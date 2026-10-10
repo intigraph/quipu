@@ -12,9 +12,15 @@ All notable changes to this project will be documented in this file.
 - *(share)* Add fail-closed pack review reports and workflow (#502)([ee174b2](https://github.com/scbrown/quipu/commit/ee174b23476be30015e23a1f35c1c5c681dc3aff))
 - *(import)* Record quarantine review lifecycle events (#480)([106a50d](https://github.com/scbrown/quipu/commit/106a50d714a3ccd354685dc459c8c69d3aa47078))
 
+
+
 ### Changed
 
 - *(share)* Use pendant names and retain legacy pack reads (#503)([1ffd453](https://github.com/scbrown/quipu/commit/1ffd453b57e2657b83e9d88572063fa76e1243a7))
+
+
+
+
 
 ### Miscellaneous
 
