@@ -345,3 +345,112 @@ fn status_pushdown_dataset_restrictions_empty_graph_and_missing_index_keep_exact
         );
     }
 }
+
+#[test]
+fn status_pushdown_constant_owner_and_duplicate_type_match_full_evaluator() {
+    let mut s = store();
+    let graph = s.lookup(&format!("{EX}g")).unwrap().unwrap();
+    let mut data = String::new();
+    for name in [
+        "absent", "closed", "open", "lang", "number", "ref", "mixed", "dup1", "untyped",
+    ] {
+        data.push_str(&format!("<{EX}{name}> <{EX}owner> <{EX}selected> .\n"));
+    }
+    data.push_str(&format!("<{EX}dup2> <{EX}owner> <{EX}other> .\n"));
+    ingest_rdf_to_graph(
+        &mut s,
+        data.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let (expr, mut inner) = shape();
+    let GraphPattern::Bgp { patterns } = &mut inner else {
+        unreachable!()
+    };
+    patterns.push(patterns[0].clone());
+    patterns.push(TriplePattern {
+        subject: TermPattern::Variable(var("s")),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}owner"))),
+        object: TermPattern::NamedNode(node(&format!("{EX}selected"))),
+    });
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+        .unwrap()
+        .expect("constrained shape must use the anti-join");
+    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    assert!(
+        narrow.len() < full.len(),
+        "must narrow, not just return correct rows"
+    );
+    let actual = accepted(&s, narrow, &expr, &ctx);
+    assert_eq!(actual, accepted(&s, full, &expr, &ctx));
+    assert_eq!(
+        actual,
+        ["absent", "dup1", "lang", "number", "ref"].map(|name| format!("{EX}{name}"))
+    );
+    let GraphPattern::Bgp { patterns } = &mut inner else {
+        unreachable!()
+    };
+    patterns.push(TriplePattern {
+        subject: TermPattern::Variable(var("s")),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}owner"))),
+        object: TermPattern::Variable(var("owner")),
+    });
+    assert!(
+        candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+            .unwrap()
+            .is_none(),
+        "extra variable must retain full evaluator"
+    );
+}
+
+#[test]
+fn status_pushdown_constant_literal_owner_preserves_term_aliases() {
+    let mut s = store();
+    let graph = s.lookup(&format!("{EX}g")).unwrap().unwrap();
+    let data = format!(
+        "<{EX}absent> <{EX}owner> \"selected\" .\n\
+         <{EX}lang> <{EX}owner> \"selected\"^^<http://www.w3.org/2001/XMLSchema#string> .\n\
+         <{EX}number> <{EX}owner> \"selected\"@en .\n\
+         <{EX}ref> <{EX}owner> \"other\" .\n"
+    );
+    ingest_rdf_to_graph(
+        &mut s,
+        data.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-02T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let (expr, mut inner) = shape();
+    let GraphPattern::Bgp { patterns } = &mut inner else {
+        unreachable!()
+    };
+    patterns.push(TriplePattern {
+        subject: TermPattern::Variable(var("s")),
+        predicate: NamedNodePattern::NamedNode(node(&format!("{EX}owner"))),
+        object: TermPattern::Literal(oxrdf::Literal::new_simple_literal("selected")),
+    });
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+        .unwrap()
+        .expect("literal owner shape must be recognized");
+    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    let actual = accepted(&s, narrow, &expr, &ctx);
+    assert_eq!(actual, accepted(&s, full, &expr, &ctx));
+    assert_eq!(actual, ["absent", "lang"].map(|name| format!("{EX}{name}")));
+}
