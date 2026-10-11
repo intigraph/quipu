@@ -6,8 +6,8 @@ probe up to 129 rows, use SQL for at most 128, otherwise retain normal planning.
 The plain-property absence optimization now recognizes fixed same-subject
 owner/type constraints and still evaluates the original filter on survivors.
 
-ROOT inference, historical reads, attachments and resident-model budgets retain
-their guards. The broader named-type hash-join experiment was not retained:
+ROOT inference, historical reads and resident-model budgets retain
+their guards. Composed archives use the bounded paths described below. The broader named-type hash-join experiment was not retained:
 cold graph construction costs too much for this workload.
 
 ## Before and after
@@ -50,3 +50,34 @@ no hosted playback is claimed.
 Rollback is a normal reviewed revert. Acceptance must measure the actual caller
 under its matched workload and verify the deadline failure rate separately.
 Increasing the timeout is outside this change.
+
+## Composed archive control
+
+The server synchronizes frozen archive attachments on pooled-reader acquisition.
+Opening a read-only Store alone omits that step. The external probe now invokes
+that synchronization and reports the mounted count. A fixture with an unrelated
+archive must report one attachment before its timings describe composition.
+`QUIPU_PERF_EXPECTED_ATTACHMENTS` verifies the declared mounted count.
+Optional `QUIPU_PERF_EXPECTED_SUBJECTS` supplies independently derived, ordered
+subject IRIs so a candidate cannot silently establish its own incomplete oracle.
+
+An unrelated archive previously disabled the selective paths, making each typed
+owner star repeat composed SQL for thousands of subjects. Current single named
+graphs can now hash-join complete SQL relations capped at 50,000 rows; a 50,001st
+row restores the existing planner. Small literal probes count canonical bindings
+across composition. Unbound triple scans use a complete, statement-local alias
+snapshot up to 4,096 entries; a larger alias table retains indexed lookup.
+Absence candidates compose all layers and recheck every original BGP constraint
+and filter. No archive is detached, and no query budget is raised.
+
+The [mounted before transcript](composed-before.log) records 24 deadline errors
+in a synthetic fixture with 100 eligible subjects. The
+[mounted after transcript](composed-after.log) records the same four-reader,
+three-round workload in both model modes, with no timeout and a slowest read of
+1.050953 seconds. These are private experiments; served recovery still requires
+matching the actual caller and deployment version independently.
+
+Composition controls also reject an omitted mount rather than timing the wrong
+context, and retain selective lookup when a broader relation encounters malformed
+unrelated data. Dense class candidate probes and small intermediate-row caps
+keep the existing evaluator instead of building an oversized alternative plan.

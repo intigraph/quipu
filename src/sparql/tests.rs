@@ -4150,11 +4150,40 @@ fn external_query_fixture_parallel_perf() {
         std::env::var("QUIPU_PERF_QUERY").expect("explicit fixture query file"),
     )
     .unwrap();
-    let reference = query(&Store::open_read_only(&db).unwrap(), &text)
-        .unwrap()
-        .rows()
-        .to_vec();
+    let mut reference_store = Store::open_read_only(&db).unwrap();
+    reference_store.sync_frozen_attachments().unwrap();
+    let expected_attachments = std::env::var("QUIPU_PERF_EXPECTED_ATTACHMENTS")
+        .ok()
+        .map(|value| value.parse::<usize>().unwrap());
+    if let Some(expected) = expected_attachments {
+        assert_eq!(
+            reference_store.attachments().len(),
+            expected,
+            "fixture composition positive control"
+        );
+    }
+    println!(
+        "fixture attachments={}",
+        reference_store.attachments().len()
+    );
+    let reference = query(&reference_store, &text).unwrap().rows().to_vec();
     assert!(!reference.is_empty(), "fixture positive control");
+    println!("fixture reference_rows={}", reference.len());
+    if let Ok(path) = std::env::var("QUIPU_PERF_EXPECTED_SUBJECTS") {
+        let expected: Vec<_> = std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let actual: Vec<_> = reference
+            .iter()
+            .map(|row| match row.get("s") {
+                Some(Value::Ref(id)) => reference_store.resolve(*id).unwrap(),
+                _ => panic!("subject fixture must project ?s"),
+            })
+            .collect();
+        assert_eq!(actual, expected, "independent fixture subjects and order");
+    }
     for enabled in [false, true] {
         for round in 0..3 {
             let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
@@ -4164,6 +4193,10 @@ fn external_query_fixture_parallel_perf() {
                         (db.clone(), text.clone(), reference.clone(), barrier.clone());
                     std::thread::spawn(move || {
                         let mut store = Store::open_read_only(&db).unwrap();
+                        store.sync_frozen_attachments().unwrap();
+                        if let Some(expected) = expected_attachments {
+                            assert_eq!(store.attachments().len(), expected, "worker composition positive control");
+                        }
                         store.set_read_model_enabled(enabled);
                         store.search_config_mut().query_timeout_ms = 10_000;
                         barrier.wait();
