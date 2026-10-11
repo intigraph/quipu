@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-11
+
+### Fixed
+
+- *(query)* Narrow selective named-graph joins before scanning closed subjects (#508)([224f7ee](https://github.com/scbrown/quipu/commit/224f7eecc92b5a838245fa1aadc6b994496dfa57))
+- *(reasoner)* Scope reactive callbacks to the committed graph (#509)([45bea07](https://github.com/scbrown/quipu/commit/45bea073064d4eb6ba61d8a0432d98a575d41570))
+- *(sparql)* Retain selective joins with composed archives (#514)([c8c9d5b](https://github.com/scbrown/quipu/commit/c8c9d5b61dc0f868c8fe9d70695dabd272109ae0))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 45bea073 (#512)([fe0face](https://github.com/scbrown/quipu/commit/fe0facebadc17247e1b711508a3e9a9fcfeb4848))
+
 ## [0.12.1] - 2026-10-10
 
 ### Added
