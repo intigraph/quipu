@@ -25,7 +25,7 @@ All notable changes to this project will be documented in this file.
 ### Miscellaneous
 
 - *(conformance)* Re-derive ledgers at dfc5da2b (#497)([f670536](https://github.com/scbrown/quipu/commit/f6705365e3b17f1d913c39adc556127b8c91d116))
-- *(conformance)* Derive release ledgers at 93928924([df6bc4f](https://github.com/scbrown/quipu/commit/df6bc4f03cd6bb7f2708056bc892f910bfb6475c))
+- Release v0.12.1 (#500)([d7f8caf](https://github.com/scbrown/quipu/commit/d7f8cafef6840116b0f4a5152c9de5bd30b054c2))
 
 ## [0.12.0] - 2026-10-10
 
