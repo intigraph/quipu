@@ -42,10 +42,10 @@ pub fn eval_bgp(
     // routing it through the model would make it pay for building one, which
     // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
     // where the nested loop turns quadratic and the build pays for itself.
-    // The read model currently indexes asserted triples. Keep constant
-    // rdf:type patterns on the entailment-aware evaluator so a join cannot
-    // silently change the answer back to asserted-only.
-    let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
+    // Match the leaf's entailment scope: named-graph types are literal.
+    let needs_type_entailment = (ctx.graph.is_root_default()
+        || (ctx.entails_rdfs && ctx.graph.includes_root_default()))
+        && patterns.iter().any(is_rdf_type_pattern);
     if patterns.len() >= 2
         && !needs_type_entailment
         && crate::store::read_model::read_model_applicable(store, ctx)
