@@ -1,9 +1,8 @@
 //! SPARQL query engine -- evaluates SPARQL queries over the EAVT fact log.
 //!
 //! Parses SPARQL via spargebra, then evaluates against the `SQLite` fact store.
-//! Supports: SELECT, ASK, CONSTRUCT, DESCRIBE with BGP, JOIN, UNION, FILTER,
-//! OPTIONAL (`LeftJoin`), VALUES, ORDER BY, GROUP BY, aggregates, HAVING,
-//! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
+//! SELECT/ASK/CONSTRUCT/DESCRIBE: BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES,
+//! ORDER BY/GROUP BY, aggregates, HAVING, EXTEND, RDFS, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
 mod casts;
@@ -23,6 +22,7 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+mod sparse_bgp;
 pub mod status_pushdown;
 #[cfg(test)]
 mod status_pushdown_tests;
