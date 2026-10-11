@@ -270,7 +270,7 @@ impl TransactObserver for ReactiveReasoner {
 
         // Re-derive affected rules and commit per-rule with proper
         // `reasoner:<rule-id>` provenance, matching the full-evaluate path.
-        let report = evaluate_affected(store, &index.ruleset, &affected)?;
+        let report = evaluate_affected(store, &index.ruleset, &affected, delta.graph)?;
 
         // Update stats.
         if let Ok(mut stats) = self.stats.write() {
@@ -299,6 +299,7 @@ fn evaluate_affected(
     store: &mut Store,
     ruleset: &RuleSet,
     affected: &BTreeSet<usize>,
+    graph: i64,
 ) -> crate::error::Result<ReactiveReport> {
     let strata = stratify::stratify(ruleset).map_err(|e| crate::Error::Store(e.to_string()))?;
 
@@ -325,11 +326,10 @@ fn evaluate_affected(
     let now = crate::time::now_iso();
     let timestamp = now.as_str();
 
-    // Placement (quipu-0b6): reactive derivation reads premises from ROOT
-    // plus its companion inferred graph and writes derivations to the
-    // companion, matching the full-evaluate path.
+    // Read the changed graph plus its companion and write derivations to
+    // that companion, matching the explicit graph-scoped evaluator.
     let companion = store
-        .ensure_companion_inferred_graph(crate::schema::ROOT_GRAPH, timestamp)
+        .ensure_companion_inferred_graph(graph, timestamp)
         .map_err(|e| crate::Error::Store(e.to_string()))?;
     let premise_head = store.transaction_head()?;
 
@@ -345,7 +345,7 @@ fn evaluate_affected(
         let mut world = evaluate::World::load_graphs_rule_indices(
             store,
             ruleset,
-            &[crate::schema::ROOT_GRAPH, companion],
+            &[graph, companion],
             &rule_indices,
         )
         .map_err(|e| crate::Error::Store(e.to_string()))?;
@@ -361,7 +361,7 @@ fn evaluate_affected(
                 rule,
                 &new_tuples,
                 timestamp,
-                crate::schema::ROOT_GRAPH,
+                graph,
                 companion,
                 &mut world,
             )

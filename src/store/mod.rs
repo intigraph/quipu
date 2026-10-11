@@ -253,6 +253,8 @@ pub struct PendingWriteEvent {
 #[cfg(feature = "reactive-reasoner")]
 #[derive(Debug, Clone)]
 pub struct Delta {
+    /// The authoritative graph this transaction changed.
+    pub graph: i64,
     /// The transaction id that produced this delta.
     pub tx: i64,
     /// Facts that were asserted in this transaction.
