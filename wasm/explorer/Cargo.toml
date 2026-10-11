@@ -27,7 +27,7 @@ wasm-bindgen = "0.2"
 js-sys = "0.3"
 serde_json = "1"
 # Writing the export archive in the tab, with the same crates the reader uses,
-# so what comes out is the same .qpack.tar.gz shape that goes in.
+# so what comes out is the same .pendant.tar.gz shape that goes in.
 tar = "0.4"
 flate2 = "1"
 

@@ -1585,7 +1585,11 @@ aegis:TextRuleShape a sh:NodeShape ;
     # Optional text-only examples; readiness requires both polarities to pass.
     sh:property [ sh:path aegis:mustMatch ; sh:datatype xsd:string ; ] ;
     sh:property [ sh:path aegis:mustNotMatch ; sh:datatype xsd:string ; ] ;
-    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] .
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
+    # Optional exemptions (aegis-40j2pq / jdl6lr): additive, so existing rules conform.
+    sh:property [ sh:path aegis:exemptPathRegex ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptRepo ; sh:datatype xsd:string ; ] ;
+    sh:property [ sh:path aegis:exemptLineMarker ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
 
 aegis:InternalIdentifierPatternShape a sh:NodeShape ;
     sh:targetClass aegis:InternalIdentifierPattern ;
@@ -2284,3 +2288,14 @@ aegis:ReactionFiringShape a sh:NodeShape ;
     # (reaction label, eventId) and freezes the payload before its first send.
     # SHACL does not prove deterministic identity or receiver idempotence.
     sh:property [ sh:path aegis:eventId ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
+
+# Episode context references can point into an explicitly selected records graph.
+# SHACL checks the reference shape; the producer checks direct WorkItem typing
+# in that graph. Do not copy or infer a WorkItem into the episode graph.
+aegis:AboutWorkItemShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:aboutWorkItem ;
+    sh:property [
+        sh:path aegis:aboutWorkItem ;
+        sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+    ] .

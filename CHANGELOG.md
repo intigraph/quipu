@@ -4,6 +4,121 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-10
+
+### Added
+
+- *(stream)* Stream durable event and named-graph transaction feeds (#501)([abc4486](https://github.com/scbrown/quipu/commit/abc448626dcc33d313f3de9b4864c3b1bc12cb71))
+- *(share)* Add fail-closed pack review reports and workflow (#502)([ee174b2](https://github.com/scbrown/quipu/commit/ee174b23476be30015e23a1f35c1c5c681dc3aff))
+- *(import)* Record quarantine review lifecycle events (#480)([106a50d](https://github.com/scbrown/quipu/commit/106a50d714a3ccd354685dc459c8c69d3aa47078))
+
+
+
+### Changed
+
+- *(share)* Use pendant names and retain legacy pack reads (#503)([1ffd453](https://github.com/scbrown/quipu/commit/1ffd453b57e2657b83e9d88572063fa76e1243a7))
+
+
+
+
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at dfc5da2b (#497)([f670536](https://github.com/scbrown/quipu/commit/f6705365e3b17f1d913c39adc556127b8c91d116))
+- *(conformance)* Derive release ledgers at 93928924([df6bc4f](https://github.com/scbrown/quipu/commit/df6bc4f03cd6bb7f2708056bc892f910bfb6475c))
+
+## [0.12.0] - 2026-10-10
+
+### Added
+
+- *(search)* Graph-anchored search behind a default-off flag (#438)([badedd4](https://github.com/scbrown/quipu/commit/badedd41f369877b5dfcc1c599499adc5739cd64))
+- *(merge)* Resolve conflicts with an emitted decisions file (#435)([ed911ec](https://github.com/scbrown/quipu/commit/ed911ec0550e7e9bd0a3f0369eeeffee0c1da799))
+- *(metrics)* Count committed writes by declared provenance (#447)([d80817d](https://github.com/scbrown/quipu/commit/d80817d606519eded43003da52de916f092ce50b))
+- *(hooks)* Quipu owns its session-capture hook: hook session-capture + hooks bundle|install|uninstall|status (#448)([03e0185](https://github.com/scbrown/quipu/commit/03e018575a57cb180d5b476b422cd20fcf6f1f88))
+- *(search)* Transactional SQLite FTS5 keyword index (#449)([adc448c](https://github.com/scbrown/quipu/commit/adc448cd9ddf53ab9f6c82ed185b0c9b422e6581))
+- *(shapes)* TextRule exemptions: exemptRepo, exemptLineMarker, and declare exemptPathRegex (#274)([a2bbd72](https://github.com/scbrown/quipu/commit/a2bbd727a512b08a93f10e27429c20a662333e2b))
+- *(audit)* Detect committed changes that bypass path enforcement (#397)([6023a92](https://github.com/scbrown/quipu/commit/6023a920c79dde56f67949229fc4ec7e4196b941))
+- *(sparql)* XSD casts, so xsd:integer(?x) and friends answer (#307)([f26f751](https://github.com/scbrown/quipu/commit/f26f751c2fe3d046bdf42c1a7b76d572cc7fa42c))
+- *(search)* Opt-in graph scope for semantic and keyword search (#452)([398b553](https://github.com/scbrown/quipu/commit/398b55305e464dd338379fbefb00521517da8058))
+- *(search)* Opt-in hybrid fusion with explain and snippets (#462)([3e7d6ec](https://github.com/scbrown/quipu/commit/3e7d6ec49de9442054a1d73a0cb75d8147ce63a6))
+- *(shapes)* Define the verdict transaction link contract (#310)([81b3608](https://github.com/scbrown/quipu/commit/81b3608a501f455a2c5077b9c8904e998fa12850))
+- *(governance)* Seal the whole decision with an RDFC-1.0 digest and a single-use nonce (#345)([3e2a6ae](https://github.com/scbrown/quipu/commit/3e2a6ae2c846cc53b929428b4aad157fa8ed232c))
+- *(share)* Commit the project graph under .quipu/graph; one-command load (#360)([7b8958b](https://github.com/scbrown/quipu/commit/7b8958b716f3ac5ec692c67ae7adb9ec4583964a))
+- *(attest)* Quipu-write-v2 binds the receiving store as audience (#388)([9a93c54](https://github.com/scbrown/quipu/commit/9a93c54d8d71d638f79eb63ed12a9fb55bc1482d))
+- *(search)* Compose anchored semantic keyword and hybrid ranking (#468)([91555e8](https://github.com/scbrown/quipu/commit/91555e8c09b7bd1a6567af4f87b7dda159f67c89))
+- *(query)* Traverse from bounded fused search seeds (#482)([1d32c0d](https://github.com/scbrown/quipu/commit/1d32c0df13fba9c9a3ee3c35675d32d437c88587))
+- *(governance)* Denial quarantine — refusals re-derive as of their transaction (GS6) (#312)([6a0e83c](https://github.com/scbrown/quipu/commit/6a0e83c97be486cb8efd6a3fac565cd2908e71a2))
+- *(governance)* Human trust root; registry amendments need an enrolled human key (S3) (#350)([39cb4e3](https://github.com/scbrown/quipu/commit/39cb4e3416246928200c419a59ef77a98374a751))
+- *(audit)* Replay committed policies without duplicate merge findings (#399)([d4f0ce6](https://github.com/scbrown/quipu/commit/d4f0ce67041d32a3c01236942081617e4f85a98a))
+- *(metrics)* Expose bounded caller latency histograms and finer buckets (#401)([47a6ea3](https://github.com/scbrown/quipu/commit/47a6ea3540aa6e965082507ffd629286530db140))
+- *(server)* Trace phases and thread IO for slow searches (#458)([808f228](https://github.com/scbrown/quipu/commit/808f22836790a8831324d0e045e3a1a967bf90ec))
+- *(search)* Add explicit structured query and JSON filters (#473)([f0de59f](https://github.com/scbrown/quipu/commit/f0de59f3ec9da7becb2853214a5da8cbc8580f58))
+- *(transport)* Add bounded dictionary Turtle graph transport (#490)([e644f10](https://github.com/scbrown/quipu/commit/e644f10bf3e2dd6f84e6aed1fefc8fd3800f307b))
+- *(bench)* Add agent census benchmark across models tasks and seeds (#383)([ecda091](https://github.com/scbrown/quipu/commit/ecda091b04e76ef7b86793bd22895f212aa8ab23))
+
+### CI/CD
+
+- Gate string-filter query performance on a 2.1M-triple fixture (#467)([fd3a029](https://github.com/scbrown/quipu/commit/fd3a029a69d7e569dab9fb07261ae2bb1a36d995))
+
+### Documentation
+
+- Make share -> import -> promote the obvious bulk-load path (#436)([467ed2e](https://github.com/scbrown/quipu/commit/467ed2ebc03eba3803a0455ab4968c94d71312f5))
+- README conformance line matches the report; drop "zero dependencies" (#440)([161ce06](https://github.com/scbrown/quipu/commit/161ce061d40f4112ae689abdd96f734200567a9b))
+- *(auth)* Explain credential issuance and client token provisioning (#308)([e08e9b4](https://github.com/scbrown/quipu/commit/e08e9b4e5d987546dc8c77df1ed380c83998d8d9))
+- Disclose literal identity loss and preservation contract (#313)([bdda63b](https://github.com/scbrown/quipu/commit/bdda63b28bf8dc3c8c51cc620b1e6676f092d04f))
+- *(paper)* Report negative Jev alias-resolution findings (#327)([2344938](https://github.com/scbrown/quipu/commit/234493859007103e3ae3322798f0562f0933f9b3))
+- Describe current installs, native MCP and inference behavior (#439)([68199f1](https://github.com/scbrown/quipu/commit/68199f1ba82c405c6939d107701aa8d99896c89f))
+- *(conformance)* Name non-passing SPARQL 1.0 cases (#469)([7c10e26](https://github.com/scbrown/quipu/commit/7c10e26fc87ea5b4406d1d9767a9444b54d31970))
+- *(conformance)* Record measured MIN term discrepancy with disclosure (#492)([9002821](https://github.com/scbrown/quipu/commit/9002821cab5c6285520c6fb0146efe99e262bca2))
+- *(conformance)* Publish actual current-source derivation and repair heading spacing (#494)([b353bc2](https://github.com/scbrown/quipu/commit/b353bc2eb733966aa692bd6f0d33691d19720eee))
+
+### Fixed
+
+- *(export)* Refuse unrecognised fields instead of exporting ROOT (#334)([8571911](https://github.com/scbrown/quipu/commit/8571911b33e078af107491d7d994951ec3a42f6d))
+- *(server)* Use jemalloc as quipu-server's allocator (#446)([214680a](https://github.com/scbrown/quipu/commit/214680aff54c0ad30f7d146229e76e51e3e53312))
+- *(update)* Instantiate a constant DELETE/INSERT template once, not per solution (#455)([1aa8de7](https://github.com/scbrown/quipu/commit/1aa8de71c9b083e315120953d64aae8d15948097))
+- *(update)* Enforce the vocabulary gate and SHACL on what a SPARQL update asserts, as /knot does (#422)([483cab8](https://github.com/scbrown/quipu/commit/483cab892acce6b06cb0f69b71d2ad137b78f5d8))
+- *(update)* Bound the whole-store copy an unsliceable update needs (#460)([a0c9b71](https://github.com/scbrown/quipu/commit/a0c9b714c523591d272081e2731c7d9fa6365083))
+- *(metrics)* Attribute authentication refusals and clarify provisioning (#457)([4bfed20](https://github.com/scbrown/quipu/commit/4bfed20aa28a9a0d1f3ee69c2653442bf09cbfa4))
+- *(owl)* Derive scheduled closure outside the writer lock (#297)([d8b6757](https://github.com/scbrown/quipu/commit/d8b6757c379c31840aef1105bcd9cb0e2b8122a6))
+- *(observability)* Record request peers and provenance gaps (#484)([addcc33](https://github.com/scbrown/quipu/commit/addcc3376a90c9f5a10db0d5fe5dde4a88f96152))
+- *(governance)* Read a hardware verdict's signCount strictly before its own tx (#393)([e2c88b0](https://github.com/scbrown/quipu/commit/e2c88b020985197f8f779a25e6c443a5cb990d9c))
+- *(mcp)* Decided_by is required on accept/reject; the schema claimed a default (#442)([762ac78](https://github.com/scbrown/quipu/commit/762ac788c15841c2888498a161d47fbb9de939c1))
+- Stream exact count groups and narrow plain-property absence projection (#470)([5e11f03](https://github.com/scbrown/quipu/commit/5e11f03afa8c048c36af7807b5011018201171f0))
+- Test policy pending post-state and document SHACL validation scope (#472)([e35669d](https://github.com/scbrown/quipu/commit/e35669de77d8ccf1595542b3c8de91480f177a74))
+- *(pack)* Prepare compatibility for receiver import review state (#479)([ef5556f](https://github.com/scbrown/quipu/commit/ef5556f24b5aa361e71761014bbdd616fb115a43))
+- *(shacl)* Separate snapshot admission from strict validation (#481)([f03f7c1](https://github.com/scbrown/quipu/commit/f03f7c146281cd372eacff37a0600ba1b68313f8))
+- *(server)* Distinguish unrun queued writes from query timeouts (#474)([e843a75](https://github.com/scbrown/quipu/commit/e843a75ed9441c705d604f40f6ff56c95b87815f))
+- *(server)* Account for abandoned HTTP request futures (#477)([3772179](https://github.com/scbrown/quipu/commit/37721793fad383fdb9cd35fb57aa7c424173810c))
+- *(rdf)* Preserve literal lexical identity across legacy encodings (#320)([91233c4](https://github.com/scbrown/quipu/commit/91233c4bd893721f24cf245b4cd587510f437e4f))
+- *(search)* Rank scoped SQLite candidates before top-K (#488)([575d035](https://github.com/scbrown/quipu/commit/575d035ddfe0c9b4ceb61c3d7cd72059eb13c294))
+- *(sparql)* CONSTRUCT template blank nodes are fresh per solution (#309)([e8a82b2](https://github.com/scbrown/quipu/commit/e8a82b2980d1bed5049fede3dd8011873da2ab8c))
+- *(provenance)* Govern episode references to existing work items (#329)([a404b89](https://github.com/scbrown/quipu/commit/a404b89698dbf5e0273ff5d3ca80932519364126))
+- Repair main release, conformance and governance checks (#491)([dfa6663](https://github.com/scbrown/quipu/commit/dfa66635fd4ed6d5641292d5b7f79ed225b038e6))
+- *(governance)* Preserve trust-root deduplication in Clippy-clean condition (#493)([f4e9834](https://github.com/scbrown/quipu/commit/f4e9834a25aa4b49fa4fbb1e689f23d80ae90d7b))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 27699d22 (#437)([b1ba34b](https://github.com/scbrown/quipu/commit/b1ba34b53c1412b8f5f80e3ecceab432d1e93506))
+- *(conformance)* Re-derive ledgers at 2842f09a (#443)([25cdb77](https://github.com/scbrown/quipu/commit/25cdb77c9e9fcb4d7f8793cb4d5a1640c0bc15e9))
+- *(conformance)* Re-derive ledgers at 214680af (#451)([f2523a0](https://github.com/scbrown/quipu/commit/f2523a0f67405b578bfb78d010f75c9b88c96936))
+- *(conformance)* Re-derive ledgers at 03e01857 (#453)([dd625a8](https://github.com/scbrown/quipu/commit/dd625a84c9236892be95f8f4040905342e60968d))
+- *(conformance)* Re-derive ledgers at adc448cd (#454)([b81f3da](https://github.com/scbrown/quipu/commit/b81f3dacf636fc365d471bd11cb42b99b405e247))
+- *(conformance)* Re-derive ledgers at 1aa8de71 (#456)([c901b2b](https://github.com/scbrown/quipu/commit/c901b2b55f90e1fd392d3dc86c1a50c4fbd7abb6))
+- *(conformance)* Re-derive ledgers at 4bfed20a (#466)([83cdb96](https://github.com/scbrown/quipu/commit/83cdb961a3dbb69549d21be855c3cd66f42f5631))
+- *(conformance)* Re-derive ledgers at d8b6757c (#486)([50ae3a7](https://github.com/scbrown/quipu/commit/50ae3a7c19389d1b472327005154791ad037be1f))
+- *(conformance)* Re-derive ledgers at 6023a920 (#487)([6ec26c8](https://github.com/scbrown/quipu/commit/6ec26c807cb080bf5fdef2bcca2fb9267b4dfa05))
+
+### Testing
+
+- *(sparql)* Preserve typed join order and grouped metadata counts (#478)([4a588eb](https://github.com/scbrown/quipu/commit/4a588eba576da0ed452ff21e3222f57aa1c344f8))
+- *(auth)* Scan compact graph handler in route census (#496)([dfc5da2](https://github.com/scbrown/quipu/commit/dfc5da2b16a767b2a749ee42973e546222d75b18))
+
+### Perf
+
+- *(sparql)* Push string FILTERs into the scan; cache compiled REGEX (#433)([2842f09](https://github.com/scbrown/quipu/commit/2842f09af7cd2f362302ae47ca559acb808a4773))
+- *(sparql)* Group rows by moving them, with O(1) group lookup (#459)([a926db3](https://github.com/scbrown/quipu/commit/a926db3a5c2c4c6d41a0152b84d8d09a3bbebea1))
+
 ## [0.11.1] - 2026-10-07
 
 ### Added
@@ -972,29 +1087,13 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 
 - *(design)* Verified headless wasm test harness; correct qd2/ajz triage([ccacf6e](https://github.com/scbrown/quipu/commit/ccacf6e1de79c8de328be73757863350642e0dfc))
-- *(patents)* Disclosure timeline and provisional draft for the governance cluster([f9d8594](https://github.com/scbrown/quipu/commit/f9d85942de5ae67cbc654e4f58cd89b8da1a4265))
-- *(patents)* Apply adversarial review to the governance provisional([3ce18ae](https://github.com/scbrown/quipu/commit/3ce18aebcb1b165d359342a7c648c21f335b79e1))
-- *(patents)* Rev 2 of disclosure timeline after adversarial re-derivation([a1127ab](https://github.com/scbrown/quipu/commit/a1127abe0a7dbd185047de8eb9e1006170371b88))
-- *(patents)* Filing-day cover sheet data for provisionals A and B([1806710](https://github.com/scbrown/quipu/commit/1806710c781e7e999bc8599e61bd066de5b400f8))
-- *(patents)* Add provisional C (NeuralAmplifier) rows to disclosure timeline([e548d47](https://github.com/scbrown/quipu/commit/e548d47666f071b569d974caa339cb2e8dbaca8d))
-- *(patents)* Filing-ready PDF of provisional A([8d911e1](https://github.com/scbrown/quipu/commit/8d911e1f1cec1d3a15a1c182cd620b312c2e5d2d))
-- *(patents)* Add provisional C to filing cover sheet data([3c5134b](https://github.com/scbrown/quipu/commit/3c5134b4980bc2aa250e7c22b1ac0a9b221fc261))
-- *(patents)* Rev 2 of cluster C timeline rows after adversarial re-derivation([49f5af3](https://github.com/scbrown/quipu/commit/49f5af34cbdfe6c1503764c1177299bd46797e83))
-- *(patents)* Fix blank pages 25-26 in provisional A PDF; numeral 108 in brief description([cecd53b](https://github.com/scbrown/quipu/commit/cecd53bc5309c03528faacd697e96268efc4f195))
-- *(patents)* Preliminary prior-art sweep notes for provisional A([748a867](https://github.com/scbrown/quipu/commit/748a8671773802a832e63088c3eebd267828428a))
-- *(patents)* Cluster D timeline rows, cover sheet entry, prior-art notes([b5703e6](https://github.com/scbrown/quipu/commit/b5703e690571e31ad760000c7537f3b1c9b1dbc8))
 - *(design)* Semantic, entity-grounded edit policies; timeline row; grounding pitch bead([9345228](https://github.com/scbrown/quipu/commit/9345228417cbbb58aaf275f61d5936fe7db5f130))
 - *(design)* Rev 2 — drop the regex; tokenized membership and the embedding tier([5148da0](https://github.com/scbrown/quipu/commit/5148da05bbb90203808c0c65b30bbbfde1f176ec))
 - *(design)* Further applications of similarity-as-grounding; claimed-linkage pitch([cca1ef3](https://github.com/scbrown/quipu/commit/cca1ef3826e8575891a2b27ad2ddca14897fa57a))
 - *(design)* The identify-and-inform-before-refusing ordering; escalation-precedent pitch([19242e8](https://github.com/scbrown/quipu/commit/19242e8705236b1ef14bc50831ff0f603ada3414))
 - *(design)* Policy by example — one gesture from an observed edit to a governed advisory rule([9bd745d](https://github.com/scbrown/quipu/commit/9bd745db0053754e92d9ccc8f19cb74af872c95f))
 - *(design)* Policy-by-example status — quipu-side steps 1/3/4 built([b0a2e16](https://github.com/scbrown/quipu/commit/b0a2e16789f6101639253adbebe8c7a03c6eaf20))
-- *(patents)* Disclosure timeline rev 3 — 2026-08-15 cluster-D rows([fd1d752](https://github.com/scbrown/quipu/commit/fd1d752ea91d241f4e8e7d4c1cf5d85fcddd7c2e))
 - *(paper)* External measurement of the fast-plane consumer (§6)([67a7fc6](https://github.com/scbrown/quipu/commit/67a7fc62b13489be6488483f00b136f53eb3d2d8))
-- *(patents)* All four specs are filing-ready; retire the inferred-name caveat([61257af](https://github.com/scbrown/quipu/commit/61257af18a12d311fe140ef3010af5c19aa49e9d))
-- *(patents)* The account gate is ~30 minutes, not days([8110039](https://github.com/scbrown/quipu/commit/8110039ee2bbe58fde878925aa0f35baec6f8f49))
-- *(patents)* Fee confirmed at $520 total, and file B first([9255671](https://github.com/scbrown/quipu/commit/925567181b2236febe12e54ff7a27fb7f7be9f06))
-- *(patents)* Record the filing — A is 64/135,410, filed 2026-08-17([48486cd](https://github.com/scbrown/quipu/commit/48486cd6200f0008d7627137da8029550d1ca7cf))
 - *(agents)* Work and push directly to main([3ad7e25](https://github.com/scbrown/quipu/commit/3ad7e25877864331aceb0200712558d9c307f21f))
 - *(design)* Golden-path blessing pipeline (design only)([7a85a20](https://github.com/scbrown/quipu/commit/7a85a20c8ac244746042cf280621270ac0b2d269))
 - *(paper)* Cite ActiveGraph (Nakajima, arXiv:2605.21997) in related work([f1be5c7](https://github.com/scbrown/quipu/commit/f1be5c7cff8b85da42f730c29def0e72282cad3c))
