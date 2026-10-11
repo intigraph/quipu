@@ -25,6 +25,29 @@ quipu = { git = "https://github.com/scbrown/quipu", default-features = false }
 
 ## From Source
 
+`qp` is the preferred command name; `quipu` remains supported. Install both
+names plus the companion server with:
+
+```bash
+just install
+# Optional destination directory:
+just install "$HOME/.local/bin"
+qp --version
+quipu --version
+```
+
+`qp` is a relative symlink to `quipu`, so both execute the same binary after
+upgrades. The installer refuses an existing conflicting `qp` in the destination
+or on PATH. It never replaces another tool's command name. Release archives
+also carry this relative link beside both binaries.
+
+To add the command name to an existing installation without opening a store:
+
+```bash
+quipu install-alias --check
+quipu install-alias
+```
+
 ```bash
 git clone https://github.com/scbrown/quipu
 cd quipu
