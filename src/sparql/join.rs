@@ -141,7 +141,7 @@ pub(crate) fn join_plan(
 /// With no shared variables this is a cartesian product, which is what the
 /// nested loop produced too — an unconnected BGP genuinely has that many
 /// solutions. The row cap is what stops it running away.
-fn hash_join_bindings(
+pub(super) fn hash_join_bindings(
     left: &[Bindings],
     right: &[Bindings],
     ctx: &TemporalContext,

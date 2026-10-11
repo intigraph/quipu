@@ -1,0 +1,74 @@
+Script started on 2026-10-11 15:49:44-04:00 [COMMAND="bash run.sh" <not executed on terminal>]
+Synthetic fixture; 100 eligible subjects, one unrelated read-only archive.
+Base: 45bea073 plus server-acquisition sync in diagnostic harness.
+Probe: four concurrent readers, three rounds in each model mode; deadline 10s.
+./before-tests --ignored --nocapture external_query_fixture_parallel_perf
+
+running 1 test
+fixture attachments=1
+model=false round=0 worker=1 timeout=true elapsed_s=10.044364
+model=false round=0 worker=0 timeout=true elapsed_s=10.124998
+model=false round=0 worker=2 timeout=true elapsed_s=10.137612
+model=false round=0 worker=3 timeout=true elapsed_s=10.158675
+model=false round=1 worker=0 timeout=true elapsed_s=10.007180
+model=false round=1 worker=1 timeout=true elapsed_s=10.098501
+model=false round=1 worker=3 timeout=true elapsed_s=10.121286
+model=false round=1 worker=2 timeout=true elapsed_s=10.131611
+model=false round=2 worker=1 timeout=true elapsed_s=10.026336
+model=false round=2 worker=2 timeout=true elapsed_s=10.101971
+model=false round=2 worker=0 timeout=true elapsed_s=10.121096
+model=false round=2 worker=3 timeout=true elapsed_s=10.133452
+model=true round=0 worker=1 timeout=true elapsed_s=10.013717
+model=true round=0 worker=3 timeout=true elapsed_s=10.054836
+model=true round=0 worker=0 timeout=true elapsed_s=10.081150
+model=true round=0 worker=2 timeout=true elapsed_s=10.107399
+model=true round=1 worker=0 timeout=true elapsed_s=10.010273
+model=true round=1 worker=3 timeout=true elapsed_s=10.056119
+model=true round=1 worker=2 timeout=true elapsed_s=10.068458
+model=true round=1 worker=1 timeout=true elapsed_s=10.087524
+test sparql::tests::external_query_fixture_parallel_perf has been running for over 60 seconds
+model=true round=2 worker=0 timeout=true elapsed_s=10.012403
+model=true round=2 worker=2 timeout=true elapsed_s=10.049603
+model=true round=2 worker=1 timeout=true elapsed_s=10.093566
+model=true round=2 worker=3 timeout=true elapsed_s=10.098673
+test sparql::tests::external_query_fixture_parallel_perf ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2075 filtered out; finished in 68.26s
+
+Candidate: bounded composed SQL star/alias snapshot/absence candidates.
+Same fixture and probe; independent ordered subject oracle and mounted-count control.
+./after-tests --ignored --nocapture external_query_fixture_parallel_perf
+
+running 1 test
+fixture attachments=1
+fixture reference_rows=100
+model=false round=0 worker=1 timeout=false elapsed_s=0.636049
+model=false round=0 worker=2 timeout=false elapsed_s=0.726223
+model=false round=0 worker=3 timeout=false elapsed_s=0.754775
+model=false round=0 worker=0 timeout=false elapsed_s=0.915558
+model=false round=1 worker=2 timeout=false elapsed_s=0.635534
+model=false round=1 worker=3 timeout=false elapsed_s=0.694024
+model=false round=1 worker=0 timeout=false elapsed_s=0.812699
+model=false round=1 worker=1 timeout=false elapsed_s=0.820302
+model=false round=2 worker=3 timeout=false elapsed_s=0.627877
+model=false round=2 worker=1 timeout=false elapsed_s=0.664702
+model=false round=2 worker=0 timeout=false elapsed_s=0.777268
+model=false round=2 worker=2 timeout=false elapsed_s=0.784157
+model=true round=0 worker=1 timeout=false elapsed_s=0.668699
+model=true round=0 worker=2 timeout=false elapsed_s=0.686045
+model=true round=0 worker=3 timeout=false elapsed_s=0.741890
+model=true round=0 worker=0 timeout=false elapsed_s=0.879210
+model=true round=1 worker=2 timeout=false elapsed_s=0.705398
+model=true round=1 worker=0 timeout=false elapsed_s=0.724267
+model=true round=1 worker=1 timeout=false elapsed_s=0.830765
+model=true round=1 worker=3 timeout=false elapsed_s=1.004564
+model=true round=2 worker=3 timeout=false elapsed_s=0.753224
+model=true round=2 worker=1 timeout=false elapsed_s=0.759052
+model=true round=2 worker=2 timeout=false elapsed_s=0.809825
+model=true round=2 worker=0 timeout=false elapsed_s=1.010591
+test sparql::tests::external_query_fixture_parallel_perf ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2081 filtered out; finished in 6.15s
+
+
+Script done on 2026-10-11 15:50:58-04:00 [COMMAND_EXIT_CODE="0"]
