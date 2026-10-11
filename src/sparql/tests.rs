@@ -4112,42 +4112,6 @@ fn construct_template_blank_node_is_fresh_per_solution() {
 }
 
 #[test]
-fn named_graph_type_join_uses_model_without_root_entailment() {
-    let (mut store, iri) = test_store_named_graph();
-    let graph = store.lookup(&iri).unwrap().unwrap();
-    let subject = store.intern("http://example.org/alice").unwrap();
-    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
-    let class = store.intern("http://example.org/Action").unwrap();
-    store
-        .overlay_write(
-            graph,
-            crate::types::Op::Assert,
-            subject,
-            rdf_type,
-            Value::Ref(class),
-            "2026-04-04T00:00:00Z",
-        )
-        .unwrap();
-    let query_text = format!(
-        "SELECT ?s ?name WHERE {{ GRAPH <{iri}> {{
-            ?s a <http://example.org/Action> ;
-               <http://example.org/name> ?name
-        }} }}"
-    );
-    store.set_read_model_enabled(false);
-    let sql = query(&store, &query_text).unwrap();
-    assert_eq!(sql.rows().len(), 1);
-    assert!(!store.read_model_is_resident_for(graph));
-    store.set_read_model_enabled(true);
-    let model = query(&store, &query_text).unwrap();
-    assert_eq!(model.rows(), sql.rows());
-    assert!(
-        store.read_model_is_resident_for(graph),
-        "a named type join must actually use the model, not just return correct SQL rows"
-    );
-}
-
-#[test]
 #[ignore = "explicit disposable database/query-file performance probe"]
 fn external_query_fixture_perf() {
     let db = std::env::var("QUIPU_PERF_DB").expect("explicit disposable fixture database");
@@ -4224,4 +4188,100 @@ fn external_query_fixture_parallel_perf() {
             }
         }
     }
+}
+
+#[test]
+fn sparse_literal_join_avoids_whole_graph_model_and_keeps_headers() {
+    let (mut store, iri) = test_store_named_graph();
+    let graph = store.lookup(&iri).unwrap().unwrap();
+    let subject = store.intern("http://example.org/alice").unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let class = store.intern("http://example.org/Action").unwrap();
+    store
+        .overlay_write(
+            graph,
+            crate::types::Op::Assert,
+            subject,
+            rdf_type,
+            Value::Ref(class),
+            "2026-04-04T00:00:00Z",
+        )
+        .unwrap();
+    let query_text = format!(
+        "SELECT * WHERE {{ GRAPH <{iri}> {{
+        ?s a <http://example.org/Action> .
+        ?s <http://example.org/name> \"t1-alice\"
+    }} }}"
+    );
+    let result = query(&store, &query_text).unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert_eq!(result.variables(), ["s"]);
+    assert!(
+        !store.read_model_is_resident_for(graph),
+        "sparse SQL must avoid the graph build"
+    );
+}
+
+#[test]
+fn sparse_literal_probe_does_not_return_its_truncated_dense_prefix() {
+    let mut store = Store::open_in_memory().unwrap();
+    let graph = store.overlay_create("urn:example:dense", 0).unwrap();
+    let kind = store.intern("urn:example:kind").unwrap();
+    let class = store.intern("urn:example:Action").unwrap();
+    let property = store.intern("urn:example:status").unwrap();
+    for n in 0..129 {
+        let subject = store.intern(&format!("urn:example:subject:{n}")).unwrap();
+        for (attribute, value) in [
+            (kind, Value::Ref(class)),
+            (property, Value::Str("open".into())),
+        ] {
+            store
+                .overlay_write(
+                    graph,
+                    crate::types::Op::Assert,
+                    subject,
+                    attribute,
+                    value,
+                    "2026-04-04T00:00:00Z",
+                )
+                .unwrap();
+        }
+    }
+    let result = query(
+        &store,
+        "SELECT ?s WHERE { GRAPH <urn:example:dense> {
+        ?s <urn:example:kind> <urn:example:Action> ; <urn:example:status> \"open\"
+    } }",
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        129,
+        "129-row probe must fall back, never lose the tail"
+    );
+    assert!(
+        store.read_model_is_resident_for(graph),
+        "dense fallback uses the normal planner"
+    );
+}
+
+#[test]
+fn sparse_literal_does_not_replan_a_disconnected_join() {
+    let (store, iri) = test_store_named_graph();
+    let graph = store.lookup(&iri).unwrap().unwrap();
+    let result = query(
+        &store,
+        &format!(
+            "SELECT ?s ?x WHERE {{ GRAPH <{iri}> {{
+        ?s <http://example.org/name> \"t1-alice\" .
+        ?x <http://example.org/p> <http://example.org/y>
+    }} }}"
+        ),
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert!(
+        store.read_model_is_resident_for(graph),
+        "disconnected relation must keep its normal hash join"
+    );
 }

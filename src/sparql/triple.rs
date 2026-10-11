@@ -31,21 +31,19 @@ pub fn eval_bgp(
     if patterns.is_empty() {
         return Ok((vec![seed.clone()], vec![]));
     }
+    if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
+    }
 
-    // The read model turns a pattern into hash lookups, which makes evaluating
-    // it ONCE and joining cheap — so when it is available, take the hash join
-    // and leave the nested loop below for SQL. The loop is where the O(n^2)
-    // lives: re-evaluating each pattern per accumulated row is quadratic no
-    // matter how fast an individual evaluation gets.
+    // The read model evaluates each pattern once instead of repeated SQL.
+    // Hash joins avoid the nested loop's quadratic repeated evaluation.
     // Only for a BGP that actually JOINS. A single pattern is the shape SQL is
     // already fast at — a bound-subject lookup is ~0.1ms against an index — and
     // routing it through the model would make it pay for building one, which
     // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
     // where the nested loop turns quadratic and the build pays for itself.
-    // Match the leaf's entailment scope: named-graph types are literal.
-    let needs_type_entailment = (ctx.graph.is_root_default()
-        || (ctx.entails_rdfs && ctx.graph.includes_root_default()))
-        && patterns.iter().any(is_rdf_type_pattern);
+    // Type patterns retain the existing entailment-aware evaluator.
+    let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
     if patterns.len() >= 2
         && !needs_type_entailment
         && crate::store::read_model::read_model_applicable(store, ctx)
@@ -115,7 +113,7 @@ pub fn eval_triple_pattern(
 /// never causes an undershoot. Enforced in the row loop rather than as a SQL
 /// `LIMIT` because rusqlite steps lazily: breaking out stops the scan just as
 /// surely, and stays correct for the reject-a-row case.
-fn eval_triple_pattern_limited(
+pub(super) fn eval_triple_pattern_limited(
     store: &Store,
     tp: &TriplePattern,
     bindings: &Bindings,

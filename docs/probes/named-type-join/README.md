@@ -1,36 +1,35 @@
-# Named-graph type join probe
+# Selective named-graph query probe
 
-Constant type patterns in a single named graph use asserted facts. Their BGP
-planner nevertheless disabled the read-model hash join as though ROOT subclass
-inference were required. The planner now uses the same inference scope as the
-leaf evaluator. ROOT inference, temporal reads, attachments and the model's
-affordability ceiling retain their existing guards.
+Owner/type/status branches scanned many closed subjects before finding rare
+active results. The final planner uses a complete small literal relation first:
+probe up to 129 rows, use SQL for at most 128, otherwise retain normal planning.
+The plain-property absence optimization now recognizes fixed same-subject
+owner/type constraints and still evaluates the original filter on survivors.
+
+ROOT inference, historical reads, attachments and resident-model budgets retain
+their guards. The broader named-type hash-join experiment was not retained:
+cold graph construction costs too much for this workload.
 
 ## Before and after
 
-The [actual transcript](output.log) uses a disposable synthetic database with
-75,000 facts, 25,000 subjects, 14,283 subjects assigned to one owner and 100
-eligible results. The query contains owner/type/status branches, missing and
-unknown status handling, ordering and a result limit. No production data was
-copied. It exercises four concurrent readers in three barrier-synchronized
-rounds with the same ten-second deadline.
+The original [small-fixture transcript](output.log) and
+[near-budget transcript](near-budget.log) record the initial experiment. The
+larger fixture contains 958,355 current facts, 25,000 subjects, 14,283 subjects
+assigned to one owner and 100 eligible results. Padding changes only unqueried
+attributes. No production data was copied.
 
-The SQL control's slowest sample is 3.145226 seconds; the model candidate's
-slowest is 0.614951 seconds. All ordered results agree exactly. Neither private
-mode timed out. This is a private query-cost demonstration, not proof that a
-served timeout or its workload has recovered. The transcript is readable text;
-no hosted playback is claimed.
+Four-reader barrier rounds use the same ten-second deadline and compare every
+ordered result. Original near-budget SQL's slowest sample is 4.080455 seconds.
+The final [selective transcript](selective.log) records the completed narrower
+implementation. Neither private mode times out. These are private cost
+measurements, not proof of served recovery; the actual caller and workload must
+be measured independently after reviewed adoption.
 
-A second fixture pads only unqueried attributes to 958,355 current facts in
-the same graph. Its [actual transcript](near-budget.log) preserves all ordered
-results but improves the slowest sample only from 4.080455 to 2.387632 seconds.
-It does not meet a two-second acceptance target. Neither private mode times
-out. Resident model budget and cold-build cost remain material limitations;
-this proposal must not be treated as the complete served incident fix.
-
-The separate mechanistic regression asserts that a named type join actually
-builds its graph model. Returning correct rows through SQL alone cannot pass
-that control. Existing ROOT subclass controls remain required.
+The sparse relation test proves the planner avoids whole-graph construction.
+The 129-row control proves a truncated probe never replaces the full query
+answer. Differential absence controls retain plain, typed, language, numeric,
+IRI and missing properties, fixed owners, duplicate type patterns, graph
+isolation, and exact fallback for unsupported shapes.
 
 ## Reproduction
 
@@ -45,9 +44,9 @@ just test --release --no-default-features --lib \
 
 The ignored probe opens its database read-only, compares exact ordered results,
 reports actual timeout errors separately, and refuses an empty positive control.
-Normal unit tests do not run the external probe. Each reader starts without a
-resident model; this includes the cold model cost.
+Normal unit tests do not run the external probe. The transcript is readable text;
+no hosted playback is claimed.
 
-Rollback is a normal reviewed revert of the planner change. Runtime acceptance
-must measure the actual caller query under its matched workload and verify its
-error rate separately. Increasing the timeout is outside this change.
+Rollback is a normal reviewed revert. Acceptance must measure the actual caller
+under its matched workload and verify the deadline failure rate separately.
+Increasing the timeout is outside this change.

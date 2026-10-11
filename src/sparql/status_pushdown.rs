@@ -1,7 +1,7 @@
 //! Narrow a typed named-graph scan by absence of a plain literal property.
 //!
-//! A singleton type scan followed by a correlated NOT EXISTS used to decode
-//! every typed subject before discovering that most already have the property.
+//! A type scan, optionally constrained by fixed same-subject properties,
+//! can reject subjects with a plain property before decoding every binding.
 //! The SQL anti-join drops only subjects with a proven plain string value.
 //! The original FILTER still evaluates every surviving binding.
 //!
@@ -10,7 +10,7 @@
 
 use rusqlite::functions::FunctionFlags;
 use spargebra::algebra::{Expression, Function, GraphPattern};
-use spargebra::term::{NamedNodePattern, TermPattern};
+use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use super::pattern_util::Bindings;
 use super::{GraphScope, TemporalContext};
@@ -24,6 +24,7 @@ struct Plan<'a> {
     subject: &'a str,
     class: &'a str,
     property: &'a str,
+    constraints: Vec<&'a TriplePattern>,
 }
 
 fn variable(expr: &Expression, name: &str) -> bool {
@@ -56,9 +57,24 @@ fn plan<'a>(expr: &'a Expression, inner: &'a GraphPattern) -> Option<Plan<'a>> {
     let GraphPattern::Bgp { patterns } = inner else {
         return None;
     };
-    let [typed] = patterns.as_slice() else {
+    if patterns.is_empty() || patterns.len() > 8 {
         return None;
-    };
+    }
+    let typed = patterns.iter().find(|tp| {
+        matches!((&tp.subject, &tp.predicate, &tp.object),
+            (TermPattern::Variable(_), NamedNodePattern::NamedNode(p), TermPattern::NamedNode(_))
+            if p.as_str() == RDF_TYPE)
+    })?;
+    if patterns.iter().any(|tp| {
+        tp.subject != typed.subject
+            || !matches!(tp.predicate, NamedNodePattern::NamedNode(_))
+            || !matches!(
+                tp.object,
+                TermPattern::NamedNode(_) | TermPattern::Literal(_)
+            )
+    }) {
+        return None;
+    }
     let (
         TermPattern::Variable(subject),
         NamedNodePattern::NamedNode(predicate),
@@ -70,6 +86,7 @@ fn plan<'a>(expr: &'a Expression, inner: &'a GraphPattern) -> Option<Plan<'a>> {
     if predicate.as_str() != RDF_TYPE {
         return None;
     }
+    let constraints = patterns.iter().filter(|tp| *tp != typed).collect();
     let Expression::Not(negated) = expr else {
         return None;
     };
@@ -104,7 +121,54 @@ fn plan<'a>(expr: &'a Expression, inner: &'a GraphPattern) -> Option<Plan<'a>> {
         subject: subject.as_str(),
         class: class.as_str(),
         property: property_name.as_str(),
+        constraints,
     })
+}
+
+fn constraint_sql(
+    store: &Store,
+    tp: &TriplePattern,
+    params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+) -> Result<Option<String>> {
+    let NamedNodePattern::NamedNode(predicate) = &tp.predicate else {
+        return Ok(None);
+    };
+    let ids = store.lookup_all(predicate.as_str())?;
+    let [predicate] = ids.as_slice() else {
+        return Ok(None); // Unknown or aliased ids retain the ordinary evaluator.
+    };
+    let Some(value) =
+        super::pattern_util::resolve_object_pattern(store, &tp.object, &Bindings::new())?
+    else {
+        return Ok(None);
+    };
+    let values = if let Value::Ref(id) = value {
+        if id < 0 || store.lookup_all(&store.resolve(id)?)?.len() != 1 {
+            return Ok(None);
+        }
+        vec![Value::Ref(id).to_bytes()]
+    } else {
+        store.literal_aliases(&value, true)?
+    };
+    let predicate_param = params.len() + 1;
+    params.push(Box::new(*predicate));
+    let mut placeholders = Vec::new();
+    for value in values {
+        placeholders.push(format!("?{}", params.len() + 1));
+        params.push(Box::new(value));
+    }
+    if placeholders.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        " AND EXISTS (SELECT 1 FROM facts AS c INDEXED BY idx_current_aev
+            WHERE c.e=t.e AND c.a=?{predicate_param} AND c.v IN ({})
+            AND c.op=1 AND c.valid_to IS NULL AND EXISTS
+                (SELECT 1 FROM facts AS cg INDEXED BY idx_current_g
+                    WHERE cg.g=?3 AND cg.rowid=c.rowid
+                    AND cg.op=1 AND cg.valid_to IS NULL))",
+        placeholders.join(",")
+    )))
 }
 
 /// Register the packed-value predicate on writer and pooled read connections.
@@ -180,7 +244,13 @@ pub fn candidates(
     if indexes != 3 {
         return Ok(None);
     }
-    let mut stmt = store.prepare(
+    let mut parameters: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+        Box::new(rdf_type),
+        Box::new(Value::Ref(class).to_bytes()),
+        Box::new(*graph),
+        Box::new(property),
+    ];
+    let mut sql = String::from(
         "SELECT DISTINCT t.e FROM facts AS t INDEXED BY idx_active_vge
         WHERE t.v=?2 AND t.g=?3 AND t.op=1 AND t.valid_to IS NULL
         AND EXISTS (SELECT 1 FROM facts AS typed INDEXED BY idx_current_aev
@@ -192,13 +262,17 @@ pub fn candidates(
                 (SELECT 1 FROM facts AS gp INDEXED BY idx_current_g
                     WHERE gp.g=?3 AND gp.rowid=p.rowid
                     AND gp.op=1 AND gp.valid_to IS NULL))",
-    )?;
-    let mut rows = stmt.query(rusqlite::params![
-        rdf_type,
-        Value::Ref(class).to_bytes(),
-        graph,
-        property
-    ])?;
+    );
+    for tp in &plan.constraints {
+        let Some(constraint) = constraint_sql(store, tp, &mut parameters)? else {
+            return Ok(None);
+        };
+        sql.push_str(&constraint);
+    }
+    let mut stmt = store.prepare(&sql)?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(
+        parameters.iter().map(std::convert::AsRef::as_ref),
+    ))?;
     let mut bindings = Vec::new();
     while let Some(row) = rows.next()? {
         super::pattern_util::check_eval_budget(ctx, bindings.len(), bindings.len())?;
