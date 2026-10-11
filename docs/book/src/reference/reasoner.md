@@ -11,6 +11,18 @@ catalogue, and current limitations.
 > <urn:quipu:graph:root#inferred>`; migrate a pre-regime store with
 > `quipu db migrate-inferred`.
 
+## Reactive graph scope
+
+Each committed transaction carries its authoritative graph in the observer
+`Delta`. Reactive rules read that graph and its companion inferred graph;
+derivations and withdrawals stay in that companion. A multi-graph batch
+notifies each graph separately. A change in one project cannot update the
+same rule's derivations in another project or in ROOT.
+
+This applies only when the reactive reasoner is enabled and its rules are
+loaded. Explicit `evaluate_in_graph` remains available for a reconciliation
+or backfill; it is not a substitute for current reactive evaluation.
+
 ## Rule Syntax
 
 Rules are written in standard Turtle files using the `rule:` vocabulary. The

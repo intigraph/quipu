@@ -200,6 +200,10 @@ jobs:
       # argument rests on them. Reuses the full-feature build just above.
       - name: quipu-server binary tests
         run: cargo test --features full --bin quipu-server
+      - name: Reactive graph scope and withdrawal
+        run: |
+          cargo test --features full --test reactive_graph_scope
+          cargo test --features full --lib reasoner::reactive
       # The MCP Registry image otherwise runs only at release time, which is
       # when a broken Dockerfile would first be seen: after the release shipped.
       # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just
