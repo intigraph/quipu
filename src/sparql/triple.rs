@@ -34,6 +34,9 @@ pub fn eval_bgp(
     if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
         return Ok(result);
     }
+    if let Some(result) = super::sql_star::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
+    }
 
     // The read model evaluates each pattern once instead of repeated SQL.
     // Hash joins avoid the nested loop's quadratic repeated evaluation.
@@ -404,6 +407,16 @@ fn visit_triple_pattern_limited(
             })
         });
     }
+    let aliases = match &tp.subject {
+        TermPattern::Variable(variable) if !bindings.contains_key(variable.as_str()) => {
+            super::triple_alias::snapshot(store, ctx)?
+        }
+        _ => None,
+    };
+    let canonical = |id| match &aliases {
+        Some(aliases) => Ok(aliases.get(&id).copied().unwrap_or(id)),
+        None => store.canonical_id(id),
+    };
     let mut stmt = store.prepare(&sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
@@ -413,15 +426,15 @@ fn visit_triple_pattern_limited(
     // result vector made an unbound production scan quadratic (aegis-h7rtt).
     let mut canonical_rows = HashSet::new();
     while let Some(row) = rows.next()? {
-        let e_id = store.canonical_id(row.get(0)?)?;
-        let a_id = store.canonical_id(row.get(1)?)?;
+        let e_id = canonical(row.get(0)?)?;
+        let a_id = canonical(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;
         let v = match Value::from_bytes(&v_bytes)? {
-            Value::Ref(id) => Value::Ref(store.canonical_id(id)?),
+            Value::Ref(id) => Value::Ref(canonical(id)?),
             other => other,
         };
         let g_id: Option<i64> = if want_g {
-            Some(store.canonical_id(row.get(3)?)?)
+            Some(canonical(row.get(3)?)?)
         } else {
             None
         };

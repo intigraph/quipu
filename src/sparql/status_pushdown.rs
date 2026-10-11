@@ -5,8 +5,9 @@
 //! The SQL anti-join drops only subjects with a proven plain string value.
 //! The original FILTER still evaluates every surviving binding.
 //!
-//! Root/default graphs, attachments, historical/seeded reads and every other
-//! expression keep the exact existing evaluator, including type entailment.
+//! Composed layers use conservative candidates and recheck the entire BGP.
+//! Root/default graphs, historical/seeded reads and every other expression
+//! keep the exact existing evaluator, including type entailment.
 
 use rusqlite::functions::FunctionFlags;
 use spargebra::algebra::{Expression, Function, GraphPattern};
@@ -203,7 +204,6 @@ pub fn candidates(
     seed: &Bindings,
 ) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
     if !seed.is_empty()
-        || !store.attachments().is_empty()
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()
         || ctx.row_limit.is_some()
@@ -223,6 +223,15 @@ pub fn candidates(
     let Some(plan) = plan(expr, inner) else {
         return Ok(None);
     };
+    if store.has_attachments() {
+        return super::composed_absence::candidates(
+            store,
+            [plan.subject, plan.class, plan.property],
+            *graph,
+            inner,
+            ctx,
+        );
+    }
     let (Some(rdf_type), Some(class), Some(property)) = (
         store.lookup(RDF_TYPE)?,
         store.lookup(plan.class)?,

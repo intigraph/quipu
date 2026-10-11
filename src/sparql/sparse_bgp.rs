@@ -16,7 +16,6 @@ pub(super) fn try_eval(
     seed: &Bindings,
 ) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
     if patterns.len() < 2
-        || store.has_attachments()
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()
         || !ctx.graph.single_graph().is_some_and(|g| g != 0)
@@ -41,6 +40,9 @@ pub(super) fn try_eval(
         }) {
             continue; // Only indexed same-subject stars; disconnected joins keep their planner.
         }
+        // The ordinary triple reader composes and canonicalizes aliases before
+        // counting bound rows, so the completeness probe also works with an
+        // unrelated archive mounted. Never probe raw physical ids here.
         let rows = eval_triple_pattern_limited(store, pattern, seed, ctx, Some(SMALL + 1))?;
         if rows.len() <= SMALL {
             chosen = Some((index, rows));
