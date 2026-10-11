@@ -68,7 +68,9 @@ row restores the existing planner. Small literal probes count canonical bindings
 across composition. Unbound triple scans use a complete, statement-local alias
 snapshot up to 4,096 entries; a larger alias table retains indexed lookup.
 Absence candidates compose all layers and recheck every original BGP constraint
-and filter. No archive is detached, and no query budget is raised.
+and filter. These bounds cap candidate or binding materialization, not total database work;
+SQLite grouping can still precede a row stop. Deadlines remain enforced.
+No archive is detached, and no query budget is raised.
 
 The [mounted before transcript](composed-before.log) records 24 deadline errors
 in a synthetic fixture with 100 eligible subjects. The
