@@ -6,21 +6,21 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-quipu = { git = "https://github.com/scbrown/quipu" }
+quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu" }
 ```
 
 To use SHACL validation (enabled by default):
 
 ```toml
 [dependencies]
-quipu = { git = "https://github.com/scbrown/quipu", features = ["shacl"] }
+quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu", features = ["shacl"] }
 ```
 
 To exclude SHACL (smaller binary, faster compile):
 
 ```toml
 [dependencies]
-quipu = { git = "https://github.com/scbrown/quipu", default-features = false }
+quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu", default-features = false }
 ```
 
 ## From Source

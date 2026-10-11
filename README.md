@@ -46,7 +46,7 @@ Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
 checksummed release.
 
 ```bash
-V=0.11.1
+V=0.12.1
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)  T=x86_64-unknown-linux-gnu ;;
   Linux-aarch64) T=aarch64-unknown-linux-gnu ;;
@@ -85,7 +85,7 @@ quipu --version
 ```
 
 ```text
-quipu 0.11.1
+quipu 0.12.1
 ```
 
 If that prints an older version, another copy is earlier on your `PATH`:

@@ -18,7 +18,7 @@ itself.
 
 For publication in a git repository, **a pendant is the text share directory**
 (named for the khipu's pendant cords, each a self-contained record hanging from
-the primary cord; see [Pendants](../sharing/README.md#pendants-what-the-artifact-is-called)).
+the primary cord; see [Pendants](../sharing/index.md#pendants-what-the-artifact-is-called)).
 The artifact was called a qpack before; `.qpack` names still load for one
 release. The binary `.pendant.db` is internal plumbing, not the published artifact. A share
 is the canonical, line-oriented interchange surface that makes review and

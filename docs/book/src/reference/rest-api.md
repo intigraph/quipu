@@ -1912,4 +1912,4 @@ Search first, then evaluate SELECT from at most100 distinct seed IRIs.
 Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
 and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
 bounded completeness accompany the ordinary query result. See
-[the request and scope contract](../../../design/search-rooted-sparql.md).
+[the request and scope contract](https://github.com/scbrown/quipu/blob/main/docs/design/search-rooted-sparql.md).

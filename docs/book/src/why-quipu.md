@@ -187,7 +187,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 ```toml
 [dependencies]
-quipu = { git = "https://github.com/scbrown/quipu" }
+quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu" }
 ```
 
 ```rust
