@@ -21,6 +21,13 @@ mode timed out. This is a private query-cost demonstration, not proof that a
 served timeout or its workload has recovered. The transcript is readable text;
 no hosted playback is claimed.
 
+A second fixture pads only unqueried attributes to 958,355 current facts in
+the same graph. Its [actual transcript](near-budget.log) preserves all ordered
+results but improves the slowest sample only from 4.080455 to 2.387632 seconds.
+It does not meet a two-second acceptance target. Neither private mode times
+out. Resident model budget and cold-build cost remain material limitations;
+this proposal must not be treated as the complete served incident fix.
+
 The separate mechanistic regression asserts that a named type join actually
 builds its graph model. Returning correct rows through SQL alone cannot pass
 that control. Existing ROOT subclass controls remain required.
