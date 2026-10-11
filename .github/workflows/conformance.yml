@@ -36,6 +36,7 @@ on:
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/ci.yml'
   push:
     branches: [main]
     paths:
@@ -45,6 +46,7 @@ on:
       - 'benchmark/public/**'
       - 'docs/book/src/benchmarks/**'
       - '.github/workflows/conformance.yml'
+      - '.github/workflows/ci.yml'
   release:
     types: [published]
   schedule:
