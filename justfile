@@ -34,6 +34,24 @@ test-query-perf:
 build:
     cargo build
 
+# Install the CLI/server pair and the relative qp command name.
+install bin_dir="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin={{quote(bin_dir)}}
+    bin=${bin:-"$HOME/.local/bin"}
+    cargo build --locked --release --features full --bin quipu --bin quipu-server
+    target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+    "$target/release/quipu" install-alias --bin-dir "$bin" --check
+    mkdir -p "$bin"
+    stage=$(mktemp -d "$bin/.quipu-install.XXXXXX")
+    trap 'rm -rf -- "$stage"' EXIT
+    install -m 755 "$target/release/quipu" "$stage/quipu"
+    install -m 755 "$target/release/quipu-server" "$stage/quipu-server"
+    mv -f -- "$stage/quipu" "$bin/quipu"
+    mv -f -- "$stage/quipu-server" "$bin/quipu-server"
+    "$bin/quipu" install-alias --bin-dir "$bin"
+
 # Build + deploy quipu-server with the fail-loud feature gate. Use THIS, never a
 # bare `cargo build`, to ship the server: quipu-server has required-features and
 # a plain build silently skips it, shipping a stale binary. Override targets via
