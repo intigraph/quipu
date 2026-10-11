@@ -2299,3 +2299,20 @@ aegis:AboutWorkItemShape a sh:NodeShape ;
         sh:nodeKind sh:IRI ;
         sh:maxCount 1 ;
     ] .
+
+# Instruction fragments (aegis-l42): opt-in rendering metadata, not authority.
+aegis:InstructionFragmentShape a sh:NodeShape ;
+  sh:targetClass aegis:InstructionFragment ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ] ;
+  sh:property [ sh:path aegis:instructionScope ; sh:datatype xsd:string ;
+    sh:minCount 1 ; sh:maxCount 1 ; sh:in ("fleet" "role" "agent" "harness") ] ;
+  sh:property [ sh:path aegis:instructionSelector ; sh:datatype xsd:string ;
+    sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path rdf:value ; sh:datatype xsd:string ; sh:minLength 1 ;
+    sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:or (
+    [ sh:property [ sh:path aegis:instructionScope ; sh:hasValue "fleet" ] ;
+      sh:property [ sh:path aegis:instructionSelector ; sh:maxLength 0 ] ]
+    [ sh:property [ sh:path aegis:instructionScope ; sh:in ("role" "agent" "harness") ] ;
+      sh:property [ sh:path aegis:instructionSelector ; sh:minLength 1 ] ]
+  ) .

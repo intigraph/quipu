@@ -141,6 +141,12 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # above is what that produces: shapes requiring predicates nothing emitted, and
 # ingestion for 11 classes one validate_on_write flag away from dying.
 REQUIRED_PREDICATE_PROVEN = {
+    ("aegis:InstructionFragmentShape", "aegis:instructionScope"):
+        "schema-first zero-instance baseline and scoped conformance controls 2026-10-11 ian (aegis-l42)",
+    ("aegis:InstructionFragmentShape", "aegis:instructionSelector"):
+        "schema-first zero-instance baseline and scoped conformance controls 2026-10-11 ian (aegis-l42)",
+    ("aegis:InstructionFragmentShape", "rdf:value"):
+        "schema-first zero-instance baseline and scoped conformance controls 2026-10-11 ian (aegis-l42)",
     # Zero asserted Reaction/ReactionFiring instances, measured 2026-09-26.
     # Schema-first contract: tests/reaction_shapes.rs covers complete producer
     # records and each missing required field; no existing class is relaxed.
