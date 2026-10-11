@@ -162,29 +162,28 @@ jobs:
     name: Extended feature surfaces
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    env:
+      # Serial feature builds need headroom for tests and cache compression.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Cache downloads only: the combined full/remote/LanceDB target filled
+      # the runner while tar created a second copy in PR #511's cache poststep.
+      # A new prefix also prevents restoring the old target-bearing archives.
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-extended-${{ hashFiles('**/Cargo.lock') }}
-          # ONLY this job's own prefix. The generic `${{ runner.os }}-cargo-`
-          # fallback restored whichever cargo cache was newest, including the
-          # test arms' target dirs (test-shacl+owl took 8.5 min to restore),
-          # and this job then builds --features full and shacl,lancedb on top.
-          # quipu#353 failed this job twice (2026-09-30) with
-          # `ld terminated with signal 7 [Bus error]` after restoring test
-          # caches, while #346 passed after restoring a small clippy cache.
-          # A cold build is slower; a full disk is a red PR.
+          key: ${{ runner.os }}-cargo-extended-sources-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-extended-
+            ${{ runner.os }}-cargo-extended-sources-v2-
       - name: Disk before build
         run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
@@ -226,6 +225,9 @@ jobs:
         if: always()
         run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: cargo test --features shacl,lancedb
+      - name: Disk after extended tests
+        if: always()
+        run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build
