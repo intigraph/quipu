@@ -87,3 +87,5 @@
 # Map
 
 - [Docs map](docs-map.md)
+
+- [Workflow processing](reference/workflow-processing.md)

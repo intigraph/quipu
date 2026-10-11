@@ -72,6 +72,22 @@ pub fn transition_message(
         .into_bytes()
 }
 
+/// Revision-bound message for directly enforced workflows. Legacy v1 is
+/// unchanged. The signed revision prevents a stale advance on a later visit
+/// to the same state.
+#[must_use]
+pub fn transition_message_v2(
+    run_iri: &str,
+    step: &str,
+    from_state: &str,
+    to_state: &str,
+    at: &str,
+    agent: &str,
+    from_revision: u64,
+) -> Vec<u8> {
+    format!("shuttle-transition-v2|{run_iri}|{step}|{from_state}|{to_state}|{at}|{agent}|{from_revision}").into_bytes()
+}
+
 /// One staged `aegis:TransitionEvent`, as read back from the pending
 /// post-state. Every field is a Vec of DISTINCT values: the canonical message
 /// has exactly one slot per field, so a multi-valued field cannot be signed
@@ -85,6 +101,8 @@ struct Transition {
     ended_at: Vec<String>,
     performed_by: Vec<String>,
     signature: Vec<String>,
+    version: Vec<String>,
+    revision: Vec<String>,
 }
 
 impl Transition {
@@ -186,14 +204,45 @@ impl Transition {
                  retry."
             )));
         }
-        let message = transition_message(
-            run,
-            step,
-            &self.from_state[0],
-            &self.to_state[0],
-            &self.ended_at[0],
-            agent,
-        );
+        let message = if self.version.is_empty() {
+            transition_message(
+                run,
+                step,
+                &self.from_state[0],
+                &self.to_state[0],
+                &self.ended_at[0],
+                agent,
+            )
+        } else if self.version == ["2"] {
+            let [revision] = self.revision.as_slice() else {
+                return Ok(Some(format!(
+                    "transition '{iri}' v2 needs one fromRevision"
+                )));
+            };
+            let Ok(n) = revision.parse::<u64>() else {
+                return Ok(Some(format!(
+                    "transition '{iri}' v2 revision must be nonnegative"
+                )));
+            };
+            if n.to_string() != *revision {
+                return Ok(Some(format!(
+                    "transition '{iri}' v2 revision must be canonical decimal"
+                )));
+            }
+            transition_message_v2(
+                run,
+                step,
+                &self.from_state[0],
+                &self.to_state[0],
+                &self.ended_at[0],
+                agent,
+                n,
+            )
+        } else {
+            return Ok(Some(format!(
+                "transition '{iri}' has an unsupported or ambiguous transitionVersion"
+            )));
+        };
         // Any registered key may verify (rotation); none verifying means the
         // signature is wrong for THIS content — a forged signature, a
         // tampered field, or a key the registry does not hold.
@@ -258,6 +307,8 @@ fn read_transition(store: &Store, iri: &str, graph: i64) -> Result<Transition> {
         format!("{PROV}endedAtTime"),
         format!("{DEFAULT_BASE_NS}performedBy"),
         format!("{DEFAULT_BASE_NS}signature"),
+        format!("{DEFAULT_BASE_NS}transitionVersion"),
+        format!("{DEFAULT_BASE_NS}fromRevision"),
     ]
     .into_iter()
     .filter_map(|name| match store.lookup(&name) {
@@ -292,6 +343,8 @@ fn read_transition(store: &Store, iri: &str, graph: i64) -> Result<Transition> {
             "toState" => &mut out.to_state,
             "performedBy" => &mut out.performed_by,
             "signature" => &mut out.signature,
+            "transitionVersion" => &mut out.version,
+            "fromRevision" => &mut out.revision,
             // `{PROV}endedAtTime` also ends in "endedAtTime" after the '/'.
             "prov#endedAtTime" | "endedAtTime" => &mut out.ended_at,
             _ => continue,

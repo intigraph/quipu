@@ -121,6 +121,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/vendor/three.module.min.js",
     "/health",
     "/version",
+    "/workflow/capabilities",
     "/stats",
     "/.well-known/void",
     // Prometheus scrape: renders in-memory counters + one SQL COUNT aggregate.

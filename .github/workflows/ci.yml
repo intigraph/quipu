@@ -204,6 +204,10 @@ jobs:
         run: |
           cargo test --features full --test reactive_graph_scope
           cargo test --features full --lib reasoner::reactive
+      - name: Direct workflow processing and atomic updates
+        run: |
+          cargo test --features full --test workflow_processing
+          cargo test --features full --bin quipu-server workflow_update_tests
       # The MCP Registry image otherwise runs only at release time, which is
       # when a broken Dockerfile would first be seen: after the release shipped.
       # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just

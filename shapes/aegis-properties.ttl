@@ -533,13 +533,11 @@ aegis:currentState a owl:DatatypeProperty ;
 
 aegis:fromState a owl:DatatypeProperty ;
     rdfs:label "from state" ;
-    rdfs:domain aegis:TransitionEvent ;
     rdfs:range xsd:string ;
     rdfs:comment "The state a TransitionEvent left, retained on the event so archived history can be replayed without reconstructing a prior mutable status." .
 
 aegis:toState a owl:DatatypeProperty ;
     rdfs:label "to state" ;
-    rdfs:domain aegis:TransitionEvent ;
     rdfs:range xsd:string ;
     rdfs:comment "The state a TransitionEvent entered, retained on the event as the append-only source from which currentState is projected." .
 
@@ -883,3 +881,17 @@ aegis:exemptLineMarker a owl:DatatypeProperty ;
 aegis:aboutWorkItem a owl:ObjectProperty ;
     rdfs:label "about work item" ;
     rdfs:comment "The primary work item providing an episode's context. This is an attribution claim, not proof of implementation or completion. A producer verifies the existing target's direct WorkItem type in its authoritative records graph before writing; a reader joins that graph explicitly. The target is not copied into the episode graph. No global domain or range: neither endpoint gains a type merely from a reference." .
+
+# States are shared by declared workflow steps and observed events: no
+# materialising domain may misclassify a WorkflowStep as a TransitionEvent.
+aegis:initialState a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "State entered by a newly created run of this workflow; direct processing checks the run starts here before any signed advance is admitted." .
+aegis:terminalState a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "A state in which this workflow finishes; the declared process must contain no outgoing step from any terminal state." .
+
+aegis:currentRevision a owl:DatatypeProperty ; rdfs:range xsd:integer ;
+    rdfs:comment "Monotone count of committed advances for this run; it changes atomically with the signed event so returning to a state cannot admit an old request." .
+aegis:fromRevision a owl:DatatypeProperty ; rdfs:range xsd:integer ;
+    rdfs:comment "The run revision the performing agent signed as the prerequisite for this advance; it must match the committed current revision before the event is accepted." .
+aegis:transitionVersion a owl:DatatypeProperty ; rdfs:range xsd:integer ;
+    rdfs:comment "Selects the canonical transition signing protocol; omission retains legacy v1, while directly enforced processing requires v2 to bind the expected run revision." .
