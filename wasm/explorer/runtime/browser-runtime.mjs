@@ -141,7 +141,11 @@ export class BrowserRemoteProvider {
       signal: AbortSignal.timeout(this.timeoutMs), credentials: "omit",
     });
     if (!response.ok) throw new Error(`remote ${this.name} refused query: HTTP ${response.status}`);
-    return { member: this.name, declared_label: this.declaredLabel, result: await response.json() };
+    const result = await response.json();
+    if (result === null || typeof result !== "object" || Array.isArray(result)) {
+      throw new Error(`remote ${this.name} response must be an object`);
+    }
+    return { member: this.name, declared_label: this.declaredLabel, result };
   }
 }
 
@@ -172,6 +176,7 @@ export class BrowserFederatedProvider {
       const member = members[index];
       let error;
       if (answer.status === "rejected") error = String(answer.reason?.message ?? answer.reason);
+      else if (answer.value === null || typeof answer.value !== "object" || Array.isArray(answer.value)) error = "member response must be an object";
       else if (!Array.isArray(answer.value.rows) || !Array.isArray(answer.value.variables)) error = "member did not return SELECT rows";
       else if (!answer.value.variables.every((v) => typeof v === "string") ||
         !answer.value.rows.every((row) => row && typeof row === "object" && !Array.isArray(row))) error = "member SELECT response is malformed";

@@ -14,6 +14,9 @@ const work = mkdtempSync(join(tmpdir(), "quipu-wasm-features-"));
 const binary = process.env.QUIPU_BIN ?? join(repo, "target/release/quipu");
 const fixture = featureFixture(repo, binary, work);
 const requests = [], remoteBodies = [];
+const malformedResponses = [null, true, 1, "invalid", [], ["invalid"], {},
+  { variables: [], rows: null }, { variables: [1], rows: [] },
+  { variables: [], rows: [null] }, { variables: [], rows: [[]] }];
 const worker = `
 import init, * as engine from "/pkg/quipu_wasm_explorer.js";
 import { BrowserSemanticSearch, BrowserRemoteProvider, BrowserFederatedProvider } from "/runtime/browser-runtime.mjs";
@@ -60,6 +63,8 @@ const server = createServer(async (req, res) => {
     if (pathname === "/failed/query") { res.writeHead(503); res.end("unavailable"); return; }
     if (pathname === "/slow/query") { setTimeout(() => res.end("{}"), 250); return; }
     res.setHeader("Content-Type", "application/json");
+    const malformed = /^\/malformed-(\d+)\/query$/.exec(pathname);
+    if (malformed) { res.end(JSON.stringify(malformedResponses[Number(malformed[1])])); return; }
     res.end(JSON.stringify({ variables: ["s"], rows: [{ s: "http://example.org/remote" }] })); return;
   }
   const root = pathname.startsWith("/pkg/") ? bundle : runtime;
@@ -131,6 +136,20 @@ try {
   assert.equal(full.complete, true); assert.equal(full.result.rows.length, 3);
   const partial = await ok({ cmd: "federate", remotes: [remote, { name: "failed", endpoint: `${base}/failed` }], floor: {}, sparql });
   assert.equal(partial.complete, false); assert.equal(partial.providers.find((p) => p.name === "failed").ok, false);
+  for (const [index, payload] of malformedResponses.entries()) {
+    const malformed = { name: "malformed", endpoint: `${base}/malformed-${index}` };
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      const refused = await ask({ cmd: "remote", options: malformed, sparql });
+      assert.equal(refused.ok, false); assert.match(refused.error, /response must be an object/);
+    }
+    const degraded = await ok({ cmd: "federate", remotes: [remote, malformed], floor: {}, sparql });
+    assert.equal(degraded.complete, false);
+    assert.equal(degraded.providers.find((p) => p.name === "malformed").ok, false);
+    assert.equal(degraded.providers.find((p) => p.name === "local").ok, true);
+    assert.equal(degraded.providers.find((p) => p.name === "peer").ok, true);
+    assert.equal(degraded.result.rows.length, 3);
+  }
+  console.log("PASS malformed null/scalar/array/SELECT members preserve local and valid peer rows");
   const count = remoteBodies.length;
   const floor = await ask({ cmd: "federate", remotes: [remote], floor: { min_freshness: "fresh" }, sparql });
   assert.equal(floor.ok, false); assert.equal(remoteBodies.length, count);
