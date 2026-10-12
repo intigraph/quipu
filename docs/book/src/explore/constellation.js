@@ -1,3 +1,5 @@
+import { entityIri, readEntity, renderEntity } from "./entity.js";
+
 // Stable, topic-clustered graph. Geometry is computed once per graph load;
 // interaction moves a camera, never a running force simulation.
 export function createConstellation({ query, prefixes, short, inspect }) {
@@ -13,7 +15,8 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     { name: "Reading trail", color: "#f3a6c8" },
   ];
   let nodes = new Map(), edges = [], active = null, camera = { x: 0, y: 0, z: 1 };
-  let width = 600, height = 460, generation = 0, overview = false;
+  let width = 600, height = 460, generation = 0, selection = 0, overview = false;
+  let ready = false;
   const shape = (tag, attrs, text) => {
     const e = document.createElementNS(NS, tag);
     Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
@@ -106,35 +109,57 @@ export function createConstellation({ query, prefixes, short, inspect }) {
   const addText = (parent, tag, value) => {
     const e = document.createElement(tag); e.textContent = value; parent.append(e); return e;
   };
-  function open(id, center = false) {
-    const n = nodes.get(id); if (!n) return;
-    active = id; overview = false;
-    if (center) camera = { x: n.x, y: n.y, z: Math.max(.7, camera.z) };
-    const card = $("node-card"); card.replaceChildren();
-    addText(card, "p", groups[n.group].name).className = "eyebrow";
-    addText(card, "h3", n.label);
-    if (n.description) addText(card, "p", n.description);
-    if (n.excerpt) addText(card, "blockquote", n.excerpt);
-    if (n.source && /^https:\/\/github\.com\/scbrown\/quipu\/blob\//.test(n.source)) {
-      const a = addText(card, "a", "Read the source ↗"); a.href = n.source;
-      a.target = "_blank"; a.rel = "noopener noreferrer";
+  async function open(id, historyMode = "push") {
+    const card = $("node-card"), ticket = ++selection;
+    try {
+      entityIri(id);
+      active = id; overview = false;
+      const url = new URL(location.href);
+      const changed = url.searchParams.get("entity") !== id;
+      url.searchParams.set("entity", id);
+      if (historyMode === "replace") history.replaceState(null, "", url);
+      else if (historyMode === "push" && changed) history.pushState(null, "", url);
+      card.dataset.entity = id; card.setAttribute("aria-busy", "true");
+      card.textContent = "Loading entity…";
+      const known = nodes.get(id);
+      if (known) camera = { x: known.x, y: known.y, z: Math.max(.7, camera.z) };
+      draw();
+      const entity = await readEntity(query, id);
+      if (ticket !== selection) return;
+      const add = (key, label, type = "") => {
+        if (!nodes.has(key)) nodes.set(key, { id: key, label: label || short(key), group: groupOf(type) });
+      };
+      add(id, entity.label, entity.types[0]);
+      const n = nodes.get(id);
+      n.label = entity.label || n.label; n.group = groupOf(entity.types[0] || "");
+      // Replace the selected node's cached subset with its queried relations.
+      edges = edges.filter((e) => e.from !== id && e.to !== id);
+      for (const r of entity.links) {
+        add(r.value, r.label);
+        const edge = r.direction === "outgoing" ? { from: id, to: r.value, rel: r.predicate }
+          : { from: r.value, to: id, rel: r.predicate };
+        if (!edges.some((e) => e.from === edge.from && e.to === edge.to && e.rel === edge.rel)) edges.push(edge);
+      }
+      arrange(); camera = { x: n.x, y: n.y, z: Math.max(.7, camera.z) };
+      renderEntity(card, id, entity, { short, navigate: open, inspect });
+      card.setAttribute("aria-busy", "false"); draw();
+    } catch (error) {
+      if (ticket !== selection) return;
+      card.textContent = `Unable to load this entity: ${error.message}`;
+      card.setAttribute("aria-busy", "false");
     }
-    const links = document.createElement("div"); links.className = "node-links";
-    for (const e of edges.filter((e) => e.from === id || e.to === id)) {
-      const target = nodes.get(e.from === id ? e.to : e.from);
-      if (!target) continue;
-      const rel = short(e.rel).split(/[\/#]/).pop();
-      links.append(button(`${e.from === id ? "→" : "←"} ${rel}: ${target.label}`, () => open(target.id, true)));
-    }
-    card.append(links, button("Inspect facts & edit", () => inspect({ iri: n.id, path: n.label })));
-    draw();
   }
+  window.addEventListener("popstate", () => {
+    if (!ready) return;
+    const id = new URL(location.href).searchParams.get("entity");
+    if (id) { $("tab-map")?.click(); open(id, "none"); }
+  });
   const zoom = (factor) => { overview = false; camera.z = Math.max(.18, Math.min(2.5, camera.z * factor)); draw(); };
   $("graph-zoom-in").onclick = () => zoom(1.3);
   $("graph-zoom-out").onclick = () => zoom(1 / 1.3);
   $("graph-home").onclick = () => {
     const first = nodes.get(K + "vision") ?? nodes.values().next().value;
-    if (first) { camera.z = .8; open(first.id, true); }
+    if (first) { camera.z = .8; open(first.id); }
   };
   $("graph-fit").onclick = () => { overview = true; draw(); };
   $("graph-search").oninput = () => {
@@ -143,7 +168,7 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     if (!text) return;
     const matches = [...nodes.values()].filter((n) => `${n.label} ${n.description ?? ""}`.toLowerCase().includes(text));
     for (const n of matches.slice(0, 12)) results.append(button(n.label, () => {
-      open(n.id, true); results.replaceChildren();
+      open(n.id); results.replaceChildren();
     }));
     if (!matches.length) addText(results, "p", "No matching nodes in this view.");
   };
@@ -186,7 +211,7 @@ export function createConstellation({ query, prefixes, short, inspect }) {
   }
   return {
     async load() {
-      const ticket = ++generation;
+      const ticket = ++generation; ready = false; ++selection;
       const sparql = `${prefixes}
 SELECT ?subject ?predicate ?object WHERE {
   ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${K}"))
@@ -227,9 +252,14 @@ SELECT ?subject ?predicate ?object WHERE {
       $("graph-search").value = ""; $("graph-results").replaceChildren();
       $("node-card").textContent = fallback
         ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a star to follow its story.";
-      $("graph-home").click(); draw();
+      ready = true;
+      const requested = new URL(location.href).searchParams.get("entity");
+      const first = nodes.get(K + "vision") ?? nodes.values().next().value;
+      if (requested) $("tab-map")?.click();
+      if (requested || first) await open(requested || first.id, "replace");
+      draw();
     },
-    focus(item) { if (nodes.has(item.iri)) open(item.iri, true); },
+    focus(item) { if (ready) open(item.iri); },
     hasVision() { return nodes.has(K + "vision"); },
   };
 }

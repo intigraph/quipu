@@ -32,6 +32,14 @@
 .node-links, #graph-results { display: grid; gap: 6px; }
 .node-links { margin: 12px 0; }
 .node-links button, #graph-results button { text-align: left; overflow-wrap: anywhere; }
+#node-card details { margin: 12px 0; }
+#node-card summary { cursor: pointer; min-height: 32px; }
+#node-card dl { font-size: 13px; }
+#node-card dt { margin-top: 10px; font-weight: 600; }
+#node-card dd { margin: 4px 0 8px; white-space: pre-wrap; }
+#node-card .entity-iri { font-size: 11px; }
+#node-card .entity-types { font-size: 12px; }
+#node-card h4 { margin: 18px 0 8px; }
 @media (max-width: 750px) {
   .wrap { padding: 16px 12px 40px; }
   .body { padding: 12px; }

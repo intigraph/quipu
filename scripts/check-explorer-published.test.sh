@@ -5,7 +5,7 @@ CHECK="$ROOT/scripts/check-explorer-published.sh"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/src/pkg" "$T/out/pkg"
-for f in index.html explorer.js worker.js constellation.js constellation.css; do echo source > "$T/out/$f"; done
+for f in index.html explorer.js worker.js constellation.js constellation.css entity.js; do echo source > "$T/out/$f"; done
 for f in quipu_wasm_explorer.js quipu_wasm_explorer_bg.wasm; do
   echo wasm > "$T/src/pkg/$f"; cp "$T/src/pkg/$f" "$T/out/pkg/$f"
 done
@@ -28,7 +28,12 @@ cp "$T/src/repository.pendant.tar.gz" "$T/out/"
 echo changed > "$T/out/repository.pendant.tar.gz"
 expect_fail "$CHECK" "$T/src" "$T/out"
 grep -q 'published bytes differ' "$T/error"
+cp "$T/src/repository.qpack.tar.gz" "$T/out/"
+rm "$T/out/entity.js"
+expect_fail "$CHECK" "$T/src" "$T/out"
+grep -q 'missing from book output: explore/entity.js' "$T/error"
+echo source > "$T/out/entity.js"
 rm "$T/out/constellation.js"
 expect_fail "$CHECK" "$T/src" "$T/out"
 grep -q 'missing from book output' "$T/error"
-echo '6 explorer publication scenarios passed'
+echo '7 explorer publication scenarios passed'
