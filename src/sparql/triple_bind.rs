@@ -32,6 +32,29 @@ pub(super) fn bind_row(
     row: MatchedRow,
     bind_graph_var: Option<&str>,
 ) -> Result<Option<Bindings>> {
+    bind_row_inner(store, tp, bindings, row, bind_graph_var, false)
+}
+
+/// Bind a subject whose unchanged primary dictionary ID was verified by SQL.
+/// Attached-only and unresolved IDs must use the ordinary binding path.
+pub(super) fn bind_row_verified_subject(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    row: MatchedRow,
+    bind_graph_var: Option<&str>,
+) -> Result<Option<Bindings>> {
+    bind_row_inner(store, tp, bindings, row, bind_graph_var, true)
+}
+
+fn bind_row_inner(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    row: MatchedRow,
+    bind_graph_var: Option<&str>,
+    verified_subject: bool,
+) -> Result<Option<Bindings>> {
     let MatchedRow {
         e_id,
         a_id,
@@ -44,7 +67,9 @@ pub(super) fn bind_row(
     // Bind subject variable (or blank node used as join variable).
     match &tp.subject {
         TermPattern::Variable(var) => {
-            let e_iri = if super::count_stream::direct_refs() && !store.has_attachments() {
+            let e_iri = if verified_subject
+                || (super::count_stream::direct_refs() && !store.has_attachments())
+            {
                 if !bind_var(
                     &mut new_bindings,
                     var.as_str(),
@@ -74,11 +99,15 @@ pub(super) fn bind_row(
             }
         }
         TermPattern::BlankNode(b) => {
-            let e_iri = store.resolve(e_id)?;
-            let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
-                Value::Ref(term_id)
+            let e_val = if verified_subject {
+                Value::Ref(e_id)
             } else {
-                Value::Str(e_iri)
+                let e_iri = store.resolve(e_id)?;
+                if let Some(term_id) = store.lookup(&e_iri)? {
+                    Value::Ref(term_id)
+                } else {
+                    Value::Str(e_iri)
+                }
             };
             if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
                 return Ok(None);

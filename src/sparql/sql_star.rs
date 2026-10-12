@@ -9,7 +9,7 @@
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use super::pattern_util::{check_eval_budget, triple_pattern_vars};
-use super::triple::eval_triple_pattern_limited;
+use super::triple::eval_complete_relation;
 use super::{Bindings, TemporalContext};
 use crate::{Result, Store};
 
@@ -56,13 +56,7 @@ pub(super) fn try_eval(
     let mut relations = Vec::with_capacity(patterns.len());
     for (index, pattern) in patterns.iter().enumerate() {
         check_eval_budget(ctx, index, 0)?;
-        let rows = match eval_triple_pattern_limited(
-            store,
-            pattern,
-            seed,
-            ctx,
-            Some(MAX_RELATION_ROWS + 1),
-        ) {
+        let rows = match eval_complete_relation(store, pattern, ctx, MAX_RELATION_ROWS + 1) {
             Ok(rows) => rows,
             // An unbound relation may encounter a malformed unrelated row
             // that the original seeded lookup never visits. Retain that
