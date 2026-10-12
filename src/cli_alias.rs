@@ -58,9 +58,12 @@ pub(crate) fn ensure(bin: &Path) -> Result<()> {
         #[cfg(not(unix))]
         return Err("relative qp aliases currently require a Unix host".into());
     }
-    if fs::read_link(&alias).ok().as_deref() != Some(Path::new("quipu"))
-        || fs::canonicalize(&alias).ok() != fs::canonicalize(&target).ok()
-    {
+    let link = fs::read_link(&alias).map_err(|e| format!("read {}: {e}", alias.display()))?;
+    let resolved_alias =
+        fs::canonicalize(&alias).map_err(|e| format!("resolve {}: {e}", alias.display()))?;
+    let resolved_target =
+        fs::canonicalize(&target).map_err(|e| format!("resolve {}: {e}", target.display()))?;
+    if link != Path::new("quipu") || resolved_alias != resolved_target {
         return Err("qp alias identity read-back failed".into());
     }
     Ok(())
@@ -91,6 +94,29 @@ pub(crate) fn run(args: &[String]) {
             preflight(&bin)?;
         } else {
             ensure(&bin)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let alias = fs::metadata(bin.join("qp")).map_err(|e| e.to_string())?;
+                let target = fs::metadata(bin.join("quipu")).map_err(|e| e.to_string())?;
+                if (alias.dev(), alias.ino()) != (target.dev(), target.ino()) {
+                    return Err("qp and quipu inode verification failed".into());
+                }
+            }
+            let version = |name: &str| -> Result<Vec<u8>> {
+                let output = std::process::Command::new(bin.join(name))
+                    .arg("--version")
+                    .output()
+                    .map_err(|e| format!("run {name} --version: {e}"))?;
+                if !output.status.success() || output.stdout.is_empty() {
+                    return Err(format!("{name} --version failed"));
+                }
+                Ok(output.stdout)
+            };
+            if version("qp")? != version("quipu")? {
+                return Err("qp and quipu version outputs disagree".into());
+            }
+            println!("Verified same executable inode and version");
         }
         println!(
             "qp -> quipu in {}{}",

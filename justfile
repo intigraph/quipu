@@ -39,7 +39,8 @@ install bin_dir="":
     #!/usr/bin/env bash
     set -euo pipefail
     bin={{quote(bin_dir)}}
-    bin=${bin:-"$HOME/.local/bin"}
+    root=${QUIPU_INSTALL_ROOT:-${CARGO_INSTALL_ROOT:-$HOME/.local}}
+    bin=${bin:-"$root/bin"}
     cargo build --locked --release --features full --bin quipu --bin quipu-server
     target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
     "$target/release/quipu" install-alias --bin-dir "$bin" --check

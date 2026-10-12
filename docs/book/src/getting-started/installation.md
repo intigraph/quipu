@@ -78,6 +78,26 @@ Both `quipu --version` and `quipu-server --version` report `git_sha` and
 without Git metadata reports `git_sha: unknown`; a dirty build reports
 `git_dirty: true`. The HTTP `/version` response retains its existing format.
 
+## With Cargo
+
+Cargo installs the executable targets; finish the installation with the alias
+command to provide both supported names:
+
+```bash
+cargo install --git https://github.com/scbrown/quipu --locked --features full
+quipu install-alias
+qp --version
+```
+
+`install-alias` uses the directory containing the running Quipu executable,
+including Cargo's `--root` destination. It refuses conflicting `qp` names and
+verifies the same inode and exact version output. `--check` only checks for
+collisions and does not create the link.
+
+`just install` resolves its root as `QUIPU_INSTALL_ROOT`, then
+`CARGO_INSTALL_ROOT`, then `$HOME/.local`, and installs into that root's `bin`
+directory. Its optional directory argument overrides this resolution.
+
 ## The Full Stack (caboodle)
 
 To install Quipu as part of the whole knowledge stack —
