@@ -136,6 +136,20 @@ const server = http.createServer((req, res) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(out, "map-mobile.png"), fullPage: true });
     check("mobile has no horizontal overflow", await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    // A second real pack without the vision must not let the file browser
+    // overwrite the restored Map selection. All writes remain in this tab.
+    const pack = await page.evaluate(async () => {
+      await window.quipu.retract("https://quipu.dev/knowledge/vision");
+      const zero = await window.quipu.query("SELECT ?p WHERE { <https://quipu.dev/knowledge/vision> ?p ?o }");
+      if (zero.rows.length) throw Error("Vision removal failed");
+      return Array.from(await window.quipu.share());
+    });
+    await page.locator("#file-input").setInputFiles({ name: "without-vision.qpack.tar.gz",
+      mimeType: "application/gzip", buffer: Buffer.from(pack) });
+    await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Loaded")
+      && document.querySelector("#sparql-out").textContent.includes("No rows"), null, { timeout: 120000 });
+    await verify(type);
+    check("pack without vision preserves deep-linked entity", await current() === type);
     const invalid = new URL(page.url()); invalid.searchParams.set("entity", 'urn:bad> ?s ?p ?o');
     await page.goto(invalid.href);
     await page.waitForFunction(() => document.querySelector("#node-card").textContent.includes("Invalid entity IRI"));

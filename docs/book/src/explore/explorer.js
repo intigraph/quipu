@@ -281,7 +281,8 @@ async function renderBrowser() {
   filter.addEventListener("input", draw);
   draw();
   wireShowQuery("#browse-showq", Q.modules);
-  if (items.length && !constellation.hasVision()) selectFile(items.find((i) => i.path === "src/share.rs") ?? items[0]);
+  // The map owns the initial selection, including a URL from a different pack.
+  // Do not overwrite a restored entity with an arbitrary first file here.
 }
 
 function detailQuery(iri) {
