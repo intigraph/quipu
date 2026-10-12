@@ -169,7 +169,7 @@ impl Store {
                 // Taken before `staged` moves into after_commit_hooks below.
                 let effective = staged.effective.take();
                 self.conn.execute_batch("RELEASE quipu_transact")?;
-                self.after_commit_hooks(datums, staged, timestamp, source)?;
+                self.after_commit_hooks(datums, staged, timestamp, source, graph)?;
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
                 self.invalidate_policy_registry_if_governance(datums)?;
@@ -399,6 +399,7 @@ impl Store {
         staged: Staged,
         timestamp: &str,
         source: Option<&str>,
+        _graph: i64,
     ) -> Result<()> {
         // Post-transact hook: auto-embed touched entities.
         // Skipped when a vector search delegate is set — embeddings belong in
@@ -442,6 +443,7 @@ impl Store {
 
             if !self.observers.is_empty() {
                 let delta = Delta {
+                    graph: _graph,
                     tx: staged.tx_id,
                     asserts: staged.asserts,
                     retracts: staged.retracts,

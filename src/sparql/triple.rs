@@ -4,6 +4,11 @@
 //! SPARQL algebra over rows, while everything here turns a triple pattern into
 //! `SQL` over `facts` and binds the variables in the rows that come back.
 
+mod scan;
+
+pub(super) use scan::eval_complete_relation;
+use scan::{ScanMode, collect_triple_pattern};
+
 use std::collections::HashSet;
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -18,7 +23,7 @@ use super::pattern_util::{
 use super::rdfs::{
     collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
 };
-use super::triple_bind::{MatchedRow, bind_row};
+use super::triple_bind::{MatchedRow, bind_row, bind_row_verified_subject};
 use super::{Bindings, GraphScope, TemporalContext};
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
@@ -31,20 +36,21 @@ pub fn eval_bgp(
     if patterns.is_empty() {
         return Ok((vec![seed.clone()], vec![]));
     }
+    if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
+    }
+    if let Some(result) = super::sql_star::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
+    }
 
-    // The read model turns a pattern into hash lookups, which makes evaluating
-    // it ONCE and joining cheap — so when it is available, take the hash join
-    // and leave the nested loop below for SQL. The loop is where the O(n^2)
-    // lives: re-evaluating each pattern per accumulated row is quadratic no
-    // matter how fast an individual evaluation gets.
+    // The read model evaluates each pattern once instead of repeated SQL.
+    // Hash joins avoid the nested loop's quadratic repeated evaluation.
     // Only for a BGP that actually JOINS. A single pattern is the shape SQL is
     // already fast at — a bound-subject lookup is ~0.1ms against an index — and
     // routing it through the model would make it pay for building one, which
     // measured as a 0.12ms -> 320ms regression. Two or more patterns is exactly
     // where the nested loop turns quadratic and the build pays for itself.
-    // The read model currently indexes asserted triples. Keep constant
-    // rdf:type patterns on the entailment-aware evaluator so a join cannot
-    // silently change the answer back to asserted-only.
+    // Type patterns retain the existing entailment-aware evaluator.
     let needs_type_entailment = patterns.iter().any(is_rdf_type_pattern);
     if patterns.len() >= 2
         && !needs_type_entailment
@@ -115,27 +121,14 @@ pub fn eval_triple_pattern(
 /// never causes an undershoot. Enforced in the row loop rather than as a SQL
 /// `LIMIT` because rusqlite steps lazily: breaking out stops the scan just as
 /// surely, and stays correct for the reject-a-row case.
-fn eval_triple_pattern_limited(
+pub(super) fn eval_triple_pattern_limited(
     store: &Store,
     tp: &TriplePattern,
     bindings: &Bindings,
     ctx: &TemporalContext,
     limit: Option<usize>,
 ) -> Result<Vec<Bindings>> {
-    let mut results = Vec::new();
-    visit_triple_pattern_limited(
-        store,
-        tp,
-        bindings,
-        ctx,
-        limit,
-        false,
-        Some(&mut |row| {
-            results.push(row);
-            Ok(())
-        }),
-    )?;
-    Ok(results)
+    collect_triple_pattern(store, tp, bindings, ctx, limit, ScanMode::Retained)
 }
 
 /// Visit exact matches without retaining their bindings. SQL and canonical
@@ -147,7 +140,15 @@ pub(super) fn visit_triple_pattern(
     ctx: &TemporalContext,
     emit: &mut dyn FnMut(Bindings) -> Result<()>,
 ) -> Result<usize> {
-    visit_triple_pattern_limited(store, tp, bindings, ctx, None, true, Some(emit))
+    visit_triple_pattern_limited(
+        store,
+        tp,
+        bindings,
+        ctx,
+        None,
+        ScanMode::Streamed,
+        Some(emit),
+    )
 }
 
 /// Count a leaf without decoding terms. Caller must prove independent variable
@@ -157,7 +158,15 @@ pub(super) fn count_triple_pattern(
     tp: &TriplePattern,
     ctx: &TemporalContext,
 ) -> Result<usize> {
-    visit_triple_pattern_limited(store, tp, &Bindings::new(), ctx, None, true, None)
+    visit_triple_pattern_limited(
+        store,
+        tp,
+        &Bindings::new(),
+        ctx,
+        None,
+        ScanMode::Streamed,
+        None,
+    )
 }
 
 fn visit_triple_pattern_limited(
@@ -166,9 +175,10 @@ fn visit_triple_pattern_limited(
     bindings: &Bindings,
     ctx: &TemporalContext,
     limit: Option<usize>,
-    streaming: bool,
+    mode: ScanMode,
     mut emit: Option<&mut dyn FnMut(Bindings) -> Result<()>>,
 ) -> Result<usize> {
+    let streaming = matches!(mode, ScanMode::Streamed);
     if limit == Some(0) {
         return Ok(0);
     }
@@ -384,6 +394,13 @@ fn visit_triple_pattern_limited(
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
             format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
+    } else if matches!(mode, ScanMode::CompleteRelation) {
+        let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
+        // Prove primary membership inside this bounded scan. Missing or
+        // attached-only subjects retain normal resolution and its errors.
+        format!(
+            "SELECT {columns}, EXISTS(SELECT 1 FROM main.terms AS primary_term WHERE primary_term.id=e) FROM {facts}{where_clause}"
+        )
     } else if want_g {
         format!("SELECT e, a, v, g FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v),g")
     } else {
@@ -406,6 +423,16 @@ fn visit_triple_pattern_limited(
             })
         });
     }
+    let aliases = match &tp.subject {
+        TermPattern::Variable(variable) if !bindings.contains_key(variable.as_str()) => {
+            super::triple_alias::snapshot(store, ctx)?
+        }
+        _ => None,
+    };
+    let canonical = |id| match &aliases {
+        Some(aliases) => Ok(aliases.get(&id).copied().unwrap_or(id)),
+        None => store.canonical_id(id),
+    };
     let mut stmt = store.prepare(&sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
@@ -415,15 +442,19 @@ fn visit_triple_pattern_limited(
     // result vector made an unbound production scan quadratic (aegis-h7rtt).
     let mut canonical_rows = HashSet::new();
     while let Some(row) = rows.next()? {
-        let e_id = store.canonical_id(row.get(0)?)?;
-        let a_id = store.canonical_id(row.get(1)?)?;
+        let physical_e_id = row.get(0)?;
+        let e_id = canonical(physical_e_id)?;
+        let verified_subject = matches!(mode, ScanMode::CompleteRelation)
+            && e_id == physical_e_id
+            && row.get::<_, bool>(if want_g { 4 } else { 3 })?;
+        let a_id = canonical(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;
         let v = match Value::from_bytes(&v_bytes)? {
-            Value::Ref(id) => Value::Ref(store.canonical_id(id)?),
+            Value::Ref(id) => Value::Ref(canonical(id)?),
             other => other,
         };
         let g_id: Option<i64> = if want_g {
-            Some(store.canonical_id(row.get(3)?)?)
+            Some(canonical(row.get(3)?)?)
         } else {
             None
         };
@@ -441,7 +472,12 @@ fn visit_triple_pattern_limited(
             v,
             g_id,
         };
-        if let Some(row) = bind_row(store, tp, bindings, matched, bind_graph_var.as_deref())? {
+        let bind = if verified_subject {
+            bind_row_verified_subject
+        } else {
+            bind_row
+        };
+        if let Some(row) = bind(store, tp, bindings, matched, bind_graph_var.as_deref())? {
             emit.as_mut().expect("binding visitor was checked above")(row)?;
             count += 1;
             if limit.is_some_and(|cap| count >= cap) {

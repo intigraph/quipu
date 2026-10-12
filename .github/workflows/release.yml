@@ -633,6 +633,7 @@ jobs:
           # differently, ships an `mcp` subcommand that cannot start.
           cp "target/${TARGET}/release/quipu" "dist/${NAME}/"
           cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
+          ln -s quipu "dist/${NAME}/qp"
           cp README.md LICENSE "dist/${NAME}/"
 
           # The binaries carry every feature, and two of them have runtime
@@ -689,6 +690,8 @@ jobs:
           LISTING="$(tar -tzf "dist/${NAME}.tar.gz")"
           grep -qx "${NAME}/quipu" <<<"${LISTING}"
           grep -qx "${NAME}/quipu-server" <<<"${LISTING}"
+          grep -qx "${NAME}/qp" <<<"${LISTING}"
+          test "$(readlink "dist/${NAME}/qp")" = quipu
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist
 
@@ -700,6 +703,10 @@ jobs:
           # proves the artifact actually executes on a clean runner.
           "${BIN}/quipu" --version
           "${BIN}/quipu-server" --version
+          ALIAS="dist/${{ steps.package.outputs.name }}"
+          test -L "${ALIAS}/qp"
+          test "${ALIAS}/qp" -ef "${ALIAS}/quipu"
+          test "$("${ALIAS}/qp" --version)" = "$("${ALIAS}/quipu" --version)"
           # A real round trip: ingest a triple and read it back.
           TMP="$(mktemp -d)"
           printf '@prefix ex: <http://example.org/> .\nex:a a ex:T ; ex:rel ex:b .\n' > "${TMP}/t.ttl"

@@ -46,7 +46,7 @@ Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
 checksummed release.
 
 ```bash
-V=0.11.1
+V=0.12.1
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)  T=x86_64-unknown-linux-gnu ;;
   Linux-aarch64) T=aarch64-unknown-linux-gnu ;;
@@ -85,7 +85,7 @@ quipu --version
 ```
 
 ```text
-quipu 0.11.1
+quipu 0.12.1
 ```
 
 If that prints an older version, another copy is earlier on your `PATH`:
@@ -172,7 +172,8 @@ claude mcp add quipu -- /absolute/path/to/quipu mcp --db /absolute/path/to/store
 No binaries? Quipu is in the [MCP Registry](https://registry.modelcontextprotocol.io),
 so VS Code's `@mcp` Extensions search (and other registry-aware clients) can
 install it in one click. That runs the published image, which needs Docker and
-nothing else:
+nothing else. The registry entry pins its own image version; it can lag the
+latest binary release. Check that tag when you need a particular version:
 
 ```bash
 docker run -i --rm -v quipu-data:/data ghcr.io/scbrown/quipu:latest
