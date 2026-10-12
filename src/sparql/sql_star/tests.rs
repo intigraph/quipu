@@ -307,3 +307,132 @@ fn malformed_unrelated_relation_retains_selective_lookup() {
         "unrelated bad blob must not break a selective query"
     );
 }
+
+#[test]
+fn complete_relation_matches_grouped_bag_with_duplicates_and_literal_aliases() {
+    let (mut store, _dir, graph) = composed();
+    let subject = store.lookup("urn:test:subject").unwrap().unwrap();
+    let status = store.lookup("urn:test:status").unwrap().unwrap();
+    for value in [
+        Value::Str("same".into()),
+        Value::Typed {
+            lexical: "same".into(),
+            datatype: crate::namespace::XSD_STRING.into(),
+        },
+        Value::Lang {
+            lexical: "same".into(),
+            lang: "en".into(),
+        },
+        Value::Int(7),
+        Value::Typed {
+            lexical: "7".into(),
+            datatype: "urn:test:datatype".into(),
+        },
+    ] {
+        store
+            .transact_to_graph(
+                &[crate::Datum {
+                    entity: subject,
+                    attribute: status,
+                    value,
+                    valid_from: "2026-10-11T00:00:00Z".into(),
+                    valid_to: None,
+                    op: Op::Assert,
+                }],
+                "2026-10-11T00:00:00Z",
+                None,
+                None,
+                graph,
+            )
+            .unwrap();
+    }
+    store.conn.execute("INSERT INTO facts(e,a,v,tx,valid_from,op,g) SELECT e,a,v,(SELECT MAX(id) FROM transactions),'2026-10-11T00:00:00Z',op,g FROM facts WHERE e=?1 AND a=?2 AND tx<(SELECT MAX(id) FROM transactions) LIMIT 1", rusqlite::params![subject,status]).unwrap();
+    let bag = |rows: Vec<Bindings>| {
+        let mut rows: Vec<_> = rows
+            .into_iter()
+            .map(|row| {
+                let mut cells: Vec<_> = row
+                    .into_iter()
+                    .map(|(key, value)| (key, value.term_key()))
+                    .collect();
+                cells.sort();
+                cells
+            })
+            .collect();
+        rows.sort();
+        rows
+    };
+    for name in ["urn:test:local", "urn:test:archive"] {
+        let graph_ids = store.lookup_all(name).unwrap();
+        assert_eq!(graph_ids.len(), 1, "positive mounted graph coverage");
+        let ctx = TemporalContext {
+            graph: super::super::GraphScope::Named(graph_ids),
+            ..TemporalContext::default()
+        };
+        for pattern in patterns() {
+            let grouped = super::super::triple::eval_triple_pattern_limited(
+                &store,
+                &pattern,
+                &Bindings::new(),
+                &ctx,
+                None,
+            )
+            .unwrap();
+            let complete = super::super::triple::eval_complete_relation(
+                &store,
+                &pattern,
+                &ctx,
+                MAX_RELATION_ROWS + 1,
+            )
+            .unwrap();
+            assert!(!grouped.is_empty(), "positive graph/predicate coverage");
+            assert_eq!(
+                bag(grouped),
+                bag(complete),
+                "same canonical binding bag in {name}"
+            );
+        }
+    }
+    let ctx = TemporalContext {
+        graph: super::super::GraphScope::Named(vec![graph]),
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..TemporalContext::default()
+    };
+    assert!(
+        try_eval(&store, &patterns(), &ctx, &Bindings::new()).is_err(),
+        "no deadline bypass"
+    );
+}
+
+#[test]
+fn complete_relation_keeps_missing_subject_dictionary_errors() {
+    let (store, _dir, graph) = composed();
+    let owner = store.lookup("urn:test:owner").unwrap().unwrap();
+    store
+        .conn
+        .pragma_update(None, "foreign_keys", false)
+        .unwrap();
+    store.conn.execute(
+        "INSERT INTO facts(e,a,v,tx,valid_from,op,g) SELECT 99999999,a,v,tx,valid_from,op,g FROM facts WHERE a=?1 AND g=?2 LIMIT 1",
+        rusqlite::params![owner, graph],
+    ).unwrap();
+    let ctx = TemporalContext {
+        graph: super::super::GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let pattern = patterns().remove(0);
+    assert!(
+        super::super::triple::eval_triple_pattern_limited(
+            &store,
+            &pattern,
+            &Bindings::new(),
+            &ctx,
+            None,
+        )
+        .is_err(),
+        "ordinary evaluator must observe the corrupt dictionary reference"
+    );
+    assert!(super::super::triple::eval_complete_relation(
+        &store, &pattern, &ctx, MAX_RELATION_ROWS + 1,
+    ).is_err(), "verified binding must preserve the dictionary error");
+}

@@ -4145,6 +4145,9 @@ fn external_query_fixture_perf() {
 #[test]
 #[ignore = "explicit disposable matched-concurrency query performance probe"]
 fn external_query_fixture_parallel_perf() {
+    let cache_limit = std::env::var("QUIPU_PERF_TERM_CACHE_LIMIT")
+        .ok()
+        .map(|value| value.parse::<usize>().unwrap());
     let db = std::env::var("QUIPU_PERF_DB").expect("explicit disposable fixture database");
     let text = std::fs::read_to_string(
         std::env::var("QUIPU_PERF_QUERY").expect("explicit fixture query file"),
@@ -4152,6 +4155,10 @@ fn external_query_fixture_parallel_perf() {
     .unwrap();
     let mut reference_store = Store::open_read_only(&db).unwrap();
     reference_store.sync_frozen_attachments().unwrap();
+    if let Some(limit) = cache_limit {
+        reference_store.set_term_cache_limit(limit);
+        println!("fixture term_cache_limit={limit}");
+    }
     let expected_attachments = std::env::var("QUIPU_PERF_EXPECTED_ATTACHMENTS")
         .ok()
         .map(|value| value.parse::<usize>().unwrap());
@@ -4194,6 +4201,9 @@ fn external_query_fixture_parallel_perf() {
                     std::thread::spawn(move || {
                         let mut store = Store::open_read_only(&db).unwrap();
                         store.sync_frozen_attachments().unwrap();
+                        if let Some(limit) = cache_limit {
+                            store.set_term_cache_limit(limit);
+                        }
                         if let Some(expected) = expected_attachments {
                             assert_eq!(store.attachments().len(), expected, "worker composition positive control");
                         }

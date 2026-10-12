@@ -4,6 +4,11 @@
 //! SPARQL algebra over rows, while everything here turns a triple pattern into
 //! `SQL` over `facts` and binds the variables in the rows that come back.
 
+mod scan;
+
+pub(super) use scan::eval_complete_relation;
+use scan::{ScanMode, collect_triple_pattern};
+
 use std::collections::HashSet;
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
@@ -18,7 +23,7 @@ use super::pattern_util::{
 use super::rdfs::{
     collect_class_and_subclasses, eval_type_pattern_with_subclasses, is_rdf_type_pattern,
 };
-use super::triple_bind::{MatchedRow, bind_row};
+use super::triple_bind::{MatchedRow, bind_row, bind_row_verified_subject};
 use super::{Bindings, GraphScope, TemporalContext};
 
 /// Evaluate a basic graph pattern -- a set of triple patterns.
@@ -123,20 +128,7 @@ pub(super) fn eval_triple_pattern_limited(
     ctx: &TemporalContext,
     limit: Option<usize>,
 ) -> Result<Vec<Bindings>> {
-    let mut results = Vec::new();
-    visit_triple_pattern_limited(
-        store,
-        tp,
-        bindings,
-        ctx,
-        limit,
-        false,
-        Some(&mut |row| {
-            results.push(row);
-            Ok(())
-        }),
-    )?;
-    Ok(results)
+    collect_triple_pattern(store, tp, bindings, ctx, limit, ScanMode::Retained)
 }
 
 /// Visit exact matches without retaining their bindings. SQL and canonical
@@ -148,7 +140,15 @@ pub(super) fn visit_triple_pattern(
     ctx: &TemporalContext,
     emit: &mut dyn FnMut(Bindings) -> Result<()>,
 ) -> Result<usize> {
-    visit_triple_pattern_limited(store, tp, bindings, ctx, None, true, Some(emit))
+    visit_triple_pattern_limited(
+        store,
+        tp,
+        bindings,
+        ctx,
+        None,
+        ScanMode::Streamed,
+        Some(emit),
+    )
 }
 
 /// Count a leaf without decoding terms. Caller must prove independent variable
@@ -158,7 +158,15 @@ pub(super) fn count_triple_pattern(
     tp: &TriplePattern,
     ctx: &TemporalContext,
 ) -> Result<usize> {
-    visit_triple_pattern_limited(store, tp, &Bindings::new(), ctx, None, true, None)
+    visit_triple_pattern_limited(
+        store,
+        tp,
+        &Bindings::new(),
+        ctx,
+        None,
+        ScanMode::Streamed,
+        None,
+    )
 }
 
 fn visit_triple_pattern_limited(
@@ -167,9 +175,10 @@ fn visit_triple_pattern_limited(
     bindings: &Bindings,
     ctx: &TemporalContext,
     limit: Option<usize>,
-    streaming: bool,
+    mode: ScanMode,
     mut emit: Option<&mut dyn FnMut(Bindings) -> Result<()>>,
 ) -> Result<usize> {
+    let streaming = matches!(mode, ScanMode::Streamed);
     if limit == Some(0) {
         return Ok(0);
     }
@@ -385,6 +394,13 @@ fn visit_triple_pattern_limited(
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
             format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
+    } else if matches!(mode, ScanMode::CompleteRelation) {
+        let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
+        // Prove primary membership inside this bounded scan. Missing or
+        // attached-only subjects retain normal resolution and its errors.
+        format!(
+            "SELECT {columns}, EXISTS(SELECT 1 FROM main.terms AS primary_term WHERE primary_term.id=e) FROM {facts}{where_clause}"
+        )
     } else if want_g {
         format!("SELECT e, a, v, g FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v),g")
     } else {
@@ -426,7 +442,11 @@ fn visit_triple_pattern_limited(
     // result vector made an unbound production scan quadratic (aegis-h7rtt).
     let mut canonical_rows = HashSet::new();
     while let Some(row) = rows.next()? {
-        let e_id = canonical(row.get(0)?)?;
+        let physical_e_id = row.get(0)?;
+        let e_id = canonical(physical_e_id)?;
+        let verified_subject = matches!(mode, ScanMode::CompleteRelation)
+            && e_id == physical_e_id
+            && row.get::<_, bool>(if want_g { 4 } else { 3 })?;
         let a_id = canonical(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;
         let v = match Value::from_bytes(&v_bytes)? {
@@ -452,7 +472,12 @@ fn visit_triple_pattern_limited(
             v,
             g_id,
         };
-        if let Some(row) = bind_row(store, tp, bindings, matched, bind_graph_var.as_deref())? {
+        let bind = if verified_subject {
+            bind_row_verified_subject
+        } else {
+            bind_row
+        };
+        if let Some(row) = bind(store, tp, bindings, matched, bind_graph_var.as_deref())? {
             emit.as_mut().expect("binding visitor was checked above")(row)?;
             count += 1;
             if limit.is_some_and(|cap| count >= cap) {
