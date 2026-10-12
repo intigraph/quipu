@@ -344,10 +344,10 @@ fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
 
 fn print_usage() {
     eprintln!(
-        "qp -- AI-native knowledge graph (quipu remains supported)
+        "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
-    qp install-alias [--bin-dir DIR] [--check]  Add the relative qp -> quipu command name
+    qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
     qp ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
     qp read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
