@@ -25,6 +25,29 @@ quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu", defaul
 
 ## From Source
 
+`qp` is the preferred command name; `quipu` remains supported. Install both
+names plus the companion server with:
+
+```bash
+just install
+# Optional destination directory:
+just install "$HOME/.local/bin"
+qp --version
+quipu --version
+```
+
+`qp` is a relative symlink to `quipu`, so both execute the same binary after
+upgrades. The installer refuses an existing conflicting `qp` in the destination
+or on PATH. It never replaces another tool's command name. Release archives
+also carry this relative link beside both binaries.
+
+To add the command name to an existing installation without opening a store:
+
+```bash
+quipu install-alias --check
+quipu install-alias
+```
+
 ```bash
 git clone https://github.com/scbrown/quipu
 cd quipu
@@ -54,6 +77,26 @@ Both `quipu --version` and `quipu-server --version` report `git_sha` and
 `git_dirty` without opening a database or loading configuration. A source archive
 without Git metadata reports `git_sha: unknown`; a dirty build reports
 `git_dirty: true`. The HTTP `/version` response retains its existing format.
+
+## With Cargo
+
+Cargo installs the executable targets; finish the installation with the alias
+command to provide both supported names:
+
+```bash
+cargo install --git https://github.com/scbrown/quipu --locked --features full
+quipu install-alias
+qp --version
+```
+
+`install-alias` uses the directory containing the running Quipu executable,
+including Cargo's `--root` destination. It refuses conflicting `qp` names and
+verifies the same inode and exact version output. `--check` only checks for
+collisions and does not create the link.
+
+`just install` resolves its root as `QUIPU_INSTALL_ROOT`, then
+`CARGO_INSTALL_ROOT`, then `$HOME/.local`, and installs into that root's `bin`
+directory. Its optional directory argument overrides this resolution.
 
 ## The Full Stack (caboodle)
 

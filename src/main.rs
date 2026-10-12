@@ -38,6 +38,7 @@
 //! Aliases: load=knot, query=read
 
 mod cli;
+mod cli_alias;
 mod cli_align;
 mod cli_attest;
 mod cli_audit;
@@ -90,6 +91,7 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "install-alias" => return cli_alias::run(&args),
         "git-merge" => return cli_git_merge::run(&args),
         "merge-driver" => return cli_git_merge::run(&args),
         "pendant-resolve" => return cli_git_merge::run(&args),
@@ -342,91 +344,92 @@ fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
 
 fn print_usage() {
     eprintln!(
-        "quipu -- AI-native knowledge graph
+        "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
-    quipu knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
-    quipu ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
-    quipu read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
-    quipu cord [--type <IRI>] [--limit N] [--db <path>]
-    quipu unravel [--tx N] [--valid-at <date>] [--db <path>]
-    quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
-    quipu explain <subject-IRI> <predicate-IRI> <object> [--depth N] [--db <path>]
-    quipu path <cone|backtest|draft> <trajectory-IRI> [options] [--db <path>]
-    quipu project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
-    quipu report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
-    quipu reason [--rules <file.ttl>] [--db <path>]
-    quipu demotions [--graph <premise-IRI>] [--db <path>]
-    quipu episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
-    quipu retract <entity-IRI> [--predicate <IRI>] [--db <path>]
-    quipu shapes load|list|remove [--db <path>]
-    quipu policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
-    quipu policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
-    quipu gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
-    quipu propose list|submit|accept|reject [--status pending] [--db <path>]
-    quipu ontology load|list|remove [--db <path>]
-    quipu validate --shapes <shapes.ttl> --data <data.ttl>
-    quipu repl [--db <path>]
-    quipu export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
-    quipu mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
-    quipu stats [--db <path>]
-    quipu search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
-    quipu search-index status|backfill|drop [--batch-size 500] [--db <path>]
-    quipu doctor labels [--db <path>]
-    quipu pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
-    quipu pack --full --format text --destination internal --out <dir> [--db <path>]
+    qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
+    qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
+    qp ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
+    qp read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
+    qp cord [--type <IRI>] [--limit N] [--db <path>]
+    qp unravel [--tx N] [--valid-at <date>] [--db <path>]
+    qp impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
+    qp explain <subject-IRI> <predicate-IRI> <object> [--depth N] [--db <path>]
+    qp path <cone|backtest|draft> <trajectory-IRI> [options] [--db <path>]
+    qp project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
+    qp report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
+    qp reason [--rules <file.ttl>] [--db <path>]
+    qp demotions [--graph <premise-IRI>] [--db <path>]
+    qp episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
+    qp retract <entity-IRI> [--predicate <IRI>] [--db <path>]
+    qp shapes load|list|remove [--db <path>]
+    qp policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
+    qp policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
+    qp gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
+    qp propose list|submit|accept|reject [--status pending] [--db <path>]
+    qp ontology load|list|remove [--db <path>]
+    qp validate --shapes <shapes.ttl> --data <data.ttl>
+    qp repl [--db <path>]
+    qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
+    qp stats [--db <path>]
+    qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
+    qp search-index status|backfill|drop [--batch-size 500] [--db <path>]
+    qp doctor labels [--db <path>]
+    qp pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
+    qp pack --full --format text --destination internal --out <dir> [--db <path>]
                                                                      LOSSLESS whole-store pack as TEXT: a git-friendly
                                                                      directory that reconstructs the store exactly
-    quipu pack --verify <file.pendant.db>
-    quipu db respace --into <space> --out <file> [--db <path>]
-    quipu db attach --list [--db <path>]
-    quipu events refusals [--db <path>]
-    quipu changes [--since-tx N] [--db <path>]
-    quipu graph import <db> --as <iri> [--db <path>]
-    quipu fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
-    quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
-    quipu restore <file.pendant | text-pack-dir> [--force] [--db <path>]
+    qp pack --verify <file.pendant.db>
+    qp db respace --into <space> --out <file> [--db <path>]
+    qp db attach --list [--db <path>]
+    qp events refusals [--db <path>]
+    qp changes [--since-tx N] [--db <path>]
+    qp graph import <db> --as <iri> [--db <path>]
+    qp fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
+    qp unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
+    qp restore <file.pendant | text-pack-dir> [--force] [--db <path>]
                                                                      REPLACES the store with a --full pack, binary or text
-    quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
-    quipu share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
-    quipu share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
-    quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
-    quipu share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
-    quipu attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
-    quipu attest list [--db <path>]
-    quipu trust-root challenge --verifier NAME --public-key HEX [--db <path>]
-    quipu trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
-    quipu trust-root status [--db <path>]
-    quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
-    quipu import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
-    quipu import delta <parent-share> <delta-share> [--actor <id>]
-    quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
-    quipu compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
-    quipu import promote <share-id> [--actor <id>] [--db <path>]
-    quipu align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
-    quipu align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
-    quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
-    quipu status <share-dir> [--db <path>]
-    quipu merge <share-dir> [--actor <id>] [--db <path>]
-    quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
-    quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
-    quipu git-merge <ref>   merge pendants from Git snapshots, stop before commit
-    quipu merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
-    quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
-    quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
-    quipu share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
-    quipu share diff <old> <new> --report [--format markdown|json] [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>] [--fail-on-introduced]   PR-review report
-    quipu diff-textconv <file>   labelled pack rendering for git diff's textconv
-    quipu audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
-    quipu audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]
-    quipu audit namespace [--graph <iri>] [--json] [--db <path>]
-    quipu audit replay <verdict> [--delta <file>] [--json] [--db <path>]
-    quipu audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
-    quipu audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
-    quipu migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
-    quipu hook session-capture   Stop hook: solicit one knowledge episode per session (stdin JSON)
-    quipu hooks bundle           print quipu's hook bundle (st.hook-bundle/1)
-    quipu hooks install|uninstall|status [--harness claude|codex]... [--project] [--no-st]
+    qp share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
+    qp share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    qp share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
+    qp share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
+    qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
+    qp attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
+    qp attest list [--db <path>]
+    qp trust-root challenge --verifier NAME --public-key HEX [--db <path>]
+    qp trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX [--attests POLICY]... [--db <path>]
+    qp trust-root status [--db <path>]
+    qp import <share-dir|archive|URL> [--source <uri>] [--actor <id>] [--destination internal] [--db <path>]
+    qp import ... [--query-namespace NS] [--replace-queries]   carried queries land as NS/<name>; collisions are reported
+    qp import delta <parent-share> <delta-share> [--actor <id>]
+    qp load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
+    qp compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
+    qp import promote <share-id> [--actor <id>] [--db <path>]
+    qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
+    qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
+    qp align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
+    qp status <share-dir> [--db <path>]
+    qp merge <share-dir> [--actor <id>] [--db <path>]
+    qp merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+    qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
+    qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
+    qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    qp pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
+    qp pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
+    qp share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
+    qp share diff <old> <new> --report [--format markdown|json] [--old-shapes <ttl>] [--new-shapes <ttl>] [--decisions <json>] [--fail-on-introduced]   PR-review report
+    qp diff-textconv <file>   labelled pack rendering for git diff's textconv
+    qp audit <trace.jsonl>|inventory|replay|tree|inheritance <trace.jsonl> [--json] [--db <path>]
+    qp audit <trace.jsonl> --repo <root> --from <base> --to <tip> [--yupana <exe>] [--json] [--db <path>]
+    qp audit namespace [--graph <iri>] [--json] [--db <path>]
+    qp audit replay <verdict> [--delta <file>] [--json] [--db <path>]
+    qp audit quarantine [list [--verdict <iri>]] [--json] [--db <path>]
+    qp audit quarantine purge (--graph <iri>|--before <ts>|--older-than <days>|--all) [--db <path>]
+    qp migrate-vectors --from sqlite --to lancedb [--dry-run] [--db <path>]
+    qp hook session-capture   Stop hook: solicit one knowledge episode per session (stdin JSON)
+    qp hooks bundle           print quipu's hook bundle (st.hook-bundle/1)
+    qp hooks install|uninstall|status [--harness claude|codex]... [--project] [--no-st]
 
 OPTIONS:
     --db <path>       Store file (default: .bobbin/quipu/quipu.db)

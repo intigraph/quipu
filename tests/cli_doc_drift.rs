@@ -64,17 +64,19 @@ fn dispatch_verbs(main_rs: &str) -> BTreeSet<String> {
     verbs
 }
 
-/// Verbs named in a block of documentation, as `quipu <verb>`.
+/// Verbs named in a block of documentation under either supported command name.
 fn documented_verbs(text: &str) -> BTreeSet<String> {
     let mut verbs = BTreeSet::new();
-    for (index, _) in text.match_indices("quipu ") {
-        let rest = &text[index + "quipu ".len()..];
-        let token: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_lowercase() || *c == '-')
-            .collect();
-        if !token.is_empty() {
-            verbs.insert(token);
+    for prefix in ["quipu ", "qp "] {
+        for (index, _) in text.match_indices(prefix) {
+            let rest = &text[index + prefix.len()..];
+            let token: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_lowercase() || *c == '-')
+                .collect();
+            if !token.is_empty() {
+                verbs.insert(token);
+            }
         }
     }
     verbs
@@ -285,5 +287,17 @@ fn every_cited_symbol_still_resolves() {
         broken.is_empty(),
         "documentation cites symbols that have been renamed or removed. The claim may \
          still be true, but its proof is dead — fix the citation or the code: {broken:#?}"
+    );
+}
+
+#[test]
+fn documentation_extraction_accepts_both_command_names() {
+    assert_eq!(
+        documented_verbs("quipu share FILE\nqp import FILE\nqp --help"),
+        BTreeSet::from([
+            "share".to_string(),
+            "import".to_string(),
+            "--help".to_string()
+        ])
     );
 }
