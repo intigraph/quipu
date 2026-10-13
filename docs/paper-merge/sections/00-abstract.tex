@@ -29,4 +29,14 @@ excluding $12$ chained pairs, and $939$ real duplicate-value incidents ---
 reproduces both the blindness ($0$ of $93$ alias repairs, matching $0$ of $21$
 on the synthetic arm) and the benefit, on data nobody generated for the
 purpose.
+
+Two additional synthetic studies examine evolving shape contracts and
+Memory-shaped metadata on a real Dolt SQL server. Merging shape declarations
+first handles the tested cardinality changes, while datatype evolution exposes
+a detector blind spot caught by post-merge validation. Native Dolt JSON already
+merges independent object keys. Typed metadata rows reduce collateral semantic
+conflicts in the tested workload, but provenance differences create new
+same-value conflicts, and indexed query performance is mixed. These findings
+qualify the benefits of finer granularity rather than establish a universal
+conflict or performance advantage.
 \end{abstract}

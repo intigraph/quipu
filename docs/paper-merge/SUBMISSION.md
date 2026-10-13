@@ -13,6 +13,11 @@ abstract's third paragraph (it reported 105 and 93 for the same quantity four
 lines apart). The abstract below is a fresh extraction from the rebuilt PDF and
 was diffed against it.
 
+Rebuilt and re-transcribed 2026-10-13 after Arms E/F. The plain abstract below
+was extracted from the 16-page PDF and checked against the source tokens. New
+results retain the datatype detector miss, provenance conflicts and the slow
+indexed traversal finding. The accepted public-history ruling remains in force.
+
 ---
 
 ## 1. Public-history decision — resolved 2026-09-24
@@ -51,8 +56,9 @@ artifact passes the full scrub gate at repository revision `f15b28d`.
     Steve Brown (ORCID 0009-0009-1720-1785)
 
 The `\thanks` block in `main.tex` carries the acknowledgement of implementation
-and drafting assistance from Claude (Anthropic), and the artifact-availability
-statement. Both were reviewed 2026-08-30 and are accurate as written.
+and drafting assistance from Claude (Anthropic) and Codex (OpenAI), and the
+artifact-availability statement. The additional research assistance is recorded
+in the October revision.
 
 **Primary category** — recommended: `cs.DB` (databases).
 The paper's contribution is a merge operator and its evaluation in a store.
@@ -64,7 +70,7 @@ about distribution.
 
 **Comments field** — suggested:
 
-    11 pages. Artifact, benchmark and replay corpus at
+    16 pages. Artifact, benchmark and replay corpus at
     https://github.com/scbrown/quipu ; every table names the command that
     regenerates it.
 
@@ -75,11 +81,7 @@ one-way door on arXiv: the license cannot be loosened after announcement.
 **Abstract** (plain text for the web form — no LaTeX, transcribed from the built
 PDF):
 
-Version control works for source code because its merge understands the medium: lines. Knowledge graphs shared between people and software agents are not lines, and merging their serializations makes conflicts out of ordering and misses the ones that matter. We describe and evaluate a three-way merge for RDF in which the schema decides what a conflict is: the merge is set algebra over canonical triples, and a slot is contended only where a SHACL shape declares that it can hold at most one value. Multi-valued predicates union; functional predicates with divergent values are handed to a person. The same shapes graph then validates the merge result, so the schema that defines conflicts also audits their resolution.
-
-We do not claim the first three-way merge for RDF. Git-backed RDF versioning with merge strategies is established prior work, and the closest neighbor -- Quit Store's Context Merge -- is included here as a baseline that this operator extends rather than replaces. Our contribution is an implementation in a production multi-agent store and an evaluation of what schema-derived conflict semantics buys against that neighbor and against six other strategies.
-
-On a synthetic divergence benchmark over five seeds, the shape-aware operator raised 33 conflicts, all true positives, with no false positives, no triples lost, none fabricated, and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts and asked 845 questions to do it. We also report a limit no schema removes: when two sides mint different names for one entity, the divergence is invisible to any triple-level operator, including this one. Replaying a recorded production corpus against the shipped operator -- 105 repairs a person actually performed, 93 of them after excluding 12 chained pairs, and 939 real duplicate-value incidents -- reproduces both the blindness (0 of 93 alias repairs, matching 0 of 21 on the synthetic arm) and the benefit, on data nobody generated for the purpose.
+Version control works for source code because its merge understands the medium: lines. Knowledge graphs shared between people and software agents are not lines, and merging their serializations makes conflicts out of ordering and misses the ones that matter. We describe and evaluate a three-way merge for RDF in which the schema decides what a conflict is: the merge is set algebra over canonical triples, and a slot is contended only where a SHACL shape declares that it can hold at most one value. Multi-valued predicates union; functional predicates with divergent values are handed to a person. The same shapes graph then validates the merge result, so the schema that defines conflicts also audits their resolution. We do not claim the first three-way merge for RDF. Git-backed RDF versioning with merge strategies is established prior work, and the closest neighbor — Quit Store’s Context Merge — is included here as a baseline that this operator extends rather than replaces. Our contribution is an implementation in a production multi-agent store and an evaluation of what schema-derived conflict semantics buys against that neighbor and against six other strategies. On a synthetic divergence benchmark over five seeds, the shape-aware operator raised 33 conflicts, all true positives, with no false positives, no triples lost, none fabricated, and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts and asked 845 questions to do it. We also report a limit no schema removes: when two sides mint different names for one entity, the divergence is invisible to any triple-level operator, including this one. Replaying a recorded production corpus against the shipped operator — 105 repairs a person actually performed, 93 of them after excluding 12 chained pairs, and 939 real duplicate-value incidents — reproduces both the blindness (0 of 93 alias repairs, matching 0 of 21 on the synthetic arm) and the benefit, on data nobody generated for the purpose. Two additional synthetic studies examine evolving shape contracts and Memory-shaped metadata on a real Dolt SQL server. Merging shape declarations first handles the tested cardinality changes, while datatype evolution exposes a detector blind spot caught by post-merge validation. Native Dolt JSON already merges independent object keys. Typed metadata rows reduce collateral semantic conflicts in the tested workload, but provenance differences create new same-value conflicts, and indexed query performance is mixed. These findings qualify the benefits of finer granularity rather than establish a universal conflict or performance advantage.
 
 ---
 
@@ -108,10 +110,11 @@ bibliography results below remain the 2026-08-30 verification record.
 
 | check | result |
 |---|---|
-| `arxiv-scrub-gate.sh` | **PASS**, exit 0 — 3 arms, every control proven, 7/7 components |
+| `arxiv-scrub-gate.sh` | **PASS**, exit 0 — expanded E/F artifact and every positive control |
 | bibliography | 6 entries, **all six** with a resolved identifier; 0 unresolved citations |
 | BibTeX warnings | **0** |
-| build | tectonic, 11 pages, 0 unresolved references |
+| build | tectonic, 16 pages; abstract checked against source/PDF |
+| Arms E/F | Real library/schema fixtures and real Dolt SQL fixtures; counts and tables regenerate |
 | bead ids in the artifact | **0** — the one advisory (`examples/replay/main.rs`) is gone |
 | policy projection | the gate was run against the config that the pre-push guard's own selftest **passes**; see the note below |
 
