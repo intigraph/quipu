@@ -295,7 +295,17 @@ fn visit_triple_pattern_limited(
             None
         }
         GraphScope::Named(gids) => {
-            conditions.push(sql_graph_in(gids, &mut sql_params));
+            conditions.push(
+                super::graph_membership::predicate(
+                    store,
+                    ctx,
+                    tp,
+                    bindings,
+                    gids,
+                    &mut sql_params,
+                )?
+                .unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)),
+            );
             None
         }
         GraphScope::AnyNamed { var, restrict } => {
