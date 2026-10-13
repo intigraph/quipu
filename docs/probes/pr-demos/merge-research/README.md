@@ -1,7 +1,7 @@
 # Merge research: paper and real-Dolt controls
 
 The trigger is the same paper artifact, viewed before and after adding the E/F
-studies. Base `222274080ee90e10723d4995a9f14172ced582dd` has an 11-page PDF with
+studies. Base `222274080ee90e10723d4995a9f14172ced582dd` has a 14-page PDF with
 neither new section. Demonstrated source `88209e8d` has a 16-page PDF containing
 both sections. The recording then runs the actual Dolt 2.1.8 control fixture:
 20 synthetic Memories, six true conflict slots, three storage arms, type/query
