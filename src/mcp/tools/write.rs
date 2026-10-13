@@ -11,6 +11,16 @@ use crate::types::Fact;
 
 use crate::mcp::value_to_json;
 
+fn refuse_graph(input: &JsonValue, operation: &str) -> Result<()> {
+    if input.get("graph").is_some() {
+        return Err(Error::InvalidValue(format!(
+            "{operation} operates only on the ROOT/default graph; the 'graph' field is \
+             unsupported. Omit it for ROOT, or use a graph-scoped /update for named graphs."
+        )));
+    }
+    Ok(())
+}
+
 /// MCP tool: `quipu_retract` -- Retract facts for an entity.
 ///
 /// Input: `{ "entity": "<IRI>", "predicate"?: "<IRI>", "value"?: <object-value>,
@@ -20,6 +30,7 @@ use crate::mcp::value_to_json;
 /// available, which is what forced a 16x blast radius and the identity-losing
 /// rebuild that followed).
 pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    refuse_graph(input, "/retract")?;
     let entity_iri = input
         .get("entity")
         .and_then(|v| v.as_str())
@@ -103,6 +114,7 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 /// IRI must not mint an unlabelled orphan node). The predicate MAY be new:
 /// first-time `set` of a property is a legitimate write.
 pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    refuse_graph(input, "/set")?;
     let entity_iri = input
         .get("entity")
         .and_then(|v| v.as_str())

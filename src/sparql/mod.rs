@@ -23,6 +23,7 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+mod root_scope;
 mod sparse_bgp;
 mod sql_star;
 pub mod status_pushdown;
@@ -527,6 +528,7 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     let started = crate::time::Stopwatch::start();
+    root_scope::check(&parsed)?;
     // Precedence, widest-scope last: an explicit caller deadline wins; then the
     // request deadline stamped at ADMISSION, which already includes whatever
     // this request spent queueing (aegis-raq1ok); then the per-query default,

@@ -33,6 +33,9 @@ overlay. A query widens its dataset only by saying so:
 
 - `GRAPH <iri> { … }` scopes the enclosed patterns to one named graph. An
   unknown IRI matches nothing.
+- ROOT is the default graph, not a named graph. `GRAPH <urn:quipu:graph:root>`
+  is refused with an error naming the default-graph form. Read ROOT without a
+  `GRAPH` clause, or explicitly use `FROM <urn:quipu:graph:root>`.
 - `GRAPH ?g { … }` ranges over the active named graphs, binding `?g` to each
   match's graph IRI. Property paths under `GRAPH ?g` are refused with an
   explicit error rather than silently reading ROOT.
@@ -48,6 +51,10 @@ SELECT ?s ?title
 FROM <http://example.org/graphs/derived>
 WHERE { ?s <http://example.org/title> ?title }
 ```
+
+`/set` and `/retract` operate only on ROOT and leave named-graph facts intact.
+They refuse a supplied `graph` field, including `null`, before changing facts.
+For a named graph, use the explicitly scoped `/update` endpoint instead.
 
 `POST /query` and the `quipu_query` MCP tool also take a `graph` request
 param — a convenience that scopes the query's *default* graph to one named

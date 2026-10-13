@@ -10,6 +10,57 @@ fn store() -> super::super::SharedStore {
     ))
 }
 
+#[tokio::test]
+async fn root_mutations_reject_graph_with_http_400_and_preserve_both_graphs() {
+    use axum::response::IntoResponse;
+    for operation in ["set", "retract"] {
+        for graph in [json!("https://example.org/named"), json!(null)] {
+            let shared = store();
+            {
+                let mut writer = shared.lock();
+                quipu::tool_knot(
+                    &mut writer,
+                    &json!({"turtle": "<https://example.org/item> <https://example.org/value> \"root\" ."}),
+                )
+                .unwrap();
+                let named = writer
+                    .overlay_create("https://example.org/named", 0)
+                    .unwrap();
+                let entity = writer.lookup("https://example.org/item").unwrap().unwrap();
+                let predicate = writer.lookup("https://example.org/value").unwrap().unwrap();
+                writer
+                    .overlay_write(
+                        named,
+                        quipu::types::Op::Assert,
+                        entity,
+                        predicate,
+                        quipu::types::Value::Str("named".into()),
+                        "2026-01-01T00:00:00Z",
+                    )
+                    .unwrap();
+            }
+            let query = json!({"query": "SELECT ?g ?v WHERE { { <https://example.org/item> <https://example.org/value> ?v } UNION { GRAPH ?g { <https://example.org/item> <https://example.org/value> ?v } } }"});
+            let before = quipu::tool_query(&shared.read(), &query).unwrap();
+            assert_eq!(before["count"], 2);
+            let transactions = shared.read().list_transactions().unwrap().len();
+            let input = json!({"entity":"https://example.org/item", "predicate":"https://example.org/value",
+                "value":"replacement", "graph":graph, "allow_orphan":true});
+            let result = if operation == "set" {
+                super::super::tools::set_predicate(State(shared.clone()), Json(input)).await
+            } else {
+                super::super::tools::retract(State(shared.clone()), Json(input)).await
+            };
+            let response = result.unwrap_err().into_response();
+            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+            assert_eq!(quipu::tool_query(&shared.read(), &query).unwrap(), before);
+            assert_eq!(
+                shared.read().list_transactions().unwrap().len(),
+                transactions
+            );
+        }
+    }
+}
+
 #[test]
 fn schemas_accept_declared_fields_and_report_sorted_unknowns() {
     for definition in quipu::tool_definitions() {
