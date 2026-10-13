@@ -63,6 +63,21 @@ ARTIFACT=(
   "benchmark/mergebench"                  # ARM A data + build report
   "benchmark/replay"                      # ARM B/C corpus + build report
   "benchmark/alias-resolution"            # ARM D protocol, tools and public manifests
+  "benchmark/memory/README.md"             # ARM F: explicit files exclude local venv/cache
+  "benchmark/memory/RESULTS.md"
+  "benchmark/memory/results"
+  "benchmark/memory/competency"
+  "benchmark/memory/beads-issues.sql"
+  "benchmark/memory/BEADS-LICENSE"
+  "benchmark/memory/model.py"
+  "benchmark/memory/run.py"
+  "benchmark/memory/runtime.py"
+  "benchmark/memory/render.py"
+  "benchmark/memory/pyproject.toml"
+  "benchmark/memory/uv.lock"
+  "benchmark/shapes"                       # ARM E synthetic inputs/results and renderer
+  "examples/shape_e.rs"                    # ARM E real-library research driver
+  "benchmark/merge-note.py"                # generated short E/F result note
   "examples/mergebench"                   # the harness that regenerates ARM A
   "examples/replay"                       # the harness that regenerates ARM B/C
   "scripts/build-replay-corpus.py"        # corpus provenance

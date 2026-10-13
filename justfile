@@ -110,14 +110,24 @@ paper-merge cmd="build":
         cd docs/paper-merge && rm -f main.aux main.bbl main.blg main.log main.out main.pdf main.fls main.fdb_latexmk; \
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
-# Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
+# Run a paper benchmark: census, merge, memory, schema (and their report generators).
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "memory" ]; then \
+        uv run --project benchmark/memory python benchmark/memory/run.py {{ args }}; \
+    elif [ "{{ name }}" = "memory-report" ]; then \
+        uv run --project benchmark/memory python benchmark/memory/render.py {{ args }}; \
+    elif [ "{{ name }}" = "schema" ]; then \
+        cargo run --quiet --release --example shape_e --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "schema-report" ]; then \
+        python3 benchmark/shapes/render.py {{ args }}; \
+    elif [ "{{ name }}" = "merge-note" ]; then \
+        python3 benchmark/merge-note.py; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, memory, memory-report, schema, schema-report)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.

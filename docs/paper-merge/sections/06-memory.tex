@@ -1,0 +1,57 @@
+\section{Memory metadata granularity (Arm F)}
+\label{sec:memory}
+
+The conflict unit can also be chosen by relational layout. We compare native
+Dolt 2.1.8 JSON metadata, a whole-cell TEXT ablation, and typed rows with fields
+\emph{memory, key, slot, value, datatype} and \emph{set-in-version}, whose primary
+key is $(memory,key,slot)$. Single-valued status and validity-until use an empty slot;
+evidence, applicability and tags use the value as their slot. Competency questions
+declare the scalar-versus-set policy and the datatypes. Memory bodies remain
+unchanged whole units. The JSON arm uses the initial issues-table migration at
+Beads commit \texttt{e1ceedf}; unrelated columns and timestamps are fixed.
+
+Ten explicit divergence templates have twenty instances each, over seeds
+1, 7, 42, 99 and 2026. The seeds change values/order but preserve balanced case
+counts. Each run uses a fresh, loopback-only real SQL-server fixture, a common
+base and two committed branches. Actual \texttt{DOLT\_MERGE} conflict tables are
+scored against declared expected outcomes. These are controlled synthetic
+experiments, not estimates of the frequency of Memory conflicts in practice.
+
+\input{sections/06-memory-tables}
+
+Native Dolt JSON already merges edits to independent object keys; the TEXT arm
+must therefore not stand in for current Dolt JSON behavior. The native JSON arm
+still conflicts on concurrent array changes that the declared set oracle regards
+as harmless. Typed rows merge distinct set additions, but storing provenance
+inside each row creates false conflicts when two writers assert the same value
+with different \texttt{set\_in\_version} values. Consequently the native decision
+count and the false native decision count do not improve over JSON in this
+balanced trial, although the number of collateral false semantic-slot questions
+falls. Provenance reconciliation remains a design
+choice, not something the primary key alone settles.
+
+TP/FP/FN counts in Table~\ref{tab:memorymerge} use declared semantic slots;
+a conflicted JSON/TEXT Memory expands to all changed metadata keys. This
+expansion counts collateral unresolved changes, not separate native prompts.
+For loss/extra accounting, every conflicted unit is held at base. Those counts
+include deferred valid changes, not irreversible data deletion. Instrument
+controls force genuine and false conflicts, missed conflicts, lost/fabricated
+facts and invalid writes. Five invalid-type candidates per seed are refused by
+the prototype writer before row mutation; native JSON accepts them. The guard
+is application validation, not native SHACL enforcement, and a JSON writer could
+apply it too.
+
+The status, tag and metadata-to-Link competency queries return independently
+constructed identical answers on both layouts. Coverage is checked for every
+seed; each timed execution is checked, not merely a count sample. Table~\ref{tab:memoryquery}
+reports warm local SQL latency, including result transfer. Indexed rows help
+the scalar and membership queries but are slower for the tested traversal join.
+This negative result is retained with the full SQL and \texttt{EXPLAIN} plans.
+One machine, fixed query order, a synthetic corpus and one indexed layout do not
+support general claims about relational or JSON performance.
+
+The artifact is \texttt{benchmark/memory/}. Run \texttt{just bench memory}
+with an explicit scratch directory; \texttt{just bench memory-report} generates
+the tables from saved measurements. Array order is ignored by the declared set
+oracle; ordered-array applications need a different policy. This arm does not
+repair the earlier $0/93$ alias blindness or change Arm D's negative result.

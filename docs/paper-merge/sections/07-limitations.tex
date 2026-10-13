@@ -55,16 +55,26 @@ so canonicalization there reduces to sorting. RDFC-1.0 is the substrate we build
 on and is not exercised by this arm; nothing here is evidence about blank-node
 canonicalization.
 
-\paragraph{Timing is indicative.} One machine, one process, single runs. The
+\paragraph{Timing is indicative.} Arm A uses one machine, one process and single runs. The
 line-merge arms include process spawn for \texttt{git merge-file}, of order
 $5$\,ms, which dominates their timing at every size measured; those columns are
 not comparable with the in-process arms and we do not report them as if they
 were.
+Arm F repeats warm local SQL queries but keeps a fixed layout and query order;
+those repetitions do not establish performance outside the tested workload.
 
 \paragraph{Slot granularity is an assumption.} A conflict is reported over a
 $(subject, predicate)$ slot because that is the unit \texttt{sh:maxCount} is
 declared over. An operator working at another granularity would need a different
 scorer, and the comparison in Table~\ref{tab:armA} would not transfer unchanged.
+Arm F explicitly supplies a separate semantic-slot scorer for native relational
+conflict units and reports those native decision units separately.
+
+\paragraph{Evolving shapes need more than cardinality.} Arm E uses a small,
+fixed meta-contract over named shape nodes and an experimental orchestration,
+not a production schema negotiation protocol. Its datatype case is a detector
+false negative detected by validation; passing the shape-graph merge does not
+make all data changes under the new contract safe.
 
 \paragraph{One deployment.} The recorded corpus comes from a single production
 store. Its class distribution --- alias-mint and functional-value doubling

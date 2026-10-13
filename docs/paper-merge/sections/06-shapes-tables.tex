@@ -1,0 +1,12 @@
+% Generated from benchmark/shapes/results.json; do not hand-edit counts.
+\begin{table}[ht]\centering\small
+\begin{tabular}{lrrrrrrrr}\toprule
+Case & TP & FP & FN & Merge & Context & Lost & Extra & SHACL \\ \midrule
+tighten & 1 & 0 & 0 & 1 & 1 & 0 & 0 & 0 \\
+loosen & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+property-added & 1 & 0 & 0 & 1 & 1 & 0 & 0 & 0 \\
+datatype & 0 & 0 & 1 & 0 & 1 & 0 & 2 & 1 \\
+removed & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+\bottomrule\end{tabular}
+\caption{Arm E, per seed. The datatype incompatibility is an oracle conflict missed by the cardinality detector and caught by post-merge SHACL validation. These are normalized automatic-output metrics, not partial deployment results.}
+\label{tab:schema}\end{table}
