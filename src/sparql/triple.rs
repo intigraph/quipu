@@ -295,17 +295,20 @@ fn visit_triple_pattern_limited(
             None
         }
         GraphScope::Named(gids) => {
-            conditions.push(
-                super::graph_membership::predicate(
+            // Scalar/streamed counts and SQL-star's bounded relations keep
+            // their existing covering plans; narrow only retained title reads.
+            let membership = match mode {
+                ScanMode::Retained => super::graph_membership::predicate(
                     store,
                     ctx,
                     tp,
                     bindings,
                     gids,
                     &mut sql_params,
-                )?
-                .unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)),
-            );
+                )?,
+                ScanMode::Streamed | ScanMode::CompleteRelation => None,
+            };
+            conditions.push(membership.unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)));
             None
         }
         GraphScope::AnyNamed { var, restrict } => {

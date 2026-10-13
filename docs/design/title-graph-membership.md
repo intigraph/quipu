@@ -24,11 +24,13 @@ leaf, checking that rowid in the graph index avoids accessing fact payload
 columns. This is a possible contributor to the observed memory growth;
 it is **inferred**, not an allocation profile result.
 
-The optimization applies only to an unseeded, current, single-file, single
+The optimization applies only to a retained, unseeded, current, single-file, single
 named graph leaf with a constant predicate and narrowed variable object.
 It requires the exact complete current graph-index definition. History,
 attachments, other shapes and missing or unproved indexes retain the ordinary
-graph predicate. No schema, persistent cache or pooled-reader policy changes.
+graph predicate. Scalar/streamed counts and bounded SQL-star relations also keep
+their existing covering plans. No schema, persistent cache or pooled-reader
+policy changes.
 
 Membership must refer to the **physical row**, not only its subject: a subject
 can have different titles in different graphs. A differential control preserves

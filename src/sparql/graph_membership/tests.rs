@@ -218,3 +218,62 @@ fn graph_membership_falls_back_for_unproved_index_history_and_scope() {
     check(&ctx, &[graph, 0]);
     check(&TemporalContext::default(), &[graph]);
 }
+
+#[test]
+fn graph_membership_streamed_reads_keep_the_existing_plan() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, mut ctx) = shape();
+    ctx.graph = GraphScope::Named(vec![graph]);
+    let metadata_reads = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&metadata_reads);
+    store
+        .conn
+        .authorizer(Some(move |context: AuthContext<'_>| {
+            if matches!(
+                context.action,
+                AuthAction::Read {
+                    table_name: "sqlite_master",
+                    column_name: "sql"
+                }
+            ) {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+            Authorization::Allow
+        }))
+        .unwrap();
+    let mut streamed = Vec::new();
+    let count = crate::sparql::triple::visit_triple_pattern(
+        &store,
+        &pattern,
+        &Bindings::new(),
+        &ctx,
+        &mut |row| {
+            streamed.push(row);
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(count, 2);
+    assert_eq!(
+        metadata_reads.load(Ordering::Relaxed),
+        0,
+        "streaming must not probe the new membership-index definition"
+    );
+    let retained = crate::sparql::triple::eval_triple_pattern_limited(
+        &store,
+        &pattern,
+        &Bindings::new(),
+        &ctx,
+        None,
+    )
+    .unwrap();
+    assert_eq!(retained, streamed);
+    assert!(
+        metadata_reads.load(Ordering::Relaxed) > 0,
+        "positive retained control proves the authorizer sees the index probe"
+    );
+}
