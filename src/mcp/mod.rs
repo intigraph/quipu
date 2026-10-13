@@ -27,6 +27,9 @@ pub mod resolution;
 pub mod search;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod scope_refusal_tests;
 pub mod tools;
 mod value;
 mod verdict_witness;

@@ -10,10 +10,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
     vec![
         serde_json::json!({
             "name": "quipu_retract",
-            "description": "Retract facts for an entity: all of them, or narrowed by predicate and/or value. Entity + predicate + value retracts exactly ONE (e,a,v) statement — use this to remove a stray edge instead of retracting a whole episode and rebuilding it.",
+            "description": "Retract ROOT/default-graph facts for an entity: all of them, or narrowed by predicate and/or value. Supplying a graph field is refused; named-graph facts are untouched. Entity + predicate + value retracts exactly ONE (e,a,v) statement — use this to remove a stray edge instead of retracting a whole episode and rebuilding it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"not": {}, "description": "Unsupported: omit this field. This tool operates only on ROOT/default graph; use graph-scoped quipu_update for named graphs."},
                     "allow_orphan": {"type": "boolean", "description": "Allow identity facts to be removed from a still-referenced entity."},
                     "source": {"type": "string", "description": "Provenance source of the retraction."},
                     "entity": { "type": "string", "description": "IRI of the entity to retract" },
@@ -27,10 +28,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_set",
-            "description": "Atomically SET (entity, predicate) to exactly one value: retracts every current object on that predicate and asserts the new one in a single transaction. The supersede primitive — re-parenting (reports_to A -> B) is one call, with no empty-predicate window and no way to end up with two supervisors by forgetting the retract half. SINGLE-VALUE semantics: replaces ALL current objects; to add without removing, assert via quipu_knot.",
+            "description": "Atomically SET (entity, predicate) to exactly one value in the ROOT/default graph. Supplying a graph field is refused; named-graph facts are untouched. Retracts every current object on that predicate and asserts the new one in a single transaction. The supersede primitive — re-parenting (reports_to A -> B) is one call, with no empty-predicate window and no way to end up with two supervisors by forgetting the retract half. SINGLE-VALUE semantics: replaces ALL current objects; to add without removing, assert via quipu_knot.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"not": {}, "description": "Unsupported: omit this field. This tool operates only on ROOT/default graph; use graph-scoped quipu_update for named graphs."},
                     "source": {"type": "string", "description": "Provenance source of the update."},
                     "entity": { "type": "string", "description": "IRI of the entity (must exist)" },
                     "predicate": { "type": "string", "description": "Predicate IRI to set (may be new)" },

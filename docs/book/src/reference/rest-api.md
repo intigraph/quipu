@@ -631,6 +631,10 @@ Optional: `timestamp`, `actor`. Returns
 already-sole-current value is an idempotent no-op (`tx_id: 0, retracted: 0,
 asserted: 0`).
 
+This operation is **ROOT/default-graph only**. Named-graph facts are untouched.
+A supplied `graph` field, including `null` or ROOT's IRI, is refused with HTTP
+400 before mutation. Omit it for ROOT; use graph-scoped `/update` for a named graph.
+
 - The **predicate is a full IRI**, from any vocabulary. This is the endpoint
   `/episode` names in its refusal when an edge relation uses an undeclared prefix.
 - **SINGLE-VALUE semantics**: all current objects are replaced. For
@@ -664,6 +668,10 @@ curl -s localhost:3030/retract -X POST \
 
 Optional: `predicate` (only retract matching), `timestamp`, `actor`, and `value`
 (retract only the one matching triple).
+
+This operation retracts **ROOT/default-graph facts only**; named-graph facts
+survive. Supplying `graph`, including `null`, is refused with HTTP 400 before
+mutation. Use an explicitly scoped `/update` for named-graph retractions.
 
 **The `value` shape matters.** An object that is an IRI reference — the target of
 an edge such as `reports_to` or `rdf:type` — must be given as a tagged object, not

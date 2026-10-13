@@ -240,7 +240,8 @@ Manage persistent SHACL shapes that auto-validate writes.
 
 ### `quipu_retract`
 
-Retract facts for an entity.
+Retract ROOT/default-graph facts for an entity. Named-graph facts are untouched;
+supplying `graph`, including `null`, is refused before mutation.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -255,6 +256,9 @@ Atomically set `(entity, predicate)` to exactly one value: retracts every
 current object on that predicate and asserts the new one in a single
 transaction — the supersede primitive. Single-value semantics: to add without
 removing, assert via `quipu_knot`.
+
+This operation affects only ROOT/default-graph facts. Named-graph facts are
+untouched, and supplying `graph`, including `null`, is refused before mutation.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
