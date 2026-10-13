@@ -8,11 +8,17 @@ unpinned `ASK {}` positive control remains true on both. The candidate then
 acquires an assertion before and after its retraction/replacement, showing the
 requested transaction, actual applied transaction, captured source head, exact
 source build, graph bytes, and receipt digest. Altering the graph fails receipt
-verification for every acquisition mode.
+verification for every acquisition mode. The registered graph positive control
+then passes and the same graph name used as a dataset alias is refused.
+
+The [earlier alias probe](alias-baseline.txt) records the falsifier against clean
+`8ca2e2c`: a project-only receipt contained the alias member’s comment data and
+passed verification. The corrected candidate rejects that selection before
+constructing a receipt; it does not broaden the requested graph scope.
 
 Base: clean `222274080ee90e10723d4995a9f14172ced582dd`, observed through its HTTP
 read interface. Candidate: clean source commit
-`8ca2e2c693e23c3082ed7a74871aa184f553cefb`, exercised through the actual compiled
+`7b15592f4e5a0301827b830e761941f3b787f72a`, exercised through the actual compiled
 library on a private in-memory fixture. The HTTP candidate's status and typed
 receipt paths are separately covered by
 `acquisition_http_contract_and_malformed_query_pin`. The recording compares the
