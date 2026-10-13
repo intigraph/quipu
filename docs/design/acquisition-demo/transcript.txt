@@ -1,0 +1,19 @@
+installed base HTTP: git_sha=222274080ee90e10723d4995a9f14172ced582dd dirty=false
+POST /query input={"query":"ASK {}","tx":"bogus"} -> HTTP200 {"labels":null,"result":true}
+POST /query input={"query":"ASK {}"} -> HTTP200 {"labels":null,"result":true}
+candidate library /query-equivalent calls on private in-memory fixture:
+input={"query":"ASK {}","tx":"bogus"} -> REFUSED tx must be a positive signed 64-bit JSON integer
+input={"query":"ASK {}"} -> {"labels":null,"result":true}
+private source acquisition: assertion -> retraction/replacement, before_tx=1, after_tx=2
+requested=Some(1) applied=1 source_head=2 producer_sha=8ca2e2c693e23c3082ed7a74871aa184f553cefb dirty=false
+<https://example.org/item/one> <https://example.org/title> "before" .
+source_receipt_sha256=sha256:142bd5d55c725e6ae30d50658b0a7958542d023dd914e17c58a29ac50ecdf780 verify=PASS
+tampered graph verification -> acquisition graph content/hash/count mismatch
+requested=Some(2) applied=2 source_head=2 producer_sha=8ca2e2c693e23c3082ed7a74871aa184f553cefb dirty=false
+<https://example.org/item/one> <https://example.org/title> "after" .
+source_receipt_sha256=sha256:b704af3c5cfa8d73c84d5848d0bc843ca306741e1ae250b7ed3cc373581fa34d verify=PASS
+tampered graph verification -> acquisition graph content/hash/count mismatch
+requested=None applied=2 source_head=2 producer_sha=8ca2e2c693e23c3082ed7a74871aa184f553cefb dirty=false
+<https://example.org/item/one> <https://example.org/title> "after" .
+source_receipt_sha256=sha256:3796fb0e365a48cb98e6a09b94bc85660a4ac992875b5b837f6868bd18a7afcc verify=PASS
+tampered graph verification -> acquisition graph content/hash/count mismatch
