@@ -116,12 +116,12 @@ outward check and stamps the resulting artifact accordingly.
 
 Native releases can ship before the trusted repository-share producer is enabled.
 While the repository variable `TRUSTED_REPOSITORY_SHARE_ENABLED` is unset or not
-`true`, the release summary explicitly records that no new repository qpack was
+`true`, the release summary explicitly records that no new repository pendant was
 published. The release may therefore have no graph artifact for the explorer.
 
 Enable that variable only after the managed trusted producer is installed and
 its scheduled execution has been observed. Once enabled, the release job requires
-the qpack, checksum and source/binary provenance receipt; missing or invalid
+the pendant, checksum and source/binary provenance receipt; missing or invalid
 artifacts fail the job. The first enabled release must separately prove published
 artifact delivery. Hosted runners never receive the private policy catalogue.
 
@@ -137,6 +137,7 @@ three `quipu import` reads back (`cmd_import`):
 | `export.nt` | the facts, as N-Triples |
 | `shapes.ttl` | the SHACL shapes those facts were validated against |
 | `manifest.json` | hashes, producer name and version, and the lineage link |
+| `queries.ttl` | only when the store has stored queries registered against the scope: the [competency questions](../reference/cli-sharing.md#stored-queries-queriesttl) a receiver can `quipu_ask`, sealed by the manifest |
 
 The manifest's `parent_share` field (`src/share.rs`, `ShareOptions`) is what
 makes a share a *link in a chain* rather than a loose dump: it names the share
@@ -146,6 +147,29 @@ base.
 Shares carry their shapes on purpose. A receiving store is never asked to guess
 what the sender meant by a predicate — it gets the constraints alongside the
 facts.
+
+### Pendants: what the artifact is called
+
+On a khipu, **pendant cords** hang from a **primary cord**, and each pendant
+carries a self-contained record. Quipu names its share artifact after them:
+
+| Khipu | Quipu |
+|---|---|
+| Primary cord | a store |
+| Pendant cord | a **pendant**: a shareable graph with its shapes and stored queries — the manifest, the payload (`export.nt`), `shapes.ttl`, and stored queries where the share carries them |
+| Subsidiary cord | a delta share, hanging off the pendant it amends |
+| Tying a pendant onto a primary cord | composing an imported pendant into a store |
+| Knots between cords | relationships — edges join cords; they are not pendants |
+
+"Share" still names the protocol — `quipu share`, `quipu import`, share deltas.
+"Pendant" names the thing that travels. Packed for release, a pendant is a
+deterministic tar archive named `*.pendant.tar.gz`.
+
+> **Renamed from "qpack".** Artifacts used to be called qpacks and carried a
+> `.qpack` extension. For one release, anything named `.qpack`,
+> `.qpack.tar.gz` or `.qpack.db` still loads unchanged, with a deprecation
+> warning; release pages publish the repository pendant under both asset names.
+> New artifacts are written only as `.pendant`.
 
 ## Receiving: verify, quarantine, promote
 
@@ -205,7 +229,7 @@ silent edit to someone else's identifiers.
 ## What travels: facts, graphs, whole repositories
 
 A share is the portable graph artifact. Its scope may be a slice of facts, a
-whole graph, or a repository graph; a release `.qpack.tar.gz` is a deterministic
+whole graph, or a repository graph; a release `.pendant.tar.gz` is a deterministic
 archive of the same text bundle, not a SQLite database. The bundle contains a
 canonical RDF payload, SHACL shapes, and JSON plus PROV-O/DCAT/SPDX RDF
 manifests (`src/share.rs`: `share_payload`, `manifest_turtle`).
@@ -370,7 +394,7 @@ bash scripts/publish-repository-share.sh --prepare "$TAG" \
   "$QUIPU_BIN" "$BOBBIN_BIN" "$SOURCE_REPO" "$NEW_OUTPUT"
 ```
 
-`--prepare` creates the text qpack archive, checksum and provenance receipt
+`--prepare` creates the text pendant archive, checksum and provenance receipt
 locally. `--publish` additionally uploads those three explicit files to the
 existing release. It refuses to replace existing assets. The receipt binds the
 archive to the release tag, source revision and native binary hash; it includes
@@ -445,3 +469,48 @@ attempt. Counters reset with the process, so compare increments within one
 `process_start_time_seconds` interval or use reset-aware Prometheus functions.
 A zero or absent verification-success series is not evidence that an import has
 proved authorship; verify a real operation and its corresponding counter delta.
+
+## Quarantine review events
+
+Verified share imports append receiver-local lifecycle events to the existing
+`GET /events` cursor feed: `import.quarantined`, `import.staged`,
+`import.adopted`, `import.promoted`, `import.rejected`, `import.expired`, and
+`import.reopened`. State and its event commit together; identical retries do not
+announce a transition again. Import integrity failures produce no import event.
+`import.adopted` means an earlier quarantine became eligible on re-import after
+local validation; it does not install any bundled shape. Promotion stays explicit.
+
+Events contain the share ID, source, caller and separately claimed actor,
+unknown types, blocking reasons, shapes hash, triple counts, byte size and waiting
+age. Old imports without review metadata gain that metadata when re-imported;
+this is observation time, not a reconstructed historical arrival. Composition
+inspection datasets are separate from the share-import review lifecycle.
+
+The pending registry survives pruning of the event delivery log. Review pages
+are bounded, ordered by share ID and return `has_more` and `next_share_id`.
+Pass the cursor with `--after` to inspect the next page. These local commands
+operate on the receiver selected by `--db`:
+
+```sh
+quipu import review pending --limit 100 --db receiver.db
+quipu import review notify --age-seconds 86400 --route reviewer --db receiver.db
+quipu import review rejected <share-id> --actor alice --reason 'not trusted' --db receiver.db
+quipu import review expired <share-id> --actor alice --reason 'review policy expired' --db receiver.db
+quipu import review reopen <share-id> --actor alice --reason 'reconsider authority' --db receiver.db
+```
+
+`notify` emits `import.review_due` after the explicit threshold, once per share
+for the current threshold/route policy. Changing that policy deliberately permits
+another notice. Consumers poll the existing feed and commit their offsets using
+`POST /events/commit`; they decide whether and how to send a nudge. No timer,
+webhook, external message, or automatic shape adoption is installed. A scheduled
+consumer must page through pending reviews, specify its policy and verify its
+own observed run and delivery. This library/CLI provides the event producer.
+
+Rejection and expiry require an actor and reason and retain quarantine contents.
+They prevent re-import and promotion until an explicit reopening; eligible or
+already promoted packs cannot be closed through the quarantine-review command.
+Receiver-local review metadata stays in the receiver SQLite database across
+restart and event retention. It is excluded from portable packs and fact shares:
+a new receiver records its own decisions. Event offsets follow the existing
+retention/replay contract.

@@ -10,6 +10,57 @@ fn store() -> super::super::SharedStore {
     ))
 }
 
+#[tokio::test]
+async fn root_mutations_reject_graph_with_http_400_and_preserve_both_graphs() {
+    use axum::response::IntoResponse;
+    for operation in ["set", "retract"] {
+        for graph in [json!("https://example.org/named"), json!(null)] {
+            let shared = store();
+            {
+                let mut writer = shared.lock();
+                quipu::tool_knot(
+                    &mut writer,
+                    &json!({"turtle": "<https://example.org/item> <https://example.org/value> \"root\" ."}),
+                )
+                .unwrap();
+                let named = writer
+                    .overlay_create("https://example.org/named", 0)
+                    .unwrap();
+                let entity = writer.lookup("https://example.org/item").unwrap().unwrap();
+                let predicate = writer.lookup("https://example.org/value").unwrap().unwrap();
+                writer
+                    .overlay_write(
+                        named,
+                        quipu::types::Op::Assert,
+                        entity,
+                        predicate,
+                        quipu::types::Value::Str("named".into()),
+                        "2026-01-01T00:00:00Z",
+                    )
+                    .unwrap();
+            }
+            let query = json!({"query": "SELECT ?g ?v WHERE { { <https://example.org/item> <https://example.org/value> ?v } UNION { GRAPH ?g { <https://example.org/item> <https://example.org/value> ?v } } }"});
+            let before = quipu::tool_query(&shared.read(), &query).unwrap();
+            assert_eq!(before["count"], 2);
+            let transactions = shared.read().list_transactions().unwrap().len();
+            let input = json!({"entity":"https://example.org/item", "predicate":"https://example.org/value",
+                "value":"replacement", "graph":graph, "allow_orphan":true});
+            let result = if operation == "set" {
+                super::super::tools::set_predicate(State(shared.clone()), Json(input)).await
+            } else {
+                super::super::tools::retract(State(shared.clone()), Json(input)).await
+            };
+            let response = result.unwrap_err().into_response();
+            assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+            assert_eq!(quipu::tool_query(&shared.read(), &query).unwrap(), before);
+            assert_eq!(
+                shared.read().list_transactions().unwrap().len(),
+                transactions
+            );
+        }
+    }
+}
+
 #[test]
 fn schemas_accept_declared_fields_and_report_sorted_unknowns() {
     for definition in quipu::tool_definitions() {
@@ -179,21 +230,47 @@ async fn query_json_reports_fields_and_standard_json_preserves_format() {
     assert!(value.get("results").is_some());
 }
 
+async fn export_status(input: JsonValue) -> (axum::http::StatusCode, axum::body::Bytes) {
+    use axum::response::IntoResponse;
+    let response = match super::super::publication::export(State(store()), Json(input)).await {
+        Ok(response) => response,
+        Err(error) => error.into_response(),
+    };
+    let status = response.status();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    (status, body)
+}
+
 #[tokio::test]
-async fn export_preserves_rdf_and_reports_unknown_fields_in_header() {
-    let response = super::super::publication::export(
-        State(store()),
-        Json(json!({
-            "format":"ntriples", "dry_run":true
-        })),
+async fn export_refuses_unrecognised_scope_fields_instead_of_exporting_root() {
+    // Measured live: both bodies returned 200 with the WHOLE store.
+    for input in [
+        json!({"scope_kind":"graph", "scope_value":"urn:example:graph"}),
+        json!({"scope":{"kind":"graph", "value":"urn:example:graph"}}),
+        json!({"format":"ntriples", "dry_run":true}),
+        json!([{"graph":"urn:example:graph"}]),
+    ] {
+        let (status, body) = export_status(input.clone()).await;
+        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{input}");
+        let text = String::from_utf8_lossy(&body);
+        assert!(text.contains("nothing was exported"), "{input}: {text}");
+    }
+}
+
+#[tokio::test]
+async fn export_with_no_scope_is_still_the_documented_root_export() {
+    let (status, body) = export_status(json!({"format":"ntriples"})).await;
+    assert_eq!(status, axum::http::StatusCode::OK);
+    let expected = quipu::export_rdf_subset(
+        &quipu::Store::open_in_memory().unwrap(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
     )
-    .await
-    .unwrap();
-    assert_eq!(response.headers()["content-type"], "application/n-triples");
-    assert_eq!(
-        response.headers()["x-quipu-ignored-fields"],
-        "[\"dry_run\"]"
-    );
+    .unwrap()
+    .0;
+    assert_eq!(body.as_ref(), expected.as_slice());
 }
 
 #[test]

@@ -1,8 +1,7 @@
 fn eval_expression_boolean(store: &Store, expr: &Expression, row: &Bindings) -> Option<bool> {
     match expr {
-        Expression::Equal(left, right) | Expression::SameTerm(left, right) => {
-            Some(expr_eq(store, left, right, row))
-        }
+        Expression::Equal(left, right) => Some(sparql_eq(store, left, right, row)),
+        Expression::SameTerm(left, right) => Some(expr_eq(store, left, right, row)),
         Expression::Greater(left, right) => {
             Some(compare_values(store, left, right, row, |order| {
                 order == std::cmp::Ordering::Greater
@@ -328,15 +327,37 @@ fn numeric_unary(
     store: &Store,
     args: &[Expression],
     row: &Bindings,
-    integer: impl FnOnce(i64) -> Option<i64>,
-    float: impl FnOnce(f64) -> f64,
+    function: &Function,
 ) -> Option<Value> {
+    use bigdecimal::{BigDecimal, RoundingMode};
     let value = eval_expr(store, args.first()?, row)?;
+    if let Some(exact) = crate::numeric_value::decimal(&value) {
+        let result = match function {
+            Function::Abs => exact.abs(),
+            Function::Ceil => exact.with_scale_round(0, RoundingMode::Ceiling),
+            Function::Floor => exact.with_scale_round(0, RoundingMode::Floor),
+            // XPath rounds ties toward positive infinity, including negatives.
+            Function::Round => {
+                (exact + BigDecimal::new(5.into(), 1)).with_scale_round(0, RoundingMode::Floor)
+            }
+            _ => return None,
+        };
+        return Some(literal_to_value(&Literal::new_typed_literal(
+            result.normalized().to_plain_string(),
+            NamedNode::new_unchecked(value.datatype()?),
+        )));
+    }
+    let number = value.as_f64()?;
+    let result = match function {
+        Function::Abs => number.abs(),
+        Function::Ceil => number.ceil(),
+        Function::Floor => number.floor(),
+        Function::Round => (number + 0.5).floor(),
+        _ => return None,
+    };
     match value {
-        Value::Int(value) => integer(value).map(Value::Int),
-        Value::Float(value) => Some(Value::Float(float(value))),
-        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(&datatype) => {
-            let result = float(lexical.parse::<f64>().ok()?);
+        Value::Float(_) => Some(Value::Float(result)),
+        Value::Typed { datatype, .. } if namespace::is_numeric_datatype(&datatype) => {
             Some(Value::Typed {
                 lexical: result.to_string(),
                 datatype,
@@ -351,33 +372,68 @@ fn numeric_binary(
     left: &Expression,
     right: &Expression,
     row: &Bindings,
-    integer: impl FnOnce(i64, i64) -> Option<i64>,
+    _integer: impl FnOnce(i64, i64) -> Option<i64>,
+    exact: impl FnOnce(bigdecimal::BigDecimal, bigdecimal::BigDecimal) -> bigdecimal::BigDecimal,
     float: impl FnOnce(f64, f64) -> f64,
 ) -> Option<Value> {
     let left = eval_expr(store, left, row)?;
     let right = eval_expr(store, right, row)?;
-    match (&left, &right) {
-        (Value::Int(left), Value::Int(right)) => integer(*left, *right).map(Value::Int),
-        _ => {
-            let value = float(left.as_f64()?, right.as_f64()?);
-            if left.datatype() == Some(namespace::XSD_DOUBLE)
-                || right.datatype() == Some(namespace::XSD_DOUBLE)
-            {
-                Some(Value::Typed {
-                    lexical: canonical_double(value),
-                    datatype: namespace::XSD_DOUBLE.to_string(),
-                })
-            } else if left.datatype() == Some(namespace::XSD_DECIMAL)
-                || right.datatype() == Some(namespace::XSD_DECIMAL)
-            {
-                Some(Value::Typed {
-                    lexical: format_decimal(value),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else {
-                Some(Value::Float(value))
-            }
+    let rank = numeric_rank(&left)?.max(numeric_rank(&right)?);
+    if rank <= NumericRank::Decimal {
+        let result = exact(
+            crate::numeric_value::decimal(&left)?,
+            crate::numeric_value::decimal(&right)?,
+        );
+        let datatype = if rank == NumericRank::Integer {
+            namespace::XSD_INTEGER
+        } else {
+            namespace::XSD_DECIMAL
+        };
+        return Some(crate::numeric_value::decimal_result(&result, datatype));
+    }
+    Some(typed_numeric(rank, float(left.as_f64()?, right.as_f64()?)))
+}
+
+/// `XPath` numeric type promotion, lowest first (SPARQL 1.1 section 17.3,
+/// W3C sparql10 type-promotion). An operation's result takes the higher
+/// operand rank, and every type derived from `xsd:integer` ranks as integer.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum NumericRank {
+    Integer,
+    Decimal,
+    Float,
+    Double,
+}
+
+fn numeric_rank(value: &Value) -> Option<NumericRank> {
+    match value {
+        Value::Int(_) => Some(NumericRank::Integer),
+        Value::Float(_) => Some(NumericRank::Double),
+        Value::Typed { datatype, .. } => match datatype.as_str() {
+            namespace::XSD_DOUBLE => Some(NumericRank::Double),
+            namespace::XSD_FLOAT => Some(NumericRank::Float),
+            namespace::XSD_DECIMAL => Some(NumericRank::Decimal),
+            other if namespace::is_integer_datatype(other) => Some(NumericRank::Integer),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn typed_numeric(rank: NumericRank, value: f64) -> Value {
+    let (lexical, datatype) = match rank {
+        NumericRank::Integer | NumericRank::Decimal => {
+            (format_decimal(value), namespace::XSD_DECIMAL)
         }
+        NumericRank::Float => (
+            canonical_double(f64::from(value as f32)),
+            namespace::XSD_FLOAT,
+        ),
+        NumericRank::Double => (canonical_double(value), namespace::XSD_DOUBLE),
+    };
+    Value::Typed {
+        lexical,
+        datatype: datatype.to_string(),
     }
 }
 
@@ -392,14 +448,10 @@ pub fn compare_values(
     let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
         return false;
     };
-    // Integers compare exactly; any other numeric pair — including Typed
-    // numerics that kept their datatype (xsd:long, xsd:decimal, …) rather than
-    // collapsing into Int/Float at parse — compares as f64.
-    if let (Value::Int(a), Value::Int(b)) = (&a, &b) {
-        return pred(a.cmp(b));
-    }
-    if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
-        return a.partial_cmp(&b).is_some_and(&pred);
+    if a.datatype().is_some_and(namespace::is_numeric_datatype)
+        && b.datatype().is_some_and(namespace::is_numeric_datatype)
+    {
+        return crate::numeric_value::compare(&a, &b).is_some_and(pred);
     }
     // String comparison uses the LEXICAL form, so "hello"@en compares as
     // "hello" (it used to compare as "hello@en") and an xsd:date still orders
@@ -412,34 +464,5 @@ pub fn compare_values(
 
 /// Convert an oxrdf Literal to a Value (same logic as rdf module).
 pub fn literal_to_value(lit: &Literal) -> Value {
-    // A language tag must be checked FIRST: its datatype is rdf:langString.
-    // Never fold the tag into the lexical form — that is irreversible (the
-    // plain string "hello@en" would become indistinguishable). aegis-fmyi.
-    if let Some(lang) = lit.language() {
-        return Value::Lang {
-            lexical: lit.value().to_string(),
-            lang: lang.to_string(),
-        };
-    }
-    let dt = lit.datatype().as_str();
-    let typed = || Value::Typed {
-        lexical: lit.value().to_string(),
-        datatype: dt.to_string(),
-    };
-    match dt {
-        namespace::XSD_INTEGER => lit
-            .value()
-            .parse::<i64>()
-            .map_or_else(|_| typed(), Value::Int),
-        // Preserve the lexical form and datatype. Numeric comparison and
-        // arithmetic use `Value::as_f64`, while MIN/MAX and result formats
-        // must still return the original RDF term (e.g. `1.0E2`^^xsd:double).
-        namespace::XSD_DOUBLE => typed(),
-        namespace::XSD_BOOLEAN => Value::Bool(matches!(lit.value(), "true" | "1")),
-        // RDF 1.1: a plain literal's datatype IS xsd:string, so Str is lossless.
-        namespace::XSD_STRING => Value::Str(lit.value().to_string()),
-        // Every other datatype — xsd:date, xsd:decimal, integer subtypes,
-        // customs — keeps its IRI verbatim instead of being destroyed.
-        _ => typed(),
-    }
+    crate::literal_identity::literal_to_value(lit)
 }

@@ -91,6 +91,13 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("events", "group_id", TermIdKind::None),
     ("events", "tx_id", TermIdKind::None),
     ("events", "payload", TermIdKind::None),
+    // Review identifiers and payloads are text/JSON, never dictionary IDs.
+    ("import_reviews", "share_id", TermIdKind::None),
+    ("import_reviews", "state", TermIdKind::None),
+    ("import_reviews", "first_seen", TermIdKind::None),
+    ("import_reviews", "updated_at", TermIdKind::None),
+    ("import_reviews", "notice_policy", TermIdKind::None),
+    ("import_reviews", "payload", TermIdKind::None),
     ("consumers", "consumer_id", TermIdKind::None),
     ("consumers", "committed_offset", TermIdKind::None),
     ("consumers", "filter", TermIdKind::None),
@@ -107,6 +114,30 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("schema_terms", "term", TermIdKind::None),
     ("schema_terms", "kind", TermIdKind::None),
     ("schema_terms", "first_offset", TermIdKind::None),
+    // Denial quarantine (GS6). IRIs and digests, never term ids — `graph` and
+    // `verdict` are IRIs precisely so an entry means the same thing in any
+    // space. `post_digest` IS computed over this store's term ids, so a
+    // respaced copy replays its denials as "post-state differs"; that is the
+    // digest being honest about a store whose ids moved, not a column respace
+    // should rewrite. `base_tx` is a transaction id, like `facts.tx`.
+    ("denial_quarantine", "id", TermIdKind::None),
+    ("denial_quarantine", "verdict", TermIdKind::None),
+    ("denial_quarantine", "attempt", TermIdKind::None),
+    ("denial_quarantine", "graph", TermIdKind::None),
+    ("denial_quarantine", "base_tx", TermIdKind::None),
+    ("denial_quarantine", "at", TermIdKind::None),
+    ("denial_quarantine", "actor", TermIdKind::None),
+    ("denial_quarantine", "source", TermIdKind::None),
+    ("denial_quarantine", "chain", TermIdKind::None),
+    ("denial_quarantine", "gate_now", TermIdKind::None),
+    ("denial_quarantine", "rules_digest", TermIdKind::None),
+    ("denial_quarantine", "post_digest", TermIdKind::None),
+    ("denial_quarantine", "retention", TermIdKind::None),
+    ("denial_quarantine", "verifier", TermIdKind::None),
+    ("denial_quarantine", "seal", TermIdKind::None),
+    ("denial_quarantine", "purged_at", TermIdKind::None),
+    ("quarantine_deltas", "attempt", TermIdKind::None),
+    ("quarantine_deltas", "delta", TermIdKind::None),
     ("term_spaces", "space", TermIdKind::None),
     ("term_spaces", "db", TermIdKind::None),
     ("term_spaces", "local", TermIdKind::None),
@@ -169,6 +200,15 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("query_params", "required", TermIdKind::None),
     ("query_params", "default_val", TermIdKind::None),
     ("query_params", "description", TermIdKind::None),
+    // -- Store::migrate_pending_share_queries (aegis-9ofqqs) --
+    // A share id, the sealed queries.ttl text, a store id, a namespace and a
+    // timestamp: all TEXT, none a term id.
+    ("pending_share_queries", "share_id", TermIdKind::None),
+    ("pending_share_queries", "member", TermIdKind::None),
+    ("pending_share_queries", "store_id", TermIdKind::None),
+    ("pending_share_queries", "namespace", TermIdKind::None),
+    ("pending_share_queries", "replace", TermIdKind::None),
+    ("pending_share_queries", "staged_at", TermIdKind::None),
     // -- Store::migrate_retraction_tx (quipu #83) --
     ("facts", "retracted_tx", TermIdKind::None),
     // -- Store::migrate_forks (quipu-gp5) --
@@ -196,9 +236,25 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("attestation_bindings", "issued_at_epoch", TermIdKind::None),
     ("attestation_bindings", "expires_at_epoch", TermIdKind::None),
     ("attestation_bindings", "revoked", TermIdKind::None),
+    ("attestation_bindings", "allow_write", TermIdKind::None),
     ("attestation_nonces", "session", TermIdKind::None),
     ("attestation_nonces", "nonce", TermIdKind::None),
     ("attestation_nonces", "consumed_at_epoch", TermIdKind::None),
+    // The decision is stored as its IRI text, not a term id, so nothing moves.
+    ("decision_nonces", "nonce", TermIdKind::None),
+    ("decision_nonces", "decision", TermIdKind::None),
+    // The verdict is an IRI's text and `tx` a transaction id; neither is a term id.
+    ("decision_nonces", "verdict", TermIdKind::None),
+    ("decision_nonces", "tx", TermIdKind::None),
+    // Trust-root amendment nonces (aegis-kzt0ql.9.4): IRIs as text, no term ids.
+    ("registry_amendment_nonces", "nonce", TermIdKind::None),
+    (
+        "registry_amendment_nonces",
+        "registration",
+        TermIdKind::None,
+    ),
+    ("registry_amendment_nonces", "amendment", TermIdKind::None),
+    ("decision_nonces", "consumed_at", TermIdKind::None),
     // -- resumable snapshot upload staging (aegis-tzhyzq) --
     // Content addresses, producer keys, metadata and raw Turtle bytes are all
     // deliberately external to the interned term-id space.

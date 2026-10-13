@@ -1,28 +1,56 @@
 //! SPARQL query engine -- evaluates SPARQL queries over the EAVT fact log.
 //!
 //! Parses SPARQL via spargebra, then evaluates against the `SQLite` fact store.
-//! Supports: SELECT, ASK, CONSTRUCT, DESCRIBE with BGP, JOIN, UNION, FILTER,
-//! OPTIONAL (`LeftJoin`), VALUES, ORDER BY, GROUP BY, aggregates, HAVING,
-//! EXTEND, RDFS subclass inference, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
+//! SELECT/ASK/CONSTRUCT/DESCRIBE: BGP, JOIN, UNION, FILTER, OPTIONAL, VALUES,
+//! ORDER BY/GROUP BY, aggregates, HAVING, EXTEND, RDFS, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod casts;
+mod composed_absence;
 pub mod exists;
 pub mod filter;
+pub mod filter_pushdown;
+#[cfg(test)]
+mod filter_pushdown_tests;
 pub mod pattern;
 pub mod pattern_util;
+#[cfg(test)]
+mod pattern_util_tests;
 pub mod property_path;
+#[cfg(test)]
+mod property_path_tests;
 pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
+mod root_scope;
+mod sparse_bgp;
+mod sql_star;
+pub mod status_pushdown;
+#[cfg(test)]
+mod status_pushdown_tests;
+pub mod string_pushdown;
+#[cfg(test)]
+mod string_pushdown_tests;
 #[cfg(test)]
 mod tests;
+mod triple_alias;
 
+mod bind_join;
+#[cfg(test)]
+mod bind_join_tests;
 mod construct;
+mod count_cover;
+mod count_mmap;
+mod count_optional;
+mod count_state;
+mod count_stream;
+mod group;
 mod join;
 mod progress;
 mod sql_in;
 pub mod triple;
+mod triple_bind;
 pub mod values;
 
 use std::collections::HashMap;
@@ -33,7 +61,7 @@ use crate::error::{Error, Result};
 use crate::store::Store;
 // The query-budget progress guard lives in `progress` (size ratchet split).
 use crate::types::Value;
-use progress::ProgressGuard;
+pub(crate) use progress::ProgressGuard;
 
 const DEFAULT_QUERY_BASE: &str = "http://example.invalid/";
 
@@ -225,6 +253,10 @@ pub struct TemporalContext {
     ///
     /// A regime must be a SUPERSET of the default answer, never a subset.
     pub entails_rdfs: bool,
+    /// String FILTERs pushed into the scan of the BGP being evaluated
+    /// (aegis-tl2q4j). Set only by a `Filter` directly over a BGP; `None` on
+    /// every other path.
+    pub string_narrows: Option<std::sync::Arc<Vec<string_pushdown::StringNarrow>>>,
 }
 
 /// Execute a SPARQL query against the store (current state).
@@ -347,8 +379,7 @@ pub fn query_row_labeled(
     sparql: &str,
     ctx: &TemporalContext,
 ) -> Result<QueryResult> {
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let g_var = match &parsed {
         Query::Select { pattern, .. }
@@ -448,8 +479,7 @@ pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) ->
     // implementation of the resolution would be free to drift from the one that
     // decides what the query actually reads — labelling a dataset the query
     // does not read is precisely the failure this is meant to prevent.
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
     let dataset = match &parsed {
         Query::Select { dataset, .. }
@@ -494,11 +524,11 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         ));
     }
 
-    let parsed = sparql_parser()
-        .parse_query(sparql)
+    let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
         .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     let started = crate::time::Stopwatch::start();
+    root_scope::check(&parsed)?;
     // Precedence, widest-scope last: an explicit caller deadline wins; then the
     // request deadline stamped at ADMISSION, which already includes whatever
     // this request spent queueing (aegis-raq1ok); then the per-query default,

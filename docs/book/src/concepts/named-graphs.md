@@ -33,6 +33,9 @@ overlay. A query widens its dataset only by saying so:
 
 - `GRAPH <iri> { … }` scopes the enclosed patterns to one named graph. An
   unknown IRI matches nothing.
+- ROOT is the default graph, not a named graph. `GRAPH <urn:quipu:graph:root>`
+  is refused with an error naming the default-graph form. Read ROOT without a
+  `GRAPH` clause, or explicitly use `FROM <urn:quipu:graph:root>`.
 - `GRAPH ?g { … }` ranges over the active named graphs, binding `?g` to each
   match's graph IRI. Property paths under `GRAPH ?g` are refused with an
   explicit error rather than silently reading ROOT.
@@ -48,6 +51,10 @@ SELECT ?s ?title
 FROM <http://example.org/graphs/derived>
 WHERE { ?s <http://example.org/title> ?title }
 ```
+
+`/set` and `/retract` operate only on ROOT and leave named-graph facts intact.
+They refuse a supplied `graph` field, including `null`, before changing facts.
+For a named graph, use the explicitly scoped `/update` endpoint instead.
 
 `POST /query` and the `quipu_query` MCP tool also take a `graph` request
 param — a convenience that scopes the query's *default* graph to one named
@@ -137,8 +144,13 @@ curl -s localhost:3030/datasets -X POST \
   dataset's members at resolve time; everything downstream reads the
   expanded set.
 - A dataset is never implicitly active — the ROOT-alone default is
-  untouched; you get a dataset's graphs only by naming it. A member naming
-  an unregistered graph contributes nothing.
+  untouched; you get a dataset's graphs only by naming it. Creating a dataset
+  with a member that names no registered graph is refused, and the refusal
+  names that member.
+- `urn:quipu:graph:root` is a valid member and reads the default graph, the
+  same as `FROM <urn:quipu:graph:root>`. A dataset of ROOT plus a named graph
+  is how a stored query reads the default graph AND that graph, without
+  hardcoding either in the query text.
 - Members may carry a declared ordering (`{"graph": …, "ord": N}`);
   duplicate ranks are refused rather than tiebroken silently. An empty
   dataset is refused.

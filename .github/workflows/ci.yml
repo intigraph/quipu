@@ -13,7 +13,7 @@ on:
 # so an old 22-job matrix cannot starve the six checks gating the current head.
 # Pushes run only those six; release-only surfaces run on PRs and nightly.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -102,8 +102,7 @@ jobs:
           #
           # `owl` is ENABLED in the deployed binary (confirmed via its own /version
           # endpoint), so this guards behaviour that is serving, not an optional surface.
-          - name: shacl+owl
-            flags: "--features shacl,owl"
+          # The owl configuration runs serially in the shacl leg below.
           # The gated RemoteProvider tests, which `--no-default-features`
           # compiles out entirely, run in extended-features on PRs/nightly.
           # Runs the LanceDB backend's own tests AND the config-selection test
@@ -111,6 +110,8 @@ jobs:
           # SQLite table (quipu-lv7). Extended-features compiles and runs them.
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
@@ -123,6 +124,36 @@ jobs:
             ${{ runner.os }}-cargo-test-${{ matrix.name }}-
             ${{ runner.os }}-cargo-
       - run: cargo test ${{ matrix.flags }}
+      - name: Test owl configuration in the shacl runner
+        if: matrix.name == 'shacl'
+        run: cargo test --features shacl,owl
+
+      # Release correctness already requires this job. No path filter or driver config.
+      - name: Verify qpack Git merge semantics
+        if: matrix.name == 'shacl'
+        run: |
+          cargo build --locked --features shacl --bin quipu
+          python3 scripts/ci/pendant-merge-check.py
+
+      # The evidence behind "the label homomorphism is machine-checked"
+      # (aegis-xfuch4.4): every lattice law at 10,000 seeded cases on the real
+      # meet AND on a deliberately widening one, which the direction laws must
+      # catch. Reuses this arm's test build; about 2 s of test time.
+      - name: Label-lattice property evidence
+        if: matrix.name == 'default'
+        env:
+          QUIPU_EVIDENCE_CASES: "10000"
+          QUIPU_EVIDENCE_DIR: target/evidence
+        run: |
+          cargo test ${{ matrix.flags }} --lib lattice::evidence_tests
+          cat target/evidence/lattice-proptest.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload label-lattice evidence
+        if: matrix.name == 'default'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-proptest-evidence
+          path: target/evidence/lattice-proptest.*
+          if-no-files-found: error
 
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six
@@ -131,28 +162,47 @@ jobs:
     name: Extended feature surfaces
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    env:
+      # Serial feature builds need headroom for tests and cache compression.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      # Cache downloads only: the combined full/remote/LanceDB target filled
+      # the runner while tar created a second copy in PR #511's cache poststep.
+      # A new prefix also prevents restoring the old target-bearing archives.
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-extended-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-extended-sources-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-extended-
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-extended-sources-v2-
+      - name: Disk before build
+        run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
       - name: Native MCP protocol and credential boundaries
         run: |
           cargo build --features full --bin quipu --bin quipu-server
           cargo test --features full --lib mcp_transport
           timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
+      # The quipu-server binary's own unit tests (src/server/*). The bin needs
+      # shacl+onnx+server, which no `test` matrix arm enables, so these were
+      # clippy'd and built but never RUN anywhere in CI. They include the
+      # /update sliced-vs-full differential (aegis-jm1lcl), whose soundness
+      # argument rests on them. Reuses the full-feature build just above.
+      - name: quipu-server binary tests
+        run: cargo test --features full --bin quipu-server
+      - name: Reactive graph scope and withdrawal
+        run: |
+          cargo test --features full --test reactive_graph_scope
+          cargo test --features full --lib reasoner::reactive
       # The MCP Registry image otherwise runs only at release time, which is
       # when a broken Dockerfile would first be seen: after the release shipped.
       # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just
@@ -169,7 +219,15 @@ jobs:
       - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
       - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
       - run: cargo test --no-default-features --features remote
+      # Measured before the step that crashed the linker, so the next failure
+      # says whether the disk was full rather than leaving it inferred.
+      - name: Disk before the shacl,lancedb tests
+        if: always()
+        run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
       - run: cargo test --features shacl,lancedb
+      - name: Disk after extended tests
+        if: always()
+        run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build
@@ -328,7 +386,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pre-commit
+      - run: pip install pre-commit PyYAML==6.0.3
       - run: python3 scripts/check-private-keys.py
       - run: pre-commit run --all-files
         env:
@@ -345,6 +403,18 @@ jobs:
       # rehearsal tag on crates.io, which cannot be undone.
       - name: Prove the crates publish guard still refuses
         run: scripts/ci/crates-publish-guard.sh --selftest
+
+      # The agent-arm harness behind `just bench agents` (aegis-xfuch4.4): its
+      # scoring oracle (true / FALSE / evasion-caught / abstained) is what turns
+      # model runs into the paper's table, so it is pinned here. Pure Python,
+      # no model call and no build.
+      - name: Verify the CI to Release contract
+        run: |
+          python3 scripts/test_release_ci_gate.py
+          python3 scripts/test_release_ci_gate_controls.py
+
+      - name: Agent benchmark harness unit tests
+        run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
 
       # THE OTHER HALF OF THE SAME LANE, and it is here for the reason the last
       # one is: the publish job is SKIPPED on ordinary pushes, so its guard emits
@@ -365,7 +435,7 @@ jobs:
           python3 scripts/ci/mcp-registry.py --selftest
 
   source-size:
-    name: Source size ratchet
+    name: Source and shape invariants
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -384,6 +454,25 @@ jobs:
       - run: scripts/test-rust-sloc.py
       - run: scripts/test-check-file-size.sh
       - run: scripts/check-file-size.sh
+      # REFUSE A VACUOUS PASS. If the script is renamed, moved or deleted, a
+      # `python3 <missing>` would fail loudly — but a future edit that wrapped
+      # this in a conditional, or a glob that stopped matching, would not. Assert
+      # the thing exists before claiming its verdict, because "the job was green"
+      # must never be reachable without the check having run.
+      - name: The gate must exist before it can pass
+        run: |
+          test -f shapes/verify_shape_invariants.py \
+            || { echo "::error::shapes/verify_shape_invariants.py is missing — refusing a green that checked nothing"; exit 1; }
+      # The script's own both-direction proof: I5/I6 fail on unshaped documented
+      # kinds and pass on agreement, I7 isolates live-but-undeclared kinds, I8
+      # derives the abstract set and is retired by shaping, and I9 stays
+      # non-fatal and visible. Run FIRST: if the checker's own logic is broken,
+      # its verdict on the real shapes is worth nothing.
+      - name: Self-test the invariant checker
+        run: python3 shapes/verify_shape_invariants.py --selftest
+      - name: Verify shape invariants (static)
+        run: python3 shapes/verify_shape_invariants.py
+
 
   load-test:
     name: Mixed load performance ratchet
@@ -431,60 +520,74 @@ jobs:
             load-test-report.json
             server.log
 
-  shapes:
-    name: Shape invariants
-    runs-on: ubuntu-latest
-    # A SEPARATE JOB, so its verdict is its own (aegis-qq7uw). The defect being
-    # fixed is that `shapes/verify_shape_invariants.py` was wired into NOTHING —
-    # no workflow referenced it, nothing else invoked it, and it ran only when a
-    # human remembered to type it. It was RED for 17 DAYS and nobody knew:
-    # a5eb73b added sh:minCount 1 on aegis:regex and aegis:enforcementTier to
-    # TextRuleShape, which I1 rejects, so the script exited 1 from 2026-08-07
-    # until 2026-08-24. The finding turned out to be a false positive in
-    # substance — but nobody adjudicated it for 17 days BECAUSE NOBODY SAW IT.
-    # A gate that is red and unrun makes no claim at all.
-    #
-    # NOT PATH-FILTERED, deliberately. `paths: shapes/**` is the obvious
-    # refinement and it reintroduces the exact failure mode: a way for the gate
-    # to legitimately not run, which is indistinguishable from the gate being
-    # broken. The static half takes about a second and needs no network, so
-    # there is nothing to buy by skipping it.
-    #
-    # STATIC HALF ONLY. I1/I2/I3/I9 and --selftest need no server. I4/I7/I8 want
-    # --data/--live against a running store; they stay out until there is a
-    # fixture worth trusting, and the script SAYS so per-invariant ("SKIPPED (no
-    # --live)") rather than quietly counting them as passed.
-    #
-    # I9 REPORTS, IT DOES NOT GATE — and that is the script's own design, not a
-    # concession made here. I1's "only rdfs:label may be required" is an
-    # aegis-ontology.shapes.ttl policy; governance.ttl's Verdict genuinely
-    # requires a signature and an evidenceHash. I9 currently prints 3 reports
-    # over 3 files (48 required-predicate + 14 missing-label findings). Gating on
-    # those would fail every PR on day one and the job would be switched off
-    # within a day, taking the real findings with it.
+  # String-FILTER pushdown (aegis-tl2q4j) took agent-written CONTAINS / REGEX /
+  # STRSTARTS / LCASE filters from timeouts to milliseconds on the production
+  # store, and nothing else in CI exercises those shapes (aegis-66ny04). At toy
+  # scale a full scan is fast and a gate proves nothing, so this loads a
+  # generated 2.1M-triple store and runs every class twice: as written, and as
+  # FILTER((X) || false), which no pushdown touches. Rows must match, and the
+  # defeated/pushed ratio must stay above the budget: an in-run positive
+  # control, so runner speed cancels out. Release build, as served.
+  query-perf:
+    name: String filter query performance gate
+    if: github.event_name != 'push'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-query-perf-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-query-perf-
+            ${{ runner.os }}-cargo-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # REFUSE A VACUOUS PASS. If the script is renamed, moved or deleted, a
-      # `python3 <missing>` would fail loudly — but a future edit that wrapped
-      # this in a conditional, or a glob that stopped matching, would not. Assert
-      # the thing exists before claiming its verdict, because "the job was green"
-      # must never be reachable without the check having run.
-      - name: The gate must exist before it can pass
+      - name: Harness self-test
+        run: scripts/quipu-query-perf.py self-test
+      - name: Reject failed and malformed defeated queries
+        run: python3 scripts/ci/test-query-perf.py
+      - name: Build release binaries
+        run: cargo build --release --locked --features full --bin quipu --bin quipu-server
+      - name: Restore generated query fixture
+        id: query-fixture
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/fixture
+          key: query-fixture-v1-${{ hashFiles('scripts/quipu-query-perf.py') }}
+      - name: Generate query fixture on cache miss
+        if: steps.query-fixture.outputs.cache-hit != 'true'
+        run: scripts/quipu-query-perf.py generate --out "$RUNNER_TEMP/fixture"
+      - name: Load the fixture
         run: |
-          test -f shapes/verify_shape_invariants.py \
-            || { echo "::error::shapes/verify_shape_invariants.py is missing — refusing a green that checked nothing"; exit 1; }
-      # The script's own both-direction proof: I5/I6 fail on unshaped documented
-      # kinds and pass on agreement, I7 isolates live-but-undeclared kinds, I8
-      # derives the abstract set and is retired by shaping, and I9 stays
-      # non-fatal and visible. Run FIRST: if the checker's own logic is broken,
-      # its verdict on the real shapes is worth nothing.
-      - name: Self-test the invariant checker
-        run: python3 shapes/verify_shape_invariants.py --selftest
-      - name: Verify shape invariants (static)
-        run: python3 shapes/verify_shape_invariants.py
+          scripts/quipu-query-perf.py load --fixture "$RUNNER_TEMP/fixture" \
+            --db /dev/shm/query-perf.db --quipu target/release/quipu
+      - name: Run the query performance gate
+        run: |
+          target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 120); do
+            curl --fail --silent http://127.0.0.1:3030/health >/dev/null && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3030/health >/dev/null
+          scripts/quipu-query-perf.py gate --url http://127.0.0.1:3030 \
+            --budget benchmark/query-perf-budget.json \
+            --output query-perf-report.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quipu-query-perf-report
+          path: |
+            query-perf-report.json
+            server.log
 
   lint-markdown:
     name: Markdown lint
@@ -526,7 +629,7 @@ jobs:
   extended-correctness:
     name: Extended correctness
     if: always() && github.event_name != 'push'
-    needs: [extended-features, build-full, wasm, source-size, load-test, shapes, lint-markdown]
+    needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     steps:
       - name: Require every extended surface to pass

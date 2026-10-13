@@ -66,6 +66,9 @@ fn tables_created_in_source() -> std::collections::BTreeSet<String> {
 #[test]
 fn every_table_a_real_store_creates_is_classified() {
     let store = Store::open_in_memory().unwrap();
+    // Opt-in virtual tables create engine-owned shadow tables absent from
+    // source DDL. Exercise actual activation, rather than exempt their names.
+    store.initialize_lexical_index().unwrap();
     let mut stmt = store
         .prepare(
             "SELECT name FROM sqlite_master \
@@ -119,6 +122,7 @@ fn every_table_a_real_store_creates_is_classified() {
 #[test]
 fn nothing_is_declared_that_nothing_creates() {
     let store = Store::open_in_memory().unwrap();
+    store.initialize_lexical_index().unwrap();
     let mut stmt = store
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
         .unwrap();
@@ -217,7 +221,7 @@ fn carried_is_content_and_log_only() {
 #[test]
 fn every_table_created_anywhere_in_the_source_is_classified() {
     // Lives in the pack ARTIFACT, not in a store — `pack.rs` writes it into the
-    // .qpack.db file itself. A store round-trip must never carry it, so it is
+    // .pendant.db file itself. A store round-trip must never carry it, so it is
     // correctly absent from DECLARED rather than missing from it.
     const NOT_A_STORE_TABLE: &[&str] = &["pack_manifest"];
 

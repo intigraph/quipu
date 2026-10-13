@@ -28,7 +28,7 @@ artifact format can *be* the database format.)
 `quipu pack` produces a fresh, self-contained Quipu SQLite store:
 
 ```text
-quipu pack <graph-iri> --out <file.qpack.db>
+quipu pack <graph-iri> --out <file.pendant.db>
     [--name <n>] [--version <semver>] [--space <term-space>]
     [--shapes <name>...] [--queries <name>...]
     [--with-vectors] [--format turtle]
@@ -147,6 +147,11 @@ renderer serves both.
   `quipu_ask` stays on the read-only pool: registry *reads* are fine there,
   and the pooled-tool survival test pins it. CLI: `quipu queries
   load|list|get|remove`.
+- **In a share:** the text share carries selected stored queries as
+  `queries.ttl`, sealed by the manifest and namespaced on import, so a qpack
+  ships its competency questions too — see
+  [standard-share-artifact.md § Stored queries](standard-share-artifact.md#stored-queries-queriesttl)
+  (aegis-fxpbys.2).
 
 ## 3. Retrieval policy — recommend, never enforce
 

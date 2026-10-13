@@ -3712,6 +3712,100 @@ fn ask_stops_at_the_first_row_for_a_pushdown_safe_pattern() {
     );
 }
 
+// ── numeric type promotion (aegis-soqv1r, W3C sparql10 type-promotion) ──────
+// integer (and every type derived from it) < decimal < float < double; the
+// result takes the higher operand type. float + float used to come back as
+// xsd:double, and short + short as a double rather than an integer.
+
+fn result_datatype(expr: &str) -> String {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?d WHERE {{ BIND(datatype({expr}) AS ?d) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    match result.rows().first().and_then(|r| r.get("d")) {
+        Some(Value::Ref(id)) => store.resolve(*id).unwrap(),
+        other => panic!("no datatype for {expr}: {other:?}"),
+    }
+}
+
+#[test]
+fn arithmetic_promotes_to_the_higher_operand_type() {
+    let xsd = |t: &str| format!("http://www.w3.org/2001/XMLSchema#{t}");
+    let cases = [
+        (r#""1"^^xsd:float + "1"^^xsd:float"#, "float"),
+        (r#""1"^^xsd:float + "1"^^xsd:decimal"#, "float"),
+        (r#""1"^^xsd:double + "1"^^xsd:float"#, "double"),
+        (r#""1"^^xsd:short + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:unsignedByte + "1"^^xsd:short"#, "integer"),
+        (r#""1"^^xsd:short + "1"^^xsd:decimal"#, "decimal"),
+        (r#""1"^^xsd:short + "1"^^xsd:float"#, "float"),
+        ("1 + 1", "integer"),
+        ("1 / 2", "decimal"),
+        (r#""4"^^xsd:float / "2"^^xsd:float"#, "float"),
+    ];
+    for (expr, want) in cases {
+        assert_eq!(result_datatype(expr), xsd(want), "{expr}");
+    }
+}
+
+// ── `=` compares numbers by value across datatypes (aegis-soqv1r) ────────────
+// `1 = 1.0` was false: `=` shared sameTerm's term identity. Ordering already
+// promoted numerics (`1 <= 1.0` was true), so `=` disagreed with `<=` and `>=`.
+
+fn bind_bool(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        &format!("SELECT ?r WHERE {{ BIND(({expr}) AS ?r) }}"),
+    )
+    .unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn equals_promotes_numerics_across_datatypes() {
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0e0"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 != 1.0"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("1 = 2"), Some(Value::Bool(false)));
+}
+
+// `=` promotes numerics; sameTerm must not. Asserted in BIND, where a type
+// error would surface as an unbound `?r` rather than as `false`. The FILTER
+// test below cannot tell `false` from an error: both drop the row.
+#[test]
+fn same_term_keeps_datatype_identity_beside_numeric_equals() {
+    assert_eq!(bind_bool("sameTerm(1, 1.0)"), Some(Value::Bool(false)));
+    assert_eq!(bind_bool("sameTerm(1, 1)"), Some(Value::Bool(true)));
+    assert_eq!(bind_bool("1 = 1.0"), Some(Value::Bool(true)));
+}
+
+#[test]
+fn equals_does_not_coerce_strings_to_numbers() {
+    assert_eq!(bind_bool(r#""1" = 1"#), Some(Value::Bool(false)));
+}
+
+#[test]
+fn filter_equals_promotes_numerics() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a = 30.0) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Alice".to_string()]);
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         SELECT ?n WHERE { ?s ex:name ?n ; ex:age ?a . FILTER(?a IN (1, 25.0)) }",
+    )
+    .unwrap();
+    assert_eq!(names(&result), vec!["Bob".to_string()]);
+}
+
 // ── FILTER type errors eliminate the row (aegis-soqv1r, W3C dawg-bev-5/-6) ──
 // An unbound variable has no effective boolean value. That is a SPARQL type
 // error: the row is dropped and the query still answers. It used to fail the
@@ -3834,4 +3928,403 @@ fn filter_same_term_non_canonical_lexical_form() {
     )
     .unwrap();
     assert!(names(&result).is_empty());
+}
+
+// ── XSD casts (aegis-soqv1r, W3C sparql10 cast + sort-function) ─────────────
+// Only xsd:double was implemented, so every other cast was silently unbound
+// and ORDER BY xsd:integer(?o) sorted nothing.
+
+fn bind_value(expr: &str) -> Option<Value> {
+    let store = test_store_with_data();
+    let q = format!(
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?r WHERE {{ BIND({expr} AS ?r) }}"
+    );
+    let result = query(&store, &q).unwrap();
+    result.rows().first().and_then(|r| r.get("r").cloned())
+}
+
+#[test]
+fn xsd_casts_from_strings() {
+    assert_eq!(bind_value(r#"xsd:integer("13")"#), Some(Value::Int(13)));
+    assert_eq!(bind_value(r#"xsd:integer("+33.3300")"#), None);
+    assert_eq!(bind_value(r#"xsd:boolean("1")"#), Some(Value::Bool(true)));
+    assert_eq!(bind_value(r#"xsd:boolean("yes")"#), None);
+    let dt = |v: Option<Value>| v.and_then(|v| v.datatype().map(str::to_string));
+    let xsd = |t: &str| Some(format!("http://www.w3.org/2001/XMLSchema#{t}"));
+    assert_eq!(dt(bind_value(r#"xsd:decimal("+33.3300")"#)), xsd("decimal"));
+    assert_eq!(dt(bind_value(r#"xsd:float("-10.2E3")"#)), xsd("float"));
+    assert_eq!(dt(bind_value(r#"xsd:double("13")"#)), xsd("double"));
+    assert_eq!(
+        dt(bind_value(r#"xsd:dateTime("2002-10-10T17:00:00Z")"#)),
+        xsd("dateTime")
+    );
+    assert_eq!(bind_value(r#"xsd:dateTime("true")"#), None);
+    assert_eq!(bind_value(r#"xsd:decimal("string")"#), None);
+}
+
+#[test]
+fn xsd_casts_by_value_and_to_string() {
+    assert_eq!(bind_value("xsd:integer(3.9)"), Some(Value::Int(3)));
+    assert_eq!(bind_value("xsd:boolean(0)"), Some(Value::Bool(false)));
+    assert_eq!(
+        bind_value("xsd:string(<http://example.org/alice>)"),
+        Some(Value::Str("http://example.org/alice".into()))
+    );
+    assert_eq!(bind_value("xsd:integer(<http://example.org/alice>)"), None);
+}
+
+#[test]
+fn order_by_a_cast_sorts_by_the_cast_value() {
+    let mut store = Store::open_in_memory().unwrap();
+    ingest_rdf(
+        &mut store,
+        br#"<http://e/s1> <http://e/p> "2" . <http://e/s2> <http://e/p> "300" . <http://e/s3> <http://e/p> "10" ."#
+            .as_slice(),
+        RdfFormat::Turtle,
+        None,
+        "2026-04-04T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = query(
+        &store,
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+         SELECT ?o WHERE { ?s <http://e/p> ?o } ORDER BY xsd:integer(?o)",
+    )
+    .unwrap();
+    let order: Vec<_> = result
+        .rows()
+        .iter()
+        .filter_map(|r| r.get("o").cloned())
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            Value::Str("2".into()),
+            Value::Str("10".into()),
+            Value::Str("300".into())
+        ]
+    );
+}
+
+#[test]
+fn xsd_cast_integer_identity_is_exact_above_f64_precision() {
+    let store = Store::open_in_memory().unwrap();
+    let identity = 9_007_199_254_740_993_i64;
+    let cast = |target, value| {
+        super::casts::cast(&store, target, value, |n| n.to_string(), |n| n.to_string())
+    };
+    for value in [
+        Value::Int(identity),
+        Value::Typed {
+            lexical: identity.to_string(),
+            datatype: crate::namespace::XSD_INTEGER.into(),
+        },
+    ] {
+        assert_eq!(
+            cast(crate::namespace::XSD_INTEGER, value.clone()),
+            Some(Value::Int(identity))
+        );
+        assert_eq!(
+            cast(crate::namespace::XSD_STRING, value),
+            Some(Value::Str(identity.to_string()))
+        );
+    }
+}
+
+#[test]
+fn xsd_cast_integer_out_of_range_does_not_saturate() {
+    let store = Store::open_in_memory().unwrap();
+    let cast = |value| {
+        super::casts::cast(
+            &store,
+            crate::namespace::XSD_INTEGER,
+            value,
+            |n| n.to_string(),
+            |n| n.to_string(),
+        )
+    };
+    assert_eq!(cast(Value::Float(1e20)), None);
+    assert_eq!(cast(Value::Float(-1e20)), None);
+    assert_eq!(cast(Value::Float(3.9)), Some(Value::Int(3)));
+}
+
+#[test]
+fn xsd_cast_datetime_checks_calendar_and_timezone() {
+    assert_eq!(bind_value(r#"xsd:dateTime("2024-02-30T12:00:00Z")"#), None);
+    assert_eq!(
+        bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:01")"#),
+        None
+    );
+    assert!(bind_value(r#"xsd:dateTime("2024-02-29T12:00:00+14:00")"#).is_some());
+}
+
+#[test]
+fn xsd_cast_double_to_string_does_not_saturate_or_spell_infinity_as_inf() {
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("1e20"))"#),
+        Some(Value::Str("1.0E20".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("INF"))"#),
+        Some(Value::Str("INF".into()))
+    );
+    assert_eq!(
+        bind_value(r#"xsd:string(xsd:double("NaN"))"#),
+        Some(Value::Str("NaN".into()))
+    );
+}
+
+#[test]
+fn xsd_cast_decimal_overflow_is_a_type_error() {
+    let too_large = "9".repeat(400);
+    assert_eq!(bind_value(&format!(r#"xsd:decimal("{too_large}")"#)), None);
+    assert!(bind_value(r#"xsd:decimal("33.33")"#).is_some());
+}
+
+// ── CONSTRUCT template blank nodes are fresh per solution (aegis-soqv1r) ────
+// One template label used to be reused for every row, fusing all solutions
+// into one node (W3C sparql10 construct-3/-4).
+
+#[test]
+fn construct_template_blank_node_is_fresh_per_solution() {
+    let store = test_store_with_data();
+    let result = query(
+        &store,
+        "PREFIX ex: <http://example.org/>
+         PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+         CONSTRUCT { [ rdf:subject ?s ; rdf:object ?n ] } WHERE { ?s ex:name ?n }",
+    )
+    .unwrap();
+    let QueryResult::Graph(triples) = result else {
+        panic!("CONSTRUCT did not return a graph");
+    };
+    let subjects: std::collections::HashSet<_> =
+        triples.iter().map(|t| t.subject.clone()).collect();
+    assert_eq!(
+        subjects.len(),
+        3,
+        "one fresh node per solution: {subjects:?}"
+    );
+    assert_eq!(triples.len(), 6);
+}
+
+#[test]
+#[ignore = "explicit disposable database/query-file performance probe"]
+fn external_query_fixture_perf() {
+    let db = std::env::var("QUIPU_PERF_DB").expect("explicit disposable fixture database");
+    let text = std::fs::read_to_string(
+        std::env::var("QUIPU_PERF_QUERY").expect("explicit fixture query file"),
+    )
+    .unwrap();
+    let mut reference = None;
+    for enabled in [false, true] {
+        for _ in 0..3 {
+            let store = Store::open_read_only(&db).unwrap();
+            store.set_read_model_enabled(enabled);
+            let start = std::time::Instant::now();
+            let result = query(&store, &text).unwrap();
+            let elapsed = start.elapsed().as_secs_f64();
+            let rows = result.rows().to_vec();
+            if let Some(expected) = &reference {
+                assert_eq!(&rows, expected, "SQL/model exact ordered rows");
+            } else {
+                reference = Some(rows);
+            }
+            assert!(!result.rows().is_empty(), "fixture positive control");
+            println!(
+                "model={enabled} rows={} elapsed_s={elapsed:.6}",
+                result.rows().len()
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "explicit disposable matched-concurrency query performance probe"]
+fn external_query_fixture_parallel_perf() {
+    let cache_limit = std::env::var("QUIPU_PERF_TERM_CACHE_LIMIT")
+        .ok()
+        .map(|value| value.parse::<usize>().unwrap());
+    let db = std::env::var("QUIPU_PERF_DB").expect("explicit disposable fixture database");
+    let text = std::fs::read_to_string(
+        std::env::var("QUIPU_PERF_QUERY").expect("explicit fixture query file"),
+    )
+    .unwrap();
+    let mut reference_store = Store::open_read_only(&db).unwrap();
+    reference_store.sync_frozen_attachments().unwrap();
+    if let Some(limit) = cache_limit {
+        reference_store.set_term_cache_limit(limit);
+        println!("fixture term_cache_limit={limit}");
+    }
+    let expected_attachments = std::env::var("QUIPU_PERF_EXPECTED_ATTACHMENTS")
+        .ok()
+        .map(|value| value.parse::<usize>().unwrap());
+    if let Some(expected) = expected_attachments {
+        assert_eq!(
+            reference_store.attachments().len(),
+            expected,
+            "fixture composition positive control"
+        );
+    }
+    println!(
+        "fixture attachments={}",
+        reference_store.attachments().len()
+    );
+    let reference = query(&reference_store, &text).unwrap().rows().to_vec();
+    assert!(!reference.is_empty(), "fixture positive control");
+    println!("fixture reference_rows={}", reference.len());
+    if let Ok(path) = std::env::var("QUIPU_PERF_EXPECTED_SUBJECTS") {
+        let expected: Vec<_> = std::fs::read_to_string(path)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let actual: Vec<_> = reference
+            .iter()
+            .map(|row| match row.get("s") {
+                Some(Value::Ref(id)) => reference_store.resolve(*id).unwrap(),
+                _ => panic!("subject fixture must project ?s"),
+            })
+            .collect();
+        assert_eq!(actual, expected, "independent fixture subjects and order");
+    }
+    for enabled in [false, true] {
+        for round in 0..3 {
+            let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+            let threads: Vec<_> = (0..4)
+                .map(|worker| {
+                    let (db, text, expected, barrier) =
+                        (db.clone(), text.clone(), reference.clone(), barrier.clone());
+                    std::thread::spawn(move || {
+                        let mut store = Store::open_read_only(&db).unwrap();
+                        store.sync_frozen_attachments().unwrap();
+                        if let Some(limit) = cache_limit {
+                            store.set_term_cache_limit(limit);
+                        }
+                        if let Some(expected) = expected_attachments {
+                            assert_eq!(store.attachments().len(), expected, "worker composition positive control");
+                        }
+                        store.set_read_model_enabled(enabled);
+                        store.search_config_mut().query_timeout_ms = 10_000;
+                        barrier.wait();
+                        let start = std::time::Instant::now();
+                        let result = query(&store, &text);
+                        let elapsed = start.elapsed().as_secs_f64();
+                        match result {
+                            Ok(result) => {
+                                assert_eq!(result.rows(), &expected, "exact ordered rows");
+                                println!("model={enabled} round={round} worker={worker} timeout=false elapsed_s={elapsed:.6}");
+                            }
+                            Err(crate::Error::QueryTimeout { .. }) => {
+                                println!("model={enabled} round={round} worker={worker} timeout=true elapsed_s={elapsed:.6}");
+                            }
+                            Err(error) => panic!("unexpected fixture failure: {error}"),
+                        }
+                    })
+                })
+                .collect();
+            for thread in threads {
+                thread.join().unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn sparse_literal_join_avoids_whole_graph_model_and_keeps_headers() {
+    let (mut store, iri) = test_store_named_graph();
+    let graph = store.lookup(&iri).unwrap().unwrap();
+    let subject = store.intern("http://example.org/alice").unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let class = store.intern("http://example.org/Action").unwrap();
+    store
+        .overlay_write(
+            graph,
+            crate::types::Op::Assert,
+            subject,
+            rdf_type,
+            Value::Ref(class),
+            "2026-04-04T00:00:00Z",
+        )
+        .unwrap();
+    let query_text = format!(
+        "SELECT * WHERE {{ GRAPH <{iri}> {{
+        ?s a <http://example.org/Action> .
+        ?s <http://example.org/name> \"t1-alice\"
+    }} }}"
+    );
+    let result = query(&store, &query_text).unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert_eq!(result.variables(), ["s"]);
+    assert!(
+        !store.read_model_is_resident_for(graph),
+        "sparse SQL must avoid the graph build"
+    );
+}
+
+#[test]
+fn sparse_literal_probe_does_not_return_its_truncated_dense_prefix() {
+    let mut store = Store::open_in_memory().unwrap();
+    let graph = store.overlay_create("urn:example:dense", 0).unwrap();
+    let kind = store.intern("urn:example:kind").unwrap();
+    let class = store.intern("urn:example:Action").unwrap();
+    let property = store.intern("urn:example:status").unwrap();
+    for n in 0..129 {
+        let subject = store.intern(&format!("urn:example:subject:{n}")).unwrap();
+        for (attribute, value) in [
+            (kind, Value::Ref(class)),
+            (property, Value::Str("open".into())),
+        ] {
+            store
+                .overlay_write(
+                    graph,
+                    crate::types::Op::Assert,
+                    subject,
+                    attribute,
+                    value,
+                    "2026-04-04T00:00:00Z",
+                )
+                .unwrap();
+        }
+    }
+    let result = query(
+        &store,
+        "SELECT ?s WHERE { GRAPH <urn:example:dense> {
+        ?s <urn:example:kind> <urn:example:Action> ; <urn:example:status> \"open\"
+    } }",
+    )
+    .unwrap();
+    assert_eq!(
+        result.rows().len(),
+        129,
+        "129-row probe must fall back, never lose the tail"
+    );
+    assert!(
+        store.read_model_is_resident_for(graph),
+        "dense fallback uses the normal planner"
+    );
+}
+
+#[test]
+fn sparse_literal_does_not_replan_a_disconnected_join() {
+    let (store, iri) = test_store_named_graph();
+    let graph = store.lookup(&iri).unwrap().unwrap();
+    let result = query(
+        &store,
+        &format!(
+            "SELECT ?s ?x WHERE {{ GRAPH <{iri}> {{
+        ?s <http://example.org/name> \"t1-alice\" .
+        ?x <http://example.org/p> <http://example.org/y>
+    }} }}"
+        ),
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1);
+    assert!(
+        store.read_model_is_resident_for(graph),
+        "disconnected relation must keep its normal hash join"
+    );
 }

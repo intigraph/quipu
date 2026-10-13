@@ -116,6 +116,19 @@ impl EventRow {
 }
 
 impl Store {
+    /// Register a wake hint at the SQLite outer-commit boundary. A callback
+    /// cannot establish durability (commit itself may still fail). Serving
+    /// consumers must cross the writer barrier, then reread the durable log.
+    /// This does not run on reads or inner savepoint releases.
+    #[cfg(feature = "server")]
+    pub fn set_commit_wake(&self, mut wake: impl FnMut() + Send + 'static) -> Result<()> {
+        self.conn.commit_hook(Some(move || {
+            wake();
+            false
+        }))?;
+        Ok(())
+    }
+
     /// Append this transaction's semantic events. MUST be called inside the
     /// `quipu_transact` savepoint (it is — from `stage_and_guard`), so the
     /// events commit or roll back atomically with the facts they describe.
@@ -389,6 +402,32 @@ impl Store {
             "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \
              VALUES (?1, ?2, ?3, NULL, ?4, ?5)",
             params![REFUSAL_EVENT, timestamp, graph_iri, tx, payload.to_string()],
+        );
+    }
+
+    /// Record a gate refusal from outside the store's own write path: the
+    /// server's `/update` gates refuse before any transaction exists
+    /// (aegis-1hfyk5). Same metadata-only event as [`Store::record_refusal`].
+    pub fn record_gate_refusal(
+        &self,
+        gate: &'static str,
+        reason: &str,
+        graph: i64,
+        actor: Option<&str>,
+        source: Option<&str>,
+        timestamp: &str,
+    ) {
+        let refusal = PendingRefusal {
+            gate,
+            reason: reason.to_owned(),
+            refused_datums: 0,
+        };
+        self.record_refusal(
+            &refusal,
+            &self.graph_iri_of(graph),
+            actor,
+            source,
+            timestamp,
         );
     }
 

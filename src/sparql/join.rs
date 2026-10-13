@@ -141,7 +141,7 @@ pub(crate) fn join_plan(
 /// With no shared variables this is a cartesian product, which is what the
 /// nested loop produced too — an unconnected BGP genuinely has that many
 /// solutions. The row cap is what stops it running away.
-fn hash_join_bindings(
+pub(super) fn hash_join_bindings(
     left: &[Bindings],
     right: &[Bindings],
     ctx: &TemporalContext,
@@ -177,7 +177,7 @@ fn hash_join_bindings(
     let key_of = |b: &Bindings| -> Vec<Vec<u8>> {
         shared
             .iter()
-            .map(|k| b.get(*k).map(Value::to_bytes).unwrap_or_default())
+            .map(|k| b.get(*k).map(Value::term_key).unwrap_or_default())
             .collect()
     };
 

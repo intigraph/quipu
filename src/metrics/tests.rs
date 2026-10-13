@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn auth_refusals_distinguish_success_and_probe_methods() {
+    let m = Metrics::default();
+    m.observe_auth_result("worker", "/knot", "POST", 200);
+    m.observe_auth_result("worker", "/knot", "POST", 401);
+    m.observe_auth_result("worker", "/knot", "POST", 403);
+    m.observe_auth_result("link-check", "/knot", "GET", 401);
+    let text = m.render(0, 0, 0, None);
+    assert!(text.contains(
+        "client=\"worker\",endpoint=\"/knot\",method=\"POST\",expected_probe=\"false\"} 1"
+    ));
+    assert!(text.contains(
+        "client=\"link-check\",endpoint=\"/knot\",method=\"GET\",expected_probe=\"false\"} 1"
+    ));
+}
+
+#[test]
+fn auth_refusal_client_and_method_labels_are_bounded_without_losing_counts() {
+    let m = Metrics::default();
+    for i in 0..(MAX_CLIENTS * 4) {
+        m.observe_auth_result(&format!("caller{i}"), "/knot", &format!("METHOD{i}"), 401);
+    }
+    let map = m.auth_refusals.lock().unwrap();
+    assert_eq!(map.len(), MAX_CLIENTS);
+    assert!(map.contains_key(&("other".into(), "/knot".into())));
+    assert!(
+        map.values()
+            .all(|methods| methods.len() == 1 && methods.contains_key(&("OTHER", false)))
+    );
+    assert_eq!(
+        map.values()
+            .map(|methods| methods[&("OTHER", false)])
+            .sum::<u64>(),
+        (MAX_CLIENTS * 4) as u64
+    );
+}
+
+#[test]
 fn client_label_precedence_and_normalisation() {
     // Explicit header wins over User-Agent.
     assert_eq!(
@@ -31,6 +68,24 @@ fn client_label_precedence_and_normalisation() {
     assert_eq!(normalize_task(Some("bad\n task!")), "badtask");
     assert_eq!(normalize_task(Some(&"x".repeat(200))).len(), 64);
     assert_eq!(normalize_task(Some("日本語")), "unattributed");
+}
+
+#[test]
+fn expected_probe_is_narrow_and_survives_caller_overflow() {
+    let m = Metrics::default();
+    for i in 0..MAX_CLIENTS {
+        m.observe_auth_result(&format!("worker{i}"), "/knot", "POST", 200);
+    }
+    m.observe_auth_result("auth-negative-probe", "/episode", "POST", 401);
+    m.observe_auth_result("auth-negative-probe", "/knot", "POST", 401);
+    m.observe_auth_result("aegis-doc-link-check", "/episode", "GET", 401);
+    m.observe_auth_result("aegis-doc-link-check", "/episode", "POST", 401);
+    let map = m.auth_refusals.lock().unwrap();
+    let folded = &map[&("other".into(), "/episode".into())];
+    assert_eq!(folded[&("POST", true)], 1);
+    assert_eq!(folded[&("POST", false)], 1);
+    assert_eq!(folded[&("GET", true)], 1);
+    assert_eq!(map[&("other".into(), "/knot".into())][&("POST", false)], 1);
 }
 
 #[test]
@@ -239,10 +294,34 @@ fn label_values_are_escaped() {
 #[test]
 fn memory_metrics_render_and_count_writes() {
     let m = Metrics::default();
-    m.observe_write(5);
-    m.observe_write(3);
+    let write = |submitted, asserted| writes::WriteCounts {
+        submitted,
+        inferred: 0,
+        asserted,
+        retracted: 0,
+        superseded: 0,
+        root: true,
+        kind: crate::write_kind::WriteKind::Knot,
+    };
+    m.observe_write(&write(5, 5));
+    // A byte-identical re-assert: submitted, but nothing changed (aegis-gwkd76).
+    m.observe_write(&write(3, 0));
     let text = m.render(0, 0, 0, None);
     assert!(text.contains("quipu_facts_written_total 8"));
+    let series = |outcome: &str| {
+        format!("quipu_write_facts_total{{writer=\"knot\",graph=\"root\",outcome=\"{outcome}\"}}")
+    };
+    assert!(
+        text.contains(&format!("{} 8", series("submitted"))),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!("{} 5", series("asserted"))),
+        "{text}"
+    );
+    assert!(text.contains(&format!("{} 3", series("noop"))), "{text}");
+    // Zero outcomes are omitted, not rendered as 0.
+    assert!(!text.contains(&series("retracted")), "{text}");
     assert!(text.contains("process_resident_memory_bytes"));
     assert!(text.contains("process_virtual_memory_bytes"));
     assert!(text.contains("quipu_process_peak_rss_bytes"));
@@ -309,4 +388,116 @@ fn held_histogram_shows_a_per_request_bound_a_total_cannot() {
     assert!(text.contains("quipu_store_held_seconds_bucket{client=\"one-expensive\",le=\"10\"} 0"));
     assert!(text.contains("quipu_store_held_seconds_bucket{client=\"one-expensive\",le=\"30\"} 1"));
     assert!(text.contains("quipu_store_held_seconds_count{client=\"one-expensive\"} 1"));
+}
+
+#[test]
+fn caller_histograms_distinguish_equal_means_and_aggregate_tasks() {
+    let m = Metrics::default();
+    for (task, steady, tail) in [("first", 0.75, 0.25), ("second", 0.75, 1.25)] {
+        m.observe_client("steady", task, "/search", steady);
+        m.observe_client("tail", task, "/search", tail);
+        m.observe_request("/search", 200, tail);
+    }
+    let text = m.render(0, 0, 0, None);
+    let name = "quipu_http_client_request_duration_seconds";
+    for client in ["steady", "tail"] {
+        assert!(text.contains(&format!(
+            "{name}_sum{{client=\"{client}\",endpoint=\"/search\"}} 1.5"
+        )));
+        assert!(text.contains(&format!(
+            "{name}_count{{client=\"{client}\",endpoint=\"/search\"}} 2"
+        )));
+        assert!(text.contains(&format!(
+            "{name}_bucket{{client=\"{client}\",endpoint=\"/search\",le=\"+Inf\"}} 2"
+        )));
+    }
+    for (client, edge, count) in [
+        ("steady", "0.25", 0),
+        ("tail", "0.25", 1),
+        ("steady", "0.75", 2),
+        ("tail", "0.75", 1),
+        ("tail", "1.5", 2),
+        ("tail", "5", 2),
+    ] {
+        assert!(text.contains(&format!(
+            "{name}_bucket{{client=\"{client}\",endpoint=\"/search\",le=\"{edge}\"}} {count}"
+        )));
+    }
+    assert!(
+        text.lines()
+            .filter(|l| l.starts_with(name))
+            .all(|l| !l.contains("task="))
+    );
+    // The global family keeps its labels and receives the same new boundaries.
+    assert!(text.contains(
+        "quipu_http_request_duration_seconds_bucket{endpoint=\"/search\",le=\"0.25\"} 1"
+    ));
+    assert!(
+        text.contains(
+            "quipu_http_request_duration_seconds_bucket{endpoint=\"/search\",le=\"1.5\"} 2"
+        )
+    );
+}
+
+#[test]
+fn caller_histogram_cap_agrees_with_counters_across_tasks_and_routes() {
+    let m = Metrics::default();
+    for i in 0..MAX_CLIENTS * 4 {
+        for route in ["/search", "/query"] {
+            m.observe_client(&format!("caller{i}"), &format!("task{i}"), route, 31.0);
+        }
+    }
+    let text = m.render(0, 0, 0, None);
+    let labels = |prefix: &str| -> BTreeSet<String> {
+        text.lines()
+            .filter(|l| l.starts_with(prefix))
+            .map(|l| {
+                l.split("client=\"")
+                    .nth(1)
+                    .unwrap()
+                    .split('"')
+                    .next()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect()
+    };
+    let histogram = "quipu_http_client_request_duration_seconds";
+    let clients = labels(&format!("{histogram}_count"));
+    assert_eq!(clients.len(), MAX_CLIENTS);
+    assert!(clients.contains("other"));
+    assert_eq!(clients, labels("quipu_http_client_requests_total"));
+    let count_lines: Vec<_> = text
+        .lines()
+        .filter(|l| l.starts_with(&format!("{histogram}_count")))
+        .collect();
+    assert_eq!(count_lines.len(), MAX_CLIENTS * 2);
+    let total: u64 = count_lines
+        .iter()
+        .map(|l| l.rsplit(' ').next().unwrap().parse::<u64>().unwrap())
+        .sum();
+    assert_eq!(total as usize, MAX_CLIENTS * 8);
+    // Above the largest finite boundary: not lost, and not counted at 30s.
+    assert!(text.contains(&format!(
+        "{histogram}_bucket{{client=\"caller0\",endpoint=\"/search\",le=\"30\"}} 0"
+    )));
+    assert!(text.contains(&format!(
+        "{histogram}_bucket{{client=\"caller0\",endpoint=\"/search\",le=\"+Inf\"}} 1"
+    )));
+}
+
+#[test]
+fn positive_auth_diagnostic_failures_remain_unexpected() {
+    let m = Metrics::default();
+    m.observe_auth_result("auth-diagnostic", "/shapes", "POST", 401);
+    m.observe_auth_result("auth-negative-probe", "/shapes", "POST", 401);
+    let map = m.auth_refusals.lock().unwrap();
+    assert_eq!(
+        map[&("auth-diagnostic".into(), "/shapes".into())][&("POST", false)],
+        1
+    );
+    assert_eq!(
+        map[&("auth-negative-probe".into(), "/shapes".into())][&("POST", true)],
+        1
+    );
 }

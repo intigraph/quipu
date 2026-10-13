@@ -21,6 +21,11 @@ setup:
 check:
     pre-commit run --all-files
 
+# Query performance gate controls (offline; no fixture or server required).
+test-query-perf:
+    python3 scripts/quipu-query-perf.py self-test
+    python3 scripts/ci/test-query-perf.py
+
 
 
 # === Rust ===
@@ -28,6 +33,25 @@ check:
 # Build the project
 build:
     cargo build
+
+# Install the CLI/server pair and the relative qp command name.
+install bin_dir="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin={{quote(bin_dir)}}
+    root=${QUIPU_INSTALL_ROOT:-${CARGO_INSTALL_ROOT:-$HOME/.local}}
+    bin=${bin:-"$root/bin"}
+    cargo build --locked --release --features full --bin quipu --bin quipu-server
+    target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+    "$target/release/quipu" install-alias --bin-dir "$bin" --check
+    mkdir -p "$bin"
+    stage=$(mktemp -d "$bin/.quipu-install.XXXXXX")
+    trap 'rm -rf -- "$stage"' EXIT
+    install -m 755 "$target/release/quipu" "$stage/quipu"
+    install -m 755 "$target/release/quipu-server" "$stage/quipu-server"
+    mv -f -- "$stage/quipu" "$bin/quipu"
+    mv -f -- "$stage/quipu-server" "$bin/quipu-server"
+    "$bin/quipu" install-alias --bin-dir "$bin"
 
 # Build + deploy quipu-server with the fail-loud feature gate. Use THIS, never a
 # bare `cargo build`, to ship the server: quipu-server has required-features and
@@ -111,6 +135,9 @@ paper-merge cmd="build":
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
 # Run a paper benchmark: census, merge, memory, schema (and their report generators).
+# just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
+#   The default model is the scripted `fake` writer: zero spend. A real model
+#   spends budget; see benchmark/census/agent/README.md before running one.
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
@@ -126,8 +153,11 @@ bench name *args:
         python3 benchmark/shapes/render.py {{ args }}; \
     elif [ "{{ name }}" = "merge-note" ]; then \
         python3 benchmark/merge-note.py; \
+    elif [ "{{ name }}" = "agents" ]; then \
+        cargo build --quiet --release --example census && \
+        python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge, memory, memory-report, schema, schema-report)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
@@ -205,6 +235,9 @@ explorer mode="release":
         wasm-bindgen --target web --out-dir "$REPO/$DEST/pkg" \
             "$TARGET/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
         cd "$REPO"
+        (cd wasm/explorer/runtime && npm ci --ignore-scripts && node build.mjs && node fetch-model.mjs)
+        mkdir -p "$DEST/pkg/runtime"
+        cp -R wasm/explorer/runtime/dist/. "$DEST/pkg/runtime/"
         echo "Built the bundle from this tree. Provide a pack yourself, or run"
         echo "  just explorer release   # to fetch the released one"
     else
@@ -215,9 +248,15 @@ explorer mode="release":
             && tar -C "$TMP" -xzf "$TMP"/*-wasm.tar.gz \
             && find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \; \
             || echo "warning: $TAG has no wasm bundle yet"
-        gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
-            && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.qpack.tar.gz" \
-            || echo "warning: $TAG has no repository qpack"
+        for RUNTIME in "$TMP"/*-wasm/runtime; do
+            if [ -d "$RUNTIME" ]; then cp -R "$RUNTIME" "$DEST/pkg/"; fi
+        done
+        # Releases cut before the pendant rename named it *-repository.qpack.tar.gz.
+        gh release download "$TAG" --pattern '*-repository.pendant.tar.gz' --dir "$TMP" \
+            && cp "$TMP"/*-repository.pendant.tar.gz "$DEST/repository.pendant.tar.gz" \
+            || { gh release download "$TAG" --pattern '*-repository.qpack.tar.gz' --dir "$TMP" \
+                && cp "$TMP"/*-repository.qpack.tar.gz "$DEST/repository.pendant.tar.gz"; } \
+            || echo "warning: $TAG has no repository pendant"
     fi
     ls -la "$DEST" "$DEST/pkg"
 
@@ -292,3 +331,9 @@ mcp action="test":
     cargo test --features full --lib mcp_transport
     target=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
     timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu-server"
+
+# Judged search evaluation; test is offline and CI-runnable.
+search-eval cmd="test" *args="":
+    @if [ "{{cmd}}" = "test" ]; then python3 scripts/test_search_eval.py; \
+    elif [ "{{cmd}}" = "run" ]; then python3 scripts/search-eval.py {{args}}; \
+    else echo "unknown search-eval command: {{cmd}}" >&2; exit 1; fi

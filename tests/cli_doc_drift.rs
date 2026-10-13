@@ -64,17 +64,19 @@ fn dispatch_verbs(main_rs: &str) -> BTreeSet<String> {
     verbs
 }
 
-/// Verbs named in a block of documentation, as `quipu <verb>`.
+/// Verbs named in a block of documentation under either supported command name.
 fn documented_verbs(text: &str) -> BTreeSet<String> {
     let mut verbs = BTreeSet::new();
-    for (index, _) in text.match_indices("quipu ") {
-        let rest = &text[index + "quipu ".len()..];
-        let token: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_lowercase() || *c == '-')
-            .collect();
-        if !token.is_empty() {
-            verbs.insert(token);
+    for prefix in ["quipu ", "qp "] {
+        for (index, _) in text.match_indices(prefix) {
+            let rest = &text[index + prefix.len()..];
+            let token: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_lowercase() || *c == '-')
+                .collect();
+            if !token.is_empty() {
+                verbs.insert(token);
+            }
         }
     }
     verbs
@@ -96,7 +98,18 @@ const NOT_COMMANDS: &[&str] = &["load", "query", "help"];
 /// `reference/cli.md` and is out of scope for THIS test, which exists to keep
 /// the sharing primitive discoverable.
 const SHARING_VERBS: &[&str] = &[
-    "share", "import", "status", "merge", "pack", "unpack", "knot",
+    "share",
+    "import",
+    "status",
+    "merge",
+    "pack",
+    "unpack",
+    "knot",
+    "git-merge",
+    "merge-driver",
+    "pendant-resolve",
+    "pendant-check",
+    "diff-textconv",
 ];
 
 #[test]
@@ -207,7 +220,7 @@ fn the_sharing_reference_page_matches_the_help_text_flags() {
 
 /// Pages whose citations must resolve.
 const CITING_PAGES: &[&str] = &[
-    "docs/book/src/sharing/README.md",
+    "docs/book/src/sharing/index.md",
     "docs/book/src/reference/cli-sharing.md",
 ];
 
@@ -274,5 +287,17 @@ fn every_cited_symbol_still_resolves() {
         broken.is_empty(),
         "documentation cites symbols that have been renamed or removed. The claim may \
          still be true, but its proof is dead — fix the citation or the code: {broken:#?}"
+    );
+}
+
+#[test]
+fn documentation_extraction_accepts_both_command_names() {
+    assert_eq!(
+        documented_verbs("quipu share FILE\nqp import FILE\nqp --help"),
+        BTreeSet::from([
+            "share".to_string(),
+            "import".to_string(),
+            "--help".to_string()
+        ])
     );
 }

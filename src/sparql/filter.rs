@@ -15,6 +15,9 @@ use crate::types::Value;
 
 use super::Bindings;
 
+mod regex_cache;
+pub(super) use regex_cache::build_regex;
+
 thread_local! {
     static QUERY_BASE_IRI: RefCell<Option<String>> = const { RefCell::new(None) };
 }
@@ -101,21 +104,21 @@ fn eval_filter_two_valued(
     ctx: &TemporalContext,
 ) -> Result<bool> {
     match expr {
-        Expression::Equal(left, right) => Ok(expr_eq(store, left, right, row)),
+        Expression::Equal(left, right) => Ok(sparql_eq(store, left, right, row)),
         // sameTerm had no FILTER arm, so every form fell to the catch-all
         // error below while the same call in BIND answered (aegis-soqv1r,
-        // W3C sparql10 sameTerm-simple/-eq/-not-eq). It shares `expr_eq` with
-        // the BIND path in `eval_expression_boolean` so the two cannot drift.
+        // W3C sparql10 sameTerm-simple/-eq/-not-eq). It keeps term identity
+        // (`expr_eq`), unlike `=` which compares numerics by value.
         Expression::SameTerm(left, right) => Ok(expr_eq(store, left, right, row)),
         // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
         // `?x = a || ?x = b`, so it desugars here rather than needing its own
-        // comparison logic — it shares `expr_eq` with the `=` arm above so the
+        // comparison logic — it shares `sparql_eq` with the `=` arm above so the
         // two can never drift. `NOT IN` is parsed as `Not(In(…))`, which the
         // `Not` arm of `eval_filter_tv` already handles. An EMPTY candidate list is `false`
         // (and `NOT IN ()` therefore `true`), per spec.
         Expression::In(lhs, candidates) => Ok(candidates
             .iter()
-            .any(|candidate| expr_eq(store, lhs, candidate, row))),
+            .any(|candidate| sparql_eq(store, lhs, candidate, row))),
         Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
             o == std::cmp::Ordering::Greater
         })),
@@ -157,9 +160,19 @@ fn eval_filter_two_valued(
     }
 }
 
-/// Term equality for `=` and `IN`. An operand that cannot be evaluated (an
+/// Value equality for `=` and `IN`. An operand that cannot be evaluated (an
 /// unbound variable, an IRI absent from the dictionary) is not equal to
 /// anything rather than an error — matching what `=` has always done.
+/// SPARQL `=`: numbers compare by VALUE across datatypes, so `1 = 1.0` holds
+/// (aegis-soqv1r). Everything else falls back to term identity (`expr_eq`),
+/// which is what `sameTerm` uses; the two differ only for numerics.
+fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
+    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+        return false;
+    };
+    crate::numeric_value::equal(&a, &b)
+}
+
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
     match (eval_expr(store, left, row), eval_expr(store, right, row)) {
         (Some(l), Some(r)) => l == r,
@@ -173,12 +186,14 @@ fn effective_boolean_value(v: &Value) -> Option<bool> {
         Value::Bool(b) => Some(*b),
         Value::Str(s) => Some(!s.is_empty()),
         Value::Int(i) => Some(*i != 0),
-        Value::Float(f) => Some(*f != 0.0),
+        Value::Float(f) => Some(*f != 0.0 && !f.is_nan()),
         // SPARQL EBV: numeric literals test against zero, plain/lang strings
         // against emptiness. Other datatypes have no EBV.
-        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => {
-            lexical.parse::<f64>().ok().map(|f| f != 0.0)
-        }
+        Value::Typed { lexical, datatype } if namespace::is_numeric_datatype(datatype) => Some(
+            lexical
+                .parse::<f64>()
+                .is_ok_and(|f| f != 0.0 && !f.is_nan()),
+        ),
         Value::Typed { lexical, datatype } if datatype == namespace::XSD_BOOLEAN => {
             Some(matches!(lexical.as_str(), "true" | "1"))
         }
@@ -273,42 +288,30 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
     Ok(re.is_match(&text))
 }
 
-/// Compile a SPARQL REGEX pattern + flag string into a `regex::Regex`.
-fn build_regex(pattern: &str, flags: &str) -> Result<regex::Regex> {
-    let mut inline = String::new();
-    for f in flags.chars() {
-        match f {
-            'i' | 's' | 'm' | 'x' => inline.push(f),
-            other => {
-                return Err(Error::InvalidValue(format!(
-                    "unsupported REGEX flag: {other:?}"
-                )));
-            }
-        }
-    }
-    let full = if inline.is_empty() {
-        pattern.to_string()
-    } else {
-        format!("(?{inline}){pattern}")
-    };
-    regex::Regex::new(&full)
-        .map_err(|e| Error::InvalidValue(format!("invalid REGEX pattern {pattern:?}: {e}")))
-}
-
 /// Render a Value as a string for string builtins (STR/CONTAINS/LCASE/…).
 /// Refs resolve to their IRI string.
 fn value_to_string(store: &Store, v: &Value) -> String {
     match v {
+        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        other => lexical(other).unwrap_or_default(),
+    }
+}
+
+/// [`value_to_string`] for every value that needs no store: `None` only for
+/// an IRI. The string pushdown (aegis-tl2q4j) narrows with this, so it must
+/// stay the one definition both use.
+pub(super) fn lexical(v: &Value) -> Option<String> {
+    Some(match v {
         Value::Str(s) => s.clone(),
         // SPARQL STR() yields the LEXICAL form — without the tag, without the
         // datatype. STR("hello"@en) is "hello", never "hello@en".
         Value::Lang { lexical, .. } | Value::Typed { lexical, .. } => lexical.clone(),
-        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        Value::Ref(_) => return None,
         Value::Int(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
         Value::Bool(b) => b.to_string(),
         Value::Bytes(b) => String::from_utf8_lossy(b).into_owned(),
-    }
+    })
 }
 
 /// Evaluate an expression to a Value.
@@ -339,50 +342,74 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             | Function::Regex,
             _,
         ) => eval_expression_boolean(store, expr, row).map(Value::Bool),
-        Expression::Add(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_add, |a, b| a + b)
-        }
-        Expression::Subtract(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_sub, |a, b| a - b)
-        }
-        Expression::Multiply(left, right) => {
-            numeric_binary(store, left, right, row, i64::checked_mul, |a, b| a * b)
-        }
+        Expression::Add(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_add,
+            |a, b| a + b,
+            |a, b| a + b,
+        ),
+        Expression::Subtract(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_sub,
+            |a, b| a - b,
+            |a, b| a - b,
+        ),
+        Expression::Multiply(left, right) => numeric_binary(
+            store,
+            left,
+            right,
+            row,
+            i64::checked_mul,
+            |a, b| a * b,
+            |a, b| a * b,
+        ),
         Expression::Divide(left, right) => {
             let dividend = eval_expr(store, left, row)?;
             let divisor_value = eval_expr(store, right, row)?;
+            if let (Some(a), Some(b)) = (
+                crate::numeric_value::decimal(&dividend),
+                crate::numeric_value::decimal(&divisor_value),
+            ) {
+                if b == 0 {
+                    return None;
+                }
+                return Some(crate::numeric_value::decimal_result(
+                    &(a / b),
+                    namespace::XSD_DECIMAL,
+                ));
+            }
             let divisor = divisor_value.as_f64()?;
             if divisor == 0.0 {
                 return None;
             }
-            let quotient = dividend.as_f64()? / divisor;
-            if matches!(dividend, Value::Int(_)) && matches!(divisor_value, Value::Int(_)) {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DOUBLE)
-                || divisor_value.datatype() == Some(namespace::XSD_DOUBLE)
-            {
-                Some(Value::Typed {
-                    lexical: canonical_double(quotient),
-                    datatype: namespace::XSD_DOUBLE.to_string(),
-                })
-            } else if dividend.datatype() == Some(namespace::XSD_DECIMAL)
-                || divisor_value.datatype() == Some(namespace::XSD_DECIMAL)
-            {
-                Some(Value::Typed {
-                    lexical: format_decimal(quotient),
-                    datatype: namespace::XSD_DECIMAL.to_string(),
-                })
-            } else {
-                Some(Value::Float(quotient))
-            }
+            // Division promotes like the other operators, except that two
+            // integers divide as xsd:decimal (SPARQL op:numeric-divide).
+            let rank = numeric_rank(&dividend)?
+                .max(numeric_rank(&divisor_value)?)
+                .max(NumericRank::Decimal);
+            Some(typed_numeric(rank, dividend.as_f64()? / divisor))
         }
         Expression::UnaryPlus(inner) => eval_expr(store, inner, row),
         Expression::UnaryMinus(inner) => match eval_expr(store, inner, row)? {
             Value::Int(value) => value.checked_neg().map(Value::Int),
-            value => Some(Value::Float(-value.as_f64()?)),
+            value => {
+                if let Some(exact) = crate::numeric_value::decimal(&value) {
+                    let datatype = if value.datatype() == Some(namespace::XSD_DECIMAL) {
+                        namespace::XSD_DECIMAL
+                    } else {
+                        namespace::XSD_INTEGER
+                    };
+                    Some(crate::numeric_value::decimal_result(&(-exact), datatype))
+                } else {
+                    Some(Value::Float(-value.as_f64()?))
+                }
+            }
         },
         Expression::If(condition, when_true, when_false) => {
             if eval_expression_boolean(store, condition, row)? {
@@ -462,14 +489,15 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             store.intern(&iri).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::Custom(function), args)
-            if function.as_str() == namespace::XSD_DOUBLE =>
+            if super::casts::is_cast(function.as_str()) =>
         {
-            let lexical = value_to_string(store, &eval_expr(store, args.first()?, row)?);
-            let value = lexical.parse::<f64>().ok()?;
-            Some(Value::Typed {
-                lexical: canonical_double(value),
-                datatype: namespace::XSD_DOUBLE.to_string(),
-            })
+            super::casts::cast(
+                store,
+                function.as_str(),
+                eval_expr(store, args.first()?, row)?,
+                canonical_double,
+                format_decimal,
+            )
         }
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
@@ -543,20 +571,10 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
             function @ (Function::Md5 | Function::Sha1 | Function::Sha256 | Function::Sha512),
             args,
         ) => hash_string(store, function, args, row),
-        Expression::FunctionCall(Function::Abs, args) => {
-            numeric_unary(store, args, row, i64::checked_abs, f64::abs)
-        }
-        Expression::FunctionCall(Function::Ceil, args) => {
-            numeric_unary(store, args, row, Some, f64::ceil)
-        }
-        Expression::FunctionCall(Function::Floor, args) => {
-            numeric_unary(store, args, row, Some, f64::floor)
-        }
-        // SPARQL ROUND follows XPath: a half-way value rounds toward positive
-        // infinity. Rust's f64::round instead rounds halves away from zero.
-        Expression::FunctionCall(Function::Round, args) => {
-            numeric_unary(store, args, row, Some, |value| (value + 0.5).floor())
-        }
+        Expression::FunctionCall(
+            function @ (Function::Abs | Function::Ceil | Function::Floor | Function::Round),
+            args,
+        ) => numeric_unary(store, args, row, function),
         _ => None,
     }
 }

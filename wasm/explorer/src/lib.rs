@@ -18,6 +18,15 @@ use quipu::share_import::{PromoteImportRequest, promote_import};
 use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
+mod features;
+
+#[wasm_bindgen]
+extern "C" {
+    /// `console.warn`, present in both the browser and node glue.
+    #[wasm_bindgen(js_namespace = console, js_name = warn)]
+    fn console_warn(message: &str);
+}
+
 fn err_js(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
@@ -51,7 +60,7 @@ pub struct Explorer {
 
 #[wasm_bindgen]
 impl Explorer {
-    /// Load a `.qpack.tar.gz` into a fresh in-memory store.
+    /// Load a pendant (`.pendant.tar.gz`) into a fresh in-memory store.
     ///
     /// Runs the full receiving ceremony rather than shortcutting to an RDF
     /// parse, because the ceremony is the thing worth showing:
@@ -71,11 +80,17 @@ impl Explorer {
     /// # Errors
     /// The archive is malformed or oversized, the manifest does not match its
     /// payload, or the import is refused.
-    #[wasm_bindgen(js_name = loadQpack)]
-    pub fn load_qpack(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
+    #[wasm_bindgen(js_name = loadPendant)]
+    pub fn load_pendant(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
         let mut request = read_archive_bytes(bytes, source, true).map_err(err_js)?;
         request.actor = None;
         let mut store = quipu::Store::open_in_memory().map_err(err_js)?;
+        #[cfg(feature = "shacl")]
+        {
+            // This explorer writes, so a linked validator must also enforce
+            // adopted shapes on writes rather than merely preview imports.
+            store.shacl_config_mut().validate_on_write = true;
+        }
 
         // Step 2. Adopting the pack's shapes is a DECISION the receiver makes,
         // and skipping it is not a silent no-op: `import_share` would find the
@@ -84,6 +99,7 @@ impl Explorer {
         store
             .load_shapes("repository-share", &request.shapes_turtle, timestamp)
             .map_err(err_js)?;
+        features::register_reasoners(&mut store)?;
 
         let import = quipu::share_import::import_share(&mut store, &request, timestamp, None)
             .map_err(err_js)?;
@@ -111,8 +127,8 @@ impl Explorer {
             "promotion": promotion,
             "shapes_bytes": request.shapes_turtle.len(),
             "export_bytes": request.export_ntriples.len(),
-            // Named rather than inferred: this build has no SHACL engine in it,
-            // so `import.validation.conforms` is a default and not a finding.
+            // Named rather than inferred: callers can distinguish a validator
+            // result from the fallback used by builds without SHACL.
             "shacl_compiled": cfg!(feature = "shacl"),
         }))
         .map_err(err_js)?;
@@ -125,6 +141,19 @@ impl Explorer {
             parent_export_ntriples: request.export_ntriples.clone(),
             edits: Vec::new(),
         })
+    }
+
+    /// Deprecated alias for [`Explorer::load_pendant`], kept for one release
+    /// after the qpack -> pendant rename (aegis-fxpbys.3). Pages built against
+    /// an older bundle call `loadQpack`; they keep working, and the browser
+    /// console says what to call instead. Remove in the release after next.
+    ///
+    /// # Errors
+    /// Exactly those of [`Explorer::load_pendant`].
+    #[wasm_bindgen(js_name = loadQpack)]
+    pub fn load_qpack(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
+        console_warn("Explorer.loadQpack is deprecated; call Explorer.loadPendant");
+        Self::load_pendant(bytes, source, timestamp)
     }
 
     /// Manifest, import decision and promotion for the loaded pack, as JSON.
@@ -173,7 +202,7 @@ impl Explorer {
                 "entity": entity, "predicate": predicate, "value": value, "actor": ACTOR,
             }),
         )
-        .map_err(err_js)?;
+        .map_err(features::engine_error)?;
         self.record("set", &out);
         serde_json::to_string(&out).map_err(err_js)
     }
@@ -201,7 +230,7 @@ impl Explorer {
         if !value.is_empty() {
             input["value"] = serde_json::from_str(value).map_err(err_js)?;
         }
-        let out = quipu::tool_retract(&mut self.store, &input).map_err(err_js)?;
+        let out = quipu::tool_retract(&mut self.store, &input).map_err(features::engine_error)?;
         self.record("retract", &out);
         serde_json::to_string(&out).map_err(err_js)
     }
@@ -219,7 +248,7 @@ impl Explorer {
     /// is refused.
     pub fn episode(&mut self, episode_json: &str) -> Result<String, JsValue> {
         let input: serde_json::Value = serde_json::from_str(episode_json).map_err(err_js)?;
-        let out = quipu::tool_episode(&mut self.store, &input).map_err(err_js)?;
+        let out = quipu::tool_episode(&mut self.store, &input).map_err(features::engine_error)?;
         self.record("episode", &out);
         serde_json::to_string(&out).map_err(err_js)
     }
@@ -249,7 +278,7 @@ impl Explorer {
             .ok_or_else(|| JsValue::from_str("share payload has no export.nt"))
     }
 
-    /// The edited store as `.qpack.tar.gz` bytes — a real, importable share.
+    /// The edited store as `.pendant.tar.gz` bytes — a real, importable share.
     ///
     /// Built with the same `share_payload` the CLI and the REST endpoint use,
     /// then tarred and gzipped exactly as the release artifact is, so what
@@ -435,5 +464,25 @@ const MAX_EXPORT_BYTES: usize = 128 * 1024 * 1024;
 #[wasm_bindgen(js_name = explorerVersion)]
 #[must_use]
 pub fn explorer_version() -> String {
-    serde_json::json!({ "version": quipu::VERSION, "git_sha": quipu::GIT_SHA }).to_string()
+    serde_json::json!({
+        "version": quipu::VERSION,
+        "git_sha": quipu::GIT_SHA,
+        "compiled_features": {
+            "shacl": cfg!(feature = "shacl"),
+            "owl": cfg!(feature = "owl"),
+            "reactive_reasoner": cfg!(feature = "reactive-reasoner"),
+        },
+    })
+    .to_string()
+}
+
+/// Validate Turtle data against supplied shapes using the linked SHACL engine.
+///
+/// This exposes the same validator for browser conformance checks and previews;
+/// write paths continue to enforce the store's adopted shapes themselves.
+#[cfg(feature = "shacl")]
+#[wasm_bindgen(js_name = validateShapes)]
+pub fn validate_shapes(shapes: &str, data: &str) -> Result<String, JsValue> {
+    let report = quipu::validate_shapes(shapes, data).map_err(err_js)?;
+    serde_json::to_string(&report).map_err(err_js)
 }

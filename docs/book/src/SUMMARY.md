@@ -47,13 +47,14 @@
 
 # Sharing & Federation
 
-- [Sharing & Federation](sharing/README.md)
+- [Sharing & Federation](sharing/index.md)
   - [Aligning concepts across graphs](sharing/align.md)
 
 # Architecture
 
 - [EAVT Fact Log](architecture/eavt.md)
 - [Change Feed](architecture/change-feed.md)
+- [Committed Feed Streams](architecture/event-stream.md)
 - [RDF Data Model](architecture/rdf.md)
 - [SPARQL Engine](architecture/sparql.md)
 - [The In-Memory Read Model](architecture/read-model.md)
@@ -72,6 +73,7 @@
 - [Impact Analysis](recipes/impact-analysis.md)
 - [Incident Correlation](recipes/incident-correlation.md)
 - [Knowledge Ingestion](recipes/knowledge-ingestion.md)
+- [Bulk Loads & Migrations](recipes/bulk-loads.md)
 
 # Benchmarks
 

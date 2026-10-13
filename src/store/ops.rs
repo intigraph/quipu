@@ -14,6 +14,9 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
 struct Staged {
     tx_id: i64,
+    /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
+    /// from values staging computes anyway: no extra store read.
+    counts: StagedCounts,
     /// The COMPLETE set of changes this write made to the current-fact view, or
     /// `None` when the write path cannot vouch that it is complete.
     ///
@@ -32,6 +35,15 @@ struct Staged {
     /// Datums actually retracted, for reactive observer notification.
     #[cfg(feature = "reactive-reasoner")]
     retracts: Vec<Datum>,
+}
+
+/// Datum counts a staged write already knows (see `metrics::writes`).
+#[derive(Clone, Copy)]
+struct StagedCounts {
+    inferred: usize,
+    asserted: usize,
+    retracted: usize,
+    superseded: usize,
 }
 
 /// Every current fact one producer's source tag owns in one graph.
@@ -61,31 +73,6 @@ pub(crate) const SOURCE_RETRACTION_SQL: &str = "SELECT f.e, f.a, f.v, f.tx, f.va
 
 impl Store {
     // -- Write path --
-
-    /// Atomically apply already-planned changes to multiple RDF graphs.
-    ///
-    /// Each graph still passes through the normal authority, SHACL, OWL, and
-    /// governed-policy gates. The outer savepoint makes a multi-operation
-    /// SPARQL Update all-or-nothing across those graph-scoped transactions.
-    pub fn transact_graph_batches(
-        &mut self,
-        batches: &[(i64, Vec<Datum>)],
-        timestamp: &str,
-        actor: Option<&str>,
-        source: Option<&str>,
-    ) -> Result<()> {
-        self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
-        for (graph, datums) in batches {
-            if let Err(error) = self.transact_to_graph(datums, timestamp, actor, source, *graph) {
-                self.conn
-                    .execute_batch("ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph")?;
-                self.read_model.borrow_mut().clear();
-                return Err(error);
-            }
-        }
-        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
-        Ok(())
-    }
 
     /// Atomically write a batch of datums in a single transaction.
     /// Returns the transaction id.
@@ -178,10 +165,11 @@ impl Store {
         match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
+                let counts = staged.counts;
                 // Taken before `staged` moves into after_commit_hooks below.
                 let effective = staged.effective.take();
                 self.conn.execute_batch("RELEASE quipu_transact")?;
-                self.after_commit_hooks(datums, staged, timestamp, source)?;
+                self.after_commit_hooks(datums, staged, timestamp, source, graph)?;
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
                 self.invalidate_policy_registry_if_governance(datums)?;
@@ -191,7 +179,28 @@ impl Store {
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
-                crate::metrics::metrics().observe_write(datums.len() as u64);
+                let kind = crate::write_kind::classify(actor, source);
+                crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
+                    submitted: datums.len() as u64,
+                    inferred: counts.inferred as u64,
+                    asserted: counts.asserted as u64,
+                    retracted: counts.retracted as u64,
+                    superseded: counts.superseded as u64,
+                    root: graph == crate::schema::ROOT_GRAPH,
+                    kind,
+                });
+                // Count the commit under the requesting client's declared
+                // provenance (aegis-7zp4rc). The engine's own writers that a
+                // request merely triggers are not that client's writes.
+                if !matches!(
+                    kind,
+                    crate::write_kind::WriteKind::Verdict
+                        | crate::write_kind::WriteKind::Reasoner
+                        | crate::write_kind::WriteKind::Migration
+                ) && let Some(p) = crate::write_provenance::current()
+                {
+                    crate::metrics::metrics().observe_write_provenance(&p);
+                }
                 // Q-VERDICT-PERSIST: outside the savepoint, so the accept case
                 // and the denial case below record identically.
                 self.flush_pending_verdicts(timestamp, actor);
@@ -245,6 +254,9 @@ impl Store {
         graph: i64,
         retract_source: Option<&str>,
     ) -> Result<Staged> {
+        // The human trust-root registry as it stands BEFORE this write
+        // (aegis-kzt0ql.9.4). Compared with the post-state below.
+        let trust_before = crate::governance::trust_root::snapshot(self)?;
         let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
 
         // Domain/range axioms are not merely a one-time migration at ontology
@@ -299,10 +311,19 @@ impl Store {
         self.verify_transition_signatures(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
 
+        // Verdict signature-scheme gate (src/verdict_schemes): a registration
+        // declaring an unknown scheme, or a hardware scheme while
+        // `hardware_verdict_schemes` is off, rolls back. Always on; inert for
+        // any write that does not assert `aegis:signatureScheme`.
+        self.refuse_disabled_signature_schemes(&staged_datums)
+            .map_err(|e| self.stash_refusal("signature-scheme", e, staged_datums.len()))?;
+
         // Write-time policy guard (the loom). Runs against the staged post-state
         // (same connection sees the open savepoint). A denial returns Err here
         // and the caller rolls the savepoint back — the write never commits.
-        self.enforce_write_policies(&staged_datums, graph)
+        // `datums.len()` marks where the caller's datums end and OWL inference
+        // begins: the quarantine hashes the attempt as the WRITER made it.
+        self.enforce_write_policies(&staged_datums, datums.len(), graph)
             .map_err(|e| self.stash_refusal("policy", e, staged_datums.len()))?;
 
         // OWL write-time constraints (aegis-bmqup): disjointWith and
@@ -313,6 +334,19 @@ impl Store {
         #[cfg(feature = "owl")]
         self.enforce_owl_constraints(&staged_datums)
             .map_err(|e| self.stash_refusal("owl", e, staged_datums.len()))?;
+
+        // Human trust-root gate (aegis-kzt0ql.9.4). ALWAYS ON: no config flag,
+        // and NOT skipped while recording verdicts. It compares the human-tier
+        // registry before and after, so it also sees changes no datum names
+        // (supersede closures). See `governance::trust_root` for why it has
+        // no switch.
+        crate::governance::trust_root::check(
+            self,
+            &trust_before,
+            &staged_datums,
+            self.trust_root_bootstrap.as_deref(),
+        )
+        .map_err(|e| self.stash_refusal("trust-root", e, staged_datums.len()))?;
 
         // Event log (event-log P1): append this tx's semantic events INSIDE the
         // savepoint, AFTER the policy guard — a denied write emits nothing, a
@@ -342,6 +376,12 @@ impl Store {
 
         Ok(Staged {
             tx_id,
+            counts: StagedCounts {
+                inferred: staged_datums.len().saturating_sub(datums.len()),
+                asserted: written_asserts.len(),
+                retracted: written_retracts.len(),
+                superseded,
+            },
             effective,
             #[cfg(feature = "reactive-reasoner")]
             asserts,
@@ -359,6 +399,7 @@ impl Store {
         staged: Staged,
         timestamp: &str,
         source: Option<&str>,
+        _graph: i64,
     ) -> Result<()> {
         // Post-transact hook: auto-embed touched entities.
         // Skipped when a vector search delegate is set — embeddings belong in
@@ -402,6 +443,7 @@ impl Store {
 
             if !self.observers.is_empty() {
                 let delta = Delta {
+                    graph: _graph,
                     tx: staged.tx_id,
                     asserts: staged.asserts,
                     retracts: staged.retracts,
