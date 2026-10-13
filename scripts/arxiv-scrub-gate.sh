@@ -73,6 +73,7 @@ ARTIFACT=(
   "benchmark/memory/run.py"
   "benchmark/memory/runtime.py"
   "benchmark/memory/render.py"
+  "benchmark/memory/demo.sh"
   "benchmark/memory/pyproject.toml"
   "benchmark/memory/uv.lock"
   "benchmark/shapes"                       # ARM E synthetic inputs/results and renderer
