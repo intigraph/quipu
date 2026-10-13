@@ -14,6 +14,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"not": {}, "description": "Unsupported: omit this field. This tool operates only on ROOT/default graph; use graph-scoped quipu_update for named graphs."},
                     "allow_orphan": {"type": "boolean", "description": "Allow identity facts to be removed from a still-referenced entity."},
                     "source": {"type": "string", "description": "Provenance source of the retraction."},
                     "entity": { "type": "string", "description": "IRI of the entity to retract" },
@@ -31,6 +32,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": {"not": {}, "description": "Unsupported: omit this field. This tool operates only on ROOT/default graph; use graph-scoped quipu_update for named graphs."},
                     "source": {"type": "string", "description": "Provenance source of the update."},
                     "entity": { "type": "string", "description": "IRI of the entity (must exist)" },
                     "predicate": { "type": "string", "description": "Predicate IRI to set (may be new)" },

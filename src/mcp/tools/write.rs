@@ -11,7 +11,7 @@ use crate::types::Fact;
 
 use crate::mcp::value_to_json;
 
-fn refuse_graph(input: &JsonValue, operation: &str) -> Result<()> {
+fn refuse_graph(operation: &str, input: &JsonValue) -> Result<()> {
     if input.get("graph").is_some() {
         return Err(Error::InvalidValue(format!(
             "{operation} operates only on the ROOT/default graph; the 'graph' field is \
@@ -30,7 +30,7 @@ fn refuse_graph(input: &JsonValue, operation: &str) -> Result<()> {
 /// available, which is what forced a 16x blast radius and the identity-losing
 /// rebuild that followed).
 pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
-    refuse_graph(input, "/retract")?;
+    refuse_graph("/retract", input)?;
     let entity_iri = input
         .get("entity")
         .and_then(|v| v.as_str())
@@ -114,7 +114,7 @@ pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 /// IRI must not mint an unlabelled orphan node). The predicate MAY be new:
 /// first-time `set` of a property is a legitimate write.
 pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
-    refuse_graph(input, "/set")?;
+    refuse_graph("/set", input)?;
     let entity_iri = input
         .get("entity")
         .and_then(|v| v.as_str())
