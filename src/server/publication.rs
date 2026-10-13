@@ -9,6 +9,17 @@ use super::{
     tools::finish_deferred_embed,
 };
 
+pub(crate) async fn acquire(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::acquisition::Request>,
+) -> Result<axum::Json<quipu::acquisition::Payload>, AppError> {
+    super::admission::read_blocking(move || {
+        let store = store.read();
+        Ok(axum::Json(quipu::acquisition::acquire(&store, &input)?))
+    })
+    .await
+}
+
 pub(crate) async fn export(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,

@@ -170,6 +170,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Canonical share serialization: returns the export and manifest without
     // writing either to the server filesystem.
     "/share",
+    "/acquire",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",

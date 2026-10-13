@@ -1,5 +1,8 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[path = "acquisition_tests.rs"]
+mod acquisition_tests;
+
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
 #[path = "search_structured_tests.rs"]
