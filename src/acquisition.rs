@@ -165,8 +165,10 @@ fn acquire_with_control(
         check_deadline()?;
         NamedNode::new(iri.clone()).map_err(|e| invalid(format!("graph IRI: {e}")))?;
         let graph = store.registered_graph_id(iri)?;
-        if !seen.insert(iri) || graph.is_none() {
-            return Err(invalid("duplicate or unregistered acquisition graph"));
+        if !seen.insert(iri) || graph.is_none() || store.is_dataset(iri)? {
+            return Err(invalid(
+                "duplicate, unregistered, or dataset-alias acquisition graph",
+            ));
         }
         if store
             .graph_class(graph.expect("registered graph checked"))?

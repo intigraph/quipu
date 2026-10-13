@@ -21,7 +21,9 @@ The expected store identity and exact project/comment graph IRIs come from
 trusted consumer configuration. The endpoint requires 1–16 distinct registered
 committed graphs. It never expands a dataset, includes ROOT implicitly, follows
 an overlay, accepts arbitrary queries, or pages its response. An unknown graph
-is refused rather than represented as an empty successful acquisition.
+is refused rather than represented as an empty successful acquisition. A graph
+IRI that also names a dataset alias is refused: `/query` would expand that alias,
+which could mislabel another graph's data as the requested source graph.
 
 `tx` must be a positive signed 64-bit JSON integer naming an existing committed
 transaction. Null, strings, fractions, negative values, unknown transactions,

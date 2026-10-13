@@ -350,3 +350,38 @@ fn graph_order_roundtrip_and_source_blank_node_identity_are_preserved() {
     roundtrip.verify(&req).unwrap();
     assert_eq!(roundtrip.source_receipt, first.source_receipt);
 }
+
+#[test]
+fn dataset_alias_cannot_expand_a_registered_graph_or_mislabel_its_receipt() {
+    let mut store = Store::open_in_memory().unwrap();
+    for (iri, marker) in [
+        (PROJECT, "PROJECT_ONLY"),
+        (COMMENTS, "FOREIGN_COMMENT_ONLY"),
+    ] {
+        let graph = store.graph_create(iri).unwrap();
+        let datums = [datum(&store, marker, Op::Assert)];
+        store
+            .transact_to_graph(&datums, "2026-01-01T00:00:00Z", None, None, graph)
+            .unwrap();
+    }
+    let mut req = request(&store, None);
+    req.graphs = vec![PROJECT.into()];
+    let control = acquire(&store, &req).unwrap();
+    assert!(control.graphs[PROJECT].contains("PROJECT_ONLY"));
+    assert!(!control.graphs[PROJECT].contains("FOREIGN_COMMENT_ONLY"));
+    store
+        .dataset_create(
+            PROJECT,
+            &[crate::store::datasets::DatasetMember::new(COMMENTS)],
+            "2026-02-01T00:00:00Z",
+            None,
+        )
+        .unwrap();
+    assert!(store.registered_graph_id(PROJECT).unwrap().is_some());
+    assert!(
+        store.is_dataset(PROJECT).unwrap(),
+        "collision must actually exist"
+    );
+    let error = acquire(&store, &req).unwrap_err();
+    assert!(error.to_string().contains("dataset-alias"), "{error}");
+}
