@@ -86,7 +86,6 @@ mod event_cursor;
 #[path = "server/feed_stream.rs"]
 mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
-use publication::{export, share_payload};
 #[cfg(test)]
 use query_endpoint::query;
 use query_endpoint::{query_get, query_post_http};
@@ -389,9 +388,10 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .route("/query", get(query_get).post(query_post_http))
         .route("/update", post(update::update_post))
-        .route("/export", post(export))
+        .route("/export", post(publication::export))
         .merge(graph_store::routes())
-        .route("/share", post(share_payload))
+        .route("/share", post(publication::share_payload))
+        .merge(publication::acquisition_routes())
         .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))

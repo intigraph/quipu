@@ -40,6 +40,7 @@
 - [CLI Commands](reference/cli.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [REST API](reference/rest-api.md)
+- [Atomic source acquisition](reference/acquisition.md)
 - [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
 - [Reasoner](reference/reasoner.md)

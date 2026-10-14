@@ -196,6 +196,12 @@ pub struct Store {
     pub(crate) attachments: Vec<attach::Attachment>,
     /// Manifests surfaced from attached knowledge packs (quipu #82).
     pub(crate) pack_manifests: Vec<(String, crate::pack::Manifest)>,
+    /// First observed topology per bounded acquisition scope. Never inferred
+    /// from another connection's main transaction or current configuration.
+    pub(crate) acquisition_anchors:
+        std::cell::RefCell<std::collections::BTreeMap<Vec<String>, (String, i64)>>,
+    /// Connection/topology incarnation prevents reopen and runtime-remount ABA.
+    pub(crate) acquisition_incarnation: String,
     /// The table source a composed query reads `facts` from — see
     /// [`attach::build_facts_source`]. Exactly `"facts"` with no attachments,
     /// which is the byte-identical SQL every query built before quipu #75.
