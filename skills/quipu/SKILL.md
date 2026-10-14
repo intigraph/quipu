@@ -2,10 +2,10 @@
 name: quipu
 description: >-
   Query the Quipu knowledge graph before you act — what the aegis homelab already knows about a
-  service, container, bead, or crew member, and what the graph is NOT to be trusted about.
+  service, container, item, or crew member, and what the graph is NOT to be trusted about.
   Portable: shell + HTTP to ${GRAPH_URL} only, runs from any LLM agent, no Gas Town formulas.
-  Triggers on "query before you act", "what do we know about <thing>", "ask quipu", "check the
-  ontology", "blast radius", "what depends on X", "what runs on X", or before starting any bead
+  Triggers on "query before you act", "what do we know about an entity", "ask quipu", "check the
+  ontology", "blast radius", "what depends on X", "what runs on X", or before starting any item
   that names an entity. To ADD knowledge use graph-extract; to map the whole graph use
   graph-report. This skill is the read path.
 allowed-tools:
