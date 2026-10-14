@@ -1760,3 +1760,22 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
 #[path = "graph_backfill_temporal_tests.rs"]
 mod graph_backfill_temporal;
+
+#[tokio::test]
+async fn request_deadline_reports_original_budget_as_http_408() {
+    let response = super::base::AppError::from(quipu::Error::RequestTimeout {
+        elapsed_ms: 41,
+        limit_ms: 20,
+    })
+    .into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::REQUEST_TIMEOUT);
+    let bytes = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .unwrap();
+    let output: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let error = output["error"].as_str().unwrap();
+    assert!(error.contains("request deadline"));
+    assert!(error.contains("budget 20ms"));
+    assert!(error.contains("elapsed 41ms"));
+    assert!(!error.contains("query_timeout_ms"));
+}
