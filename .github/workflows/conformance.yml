@@ -195,7 +195,7 @@ jobs:
         run: |
           cargo build --release \
             --bin quipu --bin quipu-server --bin quipu-shacl-conformance \
-            --features shacl,onnx,server
+            --features shacl,onnx,server,dev-tools
 
       - name: Resolve the quipu binary
         id: bin

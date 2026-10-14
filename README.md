@@ -76,8 +76,9 @@ Anywhere else, build from source (needs a Rust toolchain):
 cargo install quipu-ai --locked --features full
 ```
 
-The crate is `quipu-ai`; it installs `quipu` and `quipu-server`, plus two test
-utilities (`quipu-shacl-conformance`, `seed-fixtures`) you can ignore.
+The crate is `quipu-ai`; it installs `quipu` and `quipu-server`. The test
+utilities (`quipu-shacl-conformance`, `seed-fixtures`) build only with
+`--features dev-tools`.
 Check it:
 
 ```bash
