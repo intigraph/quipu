@@ -142,9 +142,12 @@ fn resolve_one(
 
     // Phase 1: Vector similarity search.
     // Build text from name + properties, embed it, search the vector store.
+    crate::time::check_request_deadline()?;
     let text = build_resolution_text(name, properties);
 
-    if let Some(embedding) = store.embed_query(&text)? {
+    let embedding = store.embed_query(&text)?;
+    crate::time::check_request_deadline()?;
+    if let Some(embedding) = embedding {
         let vs = store.vector_store();
         // Oversample to allow room after threshold filtering.
         let matches = vs.vector_search(&embedding, top_k * 3, None)?;
@@ -251,6 +254,7 @@ impl LabelIndex {
 
         let mut entries = Vec::new();
         for row in rows {
+            crate::time::check_request_deadline()?;
             let (entity_id, v_bytes) = row?;
             // Only string values are labels.
             let Ok(crate::types::Value::Str(label)) = crate::types::Value::from_bytes(&v_bytes)
@@ -275,6 +279,7 @@ impl LabelIndex {
         let name_lower = name.to_lowercase();
         let mut candidates = Vec::new();
         for (entity_id, label) in &self.entries {
+            crate::time::check_request_deadline()?;
             let label_lower = label.to_lowercase();
 
             // Exact match (case-insensitive).

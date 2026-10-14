@@ -92,6 +92,7 @@ pub fn resolve_nodes(
     top_k: usize,
     strict_mode: bool,
 ) -> Result<EpisodeResolution> {
+    crate::time::check_request_deadline()?;
     let index = LabelIndex::build(store)?;
     let mut hints = Vec::new();
     let mut refusal = None;
@@ -99,6 +100,7 @@ pub fn resolve_nodes(
     let mut claims: Vec<(String, String, f64)> = Vec::new();
 
     for node in nodes {
+        crate::time::check_request_deadline()?;
         // A write may declare a pairing distinct inline; the graph may already
         // record it from an earlier write. Both excuse the same pairing, and
         // the durable one is what stops a strict refusal from recurring.
