@@ -806,3 +806,58 @@ fn batch_resolution_agrees_with_the_single_entity_path() {
         }
     }
 }
+
+/// The histogram bound used to skip Jaro-Winkler comparisons must never fall
+/// BELOW the real score, or pruning would drop a true candidate (aegis-nmuwsi).
+#[test]
+fn label_profile_bound_never_undercuts_jaro_winkler() {
+    let words = [
+        "",
+        "a",
+        "ab",
+        "ba",
+        "store",
+        "Store",
+        "stores",
+        "store-server",
+        "server-store",
+        "store.example",
+        "quipu",
+        "quipu-server",
+        "quipu-ai",
+        "seeds",
+        "item-abc123",
+        "item-abc124",
+        "commit/quipu/abcdef0",
+        "alpha",
+        "alpine",
+        "beta",
+        "a much longer label with spaces in it",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ünïcödé-label",
+        "日本語",
+        "@@@@AAAA", // '@' (64) and 'A' (65) share no bucket; 'A' and '\u{1}' would
+    ];
+    let mut checked = 0;
+    for a in words {
+        for b in words {
+            let (la, lb) = (a.to_lowercase(), b.to_lowercase());
+            let real = strsim::jaro_winkler(&la, &lb);
+            let bound = LabelProfile::of(&la).jaro_winkler_upper_bound(&LabelProfile::of(&lb));
+            assert!(
+                bound + 1e-12 >= real,
+                "bound {bound} < real {real} for {la:?} vs {lb:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, words.len() * words.len());
+    // And it actually prunes: disjoint character sets cannot reach 0.85.
+    assert!(LabelProfile::of("quipu").jaro_winkler_upper_bound(&LabelProfile::of("zzzzz")) < 0.85);
+    // A saturated bucket disables pruning rather than undercounting.
+    let long = "a".repeat(300);
+    assert!(
+        (LabelProfile::of(&long).jaro_winkler_upper_bound(&LabelProfile::of("b")) - 1.0).abs()
+            < f64::EPSILON
+    );
+}

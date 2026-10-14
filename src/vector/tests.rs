@@ -203,10 +203,14 @@ fn batch_search_equals_one_search_per_query_including_ties() {
         assert_eq!(batch.len(), queries.len());
         for (q, got) in refs.iter().zip(&batch) {
             let want = store.vector_search(q, limit, None).unwrap();
-            let got: Vec<(i64, f64, &str)> =
-                got.iter().map(|m| (m.entity_id, m.score, m.text.as_str())).collect();
-            let want: Vec<(i64, f64, &str)> =
-                want.iter().map(|m| (m.entity_id, m.score, m.text.as_str())).collect();
+            let got: Vec<(i64, f64, &str)> = got
+                .iter()
+                .map(|m| (m.entity_id, m.score, m.text.as_str()))
+                .collect();
+            let want: Vec<(i64, f64, &str)> = want
+                .iter()
+                .map(|m| (m.entity_id, m.score, m.text.as_str()))
+                .collect();
             assert_eq!(got, want, "limit {limit}");
         }
     }
