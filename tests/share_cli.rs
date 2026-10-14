@@ -48,6 +48,9 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
             String::from_utf8_lossy(&result.stderr)
         );
         assert!(String::from_utf8_lossy(&result.stdout).contains("shared sha256:"));
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
+        assert_eq!(manifest["pack_dir"], "pendant");
     }
 
     for file in ["manifest.json", "export.nt", "shapes.ttl", "export.ttl"] {
@@ -57,6 +60,37 @@ fn cli_writes_byte_identical_shares_for_unchanged_state() {
             "{file} changed although graph state did not"
         );
     }
+}
+
+#[test]
+fn cli_keeps_an_explicit_repository_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let output = root.path().join("output");
+    let db = root.path().join("source.db");
+    let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args([
+            "share",
+            "--output",
+            output.to_str().unwrap(),
+            "--pack-dir",
+            "knowledge",
+            "--no-shapes",
+            "--no-queries",
+            "--destination",
+            "internal",
+            "--db",
+            db.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(output.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["pack_dir"], "knowledge");
 }
 
 #[test]
