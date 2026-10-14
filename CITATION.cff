@@ -21,8 +21,19 @@ authors:
     country: US
 repository-code: "https://github.com/scbrown/quipu"
 license: Apache-2.0
-version: 0.3.20
-date-released: 2026-08-10
+version: 0.13.0
+date-released: 2026-10-14
+preferred-citation:
+  type: article
+  title: "Quipu: A Governed Bitemporal Knowledge Graph Store"
+  authors:
+    - given-names: Steve
+      family-names: Brown
+      orcid: "https://orcid.org/0009-0009-1720-1785"
+  year: 2026
+  date-published: 2026-08-17
+  doi: "10.48550/arXiv.2608.16813"
+  url: "https://arxiv.org/abs/2608.16813"
 keywords:
   - knowledge graph
   - bitemporal
