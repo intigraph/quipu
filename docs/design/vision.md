@@ -316,7 +316,7 @@ Validation doesn't just say "rejected." It returns:
 ### What Quipu Would Be
 
 The tool that doesn't exist yet: **Oxigraph's embeddability + RDFox's reasoning +
-Stardog's AI features + TypeDB's strictness** — open source, MIT, lightweight.
+Stardog's AI features + TypeDB's strictness** — open source, Apache-2.0, lightweight.
 
 ## Rust Ecosystem Building Blocks
 
