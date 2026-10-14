@@ -330,6 +330,7 @@ impl Store {
     /// Existing terms retain their persisted id so bindings join with local data.
     /// Query-only terms receive a store-local negative id held solely in the result cache;
     /// it resolves for serialization but can never be mistaken for a persisted fact id.
+    /// New transient terms obey the cache admission limit; existing terms still resolve.
     pub(crate) fn query_ref(&self, iri: &str) -> Result<i64> {
         if let Some(id) = self.lookup(iri)? {
             return Ok(id);
@@ -337,6 +338,11 @@ impl Store {
         let mut cache = self.term_cache.borrow_mut();
         if let Some(id) = cache.transient_iri_to_id.get(iri) {
             return Ok(*id);
+        }
+        if cache.transient_id_to_iri.len() >= cache.limit {
+            return Err(Error::Store(
+                "transient query term cache limit reached".into(),
+            ));
         }
         let id = cache.next_transient_id;
         cache.next_transient_id = cache

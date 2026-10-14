@@ -40,6 +40,15 @@ fn stored_date_projects_its_datatype_on_a_read_only_connection() {
     let row = &result.rows()[0];
     assert_eq!(row.get("value"), Some(&Value::Str("2026-10-14".into())));
     assert_eq!(row.get("kind"), Some(&Value::Str(format!("{XSD}date"))));
+    let wire = quipu::tool_query(
+        &store,
+        &serde_json::json!({
+            "query": "SELECT (STR(DATATYPE(?v)) AS ?kind) WHERE { <urn:item> <urn:due> ?v }",
+            "verbose": true
+        }),
+    )
+    .unwrap();
+    assert_eq!(wire["rows"][0]["kind"], format!("{XSD}date"));
     assert_eq!(store.lookup(&format!("{XSD}date")).unwrap(), None);
     drop(store);
     assert_eq!(std::fs::read(&path).unwrap(), before);
@@ -122,4 +131,29 @@ fn datatype_reuses_an_existing_dictionary_id() {
     )
     .unwrap();
     assert_eq!(result.rows()[0].get("kind"), Some(&Value::Ref(date)));
+}
+
+#[test]
+fn transient_type_admission_is_bounded_without_evicting_existing_results() {
+    let (_root, path) = fixture();
+    let store = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    store.set_term_cache_limit(1);
+    for _ in 0..2 {
+        let result = quipu::sparql::query(
+            &store,
+            "SELECT (STR(DATATYPE(?v)) AS ?kind) WHERE { <urn:item> <urn:due> ?v }",
+        )
+        .unwrap();
+        assert_eq!(
+            result.rows()[0].get("kind"),
+            Some(&Value::Str(format!("{XSD}date")))
+        );
+    }
+    let refused = quipu::sparql::query(
+        &store,
+        r#"SELECT (DATATYPE("opaque"^^<urn:new-type>) AS ?kind) WHERE {}"#,
+    )
+    .unwrap();
+    assert!(!refused.rows()[0].contains_key("kind"));
+    assert_eq!(store.lookup("urn:new-type").unwrap(), None);
 }
