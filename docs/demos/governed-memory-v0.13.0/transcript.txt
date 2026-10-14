@@ -1,0 +1,72 @@
+Quipu 0.13.0: governed memory, using the released CLI.
+Illustrative fixtures in the public Quipu repository; isolated local store.
+quipu 0.13.0
+git_sha: ec3b707dc2976e579e634f276e752c7715a9ac99
+git_dirty: false
+
+$ quipu knot baseline.ttl --shapes memory.shapes.ttl --timestamp 2026-01-01T12:00:00Z --db memory.db 
+SHACL validation passed
+knotted 4 facts from baseline.ttl (tx 1)
+
+$ quipu read SELECT\ \?kind\ WHERE\ \{\ \?decision\ \<https://example.org/memory/sourceKind\>\ \?kind\ \} --db memory.db 
+kind
+--------------------
+"observed"
+
+1 results
+
+The shape names the path and the allowed provenance tags.
+
+$ quipu validate --shapes memory.shapes.ttl --data bad.ttl 
+invalid: 1 violation(s), 0 warning(s)
+  [Violation] https://example.org/memory/decision-2 -- In constraint not satisfied. Expected one of [Literal{StringLiteral { lexical_form: "observed", lang: None }}, Literal{StringLiteral { lexical_form: "declared", lang: None }}, Literal{StringLiteral { lexical_form: "inferred", lang: None }}] (path: https://example.org/memory/sourceKind)
+Expected refusal (exit 1).
+
+$ quipu knot bad.ttl --shapes memory.shapes.ttl --timestamp 2026-01-02T12:00:00Z --db memory.db 
+SHACL validation failed: 1 violation(s)
+  Violation on https://example.org/memory/decision-2: In constraint not satisfied. Expected one of [Literal{StringLiteral { lexical_form: "observed", lang: None }}, Literal{StringLiteral { lexical_form: "declared", lang: None }}, Literal{StringLiteral { lexical_form: "inferred", lang: None }}]
+Expected refusal (exit 1).
+
+The refused decision never entered the store:
+
+$ quipu read ASK\ \{\ \<https://example.org/memory/decision-2\>\ \?p\ \?o\ \} --db memory.db 
+false
+
+Correct the tag and carry its source:
+
+$ quipu knot good.ttl --shapes memory.shapes.ttl --timestamp 2026-01-02T12:00:00Z --db memory.db 
+SHACL validation passed
+knotted 4 facts from good.ttl (tx 2)
+
+$ quipu read SELECT\ \?kind\ \?source\ WHERE\ \{\ \<https://example.org/memory/decision-2\>\ \<https://example.org/memory/sourceKind\>\ \?kind\ \;\ \<http://www.w3.org/ns/prov#wasDerivedFrom\>\ \?source\ \} --db memory.db 
+kind	source
+----------------------------------------
+"declared"	https://example.org/memory/example-review
+
+1 results
+
+Before the second decision:
+
+$ quipu unravel --valid-at 2026-01-02T00:00:00Z --db memory.db 
+https://example.org/memory/decision-1  http://www.w3.org/1999/02/22-rdf-syntax-ns#type  https://example.org/memory/Decision  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  https://example.org/memory/text  Keep the release reversible  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  https://example.org/memory/sourceKind  observed  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  http://www.w3.org/ns/prov#wasDerivedFrom  https://example.org/memory/release-check  [2026-01-01T12:00:00Z -> inf]
+
+4 facts
+
+After it:
+
+$ quipu unravel --valid-at 2026-01-03T00:00:00Z --db memory.db 
+https://example.org/memory/decision-1  http://www.w3.org/1999/02/22-rdf-syntax-ns#type  https://example.org/memory/Decision  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  https://example.org/memory/text  Keep the release reversible  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  https://example.org/memory/sourceKind  observed  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-1  http://www.w3.org/ns/prov#wasDerivedFrom  https://example.org/memory/release-check  [2026-01-01T12:00:00Z -> inf]
+https://example.org/memory/decision-2  http://www.w3.org/1999/02/22-rdf-syntax-ns#type  https://example.org/memory/Decision  [2026-01-02T12:00:00Z -> inf]
+https://example.org/memory/decision-2  https://example.org/memory/text  Require a reproducible example  [2026-01-02T12:00:00Z -> inf]
+https://example.org/memory/decision-2  https://example.org/memory/sourceKind  declared  [2026-01-02T12:00:00Z -> inf]
+https://example.org/memory/decision-2  http://www.w3.org/ns/prov#wasDerivedFrom  https://example.org/memory/example-review  [2026-01-02T12:00:00Z -> inf]
+
+8 facts
+
+Refused writes stay out. Accepted facts retain their valid-time and source.

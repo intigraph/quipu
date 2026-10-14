@@ -15,6 +15,9 @@
   <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
 </p>
 
+[Watch governed memory in 60 seconds](docs/demos/governed-memory-v0.13.0/):
+a refused write, its corrected provenance, and a valid-time read.
+
 **Quipu is a knowledge graph for AI coding agents and the people who run them.
 It stores what your agents learn as facts, checks every write against rules you
 declare (SHACL shapes), and refuses the facts that break them, so bad knowledge

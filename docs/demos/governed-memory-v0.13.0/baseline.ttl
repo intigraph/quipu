@@ -1,0 +1,7 @@
+@prefix demo: <https://example.org/memory/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+demo:decision-1 a demo:Decision ;
+    demo:text "Keep the release reversible" ;
+    demo:sourceKind "observed" ;
+    prov:wasDerivedFrom demo:release-check .
