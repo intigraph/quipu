@@ -182,7 +182,7 @@ fn batch_search_equals_one_search_per_query_including_ties() {
     let mut stored: Vec<Vec<f32>> = Vec::new();
     for id in 1..=300_i64 {
         let v: Vec<f32> = if id % 7 == 0 {
-            stored[(id as usize) / 2].clone() // exact duplicate -> tie
+            stored[usize::try_from(id / 2).unwrap()].clone() // exact duplicate -> tie
         } else {
             (0..dims).map(|_| next()).collect()
         };

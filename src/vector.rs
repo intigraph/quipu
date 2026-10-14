@@ -432,7 +432,7 @@ impl Store {
         while let Some(row) = rows.next()? {
             // The scan is the long phase of a write's resolution pass; honour the
             // request deadline inside it, not only around it (aegis-xi0).
-            if seq % 4096 == 0 {
+            if seq.is_multiple_of(4096) {
                 crate::time::check_request_deadline()?;
             }
             let entity_id: i64 = row.get(0)?;
