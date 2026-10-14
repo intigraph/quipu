@@ -1,0 +1,3 @@
+ANCHORDEMO refused_max_bytes=1 old_head=2 first_success_head=3 history_floor=2 old_pin_accepted=true
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2276 filtered out; finished in 0.35s
+--- command exit: 101
