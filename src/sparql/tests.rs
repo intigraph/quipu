@@ -1,6 +1,103 @@
 //! Tests for the SPARQL query engine.
 
 use super::*;
+use crate::namespace;
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn datatype_readonly_uninterned_iris_are_bound_without_dictionary_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("datatype.db");
+    {
+        let store = Store::open(path.to_str().unwrap()).unwrap();
+        store.intern(namespace::XSD_INTEGER).unwrap();
+        store.intern(namespace::XSD_DATE_TIME).unwrap();
+    }
+    let store = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    let before: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    for (literal, datatype) in [
+        (
+            r#""2026-10-14"^^xsd:date"#,
+            "http://www.w3.org/2001/XMLSchema#date",
+        ),
+        (
+            r#""1.25"^^xsd:decimal"#,
+            "http://www.w3.org/2001/XMLSchema#decimal",
+        ),
+        (
+            r#""1.25"^^xsd:float"#,
+            "http://www.w3.org/2001/XMLSchema#float",
+        ),
+        (
+            r#""value"^^<urn:test:uninterned-datatype>"#,
+            "urn:test:uninterned-datatype",
+        ),
+        (r#""hello"@en"#, namespace::RDF_LANG_STRING),
+        (r#""plain""#, namespace::XSD_STRING),
+        ("true", namespace::XSD_BOOLEAN),
+        ("1.5E0", namespace::XSD_DOUBLE),
+        ("7", namespace::XSD_INTEGER),
+        (
+            r#""2026-10-14T00:00:00Z"^^xsd:dateTime"#,
+            namespace::XSD_DATE_TIME,
+        ),
+    ] {
+        let persisted = store.lookup(datatype).unwrap();
+        let text = format!(
+            "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?dt ?iri ?same ?literal WHERE {{
+              BIND(DATATYPE({literal}) AS ?dt)
+              BIND(isIRI(?dt) AS ?iri)
+              BIND(sameTerm(?dt, <{datatype}>) AS ?same)
+              BIND(sameTerm(?dt, \"{datatype}\") AS ?literal)
+              FILTER(?dt = <{datatype}>) }}"
+        );
+        let result = query(&store, &text).unwrap();
+        assert_eq!(
+            result.rows().len(),
+            1,
+            "{literal}: datatype filter lost the row"
+        );
+        let row = &result.rows()[0];
+        let Some(Value::Ref(id)) = row.get("dt") else {
+            panic!("{literal}: datatype is not an IRI")
+        };
+        assert_eq!(store.resolve(*id).unwrap(), datatype);
+        assert_eq!(row.get("iri"), Some(&Value::Bool(true)));
+        assert_eq!(row.get("same"), Some(&Value::Bool(true)));
+        assert_eq!(row.get("literal"), Some(&Value::Bool(false)));
+        assert_eq!(
+            query(&store, &text).unwrap().rows()[0].get("dt"),
+            row.get("dt")
+        );
+        assert_eq!(store.lookup(datatype).unwrap(), persisted);
+    }
+    let after: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, after);
+}
+
+#[test]
+fn datatype_writable_result_retains_a_persisted_term_id() {
+    let store = Store::open_in_memory().unwrap();
+    let datatype = "urn:test:writable-datatype";
+    assert!(store.lookup(datatype).unwrap().is_none());
+    let result = query(
+        &store,
+        "SELECT ?dt WHERE { BIND(DATATYPE(\"v\"^^<urn:test:writable-datatype>) AS ?dt) }",
+    )
+    .unwrap();
+    let Some(Value::Ref(id)) = result.rows()[0].get("dt") else {
+        panic!("datatype missing")
+    };
+    assert!(*id > 0);
+    assert_eq!(store.lookup(datatype).unwrap(), Some(*id));
+    assert_eq!(store.resolve(*id).unwrap(), datatype);
+}
 
 #[test]
 fn relative_iris_parse_against_the_default_query_base() {

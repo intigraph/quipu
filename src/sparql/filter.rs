@@ -314,11 +314,29 @@ pub(super) fn lexical(v: &Value) -> Option<String> {
     })
 }
 
+/// A datatype is an IRI even when it is not a persisted dictionary entry.
+/// Keep writable results persisted; read-only handles use the same transient
+/// reference representation as remote query bindings, without database writes.
+fn datatype_ref(store: &Store, iri: &str) -> Option<Value> {
+    let id = if store.conn.is_readonly("main").ok()? {
+        store.query_ref(iri).ok()?
+    } else {
+        store.intern(iri).ok()?
+    };
+    Some(Value::Ref(id))
+}
+
 /// Evaluate an expression to a Value.
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
-        Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
+        Expression::NamedNode(n) => {
+            if store.conn.is_readonly("main").ok()? {
+                store.query_ref(n.as_str()).ok().map(Value::Ref)
+            } else {
+                store.lookup(n.as_str()).ok().flatten().map(Value::Ref)
+            }
+        }
         Expression::Literal(lit) => Some(literal_to_value(lit)),
         Expression::Equal(_, _)
         | Expression::SameTerm(_, _)
@@ -442,11 +460,11 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                 Value::Float(_) => namespace::XSD_DOUBLE,
                 Value::Bool(_) => namespace::XSD_BOOLEAN,
                 Value::Typed { datatype, .. } => {
-                    return store.intern(&datatype).ok().map(Value::Ref);
+                    return datatype_ref(store, &datatype);
                 }
                 Value::Ref(_) | Value::Bytes(_) => return None,
             };
-            store.intern(datatype).ok().map(Value::Ref)
+            datatype_ref(store, datatype)
         }
         Expression::FunctionCall(Function::Now, _) => Some(Value::Typed {
             lexical: crate::time::now_iso(),

@@ -57,11 +57,8 @@ use crate::error::{Error, Result};
 pub(crate) struct TermCache {
     id_to_iri: HashMap<i64, String>,
     iri_to_id: HashMap<String, i64>,
-    #[cfg(feature = "remote")]
     transient_id_to_iri: HashMap<i64, String>,
-    #[cfg(feature = "remote")]
     transient_iri_to_id: HashMap<String, i64>,
-    #[cfg(feature = "remote")]
     next_transient_id: i64,
     /// Maximum entries admitted. `0` disables caching entirely.
     limit: usize,
@@ -80,11 +77,8 @@ impl Default for TermCache {
         Self {
             id_to_iri: HashMap::new(),
             iri_to_id: HashMap::new(),
-            #[cfg(feature = "remote")]
             transient_id_to_iri: HashMap::new(),
-            #[cfg(feature = "remote")]
             transient_iri_to_id: HashMap::new(),
-            #[cfg(feature = "remote")]
             next_transient_id: -1,
             limit: DEFAULT_TERM_CACHE_LIMIT,
         }
@@ -195,7 +189,6 @@ impl Store {
         if let Some(iri) = self.term_cache.borrow().id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
-        #[cfg(feature = "remote")]
         if let Some(iri) = self.term_cache.borrow().transient_id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
@@ -335,9 +328,8 @@ impl Store {
     /// Represent an IRI in a read-only query result without mutating the term dictionary.
     ///
     /// Existing terms retain their persisted id so remote bindings join with local data.
-    /// Remote-only terms receive a store-local negative id held solely in the result cache;
+    /// Unpersisted terms receive a store-local negative id held solely in the result cache;
     /// it resolves for serialization but can never be mistaken for a persisted fact id.
-    #[cfg(feature = "remote")]
     pub(crate) fn query_ref(&self, iri: &str) -> Result<i64> {
         if let Some(id) = self.lookup(iri)? {
             return Ok(id);
