@@ -1,0 +1,10 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix demo: <https://example.org/memory/> .
+
+demo:DecisionShape a sh:NodeShape ;
+    sh:targetClass demo:Decision ;
+    sh:property [
+        sh:path demo:sourceKind ;
+        sh:minCount 1 ;
+        sh:in ("observed" "declared" "inferred")
+    ] .

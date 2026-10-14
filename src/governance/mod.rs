@@ -35,6 +35,7 @@ pub mod tree;
 pub mod trust_root;
 pub mod verdict_facts;
 pub mod verifier_registry;
+pub(crate) mod workflow;
 
 pub use guard::{PolicyRegistry, is_governance_write};
 pub use placement::validate_write as validate_placement;

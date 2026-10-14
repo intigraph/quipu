@@ -1203,3 +1203,18 @@ fn materialising_the_declarations_types_the_shipped_catalog_correctly() {
          test to be measuring anything"
     );
 }
+
+#[test]
+fn direct_workflow_uses_one_entity_with_both_existing_types() {
+    let data = format!(
+        "{NS} aegis:w a aegis:Workflow,aegis:WorkflowDefinition ; rdfs:label \"direct\" ; aegis:initialState \"open\" ; aegis:terminalState \"done\" ; aegis:hasStep aegis:s . aegis:s a aegis:Step,aegis:WorkflowStep ; rdfs:label \"finish\" ; aegis:fromState \"open\" ; aegis:toState \"done\" ."
+    );
+    assert!(validate_shapes(SHAPES, &data).unwrap().conforms);
+}
+#[test]
+fn direct_workflow_rejects_mistyped_initial_state() {
+    let data = format!(
+        "{NS} aegis:w a aegis:WorkflowDefinition ; aegis:initialState 7 ; aegis:hasStep aegis:s . aegis:s a aegis:WorkflowStep ."
+    );
+    assert!(!validate_shapes(SHAPES, &data).unwrap().conforms);
+}

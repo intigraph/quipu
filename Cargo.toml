@@ -54,7 +54,7 @@ required-features = ["shacl", "onnx", "server"]
 [[bin]]
 name = "seed-fixtures"
 path = "src/bin/seed_fixtures.rs"
-required-features = ["shacl"]
+required-features = ["dev-tools"]
 
 [[bin]]
 name = "quipu-oxi-compare"
@@ -64,7 +64,7 @@ required-features = ["oxicompare"]
 [[bin]]
 name = "quipu-shacl-conformance"
 path = "src/bin/quipu_shacl_conformance.rs"
-required-features = ["shacl"]
+required-features = ["dev-tools"]
 
 # The example calls `quipu::validate_shapes`, which is gated behind `shacl`.
 # `cargo test` builds examples, so without this the `--no-default-features` CI
@@ -132,7 +132,7 @@ axum = { version = "0.8", optional = true }
 url = { version = "2", optional = true }
 oxigraph = { version = "0.5", default-features = false, optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
-libc = { version = "0.2", optional = true }
+libc = "0.2"
 rmcp = { version = "0.13", features = ["server", "transport-io", "transport-streamable-http-server"], optional = true }
 tower-http = { version = "0.6", features = ["cors", "limit"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
@@ -191,7 +191,7 @@ owl = []
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
-mcp = ["dep:libc", "dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
+mcp = ["dep:url", "dep:rmcp", "dep:tower", "dep:axum", "dep:tokio", "dep:tower-http"]
 server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxigraph", "dep:futures", "remote", "jemalloc"]
 # quipu-server's global allocator; implied by `server` so every deployed build
 # carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
@@ -224,6 +224,11 @@ oxicompare = ["dep:oxigraph", "oxigraph/rocksdb"]
 # with `--features full,lancedb` to ship it. `--all-features` is therefore NOT
 # what a release is built with.
 full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
+# Test/benchmark utilities (seed-fixtures, quipu-shacl-conformance). OFF by
+# default and outside `full`, so `cargo install quipu-ai` puts only quipu and
+# quipu-server on a user's PATH (aegis-wd3m38). Build them with
+# `--features dev-tools`.
+dev-tools = ["shacl"]
 
 [lints.rust]
 unsafe_code = "deny"

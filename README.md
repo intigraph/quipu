@@ -13,7 +13,11 @@
   <a href="https://github.com/scbrown/quipu/actions/workflows/ci.yml"><img src="https://github.com/scbrown/quipu/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://github.com/scbrown/caboodle"><img src="https://img.shields.io/badge/stack-quipu-8B5E3C.svg" alt="Part of the caboodle stack"/></a>
   <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://zenodo.org/badge/1201016929.svg" alt="DOI"/></a>
+  <a href="https://arxiv.org/abs/2608.16813"><img src="https://img.shields.io/badge/arXiv-2608.16813-b31b1b.svg" alt="arXiv: 2608.16813"/></a>
 </p>
+
+[Watch governed memory in 60 seconds](docs/demos/governed-memory-v0.13.0/):
+a refused write, its corrected provenance, and a valid-time read.
 
 **Quipu is a knowledge graph for AI coding agents and the people who run them.
 It stores what your agents learn as facts, checks every write against rules you
@@ -76,8 +80,9 @@ Anywhere else, build from source (needs a Rust toolchain):
 cargo install quipu-ai --locked --features full
 ```
 
-The crate is `quipu-ai`; it installs `quipu` and `quipu-server`, plus two test
-utilities (`quipu-shacl-conformance`, `seed-fixtures`) you can ignore.
+The crate is `quipu-ai`; it installs `quipu` and `quipu-server`. The test
+utilities (`quipu-shacl-conformance`, `seed-fixtures`) build only with
+`--features dev-tools`.
 Check it:
 
 ```bash

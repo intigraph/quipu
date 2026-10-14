@@ -134,6 +134,8 @@ aegis:TransitionShape a sh:NodeShape ;
 
 aegis:WorkflowDefinitionShape a sh:NodeShape ;
     sh:targetClass aegis:WorkflowDefinition ;
+    sh:property [ sh:path aegis:initialState ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:terminalState ; sh:datatype xsd:string ] ;
     sh:property [
         sh:path aegis:hasStep ;
         sh:class aegis:WorkflowStep ;
@@ -141,10 +143,13 @@ aegis:WorkflowDefinitionShape a sh:NodeShape ;
     ] .
 
 aegis:WorkflowStepShape a sh:NodeShape ;
-    sh:targetClass aegis:WorkflowStep .
+    sh:targetClass aegis:WorkflowStep ;
+    sh:property [ sh:path aegis:fromState ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:toState ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 
 aegis:WorkflowRunShape a sh:NodeShape ;
     sh:targetClass aegis:WorkflowRun ;
+    sh:property [ sh:path aegis:currentRevision ; sh:datatype xsd:integer ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:runOf ; sh:class aegis:WorkflowDefinition ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:currentState ; sh:datatype xsd:string ; sh:minCount 1 ] ;
     sh:property [ sh:path aegis:createdAt ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
@@ -152,6 +157,8 @@ aegis:WorkflowRunShape a sh:NodeShape ;
 
 aegis:TransitionEventShape a sh:NodeShape ;
     sh:targetClass aegis:TransitionEvent ;
+    sh:property [ sh:path aegis:fromRevision ; sh:datatype xsd:integer ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:transitionVersion ; sh:datatype xsd:integer ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:inRun ; sh:class aegis:WorkflowRun ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:atStep ; sh:class aegis:WorkflowStep ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path aegis:fromState ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;

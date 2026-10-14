@@ -278,6 +278,11 @@ pub struct GovernanceConfig {
     /// retroactively break a store, only refuse the next unverifiable write.
     pub verify_transitions: bool,
 
+    /// Enforce declared workflow steps, immutable plans/events, and atomic
+    /// signed state transitions in the same graph. Default false; independent
+    /// opt-in. Existing workflows need an explicit migration before enabling.
+    pub enforce_workflows: bool,
+
     /// Enforce authority intersection over named graphs on the write path
     /// (`src/governance/authority.rs`, SARC I5). When a caller has set a
     /// principal chain, a write to a graph the chain's INTERSECTED authority

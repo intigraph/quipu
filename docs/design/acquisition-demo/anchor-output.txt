@@ -1,0 +1,8 @@
+Script started on 2026-10-14 02:13:16-04:00 [COMMAND="python3 docs/design/acquisition-demo/anchor-capture.py" <not executed on terminal>]
+SOURCE e5e19f5a9e37fc117549068cea7836c85f865ca5
+Probe: cargo test --lib failed_first_acquisition_cannot_admit_an_earlier_history_floor -- --nocapture
+ANCHORDEMO refused_max_bytes=1 old_head=2 first_success_head=3 history_floor=3 old_pin_accepted=false
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2276 filtered out; finished in 0.39s
+COMMAND_EXIT 0
+
+Script done on 2026-10-14 02:13:43-04:00 [COMMAND_EXIT_CODE="0"]

@@ -213,6 +213,12 @@ requires the proxy to select the corresponding downstream Quipu credential.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
+For a coherent, pinned source receipt, use `POST /acquire` for a single file,
+or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
+providers. The latter uses a separate version-gated contract and refuses
+unsupported required attached or derived scope;
+see [atomic acquisition](acquisition.md) for its versioned contract.
+
 `POST /share` is also read-only. It returns the canonical Git-share manifest and
 exact file contents in one JSON response, allowing a proxy on another host to
 forward Quipu's own canonicalization, hashes, and share ID instead of reproducing
@@ -1429,9 +1435,10 @@ Return a preview rendering of an entity by IRI.
 ### `GET /version`
 
 What build is actually running: `{"version", "git_sha", "git_dirty",
-"features"}`. The git SHA is the field that matters for "is the fix
+"features", "read_contracts"}`. The git SHA is the field that matters for "is the fix
 deployed?" — a semantic version does not move when a fix lands. `features`
 maps every declared Cargo feature to whether this binary compiled it in.
+`read_contracts` lists recognized versioned source-acquisition contracts.
 
 ### `GET /metrics`
 

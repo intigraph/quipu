@@ -104,7 +104,7 @@ wasm cmd="check" n="1000":
 
 # Generate test-fixtures/test-store.db from static assets
 seed:
-    cargo run --bin seed-fixtures --features shacl
+    cargo run --bin seed-fixtures --features dev-tools
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:

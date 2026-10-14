@@ -57,11 +57,8 @@ use crate::error::{Error, Result};
 pub(crate) struct TermCache {
     id_to_iri: HashMap<i64, String>,
     iri_to_id: HashMap<String, i64>,
-    #[cfg(feature = "remote")]
     transient_id_to_iri: HashMap<i64, String>,
-    #[cfg(feature = "remote")]
     transient_iri_to_id: HashMap<String, i64>,
-    #[cfg(feature = "remote")]
     next_transient_id: i64,
     /// Maximum entries admitted. `0` disables caching entirely.
     limit: usize,
@@ -80,11 +77,8 @@ impl Default for TermCache {
         Self {
             id_to_iri: HashMap::new(),
             iri_to_id: HashMap::new(),
-            #[cfg(feature = "remote")]
             transient_id_to_iri: HashMap::new(),
-            #[cfg(feature = "remote")]
             transient_iri_to_id: HashMap::new(),
-            #[cfg(feature = "remote")]
             next_transient_id: -1,
             limit: DEFAULT_TERM_CACHE_LIMIT,
         }
@@ -93,7 +87,7 @@ impl Default for TermCache {
 
 impl TermCache {
     /// Discard persistent mappings after an outer transaction rollback.
-    /// The admission limit and transient remote terms are unaffected.
+    /// The admission limit and transient query terms are unaffected.
     pub(crate) fn clear_persistent(&mut self) {
         self.id_to_iri.clear();
         self.iri_to_id.clear();
@@ -195,7 +189,6 @@ impl Store {
         if let Some(iri) = self.term_cache.borrow().id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
-        #[cfg(feature = "remote")]
         if let Some(iri) = self.term_cache.borrow().transient_id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
@@ -334,10 +327,10 @@ impl Store {
 
     /// Represent an IRI in a read-only query result without mutating the term dictionary.
     ///
-    /// Existing terms retain their persisted id so remote bindings join with local data.
-    /// Remote-only terms receive a store-local negative id held solely in the result cache;
+    /// Existing terms retain their persisted id so bindings join with local data.
+    /// Query-only terms receive a store-local negative id held solely in the result cache;
     /// it resolves for serialization but can never be mistaken for a persisted fact id.
-    #[cfg(feature = "remote")]
+    /// New transient terms obey the cache admission limit; existing terms still resolve.
     pub(crate) fn query_ref(&self, iri: &str) -> Result<i64> {
         if let Some(id) = self.lookup(iri)? {
             return Ok(id);
@@ -345,6 +338,11 @@ impl Store {
         let mut cache = self.term_cache.borrow_mut();
         if let Some(id) = cache.transient_iri_to_id.get(iri) {
             return Ok(*id);
+        }
+        if cache.transient_id_to_iri.len() >= cache.limit {
+            return Err(Error::Store(
+                "transient query term cache limit reached".into(),
+            ));
         }
         let id = cache.next_transient_id;
         cache.next_transient_id = cache

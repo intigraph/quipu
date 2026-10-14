@@ -160,9 +160,9 @@ fn eval_filter_two_valued(
     }
 }
 
-/// Value equality for `=` and `IN`. An operand that cannot be evaluated (an
-/// unbound variable, an IRI absent from the dictionary) is not equal to
-/// anything rather than an error — matching what `=` has always done.
+/// Value equality for `=` and `IN`. An operand that cannot be evaluated (such
+/// as an unbound variable) is not equal to anything rather than an error.
+/// IRI constants retain query-local identity even without a dictionary entry.
 /// SPARQL `=`: numbers compare by VALUE across datatypes, so `1 = 1.0` holds
 /// (aegis-soqv1r). Everything else falls back to term identity (`expr_eq`),
 /// which is what `sameTerm` uses; the two differ only for numerics.
@@ -318,7 +318,7 @@ pub(super) fn lexical(v: &Value) -> Option<String> {
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
-        Expression::NamedNode(n) => store.lookup(n.as_str()).ok().flatten().map(Value::Ref),
+        Expression::NamedNode(n) => store.query_ref(n.as_str()).ok().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
         Expression::Equal(_, _)
         | Expression::SameTerm(_, _)
@@ -442,11 +442,11 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                 Value::Float(_) => namespace::XSD_DOUBLE,
                 Value::Bool(_) => namespace::XSD_BOOLEAN,
                 Value::Typed { datatype, .. } => {
-                    return store.intern(&datatype).ok().map(Value::Ref);
+                    return store.query_ref(&datatype).ok().map(Value::Ref);
                 }
                 Value::Ref(_) | Value::Bytes(_) => return None,
             };
-            store.intern(datatype).ok().map(Value::Ref)
+            store.query_ref(datatype).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::Now, _) => Some(Value::Typed {
             lexical: crate::time::now_iso(),

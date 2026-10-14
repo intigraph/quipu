@@ -1,0 +1,18 @@
+BASE ec3b707d
+$ git check-attr merge -- pendant/export.nt pendant/shapes.ttl pendant/manifest.json pendant/manifest.ttl docs/book/src/datalinks/pendant/export.nt qpack/export.nt unrelated/export.nt
+pendant/export.nt: merge: unspecified
+pendant/shapes.ttl: merge: unspecified
+pendant/manifest.json: merge: unspecified
+pendant/manifest.ttl: merge: unspecified
+docs/book/src/datalinks/pendant/export.nt: merge: unspecified
+qpack/export.nt: merge: quipu
+unrelated/export.nt: merge: unspecified
+CANDIDATE attributes
+$ git check-attr merge -- pendant/export.nt pendant/shapes.ttl pendant/manifest.json pendant/manifest.ttl docs/book/src/datalinks/pendant/export.nt qpack/export.nt unrelated/export.nt
+pendant/export.nt: merge: quipu
+pendant/shapes.ttl: merge: quipu
+pendant/manifest.json: merge: quipu
+pendant/manifest.ttl: merge: quipu
+docs/book/src/datalinks/pendant/export.nt: merge: quipu
+qpack/export.nt: merge: quipu
+unrelated/export.nt: merge: unspecified
