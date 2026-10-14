@@ -339,6 +339,37 @@ fn sample_manifest() -> ShareManifest {
     .manifest
 }
 
+#[test]
+fn new_local_pendants_stamp_the_directory_and_preserve_explicit_layouts() {
+    let default = sample_manifest();
+    assert_eq!(default.pack_dir.as_deref(), Some("pendant"));
+    assert_eq!(default.pack_dir_or_default(), "pendant");
+    for layout in [Some("knowledge".into()), Some("qpack".into()), None] {
+        let manifest = share_payload(
+            &fixture(),
+            &ShareOptions {
+                pack_dir: layout.clone(),
+                ..Default::default()
+            },
+            SHARE_PAYLOAD_MAX_BYTES,
+        )
+        .unwrap()
+        .manifest;
+        assert_eq!(manifest.pack_dir, layout);
+        assert_eq!(
+            manifest.pack_dir_or_default(),
+            layout.as_deref().unwrap_or("qpack")
+        );
+    }
+}
+
+#[test]
+fn wire_requests_cannot_claim_the_new_local_repository_layout() {
+    let request: SharePayloadRequest =
+        serde_json::from_str(r#"{"pack_dir":"attacker-layout"}"#).unwrap();
+    assert_eq!(request.options().pack_dir, None);
+}
+
 //
 // The default lives in exactly one place, and the accessor is the only reader,
 // because a caller that unwraps the Option would silently pick its own default
