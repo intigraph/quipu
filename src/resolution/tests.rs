@@ -161,6 +161,36 @@ rdfs:label "Alice Smith" .
     );
 }
 
+/// A candidate whose real score equals the threshold must still match: the
+/// pruning bound may not round below it (review of #538; dearing's API probe).
+#[test]
+fn resolve_keeps_a_candidate_scoring_exactly_the_threshold() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = r#"
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+
+ex:boundary a ex:Thing ;
+rdfs:label "aaaaaaabbb" .
+"#;
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    let real = strsim::jaro_winkler("aaaaaaaaaa", "aaaaaaabbb");
+    let result = resolve_entity(&store, "aaaaaaaaaa", &[], real, 3).unwrap();
+    assert!(
+        result.has_matches,
+        "a candidate scoring exactly the threshold ({real}) was pruned"
+    );
+}
+
 #[test]
 fn resolve_does_not_fuzzy_match_distinct_slash_qualified_commits() {
     let mut store = Store::open_in_memory().unwrap();
@@ -805,4 +835,72 @@ fn batch_resolution_agrees_with_the_single_entity_path() {
             other => panic!("batch and single disagree on whether {name} matched: {other:?}"),
         }
     }
+}
+
+/// The histogram bound used to skip Jaro-Winkler comparisons must never fall
+/// BELOW the real score, or pruning would drop a true candidate (aegis-nmuwsi).
+#[test]
+fn label_profile_bound_never_undercuts_jaro_winkler() {
+    let words = [
+        "",
+        "a",
+        "ab",
+        "ba",
+        "store",
+        "Store",
+        "stores",
+        "store-server",
+        "server-store",
+        "store.example",
+        "quipu",
+        "quipu-server",
+        "quipu-ai",
+        "seeds",
+        "item-abc123",
+        "item-abc124",
+        "commit/quipu/abcdef0",
+        "alpha",
+        "alpine",
+        "beta",
+        "a much longer label with spaces in it",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ünïcödé-label",
+        "日本語",
+        "@@@@AAAA", // '@' (64) and 'A' (65) share no bucket; 'A' and '\u{1}' would
+        // The pair whose exact bound rounded below its real 0.88 (review of #538).
+        "aaaaaaaaaa",
+        "aaaaaaabbb",
+    ];
+    let mut checked = 0;
+    for a in words {
+        for b in words {
+            let (la, lb) = (a.to_lowercase(), b.to_lowercase());
+            let real = strsim::jaro_winkler(&la, &lb);
+            let bound = LabelProfile::of(&la).jaro_winkler_upper_bound(&LabelProfile::of(&lb));
+            // No tolerance here: pruning compares the bound to the threshold
+            // exactly, so the bound itself must already be >= the real score.
+            assert!(
+                bound >= real,
+                "bound {bound} < real {real} for {la:?} vs {lb:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, words.len() * words.len());
+    // At a threshold equal to the real score, the pair must survive pruning.
+    let real = strsim::jaro_winkler("aaaaaaaaaa", "aaaaaaabbb");
+    let bound =
+        LabelProfile::of("aaaaaaaaaa").jaro_winkler_upper_bound(&LabelProfile::of("aaaaaaabbb"));
+    assert!(
+        bound >= real,
+        "bound {bound} prunes a real {real} candidate"
+    );
+    // And it actually prunes: disjoint character sets cannot reach 0.85.
+    assert!(LabelProfile::of("quipu").jaro_winkler_upper_bound(&LabelProfile::of("zzzzz")) < 0.85);
+    // A saturated bucket disables pruning rather than undercounting.
+    let long = "a".repeat(300);
+    assert!(
+        (LabelProfile::of(&long).jaro_winkler_upper_bound(&LabelProfile::of("b")) - 1.0).abs()
+            < f64::EPSILON
+    );
 }
