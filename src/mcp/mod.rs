@@ -298,7 +298,7 @@ fn query_context<'a>(store: &Store, input: &'a JsonValue) -> Result<(&'a str, Te
                 .get("valid_at")
                 .and_then(|v| v.as_str())
                 .map(std::string::ToString::to_string),
-            as_of_tx: input.get("tx").and_then(serde_json::Value::as_i64),
+            as_of_tx: crate::read_pin::requested_tx(store, input)?,
             graph,
             entails_rdfs,
             ..Default::default()

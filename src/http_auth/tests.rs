@@ -292,6 +292,10 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        (
+            "server/publication.rs",
+            include_str!("../server/publication.rs"),
+        ),
         // Handler-only today; scan it so a future route cannot escape classification.
         (
             "server/graph_store_compact.rs",
@@ -322,6 +326,7 @@ fn routes_in_server_source() -> Vec<String> {
             "server/snapshot_upload.rs",
             include_str!("../server/snapshot_upload.rs"),
         ),
+        ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
     // invisible to both tests here: its routes are never seen, so they are
@@ -333,7 +338,6 @@ fn routes_in_server_source() -> Vec<String> {
         "server/admission.rs",
         "server/auth.rs",
         "server/auth_response.rs",
-        "server/base.rs",
         "server/entity.rs",
         "server/feed.rs",
         "server/event_cursor.rs",
@@ -342,7 +346,6 @@ fn routes_in_server_source() -> Vec<String> {
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",
-        "server/publication.rs",
         "server/query_usage.rs",
         "server/reason.rs",
         "server/request_middleware.rs",

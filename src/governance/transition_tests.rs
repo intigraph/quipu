@@ -44,6 +44,7 @@ fn event(signature: Option<&str>) -> Transition {
         ended_at: vec![TS.to_string()],
         performed_by: vec![AGENT_IRI.to_string()],
         signature: signature.map(str::to_string).into_iter().collect(),
+        ..Transition::default()
     }
 }
 

@@ -533,3 +533,7 @@ mod update_attribution_tests;
 #[cfg(test)]
 #[path = "update_gates_tests.rs"]
 mod update_gates_tests;
+
+#[cfg(test)]
+#[path = "workflow_update_tests.rs"]
+mod workflow_update_tests;
