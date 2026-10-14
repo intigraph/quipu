@@ -532,7 +532,9 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
 ///   every other error exit in this binary.
 fn query_error_exit_code(error: &quipu::Error) -> i32 {
     match error {
-        quipu::Error::QueryTimeout { .. } | quipu::Error::QueryComplexity { .. } => 2,
+        quipu::Error::QueryTimeout { .. }
+        | quipu::Error::RequestTimeout { .. }
+        | quipu::Error::QueryComplexity { .. } => 2,
         _ => 1,
     }
 }
