@@ -10,10 +10,10 @@ and is then refused by the retained `/acquire` v1 route. Watch the distinct
 source receipt, provider exclusion, malformed pin, wrong generation, unknown
 required ephemeral, and byte-cap responses. No refusal returns a receipt.
 
-Recorded candidate base: `d8f755c3ac7442cdba53a18f2ed83e3594e6eda3`
-(normal merge of main `ec3b707d` into the owned feature branch). The build
-reports that base plus `producer_git_dirty=true`; the source content measured
-in this recording is identified by the following SHA-256 values.
+Recorded clean source: `1579a3e34f721c501658c2df28803dde8329a774`,
+based on main `ec3b707d`. The build reports that source revision and
+`producer_git_dirty=false`. The following SHA-256 values identify its source
+content; the subsequent recording/caption commit does not change these files.
 
 | Source | SHA-256 |
 | --- | --- |
