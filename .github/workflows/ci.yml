@@ -212,7 +212,24 @@ jobs:
           set -euo pipefail
           mkdir -p oci-context
           cp target/debug/quipu target/debug/quipu-server oci-context/
-          docker build -f packaging/oci/Dockerfile -t quipu-mcp:ci oci-context
+          # The Dockerfile's base, pinned by digest and pulled from whichever
+          # registry answers. Both serve the same content-addressed index, and
+          # the build then uses only the local tag. Anonymous ECR Public pulls
+          # hit "429 Data limit exceeded" on shared runners.
+          base_digest=sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+          pulled=
+          for attempt in 1 2 3; do
+            for repo in mirror.gcr.io/library/debian public.ecr.aws/docker/library/debian; do
+              if docker pull --quiet "$repo@$base_digest"; then
+                pulled="$repo@$base_digest"; break 2
+              fi
+            done
+            sleep $((attempt * 20))
+          done
+          test -n "$pulled" || { echo "::error::base image $base_digest unavailable from every mirror"; exit 1; }
+          docker tag "$pulled" quipu-oci-base:ci
+          docker build --build-arg BASE_IMAGE=quipu-oci-base:ci \
+            -f packaging/oci/Dockerfile -t quipu-mcp:ci oci-context
           trap 'docker volume rm -f quipu-ci >/dev/null' EXIT
           timeout 180 python3 scripts/ci/mcp-stdio-smoke.py -- \
             docker run -i --rm -v quipu-ci:/data quipu-mcp:ci
