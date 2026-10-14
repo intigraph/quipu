@@ -10,8 +10,8 @@ is a transcript, not a recording.
 
 The candidate checks the deadline during resolution. Watch the original 20 ms
 budget in the error and the unchanged fact counts. The recording identifies source revision
-`8b7a473c4b77056071f66dc8849df02bc3ec2c26`; the final changes only add the
-recording and caption. It also includes the one-node commit control.
+`8b7a473c4b77056071f66dc8849df02bc3ec2c26`; later changes add documentation and the real HTTP-handler control.
+The demonstrated runtime files remain byte-identical. It also includes the one-node commit control.
 
 Reproduce from a source checkout with the normal build environment:
 
