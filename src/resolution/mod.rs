@@ -283,6 +283,11 @@ struct LabelEntry {
     profile: LabelProfile,
 }
 
+/// Slack added to [`LabelProfile::jaro_winkler_upper_bound`] so floating-point
+/// rounding can only make pruning more conservative, never drop a candidate.
+/// Far above any rounding error and far below any meaningful score gap.
+pub(crate) const JW_BOUND_MARGIN: f64 = 1e-9;
+
 /// Character count and a 64-bucket character histogram of a lowercased label.
 ///
 /// Jaro's match count `m` is at most the multiset intersection of the two
@@ -321,6 +326,12 @@ impl LabelProfile {
     /// `(m/a + m/b + 1) / 3`; Winkler adds at most `4 * 0.1 * (1 - jaro)`, giving
     /// `0.6 * jaro + 0.4`. Returns 1.0 (never prunes) for an empty string or an
     /// unusable profile, where strsim's own edge cases apply.
+    ///
+    /// The result is padded by [`JW_BOUND_MARGIN`]: the bound and strsim reach the
+    /// same value along different floating-point paths, so an exact bound can
+    /// round BELOW a real score and prune a true candidate at the threshold.
+    /// Measured: "aaaaaaaaaa" vs "aaaaaaabbb" bounds to 0.87999999999999989
+    /// against a real 0.88 (dearing, review of #538).
     #[allow(clippy::cast_precision_loss)]
     pub(crate) fn jaro_winkler_upper_bound(&self, other: &Self) -> f64 {
         if self.chars == 0 || other.chars == 0 || !self.exact || !other.exact {
@@ -334,7 +345,7 @@ impl LabelProfile {
             .sum();
         let m = common.min(self.chars).min(other.chars) as f64;
         let jaro = (m / self.chars as f64 + m / other.chars as f64 + 1.0) / 3.0;
-        0.6 * jaro + 0.4
+        0.6 * jaro + 0.4 + JW_BOUND_MARGIN
     }
 }
 
