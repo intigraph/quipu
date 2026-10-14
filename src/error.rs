@@ -37,6 +37,12 @@ pub enum Error {
     )]
     QueryTimeout { elapsed_ms: u128, limit_ms: u128 },
 
+    /// The whole request exhausted its admission budget during execution.
+    #[error(
+        "request deadline exceeded: budget {limit_ms}ms (elapsed {elapsed_ms}ms), including queue and execution time"
+    )]
+    RequestTimeout { elapsed_ms: u128, limit_ms: u128 },
+
     /// The server rejected a write before invoking its tool or settling a nonce.
     #[error(
         "write not started: waited {waited_ms}ms for the writer (busy); retry later; the write did not run"
