@@ -72,7 +72,7 @@ impl<'de> Deserialize<'de> for ShareScope {
 }
 
 /// Options for [`share`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ShareOptions {
     /// Scope to export.
     pub scope: ShareScope,
@@ -90,9 +90,9 @@ pub struct ShareOptions {
     pub turtle_view: bool,
     /// Repository directory this share lives under (aegis-8fdp8d).
     ///
-    /// `None` records nothing in the manifest, which consumers read as the
-    /// default. Set it only where a repository has actually chosen a name, so
-    /// that a share does not assert a layout its producer never configured.
+    /// New local producers stamp `pendant`; an explicit value preserves a
+    /// repository's chosen layout. `None` retains the legacy unstamped form.
+    /// HTTP requests cannot choose this repository-local setting.
     pub pack_dir: Option<String>,
     /// Mint a producer attestation over this share's identity (aegis-tadzdf).
     ///
@@ -110,6 +110,23 @@ pub struct ShareOptions {
     /// travels with the bytes rather than living in the shell history of
     /// whoever ran the command.
     pub destination: ShareDestination,
+}
+
+impl Default for ShareOptions {
+    fn default() -> Self {
+        Self {
+            scope: ShareScope::default(),
+            shapes: Vec::new(),
+            no_shapes: false,
+            queries: None,
+            parent_share: None,
+            turtle_view: false,
+            pack_dir: Some(PENDANT_PACK_DIR.into()),
+            #[cfg(not(target_arch = "wasm32"))]
+            attest: None,
+            destination: ShareDestination::default(),
+        }
+    }
 }
 
 /// Default upper bound for a payload-returning share response.
@@ -295,6 +312,9 @@ pub struct ShareManifest {
 
 /// The directory name a share uses when its manifest does not say.
 pub const DEFAULT_PACK_DIR: &str = "qpack";
+
+/// The stamped directory for new local pendant producers.
+pub const PENDANT_PACK_DIR: &str = "pendant";
 
 impl ShareManifest {
     /// This share's repository directory, or the default when unset.

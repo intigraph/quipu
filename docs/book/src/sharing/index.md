@@ -71,6 +71,12 @@ flowchart LR
 
 ## Prepare an outward share
 
+New local shares stamp `pack_dir: "pendant"` in their manifest. Use
+`--pack-dir knowledge` to keep an explicit repository layout. Older manifests
+without this field still resolve to `qpack`; importing them does not rewrite
+their identity or silently move their deltas. HTTP shares do not assert a
+repository directory on a caller’s behalf.
+
 Outward sharing checks the outgoing bytes against the store's block-tier
 identifier-policy catalogue. Load your reviewed policy before the first share;
 loading only your data's SHACL shapes does not supply these rules.
