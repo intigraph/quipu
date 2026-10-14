@@ -233,11 +233,7 @@ fn http_only_fields_match_handler_reads() {
     let syn::Expr::Array(array) = &*r.expr else {
         panic!("expected array")
     };
-    assert_eq!(
-        array.elems.len(),
-        5,
-        "audit new HTTP-only handlers explicitly"
-    );
+    let mut audited = BTreeSet::new();
     for entry in &array.elems {
         let syn::Expr::Tuple(tuple) = entry else {
             panic!("expected tuple")
@@ -249,12 +245,11 @@ fn http_only_fields_match_handler_reads() {
         else {
             panic!("expected name")
         };
+        assert!(audited.insert(name.value()), "duplicate HTTP-only handler");
         let function = match name.value().as_str() {
             "quipu_subscriptions" => "tool_subscriptions",
             "quipu_reason" => "reason",
             "quipu_search_query" => "tool_search_query",
-            "quipu_graph_create" => "tool_graph_create",
-            "quipu_graph_label" => "tool_graph_label",
             other => panic!("unmapped HTTP handler {other}"),
         };
         let syn::Expr::Reference(r) = &tuple.elems[1] else {
@@ -283,4 +278,11 @@ fn http_only_fields_match_handler_reads() {
             "{function}"
         );
     }
+    assert_eq!(
+        audited,
+        ["quipu_reason", "quipu_search_query", "quipu_subscriptions"]
+            .map(String::from)
+            .into(),
+        "audit the exact HTTP-only surface; graph create/label use MCP schemas"
+    );
 }
