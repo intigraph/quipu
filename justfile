@@ -264,6 +264,10 @@ explorer mode="release":
 docs-demo-test:
     node scripts/smoke-datalinks.cjs
 
+# Map acceptance against the staged real browser engine and repository pack.
+explorer-navigation *args:
+    node scripts/test-explore-navigation.cjs {{args}}
+
 # Author a canonical demo share from explicit data, shapes and reviewed policy.
 docs-data graph shapes policy:
     ./scripts/export-datalinks.sh {{quote(graph)}} {{quote(shapes)}} {{quote(policy)}}
