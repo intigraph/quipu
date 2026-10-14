@@ -1,0 +1,54 @@
+SQLite 3.53.2 / EXPLAIN ONLY; fact data query never executed
+baseline
+plan SEARCH facts USING INDEX idx_current_aev (a=?)
+plan LIST SUBQUERY 1
+plan SCAN terms
+plan CREATE BLOOM FILTER
+plan USE TEMP B-TREE FOR GROUP BY
+bytecode 5 OpenRead 0 8 0 Some("8")
+bytecode 6 OpenRead 3 45 0 Some("k(4,,,,)")
+bytecode 12 DeferredSeek 3 0 0 None
+bytecode 13 Column 3 2 13 None
+bytecode 16 Column 3 2 15 None
+bytecode 23 OpenRead 1 2 0 Some("2")
+bytecode 25 Column 1 1 18 None
+bytecode 35 Column 3 2 22 None
+bytecode 41 Column 0 3 22 Some("0")
+bytecode 43 Column 3 1 27 None
+bytecode 44 Column 3 0 28 None
+bytecode 45 Column 3 2 22 None
+bytecode 47 Column 3 2 30 None
+bytecode 54 Column 5 0 8 None
+bytecode 55 Column 5 1 9 None
+bytecode 56 Column 5 2 10 None
+bytecode 64 Column 5 0 24 None
+bytecode 65 Column 5 1 25 None
+bytecode 66 Column 5 3 26 None
+candidate
+plan SEARCH facts USING INDEX idx_current_aev (a=?)
+plan LIST SUBQUERY 1
+plan SCAN terms
+plan CREATE BLOOM FILTER
+plan SEARCH scope EXISTS USING INDEX idx_current_g (g=? AND rowid=?)
+plan USE TEMP B-TREE FOR GROUP BY
+bytecode 6 OpenRead 0 8 0 Some("8")
+bytecode 7 OpenRead 5 45 0 Some("k(4,,,,)")
+bytecode 8 OpenRead 3 8 0 Some("8")
+bytecode 9 OpenRead 6 44 0 Some("k(2,,)")
+bytecode 15 DeferredSeek 5 0 0 None
+bytecode 16 Column 5 2 14 None
+bytecode 19 Column 5 2 16 None
+bytecode 26 OpenRead 1 2 0 Some("2")
+bytecode 28 Column 1 1 19 None
+bytecode 38 Column 5 2 23 None
+bytecode 50 DeferredSeek 6 0 3 None
+bytecode 51 Column 5 1 29 None
+bytecode 52 Column 5 0 30 None
+bytecode 53 Column 5 2 23 None
+bytecode 55 Column 5 2 32 None
+bytecode 63 Column 8 0 8 None
+bytecode 64 Column 8 1 9 None
+bytecode 65 Column 8 2 10 None
+bytecode 73 Column 8 0 26 None
+bytecode 74 Column 8 1 27 None
+bytecode 75 Column 8 3 28 None
