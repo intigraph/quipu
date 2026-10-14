@@ -18,6 +18,10 @@ Nothing here is hand-carried. Every figure regenerates:
 | Arm A controls | — | `just bench merge --selftest` (7 properties) |
 | Arms B/C (§6) | `benchmark/replay/` | `cargo run --example replay --features shacl` |
 | Arm B control | — | `cargo run --example replay --features shacl -- --negative-control` |
+| Arm E | `benchmark/shapes/` | `just bench schema`, then `just bench schema-report <results.json>` |
+| Arm E controls | — | `just bench schema --selftest` |
+| Arm F | `benchmark/memory/` | `just bench memory --scratch <fixture-root>`, then `just bench memory-report <output-dir>` |
+| Arm F controls | — | `just bench memory --selftest --scratch <fixture-root>` |
 
 Read each benchmark's `BUILD_REPORT.md` — the honesty record — **before quoting
 a number**. They state what each arm can and cannot establish, and one of the
@@ -78,8 +82,8 @@ Stiwi's to do, and is marked so.
       identical text — so compare rebuilds by `pdftotext`, not by `sha256`.
 - [ ] **STIWI: the submission itself.** Public disclosure from his account. See
       `SUBMISSION.md` in this directory for the prepared metadata (categories,
-      abstract, license) and the one decision that is still open — the reversible
-      corpus blob still reachable in public history at `8b369b2`.
+      abstract, license). The owner accepted the retained public-history exposure
+      on 2026-09-24; that decision is settled and is preserved in the card.
 - [ ] **STIWI (optional): Zenodo DOI.** Only if this artifact is archived
       separately from the repository; nothing in the paper depends on it.
 
@@ -98,3 +102,13 @@ Constrained by the novelty ruling, and the constraint is not cosmetic:
 - Claims stay scoped to the arms actually run. The synthetic arm's precision is
   definitional and §5 says so; the 939 figure is a counterfactual and §7 says
   so; the alias blindness is reported as a measured column, not omitted.
+
+## October research update
+
+[ARM-E-F-RESULTS.md](ARM-E-F-RESULTS.md) is the generated short results note.
+The October revision builds to 16 pages and includes the datatype conflict
+detector miss, provenance-induced row conflicts and the negative indexed
+traversal result. Earlier August build counts above are historical observations.
+The new submission abstract is transcribed from the rebuilt PDF; source and PDF
+tokens are checked for equality. Every new count regenerates from published
+fixtures/results, and all test SQL servers stop after their run.

@@ -1,0 +1,41 @@
+\section{Divergent shape declarations (Arm E)}
+\label{sec:schema}
+
+All earlier merge arms hold the shape contract fixed. Arm E instead tests a
+research orchestration: merge the shape declarations as RDF under a fixed
+SHACL-SHACL meta-shape, validate that contract, then merge data under it and
+validate again. The actual library share-merge APIs perform both merges using
+real common-base envelopes. The meta-shape declares path, bound and datatype
+functional on property-shape nodes. Shape graphs have stable named nodes;
+neither blank-node correspondence nor general SHACL meta-validation is tested.
+
+Five explicit fixtures cover tightening \texttt{maxCount} from two to one,
+loosening a one-value bound, adding a functional property, changing datatype
+from string to integer and removing a shape. Each is repeated with five seed
+identities. Left edits under the old contract and right under its changed
+contract; both source branches are checked valid under their own contracts.
+An independent positive control changes the same bound differently in both
+shape branches and requires a meta-conflict. Positive and negative validation
+controls prove the meta-contract is exercised.
+
+\input{sections/06-shapes-tables}
+
+The cardinality cases behave as the merged contract specifies, including
+conflicts appearing on tightening and dissolving on loosening/removal. Datatype
+evolution exposes a boundary: the shipped detector reads cardinality bounds,
+so it misses the incompatible left-side string in the new integer contract.
+Post-merge validation detects the violation. That rejection is not counted as
+conflict recall, and the invalid candidate must not be admitted by a pipeline
+that treats validation as a gate. Merely merging shape triples does not derive
+a complete conflict policy for every SHACL constraint.
+
+Table~\ref{tab:schema} uses explicit fixture oracles and holds a conflicted slot
+at base for automatic-output accounting, matching Arm A. The library itself
+blocks the entire merge; this normalization is not partial application. The
+Context column is the same changed-subject overlap rule on these literal-only
+fixtures, not an execution of Quit Store. Five identities do not constitute
+five sampled schema-evolution workloads. The orchestration is an experimental
+driver, not a deployed schema synchronization or negotiation feature.
+Regenerate with \texttt{just bench schema} and \texttt{just bench schema-report};
+\texttt{benchmark/shapes/} publishes all three input graphs, changed contracts,
+expected outputs and actual results.

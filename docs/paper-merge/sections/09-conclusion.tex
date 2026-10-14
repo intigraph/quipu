@@ -25,3 +25,12 @@ noted in \S\ref{sec:limits}. And the alias class, which dominates the recorded
 corpus and which this operator cannot see, is where entity resolution would have
 to meet merge --- with the open question being whether its errors are cheaper
 than the divergence it repairs.
+
+The added schema-evolution and relational-layout trials refine that claim.
+Merging declarations first changes cardinality decisions as intended in the
+tested fixtures, but datatype incompatibility still needs validation and a
+resolution policy. Native Dolt JSON already has per-key object merging; typed
+rows avoid some set conflicts while provenance can create others. Their indexed
+queries help two competency questions and hurt the tested traversal join.
+Neither finer conflict granularity nor schema-first orchestration is therefore
+a complete conflict-resolution rule on its own.

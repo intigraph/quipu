@@ -32,7 +32,7 @@
 \large The schema defines the conflict: an implementation and evaluation}
 \author{Steve Brown\thanks{\textsc{orcid}
 \href{https://orcid.org/0009-0009-1720-1785}{\nolinkurl{0009-0009-1720-1785}}.
-With implementation and drafting assistance from Claude (Anthropic).
+With implementation and drafting assistance from Claude (Anthropic) and Codex (OpenAI).
 \textbf{Artifact availability:} the merge operator, the divergence benchmark
 (\texttt{benchmark/mergebench/}) and the recorded-divergence replay corpus
 (\texttt{benchmark/replay/}) behind every number reported here are in the
@@ -41,7 +41,7 @@ names the command that regenerates it.}}
 % Pinned, not \today: main.pdf is committed, so a floating date makes every
 % rebuild differ from the committed artifact for a reason unrelated to the
 % paper. arXiv stamps its own submission date on the PDF regardless.
-\date{30 August 2026}
+\date{13 October 2026}
 
 \begin{document}
 \maketitle
@@ -53,6 +53,8 @@ names the command that regenerates it.}}
 \input{sections/04-implementation}
 \input{sections/05-synthetic}
 \input{sections/06-replay}
+\input{sections/06-shapes}
+\input{sections/06-memory}
 \input{sections/07-limitations}
 \input{sections/08-related}
 \input{sections/09-conclusion}

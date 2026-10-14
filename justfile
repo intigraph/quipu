@@ -134,7 +134,7 @@ paper-merge cmd="build":
         cd docs/paper-merge && rm -f main.aux main.bbl main.blg main.log main.out main.pdf main.fls main.fdb_latexmk; \
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
-# Run a paper benchmark (see benchmark/<name>/README.md): just bench census [--arm control] [--seed N]
+# Run a paper benchmark: census, merge, memory, schema (and their report generators).
 # just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
 #   The default model is the scripted `fake` writer: zero spend. A real model
 #   spends budget; see benchmark/census/agent/README.md before running one.
@@ -143,11 +143,21 @@ bench name *args:
         cargo run --quiet --release --example census -- {{ args }}; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "memory" ]; then \
+        uv run --project benchmark/memory python benchmark/memory/run.py {{ args }}; \
+    elif [ "{{ name }}" = "memory-report" ]; then \
+        uv run --project benchmark/memory python benchmark/memory/render.py {{ args }}; \
+    elif [ "{{ name }}" = "schema" ]; then \
+        cargo run --quiet --release --example shape_e --features shacl -- {{ args }}; \
+    elif [ "{{ name }}" = "schema-report" ]; then \
+        python3 benchmark/shapes/render.py {{ args }}; \
+    elif [ "{{ name }}" = "merge-note" ]; then \
+        python3 benchmark/merge-note.py; \
     elif [ "{{ name }}" = "agents" ]; then \
         cargo build --quiet --release --example census && \
         python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge, agents)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.

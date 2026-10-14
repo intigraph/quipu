@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-13
+
+### Added
+
+- *(install)* Provide qp as a supported Quipu command alias (#521)([ffa37b8](https://github.com/scbrown/quipu/commit/ffa37b8c155e491b58235a6847cdc81f22a7df05))
+- *(wasm)* Enable SHACL, reasoning and lazy semantic search (#506)([34f85cf](https://github.com/scbrown/quipu/commit/34f85cf8433ea2e62e38c90478bb9a784778879e))
+
+### Documentation
+
+- Repair current install examples and rendered book links (#517)([738dad0](https://github.com/scbrown/quipu/commit/738dad0f534cf52a76ccd657032c1899e86e4a6a))
+- *(research)* Add schema evolution and real-Dolt Memory merge studies (#528)([73e9ec7](https://github.com/scbrown/quipu/commit/73e9ec7cb52929ffbac720277761fb573efed663))
+
+### Fixed
+
+- *(query)* Narrow selective named-graph joins before scanning closed subjects (#508)([224f7ee](https://github.com/scbrown/quipu/commit/224f7eecc92b5a838245fa1aadc6b994496dfa57))
+- *(reasoner)* Scope reactive callbacks to the committed graph (#509)([45bea07](https://github.com/scbrown/quipu/commit/45bea073064d4eb6ba61d8a0432d98a575d41570))
+- *(sparql)* Retain selective joins with composed archives (#514)([c8c9d5b](https://github.com/scbrown/quipu/commit/c8c9d5b61dc0f868c8fe9d70695dabd272109ae0))
+- Refuse ambiguous root graph requests (#524)([2222740](https://github.com/scbrown/quipu/commit/222274080ee90e10723d4995a9f14172ced582dd))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 45bea073 (#512)([fe0face](https://github.com/scbrown/quipu/commit/fe0facebadc17247e1b711508a3e9a9fcfeb4848))
+- *(conformance)* Re-derive ledgers at c8c9d5b6 (#516)([5a05e73](https://github.com/scbrown/quipu/commit/5a05e73dd9673e75a25a26f3ec3f0435e4924a1f))
+
+### Perf
+
+- *(sparql)* Avoid repeated dictionary binding in composed queries (#519)([4451889](https://github.com/scbrown/quipu/commit/44518894b37d14ae770b7754c0b6bee365562b3a))
+
 ## [0.12.1] - 2026-10-10
 
 ### Added
