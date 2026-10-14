@@ -59,7 +59,14 @@
             Runs in this tab only.</span></div>
         <div id="sparql-out"></div>
       </div>
-    </section><div id="bad-verdict" hidden aria-live="polite"></div></div>
+    </section><div id="bad-verdict" hidden aria-live="polite"></div>
+    <section><h2>Semantic search</h2><div class="body">
+      <form id="semantic-form"><label for="semantic-query">Find related ideas in this graph</label>
+        <input id="semantic-query" type="search" required placeholder="Describe what you are looking for">
+        <button id="semantic-run" type="submit">Search</button></form>
+      <p class="muted">The first search downloads the model and builds this tab's index. Your query stays in this browser.</p>
+      <div id="semantic-results" aria-live="polite"></div>
+    </div></section></div>
   <div id="view-map" role="tabpanel" aria-labelledby="tab-map" hidden><section id="constellation">
       <h2>Knowledge constellation <span class="note" id="graph-count"></span>
         <a href="#" id="graph-showq">show the query</a></h2>
@@ -179,12 +186,12 @@ browser_evaluate  await window.quipu.delta()
           Server status: <span id="sw-state" class="mono">registering&hellip;</span>
         </p>
         <p class="note">
-          <strong><code class="mono">search</code> is unavailable here and says so.</strong>
-          Semantic search needs embeddings, which need quipu&rsquo;s <code class="mono">onnx</code>
-          feature; this bundle is built without it. <code class="mono">window.quipu.search()</code>
-          <em>rejects</em> with a typed error naming the missing feature &mdash; it never resolves
-          to an empty list, because an empty list is indistinguishable from &ldquo;nothing
-          matched&rdquo;.
+          <code class="mono">window.quipu.search(query, limit)</code> uses a lazy,
+          self-hosted model. <code class="mono">capabilities()</code> reports its state;
+          <code class="mono">validate(shapes, data)</code> returns a real SHACL report.
+          Rejected writes carry <code class="mono">error.validation</code>; they do not
+          turn into empty results. The relative <code class="mono">./search</code> route
+          uses the same worker and model.
         </p></details>
       </article>
 </div>

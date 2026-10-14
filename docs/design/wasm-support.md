@@ -4,6 +4,15 @@
 > Datalog by default. It validates imports and local writes and exposes real
 > validation reports. Semantic search uses a lazy, self-hosted JavaScript ONNX
 > backend; browser federation uses fetch. Section 7 describes this implementation.
+> The shipped page routes `window.quipu.search(query, limit)` through its store
+> worker; the first call loads the model from `pkg/runtime/` and indexes ROOT.
+> `capabilities()` reports the lazy model state. Writes reject with structured
+> `error.validation` reports. `validate(shapes, data)`, `ontology(input)`,
+> `remote(options, sparql, graph)` and `federate(remotes, sparql, floor)` expose
+> the same browser engine and adapters; none sends local edits to a server.
+> Relative `./search`, `./validate` and `./ontology` POST routes relay to that
+> worker too. Asset/network failures reject explicitly rather than returning
+> empty search results. The first search can take longer while the model loads.
 > The earlier measurements and read-only distribution proposal below remain
 > historical design context rather than the explorer's current feature contract.
 >
