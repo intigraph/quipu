@@ -145,6 +145,7 @@ SELECT ?dependent WHERE { ?dependent a:depends_on+ a:${DB_HOST} }
 ```
 
 Re-run the pair below yourself to confirm paths still work before relying on one:
+
 ```sparql
 SELECT (COUNT(*) AS ?n) WHERE { ?s a:depends_on  ?o }   # plain
 SELECT (COUNT(*) AS ?n) WHERE { ?s a:depends_on+ ?o }   # transitive — must be >= plain
@@ -200,7 +201,7 @@ acts. Ask any capability to show its work — `count > 0` — before believing i
 **(e) Asking "what is MISSING?" — the engine refuses the obvious idioms, and a careless client turns
 the refusal into a clean answer.** Verified live 2026-07-15. The SPARQL engine does **not** support:
 
-```
+```text
 FILTER NOT EXISTS { ... }     FILTER(?x IN (...))     VALUES ?x { ... }     MINUS { ... }
 ```
 
@@ -241,6 +242,7 @@ limit — into every launcher-started crew session. It fetches `/stats` live wit
 **fails silent** (exit 0, no output) if Quipu is unreachable, so it can never wedge a session.
 
 Registered in two places, deliberately:
+
 - `~/.gt/hooks-overrides/${BEADS_DB}__crew.json` — the **source of truth**. `gt hooks` generates
   each `settings.json` from base+overrides, so a hand-edit alone would be erased by the next
   `gt hooks sync` (**internal-ref**). The override is what makes the hook survive that.
