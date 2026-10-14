@@ -12,6 +12,11 @@
 .beads/issues.jsonl merge=beads
 
 # Local context is supplied by `quipu git-merge REF`; CI checks without a driver.
+**/pendant/export.nt merge=quipu
+**/pendant/shapes.ttl merge=quipu
+**/pendant/manifest.json merge=quipu
+**/pendant/manifest.ttl merge=quipu
+# Legacy pack directory remains an accepted alias.
 **/qpack/export.nt merge=quipu
 **/qpack/shapes.ttl merge=quipu
 **/qpack/manifest.json merge=quipu
