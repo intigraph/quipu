@@ -6,8 +6,8 @@ this page cannot quietly fall behind the binary.
 
 A note on vocabulary: **the share is the portable artifact.** `quipu share`
 writes its standard text files directly; releases may carry the same files in a
-deterministic `.qpack.tar.gz` archive. The older `pack` and `unpack` commands
-remain for local SQLite compatibility, but a `.qpack.db` is not the published
+deterministic `.pendant.tar.gz` archive. The older `pack` and `unpack` commands
+remain for local SQLite compatibility, but a `.pendant.db` is not the published
 interchange format.
 
 ---
@@ -59,7 +59,7 @@ one for a share bound for an internal forge, where those identifiers are the
 point. `--destination internal` is the single explicit way to say so:
 
 ```text
-quipu share --output qpack/today --destination internal
+quipu share --output pendant/today --destination internal
 ```
 
 It does three things, and the third is what makes the first two safe:
@@ -110,7 +110,7 @@ when you know it, rather than trying to reconstruct it at reconnect time.
 
 ## Stored queries (`queries.ttl`)
 
-A share carries the stored queries `quipu_ask` answers by name, so a qpack
+A share carries the stored queries `quipu_ask` answers by name, so a pendant
 ships its competency questions beside its data. Each query is described as RDF
 in `queries.ttl`; the manifest seals that file's SHA-256 as `queries_hash` and it
 takes part in the `share_id`, so changing one query's text changes the share's
@@ -340,10 +340,10 @@ Plain `quipu merge` without these flags behaves as before.
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
 ```text
-quipu pack <graph-iri> --out <file.qpack.db> [--name N] [--version V] [--space N]
+quipu pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N]
            [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
-quipu pack --verify <file.qpack.db>
-quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
+quipu pack --verify <file.pendant.db>
+quipu unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]
 ```
 
 | Flag | Effect |
@@ -359,7 +359,7 @@ quipu unpack <file.qpack.db> [--into <graph-iri>] [--db <path>]
 
 `--verify` answers whether a legacy SQLite pack is intact before loading it.
 New repository and release workflows use `share` and `import`; they do not
-publish `.qpack.db` files.
+publish `.pendant.db` files.
 
 ## `quipu pack --full` / `quipu restore` — whole-store packs
 
@@ -371,7 +371,7 @@ with it.
 
 ```text
 quipu pack --full [--format text] --destination internal --out <path> [--db <path>]
-quipu restore <file.qpack | text-pack-dir> [--force] [--db <path>]
+quipu restore <file.pendant | text-pack-dir> [--force] [--db <path>]
 ```
 
 | Flag | Effect |
@@ -688,13 +688,13 @@ quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
 quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
 ```
 
-Version attributes for each share directory (adjust `qpack` to your layout):
+Version attributes for each share directory (adjust `pendant` to your layout):
 
 ```gitattributes
-qpack/export.nt merge=quipu
-qpack/shapes.ttl merge=quipu
-qpack/manifest.json merge=quipu
-qpack/manifest.ttl merge=quipu
+pendant/export.nt merge=quipu
+pendant/shapes.ttl merge=quipu
+pendant/manifest.json merge=quipu
+pendant/manifest.ttl merge=quipu
 ```
 
 Start at the repository root with a clean index and worktree. Save the branch
@@ -729,8 +729,8 @@ matches; the decision belongs to the reviewer.
 Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
 
 ```bash
-quipu pendant-resolve "$base" "$ours" "$theirs" qpack conflict:0 ours
-quipu pendant-resolve "$base" "$ours" "$theirs" qpack alias:0 reject
+quipu pendant-resolve "$base" "$ours" "$theirs" pendant conflict:0 ours
+quipu pendant-resolve "$base" "$ours" "$theirs" pendant alias:0 reject
 ```
 
 Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
@@ -745,13 +745,13 @@ the directory is not a multi-file transaction, so the hash gate must pass before
 use. Review and stage the complete directory, then commit:
 
 ```bash
-git add qpack
+git add pendant
 git commit
 quipu pendant-check "$base" "$ours" "$theirs" HEAD
 ```
 
 The wrapper always stops before commit, including clean merges. It reconciles
-whole qpacks after Git because Git may skip individual drivers when one file is
+whole pendants after Git because Git may skip individual drivers when one file is
 unchanged. Blank-node graphs currently refuse divergent merges: canonical blank
 labels are not stable identities across snapshots. Skolemize those nodes first.
 
@@ -774,11 +774,11 @@ that happened elsewhere. This repository's `main` protection uses strict status
 checks, so a squash merge's tree equals the synthetic merge commit the PR check
 tested. It does **not** enforce protection for administrators, so an admin's
 direct push, or an admin merge that skips pending or failing checks, lands a
-qpack that no merge replay has verified. Treat an admin bypass as unverified and
+pendant that no merge replay has verified. Treat an admin bypass as unverified and
 run `quipu pendant-check` on the original base/ours/theirs yourself, or enable
 "include administrators" if that gap is unacceptable.
 
-Measured on the repository's real Datalinks qpack, replacing the same functional
+Measured on the repository's real Datalinks pendant, replacing the same functional
 value on both branches produces a **text conflict**, not a clean double. Git
 writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
