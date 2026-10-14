@@ -366,6 +366,83 @@ mod write_timeout_tests {
         assert!(graphs.to_string().contains("urn:timeout:control"));
     }
 
+    struct BudgetProvider {
+        expire: bool,
+    }
+
+    impl quipu::EmbeddingProvider for BudgetProvider {
+        fn embed_text(&self, _: &str) -> quipu::Result<Vec<f32>> {
+            if self.expire {
+                let deadline =
+                    quipu::time::request_deadline().expect("real handler admission deadline");
+                std::thread::sleep(std::time::Duration::from_millis(
+                    deadline.remaining_millis() + 2,
+                ));
+            }
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+        fn dimension(&self) -> usize {
+            3
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn episode_handler_refuses_expired_batch_then_commits_large_control() {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        store.resolution_config_mut().enabled = true;
+        store.embedding_config_mut().auto_embed = false;
+        store.set_embedding_provider(Arc::new(BudgetProvider { expire: true }));
+        let shared = Arc::new(super::super::StoreHandle::writer_only(store));
+        let input = |count: usize| {
+            let nodes: Vec<_> = (0..count)
+                .map(|i| {
+                    serde_json::json!({
+                        "name": format!("http-document-{i}"), "type": "Document",
+                        "description": "request budget control",
+                        "properties": {"ordinal": i, "category": "control", "status": "committed"}
+                    })
+                })
+                .collect();
+            serde_json::json!({"name": format!("http-batch-{count}"), "nodes": nodes, "edges": []})
+        };
+        let result = TEST_REQUEST_BUDGET_MS
+            .scope(
+                5000,
+                super::super::tools::episode(
+                    axum::extract::State(shared.clone()),
+                    axum::Json(input(57)),
+                ),
+            )
+            .await;
+        let response = result.unwrap_err().into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::REQUEST_TIMEOUT);
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("budget 5000ms"));
+        assert!(!body["error"].as_str().unwrap().contains("exceeded 0ms"));
+        assert!(shared.read().current_facts().unwrap().is_empty());
+        shared
+            .write_lock()
+            .unwrap()
+            .set_embedding_provider(Arc::new(BudgetProvider { expire: false }));
+        let created = TEST_REQUEST_BUDGET_MS
+            .scope(
+                5000,
+                super::super::tools::episode(
+                    axum::extract::State(shared.clone()),
+                    axum::Json(input(200)),
+                ),
+            )
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(created["outcome"], "created");
+        assert!(created["count"].as_u64().unwrap() >= 1200);
+        assert!(shared.read().current_facts().unwrap().len() >= 1200);
+    }
+
     #[tokio::test]
     async fn expired_read_retains_query_timeout_response() {
         let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));

@@ -1,0 +1,10 @@
+Script started on 2026-10-14 01:40:07-04:00 [COMMAND="python3 docs/design/episode-budget-demo/capture.py" <not executed on terminal>]
+SOURCE 8b7a473c4b77056071f66dc8849df02bc3ec2c26
+Private in-memory fixture: synthetic Document nodes; 2ms per embedding; request budget20ms.
+Probe: cargo run --example episode_budget_demo
+nodes=1 elapsed_ms=4 before=0 after=8 result=Ok(Object {"count": Number(8), "episode": String("private-probe-1"), "outcome": String("created"), "resolution_contentions": Array [], "resolution_hints": Array [], "tx_id": Number(1)})
+nodes=19 elapsed_ms=21 before=0 after=0 result=Err(RequestTimeout { elapsed_ms: 21, limit_ms: 20 })
+nodes=57 elapsed_ms=21 before=0 after=0 result=Err(RequestTimeout { elapsed_ms: 21, limit_ms: 20 })
+COMMAND_EXIT 0
+
+Script done on 2026-10-14 01:40:20-04:00 [COMMAND_EXIT_CODE="0"]
