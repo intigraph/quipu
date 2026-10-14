@@ -9,8 +9,9 @@ budget. Both refusals left zero facts. [The actual baseline output](before.txt)
 is a transcript, not a recording.
 
 The candidate checks the deadline during resolution. Watch the original 20 ms
-budget in the error and the unchanged fact counts. The recording identifies its
-source revision. It also includes the one-node commit control.
+budget in the error and the unchanged fact counts. The recording identifies source revision
+`8b7a473c4b77056071f66dc8849df02bc3ec2c26`; the final changes only add the
+recording and caption. It also includes the one-node commit control.
 
 Reproduce from a source checkout with the normal build environment:
 
@@ -31,3 +32,6 @@ This demonstrates private source behavior. It does not establish the production
 configuration or deployed repair. The retained incident payload is not included.
 The CI controls also exercise loaded vocabulary, 50 and 200 nodes, an expired
 batch, atomic refusal, and a subsequent successful write.
+
+The capture uses `python3 docs/design/episode-budget-demo/capture.py` under
+`script`, in the normal guarded build environment. No inline playback is claimed.
