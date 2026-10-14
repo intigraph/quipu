@@ -318,7 +318,10 @@ impl AppError {
     /// disconnected records no status, so an all-200 scrape looks identical
     /// whether the deadline fired constantly or never.
     pub(crate) fn is_query_timeout(&self) -> bool {
-        matches!(self.0, quipu::Error::QueryTimeout { .. })
+        matches!(
+            self.0,
+            quipu::Error::QueryTimeout { .. } | quipu::Error::RequestTimeout { .. }
+        )
     }
 }
 
@@ -337,7 +340,9 @@ impl IntoResponse for AppError {
             // A query that ran out of budget is neither malformed nor a server
             // fault — 408 lets a caller distinguish "narrow your query" from
             // both.
-            quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            quipu::Error::QueryTimeout { .. } | quipu::Error::RequestTimeout { .. } => {
+                StatusCode::REQUEST_TIMEOUT
+            }
             quipu::Error::WriteAdmissionTimeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
             // A join explosion is a property of the QUERY (its error names the
             // limit and how to fix the query) — 422: well-formed, unprocessable

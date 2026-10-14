@@ -288,6 +288,7 @@ pub fn tool_retract_episode(store: &mut Store, input: &JsonValue) -> Result<Json
 
 /// MCP tool: `quipu_episode` -- Ingest structured knowledge from an agent episode.
 pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::time::check_request_deadline()?;
     let ep: Episode = serde_json::from_value(input.clone())
         .map_err(|e| Error::InvalidValue(format!("invalid episode JSON: {e}")))?;
 
@@ -309,7 +310,13 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         &base_ns,
     )?;
     let result =
-        episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))?;
+        episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))
+            .map_err(|error| match (error, crate::time::request_deadline()) {
+                (Error::QueryTimeout { .. }, Some(deadline)) if deadline.passed() => {
+                    deadline.request_timeout()
+                }
+                (other, _) => other,
+            })?;
 
     Ok(serde_json::json!({
         "tx_id": result.tx_id,

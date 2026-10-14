@@ -33,6 +33,7 @@ pub fn epoch_secs() -> u64 {
 pub struct Deadline(
     #[cfg(not(target_arch = "wasm32"))] std::time::Instant,
     #[cfg(target_arch = "wasm32")] f64,
+    u64,
 );
 
 impl Deadline {
@@ -41,11 +42,14 @@ impl Deadline {
     pub fn after_millis(ms: u64) -> Self {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            Self(std::time::Instant::now() + std::time::Duration::from_millis(ms))
+            Self(
+                std::time::Instant::now() + std::time::Duration::from_millis(ms),
+                ms,
+            )
         }
         #[cfg(target_arch = "wasm32")]
         {
-            Self(js_sys::Date::now() + ms as f64)
+            Self(js_sys::Date::now() + ms as f64, ms)
         }
     }
 
@@ -59,6 +63,21 @@ impl Deadline {
         #[cfg(target_arch = "wasm32")]
         {
             js_sys::Date::now() >= self.0
+        }
+    }
+
+    /// Original duration and elapsed time, including work before a query starts.
+    #[must_use]
+    pub fn request_timeout(&self) -> crate::error::Error {
+        #[cfg(not(target_arch = "wasm32"))]
+        let elapsed_ms = std::time::Instant::now()
+            .saturating_duration_since(self.0 - std::time::Duration::from_millis(self.1))
+            .as_millis();
+        #[cfg(target_arch = "wasm32")]
+        let elapsed_ms = (js_sys::Date::now() - (self.0 - self.1 as f64)).max(0.0) as u128;
+        crate::error::Error::RequestTimeout {
+            elapsed_ms,
+            limit_ms: u128::from(self.1),
         }
     }
 
@@ -350,6 +369,17 @@ fn civil_from_days(z: i64) -> (i64, i64, i64) {
 #[must_use]
 pub fn request_deadline() -> Option<Deadline> {
     REQUEST_DEADLINE.with(std::cell::Cell::get)
+}
+
+/// Refuse further work once the admission budget has expired.
+///
+/// # Errors
+/// Returns the original request duration and total elapsed time on expiry.
+pub fn check_request_deadline() -> crate::error::Result<()> {
+    if let Some(deadline) = request_deadline().filter(Deadline::passed) {
+        return Err(deadline.request_timeout());
+    }
+    Ok(())
 }
 
 /// Set the ambient request deadline for this thread, restoring the previous
