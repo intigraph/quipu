@@ -256,6 +256,11 @@ impl Store {
     ) -> Result<Staged> {
         // The human trust-root registry as it stands BEFORE this write
         // (aegis-kzt0ql.9.4). Compared with the post-state below.
+        let workflow_before = if self.governance_config().enforce_workflows {
+            Some(crate::governance::workflow::capture(self, datums, graph)?)
+        } else {
+            None
+        };
         let trust_before = crate::governance::trust_root::snapshot(self)?;
         let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
 
@@ -310,6 +315,11 @@ impl Store {
         // Same contract and refusal plumbing as the placement check above.
         self.verify_transition_signatures(&staged_datums, graph)
             .map_err(|e| self.stash_refusal("transition", e, staged_datums.len()))?;
+
+        if let Some(before) = workflow_before {
+            crate::governance::workflow::validate(self, &before, &staged_datums, graph)
+                .map_err(|e| self.stash_refusal("workflow", e, staged_datums.len()))?;
+        }
 
         // Verdict signature-scheme gate (src/verdict_schemes): a registration
         // declaring an unknown scheme, or a hardware scheme while

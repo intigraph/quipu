@@ -125,11 +125,11 @@ Facts: 853 | Entities: 127 | Predicates: 34
 |  | **Jena/Stardog** | **Graphiti/Mem0** | **Quipu** |
 |--|:----------------:|:-----------------:|:---------:|
 | Strict schema (SHACL)       | ✅ | ❌ | ✅ |
-| Bitemporal time-travel      | ❌ | ❌ | ✅ |
+| Bitemporal time-travel      | ❌ | ✅ Graphiti | ✅ |
 | SPARQL 1.1                  | ✅ | ❌ | ✅ |
 | Datalog reasoner            | ❌ | ❌ | ✅ |
 | Counterfactual queries      | ❌ | ❌ | ✅ |
-| Vector similarity search    | ❌ | ✅ | ✅ |
+| Vector similarity search    | ✅ Stardog | ✅ | ✅ |
 | LanceDB ANN + pushdown      | ❌ | ❌ | ✅ |
 | Agent-friendly feedback     | ❌ | ❌ | ✅ |
 | Episode provenance          | ❌ | ✅ | ✅ |
@@ -138,6 +138,11 @@ Facts: 853 | Entities: 127 | Predicates: 34
 | Embeddable (no server)      | ❌ | ❌ | ✅ |
 | SQLite-backed               | ❌ | ❌ | ✅ |
 | Rust, no JVM or Python      | ❌ | ❌ | ✅ |
+
+Named products in a cell qualify the grouped column: the capability is not
+being attributed to every member. [Graphiti documents explicit bi-temporal
+tracking](https://github.com/getzep/graphiti#graphiti-vs-graphrag), and
+[Stardog's semantic search compares vector embeddings](https://docs.stardog.com/query-stardog/full-text-search).
 
 Traditional RDF stores demand too much ceremony. AI-native stores have no structure.
 Quipu's thesis: **start strict, use agents to bear the cost of strictness.**

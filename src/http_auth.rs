@@ -121,6 +121,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/vendor/three.module.min.js",
     "/health",
     "/version",
+    "/workflow/capabilities",
     "/stats",
     "/.well-known/void",
     // Prometheus scrape: renders in-memory counters + one SQL COUNT aggregate.
@@ -170,6 +171,10 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Canonical share serialization: returns the export and manifest without
     // writing either to the server filesystem.
     "/share",
+    "/acquire",
+    // Read transaction and volatile admission cache only; no fact, registry,
+    // filesystem, or persistent history mutation.
+    "/acquire/composed",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",

@@ -1,0 +1,5 @@
+registered graph control: <https://example.org/item/one> <https://example.org/title> "PROJECT_ONLY" .
+
+producer=8ca2e2c693e23c3082ed7a74871aa184f553cefb dirty=false receipt_scope=["https://example.org/project/board"]
+alias collision acquisition: <https://example.org/item/one> <https://example.org/title> "FOREIGN_COMMENT_ONLY" .
+receipt verification: Ok(())

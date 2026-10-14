@@ -1,0 +1,5 @@
+@prefix demo: <https://example.org/memory/> .
+
+demo:decision-2 a demo:Decision ;
+    demo:text "Require a reproducible example" ;
+    demo:sourceKind "guessed" .

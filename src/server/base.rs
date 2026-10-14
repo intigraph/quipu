@@ -144,6 +144,7 @@ pub(crate) async fn version() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": env!("QUIPU_GIT_SHA"),
         "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
+        "read_contracts": ["quipu-acquisition/v1", "quipu-acquisition/composed-v1"],
         "features": compiled_features(),
     }))
 }
@@ -318,7 +319,10 @@ impl AppError {
     /// disconnected records no status, so an all-200 scrape looks identical
     /// whether the deadline fired constantly or never.
     pub(crate) fn is_query_timeout(&self) -> bool {
-        matches!(self.0, quipu::Error::QueryTimeout { .. })
+        matches!(
+            self.0,
+            quipu::Error::QueryTimeout { .. } | quipu::Error::RequestTimeout { .. }
+        )
     }
 }
 
@@ -337,7 +341,9 @@ impl IntoResponse for AppError {
             // A query that ran out of budget is neither malformed nor a server
             // fault — 408 lets a caller distinguish "narrow your query" from
             // both.
-            quipu::Error::QueryTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
+            quipu::Error::QueryTimeout { .. } | quipu::Error::RequestTimeout { .. } => {
+                StatusCode::REQUEST_TIMEOUT
+            }
             quipu::Error::WriteAdmissionTimeout { .. } => StatusCode::SERVICE_UNAVAILABLE,
             // A join explosion is a property of the QUERY (its error names the
             // limit and how to fix the query) — 422: well-formed, unprocessable
@@ -444,4 +450,28 @@ pub(crate) fn handle_identity_args(args: &[String]) -> bool {
     } else {
         false
     }
+}
+
+/// Direct-workflow clients must prove the guard is enabled before writing.
+/// Only processing capability is exposed, never deployment configuration or keys.
+pub(crate) async fn workflow_capabilities(
+    State(store): State<SharedStore>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let enabled = blocking(move || Ok(store.lock().governance_config().enforce_workflows)).await?;
+    Ok(axum::Json(
+        json!({"enabled": enabled, "signature_version": 2,
+        "revision_required": true, "scope": "same-graph", "write_surface": "/update"}),
+    ))
+}
+
+/// Read-only server status routes, kept with their handlers.
+pub(crate) fn status_routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route("/health", axum::routing::get(health))
+        .route("/version", axum::routing::get(version))
+        .route("/stats", axum::routing::get(stats))
+        .route(
+            "/workflow/capabilities",
+            axum::routing::get(workflow_capabilities),
+        )
 }

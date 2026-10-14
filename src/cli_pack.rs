@@ -90,9 +90,13 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         queries: (no_queries || !queries.is_empty()).then_some(queries),
         parent_share: flag_value(args, "--parent-share").map(String::from),
         turtle_view: args.iter().any(|arg| arg == "--turtle"),
-        // aegis-8fdp8d. Recorded only when the operator names it, so a share
-        // never asserts a repository layout nobody configured.
-        pack_dir: flag_value(args, "--pack-dir").map(String::from),
+        // Stamp the new local default; explicit repository layouts still win.
+        // Legacy manifests without this field keep their old qpack fallback.
+        pack_dir: Some(
+            flag_value(args, "--pack-dir")
+                .unwrap_or(quipu::share::PENDANT_PACK_DIR)
+                .into(),
+        ),
         attest: attest_options(args),
         destination: destination_flag(args),
     };

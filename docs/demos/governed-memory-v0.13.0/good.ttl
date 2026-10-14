@@ -1,0 +1,7 @@
+@prefix demo: <https://example.org/memory/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+demo:decision-2 a demo:Decision ;
+    demo:text "Require a reproducible example" ;
+    demo:sourceKind "declared" ;
+    prov:wasDerivedFrom demo:example-review .

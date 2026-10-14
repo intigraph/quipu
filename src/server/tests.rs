@@ -1,5 +1,8 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[path = "acquisition_tests.rs"]
+mod acquisition_tests;
+
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
 #[path = "search_structured_tests.rs"]
@@ -1527,7 +1530,11 @@ async fn a_federated_query_reports_its_providers() {
 #[test]
 fn book_rest_reference_covers_every_route() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let server_src = std::fs::read_to_string(root.join("src/server.rs")).unwrap();
+    let server_src = format!(
+        "{}\n{}",
+        std::fs::read_to_string(root.join("src/server.rs")).unwrap(),
+        std::fs::read_to_string(root.join("src/server/publication.rs")).unwrap()
+    );
     let page = std::fs::read_to_string(root.join("docs/book/src/reference/rest-api.md")).unwrap();
 
     let mut paths = Vec::new();
@@ -1753,3 +1760,22 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
 #[path = "graph_backfill_temporal_tests.rs"]
 mod graph_backfill_temporal;
+
+#[tokio::test]
+async fn request_deadline_reports_original_budget_as_http_408() {
+    let response = super::base::AppError::from(quipu::Error::RequestTimeout {
+        elapsed_ms: 41,
+        limit_ms: 20,
+    })
+    .into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::REQUEST_TIMEOUT);
+    let bytes = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .unwrap();
+    let output: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let error = output["error"].as_str().unwrap();
+    assert!(error.contains("request deadline"));
+    assert!(error.contains("budget 20ms"));
+    assert!(error.contains("elapsed 41ms"));
+    assert!(!error.contains("query_timeout_ms"));
+}

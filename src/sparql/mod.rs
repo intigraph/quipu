@@ -45,6 +45,7 @@ mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
+mod graph_membership;
 mod group;
 mod join;
 mod progress;

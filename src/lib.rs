@@ -3,6 +3,7 @@
 //! This crate implements an immutable bitemporal EAVT fact log backed by `SQLite`,
 //! designed as a foundation for agent-enforced knowledge graphs.
 
+pub mod acquisition;
 pub mod align;
 pub mod compact;
 pub mod config;
@@ -59,6 +60,7 @@ mod rdf_export;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 mod rdf_graph_store;
 mod rdf_scope;
+pub mod read_pin;
 pub mod reasoner;
 pub mod reconcile;
 pub mod report;

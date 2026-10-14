@@ -537,6 +537,7 @@ impl Store {
             return Ok(false);
         }
 
+        self.invalidate_acquisition_topology();
         for alias in &mounted {
             if !want.contains(&alias.as_str()) {
                 self.conn
@@ -584,6 +585,7 @@ impl Store {
     /// SQL — the in-process half of what `open_with_attachments` does at
     /// startup, so a freeze needs no server restart.
     fn mount_attachment(&mut self, attachment: Attachment) -> Result<()> {
+        self.invalidate_acquisition_topology();
         attach::attach_all(&self.conn, std::slice::from_ref(&attachment))?;
         let mut all = self.attachments.clone();
         all.push(attachment);
@@ -601,6 +603,7 @@ impl Store {
     /// Detach one attachment, drop its registered graph rows, and rebuild the
     /// composed SQL.
     fn unmount_attachment(&mut self, alias: &str) -> Result<()> {
+        self.invalidate_acquisition_topology();
         self.conn
             .execute("DELETE FROM main.graphs WHERE source = ?1", params![alias])?;
         self.conn
