@@ -82,6 +82,42 @@ fn datatype_readonly_uninterned_iris_are_bound_without_dictionary_writes() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn readonly_filter_transients_stop_at_the_cap_without_breaking_admitted_terms() {
+    use crate::store::terms::READ_ONLY_TRANSIENT_LIMIT;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("cap.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let store = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    let datatype = "http://www.w3.org/2001/XMLSchema#date";
+    let text = format!(
+        "SELECT ?dt WHERE {{ BIND(DATATYPE(\"2026-10-14\"^^<{datatype}>) AS ?dt) FILTER(?dt = <{datatype}>) }}"
+    );
+    assert_eq!(query(&store, &text).unwrap().rows().len(), 1);
+    // Every distinct unknown constant IRI in a read-only FILTER is one transient.
+    let mut n = 0;
+    while store.transient_term_len() < READ_ONLY_TRANSIENT_LIMIT {
+        let q = format!("ASK {{ FILTER(<urn:test:cap:{n}> = <urn:test:cap:{n}>) }}");
+        query(&store, &q).unwrap();
+        n += 1;
+        assert!(
+            n <= READ_ONLY_TRANSIENT_LIMIT,
+            "FILTER constants are not reaching transients"
+        );
+    }
+    let q = "SELECT ?dt WHERE { BIND(DATATYPE(\"v\"^^<urn:test:past-the-cap>) AS ?dt) }";
+    let past = query(&store, q).unwrap();
+    assert_eq!(
+        past.rows()[0].get("dt"),
+        None,
+        "past the cap a new datatype stays unbound"
+    );
+    assert_eq!(store.transient_term_len(), READ_ONLY_TRANSIENT_LIMIT);
+    // A term admitted before the cap still binds, and to the same id.
+    assert_eq!(query(&store, &text).unwrap().rows().len(), 1);
+}
+
+#[test]
 fn datatype_writable_result_retains_a_persisted_term_id() {
     let store = Store::open_in_memory().unwrap();
     let datatype = "urn:test:writable-datatype";

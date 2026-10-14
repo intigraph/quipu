@@ -13,6 +13,10 @@ use super::Store;
 use super::{Connection, intern_in_space, local_term_space};
 use crate::error::{Error, Result};
 
+/// Cap on transient terms admitted for read-only FILTER and `DATATYPE()`
+/// constants (see [`Store::query_ref_bounded`]).
+pub(crate) const READ_ONLY_TRANSIENT_LIMIT: usize = 4096;
+
 /// Memoized `id <-> IRI` dictionary, populated on demand by [`Store::resolve`]
 /// and [`Store::lookup`].
 ///
@@ -330,13 +334,33 @@ impl Store {
     /// Existing terms retain their persisted id so remote bindings join with local data.
     /// Unpersisted terms receive a store-local negative id held solely in the result cache;
     /// it resolves for serialization but can never be mistaken for a persisted fact id.
+    #[cfg(feature = "remote")]
     pub(crate) fn query_ref(&self, iri: &str) -> Result<i64> {
+        self.transient_ref(iri, None)?
+            .ok_or_else(|| Error::Store("unbounded transient admission refused a term".into()))
+    }
+
+    /// [`Store::query_ref`] for constants a read-only FILTER or `DATATYPE()` names.
+    ///
+    /// Those transients live as long as the pooled read connection, and every
+    /// distinct unknown IRI in any query would add one. So admission stops at
+    /// [`READ_ONLY_TRANSIENT_LIMIT`]: past it a new unknown IRI is `None`, which
+    /// is what an unpersisted IRI evaluated to before transients were used here.
+    /// Already-admitted terms keep resolving, and no id is ever reused.
+    pub(crate) fn query_ref_bounded(&self, iri: &str) -> Result<Option<i64>> {
+        self.transient_ref(iri, Some(READ_ONLY_TRANSIENT_LIMIT))
+    }
+
+    fn transient_ref(&self, iri: &str, limit: Option<usize>) -> Result<Option<i64>> {
         if let Some(id) = self.lookup(iri)? {
-            return Ok(id);
+            return Ok(Some(id));
         }
         let mut cache = self.term_cache.borrow_mut();
         if let Some(id) = cache.transient_iri_to_id.get(iri) {
-            return Ok(*id);
+            return Ok(Some(*id));
+        }
+        if limit.is_some_and(|limit| cache.transient_iri_to_id.len() >= limit) {
+            return Ok(None);
         }
         let id = cache.next_transient_id;
         cache.next_transient_id = cache
@@ -345,6 +369,12 @@ impl Store {
             .ok_or_else(|| Error::Store("transient query term id space exhausted".into()))?;
         cache.transient_id_to_iri.insert(id, iri.to_string());
         cache.transient_iri_to_id.insert(iri.to_string(), id);
-        Ok(id)
+        Ok(Some(id))
+    }
+
+    /// Transient terms currently held. Test surface.
+    #[cfg(test)]
+    pub(crate) fn transient_term_len(&self) -> usize {
+        self.term_cache.borrow().transient_iri_to_id.len()
     }
 }

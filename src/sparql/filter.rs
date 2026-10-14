@@ -319,7 +319,7 @@ pub(super) fn lexical(v: &Value) -> Option<String> {
 /// reference representation as remote query bindings, without database writes.
 fn datatype_ref(store: &Store, iri: &str) -> Option<Value> {
     let id = if store.conn.is_readonly("main").ok()? {
-        store.query_ref(iri).ok()?
+        store.query_ref_bounded(iri).ok()??
     } else {
         store.intern(iri).ok()?
     };
@@ -332,7 +332,11 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
         Expression::NamedNode(n) => {
             if store.conn.is_readonly("main").ok()? {
-                store.query_ref(n.as_str()).ok().map(Value::Ref)
+                store
+                    .query_ref_bounded(n.as_str())
+                    .ok()
+                    .flatten()
+                    .map(Value::Ref)
             } else {
                 store.lookup(n.as_str()).ok().flatten().map(Value::Ref)
             }
