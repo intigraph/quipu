@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::namespace;
 use crate::store::Store;
+use crate::vector::VectorMatch;
 
 mod matching;
 #[cfg(test)]
@@ -138,8 +139,6 @@ fn resolve_one(
     top_k: usize,
     excluded: &[String],
 ) -> Result<ResolutionResult> {
-    let mut candidates = Vec::new();
-
     // Phase 1: Vector similarity search.
     // Build text from name + properties, embed it, search the vector store.
     crate::time::check_request_deadline()?;
@@ -147,12 +146,71 @@ fn resolve_one(
 
     let embedding = store.embed_query(&text)?;
     crate::time::check_request_deadline()?;
-    if let Some(embedding) = embedding {
-        let vs = store.vector_store();
+    let matches = match embedding {
         // Oversample to allow room after threshold filtering.
-        let matches = vs.vector_search(&embedding, top_k * 3, None)?;
+        Some(embedding) => Some(
+            store
+                .vector_store()
+                .vector_search(&embedding, top_k * 3, None)?,
+        ),
+        None => None,
+    };
+    resolve_with_matches(
+        store,
+        index,
+        name,
+        threshold,
+        top_k,
+        excluded,
+        matches.as_deref(),
+    )
+}
 
-        for m in &matches {
+/// Phase 1 for a whole batch: embed every text, then ONE vector search call.
+///
+/// Result `i` is what [`resolve_one`] would have searched for `texts[i]`:
+/// `None` where no embedding provider answers, else the same oversampled
+/// top-`top_k * 3` matches (aegis-nmuwsi).
+///
+/// # Errors
+/// Propagates embedding and store failures, and the request deadline.
+pub(crate) fn batch_vector_matches(
+    store: &Store,
+    texts: &[String],
+    top_k: usize,
+) -> Result<Vec<Option<Vec<VectorMatch>>>> {
+    let mut embeddings = Vec::with_capacity(texts.len());
+    for text in texts {
+        crate::time::check_request_deadline()?;
+        embeddings.push(store.embed_query(text)?);
+    }
+    crate::time::check_request_deadline()?;
+    let queries: Vec<&[f32]> = embeddings.iter().flatten().map(Vec::as_slice).collect();
+    let mut searched = store
+        .vector_store()
+        .vector_search_batch(&queries, top_k * 3, None)?
+        .into_iter();
+    crate::time::check_request_deadline()?;
+    Ok(embeddings
+        .iter()
+        .map(|e| e.as_ref().and_then(|_| searched.next()))
+        .collect())
+}
+
+/// Everything after the vector search, given its matches (`None` = no provider).
+pub(crate) fn resolve_with_matches(
+    store: &Store,
+    index: &LabelIndex,
+    name: &str,
+    threshold: f64,
+    top_k: usize,
+    excluded: &[String],
+    vector_matches: Option<&[VectorMatch]>,
+) -> Result<ResolutionResult> {
+    let mut candidates = Vec::new();
+
+    if let Some(matches) = vector_matches {
+        for m in matches {
             if m.score >= threshold {
                 let iri = store.resolve(store.canonical_id(m.entity_id)?)?;
                 candidates.push(EntityCandidate {
@@ -191,7 +249,7 @@ fn resolve_one(
 }
 
 /// Build embeddable text for resolution from a name and optional properties.
-fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String {
+pub(crate) fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String {
     let mut parts = vec![name.to_string()];
     for (k, v) in properties {
         parts.push(format!("{k}: {v}"));

@@ -72,6 +72,26 @@ pub trait KnowledgeVectorStore {
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>>;
 
+    /// Several [`vector_search`](Self::vector_search)es at once, one result per
+    /// query, each identical to searching that query alone.
+    ///
+    /// Entity resolution runs one search per node of an episode. On the built-in
+    /// `SQLite` backend each search is a brute-force scan of every stored vector,
+    /// so a 20-node episode read the whole vector table 20 times under the writer
+    /// lock (aegis-nmuwsi). That backend overrides this with ONE scan scoring
+    /// every query; this default keeps every other backend's behaviour unchanged.
+    fn vector_search_batch(
+        &self,
+        queries: &[&[f32]],
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<Vec<VectorMatch>>> {
+        queries
+            .iter()
+            .map(|query| self.vector_search(query, limit, valid_at))
+            .collect()
+    }
+
     /// Search with an optional predicate pushdown filter.
     ///
     /// The `filter` is a SQL-like WHERE clause fragment (e.g.
@@ -220,6 +240,15 @@ impl KnowledgeVectorStore for Store {
         self.scan_vectors(query, limit, valid_at, Some(keep))
     }
 
+    fn vector_search_batch(
+        &self,
+        queries: &[&[f32]],
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<Vec<VectorMatch>>> {
+        self.scan_vectors_batch(queries, limit, valid_at)
+    }
+
     fn vector_count(&self) -> Result<usize> {
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM vectors WHERE valid_to IS NULL",
@@ -314,7 +343,16 @@ impl Store {
         };
         drop(sort_trace);
         let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);
+        self.fetch_vector_matches(scored, valid_at)
+    }
 
+    /// Text and validity for scored survivors, in the order given (same
+    /// validity filter as the scan, so the row scored is the row read back).
+    fn fetch_vector_matches(
+        &self,
+        scored: Vec<(i64, f64)>,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<VectorMatch>> {
         // Fetch text + validity for the survivors only (same validity filter, so
         // the row scored is the row read back).
         let text_sql = if valid_at.is_some() {
@@ -356,6 +394,69 @@ impl Store {
             }
         }
         Ok(matches)
+    }
+
+    /// One brute-force scan scoring every query; result `i` equals
+    /// `scan_vectors(queries[i], limit, valid_at, None)`.
+    ///
+    /// Each query keeps a bounded top-`limit` instead of a score per row, and the
+    /// survivors are ordered by score descending with scan order breaking ties,
+    /// which is what the stable sort-then-truncate in `scan_vectors` yields.
+    fn scan_vectors_batch(
+        &self,
+        queries: &[&[f32]],
+        limit: usize,
+        valid_at: Option<&str>,
+    ) -> Result<Vec<Vec<VectorMatch>>> {
+        if queries.is_empty() {
+            return Ok(Vec::new());
+        }
+        let sql = if valid_at.is_some() {
+            "SELECT entity_id, embedding FROM vectors \
+             WHERE valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1)"
+        } else {
+            "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL"
+        };
+        let scan_trace = crate::search_trace::phase(crate::search_trace::Phase::Scan);
+        let mut stmt = self.conn.prepare(sql)?;
+        let mut rows = if let Some(vt) = valid_at {
+            stmt.query(params![vt])?
+        } else {
+            stmt.query([])?
+        };
+
+        let mut tops: Vec<TopK> = queries.iter().map(|_| TopK::new(limit)).collect();
+        let mut seq = 0usize;
+        while let Some(row) = rows.next()? {
+            // The scan is the long phase of a write's resolution pass; honour the
+            // request deadline inside it, not only around it (aegis-xi0).
+            if seq % 4096 == 0 {
+                crate::time::check_request_deadline()?;
+            }
+            let entity_id: i64 = row.get(0)?;
+            let blob: Vec<u8> = row.get(1)?;
+            let stored = bytes_to_f32_slice(&blob);
+            for (query, top) in queries.iter().zip(tops.iter_mut()) {
+                if !stored.is_empty() && stored.len() != query.len() {
+                    return Err(crate::Error::Store(format!(
+                        "embedding dimension mismatch: query has {} dims but the stored \
+                         vector for entity {} has {} — re-embed after changing the \
+                         embedding model/dimension",
+                        query.len(),
+                        entity_id,
+                        stored.len()
+                    )));
+                }
+                top.offer(cosine_similarity(query, &stored), seq, entity_id);
+            }
+            seq += 1;
+        }
+        drop(scan_trace);
+
+        let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);
+        tops.into_iter()
+            .map(|top| self.fetch_vector_matches(top.into_sorted(), valid_at))
+            .collect()
     }
 
     /// Return a reference to this store's vector backend.
@@ -406,6 +507,80 @@ pub(crate) fn bytes_to_f32_slice(data: &[u8]) -> Vec<f32> {
         .iter()
         .map(|chunk| f32::from_le_bytes(*chunk))
         .collect()
+}
+
+/// Bounded top-`k` by score, ties broken by scan order (earlier wins).
+///
+/// Equivalent to collecting every `(score, seq)`, stable-sorting by score
+/// descending and truncating to `k`, without holding a score per stored row.
+struct TopK {
+    k: usize,
+    items: Vec<(f64, usize, i64)>,
+    worst: usize,
+}
+
+impl TopK {
+    fn new(k: usize) -> Self {
+        Self {
+            k,
+            items: Vec::with_capacity(k),
+            worst: 0,
+        }
+    }
+
+    /// Whether `a` ranks ahead of `b`: higher score, or equal score seen first.
+    fn ahead(a: (f64, usize), b: (f64, usize)) -> bool {
+        match a.0.partial_cmp(&b.0) {
+            Some(std::cmp::Ordering::Greater) => true,
+            Some(std::cmp::Ordering::Less) => false,
+            _ => a.1 < b.1,
+        }
+    }
+
+    fn offer(&mut self, score: f64, seq: usize, entity_id: i64) {
+        if self.k == 0 {
+            return;
+        }
+        if self.items.len() < self.k {
+            self.items.push((score, seq, entity_id));
+            if self.items.len() == self.k {
+                self.recompute_worst();
+            }
+            return;
+        }
+        let w = self.items[self.worst];
+        if Self::ahead((score, seq), (w.0, w.1)) {
+            self.items[self.worst] = (score, seq, entity_id);
+            self.recompute_worst();
+        }
+    }
+
+    fn recompute_worst(&mut self) {
+        let mut worst = 0;
+        for i in 1..self.items.len() {
+            let (a, b) = (self.items[i], self.items[worst]);
+            if Self::ahead((b.0, b.1), (a.0, a.1)) {
+                worst = i;
+            }
+        }
+        self.worst = worst;
+    }
+
+    fn into_sorted(mut self) -> Vec<(i64, f64)> {
+        self.items.sort_by(|a, b| {
+            if Self::ahead((a.0, a.1), (b.0, b.1)) {
+                std::cmp::Ordering::Less
+            } else if Self::ahead((b.0, b.1), (a.0, a.1)) {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        self.items
+            .into_iter()
+            .map(|(score, _, id)| (id, score))
+            .collect()
+    }
 }
 
 #[cfg(test)]

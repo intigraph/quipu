@@ -161,3 +161,54 @@ fn vector_store_trait_object() {
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].entity_id, eid);
 }
+
+/// `vector_search_batch` on the built-in SQLite backend must return, for every
+/// query, exactly what `vector_search` returns for that query alone: same
+/// entities, same scores, same order, ties included (aegis-nmuwsi).
+#[test]
+fn batch_search_equals_one_search_per_query_including_ties() {
+    let store = Store::open_in_memory().unwrap();
+    let dims = 4;
+    // Deterministic vectors with deliberate exact duplicates, so ties exist.
+    let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        #[allow(clippy::cast_precision_loss)]
+        let x = (seed % 2001) as f32 / 1000.0 - 1.0;
+        x
+    };
+    let mut stored: Vec<Vec<f32>> = Vec::new();
+    for id in 1..=300_i64 {
+        let v: Vec<f32> = if id % 7 == 0 {
+            stored[(id as usize) / 2].clone() // exact duplicate -> tie
+        } else {
+            (0..dims).map(|_| next()).collect()
+        };
+        store
+            .embed_entity(id, &format!("entity {id}"), &v, "2026-01-01T00:00:00Z")
+            .unwrap();
+        stored.push(v);
+    }
+    let queries: Vec<Vec<f32>> = vec![
+        stored[0].clone(),
+        stored[13].clone(),
+        (0..dims).map(|_| next()).collect(),
+        vec![1.0, 0.0, 0.0, 0.0],
+    ];
+    let refs: Vec<&[f32]> = queries.iter().map(Vec::as_slice).collect();
+    for limit in [0, 1, 3, 15, 299, 1000] {
+        let batch = store.vector_search_batch(&refs, limit, None).unwrap();
+        assert_eq!(batch.len(), queries.len());
+        for (q, got) in refs.iter().zip(&batch) {
+            let want = store.vector_search(q, limit, None).unwrap();
+            let got: Vec<(i64, f64, &str)> =
+                got.iter().map(|m| (m.entity_id, m.score, m.text.as_str())).collect();
+            let want: Vec<(i64, f64, &str)> =
+                want.iter().map(|m| (m.entity_id, m.score, m.text.as_str())).collect();
+            assert_eq!(got, want, "limit {limit}");
+        }
+    }
+    assert!(store.vector_search_batch(&[], 5, None).unwrap().is_empty());
+}
