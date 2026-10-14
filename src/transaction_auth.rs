@@ -215,6 +215,7 @@ pub(crate) fn begin(
 /// Called immediately after creating a transaction, inside its savepoint.
 /// The evidence therefore commits or rolls back with the exact transaction.
 pub(crate) fn record(conn: &Connection, tx_id: i64) -> crate::Result<()> {
+    crate::write_provenance::record(conn, tx_id)?;
     IDENTITY.with(|slot| {
         if let Some(identity) = slot.borrow().as_ref() {
             // A signed write mutates only once its nonce is spent and its

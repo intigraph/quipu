@@ -232,7 +232,7 @@ pub(crate) async fn transactions(
             .map(|t| {
                 Ok(
                     json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor,
-                    "source": t.source, "authenticated": store.transaction_auth(t.id)? }),
+                    "source": t.source, "authenticated": store.transaction_auth(t.id)?, "declared": store.transaction_declarations(t.id)?, "qualified_tx": { "provider": "main", "source_store_id": store.store_id()?, "local_tx": t.id } }),
                 )
             })
             .collect::<quipu::Result<_>>()?;

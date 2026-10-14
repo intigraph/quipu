@@ -65,3 +65,49 @@ fn scope_carries_and_restores() {
     });
     assert!(current().is_none());
 }
+
+#[test]
+fn committed_declarations_are_atomic_bounded_and_not_authentication() {
+    let mut store = crate::Store::open_in_memory().unwrap();
+    let p = Arc::new(class([
+        Some("actor"),
+        Some("service"),
+        Some("host-a"),
+        None,
+        None,
+    ]));
+    let tx = scoped(Some(p), || {
+        store.transact(&[], "2026-01-01T00:00:00Z", Some("different"), None)
+    })
+    .unwrap();
+    assert_eq!(
+        store.transaction_declarations(tx).unwrap().unwrap()["host"],
+        "host-a"
+    );
+    assert!(store.transaction_auth(tx).unwrap().is_none());
+    let plain = store
+        .transact(&[], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    assert!(store.transaction_declarations(plain).unwrap().is_none());
+    store
+        .conn
+        .execute_batch("SAVEPOINT declared_rollback")
+        .unwrap();
+    let tx = scoped(
+        Some(Arc::new(class([None, None, Some("host-b"), None, None]))),
+        || store.transact(&[], "2026-01-01T00:00:00Z", None, None),
+    )
+    .unwrap();
+    assert!(store.transaction_declarations(tx).unwrap().is_some());
+    store
+        .conn
+        .execute_batch("ROLLBACK TO declared_rollback; RELEASE declared_rollback")
+        .unwrap();
+    assert!(store.transaction_declarations(tx).unwrap().is_none());
+    let oversized = "x".repeat(1025);
+    assert!(
+        !class([None, None, Some(&oversized), None, None])
+            .declarations
+            .contains_key("host")
+    );
+}

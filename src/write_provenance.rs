@@ -54,6 +54,8 @@ pub struct RequestProvenance {
     pub completeness: Completeness,
     /// Required fields the request did not declare, as names from `FIELDS`.
     pub missing: Vec<&'static str>,
+    /// Bounded caller declarations. Never authenticated identity or metric labels.
+    pub declarations: std::collections::BTreeMap<String, String>,
 }
 
 /// A header value counts as declared when it has a printable character. A
@@ -90,6 +92,15 @@ impl RequestProvenance {
             endpoint: endpoint.to_string(),
             completeness,
             missing,
+            declarations: FIELDS
+                .into_iter()
+                .zip(values)
+                .filter_map(|(key, value)| {
+                    value
+                        .filter(|v| declared(Some(v)) && v.len() <= 1024)
+                        .map(|v| (key.to_string(), v.to_string()))
+                })
+                .collect(),
         }
     }
 }
@@ -130,3 +141,48 @@ pub fn current() -> Option<Arc<RequestProvenance>> {
 #[cfg(test)]
 #[path = "write_provenance_tests.rs"]
 mod tests;
+
+/// Retain declared provenance inside the fact transaction's savepoint.
+pub(crate) fn record(conn: &rusqlite::Connection, tx: i64) -> crate::Result<()> {
+    if let Some(provenance) = current() {
+        conn.execute(
+            "INSERT INTO transaction_declarations (tx, declarations) VALUES (?1, ?2)",
+            rusqlite::params![
+                tx,
+                serde_json::to_string(&provenance.declarations)
+                    .map_err(|e| crate::Error::Serialization(e.to_string()))?
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+impl crate::Store {
+    /// Historical missing declarations remain unknown; never infer a host from actor.
+    pub fn transaction_declarations(
+        &self,
+        tx: i64,
+    ) -> crate::Result<Option<std::collections::BTreeMap<String, String>>> {
+        use rusqlite::OptionalExtension;
+        let exists: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='transaction_declarations')",
+            [], |row| row.get(0),
+        )?;
+        if !exists {
+            return Ok(None);
+        }
+        let value: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT declarations FROM transaction_declarations WHERE tx=?1",
+                [tx],
+                |row| row.get(0),
+            )
+            .optional()?;
+        value
+            .map(|text| {
+                serde_json::from_str(&text).map_err(|e| crate::Error::Serialization(e.to_string()))
+            })
+            .transpose()
+    }
+}

@@ -48,6 +48,8 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    ("transaction_declarations", "tx", TermIdKind::None),
+    ("transaction_declarations", "declarations", TermIdKind::None),
     ("store_identity", "id", TermIdKind::None),
     ("store_identity", "store_id", TermIdKind::None),
     ("facts", "e", TermIdKind::Id),
