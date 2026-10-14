@@ -22,7 +22,11 @@
 # Docker publishes the same official image on ECR Public. Shared CI runners
 # exhausted Docker Hub's anonymous pull quota before the image smoke could run.
 # Keep CI and release on this shared reference; no credentials are required.
-FROM public.ecr.aws/docker/library/debian:trixie-slim
+# CI overrides BASE_IMAGE with a locally tagged copy of the same digest, pulled
+# with fallbacks, because ECR Public's anonymous data limit also runs out on
+# shared runners (429 "Data limit exceeded"). Release builds use this default.
+ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
+FROM ${BASE_IMAGE}
 
 # The registry refuses to list the image unless this equals server.json `name`.
 # scripts/ci/mcp-registry.py check keeps the two in step.
