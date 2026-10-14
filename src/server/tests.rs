@@ -1530,7 +1530,11 @@ async fn a_federated_query_reports_its_providers() {
 #[test]
 fn book_rest_reference_covers_every_route() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let server_src = std::fs::read_to_string(root.join("src/server.rs")).unwrap();
+    let server_src = format!(
+        "{}\n{}",
+        std::fs::read_to_string(root.join("src/server.rs")).unwrap(),
+        std::fs::read_to_string(root.join("src/server/publication.rs")).unwrap()
+    );
     let page = std::fs::read_to_string(root.join("docs/book/src/reference/rest-api.md")).unwrap();
 
     let mut paths = Vec::new();

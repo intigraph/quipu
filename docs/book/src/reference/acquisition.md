@@ -9,15 +9,14 @@ Historical acquisition through `/share` is unsupported.
 {
   "source_store_id": "the-known-source-lineage-id",
   "graphs": [
-    "https://example.org/project/board",
-    "https://example.org/project/comments"
+    "https://example.org/project/board"
   ],
   "tx": 42,
   "max_bytes": 262144
 }
 ```
 
-The expected store identity and exact project/comment graph IRIs come from
+The expected store identity and exact required graph IRIs come from
 trusted consumer configuration. The endpoint requires 1–16 distinct registered
 committed graphs. It never expands a dataset, includes ROOT implicitly, follows
 an overlay, accepts arbitrary queries, or pages its response. An unknown graph
@@ -90,3 +89,68 @@ the source would discard the distinction the receipt preserves.
 `/query` also validates its `tx` field without coercion. A transaction pin cannot
 be combined with `valid_at` or `fork` at this remote boundary. This restriction
 does not change the internal bitemporal evaluator's independent time axes.
+
+## Composed service acquisition
+
+`POST /acquire/composed` uses the separate
+`quipu-acquisition/composed-v1` contract. `/acquire` retains its blanket
+attachment refusal. Consumers must gate on the new `/version.read_contracts`
+entry and retain the returned source receipt unchanged.
+
+This first composed profile selects only registered, committed MAIN graphs.
+Other providers remain mounted and appear in a complete, bounded census, with
+`outside-qualified-main-scope` exclusions. Required unknown or attached graphs,
+dataset aliases, overlays, frozen selections, overlapping graph ownership, and
+selected identities affected by composed term aliases refuse. The direct-main
+reader explicitly differs from composed `/query` resolution: its advertised
+reader is `qualified-main-committed/v1`. The ownership digest binds the full
+selected graph label cache and configured floor. This first profile supports
+cache-only, timeless label-floor evaluation; expiring labels or trust-derived
+floor inputs refuse rather than borrowing unbound meta-graph history.
+
+The request adds `expected_generation` to the v1 fields. It is optional for
+present capture, but required with any explicit `tx`: capture the admitted
+generation first, then submit that token with the MAIN pin. Equal transaction
+integers cannot identify a composition. The response
+contains `graphs`, `source_receipt`, and `source_receipt_sha256`. The receipt
+contains its own `schema`, `complete`, a nested `main` receipt with schema
+`quipu-acquisition/main-direct-v1`, and `composition`. The main receipt's
+`applied_tx` applies only to MAIN. Composition binds the connection incarnation,
+selected ownership and policy digest, and every mounted provider's alias,
+lineage, opaque physical identity, byte hash, manifest hash, local head, term
+space, graph inventory, and exclusion. It is not a global transaction clock.
+
+The server serializes topology access on its canonical store handle and holds
+one MAIN read transaction. On Linux x86-64 and AArch64, read leases retain the
+provider files during census, hashing, selected reads, and final checks.
+The lease fence also refuses an existing SIGIO handler or blocked/pending
+notification on its synchronous thread. Existing writers, a lease break,
+mutable journal content, replacement, or a
+change in physical file identity refuse. Read-only mount configuration alone
+is insufficient. Other platforms refuse attached composed acquisition while
+still allowing the attachment-free direct-main profile.
+
+Historical admission starts at the connection's first successful observation
+of that scope and fenced topology. The composition's `history_min_tx` records
+this floor separately from retained MAIN transaction history. Changing topology
+or policy resets the floor; restarting creates a new incarnation. Runtime
+mount, unmount, or synchronized remount invalidates the incarnation before the
+transition, even if the same file returns or a transition fails. An old MAIN
+pin cannot retroactively use a newly attached pack. A previously observed pin
+can be reused under its unchanged generation after ordinary MAIN data writes.
+An expected-generation mismatch refuses rather than silently resealing data.
+
+Limits are 16 selected graphs, 16 mounted providers, 512 named graphs per
+provider, 256 MiB of aggregate provider identity reads, 100,000 selected rows
+per graph, an 8 MiB response, and a ten-second operation ceiling. A shorter
+request deadline also applies. Caller `max_bytes` only lowers the response
+ceiling; graph bytes consume one aggregate budget during reading rather than
+accumulating a separate full allowance per graph. Unsupported RDF values, including raw byte values, refuse. No error
+returns a complete receipt or falls back to an empty or present-state export.
+
+Profiles must name their actual required scope. Committed comments may reside
+in the project graph itself; do not invent a separate comments graph. A
+committed-project profile that excludes derived ephemerals does not satisfy a
+full SDK snapshot requiring them. Unknown required sidegraphs refuse. Producer
+source tests and a version advertisement do not establish configured adapter
+acceptance, installed publication, or runtime activation.

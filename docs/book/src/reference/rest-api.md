@@ -213,7 +213,10 @@ requires the proxy to select the corresponding downstream Quipu credential.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
-For a coherent, pinned source receipt, use `POST /acquire`;
+For a coherent, pinned source receipt, use `POST /acquire` for a single file,
+or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
+providers. The latter uses a separate version-gated contract and refuses
+unsupported required attached or derived scope;
 see [atomic acquisition](acquisition.md) for its versioned contract.
 
 `POST /share` is also read-only. It returns the canonical Git-share manifest and

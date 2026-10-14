@@ -393,7 +393,7 @@ async fn main() {
         .route("/export", post(publication::export))
         .merge(graph_store::routes())
         .route("/share", post(publication::share_payload))
-        .route("/acquire", post(publication::acquire))
+        .merge(publication::acquisition_routes())
         .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))

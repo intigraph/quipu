@@ -10,6 +10,16 @@ use serde_json::json;
 
 use crate::{Error, Result, Store};
 
+/// Versioned, qualified-main acquisition with a fenced attachment census.
+pub mod composed;
+
+#[path = "acquisition/census.rs"]
+mod census;
+#[path = "acquisition/main_graph.rs"]
+mod main_graph;
+#[path = "acquisition/provider_fence.rs"]
+mod provider_fence;
+
 /// Fixed response ceiling, shared with the payload-returning share endpoint.
 pub const MAX_BYTES: usize = crate::share::SHARE_PAYLOAD_MAX_BYTES;
 

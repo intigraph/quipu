@@ -9,6 +9,12 @@ use super::{
     tools::finish_deferred_embed,
 };
 
+pub(crate) fn acquisition_routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route("/acquire", axum::routing::post(acquire))
+        .route("/acquire/composed", axum::routing::post(acquire_composed))
+}
+
 pub(crate) async fn acquire(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<quipu::acquisition::Request>,
@@ -16,6 +22,21 @@ pub(crate) async fn acquire(
     super::admission::read_blocking(move || {
         let store = store.read();
         Ok(axum::Json(quipu::acquisition::acquire(&store, &input)?))
+    })
+    .await
+}
+
+pub(crate) async fn acquire_composed(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::acquisition::composed::Request>,
+) -> Result<axum::Json<quipu::acquisition::composed::Payload>, AppError> {
+    super::admission::read_blocking(move || {
+        // A stable writer handle owns topology and the per-scope historical
+        // anchor. Random pooled connections cannot promise that same anchor.
+        let store = store.lock();
+        Ok(axum::Json(quipu::acquisition::composed::acquire(
+            &store, &input,
+        )?))
     })
     .await
 }

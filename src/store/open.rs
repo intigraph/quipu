@@ -488,6 +488,8 @@ impl Store {
             pending_embed: None,
             attachments: Vec::new(),
             pack_manifests: Vec::new(),
+            acquisition_anchors: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+            acquisition_incarnation: crate::acquisition::composed::new_incarnation(),
             facts_source: "facts".to_string(),
             resolve_sql: attach::RESOLVE_SQL_LOCAL.to_string(),
             term_cache: std::cell::RefCell::new(TermCache::default()),
