@@ -15,13 +15,23 @@ At a 390px-wide viewport:
 2. In its card, tap **guides: Federation has explicit boundaries**.
 3. Read the decision and its source excerpt. Tap **governs: src/provider/mod.rs**
    to reach the actual indexed code module.
-4. **Read the source** opens the repository file; **Inspect facts & edit** opens
+4. Follow another related entity. Each click centers that entity in the map.
+   The card shows its types, with **Properties** and **Provenance** disclosures.
+   **Read the source** opens the repository file; **Inspect facts & edit** opens
    its local facts. SPARQL, export and the propose-as-PR flow remain available.
+
+Related entities come from queries against the whole loaded graph. Arrows mark
+outgoing (→) and incoming (←) links, and every link names its predicate. The list
+includes entities outside the initial contributor overview, such as types and
+provenance sources. An engine-truncated answer is explicitly marked incomplete.
+The URL's `entity` parameter identifies the selection: browser back and forward,
+reloading, or opening that URL in another tab restores it in the map.
 
 ![The contributor constellation on a 390px viewport](../images/contributor-constellation-mobile.png)
 
 The cluster outlines separate vision, decisions, episodes, code and reading.
-Positions stay fixed while you explore. Drag or use arrow keys to pan; pinch,
+Positions follow a stable order within each cluster; following a link can add
+entities beyond the initial overview. Drag or use arrow keys to pan; pinch,
 use the mouse wheel or the zoom buttons to zoom. **All clusters** fits the
 reading map; tap a cluster to enter it. At that overview scale, cluster controls
 replace individual node controls. Visible node targets and controls are at least
