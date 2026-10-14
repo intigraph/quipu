@@ -231,17 +231,14 @@ fn acquire_with_control(
     }
     let key: Vec<_> = scope.into_iter().cloned().collect();
     let floor = {
-        let mut anchors = store.acquisition_anchors.borrow_mut();
+        let anchors = store.acquisition_anchors.borrow();
         if anchors.len() >= 16 && !anchors.contains_key(&key) {
             return Err(invalid("acquisition history scope budget exceeded"));
         }
-        let anchor = anchors
-            .entry(key)
-            .or_insert_with(|| (fingerprint.clone(), head));
-        if anchor.0 != fingerprint {
-            *anchor = (fingerprint.clone(), head);
+        match anchors.get(&key) {
+            Some((generation, observed)) if generation == &fingerprint => *observed,
+            _ => head,
         }
-        anchor.1
     };
     if applied_tx < floor {
         return Err(invalid(
@@ -315,6 +312,12 @@ fn acquire_with_control(
         provider_fence::mounted_file_unchanged(store, &a.alias)?;
     }
     read.commit()?;
+    // Admission is provisional until every receipt bound, fence and the read
+    // commit succeeds. A refusal cannot establish history or consume a slot.
+    store.acquisition_anchors.borrow_mut().insert(
+        key,
+        (payload.source_receipt.composition.generation.clone(), floor),
+    );
     Ok(payload)
 }
 

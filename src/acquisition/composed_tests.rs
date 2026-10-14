@@ -519,3 +519,84 @@ fn label_dependency_change_invalidates_generation_and_timed_floor_refuses() {
             .contains("label floor is unsupported")
     );
 }
+
+#[test]
+fn failed_first_acquisition_cannot_admit_an_earlier_history_floor() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = main(dir.path());
+    let old_head = store.latest_tx_id().unwrap();
+    let mut failed = req(&store, None);
+    failed.max_bytes = Some(1);
+    assert!(acquire(&store, &failed).is_err());
+    let current_head = write(&mut store, PROJECT, "after refusal", Op::Assert);
+    assert!(current_head > old_head);
+    let first = acquire(&store, &req(&store, None)).unwrap();
+    let mut old = req(&store, Some(old_head));
+    old.expected_generation = Some(first.source_receipt.composition.generation.clone());
+    let old_pin = acquire(&store, &old);
+    println!(
+        "ANCHORDEMO refused_max_bytes=1 old_head={old_head} first_success_head={current_head} history_floor={} old_pin_accepted={}",
+        first.source_receipt.composition.history_min_tx,
+        old_pin.is_ok()
+    );
+    assert_eq!(
+        first.source_receipt.composition.history_min_tx, current_head,
+        "only a successful fenced receipt can establish the history floor"
+    );
+    assert!(old_pin.is_err(), "refused observation admitted an old pin");
+    old.tx = Some(current_head);
+    acquire(&store, &old).unwrap().verify(&old).unwrap();
+}
+
+#[test]
+fn failed_new_scopes_consume_no_anchor_slots_and_preserve_observed_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = main(dir.path());
+    let observed = acquire(&store, &req(&store, None)).unwrap();
+    let before = store.acquisition_anchors.borrow().clone();
+    let mut last = req(&store, None);
+    for n in 0..17 {
+        let graph = format!("https://example.org/new/scope/{n}");
+        store.graph_create(&graph).unwrap();
+        write(&mut store, &graph, "new scope", Op::Assert);
+        last = req(&store, None);
+        last.graphs = vec![graph];
+        last.max_bytes = Some(1);
+        assert!(acquire(&store, &last).is_err());
+        assert_eq!(*store.acquisition_anchors.borrow(), before);
+    }
+    last.max_bytes = None;
+    let current = acquire(&store, &last).unwrap();
+    assert_eq!(
+        current.source_receipt.composition.history_min_tx,
+        store.latest_tx_id().unwrap()
+    );
+    assert_eq!(store.acquisition_anchors.borrow().len(), 2);
+    let mut old = req(&store, Some(observed.source_receipt.main.applied_tx));
+    old.expected_generation = Some(observed.source_receipt.composition.generation);
+    acquire(&store, &old).unwrap().verify(&old).unwrap();
+}
+
+#[test]
+fn failed_generation_change_preserves_the_previously_admitted_anchor() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = main(dir.path());
+    acquire(&store, &req(&store, None)).unwrap();
+    let before = store.acquisition_anchors.borrow().clone();
+    // A harmless floor-policy change participates in the bound generation.
+    let mut store = store;
+    store
+        .labels_config
+        .deny_policy_tokens
+        .push("unused-deny-token".into());
+    let mut failed = req(&store, None);
+    failed.max_bytes = Some(1);
+    assert!(acquire(&store, &failed).is_err());
+    assert_eq!(*store.acquisition_anchors.borrow(), before);
+    let previous_generation = before.values().next().unwrap().0.clone();
+    let current = acquire(&store, &req(&store, None)).unwrap();
+    assert_ne!(
+        current.source_receipt.composition.generation,
+        previous_generation
+    );
+}
