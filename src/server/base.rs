@@ -450,3 +450,27 @@ pub(crate) fn handle_identity_args(args: &[String]) -> bool {
         false
     }
 }
+
+/// Direct-workflow clients must prove the guard is enabled before writing.
+/// Only processing capability is exposed, never deployment configuration or keys.
+pub(crate) async fn workflow_capabilities(
+    State(store): State<SharedStore>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let enabled = blocking(move || Ok(store.lock().governance_config().enforce_workflows)).await?;
+    Ok(axum::Json(
+        json!({"enabled": enabled, "signature_version": 2,
+        "revision_required": true, "scope": "same-graph", "write_surface": "/update"}),
+    ))
+}
+
+/// Read-only server status routes, kept with their handlers.
+pub(crate) fn status_routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route("/health", axum::routing::get(health))
+        .route("/version", axum::routing::get(version))
+        .route("/stats", axum::routing::get(stats))
+        .route(
+            "/workflow/capabilities",
+            axum::routing::get(workflow_capabilities),
+        )
+}

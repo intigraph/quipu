@@ -75,7 +75,7 @@ mod update_slice;
 #[path = "server/wal_maintenance.rs"]
 mod wal_maintenance;
 
-use base::{health, metrics_handler, stats, version};
+use base::metrics_handler;
 use entity::{
     entity_conneg, entity_history, entity_html, entity_json, entity_query_conneg,
     entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
@@ -384,9 +384,7 @@ async fn main() {
     let app = Router::new()
         .merge(assets::routes())
         // Core API
-        .route("/health", get(health))
-        .route("/version", get(version))
-        .route("/stats", get(stats))
+        .merge(base::status_routes())
         .route("/.well-known/void", get(service_description::service_description))
         .route("/metrics", get(metrics_handler))
         .route("/query", get(query_get).post(query_post_http))
