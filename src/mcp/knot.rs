@@ -46,7 +46,7 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
     };
     let Some(g) = store.lookup(iri)? else {
         return Err(Error::InvalidValue(format!(
-            "unknown graph: {iri} — create and register it first via graph_create"
+            "unknown graph: {iri} — create it with quipu_graph_create {{\"graph\":\"{iri}\"}} (MCP) or quipu graph create '{iri}' --db <path> (CLI)"
         )));
     };
     match store.graph_class(g)?.as_deref() {
@@ -58,7 +58,7 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
             "graph {iri} has unsupported class '{other}' for knot writes"
         ))),
         None => Err(Error::InvalidValue(format!(
-            "graph {iri} is interned but not registered — register it via graph_create"
+            "graph {iri} is interned but not registered — create it with quipu_graph_create {{\"graph\":\"{iri}\"}} (MCP) or quipu graph create '{iri}' --db <path> (CLI)"
         ))),
     }
 }

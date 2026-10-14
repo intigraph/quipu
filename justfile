@@ -331,6 +331,7 @@ mcp action="test":
     cargo test --features full --lib mcp_transport
     target=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
     timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu-server"
+    timeout 120 python3 scripts/test-named-graph-recipe.py "$target/debug/quipu-server"
 
 # Judged search evaluation; test is offline and CI-runnable.
 search-eval cmd="test" *args="":

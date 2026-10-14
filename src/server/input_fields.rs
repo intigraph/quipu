@@ -33,21 +33,6 @@ pub(crate) const HTTP_ONLY_FIELDS: &[(&str, &[&str])] = &[
             "batch_window_s",
         ],
     ),
-    ("quipu_graph_create", &["graph"]),
-    (
-        "quipu_graph_label",
-        &[
-            "graph",
-            "timestamp",
-            "trust",
-            "freshness",
-            "durability",
-            "policy",
-            "kind",
-            "valid_to",
-            "actor",
-        ],
-    ),
     ("quipu_reason", &["rules", "prefix", "graph", "timestamp"]),
 ];
 

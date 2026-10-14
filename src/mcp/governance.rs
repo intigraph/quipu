@@ -371,30 +371,8 @@ pub fn tool_overlay_create(store: &Store, input: &JsonValue) -> Result<JsonValue
     Ok(serde_json::json!({ "g": g, "parent_branch": parent_branch }))
 }
 
-/// MCP tool: `quipu_graph_create` -- register a committed-class named graph.
-///
-/// Input: `{ "graph": "<iri>" }`. Output: `{ "g": N, "created": bool }`.
-///
-/// This exists because `Store::graph_create` had no caller outside its own
-/// tests (camayoc-s0h): the registration `set_graph_label` presumes was
-/// written and unreachable, so a consumer could write into a named graph via
-/// `/episode` — which interns the IRI without registering it — and then find
-/// the graph could not be labelled. Routing without labelling is worse than
-/// neither, because it produces separate graphs every query still reads at
-/// equal trust.
-///
-/// Idempotent. Re-creating an existing committed graph is a no-op, and
-/// `created` reports which happened rather than leaving the caller to guess
-/// from a bare success.
-pub fn tool_graph_create(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let graph = input
-        .get("graph")
-        .and_then(JsonValue::as_str)
-        .ok_or_else(|| Error::InvalidValue("missing 'graph' parameter".into()))?;
-    let existed = store.lookup(graph)?.is_some();
-    let g = store.graph_create(graph)?;
-    Ok(serde_json::json!({ "g": g, "created": !existed }))
-}
+/// Committed graph creation lives with the other graph-registry tools.
+pub use super::tools::tool_graph_create;
 
 /// MCP tool: `quipu_graph_label` -- declare a named graph's lattice label.
 ///
