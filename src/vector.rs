@@ -426,6 +426,8 @@ impl Store {
         };
 
         let mut tops: Vec<TopK> = queries.iter().map(|_| TopK::new(limit)).collect();
+        // Each query's squared norm once, not once per stored row.
+        let query_norms: Vec<f64> = queries.iter().map(|q| squared_norm(q)).collect();
         let mut seq = 0usize;
         while let Some(row) = rows.next()? {
             // The scan is the long phase of a write's resolution pass; honour the
@@ -436,7 +438,11 @@ impl Store {
             let entity_id: i64 = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
             let stored = bytes_to_f32_slice(&blob);
-            for (query, top) in queries.iter().zip(tops.iter_mut()) {
+            // The stored vector's squared norm once per row, not once per query.
+            let stored_norm = squared_norm(&stored);
+            for ((query, top), query_norm) in
+                queries.iter().zip(tops.iter_mut()).zip(query_norms.iter())
+            {
                 if !stored.is_empty() && stored.len() != query.len() {
                     return Err(crate::Error::Store(format!(
                         "embedding dimension mismatch: query has {} dims but the stored \
@@ -447,7 +453,11 @@ impl Store {
                         stored.len()
                     )));
                 }
-                top.offer(cosine_similarity(query, &stored), seq, entity_id);
+                top.offer(
+                    cosine_with_norms(query, &stored, *query_norm, stored_norm),
+                    seq,
+                    entity_id,
+                );
             }
             seq += 1;
         }
@@ -488,6 +498,31 @@ pub(crate) fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
         dot += x * y;
         norm_a += x * x;
         norm_b += y * y;
+    }
+    let denom = norm_a.sqrt() * norm_b.sqrt();
+    if denom == 0.0 { 0.0 } else { dot / denom }
+}
+
+/// Sum of squares in f64, accumulated in the same order as [`cosine_similarity`].
+fn squared_norm(v: &[f32]) -> f64 {
+    let mut sum = 0.0f64;
+    for x in v {
+        let x = f64::from(*x);
+        sum += x * x;
+    }
+    sum
+}
+
+/// [`cosine_similarity`] given both squared norms precomputed by
+/// [`squared_norm`]: the dot product, sums and `sqrt`s are taken in the same
+/// order, so the result is bit-identical.
+fn cosine_with_norms(a: &[f32], b: &[f32], norm_a: f64, norm_b: f64) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0f64;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += f64::from(*x) * f64::from(*y);
     }
     let denom = norm_a.sqrt() * norm_b.sqrt();
     if denom == 0.0 { 0.0 } else { dot / denom }

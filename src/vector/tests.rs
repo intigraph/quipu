@@ -216,3 +216,23 @@ fn batch_search_equals_one_search_per_query_including_ties() {
     }
     assert!(store.vector_search_batch(&[], 5, None).unwrap().is_empty());
 }
+
+/// The batch scan's precomputed-norm cosine must be bit-identical to
+/// `cosine_similarity`, or batch and single searches could rank differently.
+#[test]
+fn cosine_with_norms_is_bit_identical_to_cosine_similarity() {
+    let vs: Vec<Vec<f32>> = vec![
+        vec![0.1, -0.2, 0.3, 0.4],
+        vec![1e-20, 3.5, -7.25, 0.0],
+        vec![0.0, 0.0, 0.0, 0.0],
+        vec![-1.0, 1.0, -1.0, 1.0],
+        make_embedding(2.5, 4),
+    ];
+    for a in &vs {
+        for b in &vs {
+            let want = cosine_similarity(a, b);
+            let got = cosine_with_norms(a, b, squared_norm(a), squared_norm(b));
+            assert_eq!(got.to_bits(), want.to_bits(), "{a:?} vs {b:?}");
+        }
+    }
+}
