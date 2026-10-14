@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::store::Store;
 
-use super::{EntityCandidate, LabelIndex, VectorScope, recorded_distinct_from, resolve_one};
+use super::{EntityCandidate, LabelIndex, VectorScope, recorded_distinct_from};
 
 /// One entity to resolve, as the caller already knows it.
 #[derive(Debug)]
@@ -98,8 +98,14 @@ pub fn resolve_nodes(
     let mut refusal = None;
     // (contested iri, claiming node, score) — accumulated across nodes.
     let mut claims: Vec<(String, String, f64)> = Vec::new();
+    // Phase 1 for every node in one vector scan instead of one scan per node.
+    let texts: Vec<String> = nodes
+        .iter()
+        .map(|n| super::build_resolution_text(n.name, &n.properties))
+        .collect();
+    let vector_matches = super::batch_vector_matches(store, &texts, top_k)?;
 
-    for node in nodes {
+    for (node, matches) in nodes.iter().zip(vector_matches.iter()) {
         crate::time::check_request_deadline()?;
         // A write may declare a pairing distinct inline; the graph may already
         // record it from an earlier write. Both excuse the same pairing, and
@@ -107,14 +113,14 @@ pub fn resolve_nodes(
         let mut excused = recorded_distinct_from(store, &node.iri)?;
         excused.extend(node.declared_distinct.iter().cloned());
 
-        let result = resolve_one(
+        let result = super::resolve_with_matches(
             store,
             &index,
             node.name,
-            &node.properties,
             threshold,
             top_k,
             &excused,
+            matches.as_deref(),
         )?;
 
         if !result.has_matches {

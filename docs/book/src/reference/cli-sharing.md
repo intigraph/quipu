@@ -486,6 +486,11 @@ holds is visible without reading the store. `revoke` keeps the row: a revoked bi
 refuses as `revoked`, which is a different finding from an unbound key. Rotation is a
 new binding plus a revoke of the old one.
 
+To set up an agent end to end (its own user, `sd key init`, enrollment, verification
+and revocation), follow CABOODLE's
+[agent identity and write access](https://scbrown.github.io/caboodle/agents.html#agent-identity-and-write-access)
+guide.
+
 **Importing a share never registers its producer.** This is the point, not an
 omission: a key that vouches for the bundle it arrived in vouches for nothing, and an
 attacker substituting the whole bundle would substitute the key with it. Registration

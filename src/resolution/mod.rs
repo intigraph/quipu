@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::namespace;
 use crate::store::Store;
+use crate::vector::VectorMatch;
 
 mod matching;
 #[cfg(test)]
@@ -138,8 +139,6 @@ fn resolve_one(
     top_k: usize,
     excluded: &[String],
 ) -> Result<ResolutionResult> {
-    let mut candidates = Vec::new();
-
     // Phase 1: Vector similarity search.
     // Build text from name + properties, embed it, search the vector store.
     crate::time::check_request_deadline()?;
@@ -147,12 +146,71 @@ fn resolve_one(
 
     let embedding = store.embed_query(&text)?;
     crate::time::check_request_deadline()?;
-    if let Some(embedding) = embedding {
-        let vs = store.vector_store();
+    let matches = match embedding {
         // Oversample to allow room after threshold filtering.
-        let matches = vs.vector_search(&embedding, top_k * 3, None)?;
+        Some(embedding) => Some(
+            store
+                .vector_store()
+                .vector_search(&embedding, top_k * 3, None)?,
+        ),
+        None => None,
+    };
+    resolve_with_matches(
+        store,
+        index,
+        name,
+        threshold,
+        top_k,
+        excluded,
+        matches.as_deref(),
+    )
+}
 
-        for m in &matches {
+/// Phase 1 for a whole batch: embed every text, then ONE vector search call.
+///
+/// Result `i` is what [`resolve_one`] would have searched for `texts[i]`:
+/// `None` where no embedding provider answers, else the same oversampled
+/// top-`top_k * 3` matches (aegis-nmuwsi).
+///
+/// # Errors
+/// Propagates embedding and store failures, and the request deadline.
+pub(crate) fn batch_vector_matches(
+    store: &Store,
+    texts: &[String],
+    top_k: usize,
+) -> Result<Vec<Option<Vec<VectorMatch>>>> {
+    let mut embeddings = Vec::with_capacity(texts.len());
+    for text in texts {
+        crate::time::check_request_deadline()?;
+        embeddings.push(store.embed_query(text)?);
+    }
+    crate::time::check_request_deadline()?;
+    let queries: Vec<&[f32]> = embeddings.iter().flatten().map(Vec::as_slice).collect();
+    let mut searched = store
+        .vector_store()
+        .vector_search_batch(&queries, top_k * 3, None)?
+        .into_iter();
+    crate::time::check_request_deadline()?;
+    Ok(embeddings
+        .iter()
+        .map(|e| e.as_ref().and_then(|_| searched.next()))
+        .collect())
+}
+
+/// Everything after the vector search, given its matches (`None` = no provider).
+pub(crate) fn resolve_with_matches(
+    store: &Store,
+    index: &LabelIndex,
+    name: &str,
+    threshold: f64,
+    top_k: usize,
+    excluded: &[String],
+    vector_matches: Option<&[VectorMatch]>,
+) -> Result<ResolutionResult> {
+    let mut candidates = Vec::new();
+
+    if let Some(matches) = vector_matches {
+        for m in matches {
             if m.score >= threshold {
                 let iri = store.resolve(store.canonical_id(m.entity_id)?)?;
                 candidates.push(EntityCandidate {
@@ -191,7 +249,7 @@ fn resolve_one(
 }
 
 /// Build embeddable text for resolution from a name and optional properties.
-fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String {
+pub(crate) fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String {
     let mut parts = vec![name.to_string()];
     for (k, v) in properties {
         parts.push(format!("{k}: {v}"));
@@ -210,8 +268,85 @@ fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String 
 /// The IRI is resolved lazily — only for rows that actually clear the threshold
 /// — because `store.resolve` is a query per id and most labels match nothing.
 pub(crate) struct LabelIndex {
-    /// `(canonical entity id, label)` for every current `rdfs:label` fact.
-    entries: Vec<(i64, String)>,
+    /// One entry per current `rdfs:label` fact, lowercased and profiled ONCE.
+    ///
+    /// `candidates` runs per node over every label. Comparing each with
+    /// Jaro-Winkler was ~1 us per label, ~7 s for a 20-node episode against a
+    /// 361k-label store (aegis-nmuwsi); [`LabelProfile`] lets it skip, exactly,
+    /// the labels that cannot reach the threshold.
+    entries: Vec<LabelEntry>,
+}
+
+struct LabelEntry {
+    entity_id: i64,
+    lower: String,
+    profile: LabelProfile,
+}
+
+/// Slack added to [`LabelProfile::jaro_winkler_upper_bound`] so floating-point
+/// rounding can only make pruning more conservative, never drop a candidate.
+/// Far above any rounding error and far below any meaningful score gap.
+pub(crate) const JW_BOUND_MARGIN: f64 = 1e-9;
+
+/// Character count and a 64-bucket character histogram of a lowercased label.
+///
+/// Jaro's match count `m` is at most the multiset intersection of the two
+/// strings' characters, and bucketing only merges counts, so the sum of
+/// per-bucket minimums is still an upper bound on `m`. A bucket that would
+/// overflow marks the profile unusable, and an unusable profile never prunes.
+pub(crate) struct LabelProfile {
+    chars: usize,
+    buckets: [u8; 64],
+    exact: bool,
+}
+
+impl LabelProfile {
+    pub(crate) fn of(lower: &str) -> Self {
+        let mut buckets = [0u8; 64];
+        let mut chars = 0;
+        let mut exact = true;
+        for c in lower.chars() {
+            chars += 1;
+            let b = &mut buckets[(u32::from(c) % 64) as usize];
+            match b.checked_add(1) {
+                Some(v) => *b = v,
+                None => exact = false,
+            }
+        }
+        Self {
+            chars,
+            buckets,
+            exact,
+        }
+    }
+
+    /// An upper bound on `strsim::jaro_winkler` between the two profiled strings.
+    ///
+    /// Jaro is `(m/a + m/b + (m - t)/m) / 3` with `m` bounded as above, so at most
+    /// `(m/a + m/b + 1) / 3`; Winkler adds at most `4 * 0.1 * (1 - jaro)`, giving
+    /// `0.6 * jaro + 0.4`. Returns 1.0 (never prunes) for an empty string or an
+    /// unusable profile, where strsim's own edge cases apply.
+    ///
+    /// The result is padded by [`JW_BOUND_MARGIN`]: the bound and strsim reach the
+    /// same value along different floating-point paths, so an exact bound can
+    /// round BELOW a real score and prune a true candidate at the threshold.
+    /// Measured: "aaaaaaaaaa" vs "aaaaaaabbb" bounds to 0.87999999999999989
+    /// against a real 0.88 (dearing, review of #538).
+    #[allow(clippy::cast_precision_loss)]
+    pub(crate) fn jaro_winkler_upper_bound(&self, other: &Self) -> f64 {
+        if self.chars == 0 || other.chars == 0 || !self.exact || !other.exact {
+            return 1.0;
+        }
+        let common: usize = self
+            .buckets
+            .iter()
+            .zip(other.buckets.iter())
+            .map(|(a, b)| usize::from(*a.min(b)))
+            .sum();
+        let m = common.min(self.chars).min(other.chars) as f64;
+        let jaro = (m / self.chars as f64 + m / other.chars as f64 + 1.0) / 3.0;
+        0.6 * jaro + 0.4 + JW_BOUND_MARGIN
+    }
 }
 
 impl LabelIndex {
@@ -264,7 +399,12 @@ impl LabelIndex {
             // An attached layer and the local store can intern the same IRI at
             // different ids; canonicalising here means one entity yields one
             // candidate rather than one per layer that mentions it.
-            entries.push((store.canonical_id(entity_id)?, label));
+            let lower = label.to_lowercase();
+            entries.push(LabelEntry {
+                entity_id: store.canonical_id(entity_id)?,
+                profile: LabelProfile::of(&lower),
+                lower,
+            });
         }
         Ok(Self { entries })
     }
@@ -277,13 +417,15 @@ impl LabelIndex {
         threshold: f64,
     ) -> Result<Vec<EntityCandidate>> {
         let name_lower = name.to_lowercase();
+        let name_profile = LabelProfile::of(&name_lower);
+        let name_is_commit = is_slash_qualified_commit_id(&name_lower);
         let mut candidates = Vec::new();
-        for (entity_id, label) in &self.entries {
+        for entry in &self.entries {
             crate::time::check_request_deadline()?;
-            let label_lower = label.to_lowercase();
+            let (entity_id, label_lower) = (&entry.entity_id, &entry.lower);
 
             // Exact match (case-insensitive).
-            if name_lower == label_lower {
+            if name_lower == *label_lower {
                 candidates.push(EntityCandidate {
                     iri: store.resolve(*entity_id)?,
                     score: 1.0,
@@ -297,14 +439,18 @@ impl LabelIndex {
             // `commit/<repo>/` prefix gives them a high Jaro-Winkler score.
             // Keep exact matching above for idempotent reuse, and keep this
             // deliberately narrower than a generic kind-prefix exemption.
-            if is_slash_qualified_commit_id(&name_lower)
-                && is_slash_qualified_commit_id(&label_lower)
-            {
+            if name_is_commit && is_slash_qualified_commit_id(label_lower) {
+                continue;
+            }
+
+            // A label that cannot reach the threshold is skipped without the
+            // ~1 us Jaro-Winkler comparison; the bound never undercuts it.
+            if name_profile.jaro_winkler_upper_bound(&entry.profile) < threshold {
                 continue;
             }
 
             // Jaro-Winkler similarity.
-            let jw = strsim::jaro_winkler(&name_lower, &label_lower);
+            let jw = strsim::jaro_winkler(&name_lower, label_lower);
             if jw >= threshold {
                 candidates.push(EntityCandidate {
                     iri: store.resolve(*entity_id)?,
