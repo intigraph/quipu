@@ -50,13 +50,15 @@ fn hinted(output: &Value, node: &str, candidate: &str) -> bool {
 /// byte-identically and write the same facts.
 #[test]
 fn two_phase_answers_exactly_as_single_phase() {
-    let seed = episode(
-        "seed",
-        &["document-alpha", "aaaaaaaaaa", "unrelated-zeta"],
-    );
+    let seed = episode("seed", &["document-alpha", "aaaaaaaaaa", "unrelated-zeta"]);
     let write = episode(
         "write",
-        &["document-alpha", "document-alpah", "aaaaaaabbb", "brand-new"],
+        &[
+            "document-alpha",
+            "document-alpah",
+            "aaaaaaabbb",
+            "brand-new",
+        ],
     );
     let mut single = store(0.88);
     let mut double = store(0.88);
@@ -168,21 +170,34 @@ fn expired_budget_refuses_in_phase_zero_without_writing() {
     );
     assert!(!error.to_string().contains("exceeded 0ms"));
     assert_eq!(store.current_facts().unwrap(), before);
-    assert_eq!(two_phase(&mut store, &episode("next", &["one"]))["outcome"], "created");
+    assert_eq!(
+        two_phase(&mut store, &episode("next", &["one"]))["outcome"],
+        "created"
+    );
 }
 
 /// aegis-8kn: hundreds of nodes with resolution ON commit within budget.
 #[test]
 fn hundreds_of_resolved_nodes_commit_within_budget() {
     for count in [50, 200] {
-        let mut store = store(0.85);
         let names: Vec<String> = (0..count).map(|i| format!("document-{i}")).collect();
         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-        let before = store.current_facts().unwrap().len();
+        let input = json!({"name": "batch", "edges": [], "nodes": refs.iter().map(|n| json!({
+            "name": n, "type": "Document", "description": "batch control",
+            "properties": {"category": "control", "status": "committed"}})).collect::<Vec<_>>()});
+        let mut single = store(0.85);
+        tool_episode(&mut single, &input).unwrap();
+        let expected = single.current_facts().unwrap().len();
+
+        let mut store = store(0.85);
         let guard = set_request_deadline(Some(Deadline::after_millis(5000)));
-        let output = two_phase(&mut store, &episode("batch", &refs));
+        let output = two_phase(&mut store, &input);
         drop(guard);
         assert_eq!(output["outcome"], "created");
-        assert!(store.current_facts().unwrap().len() - before >= count * 5);
+        let written = store.current_facts().unwrap().len();
+        assert_eq!(written, expected, "two-phase wrote different facts");
+        if count == 200 {
+            assert!(written >= 500, "200 nodes wrote only {written} facts");
+        }
     }
 }
