@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Records the Quipu agent + graph demo video",
+  "dependencies": {
+    "@xterm/addon-fit": "0.10.0",
+    "@xterm/xterm": "5.5.0",
+    "playwright-core": "1.56.1"
+  }
+}
