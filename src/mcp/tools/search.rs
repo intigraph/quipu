@@ -188,7 +188,7 @@ pub(super) fn keyword_response_in(
     input: &JsonValue,
     candidates: Option<&std::collections::HashSet<i64>>,
 ) -> Result<JsonValue> {
-    let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
+    let graph_scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
     if !store.search_config().keyword {
         return Err(Error::InvalidValue(
             "keyword search is disabled ([quipu.search] keyword = false)".into(),

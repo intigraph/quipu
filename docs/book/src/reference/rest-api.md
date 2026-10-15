@@ -917,8 +917,11 @@ uses one vector per entity; entities with ROOT text keep it, otherwise text
 combines their named-graph facts. Explicit graph scope refuses ROOT content
 and anchor reranking.
 
-Explicit graph selection and automatic named-only embedding text are disabled
-by default (`[quipu.search] named_graphs = false`). Prepare existing named-only
+Explicit graph selection for semantic and hybrid search, and automatic
+named-only embedding text, are disabled by default (`[quipu.search]
+named_graphs = false`). Keyword mode (`mode: "keyword"`) accepts an explicit
+scope without the flag, because the lexical index records each assertion's
+graph; it still refuses until that index is complete. Prepare existing named-only
 vectors through bounded `POST /embed_backfill_graph` calls, then enable the
 flag. This avoids turning the next producer snapshot into an unpaced initial
 embedding drain. Graph backfill leaves entities with any ROOT history alone,
