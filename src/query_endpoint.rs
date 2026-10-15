@@ -431,14 +431,12 @@ async fn query_core(
 
         // Pin readiness and evaluation to the same schema/fact snapshot: a
         // concurrent explicit index drop cannot turn this into a scan fallback.
-        let substring_read = if require_substring {
-            Some(store.substring_read()?)
+        let mut result = if require_substring {
+            store.substring_query(|| run(&store))?
         } else {
-            None
+            run(&store)
         };
-        let mut result = run(&store);
-        if let Some(transaction) = substring_read {
-            transaction.commit().map_err(quipu::Error::from)?;
+        if require_substring {
             if let Ok(response) = &mut result {
                 response.headers_mut().insert(
                     axum::http::HeaderName::from_static("x-quipu-substring-index"),

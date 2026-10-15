@@ -778,3 +778,75 @@ fn substring_readiness_is_pinned_and_not_cached_after_drop() {
     );
     assert!(reader.conn.is_autocommit());
 }
+
+#[test]
+fn substring_query_bounds_the_whole_scope_and_restores_on_every_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path().join("owned.db").to_str().unwrap()).unwrap();
+    let cache = || {
+        store
+            .conn
+            .query_row("PRAGMA cache_size", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let mmap = || {
+        store
+            .conn
+            .query_row("PRAGMA mmap_size", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    store
+        .conn
+        .pragma_update(None, "cache_size", -32000)
+        .unwrap();
+    store
+        .conn
+        .pragma_update(None, "mmap_size", 268435456)
+        .unwrap();
+    let prior = (cache(), mmap());
+    assert!(
+        store
+            .substring_query(|| panic!("missing index must not evaluate"))
+            .is_err()
+    );
+    assert_eq!((cache(), mmap()), prior);
+    finish(&store);
+    let check = || {
+        assert!(!store.conn.is_autocommit());
+        assert_eq!(cache(), -8192);
+        assert_eq!(mmap(), 0);
+    };
+    assert_eq!(
+        store
+            .substring_query(|| {
+                check();
+                7
+            })
+            .unwrap(),
+        7
+    );
+    assert_eq!((cache(), mmap()), prior);
+    let error: std::result::Result<(), &str> = store
+        .substring_query(|| {
+            check();
+            Err("query error")
+        })
+        .unwrap();
+    assert_eq!(error, Err("query error"));
+    assert!(store.conn.is_autocommit());
+    assert_eq!((cache(), mmap()), prior);
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = store.substring_query(|| {
+            check();
+            panic!("query panic")
+        });
+    }));
+    assert!(panic.is_err());
+    assert!(store.conn.is_autocommit());
+    assert_eq!((cache(), mmap()), prior);
+    store.conn.pragma_update(None, "cache_size", -1024).unwrap();
+    store
+        .substring_query(|| assert_eq!(cache(), -1024))
+        .unwrap();
+    assert_eq!(cache(), -1024);
+}

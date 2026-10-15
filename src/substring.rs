@@ -129,6 +129,17 @@ impl Store {
         }
         Ok(transaction)
     }
+    /// Evaluate one explicit substring-contract request with a bounded SQLite
+    /// cache, restoring the connection policy after success, error or unwind.
+    /// Readiness and evaluation share one read snapshot; no preparation occurs.
+    pub fn substring_query<T>(&self, evaluate: impl FnOnce() -> T) -> Result<T> {
+        crate::sparql::count_mmap::scalar(self, || {
+            let transaction = self.substring_read()?;
+            let result = evaluate();
+            transaction.commit()?;
+            Ok(result)
+        })
+    }
     /// Observe supported derived-index state without creating it or scanning facts.
     pub fn substring_progress(&self) -> Result<Option<SubstringProgress>> {
         let exists:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM main.sqlite_master WHERE name='substring_progress' AND type='table')",[],|r|r.get(0))?;
