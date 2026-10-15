@@ -5,6 +5,8 @@ mod acquisition_tests;
 
 #[path = "episode_two_phase_tests.rs"]
 mod episode_two_phase_tests;
+#[path = "point_read_tests.rs"]
+mod point_read_tests;
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
 #[path = "search_structured_tests.rs"]
@@ -1037,6 +1039,7 @@ pub(super) fn pooled_handle_with_provider(
         readers: super::ReadPool {
             conns,
             next: std::sync::atomic::AtomicUsize::new(0),
+            point_reserve: false,
         },
         #[cfg(feature = "reactive-reasoner")]
         reasoner: None,

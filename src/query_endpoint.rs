@@ -9,7 +9,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
-use super::{SharedStore, admission::read_blocking, base::AppError};
+use super::{SharedStore, admission::query_blocking, base::AppError};
 
 /// Conservative bounds for the two standard SPARQL Protocol transports.
 /// GET is intentionally small enough for common proxies; clients with larger
@@ -229,7 +229,8 @@ async fn query_core(
         .into());
     }
 
-    read_blocking(move || {
+    let point = store.readers.point_reserve && super::point_reads::eligible(&input);
+    query_blocking(point, move || {
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query
@@ -248,7 +249,11 @@ async fn query_core(
         // read-only connection instead of the writer's mutex. `wait_secs` keeps
         // meaning the same thing — time spent acquiring — which is what makes
         // the before/after curve comparable rather than merely different.
-        let store = store.read();
+        let store = if point {
+            store.point_read()
+        } else {
+            store.read()
+        };
         let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
 
