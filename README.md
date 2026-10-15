@@ -20,8 +20,8 @@
   <a href="docs/demos/agent-graph/"><img src="docs/demos/agent-graph/agent-graph.gif" width="900" alt="An agent records services in a terminal while the Quipu graph grows beside it. A guessed fact with no source is refused and the graph does not change; the corrected fact, citing its trace, is accepted; a valid-time read then answers what was true before a migration."/></a>
 </p>
 
-An agent records what it learns; Quipu checks every write. A guess with no source is
-refused, the corrected fact keeps its provenance, and a valid-time read shows what was
+An agent records what it learns; with write checking turned on, Quipu checks every write.
+A guess with no source is refused, the corrected fact keeps its provenance, and a valid-time read shows what was
 true before a change. [How this demo is made](docs/demos/agent-graph/) ·
 [terminal-only version](docs/demos/governed-memory-v0.13.0/)
 

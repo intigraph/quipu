@@ -2,7 +2,7 @@
 
 ![The agent works in the terminal on the left while the Quipu explorer shows the graph on the right](agent-graph.gif)
 
-A scripted agent records what it learns about a small, fictional shop stack. On the left
+The demo turns write checking on (it passes `--shapes` to every write). A scripted agent records what it learns about a small, fictional shop stack. On the left
 is its terminal; on the right is Quipu's own explorer (`/ui`), served from the same store.
 Every command shown is really run against a fresh local store, and every output is the
 real output. The narration is scripted so the recording can be reproduced each release.
@@ -13,7 +13,9 @@ real output. The narration is scripted so the recording can be reproduced each r
    [shape](scenario/shapes.ttl) requires `sourceKind` and `prov:wasDerivedFrom`, so the
    write is refused: the graph does not change.
 3. **Correct.** Citing a trace, the same claim is accepted and the node appears.
-4. **Change.** `orders-db` moves from `db-a` to `db-b`.
+4. **Change.** `orders-db` moves from `db-a` to `db-b`: the old host is retracted (`qp retract`
+   has no valid-time argument, so `db-a` ends at the moment of retraction) and `db-b` is
+   recorded as valid from January 3.
 5. **Ask the past.** `--valid-at 2026-01-02` answers `db-a`; the current read answers `db-b`.
 
 The data are illustrative fixtures under `https://example.org/shop/`. No server outside
