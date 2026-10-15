@@ -3,6 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use syn::visit::{self, Visit};
 
+#[path = "tool_schema_fields/parity.rs"]
+mod parity;
+
 #[derive(Default)]
 struct Reads {
     roots: BTreeSet<String>,
@@ -135,7 +138,10 @@ fn audit_schema_fields() {
     let mut gaps = BTreeMap::new();
     for def in quipu::tool_definitions() {
         let name = def["name"].as_str().unwrap();
-        let function = if name == "quipu_explain" {
+        let mapped = parity::handler(name);
+        let function = if let Some((function, _)) = mapped {
+            function.to_string()
+        } else if name == "quipu_explain" {
             "explain".to_string()
         } else if name == "quipu_graph" {
             "tool_graph_view".to_string()
@@ -149,6 +155,16 @@ fn audit_schema_fields() {
             .cloned()
             .collect();
         if let Some(read) = expanded.get(&function) {
+            let mut read = read.clone();
+            if let Some((_, Some((file, wire)))) = mapped {
+                read.extend(parity::wire_fields(file, wire));
+            }
+            // The SPARQL protocol body is encoded by the MCP adapter rather
+            // than read as JsonValue by update_post; its fields are exercised
+            // end-to-end by the transport form/provenance control.
+            if name == "quipu_update" {
+                read.extend(["update", "actor", "source"].map(String::from));
+            }
             let missing: Vec<_> = read.difference(&declared).collect();
             if !missing.is_empty() {
                 gaps.insert(name.to_string(), serde_json::json!(missing));
