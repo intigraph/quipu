@@ -118,8 +118,15 @@ pub fn eval_pattern_seeded(
                 return Ok(done);
             }
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
-            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
-            let joined = join_rows(&left_rows, &right_rows, ctx)?;
+            let (joined, right_vars) = match super::bind_join::try_subject_bind_join(
+                store, right, ctx, seed, &left_rows, &left_vars,
+            )? {
+                Some(bound) => bound,
+                None => {
+                    let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
+                    (join_rows(&left_rows, &right_rows, ctx)?, right_vars)
+                }
+            };
             let mut vars = left_vars;
             for v in right_vars {
                 if !vars.contains(&v) {
@@ -171,6 +178,11 @@ pub fn eval_pattern_seeded(
                 .filter(|(name, _)| var_names.contains(name))
                 .map(|(name, value)| (name.clone(), value.clone()))
                 .collect();
+            if let Some(result) =
+                super::substring_project::try_eval(store, inner, &var_names, ctx, &projected_seed)?
+            {
+                return Ok(result);
+            }
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, &projected_seed)?;
             // SERVICE provenance is response metadata, not a query variable the
             // remote graph pattern must explicitly project. Preserve it through

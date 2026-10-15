@@ -17,6 +17,22 @@ hw:koror a hw:Host .            # Missing required hostname
 With SHACL shapes loaded, Quipu catches these problems before they enter
 the fact log.
 
+## Class targets and subclasses
+
+A `sh:targetClass` selects instances of that class and of its subclasses,
+following the data graph's `rdfs:subClassOf` edges transitively. For example,
+if the validation data declares `ex:Step rdfs:subClassOf ex:Action`, an entity
+typed only `ex:Step` must satisfy a shape targeting `ex:Action`. Cycles and
+multiple inheritance do not duplicate a focus node within the same shape.
+This follows [SHACL class-based targets](https://www.w3.org/TR/shacl/#targetClass).
+
+Target selection leaves asserted data unchanged. It does not manufacture
+`rdf:type ex:Action` values for a constraint such as `sh:hasValue` on
+`rdf:type`. An explicit-type requirement still needs an explicit assertion.
+Subclass declarations present only in the shapes graph are not merged into
+the validation data by this mechanism. Write vocabulary admission remains a
+separate check against loaded shapes.
+
 ## Defining a Shape
 
 A shape declares constraints for a class of entities. Here's a shape that

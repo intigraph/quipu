@@ -36,6 +36,12 @@
 //!   the filter sees is the string the narrowing tests.
 
 use std::cell::RefCell;
+#[cfg(test)]
+thread_local! { static VALUE_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+#[cfg(test)]
+pub(crate) fn value_visits(reset: bool) -> usize {
+    VALUE_VISITS.with(|count| if reset { count.replace(0) } else { count.get() })
+}
 use std::sync::Arc;
 
 use rusqlite::functions::FunctionFlags;
@@ -70,9 +76,19 @@ pub struct StringNarrow {
     fold: Fold,
     needle: String,
     regex: Option<regex::Regex>,
+    plain_literal: bool,
 }
 
 impl StringNarrow {
+    /// Only a proven plain string may use the literal-only candidate index.
+    pub(super) fn substring_phrase(&self) -> Option<String> {
+        (self.plain_literal
+            && self.test == Test::Contains
+            && self.fold == Fold::Lower
+            && !self.needle.contains('\0')
+            && self.needle.chars().count() >= 3)
+            .then(|| format!("\"{}\"", self.needle.replace('"', "\"\"")))
+    }
     /// Could the filter accept a value whose string form is `s`?
     fn keeps_text(&self, s: &str) -> bool {
         let folded;
@@ -98,6 +114,8 @@ impl StringNarrow {
     /// [`Self::keeps_text`] for an encoded value; an undecodable value or an
     /// IRI is kept.
     fn keeps_encoded(&self, bytes: &[u8]) -> bool {
+        #[cfg(test)]
+        VALUE_VISITS.with(|count| count.set(count.get() + 1));
         match Value::from_bytes(bytes) {
             Ok(value) => lexical(&value).is_none_or(|s| self.keeps_text(&s)),
             Err(_) => true,
@@ -113,7 +131,37 @@ pub fn collect(expr: &Expression, inner: &GraphPattern, seed: &Bindings) -> Vec<
     let mut out = Vec::new();
     conjuncts(expr, &mut out);
     out.retain(|n| !seed.contains_key(&n.var) && occurs(patterns, &n.var));
+    for narrow in &mut out {
+        narrow.plain_literal = plain_literal_guard(expr, &narrow.var);
+    }
     out
+}
+
+fn plain_literal_guard(expr: &Expression, var: &str) -> bool {
+    fn scan(expr: &Expression, var: &str, literal: &mut bool, identity: &mut bool) {
+        let variable = |e: &Expression| matches!(e,Expression::Variable(v) if v.as_str()==var);
+        let string = |e: &Expression| matches!(e,Expression::FunctionCall(Function::Str,args) if args.len()==1 && variable(&args[0]));
+        match expr {
+            Expression::And(a, b) => {
+                scan(a, var, literal, identity);
+                scan(b, var, literal, identity);
+            }
+            Expression::FunctionCall(Function::IsLiteral, args)
+                if args.len() == 1 && variable(&args[0]) =>
+            {
+                *literal = true;
+            }
+            Expression::SameTerm(a, b)
+                if (variable(a) && string(b)) || (variable(b) && string(a)) =>
+            {
+                *identity = true;
+            }
+            _ => {}
+        }
+    }
+    let (mut literal, mut identity) = (false, false);
+    scan(expr, var, &mut literal, &mut identity);
+    literal && identity
 }
 
 /// `ctx` carrying the narrowing predicates for `inner`, or `None` when the
@@ -176,6 +224,7 @@ fn narrow(function: &Function, args: &[Expression]) -> Option<StringNarrow> {
         fold,
         needle,
         regex,
+        plain_literal: false,
     })
 }
 

@@ -17,7 +17,7 @@
 //! answers differently from one evaluated bottom-up — so they keep the hash join.
 
 use spargebra::algebra::GraphPattern;
-use spargebra::term::{GroundTerm, NamedNodePattern, Variable};
+use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable};
 
 use crate::error::Result;
 use crate::store::Store;
@@ -141,6 +141,102 @@ pub(crate) fn try_values_bind_join(
     let mut vars = first;
     for v in second {
         push_unique(&mut vars, v);
+    }
+    Ok(Some((rows, vars)))
+}
+
+/// A selected relation may drive indexed metadata lookups without scanning the
+/// unrelated right relation. This is a finite work bound, not a result limit.
+pub(crate) const SUBJECT_BIND_MAX_ROWS: usize = 16_384;
+
+// These wrappers cannot observe substitution; variable GRAPH and expressions
+// deliberately decline. Keep this separate from the broader VALUES planner.
+fn subject_lookup_patterns<'a>(
+    pattern: &'a GraphPattern,
+    triples: &mut Vec<&'a TriplePattern>,
+    variables: &mut Vec<String>,
+) -> bool {
+    match pattern {
+        GraphPattern::Bgp { patterns } => {
+            for triple in patterns {
+                triples.push(triple);
+                for variable in triple_pattern_vars(triple) {
+                    push_unique(variables, variable);
+                }
+            }
+            true
+        }
+        GraphPattern::Graph {
+            name: NamedNodePattern::NamedNode(_),
+            inner,
+        } => subject_lookup_patterns(inner, triples, variables),
+        GraphPattern::Union { left, right } => {
+            subject_lookup_patterns(left, triples, variables)
+                && subject_lookup_patterns(right, triples, variables)
+        }
+        _ => false,
+    }
+}
+
+/// Bind a plain BGP or constant GRAPH/UNION thereof to a left relation. Every right
+/// subject must be constant or an IRI bound in every input row, and at least
+/// one must be newly supplied by the left operand. FILTER, OPTIONAL, MINUS,
+/// paths, variable GRAPH and subqueries keep bottom-up evaluation.
+///
+/// Only expression-free BGP substitution is used: no expression gains visibility of bindings
+/// that it would not have in the ordinary join. Multiplicity is retained by
+/// evaluating once for every left row, including duplicates.
+pub(crate) fn try_subject_bind_join(
+    store: &Store,
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let mut patterns = Vec::new();
+    let mut vars = Vec::new();
+    if !subject_lookup_patterns(right, &mut patterns, &mut vars) {
+        return Ok(None);
+    }
+    if left_rows.len() > SUBJECT_BIND_MAX_ROWS {
+        return Ok(None);
+    }
+    if left_rows.is_empty() {
+        return Ok(Some((Vec::new(), vars)));
+    }
+    let mut newly_bound_subject = false;
+    for pattern in patterns {
+        match &pattern.subject {
+            TermPattern::NamedNode(_) => {}
+            TermPattern::Variable(variable) => {
+                let name = variable.as_str();
+                for (i, row) in left_rows.iter().enumerate() {
+                    // Preparation is inside the same deadline as execution.
+                    check_eval_budget(ctx, i, 0)?;
+                    if !matches!(row.get(name), Some(crate::types::Value::Ref(id)) if *id > 0) {
+                        return Ok(None);
+                    }
+                }
+                newly_bound_subject |=
+                    !seed.contains_key(name) && left_vars.iter().any(|v| v == name);
+            }
+            _ => return Ok(None),
+        }
+    }
+    if !newly_bound_subject {
+        return Ok(None);
+    }
+    let row_ctx = TemporalContext {
+        row_limit: None,
+        ..ctx.clone()
+    };
+    let mut rows = Vec::new();
+    for (i, row) in left_rows.iter().enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        let (mut found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
+        rows.append(&mut found);
+        check_eval_budget(ctx, i, rows.len())?;
     }
     Ok(Some((rows, vars)))
 }

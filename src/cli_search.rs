@@ -114,6 +114,11 @@ pub fn cmd_search(args: &[String], db: &str) {
 
 pub fn cmd_index(args: &[String], db: &str) {
     let action = args.get(2).map_or("status", String::as_str);
+    let kind = flag_value(args, "--kind").unwrap_or("keyword");
+    if !matches!(kind, "keyword" | "substring") {
+        eprintln!("error: --kind must be keyword or substring");
+        std::process::exit(1);
+    }
     // One invocation = one bounded batch. Refuse the protected ingest lane
     // before opening or creating the index; operators schedule the next batch.
     if action == "backfill" && ingest_lane(&quipu::time::now_iso()) {
@@ -121,7 +126,9 @@ pub fn cmd_index(args: &[String], db: &str) {
         std::process::exit(1);
     }
     if !matches!(action, "status" | "backfill" | "drop") {
-        eprintln!("usage: quipu search-index status|backfill|drop [--batch-size 500] [--db path]");
+        eprintln!(
+            "usage: quipu search-index status|backfill|drop [--kind keyword|substring] [--batch-size 500] [--db path]"
+        );
         std::process::exit(1);
     }
     // Maintenance must not configure vector backends/ONNX or create an index
@@ -131,9 +138,15 @@ pub fn cmd_index(args: &[String], db: &str) {
         std::process::exit(1);
     });
     let out = match action {
+        "status" if kind == "substring" => store.substring_progress().and_then(|p| {
+            Ok(serde_json::json!({"index":p,"ready":store.substring_index_ready()?}))
+        }),
         "status" => store
             .lexical_progress()
             .map(|p| serde_json::json!({"index":p})),
+        "drop" if kind == "substring" => store
+            .drop_substring_index()
+            .map(|()| serde_json::json!({"dropped":true})),
         "drop" => store
             .drop_lexical_index()
             .map(|()| serde_json::json!({"dropped":true})),
@@ -145,9 +158,15 @@ pub fn cmd_index(args: &[String], db: &str) {
                     eprintln!("error: --batch-size must be an integer");
                     std::process::exit(1)
                 });
-            store
-                .backfill_lexical_batch(batch)
-                .map(|p| serde_json::json!({"index":p}))
+            if kind == "substring" {
+                store
+                    .backfill_substring_batch(batch)
+                    .map(|p| serde_json::json!({"index":p}))
+            } else {
+                store
+                    .backfill_lexical_batch(batch)
+                    .map(|p| serde_json::json!({"index":p}))
+            }
         }
     };
     match out {

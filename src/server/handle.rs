@@ -92,6 +92,7 @@ pub(crate) struct StoreHandle {
 pub(crate) struct ReadPool {
     pub(crate) conns: Vec<FairMutex<quipu::Store>>,
     pub(crate) next: std::sync::atomic::AtomicUsize,
+    pub(crate) point_reserve: bool,
 }
 
 impl ReadPool {
@@ -99,11 +100,21 @@ impl ReadPool {
         Self {
             conns: Vec::new(),
             next: std::sync::atomic::AtomicUsize::new(0),
+            point_reserve: false,
         }
     }
 
     pub(crate) fn len(&self) -> usize {
         self.conns.len()
+    }
+
+    pub(crate) fn reserve_point_reads(&mut self, enabled: bool) -> bool {
+        self.point_reserve = enabled && self.len() >= 2;
+        self.point_reserve
+    }
+
+    pub(crate) fn ordinary_len(&self) -> usize {
+        self.len() - usize::from(self.point_reserve)
     }
 }
 
@@ -207,9 +218,10 @@ impl StoreHandle {
     /// but failing a request is still a bug, and the borrow checker cannot
     /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
     pub(crate) fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        let mut guard = if self.readers.conns.is_empty() {
+        let readers = &self.readers.conns[usize::from(self.readers.point_reserve)..];
+        let guard = if readers.is_empty() {
             self.writer.lock()
-        } else if let Some(g) = self.readers.conns.iter().find_map(FairMutex::try_lock) {
+        } else if let Some(g) = readers.iter().find_map(FairMutex::try_lock) {
             // Work-conserving fast path.
             g
         } else {
@@ -219,9 +231,26 @@ impl StoreHandle {
                 .readers
                 .next
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                % self.readers.conns.len();
-            self.readers.conns[i].lock()
+                % readers.len();
+            readers[i].lock()
         };
+        Self::sync_reader(guard)
+    }
+
+    /// The reserved connection is never borrowed by ordinary readers. Keeping
+    /// both connection and async admission separate prevents either FIFO from
+    /// recreating the expensive backlog in front of a point request.
+    pub(crate) fn point_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        if self.readers.point_reserve {
+            Self::sync_reader(self.readers.conns[0].lock())
+        } else {
+            self.read()
+        }
+    }
+
+    fn sync_reader(
+        mut guard: parking_lot::FairMutexGuard<'_, quipu::Store>,
+    ) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
         // Deep freeze: a pooled reader opened before a freeze has no pack
         // attached, and its `facts_source` is plain "facts" — a query over
         // the frozen graph would silently read zero rows. Sync against the
@@ -304,6 +333,7 @@ impl ReadPool {
             ReadPool {
                 conns,
                 next: std::sync::atomic::AtomicUsize::new(0),
+                point_reserve: false,
             }
         }
     }

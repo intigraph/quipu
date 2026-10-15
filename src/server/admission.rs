@@ -14,6 +14,22 @@ use super::base::{AppError, blocking};
 /// cannot release admission while its blocking work is still running.
 static WRITE_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
+/// One FIFO permit paired with the opt-in reserved reader. Ordinary reads
+/// cannot consume it; point floods cannot consume ordinary admission either.
+static POINT_READ_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
+pub(crate) async fn query_blocking<T, F>(point: bool, f: F) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    if point {
+        admit_blocking_with(&POINT_READ_ADMISSION, "point-read", f).await
+    } else {
+        read_blocking(f).await
+    }
+}
+
 pub(crate) async fn write_blocking<T, F>(f: F) -> Result<T, AppError>
 where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
@@ -68,7 +84,26 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    let permit = admission.acquire().await.map_err(|_| {
+    let acquire = admission.acquire();
+    let acquired = if kind == "point-read" {
+        if let Some(deadline) = deadline {
+            let remaining = deadline.remaining_millis();
+            let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
+            tokio::time::timeout(std::time::Duration::from_millis(remaining), acquire)
+                .await
+                .map_err(|_| {
+                    AppError::from(quipu::Error::RequestTimeout {
+                        elapsed_ms: started.elapsed().as_millis(),
+                        limit_ms,
+                    })
+                })?
+        } else {
+            acquire.await
+        }
+    } else {
+        acquire.await
+    };
+    let permit = acquired.map_err(|_| {
         AppError::from(quipu::Error::InvalidValue(format!(
             "{kind} admission is closed"
         )))
@@ -547,3 +582,7 @@ mod write_timeout_tests {
         assert!(quipu::time::request_deadline().is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "admission/point_timeout_tests.rs"]
+mod point_timeout_tests;
