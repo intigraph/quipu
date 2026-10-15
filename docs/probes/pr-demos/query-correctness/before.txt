@@ -1,0 +1,11 @@
+Observed baseline: f22e4634 plus regression tests, before production-code edits.
+
+thread 'sparql::tests::f79_iri_order_is_lexical_independent_of_intern_order' (2624239) panicked at src/sparql/tests.rs:4347:9:
+assertion `left == right` failed
+  left: ["urn:order:z", "urn:order:a", "urn:order:m"]
+ right: ["urn:order:a", "urn:order:m", "urn:order:z"]
+
+thread 'tests::f79_standard_results_signal_actual_truncation' (2815641) panicked at src/server/tests.rs:1795:13:
+assertion `left == right` failed: application/sparql-results+json: 1
+  left: None
+ right: Some("false")
