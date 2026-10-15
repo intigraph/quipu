@@ -1,0 +1,11 @@
+@prefix ex: <https://example.org/shop/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+ex:checkout a ex:Service ; ex:name "checkout" ; ex:dependsOn ex:orders, ex:payments ;
+    ex:sourceKind "observed" ; prov:wasDerivedFrom ex:trace-1042 .
+ex:orders a ex:Service ; ex:name "orders" ; ex:dependsOn ex:orders-db ;
+    ex:sourceKind "observed" ; prov:wasDerivedFrom ex:trace-1042 .
+ex:payments a ex:Service ; ex:name "payments" ;
+    ex:sourceKind "declared" ; prov:wasDerivedFrom ex:service-catalog .
+ex:orders-db a ex:Service ; ex:name "orders-db" ; ex:runsOn ex:db-a ;
+    ex:sourceKind "declared" ; prov:wasDerivedFrom ex:service-catalog .

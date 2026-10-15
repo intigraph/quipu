@@ -395,6 +395,7 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     qp share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     qp share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    qp share ... [--pointers <file.toml>]   name graphs this share does not carry ([[pointer]] kind = endpoint | pack)
     qp share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     qp share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
     qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
@@ -408,6 +409,7 @@ COMMANDS:
     qp import delta <parent-share> <delta-share> [--actor <id>]
     qp load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
     qp compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
+    qp compose --repo <repo> <pack-key>=<pack>... [--shapes-from <pack-key>] | --repo <repo> --rollback [--db <path>]
     qp import promote <share-id> [--actor <id>] [--db <path>]
     qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]

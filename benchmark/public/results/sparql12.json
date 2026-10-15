@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C SPARQL 1.2 query tests (all dawgt:Proposed at the pinned revision)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "900cfae9b53cd325e3ffab30bcd1cd18b3c1a52e",
+  "quipu_revision": "f13fc1bf1dc938a703a85e7f6bac2519392d5fbe",
   "scope": "cases needing RDF 1.2 grammar or terms are enumerated, not run; the rest are run",
   "totals": {
     "all": {
@@ -2477,6 +2477,6 @@
       "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
     }
   ],
-  "generated_at": "2026-10-14T23:53:05Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38655943426"
+  "generated_at": "2026-10-15T13:06:48Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38738961485"
 }

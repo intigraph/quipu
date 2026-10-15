@@ -449,6 +449,39 @@ impl Store {
         Ok(())
     }
 
+    /// Pendant autoload repository state (aegis-koxp0u): the CURRENT/previous
+    /// pointer per repository, the snapshot graphs each repository owns (what
+    /// retention may drop), and the durable local tombstones carried forward
+    /// across snapshots of one pack. Additive tables; nothing else references them.
+    pub(super) fn migrate_pendant_repos(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS pendant_repo_pointers (
+                 repo     TEXT NOT NULL,
+                 slot     TEXT NOT NULL CHECK (slot IN ('current', 'previous')),
+                 snapshot TEXT NOT NULL,
+                 members  TEXT NOT NULL,
+                 moved_at TEXT NOT NULL,
+                 PRIMARY KEY (repo, slot)
+             );
+             CREATE TABLE IF NOT EXISTS pendant_repo_graphs (
+                 repo        TEXT NOT NULL,
+                 pack_key    TEXT NOT NULL,
+                 graph       TEXT NOT NULL,
+                 share_id    TEXT NOT NULL,
+                 composed_at TEXT NOT NULL,
+                 PRIMARY KEY (repo, graph)
+             );
+             CREATE TABLE IF NOT EXISTS pendant_repo_tombstones (
+                 repo        TEXT NOT NULL,
+                 pack_key    TEXT NOT NULL,
+                 statement   TEXT NOT NULL,
+                 recorded_at TEXT NOT NULL,
+                 PRIMARY KEY (repo, pack_key, statement)
+             );",
+        )?;
+        Ok(())
+    }
+
     pub(super) fn migrate_datasets(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS datasets (

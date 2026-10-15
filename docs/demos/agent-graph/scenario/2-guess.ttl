@@ -1,0 +1,4 @@
+@prefix ex: <https://example.org/shop/> .
+
+ex:cache a ex:Service ; ex:name "cache" ; ex:dependsOn ex:orders ;
+    ex:sourceKind "guessed" .

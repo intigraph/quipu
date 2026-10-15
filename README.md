@@ -16,6 +16,15 @@
   <a href="https://arxiv.org/abs/2608.16813"><img src="https://img.shields.io/badge/arXiv-2608.16813-b31b1b.svg" alt="arXiv: 2608.16813"/></a>
 </p>
 
+<p align="center">
+  <a href="docs/demos/agent-graph/"><img src="docs/demos/agent-graph/agent-graph.gif" width="900" alt="An agent records services in a terminal while the Quipu graph grows beside it. A guessed fact with no source is refused and the graph does not change; the corrected fact, citing its trace, is accepted; a valid-time read then answers what was true before a migration."/></a>
+</p>
+
+An agent records what it learns; with write checking turned on, Quipu checks every write.
+A guess with no source is refused, the corrected fact keeps its provenance, and a valid-time read shows what was
+true before a change. [How this demo is made](docs/demos/agent-graph/) ·
+[terminal-only version](docs/demos/governed-memory-v0.13.0/)
+
 **Quipu is a governed, bitemporal knowledge store for AI coding agents and the
 people who run them.** It can check writes against your rules, records where each fact came from, and answers what was true when. *Bitemporal* means keeping both
 when a fact was recorded and, when supplied, when it was true.
@@ -230,6 +239,7 @@ when.
 | [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
 | [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
+| [shantytown](https://github.com/scbrown/shantytown) | runs crews of AI agents on work items, triggered by hand, on a schedule or by events; can share work and memory through Quipu |
 | [shuttle](https://github.com/scbrown/shuttle) | runs signed agent workflows and keeps their records in Quipu |
 
 <!-- stack-table:end -->
