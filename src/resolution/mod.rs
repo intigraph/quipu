@@ -42,7 +42,8 @@ mod matching;
 mod tests;
 
 pub use matching::{
-    Contention, EpisodeResolution, NodeQuery, resolve_episode_nodes, resolve_nodes,
+    Contention, EpisodeResolution, NodeQuery, ResolutionGeneration, resolve_episode_nodes,
+    resolve_nodes, revalidate_episode_resolution,
 };
 
 /// A candidate entity match from resolution.
@@ -355,6 +356,19 @@ impl LabelIndex {
     /// # Errors
     /// Propagates store and decode failures.
     pub(crate) fn build(store: &Store) -> Result<Self> {
+        Self::build_filtered(store, None)
+    }
+
+    /// Only the labels asserted in transactions after `after_tx`: the delta a
+    /// two-phase `/episode` re-checks under the writer (aegis-xi0).
+    ///
+    /// # Errors
+    /// Propagates store and decode failures.
+    pub(crate) fn build_since(store: &Store, after_tx: i64) -> Result<Self> {
+        Self::build_filtered(store, Some(after_tx))
+    }
+
+    fn build_filtered(store: &Store, after_tx: Option<i64>) -> Result<Self> {
         // `lookup` is main-scoped, and a layer interns `rdfs:label` in ITS OWN
         // term space — so on a composed store the local id matches none of the
         // layer's label rows, and on a store whose main file has no labels at
@@ -374,8 +388,9 @@ impl LabelIndex {
         // `facts_source()` is the literal `facts` table with no attachments and
         // the `UNION ALL` over local + layers with them, so this one statement
         // reads the composition without knowing whether there is one.
+        let since = after_tx.map_or_else(String::new, |tx| format!(" AND tx > {tx}"));
         let sql = format!(
-            "SELECT e, v FROM {} WHERE a IN ({}) AND valid_to IS NULL AND op = 1",
+            "SELECT e, v FROM {} WHERE a IN ({}) AND valid_to IS NULL AND op = 1{since}",
             store.facts_source(),
             id_list(&label_ids),
         );
@@ -410,7 +425,7 @@ impl LabelIndex {
     }
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
-    fn candidates(
+    pub(crate) fn candidates(
         &self,
         store: &Store,
         name: &str,
@@ -522,7 +537,7 @@ pub(crate) fn recorded_distinct_from(store: &Store, iri: &str) -> Result<Vec<Str
 }
 
 /// Deduplicate candidates by IRI, keeping the highest-scoring entry for each.
-fn dedup_by_iri(candidates: &mut Vec<EntityCandidate>) {
+pub(crate) fn dedup_by_iri(candidates: &mut Vec<EntityCandidate>) {
     // Candidates are already sorted by descending score, so the first
     // occurrence of each IRI is the highest-scoring one.
     let mut seen = HashSet::new();

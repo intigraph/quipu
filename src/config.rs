@@ -123,6 +123,15 @@ pub struct SearchConfig {
     /// Left at 0 the server behaves exactly as it did before this key existed.
     pub request_timeout_ms: u64,
 
+    /// Admission budget for `/episode` alone, in milliseconds (default: 0 =
+    /// use `request_timeout_ms`).
+    ///
+    /// A non-strict `/episode` resolves its nodes on a read connection before it
+    /// takes the writer (aegis-xi0), so a longer budget here no longer holds
+    /// other writers for its duration. Reads keep `request_timeout_ms`, which is
+    /// sized to their own clients.
+    pub episode_request_timeout_ms: u64,
+
     /// Ceiling on INTERMEDIATE binding rows during SPARQL evaluation
     /// (default: 1,000,000; 0 disables). The wall-clock budget alone is not
     /// enough: an exploding join burns its whole timeout at 100% CPU while
@@ -165,6 +174,7 @@ impl Default for SearchConfig {
             max_sparql_rows: 10_000,
             query_timeout_ms: 30_000,
             request_timeout_ms: 0,
+            episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: false,

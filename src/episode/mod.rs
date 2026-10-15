@@ -125,9 +125,6 @@ pub fn ingest_episode_with_resolution(
     base_ns: &str,
     resolution_opts: Option<&IngestResolutionOpts>,
 ) -> Result<IngestResult> {
-    let mut resolution_hints = Vec::new();
-    let mut resolution_contentions = Vec::new();
-
     // Resolve every node in ONE pass: it scans the label set once for the whole
     // episode rather than once per node, and it can see two nodes claiming one
     // existing entity — which a per-node loop structurally cannot.
@@ -135,11 +132,7 @@ pub fn ingest_episode_with_resolution(
         && opts.enabled
     {
         let resolved = resolution::resolve_episode_nodes(store, &episode.nodes, base_ns, opts)?;
-        if let Some(msg) = resolved.refusal {
-            return Err(crate::error::Error::InvalidValue(msg));
-        }
-        resolution_hints = resolved.hints;
-        resolution_contentions = resolved.contentions;
+        return ingest_episode_resolved(store, episode, timestamp, base_ns, resolved);
     }
 
     let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
@@ -148,8 +141,37 @@ pub fn ingest_episode_with_resolution(
         tx_id,
         count,
         outcome,
-        resolution_hints,
-        resolution_contentions,
+        resolution_hints: Vec::new(),
+        resolution_contentions: Vec::new(),
+    })
+}
+
+/// Commit an episode whose resolution was already computed.
+///
+/// The second half of [`ingest_episode_with_resolution`], and the commit phase
+/// of a two-phase `/episode` (aegis-xi0) once the caller has revalidated a
+/// resolution read outside the writer. A strict-mode refusal still refuses
+/// before anything is written.
+///
+/// # Errors
+/// Refuses on a strict-mode match; propagates ingest failures.
+pub fn ingest_episode_resolved(
+    store: &mut Store,
+    episode: &Episode,
+    timestamp: &str,
+    base_ns: &str,
+    resolved: resolution::EpisodeResolution,
+) -> Result<IngestResult> {
+    if let Some(msg) = resolved.refusal {
+        return Err(crate::error::Error::InvalidValue(msg));
+    }
+    let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
+    Ok(IngestResult {
+        tx_id,
+        count,
+        outcome,
+        resolution_hints: resolved.hints,
+        resolution_contentions: resolved.contentions,
     })
 }
 
