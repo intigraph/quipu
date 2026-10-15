@@ -4,6 +4,40 @@
 
 use serde_json::Value;
 
+pub(crate) fn open_pool(
+    db_path: &str,
+    store: &quipu::Store,
+    config: &quipu::config::ServerConfig,
+) -> super::handle::ReadPool {
+    use super::handle::ReadPool;
+    let mut read_pool = ReadPool::open(db_path, store, config.read_pool_size);
+    if config.reserve_point_reads && store.search_config().request_timeout_ms == 0 {
+        eprintln!("error: reserve_point_reads requires a positive request_timeout_ms");
+        std::process::exit(1);
+    }
+    let point_reserved = read_pool.reserve_point_reads(config.reserve_point_reads);
+
+    if read_pool.len() > 0 {
+        eprintln!("read pool: {} read-only connections", read_pool.len());
+    } else {
+        eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
+    }
+
+    super::admission::init_read_admission_for_pool(read_pool.ordinary_len());
+    if config.reserve_point_reads {
+        eprintln!(
+            "point read reserve: {} ({} ordinary readers)",
+            if point_reserved {
+                "enabled: 1"
+            } else {
+                "unavailable: needs >=2 pooled readers"
+            },
+            read_pool.ordinary_len()
+        );
+    }
+    read_pool
+}
+
 pub(crate) fn eligible(input: &Value) -> bool {
     let Some(fields) = input.as_object() else {
         return false;
