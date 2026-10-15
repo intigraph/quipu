@@ -3,6 +3,8 @@
 #[path = "acquisition_tests.rs"]
 mod acquisition_tests;
 
+#[path = "episode_two_phase_tests.rs"]
+mod episode_two_phase_tests;
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
 #[path = "search_structured_tests.rs"]

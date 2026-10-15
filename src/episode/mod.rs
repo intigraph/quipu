@@ -17,6 +17,7 @@ use crate::resolution::{self, Contention, EntityCandidate};
 use crate::shacl;
 use crate::{namespace, rdf::parse_rdf, store::Store};
 
+mod commit;
 mod descriptions;
 mod edge_predicate;
 #[cfg(test)]
@@ -26,6 +27,8 @@ mod node_type;
 use node_type::validate_node_type;
 pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
 mod validation;
+
+pub use commit::ingest_episode_resolved;
 
 /// Options controlling entity resolution during episode ingest.
 #[derive(Debug, Clone)]
@@ -143,35 +146,6 @@ pub fn ingest_episode_with_resolution(
         outcome,
         resolution_hints: Vec::new(),
         resolution_contentions: Vec::new(),
-    })
-}
-
-/// Commit an episode whose resolution was already computed.
-///
-/// The second half of [`ingest_episode_with_resolution`], and the commit phase
-/// of a two-phase `/episode` (aegis-xi0) once the caller has revalidated a
-/// resolution read outside the writer. A strict-mode refusal still refuses
-/// before anything is written.
-///
-/// # Errors
-/// Refuses on a strict-mode match; propagates ingest failures.
-pub fn ingest_episode_resolved(
-    store: &mut Store,
-    episode: &Episode,
-    timestamp: &str,
-    base_ns: &str,
-    resolved: resolution::EpisodeResolution,
-) -> Result<IngestResult> {
-    if let Some(msg) = resolved.refusal {
-        return Err(crate::error::Error::InvalidValue(msg));
-    }
-    let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
-    Ok(IngestResult {
-        tx_id,
-        count,
-        outcome,
-        resolution_hints: resolved.hints,
-        resolution_contentions: resolved.contentions,
     })
 }
 
