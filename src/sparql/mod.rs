@@ -12,6 +12,9 @@ pub mod filter;
 pub mod filter_pushdown;
 #[cfg(test)]
 mod filter_pushdown_tests;
+pub mod left_join;
+#[cfg(test)]
+mod left_join_tests;
 mod order;
 pub mod pattern;
 pub mod pattern_util;

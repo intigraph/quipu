@@ -251,30 +251,14 @@ pub fn eval_pattern_seeded(
                     vars.push(v.clone());
                 }
             }
-            let mut results = Vec::new();
-            // Same nested join loop as `join_rows` — same budget enforcement,
-            // for the same reason (OPTIONAL explodes exactly like Join).
-            let mut i = 0usize;
-            for l in &left_rows {
-                let mut matched = false;
-                for r in &right_rows {
-                    super::pattern_util::check_eval_budget(ctx, i, results.len())?;
-                    i += 1;
-                    if let Some(merged) = merge_bindings(l, r) {
-                        let passes = match expression.as_ref() {
-                            Some(e) => eval_filter(store, e, &merged, ctx)?,
-                            None => true,
-                        };
-                        if passes {
-                            results.push(merged);
-                            matched = true;
-                        }
-                    }
-                }
-                if !matched {
-                    results.push(l.clone());
-                }
-            }
+            // Keyed probe, same output and order as the nested loop (aegis-d8c).
+            let results = super::left_join::left_join(
+                store,
+                ctx,
+                &left_rows,
+                &right_rows,
+                expression.as_ref(),
+            )?;
             Ok((results, vars))
         }
 
