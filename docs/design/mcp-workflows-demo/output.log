@@ -1,0 +1,17 @@
+Script started on 2026-10-15 05:40:33-04:00 [COMMAND="python3 scripts/demo-mcp-workflows.py "$MCP_BEFORE" "$MCP_AFTER"" <not executed on terminal>]
+BEFORE
+quipu-server 0.14.1
+git_sha: 5fd07d21dfbec0f29fce54af86ae4fb8f02739a0
+git_dirty: false
+Positive control: same store query count=1
+tools/call quipu_events {"since":0,"limit":1}
+{"jsonrpc": "2.0", "id": 4, "error": {"code": -32602, "message": "unknown Quipu tool"}}
+AFTER
+quipu-server 0.14.1
+git_sha: 5fd07d21dfbec0f29fce54af86ae4fb8f02739a0
+git_dirty: true
+Positive control: same store query count=1
+tools/call quipu_events {"since":0,"limit":1}
+{"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text", "text": "{\"events\":[{\"group_id\":null,\"offset\":1,\"payload\":{\"predicate_iri\":\"urn:demo:value\"},\"schema\":\"quipu.event/v1\",\"subject\":\"urn:demo:value\",\"ts\":\"2026-10-15T09:40:34Z\",\"tx_id\":1,\"type\":\"predicate.new\"}],\"lag\":1,\"next_offset\":1}"}], "isError": false}}
+
+Script done on 2026-10-15 05:40:34-04:00 [COMMAND_EXIT_CODE="0"]
