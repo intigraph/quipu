@@ -85,6 +85,13 @@ pub(crate) fn validate_pointers(pointers: &[SharePointer]) -> Result<()> {
                     pointer.graph
                 ))
             })?;
+        if rest.contains(['?', '#']) {
+            return Err(Error::InvalidValue(format!(
+                "share pointer {} {what} carries a query or fragment; a share is published, \
+                 and tokens travel there, so it must not",
+                pointer.graph
+            )));
+        }
         if rest.split('/').next().unwrap_or_default().contains('@') {
             return Err(Error::InvalidValue(format!(
                 "share pointer {} {what} carries credentials; a share is published, so it \
@@ -94,4 +101,17 @@ pub(crate) fn validate_pointers(pointers: &[SharePointer]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// The pointer strings a published manifest carries, one per line, for the
+/// outward scrub. `manifest.json` is otherwise exempt (hashes and ids only), so
+/// without this an internal hostname in a pointer would leave the LAN unchecked.
+pub(crate) fn pointer_scrub_text(pointers: &[SharePointer]) -> String {
+    pointers
+        .iter()
+        .map(|pointer| match &pointer.target {
+            PointerTarget::Endpoint { endpoint } => format!("{} {endpoint}\n", pointer.graph),
+            PointerTarget::Pack { url, .. } => format!("{} {url}\n", pointer.graph),
+        })
+        .collect()
 }

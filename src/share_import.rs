@@ -440,6 +440,12 @@ pub(crate) fn import_inner(
         if let Some(queries) = &request.queries_turtle {
             files.insert("queries.ttl".to_string(), queries.clone());
         }
+        if !request.manifest.pointers.is_empty() {
+            files.insert(
+                crate::share::POINTERS_SCRUB_LABEL.to_string(),
+                crate::share::pointer_scrub_text(&request.manifest.pointers),
+            );
+        }
         crate::share_scrub::scrub_outward_payload(
             store,
             &files,

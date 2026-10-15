@@ -266,6 +266,10 @@ pub(crate) fn compose_scoped(
                 &BTreeMap::from([
                     ("export.nt".into(), request.export_ntriples.clone()),
                     ("shapes.ttl".into(), request.shapes_turtle.clone()),
+                    (
+                        crate::share::POINTERS_SCRUB_LABEL.into(),
+                        crate::share::pointer_scrub_text(&request.manifest.pointers),
+                    ),
                 ]),
                 "composition of an internal share",
             )?;

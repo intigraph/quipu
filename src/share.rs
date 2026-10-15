@@ -237,7 +237,10 @@ pub struct ShareFiles {
 }
 
 mod pointers;
+pub(crate) use pointers::pointer_scrub_text;
 pub(crate) use pointers::validate_pointers;
+/// The name a scrub refusal gives the pointer entries of `manifest.json`.
+pub(crate) const POINTERS_SCRUB_LABEL: &str = "manifest.json pointers";
 pub use pointers::{PointerTarget, SharePointer};
 
 /// Versioned, hash-checked share envelope.
@@ -554,6 +557,13 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         );
     }
     enforce_destination(store, &files, opts.destination, "share scrub")?;
+    if !manifest.pointers.is_empty() {
+        let pointers = BTreeMap::from([(
+            POINTERS_SCRUB_LABEL.to_string(),
+            pointers::pointer_scrub_text(&manifest.pointers),
+        )]);
+        enforce_destination(store, &pointers, opts.destination, "share scrub")?;
+    }
     Ok(SharePayload { manifest, files })
 }
 

@@ -116,6 +116,17 @@ fn malformed_or_credential_bearing_pointers_are_refused_by_the_producer() {
             "credentials",
         ),
         (
+            vec![endpoint(
+                "urn:g",
+                "https://q.example.org/sparql?access_token=s3cret",
+            )],
+            "query or fragment",
+        ),
+        (
+            vec![pack("urn:g", "https://example.org/p.tar.gz#frag", SHA)],
+            "query or fragment",
+        ),
+        (
             vec![pack("urn:g", "https://example.org/p.pendant.tar.gz", "abc")],
             "64 lowercase hex",
         ),
@@ -221,5 +232,61 @@ fn a_pointer_only_share_carries_no_facts_and_composition_reports_without_followi
                 .unwrap()
                 .is_none(),
         "pointers are reported, never followed or registered"
+    );
+}
+
+fn outward(pointers: Vec<SharePointer>) -> ShareOptions {
+    ShareOptions {
+        no_shapes: true,
+        pointers,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn an_outward_share_scrubs_pointer_urls_like_facts() {
+    // CONTROL: the same identifier in facts is refused outward.
+    let leaky = store_with("<urn:a> <urn:p> \"FIXTURE_PRIVATE_TOKEN\" .\n");
+    let dir = tempfile::tempdir().unwrap();
+    let err = share(
+        &leaky,
+        pack_dir(dir.path()).to_str().unwrap(),
+        &outward(Vec::new()),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("export.nt"), "{err}");
+
+    let store = store_with("<urn:a> <urn:p> \"x\" .\n");
+    for pointer in [
+        endpoint("urn:g", "http://FIXTURE_PRIVATE_TOKEN.example/sparql"),
+        pack(
+            "urn:g",
+            "https://example.org/FIXTURE_PRIVATE_TOKEN.pendant.tar.gz",
+            SHA,
+        ),
+        endpoint("urn:FIXTURE_PRIVATE_TOKEN", "https://q.example.org/sparql"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let err = share(
+            &store,
+            pack_dir(dir.path()).to_str().unwrap(),
+            &outward(vec![pointer]),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("manifest.json pointers"), "{err}");
+        assert!(!pack_dir(dir.path()).join("manifest.json").exists());
+    }
+
+    // The same pointer is fine when the share is explicitly internal.
+    let dir = tempfile::tempdir().unwrap();
+    produce(
+        &store,
+        dir.path(),
+        vec![endpoint(
+            "urn:g",
+            "http://FIXTURE_PRIVATE_TOKEN.example/sparql",
+        )],
     );
 }
