@@ -32,7 +32,17 @@ pub(super) fn predicate(
         (TermPattern::Variable(subject), NamedNodePattern::NamedNode(_))
         if matches!(seed.get(subject.as_str()), Some(crate::Value::Ref(id)) if *id >= 0)
     );
-    if (!text_leaf && !bound_leaf)
+    // Object-bound metadata (identifier/type) has the same narrow value
+    // condition in the caller. Read graph membership from the same physical
+    // assertion rowid without fetching its potentially wide fact-table page.
+    let object_leaf = matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
+        && match &pattern.object {
+            TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
+            TermPattern::Variable(object) => seed.get(object.as_str()).is_some_and(|value|
+                !matches!(value, crate::Value::Ref(id) if *id < 0)),
+            _ => false,
+        };
+    if (!text_leaf && !bound_leaf && !object_leaf)
         || store.has_attachments()
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()

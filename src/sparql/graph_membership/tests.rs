@@ -348,3 +348,24 @@ fn bound_streamed_metadata_uses_same_membership_without_changing_rows() {
     assert_eq!(count,1);assert!(reads.load(Ordering::Relaxed)>0,"bound streaming must check validated membership index");
     let retained=crate::sparql::triple::eval_triple_pattern_limited(&store,&pattern,&seed,&ctx,None).unwrap();assert_eq!(streamed,retained);
 }
+
+#[test]
+fn bound_object_membership_uses_covering_graph_index_without_payload_columns() {
+    let (store,graph)=fixture();index(&store);
+    let (pattern,_)=shape();
+    let ctx=TemporalContext {graph:GraphScope::Named(vec![graph]),..TemporalContext::default()};
+    let seed=Bindings::from([("text".to_owned(),crate::Value::Str("SEEDS alpha".into()))]);
+    let title=store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let mut params:Vec<Box<dyn rusqlite::types::ToSql>>=vec![Box::new(title)];
+    let scope=predicate(&store,&ctx,&pattern,&seed,&[graph],&mut params).unwrap()
+        .expect("bound object must keep graph checks on the covering rowid index");
+    let bytes=crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let hex:String=bytes.iter().map(|b|format!("{b:02x}")).collect();
+    let sql=|scope:&str|format!("SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND v=X'{hex}' AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)");
+    assert!(table_columns(&store,&sql("g=?2"),&[title,graph])>0);
+    assert_eq!(table_columns(&store,&sql(&scope),&[title,graph]),0);
+    let q=format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store,&q).unwrap().rows().len(),1);
+    let foreign=format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"seeds FOREIGN ONLY\" }} }}");
+    assert!(query(&store,&foreign).unwrap().rows().is_empty());
+}

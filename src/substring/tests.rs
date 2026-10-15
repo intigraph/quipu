@@ -402,3 +402,48 @@ fn old_dense_index_version_refuses_sparse_readiness_without_upgrading() {
     let after: (i64,i64) = store.conn.query_row("SELECT cursor,version FROM substring_progress",[],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
     assert_eq!(before,after,"queries must not initialize or upgrade derived custody");
 }
+
+#[test]
+fn ordinary_projection_does_not_fetch_fts_text_after_exact_phrase_match() {
+    use rusqlite::hooks::{AuthAction,AuthContext,Authorization};
+    let store=fixture();finish(&store);
+    store.conn.authorizer(Some(|context:AuthContext<'_>| {
+        if matches!(context.action,AuthAction::Read { table_name:"substring_fts",column_name:"text",.. }) { Authorization::Deny } else { Authorization::Allow }
+    })).unwrap();
+    let result=query(&store,&projected("quipu"));
+    assert!(result.is_ok(),"ordinary exact phrase must not fetch stored text: {result:?}");
+    assert_eq!(result.unwrap().rows().len(),1);
+}
+
+#[test]
+fn exact_trigram_phrase_matches_lowercase_substrings_including_punctuation() {
+    let conn=rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(FTS).unwrap();
+    let alphabet=['a','B','é','İ','ß','🐟',' ','"','\n','\0'];
+    let mut documents=Vec::new();
+    for n in 0..100 {
+        let text:String=(0..9).map(|p|alphabet[(n*7+p*p+3*p)%alphabet.len()]).collect();
+        documents.push(text.to_lowercase());
+    }
+    documents.extend(["a b","a\0b","quoted \"word\"", "Straße ÉCLAIR İstanbul", "🐟 fish"].map(str::to_owned));
+    let mut needles=std::collections::BTreeSet::new();
+    for (i,text) in documents.iter().enumerate() {
+        conn.execute("INSERT INTO substring_fts(rowid,scope,text,exact_text) VALUES(?1,'scope',?2,?3)",params![i as i64+1,text.replace('\0'," "),text.contains('\0').then_some(text)]).unwrap();
+        let chars:Vec<_>=text.chars().collect();
+        for start in 0..chars.len() {
+            for len in 3..=5 {if start+len<=chars.len() {
+                let needle:String=chars[start..start+len].iter().collect();
+                if !needle.contains('\0') {needles.insert(needle);}
+            }}
+        }
+    }
+    needles.extend(["absent control","a b","word","écl","🐟 f"].map(str::to_owned));
+    assert!(needles.len()>40,"positive generated coverage");
+    for needle in needles {
+        let phrase=format!("text:\"{}\"",needle.replace('"',"\"\""));
+        let mut stmt=conn.prepare("SELECT rowid FROM substring_fts WHERE substring_fts MATCH ?1 AND (exact_text IS NULL OR instr(exact_text,?2)>0) ORDER BY rowid").unwrap();
+        let actual:Vec<i64>=stmt.query_map(params![phrase,needle],|r|r.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        let expected:Vec<i64>=documents.iter().enumerate().filter(|(_,text)|text.contains(&needle)).map(|(i,_)|i as i64+1).collect();
+        assert_eq!(actual,expected,"{needle:?}");
+    }
+}

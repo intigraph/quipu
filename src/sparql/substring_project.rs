@@ -1,5 +1,6 @@
 //! Subject-only projection from an explicitly complete local substring index.
-//! Exact lexical verification remains; fingerprints never decide RDF equality.
+//! Exact trigram phrases decide ordinary text; NUL normalization still needs
+//! lexical verification. Fingerprints never decide RDF equality.
 use std::collections::HashSet;
 use spargebra::algebra::{Expression,Function,GraphPattern};
 use spargebra::term::{NamedNodePattern,TermPattern};
@@ -51,7 +52,12 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     let [predicate]=predicates.as_slice() else{return Ok(None);};
     let phrase=format!("scope:\"g={graph};p={predicate};\" AND text:\"{}\"",needle.replace('"',"\"\""));
     let mut params:Vec<rusqlite::types::Value>=vec![phrase.into(),needle.to_owned().into(),graph.into(),(*predicate).into()];
-    let mut conditions=vec!["substring_fts MATCH ?1".to_owned(),"instr(coalesce(substring_fts.exact_text,substring_fts.text),?2)>0".into(),"f.g=?3".into(),"f.a=?4".into(),"f.plain=1".into(),"f.fact_id=substring_fts.rowid".into()];
+    // The exact readiness DDL fixes case_sensitive=1 trigram semantics, and
+    // needle() requires >=3 Unicode characters without NUL. Ordinary stored
+    // text is already lowercase: the quoted phrase proves the substring.
+    // Normalized NUL text alone may have false positives and must be checked.
+    // Avoid fetching the potentially wide ordinary text column again.
+    let mut conditions=vec!["substring_fts MATCH ?1".to_owned(),"(substring_fts.exact_text IS NULL OR instr(substring_fts.exact_text,?2)>0)".into(),"f.g=?3".into(),"f.a=?4".into(),"f.plain=1".into(),"f.fact_id=substring_fts.rowid".into()];
     if let Some(value)=seed.get(name) {
         let Value::Ref(id)=value else{return Ok(None);};
         if *id<0{return Ok(None);}
