@@ -11,9 +11,11 @@ fn doubling_template_is_refused_before_large_allocation() {
         "{% set s = s ~ s %}".repeat(26)
     );
     for (template, success) in [("{{ 'x' }}", true), (attack.as_str(), false)] {
+        // Parsing reserves a 256 MiB stack. Leave virtual-address room for
+        // linked feature surfaces (notably LanceDB); RSS remains capped below.
         let result = Command::new("prlimit")
             .args([
-                "--as=402653184",
+                "--as=1073741824",
                 "--",
                 "/usr/bin/time",
                 "-f",
