@@ -385,6 +385,9 @@ COMMANDS:
     qp db attach --list [--db <path>]
     qp events refusals [--db <path>]
     qp changes [--since-tx N] [--db <path>]
+    qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
+    qp graph label <iri> --label '<JSON label fields>' [--db <path>]
+    qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]
     qp graph import <db> --as <iri> [--db <path>]
     qp fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     qp unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack

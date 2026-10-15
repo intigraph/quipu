@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
+import select
 import re
 import subprocess
 import sys
@@ -39,18 +41,65 @@ def discover(manifest: Path) -> list[tuple[object, tuple[tuple[str, Path], ...]]
     return found
 
 
+def endpoint_urls(service_data: tuple[tuple[str, Path], ...]) -> dict[str, str]:
+    urls: dict[str, str] = {}
+    used: set[int] = set()
+    for endpoint, _ in service_data:
+        if endpoint in urls:
+            raise ValueError(f"duplicate SERVICE endpoint: {endpoint}")
+        for _ in range(32):
+            port = EVAL.reserve_port()
+            if port not in used:
+                used.add(port)
+                urls[endpoint] = f"http://127.0.0.1:{port}/query"
+                break
+        else:
+            raise ValueError("could not allocate distinct SERVICE ports")
+    return urls
+
+
+def stop_server(process: subprocess.Popen) -> None:
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    if process.stderr:
+        process.stderr.close()
+
+
 def start_server(server: Path, cwd: Path, database: Path, url: str) -> subprocess.Popen:
-    process = subprocess.Popen([str(server), "--db", str(database), "--bind", url.removeprefix("http://")], cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-    for _ in range(150):
-        try:
-            with urllib.request.urlopen(f"{url}/health", timeout=0.2):
-                return process
-        except (urllib.error.URLError, TimeoutError):
+    bind = url.removeprefix("http://")
+    process = subprocess.Popen([str(server), "--db", str(database), "--bind", bind], cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    # This message is emitted only after this child's listener binds. A health
+    # response alone may belong to another process that won the port race.
+    marker = f"quipu-server listening on {bind} ".encode()
+    log = b""
+    deadline = time.monotonic() + 5
+    try:
+        assert process.stderr is not None
+        while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise ValueError(f"quipu-server exited before health: {process.stderr.read().strip()}")
+                log += process.stderr.read()
+                raise ValueError(f"quipu-server exited before health: {log[-16384:].decode(errors='replace').strip()}")
+            if marker not in log:
+                readable, _, _ = select.select([process.stderr], [], [], 0.02)
+                if readable:
+                    log = (log + os.read(process.stderr.fileno(), 4096))[-16384:]
+                continue
+            try:
+                with urllib.request.urlopen(f"{url}/health", timeout=0.2):
+                    if process.poll() is None:
+                        return process
+            except (urllib.error.URLError, TimeoutError):
+                pass
             time.sleep(0.02)
-    process.terminate()
-    raise ValueError("quipu-server did not become healthy")
+        raise ValueError("quipu-server did not bind and become healthy")
+    except BaseException:
+        stop_server(process)
+        raise
 
 
 def run_case(case: object, service_data: tuple[tuple[str, Path], ...], quipu: Path, server: Path) -> dict:
@@ -59,7 +108,7 @@ def run_case(case: object, service_data: tuple[tuple[str, Path], ...], quipu: Pa
         return {**base, "status": "unsupported", "reason": "variable SERVICE endpoints are deliberately refused; endpoints must be operator-configured", "commitment": "deliberate-policy-deviation"}
     with tempfile.TemporaryDirectory(prefix="quipu-w3c-service-") as raw:
         temporary = Path(raw)
-        endpoint_map = {endpoint: f"http://127.0.0.1:{EVAL.reserve_port()}/query" for endpoint, _ in service_data}
+        endpoint_map = endpoint_urls(service_data)
         config_dir = temporary / ".bobbin"
         config_dir.mkdir()
         lines: list[str] = []
@@ -118,11 +167,7 @@ def run_case(case: object, service_data: tuple[tuple[str, Path], ...], quipu: Pa
             return {**base, "status": "error", "diagnostic": str(error)}
         finally:
             for process in reversed(processes):
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill(); process.wait()
+                stop_server(process)
 
 
 def main() -> int:
