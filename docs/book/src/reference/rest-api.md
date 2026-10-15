@@ -1149,8 +1149,10 @@ curl -s localhost:3030/project -X POST \
 ### `POST /render`
 
 Prepare a deterministic markdown file plan from a stored specification or an
-ad-hoc specification. This is a pooled read-only endpoint: the server neither
-writes files nor accepts a destination. The CLI declares `cli-render` in
+ad-hoc specification. This protected computation requires an accepted bearer;
+it remains a pooled read-only endpoint, including on read-only servers. Missing
+or invalid credentials refuse, and open-write mode does not open this route.
+The server neither writes files nor accepts a destination. The CLI declares `cli-render` in
 `X-Quipu-Client` and publishes the verified plan locally.
 
 ```json

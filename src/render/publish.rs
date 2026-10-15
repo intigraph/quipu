@@ -49,20 +49,23 @@ fn stamps(files: &BTreeMap<String, RenderFile>) -> BTreeMap<String, Stamp> {
         })
         .collect()
 }
-fn ancestry(path: &Path) -> Result<()> {
-    for ancestor in path.ancestors() {
-        match fs::symlink_metadata(ancestor) {
-            Ok(m) if !m.file_type().is_dir() => {
-                return Err(invalid(
-                    "destination and ancestors must be real directories",
-                ));
-            }
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(io(e)),
+#[cfg(unix)]
+fn open_parent(path: &Path) -> Result<Dir> {
+    // Walk from the filesystem root through directory capabilities. Each
+    // component is opened NOFOLLOW; no checked pathname is reopened ambiently.
+    let mut dir = Dir::open_ambient_dir("/", cap_std::ambient_authority()).map_err(io)?;
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir => {}
+            std::path::Component::Normal(name) => dir = open_root(&dir, Path::new(name))?,
+            _ => return Err(invalid("parent must have canonical directory components")),
         }
     }
-    Ok(())
+    Ok(dir)
+}
+#[cfg(not(unix))]
+fn open_parent(_: &Path) -> Result<Dir> {
+    Err(invalid("publication requires Unix directory capabilities"))
 }
 #[cfg(unix)]
 fn mode(m: &Metadata) -> u32 {
@@ -247,8 +250,7 @@ pub fn publish(plan: &RenderPlan, destination: &Path, dry_run: bool) -> Result<C
     let name = root
         .file_name()
         .ok_or_else(|| invalid("destination requires a directory name"))?;
-    ancestry(&root)?;
-    let parent = Dir::open_ambient_dir(parent_path, cap_std::ambient_authority()).map_err(io)?;
+    let parent = open_parent(parent_path)?;
     #[cfg(unix)]
     let lock = fs::File::from(
         rustix::fs::openat(
@@ -328,6 +330,22 @@ pub fn publish(plan: &RenderPlan, destination: &Path, dry_run: bool) -> Result<C
             .dir
             .write(MANIFEST, serde_json::to_vec_pretty(&manifest).map_err(io)?)
             .map_err(io)?;
+        use cap_std::fs::PermissionsExt;
+        stage
+            .dir
+            .set_permissions(MANIFEST, cap_std::fs::Permissions::from_mode(0o600))
+            .map_err(io)?;
+        let root_mode = before
+            .dir
+            .as_ref()
+            .map(|dir| dir.dir_metadata().map(|m| mode(&m)))
+            .transpose()
+            .map_err(io)?
+            .unwrap_or(0o700);
+        stage
+            .dir
+            .set_permissions(".", cap_std::fs::Permissions::from_mode(root_mode))
+            .map_err(io)?;
         stage
             .dir
             .open(MANIFEST)
@@ -376,7 +394,8 @@ impl Stage {
             std::process::id(),
             COUNT.fetch_add(1, Ordering::Relaxed)
         ));
-        parent.create_dir(&name).map_err(io)?;
+        rustix::fs::mkdirat(parent, &name, rustix::fs::Mode::from_bits_truncate(0o700))
+            .map_err(io)?;
         let dir = open_root(parent, &name)?;
         Ok(Self {
             parent: parent.try_clone().map_err(io)?,

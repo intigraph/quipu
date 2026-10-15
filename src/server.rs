@@ -494,8 +494,9 @@ async fn main() {
                         .get(axum::http::header::AUTHORIZATION)
                         .and_then(|v| v.to_str().ok())
                         .map(str::to_string);
-                    let authorization = quipu::http_auth::authorize_bearers(
-                        is_write,
+                    let authorization = quipu::http_auth::authorize_http_bearers(
+                        &path,
+                        req.method().as_str(),
                         read_only,
                         &auth_policy,
                         auth_header.as_deref(),

@@ -5,10 +5,14 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
+mod render_auth;
+pub use render_auth::authorize_http_bearers;
+
 /// The set of write endpoints. A request to one of these mutates the fact log
 /// (or schema), so it is subject to read-only mode and bearer auth. Everything
 /// else (query, search, entity reads, UI, health) is treated as read-only and
-/// stays open.
+/// stays open, except protected read computations such as `/render`, which use
+/// `authorize_http_bearers` without changing their store mutability.
 ///
 /// WHY THIS IS A HAND-KEPT LIST AND NOT DERIVED FROM A MACRO (aegis-2f4n).
 /// The obvious idea — "the write set is the `rw_handler!` routes in server.rs" —
@@ -128,7 +132,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Reads the store, mutates nothing.
     "/metrics",
     "/query",
-    // Produces bounded bytes only; the client owns filesystem publication.
+    // Read-only computation, but authorize_http_bearers requires a credential.
     "/render",
     "/cord",
     // Render-ready node-link projection for the UI. Reads the fact log only.

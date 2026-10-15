@@ -47,18 +47,37 @@ impl Write for Bounded {
 }
 
 fn template_bytes(template: &str, context: &Value) -> Result<Vec<u8>> {
-    if template.len() > 256 * 1024 {
-        return Err(invalid("template too large"));
-    }
-    let tags = regex::Regex::new(r"(?s)\{[\{%](.*?)[%\}]\}").expect("constant regex");
-    if tags.captures_iter(template).any(|tag| tag[1].contains('*')) {
-        return Err(invalid(
-            "multiplication/repetition is unsupported in template expressions",
-        ));
-    }
+    super::template_limits::validate(template)?;
     let mut env = Environment::empty();
-    env.add_filter("upper", |value: String| value.to_uppercase());
-    env.add_filter("lower", |value: String| value.to_lowercase());
+    // Never coerce an arbitrarily structured value into an intermediate string.
+    fn case(
+        value: &minijinja::Value,
+        upper: bool,
+    ) -> std::result::Result<String, minijinja::Error> {
+        let text = value
+            .as_str()
+            .filter(|v| v.len() <= MAX_BYTES)
+            .ok_or_else(|| {
+                minijinja::Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    "bounded string required",
+                )
+            })?;
+        let out = if upper {
+            text.to_uppercase()
+        } else {
+            text.to_lowercase()
+        };
+        if out.len() > MAX_BYTES {
+            return Err(minijinja::Error::new(
+                minijinja::ErrorKind::InvalidOperation,
+                "case result cap",
+            ));
+        }
+        Ok(out)
+    }
+    env.add_filter("upper", |value: minijinja::Value| case(&value, true));
+    env.add_filter("lower", |value: minijinja::Value| case(&value, false));
     // No loader, custom object, callback, filesystem or network function is
     // installed. Remove allocation-prone range; loops only see bounded rows.
     env.set_fuel(Some(100_000));
@@ -113,6 +132,14 @@ pub(crate) fn add_file(
     }
     if files.len() >= MAX_FILES || bytes.len() > MAX_BYTES {
         return Err(invalid("file/output cap exceeded"));
+    }
+    let mut total = bytes.len();
+    for file in files.values() {
+        let padding = file.base64.bytes().rev().take_while(|b| *b == b'=').count();
+        total = total.saturating_add(file.base64.len() / 4 * 3 - padding);
+        if total > MAX_BYTES {
+            return Err(invalid("aggregate output cap exceeded"));
+        }
     }
     for existing in files.keys() {
         let old = existing.to_ascii_lowercase();

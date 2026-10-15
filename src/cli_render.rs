@@ -115,10 +115,13 @@ fn remote(url: &str, request: &RenderRequest) -> quipu::Result<RenderPlan> {
         .redirects(0)
         .timeout(std::time::Duration::from_secs(30))
         .build();
-    let response = agent
+    let mut post = agent
         .post(&endpoint)
         .set("Content-Type", "application/json")
-        .set("X-Quipu-Client", "cli-render")
+        .set("X-Quipu-Client", "cli-render");
+    let token = render_credential()?;
+    post = post.set("Authorization", &format!("Bearer {token}"));
+    let response = post
         .send_string(&serde_json::to_string(request).map_err(|e| error(&e))?)
         .map_err(|e| error(&e))?;
     let mut bytes = Vec::new();
@@ -137,6 +140,46 @@ fn remote(url: &str, request: &RenderRequest) -> quipu::Result<RenderPlan> {
     }
     plan.validate()?;
     Ok(plan)
+}
+
+#[cfg(feature = "remote")]
+fn render_credential() -> quipu::Result<String> {
+    use std::io::Read;
+    let fail = || {
+        quipu::Error::InvalidValue("remote render requires a provisioned client credential".into())
+    };
+    if let Ok(value) = std::env::var("QUIPU_AUTH_TOKEN")
+        && !value.trim().is_empty()
+    {
+        return checked_credential(&value);
+    }
+    let path = std::env::var_os("QUIPU_AUTH_TOKEN_FILE")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|home| std::path::PathBuf::from(home).join(".config/quipu/token"))
+        })
+        .ok_or_else(fail)?;
+    let mut value = String::new();
+    std::fs::File::open(path)
+        .map_err(|_| fail())?
+        .take(16_385)
+        .read_to_string(&mut value)
+        .map_err(|_| fail())?;
+    checked_credential(&value)
+}
+
+#[cfg(feature = "remote")]
+fn checked_credential(value: &str) -> quipu::Result<String> {
+    let token = value.trim();
+    if token.is_empty() || value.len() > 16_384 || !token.bytes().all(|b| b.is_ascii_graphic()) {
+        // ureq includes a rejected header's complete value in BadHeader.
+        // Validate before handing a credential to that error-producing layer.
+        return Err(quipu::Error::InvalidValue(
+            "remote render requires a valid provisioned client credential".into(),
+        ));
+    }
+    Ok(token.to_owned())
 }
 #[cfg(not(feature = "remote"))]
 fn remote(_: &str, _: &RenderRequest) -> quipu::Result<RenderPlan> {

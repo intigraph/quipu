@@ -71,6 +71,55 @@ fn actual_cli_ad_hoc_dry_run_and_unknown_flag() {
     );
 }
 
+#[cfg(feature = "remote")]
+#[test]
+fn malformed_credential_errors_never_echo_header_values_or_connect() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    let token_file = home.join("private-token");
+    std::fs::write(&token_file, b"REDACTION-CONTROL\r\nInjected: fixture").unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    for from_file in [false, true] {
+        let result = Command::new(env!("CARGO_BIN_EXE_quipu"))
+            .args([
+                "render",
+                "urn:example:spec",
+                "--server",
+                &format!("http://{}", listener.local_addr().unwrap()),
+                "--dest",
+                root.path().join("owned").to_str().unwrap(),
+            ])
+            .current_dir(root.path())
+            .env("HOME", &home)
+            .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env(
+                "QUIPU_AUTH_TOKEN",
+                if from_file {
+                    ""
+                } else {
+                    "REDACTION-CONTROL\r\nInjected: fixture"
+                },
+            )
+            .env("QUIPU_AUTH_TOKEN_FILE", &token_file)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        assert!(!result.status.success());
+        assert!(
+            stderr.contains("valid provisioned client credential"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains("REDACTION-CONTROL"));
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        assert!(!root.path().join("owned").exists());
+    }
+}
+
 #[test]
 fn stored_cli_spec_and_includes_round_trip_in_private_pendant() {
     let root = tempfile::tempdir().unwrap();
@@ -185,7 +234,13 @@ fn remote_cli_requires_the_requested_historical_stamp_before_publishing() {
         "sha256:{}",
         hex::encode(ring::digest::digest(&ring::digest::SHA256, bytes).as_ref())
     );
-    for (returned_at, expected_success) in [(Some(requested), true), (None, false)] {
+    std::fs::create_dir_all(home.join(".config/quipu")).unwrap();
+    std::fs::write(home.join(".config/quipu/token"), b"render-test-token\n").unwrap();
+    for (returned_at, expected_success, file_token) in [
+        (Some(requested), true, false),
+        (Some(requested), true, true),
+        (None, false, false),
+    ] {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let response=serde_json::json!({"schema":1,"spec":"urn:example:requested","source_tx":7,
@@ -200,6 +255,7 @@ fn remote_cli_requires_the_requested_historical_stamp_before_publishing() {
             reader.read_line(&mut first).unwrap();
             assert!(first.starts_with("POST /render "));
             let mut length = None;
+            let mut authenticated = false;
             loop {
                 let mut line = String::new();
                 reader.read_line(&mut line).unwrap();
@@ -209,7 +265,14 @@ fn remote_cli_requires_the_requested_historical_stamp_before_publishing() {
                 if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
                     length = Some(value.trim().parse::<usize>().unwrap());
                 }
+                if line.eq_ignore_ascii_case("Authorization: Bearer render-test-token\r\n") {
+                    authenticated = true;
+                }
             }
+            assert!(
+                authenticated,
+                "remote render must send its provisioned bearer"
+            );
             let mut body = vec![0; length.unwrap()];
             reader.read_exact(&mut body).unwrap();
             let request: serde_json::Value = serde_json::from_slice(&body).unwrap();
@@ -236,6 +299,11 @@ fn remote_cli_requires_the_requested_historical_stamp_before_publishing() {
             .current_dir(root.path())
             .env("HOME", &home)
             .env("XDG_CONFIG_HOME", home.join(".config"))
+            .env(
+                "QUIPU_AUTH_TOKEN",
+                if file_token { "" } else { "render-test-token" },
+            )
+            .env_remove("QUIPU_AUTH_TOKEN_FILE")
             .output()
             .unwrap();
         worker.join().unwrap();

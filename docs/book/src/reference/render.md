@@ -48,7 +48,12 @@ Normal share/export scrub and destination rules still apply.
 Use `per-entity` layout and a path such as `{scope}/{slug}/SKILL.md`. Each row has
 its own `row` context; single-file templates receive all sorted `rows`. The
 small deterministic template language supports loops, conditionals and the
-`upper` and `lower` filters. Undefined variables, path collisions, traversal,
+`upper` and `lower` filters on bounded strings. Fields, indexes, scalar literals,
+comparisons and boolean conditions are supported. Allocation operators (`~`, `+`,
+`*`, `**`), reassignment, captures, recursive loops, function calls and dynamic
+container literals are refused before template compilation. Templates are capped
+at 256 KiB and 4096 tokens; final files share one incremental 16 MiB budget.
+Undefined variables, path collisions, traversal,
 case aliases and incomplete queries refuse before publication.
 
 Includes are a JSON literal in `render:includes`, or an `includes` column on
@@ -76,10 +81,19 @@ qp render urn:example:report --valid-at 2026-01-15T00:00:00Z \
 qp render urn:example:report --dest output/remote --server https://graph.example
 ```
 
+Remote `/render` requests require an accepted bearer even on a read-only server.
+The client follows the documented credential order: nonempty `QUIPU_AUTH_TOKEN`,
+then `QUIPU_AUTH_TOKEN_FILE`, then `~/.config/quipu/token`. Credentials are never
+passed as arguments or printed. Without a configured credential, remote rendering
+refuses; local rendering requires no bearer.
+
 Only manifest-owned files can be updated or removed. Unknown files, edited
 managed bytes, changed modes, symlinks and a changed destination refuse. The
 client stages a complete directory and atomically publishes it on Linux/macOS.
-Unchanged files retain their inode and modification time across an update.
+New roots are private (0700); updates preserve the existing root mode. The
+manifest is private (0600). Parent directories are opened component by component
+with no-follow capabilities. Unchanged files retain their inode and modification
+time across an update.
 A failed or indeterminate publication is not permission to retry blindly;
 inspect the retained destination and any reported staging directory first.
 

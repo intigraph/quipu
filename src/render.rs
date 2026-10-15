@@ -5,7 +5,10 @@ mod diff;
 mod plan;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod publish;
+#[cfg(test)]
+mod security_tests;
 mod spec;
+mod template_limits;
 #[cfg(test)]
 mod tests;
 
