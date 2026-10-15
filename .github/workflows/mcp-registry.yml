@@ -95,9 +95,11 @@ jobs:
       - name: Build
         env:
           VERSION: ${{ steps.version.outputs.version }}
+        # The same digest-pinned base CI smoke-tests, never the floating tag (aegis-r38).
         run: |
-          docker build --platform linux/amd64 -f packaging/oci/Dockerfile \
-            -t "${IMAGE}:${VERSION}" oci-context
+          scripts/ci/oci-base.sh quipu-oci-base:release
+          docker build --platform linux/amd64 --build-arg BASE_IMAGE=quipu-oci-base:release \
+            -f packaging/oci/Dockerfile -t "${IMAGE}:${VERSION}" oci-context
 
       # The exact command VS Code writes after an Install click, including the
       # named volume, run twice so a database that does not persist is caught.
