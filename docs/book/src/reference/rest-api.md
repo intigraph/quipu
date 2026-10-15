@@ -1490,9 +1490,20 @@ folds into `other` rather than creating unbounded Prometheus cardinality:
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
 
+`/query` load is also counted by the caller's DECLARED `X-Quipu-Agent`, so a
+read-heavy client such as `seeds` can be split by the crew member it acts for.
+The value is caller-declared and unauthenticated. It is normalised like the
+client label and capped at 32 agents; a missing or unusable value is
+`undeclared` and overflow folds into `other`. There is no task or endpoint
+dimension, so the series count stays at most clients x 32:
+
+- `quipu_http_agent_query_requests_total{client,agent}` — completed `/query`
+  requests (including dropped futures, like the client counter);
+- `quipu_http_agent_query_seconds_total{client,agent}` — their wall time.
+
 Writers declare structured provenance in five headers: `X-Quipu-Agent`,
 `X-Quipu-Harness`, `X-Quipu-Model`, `X-Quipu-Session` and `X-Quipu-Host`. Their
-values are never metric labels. On write routes the server classifies how
+values are not metric labels, except `X-Quipu-Agent` on `/query` above. On write routes the server classifies how
 completely they were declared, and counts each COMMITTED write transaction once,
 at commit. A refused or rolled-back request counts nothing, and commits the
 engine makes on a request's behalf (verdicts, reasoner materialization,

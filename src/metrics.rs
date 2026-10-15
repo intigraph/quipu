@@ -24,6 +24,7 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+pub mod agents;
 pub(crate) mod attestation;
 mod histogram;
 use histogram::Hist;
@@ -228,6 +229,8 @@ pub struct Metrics {
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
+    /// `/query` by declared agent (aegis-ufw); bounded, no task/endpoint dimension.
+    agent_queries: agents::AgentQueryMetrics,
     /// (client, task, endpoint template) -> (request count, summed seconds).
     clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
     /// Per-caller tails, sharing the counter's bounded identity but not its task dimension.
@@ -330,6 +333,20 @@ impl Metrics {
     ///
     /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
     /// constant for why the cap is not optional.
+    /// Count a completed `/query` by its DECLARED agent (aegis-ufw). Other
+    /// endpoints are ignored here; `quipu_http_client_requests_total` covers them.
+    pub fn observe_agent_query(
+        &self,
+        client: &str,
+        endpoint: &str,
+        declared_agent: Option<&str>,
+        seconds: f64,
+    ) {
+        if endpoint == "/query" {
+            self.agent_queries.observe(client, declared_agent, seconds);
+        }
+    }
+
     pub fn observe_client(&self, client: &str, task: &str, endpoint: &str, seconds: f64) {
         let mut map = self.clients.lock().unwrap();
         // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
@@ -447,6 +464,7 @@ impl Metrics {
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.write_provenance.render(&mut out);
+        self.agent_queries.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_auth_refusals_total HTTP 401 responses by bounded client, route template and method.\n\
