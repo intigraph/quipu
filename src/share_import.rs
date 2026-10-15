@@ -236,6 +236,8 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
         )));
     }
     crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
+    // A hand-edited manifest must not carry what the producer would have refused.
+    crate::share::validate_pointers(&request.manifest.pointers)?;
     let expected = sha256(&manifest_bytes(&request.manifest, false)?);
     if request.manifest.share_id != expected {
         return Err(Error::InvalidValue(format!(
@@ -437,6 +439,12 @@ pub(crate) fn import_inner(
         ]);
         if let Some(queries) = &request.queries_turtle {
             files.insert("queries.ttl".to_string(), queries.clone());
+        }
+        if !request.manifest.pointers.is_empty() {
+            files.insert(
+                crate::share::POINTERS_SCRUB_LABEL.to_string(),
+                crate::share::pointer_scrub_text(&request.manifest.pointers),
+            );
         }
         crate::share_scrub::scrub_outward_payload(
             store,

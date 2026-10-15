@@ -358,7 +358,7 @@ async fn query_core(
                     })
             });
             if let Some(fmt) = format {
-                let (result, _truncated) = quipu::query_result_with_federation(
+                let (result, truncated) = quipu::query_result_with_federation(
                     store,
                     &input,
                     Some(std::sync::Arc::new(federation.clone())),
@@ -369,6 +369,14 @@ async fn query_core(
                     // this, one Accept header reopens the exact silence the marker
                     // closes on the bespoke shape — for SELECT as much as for ASK.
                     let mut headers = HeaderMap::new();
+                    headers.insert(
+                        axum::http::HeaderName::from_static("x-quipu-truncated"),
+                        axum::http::HeaderValue::from_static(if truncated {
+                            "true"
+                        } else {
+                            "false"
+                        }),
+                    );
                     super::input_fields::query_header(&input, &mut headers);
                     if let Ok(ct) = axum::http::HeaderValue::from_str(content_type) {
                         headers.insert(axum::http::header::CONTENT_TYPE, ct);

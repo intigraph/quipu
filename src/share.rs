@@ -110,6 +110,8 @@ pub struct ShareOptions {
     /// travels with the bytes rather than living in the shell history of
     /// whoever ran the command.
     pub destination: ShareDestination,
+    /// Graphs to name without carrying (aegis-3fy1kp). Empty for an ordinary share.
+    pub pointers: Vec<SharePointer>,
 }
 
 impl Default for ShareOptions {
@@ -125,6 +127,7 @@ impl Default for ShareOptions {
             #[cfg(not(target_arch = "wasm32"))]
             attest: None,
             destination: ShareDestination::default(),
+            pointers: Vec::new(),
         }
     }
 }
@@ -185,6 +188,10 @@ impl SharePayloadRequest {
             // (aegis-auw0o7). An internal share is produced at the machine that
             // owns the store, with `quipu share --destination internal`.
             destination: ShareDestination::Outward,
+            // Not settable over HTTP: pointers are a property of the producing
+            // repository (aegis-3fy1kp), and a caller who does not own it must not
+            // make this server's share point anywhere.
+            pointers: Vec::new(),
         }
     }
 
@@ -228,6 +235,13 @@ pub struct ShareFiles {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
 }
+
+mod pointers;
+pub(crate) use pointers::pointer_scrub_text;
+pub(crate) use pointers::validate_pointers;
+/// The name a scrub refusal gives the pointer entries of `manifest.json`.
+pub(crate) const POINTERS_SCRUB_LABEL: &str = "manifest.json pointers";
+pub use pointers::{PointerTarget, SharePointer};
 
 /// Versioned, hash-checked share envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -308,6 +322,15 @@ pub struct ShareManifest {
     /// produced before this existed — the field is additive, not a format break.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<ShareDestination>,
+    /// Graphs this share names but does not carry (aegis-3fy1kp).
+    ///
+    /// INSIDE `share_id`, like `destination`: removing or editing a pointer makes
+    /// the manifest hash to something else and `verify_share` refuses. Skipped
+    /// when empty, so every share produced before this field is byte-identical.
+    /// An older reader drops the unknown field, recomputes a different id and
+    /// refuses the share: it fails closed rather than silently ignoring pointers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<SharePointer>,
 }
 
 /// The directory name a share uses when its manifest does not say.
@@ -494,7 +517,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             .destination
             .is_internal()
             .then_some(ShareDestination::Internal),
+        pointers: opts.pointers.clone(),
     };
+    validate_pointers(&manifest.pointers)?;
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
     // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
     // stripped from the hashed form (see `manifest_bytes`), so assigning it here
@@ -532,6 +557,13 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         );
     }
     enforce_destination(store, &files, opts.destination, "share scrub")?;
+    if !manifest.pointers.is_empty() {
+        let pointers = BTreeMap::from([(
+            POINTERS_SCRUB_LABEL.to_string(),
+            pointers::pointer_scrub_text(&manifest.pointers),
+        )]);
+        enforce_destination(store, &pointers, opts.destination, "share scrub")?;
+    }
     Ok(SharePayload { manifest, files })
 }
 
@@ -672,3 +704,7 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "share/pointer_tests.rs"]
+mod pointer_tests;

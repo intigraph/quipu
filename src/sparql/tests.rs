@@ -4328,3 +4328,54 @@ fn sparse_literal_does_not_replan_a_disconnected_join() {
         "disconnected relation must keep its normal hash join"
     );
 }
+
+#[test]
+fn f79_iri_order_is_lexical_independent_of_intern_order() {
+    let store = Store::open_in_memory().unwrap();
+    for iri in ["urn:order:z", "urn:order:a", "urn:order:m"] {
+        store.intern(iri).unwrap();
+    }
+    for (order, expected) in [
+        ("?s", vec!["urn:order:a", "urn:order:m", "urn:order:z"]),
+        (
+            "DESC(?s)",
+            vec!["urn:order:z", "urn:order:m", "urn:order:a"],
+        ),
+    ] {
+        let result = query(&store, &format!("SELECT ?s WHERE {{ VALUES ?s {{ <urn:order:z> <urn:order:a> <urn:order:m> }} }} ORDER BY {order}")).unwrap();
+        let actual: Vec<_> = result
+            .rows()
+            .iter()
+            .map(|r| {
+                let Value::Ref(id) = r["s"] else {
+                    panic!("expected IRI")
+                };
+                store.resolve(id).unwrap()
+            })
+            .collect();
+        println!("ORDER BY {order}: {actual:?}");
+        assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn f79_iri_keyset_pages_do_not_skip_interned_subjects() {
+    let store = Store::open_in_memory().unwrap();
+    for iri in ["urn:order:z", "urn:order:a", "urn:order:m"] {
+        store.intern(iri).unwrap();
+    }
+    let mut cursor = String::new();
+    let mut seen = Vec::new();
+    for _ in 0..4 {
+        let result = query(&store, &format!("SELECT ?s WHERE {{ VALUES ?s {{ <urn:order:z> <urn:order:a> <urn:order:m> }} FILTER(STR(?s) > \"{cursor}\") }} ORDER BY ?s LIMIT 1")).unwrap();
+        if result.rows().is_empty() {
+            break;
+        }
+        let Value::Ref(id) = result.rows()[0]["s"] else {
+            panic!("expected IRI")
+        };
+        cursor = store.resolve(id).unwrap();
+        seen.push(cursor.clone());
+    }
+    assert_eq!(seen, ["urn:order:a", "urn:order:m", "urn:order:z"]);
+}
