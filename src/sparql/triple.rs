@@ -415,7 +415,7 @@ fn visit_triple_pattern_limited(
     // The candidate flag proves primary-only facts and retains every filter.
     let facts = if substring_candidates {
         "facts NOT INDEXED"
-    } else if matches!(mode, ScanMode::Retained) {
+    } else if matches!(mode, ScanMode::Retained | ScanMode::Streamed) {
         super::graph_membership::object_source(store,ctx,tp,bindings)?.unwrap_or(store.facts_source())
     } else {
         store.facts_source()
