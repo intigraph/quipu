@@ -50,7 +50,9 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     if !store.substring_index_ready()? {return Ok(None);}
     let predicates=store.lookup_all(predicate.as_str())?;
     let [predicate]=predicates.as_slice() else{return Ok(None);};
-    let phrase=format!("scope:\"g={graph};p={predicate};\" AND text:\"{}\"",needle.replace('"',"\"\""));
+    // Exact compact g/a checks below establish scope. Do not intersect a
+    // redundant high-frequency FTS scope posting list for every text leaf.
+    let phrase=format!("text:\"{}\"",needle.replace('"',"\"\""));
     let mut params:Vec<rusqlite::types::Value>=vec![phrase.into(),needle.to_owned().into(),graph.into(),(*predicate).into()];
     // The exact readiness DDL fixes case_sensitive=1 trigram semantics, and
     // needle() requires >=3 Unicode characters without NUL. Ordinary stored
