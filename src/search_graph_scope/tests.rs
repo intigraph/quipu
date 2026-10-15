@@ -337,3 +337,64 @@ fn deleting_named_facts_cannot_turn_their_vector_into_a_root_hit() {
         "deletion must not admit a previously hidden named vector into ROOT"
     );
 }
+
+#[test]
+fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
+    // aegis-rcz5ib.10: keyword scope reads the lexical index's own graph column,
+    // so it needs no named-only vectors; every other mode keeps the refusal.
+    let mut s = fixture();
+    s.search_config_mut().named_graphs = false;
+    s.search_config_mut().hybrid = true;
+    let out = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","graph":"urn:graph:a","verbose":true}),
+    )
+    .unwrap();
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["results"][0]["entity"], "urn:alpha");
+    assert_eq!(out["results"][0]["graph"], "urn:graph:a");
+    let all = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","all_graphs":true}),
+    )
+    .unwrap();
+    assert_eq!(all["count"], 3);
+    for input in [
+        json!({"mode":"semantic","embedding":[1.0,0.0],"graph":"urn:graph:a"}),
+        json!({"mode":"hybrid","query":"shared","alpha":0.5,"graph":"urn:graph:a"}),
+        json!({"query":"shared","graph":"urn:graph:a"}),
+    ] {
+        let err = crate::tool_search(&s, &input).unwrap_err().to_string();
+        assert!(err.contains("named_graphs = false"), "{input}: {err}");
+    }
+    let root = crate::tool_search(&s, &json!({"mode":"keyword","query":"shared"})).unwrap();
+    assert_eq!(root["count"], 1, "omitted scope stays ROOT");
+    assert_eq!(root["results"][0]["entity"], "urn:root");
+}
+
+#[test]
+fn keyword_graph_scope_still_refuses_an_incomplete_index() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.search_config_mut().keyword = true;
+    s.search_config_mut().named_graphs = false;
+    let id = s.graph_create("urn:graph:a").unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        &mut s,
+        &b"<urn:alpha> <http://www.w3.org/2000/01/rdf-schema#label> \"shared alpha\" ."[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        AT,
+        None,
+        None,
+        id,
+    )
+    .unwrap();
+    s.initialize_lexical_index().unwrap();
+    let err = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","graph":"urn:graph:a"}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("not ready"), "{err}");
+}
