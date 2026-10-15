@@ -38,6 +38,10 @@ const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, r
 const page = await ctx.newPage();
 let capturing = false, t0 = 0, capture = Promise.resolve();
 try {
+  await sleep(1500);
+  await page.goto(`http://127.0.0.1:${STAGE_PORT}/stage.html`);
+  await page.evaluate((u) => window.stage.graph(u), `http://127.0.0.1:${QUIPU_PORT}/ui#explorer`);
+  await sleep(2500);
   // Frames for the README GIF: a screenshot every 250ms, named by elapsed milliseconds.
   const frames = path.join(outDir, 'frames'); fs.mkdirSync(frames, { recursive: true });
   capturing = true; t0 = Date.now();
@@ -46,10 +50,6 @@ try {
     await page.screenshot({ path: path.join(frames, `${String(t).padStart(7, '0')}.png`) }).catch(() => {});
     await sleep(Math.max(0, 250 - (Date.now() - t0 - t)));
   } })();
-  await sleep(1500);
-  await page.goto(`http://127.0.0.1:${STAGE_PORT}/stage.html`);
-  await page.evaluate((u) => window.stage.graph(u), `http://127.0.0.1:${QUIPU_PORT}/ui#explorer`);
-  await sleep(2500);
   const frame = () => page.frames().find((f) => f.url().includes(`:${QUIPU_PORT}/`));
   const refresh = async () => { await frame().evaluate(() => { if (typeof loadEntities === 'function') loadEntities(); if (typeof checkHealth === 'function') checkHealth(); }); await sleep(1800); };
   const say = async (text) => {
