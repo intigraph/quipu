@@ -230,7 +230,10 @@ async fn query_core(
     }
 
     let point = store.readers.point_reserve && super::point_reads::eligible(&input);
+    let mut observation =
+        super::query_usage::Observation::new(&input, super::request_middleware::request_id());
     query_blocking(point, move || {
+        observation.dispatched();
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query
@@ -245,6 +248,7 @@ async fn query_core(
         // them is what makes a queued caller look like an expensive one.
         let federation = store.federation.clone();
         let lock_t0 = std::time::Instant::now();
+        observation.waiting();
         // POOLED READ. SPARQL is read-only, so this takes a
         // read-only connection instead of the writer's mutex. `wait_secs` keeps
         // meaning the same thing — time spent acquiring — which is what makes
@@ -256,6 +260,7 @@ async fn query_core(
         };
         let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
+        observation.acquired();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
             // quipu-tkh: `"federated": true` fans the WHOLE query text out
@@ -477,6 +482,7 @@ async fn query_core(
             let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
         }
+        observation.finished(result.is_ok());
         result
     })
     .await
