@@ -9,11 +9,11 @@ use std::collections::HashSet;
 fn variable(e: &Expression, name: &str) -> bool {
     matches!(e,Expression::Variable(v) if v.as_str()==name)
 }
-fn call(e: &Expression, function: Function, name: &str) -> bool {
-    matches!(e,Expression::FunctionCall(f,args) if *f==function&&args.len()==1&&variable(&args[0],name))
+fn call(e: &Expression, function: &Function, name: &str) -> bool {
+    matches!(e,Expression::FunctionCall(f,args) if f==function&&args.len()==1&&variable(&args[0],name))
 }
 fn str_var(e: &Expression, name: &str) -> bool {
-    call(e, Function::Str, name)
+    call(e, &Function::Str, name)
 }
 fn conjuncts<'a>(e: &'a Expression, out: &mut Vec<&'a Expression>) {
     if let Expression::And(a, b) = e {
@@ -31,7 +31,7 @@ fn needle<'a>(expr: &'a Expression, name: &str) -> Option<&'a str> {
     }
     let (mut literal, mut plain, mut value) = (false, false, None);
     for p in parts {
-        if call(p, Function::IsLiteral, name) {
+        if call(p, &Function::IsLiteral, name) {
             if literal {
                 return None;
             }

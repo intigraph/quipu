@@ -44,7 +44,7 @@ pub(super) fn predicate(
             TermPattern::Variable(object) => seed
                 .get(object.as_str())
                 .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
-            _ => false,
+            TermPattern::BlankNode(_) => false,
         };
     if (!text_leaf && !bound_leaf && !object_leaf)
         || store.has_attachments()
@@ -104,7 +104,7 @@ pub(super) fn object_source(
         TermPattern::Variable(object) => seed
             .get(object.as_str())
             .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
-        _ => false,
+        TermPattern::BlankNode(_) => false,
     };
     if !local_graph
         || !unbound_subject

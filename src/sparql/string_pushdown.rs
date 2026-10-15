@@ -149,12 +149,12 @@ fn plain_literal_guard(expr: &Expression, var: &str) -> bool {
             Expression::FunctionCall(Function::IsLiteral, args)
                 if args.len() == 1 && variable(&args[0]) =>
             {
-                *literal = true
+                *literal = true;
             }
             Expression::SameTerm(a, b)
                 if (variable(a) && string(b)) || (variable(b) && string(a)) =>
             {
-                *identity = true
+                *identity = true;
             }
             _ => {}
         }
