@@ -38,13 +38,16 @@ pub(super) fn predicate(
     // Object-bound metadata (identifier/type) has the same narrow value
     // condition in the caller. Read graph membership from the same physical
     // assertion rowid without fetching its potentially wide fact-table page.
+    // SPARQL 1.2 adds Triple through feature unification; unsupported terms
+    // must retain the ordinary evaluator in either feature configuration.
+    #[allow(clippy::match_wildcard_for_single_variants)]
     let object_leaf = matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
         && match &pattern.object {
             TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
             TermPattern::Variable(object) => seed
                 .get(object.as_str())
                 .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
-            TermPattern::BlankNode(_) => false,
+            _ => false,
         };
     if (!text_leaf && !bound_leaf && !object_leaf)
         || store.has_attachments()
@@ -99,12 +102,14 @@ pub(super) fn object_source(
         super::GraphScope::Named(graphs) if graphs.len() == 1 && graphs[0] > 0);
     let unbound_subject = matches!(&pattern.subject,
         TermPattern::Variable(subject) if !seed.contains_key(subject.as_str()));
+    // The wildcard also excludes the feature-dependent RDF-star Triple term.
+    #[allow(clippy::match_wildcard_for_single_variants)]
     let bound_object = match &pattern.object {
         TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
         TermPattern::Variable(object) => seed
             .get(object.as_str())
             .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
-        TermPattern::BlankNode(_) => false,
+        _ => false,
     };
     if !local_graph
         || !unbound_subject
