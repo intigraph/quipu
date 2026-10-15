@@ -9,15 +9,92 @@ use crate::cli::{chrono_now, flag_value};
 pub fn cmd_graph(args: &[String], db_path: &str) {
     match args.get(2).map(String::as_str) {
         Some("import") => cmd_import(args, db_path),
+        Some("create") => cmd_register(args, db_path, false),
+        Some("label") => cmd_register(args, db_path, true),
+        Some("overlay-create" | "overlay-write" | "overlay-compose") => cmd_overlay(args, db_path),
         Some("freeze") => cmd_freeze(args, db_path),
         Some("thaw") => cmd_thaw(args, db_path),
         Some("list") => cmd_list(args, db_path),
         _ => {
             eprintln!(
-                "usage: quipu graph import <db> --as <iri> [--db <path>]\n       \
+                "usage: quipu graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]\n       \
+                 quipu graph label <iri> --label '<JSON label fields>' [--actor <who>] [--timestamp <utc>] [--db <path>]\n       \
+                 quipu graph overlay-create|overlay-write|overlay-compose --input '<JSON tool input>' [--db <path>]\n       \
+                 quipu graph import <db> --as <iri> [--db <path>]\n       \
                  quipu graph freeze <iri> [--out <dir>] [--actor <who>] [--db <path>]\n       \
                  quipu graph thaw <iri> [--actor <who>] [--db <path>]\n       \
-                 quipu graph list [--kind <token>] [--frozen] [--db <path>]"
+                 quipu graph list [--kind <token>] [--frozen] [--json] [--db <path>]"
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_overlay(args: &[String], db_path: &str) {
+    let input = flag_value(args, "--input")
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| {
+            eprintln!("graph overlay verbs require --input '<JSON object>'; fields match the corresponding MCP/REST tool");
+            std::process::exit(1);
+        });
+    let mut store = open_store(db_path);
+    let result = match args[2].as_str() {
+        "overlay-create" => quipu::tool_overlay_create(&store, &input),
+        "overlay-write" => quipu::tool_overlay_write(&mut store, &input),
+        "overlay-compose" => quipu::tool_overlay_compose(&store, &input),
+        _ => unreachable!(),
+    };
+    match result {
+        Ok(value) => println!("{value}"),
+        Err(error) => {
+            eprintln!("{} error: {error}", args[2]);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Both CLI verbs enter the exact library handlers used by REST and MCP.
+fn cmd_register(args: &[String], db_path: &str, label: bool) {
+    let Some(graph) = args.get(3).filter(|s| !s.starts_with("--")) else {
+        eprintln!("graph create/label requires a graph IRI; see quipu graph --help");
+        std::process::exit(1);
+    };
+    let mut input = if label {
+        let raw = flag_value(args, "--label").unwrap_or_else(|| {
+            eprintln!(
+                "graph label requires --label '<JSON object>', e.g. '{{\"kind\":\"operational\"}}'"
+            );
+            std::process::exit(1);
+        });
+        match serde_json::from_str::<serde_json::Value>(raw) {
+            Ok(value) if value.is_object() => value,
+            _ => {
+                eprintln!("--label must be a JSON object");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        serde_json::json!({})
+    };
+    input["graph"] = serde_json::json!(graph);
+    input["timestamp"] =
+        serde_json::json!(flag_value(args, "--timestamp").map_or_else(chrono_now, str::to_owned));
+    if let Some(actor) = flag_value(args, "--actor") {
+        input["actor"] = serde_json::json!(actor);
+    }
+    let mut store = open_store(db_path);
+    let result = if label {
+        quipu::tool_graph_label(&mut store, &input)
+    } else {
+        quipu::tool_graph_create(&store, &input)
+    };
+    match result {
+        Ok(value) => println!("{value}"),
+        Err(error) => {
+            eprintln!(
+                "graph {} error: {error}",
+                if label { "label" } else { "create" }
             );
             std::process::exit(1);
         }
@@ -107,6 +184,23 @@ fn cmd_thaw(args: &[String], db_path: &str) {
 fn cmd_list(args: &[String], db_path: &str) {
     let store = open_store(db_path);
     let lifecycle = args.iter().any(|a| a == "--frozen").then_some("frozen");
+    if args.iter().any(|a| a == "--json") {
+        let mut input = serde_json::json!({});
+        if let Some(kind) = flag_value(args, "--kind") {
+            input["kind"] = serde_json::json!(kind);
+        }
+        if let Some(lifecycle) = lifecycle {
+            input["lifecycle"] = serde_json::json!(lifecycle);
+        }
+        match quipu::tool_graph_list(&store, &input) {
+            Ok(value) => println!("{value}"),
+            Err(error) => {
+                eprintln!("graph list error: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     match store.list_graphs(flag_value(args, "--kind"), lifecycle) {
         Ok(graphs) => {
             for g in graphs {

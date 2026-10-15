@@ -29,6 +29,7 @@ mod literal_overlay;
 mod migrate;
 mod open;
 pub(crate) use open::open_file_immutable;
+mod graph_creation;
 pub mod ops;
 pub mod overlays;
 pub mod push;

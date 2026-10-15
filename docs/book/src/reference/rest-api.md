@@ -1928,3 +1928,27 @@ Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
 and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
 bounded completeness accompany the ordinary query result. See
 [the request and scope contract](https://github.com/scbrown/quipu/blob/main/docs/design/search-rooted-sparql.md).
+
+## `POST /graph/create`
+
+Register a committed graph before graph-scoped knot writes or labeling.
+Input: `{"graph":"urn:example:jobs","actor":"urn:example:agent","timestamp":"2026-10-14T12:00:00Z"}`.
+Only `graph` is required; timestamp defaults to current UTC and supplied times
+must be RFC 3339. Returns `graph`, `g`, `created` and `creation: {timestamp, actor}`.
+A repeat is idempotent and preserves the original creator/time; an interned
+term alone is not registration. Actor is caller-declared provenance, never
+permission. Older graphs retain a null actor instead of fabricated attribution.
+An overlay cannot be reclassified as committed. This is a protected write,
+sharing the server's normal bearer/read-only guards and MCP handler.
+
+## `POST /graph/label`
+
+Declare versioned graph labels. Required: `graph`, `timestamp`; optional:
+`actor`, `trust: {iri, chain, rank}`, `freshness`, `durability`, `policy` token
+array, `kind`, `valid_to`. At least one axis is required. Unregistered graphs,
+unknown axis values, and empty labels are errors. Create first via
+`POST /graph/create` or MCP `quipu_graph_create`.
+
+`GET /graphs` returns each row's `creation` together with class/lifecycle/labels.
+The [MCP-only recipe](../recipes/named-graph-mcp.md) exercises the same handlers
+without a REST client.

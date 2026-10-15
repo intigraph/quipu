@@ -151,7 +151,8 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         code, listing = http('/mcp', envelope('tools/list')); assert code == 200
         tools = unpack(listing)['tools']
         names = {t['name'] for t in tools}
-        assert {'quipu_query', 'quipu_search', 'quipu_episode', 'quipu_knot'} <= names
+        assert {'quipu_query', 'quipu_search', 'quipu_episode', 'quipu_knot',
+                'quipu_graph_create', 'quipu_graph_label'} <= names
         assert len(names) == len(tools)
         by_name = {t['name']: t for t in tools}
         assert by_name['quipu_query']['annotations']['readOnlyHint'] is True
@@ -171,8 +172,21 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         assert tool_body(call('quipu_query', query, 'invalid'))['count'] == 0
         assert http('/mcp', initialized(), extra={'Origin': 'https://untrusted.example'})[0] == 403
         assert 'error' in call('quipu_not_registered')
-        code, created_graph = http('/graph/create', {'graph': 'urn:fixture:graph'}, SHARED)
+        graph_input = {'graph': 'urn:fixture:graph', 'actor': 'urn:spoof',
+                       'timestamp': '2026-10-14T00:00:00Z'}
+        label_input = {'graph': 'urn:fixture:graph', 'timestamp': '2026-10-14T00:00:00Z',
+                       'kind': 'operational', 'actor': 'urn:spoof'}
+        for name, body in [('quipu_graph_create', graph_input), ('quipu_graph_label', label_input)]:
+            assert by_name[name]['annotations']['readOnlyHint'] is False
+            assert unpack(call(name, body)).get('isError') is True
+            assert unpack(call(name, body, 'invalid')).get('isError') is True
+        code, created_graph = http('/graph/create', graph_input, SHARED)
         assert code == 200, created_graph
+        assert created_graph.get('ignored_fields', []) == [], created_graph
+        assert created_graph['creation'] == {'actor': 'urn:spoof', 'timestamp': graph_input['timestamp']}
+        repeat = tool_body(call('quipu_graph_create', dict(graph_input, actor='urn:other'), SHARED))
+        assert repeat['created'] is False and repeat['creation'] == created_graph['creation']
+        assert tool_body(call('quipu_graph_label', label_input, TOKENS['one']))['tx_id'] > 0
         assert tool_body(call('quipu_graph_list'))['count'] >= 1
         assert tool_body(call('quipu_graph_list', {'lifecycle': 'frozen'}))['count'] == 0
 
@@ -204,6 +218,9 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         proc = start('--db', str(root / 'http.db'), '--bind', '127.0.0.1:' + str(port))
         ready(proc)
         assert unpack(call('quipu_knot', turtle, TOKENS['one'])).get('isError') is True
+        for name, body in [('quipu_graph_create', dict(graph_input, graph='urn:fixture:forbidden')),
+                           ('quipu_graph_label', label_input)]:
+            assert unpack(call(name, body, TOKENS['one'])).get('isError') is True
         assert tool_body(call('quipu_query', query))['count'] == 3
         print('HTTP: restart without stale session and read-only refusal passed')
         proc.terminate(); proc.wait(timeout=10)
