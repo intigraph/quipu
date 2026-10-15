@@ -428,7 +428,7 @@ fn exact_trigram_phrase_matches_lowercase_substrings_including_punctuation() {
     documents.extend(["a b","a\0b","quoted \"word\"", "Straße ÉCLAIR İstanbul", "🐟 fish"].map(str::to_owned));
     let mut needles=std::collections::BTreeSet::new();
     for (i,text) in documents.iter().enumerate() {
-        conn.execute("INSERT INTO substring_fts(rowid,scope,text,exact_text) VALUES(?1,'scope',?2,?3)",params![i as i64+1,text.replace('\0'," "),text.contains('\0').then_some(text)]).unwrap();
+        conn.execute("INSERT INTO substring_fts(rowid,text,exact_text) VALUES(?1,?2,?3)",params![i as i64+1,text.replace('\0'," "),text.contains('\0').then_some(text)]).unwrap();
         let chars:Vec<_>=text.chars().collect();
         for start in 0..chars.len() {
             for len in 3..=5 {if start+len<=chars.len() {

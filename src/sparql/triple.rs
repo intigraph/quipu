@@ -700,15 +700,15 @@ fn push_string_narrows(
                 && bindings.is_empty()
                 && !store.has_attachments()
                 && let Some(phrase) = narrow.substring_phrase()
-                && let Some(graph) = ctx.graph.single_graph()
+                && ctx.graph.single_graph().is_some()
                 && let NamedNodePattern::NamedNode(predicate) = &tp.predicate
                 && store.substring_index_ready()?
             {
                 let ids = store.lookup_all(predicate.as_str())?;
-                if let [predicate] = ids.as_slice() {
+                if let [_predicate] = ids.as_slice() {
                     let parameter = sql_params.len() + 1;
                     sql_params.push(Box::new(format!(
-                        "scope:\"g={graph};p={predicate};\" AND text:{phrase}"
+                        "text:{phrase}"
                     )));
                     conditions.push(format!("facts.rowid IN (SELECT rowid FROM main.substring_fts WHERE substring_fts MATCH ?{parameter})"));
                     substring_candidates = true;

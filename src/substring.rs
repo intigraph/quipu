@@ -4,31 +4,31 @@
 use rusqlite::{OptionalExtension, functions::FunctionFlags, params};
 use crate::{Error, Result, Store, Value};
 
-const FTS: &str = "CREATE VIRTUAL TABLE substring_fts USING fts5(scope,text,exact_text UNINDEXED,tokenize='trigram case_sensitive 1')";
+const FTS: &str = "CREATE VIRTUAL TABLE substring_fts USING fts5(text,exact_text UNINDEXED,tokenize='trigram case_sensitive 1')";
 const SCHEMA: &str = r#"
-CREATE VIRTUAL TABLE substring_fts USING fts5(scope,text,exact_text UNINDEXED,tokenize='trigram case_sensitive 1');
+CREATE VIRTUAL TABLE substring_fts USING fts5(text,exact_text UNINDEXED,tokenize='trigram case_sensitive 1');
 CREATE TABLE substring_progress (
  id INTEGER PRIMARY KEY CHECK(id=1), cursor INTEGER NOT NULL,
  highwater INTEGER NOT NULL, complete INTEGER NOT NULL, version INTEGER NOT NULL
 );
-INSERT INTO substring_progress SELECT 1,0,h,h=0,5 FROM
+INSERT INTO substring_progress SELECT 1,0,h,h=0,6 FROM
  (SELECT coalesce(max(rowid),0) AS h FROM facts);
 CREATE TABLE substring_facts (
  fact_id INTEGER PRIMARY KEY, e INTEGER NOT NULL, a INTEGER NOT NULL, g INTEGER NOT NULL,
  plain INTEGER NOT NULL, value_hash BLOB NOT NULL, needs_exact INTEGER NOT NULL
 );
 CREATE VIEW substring_source AS
- SELECT rowid AS fact_id, printf('g=%lld;p=%lld;',g,a) AS scope,
+ SELECT rowid AS fact_id,
  quipu_substring_text(v) AS text, quipu_substring_exact(v) AS exact_text,
  e,a,g,quipu_substring_plain(v) AS plain,
  quipu_substring_hash(v) AS value_hash,
  quipu_substring_exact(v) IS NOT NULL AS needs_exact
  FROM facts NOT INDEXED WHERE op=1 AND valid_to IS NULL AND quipu_substring_text(v)<>'';
 CREATE TRIGGER substring_insert AFTER INSERT ON facts BEGIN
- INSERT INTO substring_fts(rowid,scope,text,exact_text)
- SELECT fact_id,scope,text,exact_text FROM substring_source WHERE fact_id=NEW.rowid;
+ INSERT INTO substring_fts(rowid,text,exact_text)
+ SELECT fact_id,text,exact_text FROM substring_source WHERE fact_id=NEW.rowid;
  INSERT INTO substring_facts
- SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id=NEW.rowid;
+ SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id=NEW.rowid AND plain=1;
 END;
 CREATE TRIGGER substring_delete AFTER DELETE ON facts BEGIN
  DELETE FROM substring_fts WHERE rowid=OLD.rowid;
@@ -37,10 +37,10 @@ END;
 CREATE TRIGGER substring_update AFTER UPDATE ON facts BEGIN
  DELETE FROM substring_fts WHERE rowid=OLD.rowid;
  DELETE FROM substring_facts WHERE fact_id=OLD.rowid;
- INSERT INTO substring_fts(rowid,scope,text,exact_text)
- SELECT fact_id,scope,text,exact_text FROM substring_source WHERE fact_id=NEW.rowid;
+ INSERT INTO substring_fts(rowid,text,exact_text)
+ SELECT fact_id,text,exact_text FROM substring_source WHERE fact_id=NEW.rowid;
  INSERT INTO substring_facts
- SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id=NEW.rowid;
+ SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id=NEW.rowid AND plain=1;
 END;
 "#;
 
@@ -103,7 +103,7 @@ impl Store {
     pub fn substring_progress(&self) -> Result<Option<SubstringProgress>> {
         let exists:bool=self.conn.query_row("SELECT EXISTS(SELECT 1 FROM main.sqlite_master WHERE name='substring_progress' AND type='table')",[],|r|r.get(0))?;
         if !exists{return Ok(None);}
-        Ok(self.conn.query_row("SELECT cursor,highwater,complete FROM main.substring_progress WHERE id=1 AND version=5",[],|r|Ok(SubstringProgress{cursor:r.get(0)?,highwater:r.get(1)?,complete:r.get(2)?})).optional()?)
+        Ok(self.conn.query_row("SELECT cursor,highwater,complete FROM main.substring_progress WHERE id=1 AND version=6",[],|r|Ok(SubstringProgress{cursor:r.get(0)?,highwater:r.get(1)?,complete:r.get(2)?})).optional()?)
     }
     /// A complete index requires the exact tokenizer, projection and maintenance DDL.
     pub fn substring_index_ready(&self) -> Result<bool> {
@@ -131,9 +131,9 @@ impl Store {
             let end:i64=self.conn.query_row("SELECT coalesce(max(rowid),?2) FROM (SELECT rowid FROM facts WHERE rowid>?1 AND rowid<=?2 ORDER BY rowid LIMIT ?3)",params![state.cursor,state.highwater,batch_size as i64],|r|r.get(0))?;
             self.conn.execute("DELETE FROM substring_fts WHERE rowid>?1 AND rowid<=?2",params![state.cursor,end])?;
             self.conn.execute("DELETE FROM substring_facts WHERE fact_id>?1 AND fact_id<=?2",params![state.cursor,end])?;
-            self.conn.execute("INSERT INTO substring_fts(rowid,scope,text,exact_text) SELECT fact_id,scope,text,exact_text FROM substring_source WHERE fact_id>?1 AND fact_id<=?2",params![state.cursor,end])?;
-            self.conn.execute("INSERT INTO substring_facts SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id>?1 AND fact_id<=?2",params![state.cursor,end])?;
-            self.conn.execute("UPDATE substring_progress SET cursor=?1,complete=(?1>=highwater) WHERE id=1 AND version=5",[end])?;
+            self.conn.execute("INSERT INTO substring_fts(rowid,text,exact_text) SELECT fact_id,text,exact_text FROM substring_source WHERE fact_id>?1 AND fact_id<=?2",params![state.cursor,end])?;
+            self.conn.execute("INSERT INTO substring_facts SELECT fact_id,e,a,g,plain,value_hash,needs_exact FROM substring_source WHERE fact_id>?1 AND fact_id<=?2 AND plain=1",params![state.cursor,end])?;
+            self.conn.execute("UPDATE substring_progress SET cursor=?1,complete=(?1>=highwater) WHERE id=1 AND version=6",[end])?;
             Ok(())
         })?;
         self.substring_progress()?.ok_or_else(||Error::Store("substring state missing".into()))
