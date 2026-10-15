@@ -153,6 +153,28 @@ impl Store {
                 op: Op::Assert,
             });
         }
+        // Re-creating a dataset REPLACES its membership, so the meta-graph must say
+        // so too: a member that was dropped has its includesGraph closed here.
+        // Before aegis-koxp0u it was only ever appended, so a dataset moved N times
+        // (a pendant CURRENT pointer) claimed every graph it had ever held. Closed,
+        // not deleted: that it was once a member stays bitemporal history.
+        if self.is_dataset(name)? {
+            let kept: std::collections::BTreeSet<&str> =
+                members.iter().map(|m| m.graph_iri.as_str()).collect();
+            for old in self.dataset_members(name)? {
+                if !kept.contains(old.graph_iri.as_str()) {
+                    let g_term = self.intern(&old.graph_iri)?;
+                    datums.push(Datum {
+                        entity: subject,
+                        attribute: a_includes,
+                        value: Value::Ref(g_term),
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: Op::Retract,
+                    });
+                }
+            }
+        }
 
         self.conn.execute_batch("SAVEPOINT quipu_dataset")?;
         let result = (|| -> Result<()> {
