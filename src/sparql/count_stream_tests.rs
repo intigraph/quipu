@@ -255,7 +255,11 @@ fn attached_graph_aliases_use_canonical_binding_and_dedup() {
     for path in [&main, &raw] {
         let mut store = Store::open(path.to_str().unwrap()).unwrap();
         let graph = store.graph_create("http://example.org/board").unwrap();
-        seed(&mut store, graph, r#"ex:a a ex:Issue ; ex:id "same" ."#);
+        seed(
+            &mut store,
+            graph,
+            r#"ex:a a ex:Issue ; ex:id "same" ; ex:status "open" ."#,
+        );
     }
     crate::store::respace::respace_file(&raw, &layer, 4).unwrap();
     let store = Store::open_with_attachments(
@@ -266,12 +270,55 @@ fn attached_graph_aliases_use_canonical_binding_and_dedup() {
     assert!(store.has_attachments());
     for q in [
         "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s ?p ?o } }",
+        "SELECT (COUNT(?o) AS ?n) WHERE { GRAPH ex:board { ?s ?p ?o } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ex:a ?p ?o } }",
+        "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue } }",
         "SELECT (COUNT(DISTINCT ?id) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?id } }",
         "SELECT ?id (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?id } } GROUP BY ?id",
     ] {
         compare(&store, q, &TemporalContext::default(), true);
     }
+    for ctx in [
+        TemporalContext {
+            valid_at: Some("2026-10-07T00:00:00Z".into()),
+            ..TemporalContext::default()
+        },
+        TemporalContext {
+            as_of_tx: Some(1),
+            ..TemporalContext::default()
+        },
+        TemporalContext {
+            named_dataset: Some(vec![]),
+            ..TemporalContext::default()
+        },
+    ] {
+        compare(
+            &store,
+            "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s ?p ?o } }",
+            &ctx,
+            true,
+        );
+    }
     assert!(!super::direct_refs());
+    // A scalar COUNT retains one result, not three intermediate bindings.
+    // Canonical aliases from the second dictionary still count only once.
+    let Query::Select { pattern, .. } = super::super::sparql_parser()
+        .parse_query(&format!(
+            "{PREFIX}SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH ex:board {{ ?s ?p ?o }} }}"
+        ))
+        .unwrap()
+    else {
+        panic!()
+    };
+    let (inner, variables, aggregates) = group(&pattern);
+    let ctx = TemporalContext {
+        row_cap: Some(1),
+        ..TemporalContext::default()
+    };
+    let result = super::try_evaluate(&store, inner, variables, aggregates, &ctx, &Bindings::new())
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.0[0][aggregates[0].0.as_str()], Value::Int(3));
 }
 
 #[test]

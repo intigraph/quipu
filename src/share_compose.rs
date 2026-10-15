@@ -36,6 +36,74 @@ pub struct Composition {
     pub shapes_authority: String,
     pub packs: Vec<ComposedPack>,
     pub validation: serde_json::Value,
+    /// Graphs the inputs NAME without carrying (aegis-3fy1kp), each with the share
+    /// that declared it. Reported, never followed: loading a pointer is the
+    /// consumer's trust decision. Omitted when empty, so a composition of
+    /// pointer-free packs serializes exactly as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<DeclaredPointer>,
+}
+
+/// One pointer and the input share that declared it.
+#[derive(Debug, Serialize)]
+pub struct DeclaredPointer {
+    pub share_id: String,
+    #[serde(flatten)]
+    pub pointer: crate::share::SharePointer,
+}
+
+/// Where a composition's graphs and dataset live.
+///
+/// `Inspection` is plain `compose`: content-addressed pack graphs shared by every
+/// composition of the same bytes. `Repository` is the pendant autoload mode
+/// (aegis-koxp0u): pack graphs are scoped to one repository and pack key, so a
+/// local retraction in one repository can never show through another's view,
+/// and each input's tombstones are applied to its payload before validation.
+pub(crate) enum Scope<'a> {
+    Inspection,
+    Repository {
+        repo: &'a str,
+        keys: &'a [String],
+        /// Canonical N-Triples lines, one set per input, in input order.
+        tombstones: &'a [BTreeSet<String>],
+    },
+}
+
+impl Scope<'_> {
+    pub(crate) fn pack_graph(&self, index: usize, share_id: &str) -> String {
+        match self {
+            Scope::Inspection => format!("urn:quipu:composition:pack:{}", &share_id[7..]),
+            Scope::Repository { repo, keys, .. } => {
+                format!(
+                    "urn:quipu:repo:{repo}:pack:{}:{}",
+                    keys[index],
+                    &share_id[7..]
+                )
+            }
+        }
+    }
+
+    fn dataset(&self, digest: &str) -> String {
+        match self {
+            Scope::Inspection => format!("urn:quipu:composition:{}", &digest[7..]),
+            Scope::Repository { repo, .. } => {
+                format!("urn:quipu:repo:{repo}:snapshot:{}", &digest[7..])
+            }
+        }
+    }
+}
+
+/// Canonical N-Triples text for one line, so a tombstone harvested from the
+/// store matches the same statement in a later snapshot's payload.
+pub(crate) fn canonical_line(line: &str) -> Result<Option<String>> {
+    let mut parsed = RdfParser::from_format(RdfFormat::NTriples).for_reader(line.as_bytes());
+    match parsed.next() {
+        None => Ok(None),
+        Some(quad) => {
+            let triple = Triple::from(quad.map_err(|e| Error::InvalidValue(e.to_string()))?);
+            Ok(Some(format!("{triple} .")))
+        }
+    }
 }
 
 fn scoped_graph(request: &ShareImportRequest) -> Result<String> {
@@ -128,7 +196,15 @@ pub fn compose(
     actor: Option<&str>,
 ) -> Result<Composition> {
     store.conn.execute_batch("SAVEPOINT quipu_compose_all")?;
-    let result = compose_inner(store, requests, authority, timestamp, actor);
+    let result = compose_scoped(
+        store,
+        requests,
+        authority,
+        timestamp,
+        actor,
+        &Scope::Inspection,
+    )
+    .map(|(composition, _)| composition);
     match result {
         Ok(result) => {
             store.conn.execute_batch("RELEASE quipu_compose_all")?;
@@ -145,13 +221,19 @@ pub fn compose(
     }
 }
 
-fn compose_inner(
+/// Statements a tombstone removed from an already-composed (reused) pack graph,
+/// which the caller retracts there: `(graph IRI, canonical lines)`.
+pub(crate) type Suppressed = Vec<(String, Vec<String>)>;
+
+/// The composition body, run inside the caller's savepoint.
+pub(crate) fn compose_scoped(
     store: &mut Store,
     requests: &[ShareImportRequest],
     authority: Option<usize>,
     timestamp: &str,
     actor: Option<&str>,
-) -> Result<Composition> {
+    scope: &Scope<'_>,
+) -> Result<(Composition, Suppressed)> {
     if requests.is_empty() {
         return Err(Error::InvalidValue(
             "composition needs at least one pack".into(),
@@ -184,6 +266,10 @@ fn compose_inner(
                 &BTreeMap::from([
                     ("export.nt".into(), request.export_ntriples.clone()),
                     ("shapes.ttl".into(), request.shapes_turtle.clone()),
+                    (
+                        crate::share::POINTERS_SCRUB_LABEL.into(),
+                        crate::share::pointer_scrub_text(&request.manifest.pointers),
+                    ),
                 ]),
                 "composition of an internal share",
             )?;
@@ -193,21 +279,45 @@ fn compose_inner(
             store, request, timestamp,
         )?);
     }
+    let mut suppressed: Suppressed = Vec::new();
     let graphs = requests
         .iter()
-        .map(|request| {
-            let graph = format!(
-                "urn:quipu:composition:pack:{}",
-                &request.manifest.share_id[7..]
-            );
-            if let Some(id) = store.lookup(&graph)?
-                && store.graph_class(id)?.as_deref() == Some("committed")
-            {
+        .enumerate()
+        .map(|(index, request)| {
+            let graph = scope.pack_graph(index, &request.manifest.share_id);
+            let reused = match store.lookup(&graph)? {
+                Some(id) => store.graph_class(id)?.as_deref() == Some("committed"),
+                None => false,
+            };
+            let payload = if reused {
                 let (bytes, _) =
                     crate::rdf::export_rdf_subset(store, RdfFormat::NTriples, Some(&graph))?;
-                return String::from_utf8(bytes).map_err(|e| Error::Serialization(e.to_string()));
+                String::from_utf8(bytes).map_err(|e| Error::Serialization(e.to_string()))?
+            } else {
+                scoped_graph(request)?
+            };
+            let Scope::Repository { tombstones, .. } = scope else {
+                return Ok(payload);
+            };
+            let dead = &tombstones[index];
+            if dead.is_empty() {
+                return Ok(payload);
             }
-            scoped_graph(request)
+            let (mut kept, mut removed) = (String::new(), Vec::new());
+            for line in payload.lines() {
+                match canonical_line(line)? {
+                    Some(canonical) if dead.contains(&canonical) => removed.push(canonical),
+                    Some(canonical) => {
+                        kept.push_str(&canonical);
+                        kept.push('\n');
+                    }
+                    None => {}
+                }
+            }
+            if reused && !removed.is_empty() {
+                suppressed.push((graph, removed));
+            }
+            Ok(kept)
         })
         .collect::<Result<Vec<_>>>()?;
     let union: BTreeSet<_> = graphs.iter().flat_map(|g| g.lines()).collect();
@@ -249,13 +359,14 @@ fn compose_inner(
         ));
     }
     let digest = crate::share::sha256(identity.as_bytes());
-    let dataset = format!("urn:quipu:composition:{}", &digest[7..]);
+    let dataset = scope.dataset(&digest);
     let packs: Vec<_> = requests
         .iter()
         .zip(attestations)
-        .map(|(r, attestation)| ComposedPack {
+        .enumerate()
+        .map(|(index, (r, attestation))| ComposedPack {
             share_id: r.manifest.share_id.clone(),
-            graph: format!("urn:quipu:composition:pack:{}", &r.manifest.share_id[7..]),
+            graph: scope.pack_graph(index, &r.manifest.share_id),
             store_id: r.manifest.store_id.clone(),
             tx_anchor: r.manifest.tx_anchor,
             created_at: r.manifest.created_at.clone(),
@@ -275,6 +386,15 @@ fn compose_inner(
         shapes_authority: chosen.manifest.share_id.clone(),
         packs,
         validation,
+        pointers: requests
+            .iter()
+            .flat_map(|r| {
+                r.manifest.pointers.iter().map(|pointer| DeclaredPointer {
+                    share_id: r.manifest.share_id.clone(),
+                    pointer: pointer.clone(),
+                })
+            })
+            .collect(),
     };
     store.conn.execute_batch("SAVEPOINT quipu_composition")?;
     let write = (|| -> Result<()> {
@@ -336,7 +456,7 @@ fn compose_inner(
             return Err(error);
         }
     }
-    Ok(result)
+    Ok((result, suppressed))
 }
 
 #[cfg(all(test, feature = "shacl"))]

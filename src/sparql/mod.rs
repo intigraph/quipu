@@ -12,6 +12,7 @@ pub mod filter;
 pub mod filter_pushdown;
 #[cfg(test)]
 mod filter_pushdown_tests;
+mod order;
 pub mod pattern;
 pub mod pattern_util;
 #[cfg(test)]

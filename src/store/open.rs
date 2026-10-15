@@ -133,6 +133,10 @@ impl Store {
         self.labels_config.clone_from(&other.labels_config);
         self.owl_config.clone_from(&other.owl_config);
         self.embedding_config.clone_from(&other.embedding_config);
+        // A pooled reader resolves `/episode` nodes before the writer commits
+        // them (aegis-xi0), and serves `/resolve`; both must use the served
+        // `[quipu.resolution]` policy, not the defaults.
+        self.resolution_config.clone_from(&other.resolution_config);
         self.embedding_provider
             .clone_from(&other.embedding_provider);
     }
@@ -245,6 +249,7 @@ impl Store {
         Self::migrate_term_spaces(&conn)?;
         Self::migrate_graph_labels(&conn)?;
         Self::migrate_datasets(&conn)?;
+        Self::migrate_pendant_repos(&conn)?;
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_decision_nonces(&conn)?;

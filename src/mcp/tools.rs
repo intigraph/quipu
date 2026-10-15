@@ -21,9 +21,12 @@ mod structured_syntax;
 mod write;
 
 pub use datasets::tool_datasets;
-pub use graphs::{tool_graph_freeze, tool_graph_list, tool_graph_thaw};
+pub use graphs::{tool_graph_create, tool_graph_freeze, tool_graph_list, tool_graph_thaw};
 pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};
 pub use search::{tool_hybrid_search, tool_search};
 pub use shapes::{resolve_validation_shapes, tool_shapes, tool_subscriptions, tool_validate};
-pub use write::{tool_episode, tool_retract, tool_retract_episode, tool_set};
+pub use write::{
+    PreparedEpisode, tool_episode, tool_episode_commit, tool_episode_prepare, tool_retract,
+    tool_retract_episode, tool_set,
+};

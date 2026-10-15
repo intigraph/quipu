@@ -5,7 +5,7 @@
 <h1 align="center">quipu</h1>
 
 <p align="center">
-  <em>🪢 A memory for your agents that refuses facts that break your rules</em>
+  <em>🪢 Governed knowledge with a history your agents can query</em>
 </p>
 
 <p align="center">
@@ -16,26 +16,34 @@
   <a href="https://arxiv.org/abs/2608.16813"><img src="https://img.shields.io/badge/arXiv-2608.16813-b31b1b.svg" alt="arXiv: 2608.16813"/></a>
 </p>
 
-[Watch governed memory in 60 seconds](docs/demos/governed-memory-v0.13.0/):
-a refused write, its corrected provenance, and a valid-time read.
+<p align="center">
+  <a href="docs/demos/agent-graph/"><img src="docs/demos/agent-graph/agent-graph.gif" width="900" alt="An agent records services in a terminal while the Quipu graph grows beside it. A guessed fact with no source is refused and the graph does not change; the corrected fact, citing its trace, is accepted; a valid-time read then answers what was true before a migration."/></a>
+</p>
 
-**Quipu is a knowledge graph for AI coding agents and the people who run them.
-It stores what your agents learn as facts, checks every write against rules you
-declare (SHACL shapes), and refuses the facts that break them, so bad knowledge
-never gets in.** It keeps every version of every fact, so you can ask what was
-true last Tuesday, and it answers standard SPARQL 1.1. It comes as a command-line
-tool, a REST server, and a Rust library, and agents connect through Quipu’s
-own MCP server (`quipu mcp` for stdio or `quipu-server` over HTTP).
+An agent records what it learns; with write checking turned on, Quipu checks every write.
+A guess with no source is refused, the corrected fact keeps its provenance, and a valid-time read shows what was
+true before a change. [How this demo is made](docs/demos/agent-graph/) ·
+[terminal-only version](docs/demos/governed-memory-v0.13.0/)
 
-A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record:
-cords are entities, knots are facts.
+**Quipu is a governed, bitemporal knowledge store for AI coding agents and the
+people who run them.** It can check writes against your rules, records where each fact came from, and answers what was true when. *Bitemporal* means keeping both
+when a fact was recorded and, when supplied, when it was true.
+
+Write enforcement is opt-in: `shacl.validate_on_write` and `governance.enforce_on_write`
+default to `false` ([configuration](https://scbrown.github.io/quipu/getting-started/configuration.html)).
+The [60-second demo](docs/demos/governed-memory-v0.13.0/) shows an enabled gate,
+a refused write, corrected provenance, and a valid-time read.
+
+Quipu answers standard SPARQL 1.1 as a CLI, REST server and Rust library, with its own MCP server (`quipu mcp` or `quipu-server` over HTTP).
+
+A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
 
 ## Why you would want it
 
-- **Bad facts are refused, not cleaned up later.** A write that breaks a shape
-  fails with the rule it broke, so an agent can correct it on the spot.
-- **Nothing is overwritten.** Every fact carries when it was recorded and when
-  it was true, so you can query the graph as it was at any moment.
+- **Check knowledge before accepting it.** With write validation enabled, a
+  write that breaks a shape fails with the rule it broke, so an agent can fix it.
+- **Keep the history.** Facts carry when they were recorded and can carry when
+  they were true, so you can query earlier recorded or valid-time views.
 - **Standard, and scored.** Its SPARQL 1.1 conformance is measured against the
   Working Group–approved W3C tests, class by class with every exception named,
   and scored alongside other stores in
@@ -166,7 +174,7 @@ Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, an
 `quipu mcp --db store.db` provides stdio using the companion server binary.
 Build both with `cargo build --release --features full`. Protected stdio writes use
 `--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
-Quipu defines 48 MCP tools (50 with `owl`), from one shared schema manifest.
+Quipu defines 50 MCP tools (52 with `owl`), from one shared schema manifest.
 Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
 See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 
@@ -217,16 +225,21 @@ Caboodle installs these together and proves each one works; every tool also stan
 
 <!-- stack-table:start -->
 
+The Quipu stack is built around a governed, bitemporal knowledge store: shared
+facts, decisions and work history your agents can query. Quipu can check writes
+against your rules, records where each fact came from, and answers what was true
+when.
+
 | tool | what it gives your agents |
 |---|---|
-| [caboodle](https://github.com/scbrown/caboodle) | one wizard that installs the stack and proves it works |
-| [quipu](https://github.com/scbrown/quipu) | a knowledge graph that refuses facts that break its rules |
-| [camayoc](https://github.com/scbrown/camayoc) | the starter vocabulary, and how new knowledge earns its way in |
-| [bobbin](https://github.com/scbrown/bobbin) | search and context over your repositories, served over MCP |
-| [yupana](https://github.com/scbrown/yupana) | enforces your code policies and shows the blast radius before an edit |
-| [desire-path](https://github.com/scbrown/desire-path) | turns your agents' hallucinations into feature requests |
+| [caboodle](https://github.com/scbrown/caboodle) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
+| [quipu](https://github.com/scbrown/quipu) | stores shared facts with provenance and history; can check writes against your rules |
+| [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
+| [bobbin](https://github.com/scbrown/bobbin) | searches your code and can include related knowledge from Quipu |
+| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
+| [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
-| [shuttle](https://github.com/scbrown/shuttle) | the workflows your agents run, every step signed and kept in the graph |
+| [shuttle](https://github.com/scbrown/shuttle) | runs signed agent workflows and keeps their records in Quipu |
 
 <!-- stack-table:end -->
 

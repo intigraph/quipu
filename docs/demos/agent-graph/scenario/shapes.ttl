@@ -1,0 +1,11 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <https://example.org/shop/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Every claim the agent records must say how it knows: observed, declared or inferred,
+# and point at a source. A guess has nowhere to go.
+ex:ServiceShape a sh:NodeShape ;
+    sh:targetClass ex:Service ;
+    sh:property [ sh:path ex:sourceKind ; sh:minCount 1 ; sh:in ("observed" "declared" "inferred") ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:nodeKind sh:IRI ] .

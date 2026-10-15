@@ -318,6 +318,7 @@ async fn main() {
 
     admission::init_read_admission_for_pool(read_pool.len());
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
+    admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
     let handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     #[cfg(feature = "reactive-reasoner")]
@@ -345,6 +346,7 @@ async fn main() {
         tower_http::cors::CorsLayer::new().allow_origin(origins)
     };
     let cors = cors_base
+        .expose_headers([axum::http::HeaderName::from_static("x-quipu-truncated")])
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,

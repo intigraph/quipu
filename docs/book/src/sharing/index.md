@@ -279,6 +279,48 @@ digest mismatch (`src/share_delta.rs`: `write_delta`, `materialize`). These are
 local artifact writes and reads: they do not send a delta to a remote store or
 grant ROOT admission.
 
+### Pointers: graphs a share names but does not carry
+
+A share can also name graphs it does not contain. A repository that only points
+at knowledge ships a share with no facts:
+
+```sh
+quipu share --output pointers --pointers pointers.toml --no-shapes
+```
+
+```toml
+[[pointer]]
+graph = "https://example.org/homelab"
+kind = "endpoint"                         # a live graph, reached by federation
+endpoint = "https://quipu.example.org/sparql"
+
+[[pointer]]
+graph = "https://example.org/reference"
+kind = "pack"                             # a pinned pack, fetched on first use
+url = "https://example.org/reference.pendant.tar.gz"
+sha256 = "<64 lowercase hex digits of the archive>"
+```
+
+Pointers are part of the share's identity, like the internal destination
+marker. Removing or editing one changes the hash, so `verify_share` refuses the
+share, and the verifier applies the producer's own rules, so a hand-edited
+manifest cannot carry what `quipu share` would refuse:
+
+- an IRI graph;
+- an `http(s)` URL with no credentials;
+- a 64-hex `sha256`;
+- one pointer per graph.
+
+A share without pointers is byte-identical to one produced before the field
+existed. An older quipu refuses a share that has pointers, because it
+recomputes a different identity; it never silently drops them.
+
+`quipu compose` reports every input's pointers, each with the share that
+declared it, and never follows them. Loading a pointer is the consumer's trust
+decision (caboodle `packs trust`). Following `kind = "pack"` pointers on first
+use, and joining `kind = "endpoint"` pointers to the federation list, are
+separate steps.
+
 The older SQLite pack commands remain an internal/archive compatibility surface:
 
 ```sh
