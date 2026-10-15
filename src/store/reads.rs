@@ -46,6 +46,7 @@ impl Store {
     /// live there: the local retractions pendant autoload carries forward to the
     /// next snapshot of the same pack (aegis-koxp0u). A statement re-asserted
     /// since (a live row exists) is not a retraction and is excluded.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn retracted_composition_facts_in_graph(&self, g: i64) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts f \
