@@ -395,6 +395,7 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     qp share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     qp share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    qp share ... [--pointers <file.toml>]   name graphs this share does not carry ([[pointer]] kind = endpoint | pack)
     qp share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     qp share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
     qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]

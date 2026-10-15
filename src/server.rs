@@ -346,6 +346,7 @@ async fn main() {
         tower_http::cors::CorsLayer::new().allow_origin(origins)
     };
     let cors = cors_base
+        .expose_headers([axum::http::HeaderName::from_static("x-quipu-truncated")])
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
