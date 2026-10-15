@@ -86,6 +86,11 @@ impl Engine<OxigraphInMemory> for SubclassEngine {
         store: &OxigraphInMemory,
         class: &Object,
     ) -> Result<FocusNodes<OxigraphInMemory>, ValidationError> {
+        // Preserve the native allocation path for classes with no subclasses.
+        // In particular, a graph without hierarchy edges needs no focus union.
+        if !self.children.contains_key(class) {
+            return self.inner.target_class(store, class);
+        }
         let mut pending = vec![class.clone()];
         let mut visited = HashSet::new();
         let mut focus = HashSet::new();

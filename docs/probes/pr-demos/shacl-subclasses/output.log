@@ -1,4 +1,4 @@
-Script started on 2026-10-15 10:55:26-04:00 [COMMAND="python3 docs/probes/pr-demos/shacl-subclasses/run.py" <not executed on terminal>]
+Script started on 2026-10-15 11:23:07-04:00 [COMMAND="python3 docs/probes/pr-demos/shacl-subclasses/run.py" <not executed on terminal>]
 === before: private CLI fixture, no server or production data ===
 quipu 0.14.1
 git_sha: f13fc1bf1dc938a703a85e7f6bac2519392d5fbe
@@ -15,7 +15,7 @@ valid (0 warnings)
 exit=0
 === after: private CLI fixture, no server or production data ===
 quipu 0.14.1
-git_sha: f13fc1bf1dc938a703a85e7f6bac2519392d5fbe
+git_sha: f83321003bcedaae29899a78e0cce9b42e9f25ce
 git_dirty: true
 $ quipu validate --shapes shapes.ttl --data subclass-missing.ttl
 invalid: 1 violation(s), 0 warning(s)
@@ -29,4 +29,4 @@ $ quipu validate --shapes shapes.ttl --data subclass-valid.ttl
 valid (0 warnings)
 exit=0
 
-Script done on 2026-10-15 10:55:26-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-15 11:23:07-04:00 [COMMAND_EXIT_CODE="0"]

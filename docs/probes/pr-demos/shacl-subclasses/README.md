@@ -11,8 +11,8 @@ scriptreplay --log-out output.log --log-timing timing.log
 ```
 
 The before binary is clean0.14.1 at `f13fc1bf1dc938a703a85e7f6bac2519392d5fbe`.
-The candidate is a pre-commit build from that base plus this proposal, so its
-embedded version reports the base SHA and `git_dirty: true`. [Source hashes](source-hashes.json)
+The candidate is a pre-commit build of this proposal; its embedded version
+identifies the checkout used for the build and reports `git_dirty: true`. [Source hashes](source-hashes.json)
 bind the four changed code/dependency files and candidate binary; those file
 hashes must match the proposal being reviewed. This is source-fixture evidence,
 not a claim about a deployed release.
