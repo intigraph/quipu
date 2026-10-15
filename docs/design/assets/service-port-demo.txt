@@ -1,0 +1,4 @@
+before: real local SERVICE fixture, first two port reservations identical
+{"class": "federated-query", "diagnostic": "actual vars/rows ['s', 'o1', 'o2'] [('http://example.org/a', '\"Alan\"', '\"Alan\"'), ('http://example.org/b', '\"Bob\"', '\"Bob\"')]; expected ['s', 'o1', 'o2'] [('http://example.org/b', '\"Bob\"', '(unbound)'), ('http://example.org/a', '\"Alan\"', '\"SPARQL 1.1 Basic Federated Query\"')]", "id": ":service2", "manifest": "service/manifest.ttl", "name": "SERVICE test 2", "query": "service/service02.rq", "result": "service/service02.srx", "status": "failed"}
+after: real local SERVICE fixture, first two port reservations identical
+{"class": "federated-query", "diagnostic": "", "id": ":service2", "manifest": "service/manifest.ttl", "name": "SERVICE test 2", "query": "service/service02.rq", "result": "service/service02.srx", "status": "passed"}

@@ -1163,3 +1163,23 @@ silence rather than a malformed response. Its guards, in order:
 The message tells the agent that writes need a bearer from `QUIPU_AUTH_TOKEN`
 and to send `X-Quipu-Client: session-capture`. The act rate is
 `episodes whose source carries the session id / lines in solicit-log.jsonl`.
+
+## Create and label named graphs
+
+```sh
+quipu graph create urn:example:jobs --actor urn:example:agent --db tutorial.db
+quipu graph label urn:example:jobs --label '{"kind":"operational","freshness":"fresh"}' --db tutorial.db
+quipu graph list --json --db tutorial.db
+```
+
+Both verbs call the same handlers as MCP/REST. `--timestamp <RFC3339>` pins the
+creation/declaration time; otherwise current UTC is used. `--actor` is declared
+provenance, not authorization. Create is idempotent and preserves the original
+provenance. Label fields match `quipu_graph_label`, including trust, policy,
+durability and validity bounds. JSON listing exposes creation and all labels;
+the existing tab-separated listing remains the default.
+
+`graph overlay-create`, `graph overlay-write`, and `graph overlay-compose`
+accept `--input '<JSON object>'` using the corresponding MCP tool input fields.
+For the complete new-class write recipe, see
+[named graphs through MCP](../recipes/named-graph-mcp.md).

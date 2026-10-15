@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **48 tools** in a default build, or
-**50** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **50 tools** in a default build, or
+**52** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -980,3 +980,23 @@ weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
 Server activation and the ready lexical index are required for intermediate
 weights. Alpha endpoints retain exact pure responses. See the REST search
 reference for candidate bounds, scope compatibility, snippets and rollback.
+
+### `quipu_graph_create`
+
+`quipu_graph_create` takes `graph` (required), optional RFC 3339 `timestamp`
+(default current UTC), and optional non-empty `actor`. It registers a committed
+named graph and returns `graph`, `g`, `created`, and `creation` with `timestamp`
+and `actor`. Repeats preserve original provenance. An actor is a declaration,
+not authenticated identity; missing historical attribution is null.
+
+### `quipu_graph_label`
+
+`quipu_graph_label` takes required `graph` and `timestamp`, optional `actor`,
+`trust: {iri, chain, rank}`, `freshness`, `durability`, `policy` tokens, `kind`,
+and `valid_to`. At least one label axis must be supplied. Register the graph
+first. Label declarations are versioned. Invalid axes, empty declarations and
+unregistered graphs are refused.
+
+`quipu_graph_list` includes each graph's `creation` alongside class and labels.
+Follow the [complete MCP-only named graph recipe](../recipes/named-graph-mcp.md)
+for create, label, new-class shapes, write and scoped query.

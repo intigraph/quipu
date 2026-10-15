@@ -71,6 +71,19 @@ for row in result.rows() {
 | AVG | `SELECT (AVG(?age) AS ?mean) ...` |
 | MIN / MAX | `SELECT (MIN(?age) AS ?youngest) ...` |
 
+An ungrouped, non-distinct `COUNT(*)` or `COUNT` of a bound variable over
+one triple pattern can use a scalar SQL count. This avoids retaining a binding
+for every matching triple. Composed stores canonicalize subject, predicate and
+reference-object aliases before counting, so duplicate assertions across
+attached dictionaries still count once. The query's graph and temporal scope
+remain in force.
+
+During the scalar statement, file mappings are disabled and an oversized main
+page-cache budget is reduced to 8 MiB. Each provider's mapping policy and the
+main cache policy are restored afterward, including on errors. Smaller cache
+budgets are preserved. Query deadlines still apply; unsupported aggregate
+forms and joins retain their existing complexity limits.
+
 ### FILTER Expressions
 
 | Expression | Example |
