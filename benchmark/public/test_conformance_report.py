@@ -669,6 +669,9 @@ def head_tree_fixture(*, stale=True):
             ["git", *args], cwd=root, check=True, capture_output=True, text=True
         )
         run("init", "-q", "-b", "main")
+        # Commits must not leave background writers racing TemporaryDirectory cleanup.
+        run("config", "gc.auto", "0")
+        run("config", "maintenance.auto", "false")
         run("config", "user.email", "fixture@example.com")
         run("config", "user.name", "Fixture")
         run("config", "core.hooksPath", "/dev/null")
@@ -720,6 +723,17 @@ class ArmSeparationTest(unittest.TestCase):
             text=True,
             check=False,
         )
+
+    def test_fixture_disables_background_git_maintenance(self):
+        with head_tree_fixture() as work:
+            for key, expected in (("gc.auto", "0"), ("maintenance.auto", "false")):
+                with self.subTest(key=key):
+                    result = subprocess.run(
+                        ["git", "config", "--local", "--get", key],
+                        cwd=work, capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout.strip(), expected)
 
     def test_a_stale_stamp_fails_provenance_and_NOT_content(self):
         with head_tree_fixture() as work:
