@@ -125,7 +125,8 @@ pub fn negotiate(accept: &str) -> Option<ResultFormat> {
 ///
 /// `result` is expected to have already had the server-side row ceiling applied
 /// (see `mcp::query_result`); the standard shapes have no field for a `truncated`
-/// flag, so the cap is silent here by design — but it is the same cap.
+/// flag. The HTTP caller must carry that flag in `X-Quipu-Truncated`; dropping
+/// it would silently present a capped result as complete.
 pub fn serialize(
     store: &Store,
     result: &QueryResult,

@@ -36,6 +36,20 @@ pub struct Composition {
     pub shapes_authority: String,
     pub packs: Vec<ComposedPack>,
     pub validation: serde_json::Value,
+    /// Graphs the inputs NAME without carrying (aegis-3fy1kp), each with the share
+    /// that declared it. Reported, never followed: loading a pointer is the
+    /// consumer's trust decision. Omitted when empty, so a composition of
+    /// pointer-free packs serializes exactly as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<DeclaredPointer>,
+}
+
+/// One pointer and the input share that declared it.
+#[derive(Debug, Serialize)]
+pub struct DeclaredPointer {
+    pub share_id: String,
+    #[serde(flatten)]
+    pub pointer: crate::share::SharePointer,
 }
 
 /// Where a composition's graphs and dataset live.
@@ -252,6 +266,10 @@ pub(crate) fn compose_scoped(
                 &BTreeMap::from([
                     ("export.nt".into(), request.export_ntriples.clone()),
                     ("shapes.ttl".into(), request.shapes_turtle.clone()),
+                    (
+                        crate::share::POINTERS_SCRUB_LABEL.into(),
+                        crate::share::pointer_scrub_text(&request.manifest.pointers),
+                    ),
                 ]),
                 "composition of an internal share",
             )?;
@@ -368,6 +386,15 @@ pub(crate) fn compose_scoped(
         shapes_authority: chosen.manifest.share_id.clone(),
         packs,
         validation,
+        pointers: requests
+            .iter()
+            .flat_map(|r| {
+                r.manifest.pointers.iter().map(|pointer| DeclaredPointer {
+                    share_id: r.manifest.share_id.clone(),
+                    pointer: pointer.clone(),
+                })
+            })
+            .collect(),
     };
     store.conn.execute_batch("SAVEPOINT quipu_composition")?;
     let write = (|| -> Result<()> {
