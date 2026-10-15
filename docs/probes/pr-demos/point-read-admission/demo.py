@@ -1,5 +1,12 @@
 """Display retained private measurements; no network or workload replay."""
 import json
+import sys
+
+if sys.stdout.isatty():
+    import termios
+    settings = termios.tcgetattr(sys.stdout.fileno())
+    settings[1] &= ~termios.ONLCR
+    termios.tcsetattr(sys.stdout.fileno(), termios.TCSANOW, settings)
 from pathlib import Path
 
 m = json.loads(Path(__file__).with_name("measurements.json").read_text())

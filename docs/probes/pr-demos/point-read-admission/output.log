@@ -1,4 +1,4 @@
-Script started on 2026-10-15 17:51:06-04:00 [COMMAND="python3 demo.py" <not executed on terminal>]
+Script started on 2026-10-15 17:51:39-04:00 [COMMAND="python3 demo.py" <not executed on terminal>]
 Retained private 500-triple fixture, 90 COUNT requests; no workload replay.
 Same CPU 25%, pool 4, 4 GiB RAM, no swap, 10-second admission budget.
 baseline: 26e791ec
@@ -15,4 +15,4 @@ candidate: 5fefecee
   health all 200; peak 238.5 MiB
 PASS point-ASK target <=1s. Off by default; production LIMIT-1 incident unresolved.
 
-Script done on 2026-10-15 17:51:06-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-15 17:51:39-04:00 [COMMAND_EXIT_CODE="0"]
