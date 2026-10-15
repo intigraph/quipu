@@ -435,3 +435,26 @@ fn streamed_bound_object_avoids_the_predicate_range_scan() {
     assert_eq!(rows.len(), 1);
     assert!(steps.load(Ordering::Relaxed) < 50, "object point lookup exceeded 5000 VM steps: {}", steps.load(Ordering::Relaxed));
 }
+
+#[test]
+fn unknown_named_graph_does_not_scan_the_predicate_range() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (mut store, graph) = fixture();
+    let data: String = (0..1500).map(|i| format!("<{EX}bulk{i}> <{EX}title> \"unrelated\" .\n")).collect();
+    ingest_rdf_to_graph(&mut store, data.as_bytes(), RdfFormat::NTriples, None,
+        "2026-01-01T00:00:00Z", None, None, graph).unwrap();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext { graph: GraphScope::Named(vec![-1]), ..Default::default() };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let steps = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&steps);
+    store.conn.progress_handler(100, Some(move || { observed.fetch_add(1, Ordering::Relaxed); false })).unwrap();
+    let mut rows = Vec::new();
+    let count = crate::sparql::triple::visit_triple_pattern(&store, &pattern, &seed, &ctx,
+        &mut |row| { rows.push(row); Ok(()) }).unwrap();
+    store.conn.progress_handler(0, None::<fn() -> bool>).unwrap();
+    assert_eq!(count, 0);
+    assert_eq!(rows.len(), 0);
+    assert!(steps.load(Ordering::Relaxed) == 0, "unknown graph must not step a facts scan: {}", steps.load(Ordering::Relaxed));
+}

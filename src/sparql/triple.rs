@@ -182,6 +182,16 @@ fn visit_triple_pattern_limited(
     if limit == Some(0) {
         return Ok(0);
     }
+    // GraphPattern::Graph uses -1 only for an absent or dataset-excluded
+    // named graph. In a primary-only store it cannot contribute any facts.
+    // Avoid repeating a predicate scan for each correlated EXISTS seed.
+    // Attached stores retain their ordinary dictionary/composition path.
+    if !store.has_attachments()
+        && matches!(&ctx.graph, GraphScope::Named(graphs)
+            if !graphs.is_empty() && graphs.iter().all(|graph| *graph == -1))
+    {
+        return Ok(0);
+    }
     // Formal default: a constant rdf:type query uses the loaded RDFS class
     // hierarchy. Named graphs remain literal because the hierarchy is rooted
     // in the default graph and must not leak across graph boundaries.
