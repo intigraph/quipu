@@ -315,4 +315,39 @@ mod tests {
         );
         assert_eq!(body(call("/query", &named).await.unwrap()).await, "none");
     }
+
+    /// aegis-ufw: a completed `/query` is counted by its DECLARED agent; a
+    /// missing agent is `undeclared`; other routes do not enter this counter.
+    #[tokio::test]
+    async fn query_completions_are_counted_by_declared_agent() {
+        async fn ok() -> &'static str {
+            "ok"
+        }
+        let app = axum::Router::new()
+            .route("/query", axum::routing::post(ok))
+            .route("/knot", axum::routing::post(ok))
+            .layer(axum::middleware::from_fn(log_request));
+        let send = |uri: &'static str, agent: Option<&'static str>| {
+            let mut req = axum::http::Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("x-quipu-client", "ufw-agent-probe");
+            if let Some(agent) = agent {
+                req = req.header("x-quipu-agent", agent);
+            }
+            app.clone()
+                .oneshot(req.body(axum::body::Body::empty()).unwrap())
+        };
+        send("/query", Some("Tim")).await.unwrap();
+        send("/query", Some("tim")).await.unwrap();
+        send("/query", None).await.unwrap();
+        send("/knot", Some("tim")).await.unwrap();
+        let metrics = quipu::metrics::metrics().render(0, 0, 0, None);
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"tim\"} 2\n"
+        ), "{metrics}");
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"undeclared\"} 1\n"
+        ));
+    }
 }
