@@ -7,7 +7,30 @@ pub(super) fn projection(
     ctx: &TemporalContext,
     conditions: &[String],
 ) -> Result<Option<String>> {
-    if store.has_attachments() || ctx.valid_at.is_some() || ctx.as_of_tx.is_some() {
+    if store.has_attachments() {
+        // Match canonical_id and Value::term_key before counting the composed
+        // relation. Reference keys are integers; all literal keys are blobs,
+        // so the two RDF term kinds cannot collide under SQLite GROUP BY.
+        // Keep predicates on physical ids, as lookup_all already supplies every
+        // dictionary id. The source retains each provider's contributed graphs.
+        return Ok(Some(format!(
+            "SELECT COALESCE(subject_alias.canonical_id, facts.e) AS canonical_e,
+                    COALESCE(predicate_alias.canonical_id, facts.a) AS canonical_a,
+                    CASE WHEN quipu_lexical_ref(facts.v) IS NULL
+                         THEN quipu_term_key(facts.v)
+                         ELSE COALESCE(object_alias.canonical_id,
+                                       quipu_lexical_ref(facts.v)) END AS canonical_v
+             FROM {}
+             LEFT JOIN term_alias AS subject_alias ON subject_alias.alias_id=facts.e
+             LEFT JOIN term_alias AS predicate_alias ON predicate_alias.alias_id=facts.a
+             LEFT JOIN term_alias AS object_alias
+                 ON object_alias.alias_id=quipu_lexical_ref(facts.v)
+             WHERE {} GROUP BY canonical_e,canonical_a,canonical_v",
+            store.facts_source(),
+            conditions.join(" AND ")
+        )));
+    }
+    if ctx.valid_at.is_some() || ctx.as_of_tx.is_some() {
         return Ok(None);
     }
     let (GraphScope::Default(graphs) | GraphScope::Named(graphs)) = &ctx.graph else {
