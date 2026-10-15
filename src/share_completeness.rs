@@ -126,6 +126,17 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Local derived-index cursor/highwater. A reconstructed store has its
     // own fact rowids and must start a new bounded backfill.
     ("lexical_progress", Disposition::Excluded),
+    // Optional substring candidates are local derived acceleration, never RDF
+    // content or an activation instruction. Physical rowids/cursors do not
+    // survive reconstruction; receivers explicitly initialize and backfill.
+    ("substring_progress", Disposition::Excluded),
+    ("substring_facts", Disposition::Excluded),
+    ("substring_fts", Disposition::Excluded),
+    ("substring_fts_data", Disposition::Excluded),
+    ("substring_fts_idx", Disposition::Excluded),
+    ("substring_fts_content", Disposition::Excluded),
+    ("substring_fts_docsize", Disposition::Excluded),
+    ("substring_fts_config", Disposition::Excluded),
     // Webhook URLs. Restoring them aims a new store at another store's endpoints.
     ("subscriptions", Disposition::Excluded),
     // `path` is a producer-local filesystem path; restored verbatim it points at

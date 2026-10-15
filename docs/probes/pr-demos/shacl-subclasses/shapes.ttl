@@ -1,0 +1,4 @@
+@prefix ex: <https://example.test/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+ex:ParentShape a sh:NodeShape ; sh:targetClass ex:Parent ; sh:property [ sh:path ex:required ; sh:minCount 1 ] .

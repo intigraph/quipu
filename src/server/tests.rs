@@ -1904,3 +1904,61 @@ async fn f79_graph_formats_signal_truncation_without_changing_rdf_body() {
         }
     }
 }
+
+#[tokio::test]
+async fn substring_contract_refuses_before_query_and_echoes_ready_snapshot() {
+    let empty: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("x-quipu-require-substring", "v6".parse().unwrap());
+    headers.insert(
+        axum::http::header::ACCEPT,
+        "application/sparql-results+json".parse().unwrap(),
+    );
+    let error = query(
+        State(empty),
+        headers.clone(),
+        axum::Json(json!({"query":"not valid SPARQL"})),
+    )
+    .await
+    .unwrap_err();
+    let body = axum::body::to_bytes(error.into_response().into_body(), 65536)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("substring index is not ready"));
+    let store = Store::open_in_memory().unwrap();
+    store.backfill_substring_batch(1).unwrap();
+    let ready: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let response = query(
+        State(ready.clone()),
+        headers.clone(),
+        axum::Json(json!({"query":"ASK {}"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.headers()["x-quipu-substring-index"], "v6");
+    let body = axum::body::to_bytes(response.into_body(), 65536)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["boolean"],
+        true
+    );
+    for input in [
+        json!({"query":"ASK {}","tx":1}),
+        json!({"query":"ASK {}","federated":true}),
+    ] {
+        assert!(
+            query(State(ready.clone()), headers.clone(), axum::Json(input))
+                .await
+                .is_err()
+        );
+    }
+    headers.insert("x-quipu-require-substring", "unknown".parse().unwrap());
+    assert!(
+        query(State(ready), headers, axum::Json(json!({"query":"ASK {}"})))
+            .await
+            .is_err()
+    );
+}
