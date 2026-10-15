@@ -48,6 +48,8 @@ mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
+#[path = "server/point_reads.rs"]
+mod point_reads;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
@@ -308,7 +310,12 @@ async fn main() {
     // and a dead one is not.
     wal_maintenance::reset_at_startup(&store);
 
-    let read_pool = ReadPool::open(&db_path, &store, config.server.read_pool_size);
+    let mut read_pool = ReadPool::open(&db_path, &store, config.server.read_pool_size);
+    if config.server.reserve_point_reads && store.search_config().request_timeout_ms == 0 {
+        eprintln!("error: reserve_point_reads requires a positive request_timeout_ms");
+        std::process::exit(1);
+    }
+    let point_reserved = read_pool.reserve_point_reads(config.server.reserve_point_reads);
 
     if read_pool.len() > 0 {
         eprintln!("read pool: {} read-only connections", read_pool.len());
@@ -316,7 +323,18 @@ async fn main() {
         eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
     }
 
-    admission::init_read_admission_for_pool(read_pool.len());
+    admission::init_read_admission_for_pool(read_pool.ordinary_len());
+    if config.server.reserve_point_reads {
+        eprintln!(
+            "point read reserve: {} ({} ordinary readers)",
+            if point_reserved {
+                "enabled: 1"
+            } else {
+                "unavailable: needs >=2 pooled readers"
+            },
+            read_pool.ordinary_len()
+        );
+    }
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
