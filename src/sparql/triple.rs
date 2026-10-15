@@ -426,9 +426,7 @@ fn visit_triple_pattern_limited(
     let facts = if substring_candidates {
         "facts NOT INDEXED"
     } else if matches!(mode, ScanMode::Retained | ScanMode::Streamed) {
-        super::graph_membership::subject_source(store,ctx,tp,bindings)?
-            .or(super::graph_membership::object_source(store,ctx,tp,bindings)?)
-            .unwrap_or(store.facts_source())
+        super::graph_membership::object_source(store,ctx,tp,bindings)?.unwrap_or(store.facts_source())
     } else {
         store.facts_source()
     };
