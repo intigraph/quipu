@@ -11,7 +11,26 @@ pub(crate) struct GraphScope {
 mod tests;
 
 impl GraphScope {
+    /// Scope for semantic, hybrid and anchored search: an explicit graph needs
+    /// `[quipu.search] named_graphs`, because their named-only vectors must be
+    /// prepared by bounded backfill first.
     pub fn parse(store: &Store, input: &Value) -> Result<Self> {
+        let scope = Self::parse_any(store, input)?;
+        if scope.explicit && !store.search_config().named_graphs {
+            return Err(Error::InvalidValue("explicit graph search is disabled ([quipu.search] named_graphs = false); prepare bounded backfill before enabling".into()));
+        }
+        Ok(scope)
+    }
+
+    /// Scope for keyword search. The lexical index records every assertion's
+    /// graph, and keyword search already refuses until that index is complete,
+    /// so an explicit graph needs no embedding preparation and no
+    /// `named_graphs` (aegis-rcz5ib.10).
+    pub fn parse_keyword(store: &Store, input: &Value) -> Result<Self> {
+        Self::parse_any(store, input)
+    }
+
+    fn parse_any(store: &Store, input: &Value) -> Result<Self> {
         let graph = input.get("graph").filter(|v| !v.is_null());
         let graphs = input.get("graphs");
         let all = match input.get("all_graphs") {
@@ -63,9 +82,6 @@ impl GraphScope {
         }
         ids.sort_unstable();
         ids.dedup();
-        if explicit && !store.search_config().named_graphs {
-            return Err(Error::InvalidValue("explicit graph search is disabled ([quipu.search] named_graphs = false); prepare bounded backfill before enabling".into()));
-        }
         Ok(Self { ids, explicit })
     }
 
