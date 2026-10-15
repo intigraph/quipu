@@ -20,6 +20,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 for (const f of fs.readdirSync(scen)) if (f.endsWith('.ttl')) fs.copyFileSync(path.join(scen, f), path.join(work, f));
 execFileSync(QP, ['shapes', 'load', 'shop', 'shapes.ttl', '--db', db], { cwd: work });
 
+// A server left over from an interrupted take would answer on the same port with OLD data,
+// and the recording would show facts the scenario never wrote. Refuse rather than borrow it.
+import net from 'node:net';
+for (const port of [STAGE_PORT, QUIPU_PORT]) {
+  const busy = await new Promise((r) => { const s = net.connect(port, '127.0.0.1', () => { s.end(); r(true); }); s.on('error', () => r(false)); });
+  if (busy) { console.error(`port ${port} is already in use; stop the leftover process first`); process.exit(2); }
+}
 const server = spawn(path.join(binDir, 'quipu-server'), ['--db', db, '--bind', `127.0.0.1:${QUIPU_PORT}`], { stdio: 'ignore' });
 const stage = http.createServer((req, res) => {
   const p = path.join(here, decodeURIComponent(new URL(req.url, 'http://x').pathname));
@@ -42,6 +49,10 @@ try {
   await page.goto(`http://127.0.0.1:${STAGE_PORT}/stage.html`);
   await page.evaluate((u) => window.stage.graph(u), `http://127.0.0.1:${QUIPU_PORT}/ui#explorer`);
   await sleep(2500);
+  // The graph pane must start EMPTY: proves the stage shows this take's own fresh store.
+  const stats = await (await fetch(`http://127.0.0.1:${QUIPU_PORT}/stats`)).json();
+  const facts = stats.facts ?? stats.fact_count ?? stats.total_facts;
+  if (facts !== 0) throw new Error(`graph pane is not empty before step 1 (facts=${JSON.stringify(facts)}); refusing to record`);
   // Frames for the README GIF: a screenshot every 250ms, named by elapsed milliseconds.
   const frames = path.join(outDir, 'frames'); fs.mkdirSync(frames, { recursive: true });
   capturing = true; t0 = Date.now();
