@@ -209,6 +209,25 @@ async fn query_core(
     // shared function is a stronger guarantee of agreement than one shared value
     // passed through two layers.
     let client = super::query_usage::client(&headers);
+    let require_substring = match headers.get("x-quipu-require-substring") {
+        None => false,
+        Some(value) if value.as_bytes() == b"v6" => true,
+        Some(_) => {
+            return Err(
+                quipu::Error::InvalidValue("unsupported substring read contract".into()).into(),
+            );
+        }
+    };
+    if require_substring
+        && (input.get("tx").is_some()
+            || input.get("valid_at").is_some()
+            || input.get("federated").and_then(JsonValue::as_bool) == Some(true))
+    {
+        return Err(quipu::Error::InvalidValue(
+            "substring read contract is current and local only".into(),
+        )
+        .into());
+    }
 
     read_blocking(move || {
         // Query TEXT at START, before taking the store lock: the query that
@@ -410,7 +429,23 @@ async fn query_core(
             ))
         };
 
-        let result = run(&store);
+        // Pin readiness and evaluation to the same schema/fact snapshot: a
+        // concurrent explicit index drop cannot turn this into a scan fallback.
+        let substring_read = if require_substring {
+            Some(store.substring_read()?)
+        } else {
+            None
+        };
+        let mut result = run(&store);
+        if let Some(transaction) = substring_read {
+            transaction.commit().map_err(quipu::Error::from)?;
+            if let Ok(response) = &mut result {
+                response.headers_mut().insert(
+                    axum::http::HeaderName::from_static("x-quipu-substring-index"),
+                    axum::http::HeaderValue::from_static("v6"),
+                );
+            }
+        }
         // Recorded while the guard is STILL ALIVE, so `held` is genuinely the
         // lock-holding interval and not "until the response was serialised".
         quipu::metrics::metrics().observe_store_time(

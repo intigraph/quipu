@@ -166,11 +166,14 @@ fn subject_lookup_patterns<'a>(
             }
             true
         }
-        GraphPattern::Graph { name: NamedNodePattern::NamedNode(_), inner } =>
-            subject_lookup_patterns(inner, triples, variables),
-        GraphPattern::Union { left, right } =>
+        GraphPattern::Graph {
+            name: NamedNodePattern::NamedNode(_),
+            inner,
+        } => subject_lookup_patterns(inner, triples, variables),
+        GraphPattern::Union { left, right } => {
             subject_lookup_patterns(left, triples, variables)
-                && subject_lookup_patterns(right, triples, variables),
+                && subject_lookup_patterns(right, triples, variables)
+        }
         _ => false,
     }
 }

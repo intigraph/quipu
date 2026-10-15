@@ -178,7 +178,9 @@ pub fn eval_pattern_seeded(
                 .filter(|(name, _)| var_names.contains(name))
                 .map(|(name, value)| (name.clone(), value.clone()))
                 .collect();
-            if let Some(result) = super::substring_project::try_eval(store, inner, &var_names, ctx, &projected_seed)? {
+            if let Some(result) =
+                super::substring_project::try_eval(store, inner, &var_names, ctx, &projected_seed)?
+            {
                 return Ok(result);
             }
             let (rows, _) = eval_pattern_seeded(store, inner, ctx, &projected_seed)?;

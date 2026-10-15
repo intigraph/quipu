@@ -27,7 +27,10 @@ pub(super) fn predicate(
     // A positive local subject and constant predicate already narrow the leaf.
     // Only graph membership changes: every original value, temporal and bag
     // condition remains in the caller, and the same physical rowid is tested.
-    let bound_leaf = matches!((&pattern.subject, &pattern.predicate), (TermPattern::NamedNode(_), NamedNodePattern::NamedNode(_))) || matches!(
+    let bound_leaf = matches!(
+        (&pattern.subject, &pattern.predicate),
+        (TermPattern::NamedNode(_), NamedNodePattern::NamedNode(_))
+    ) || matches!(
         (&pattern.subject, &pattern.predicate),
         (TermPattern::Variable(subject), NamedNodePattern::NamedNode(_))
         if matches!(seed.get(subject.as_str()), Some(crate::Value::Ref(id)) if *id >= 0)
@@ -38,8 +41,9 @@ pub(super) fn predicate(
     let object_leaf = matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
         && match &pattern.object {
             TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
-            TermPattern::Variable(object) => seed.get(object.as_str()).is_some_and(|value|
-                !matches!(value, crate::Value::Ref(id) if *id < 0)),
+            TermPattern::Variable(object) => seed
+                .get(object.as_str())
+                .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
             _ => false,
         };
     if (!text_leaf && !bound_leaf && !object_leaf)
@@ -97,23 +101,37 @@ pub(super) fn object_source(
         TermPattern::Variable(subject) if !seed.contains_key(subject.as_str()));
     let bound_object = match &pattern.object {
         TermPattern::NamedNode(_) | TermPattern::Literal(_) => true,
-        TermPattern::Variable(object) => seed.get(object.as_str()).is_some_and(|value|
-            !matches!(value, crate::Value::Ref(id) if *id < 0)),
+        TermPattern::Variable(object) => seed
+            .get(object.as_str())
+            .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
         _ => false,
     };
-    if !local_graph || !unbound_subject || !bound_object
+    if !local_graph
+        || !unbound_subject
+        || !bound_object
         || !matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
-        || store.has_attachments() || ctx.valid_at.is_some() || ctx.as_of_tx.is_some()
+        || store.has_attachments()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
     {
         return Ok(None);
     }
-    let definition: Option<String> = store.conn.query_row(
-        "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_vaet'",
-        [], |row| row.get(0),
-    ).optional()?;
-    let Some(definition) = definition else { return Ok(None); };
-    let normalized: String = definition.chars()
-        .filter(|c| !c.is_ascii_whitespace()).flat_map(char::to_lowercase).collect();
+    let definition: Option<String> = store
+        .conn
+        .query_row(
+            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_vaet'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(definition) = definition else {
+        return Ok(None);
+    };
+    let normalized: String = definition
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace())
+        .flat_map(char::to_lowercase)
+        .collect();
     if normalized != "createindexidx_vaetonfacts(v,a,e,valid_from)" {
         return Ok(None);
     }

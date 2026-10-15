@@ -29,7 +29,6 @@ pub mod rdfs_closure;
 mod rdfs_closure_tests;
 mod root_scope;
 mod sparse_bgp;
-mod substring_project;
 mod sql_star;
 pub mod status_pushdown;
 #[cfg(test)]
@@ -37,6 +36,7 @@ mod status_pushdown_tests;
 pub mod string_pushdown;
 #[cfg(test)]
 mod string_pushdown_tests;
+mod substring_project;
 #[cfg(test)]
 mod tests;
 mod triple_alias;

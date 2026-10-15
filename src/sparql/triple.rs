@@ -321,7 +321,12 @@ fn visit_triple_pattern_limited(
                         if matches!(bindings.get(v.as_str()), Some(Value::Ref(id)) if *id >= 0)) =>
                 {
                     super::graph_membership::predicate(
-                        store, ctx, tp, bindings, gids, &mut sql_params,
+                        store,
+                        ctx,
+                        tp,
+                        bindings,
+                        gids,
+                        &mut sql_params,
                     )?
                 }
                 ScanMode::Streamed | ScanMode::CompleteRelation => None,
@@ -426,7 +431,8 @@ fn visit_triple_pattern_limited(
     let facts = if substring_candidates {
         "facts NOT INDEXED"
     } else if matches!(mode, ScanMode::Retained | ScanMode::Streamed) {
-        super::graph_membership::object_source(store,ctx,tp,bindings)?.unwrap_or(store.facts_source())
+        super::graph_membership::object_source(store, ctx, tp, bindings)?
+            .unwrap_or(store.facts_source())
     } else {
         store.facts_source()
     };
@@ -696,7 +702,8 @@ fn push_string_narrows(
             sql_params.push(Box::new(i64::try_from(k).unwrap_or(i64::MAX)));
             added = true;
             if object == var
-                && ctx.valid_at.is_none() && ctx.as_of_tx.is_none()
+                && ctx.valid_at.is_none()
+                && ctx.as_of_tx.is_none()
                 && bindings.is_empty()
                 && !store.has_attachments()
                 && let Some(phrase) = narrow.substring_phrase()
@@ -707,9 +714,7 @@ fn push_string_narrows(
                 let ids = store.lookup_all(predicate.as_str())?;
                 if let [_predicate] = ids.as_slice() {
                     let parameter = sql_params.len() + 1;
-                    sql_params.push(Box::new(format!(
-                        "text:{phrase}"
-                    )));
+                    sql_params.push(Box::new(format!("text:{phrase}")));
                     conditions.push(format!("facts.rowid IN (SELECT rowid FROM main.substring_fts WHERE substring_fts MATCH ?{parameter})"));
                     substring_candidates = true;
                 }

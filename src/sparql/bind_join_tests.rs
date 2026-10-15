@@ -595,21 +595,40 @@ fn subject_bind_constant_graph_union_matches_bottom_up_bags_and_headers() {
     let store = store();
     let seed = Bindings::new();
     let ctx = TemporalContext::default();
-    let left = where_clause("SELECT * WHERE { VALUES ?s { <http://example.org/alice> <http://example.org/alice> <http://example.org/bob> } }");
-    let right = where_clause("SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { GRAPH <http://example.org/g> { ?s <http://example.org/team> ?team } } }");
+    let left = where_clause(
+        "SELECT * WHERE { VALUES ?s { <http://example.org/alice> <http://example.org/alice> <http://example.org/bob> } }",
+    );
+    let right = where_clause(
+        "SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { GRAPH <http://example.org/g> { ?s <http://example.org/team> ?team } } }",
+    );
     let (rows, vars) = eval_pattern_seeded(&store, &left, &ctx, &seed).unwrap();
     let (rhs, rhs_vars) = eval_pattern_seeded(&store, &right, &ctx, &seed).unwrap();
     let expected = join_rows(&rows, &rhs, &ctx).unwrap();
-    let (actual, actual_vars) = super::bind_join::try_subject_bind_join(&store, &right, &ctx, &seed, &rows, &vars).unwrap().expect("constant GRAPH/UNION of subject lookups must engage");
+    let (actual, actual_vars) =
+        super::bind_join::try_subject_bind_join(&store, &right, &ctx, &seed, &rows, &vars)
+            .unwrap()
+            .expect("constant GRAPH/UNION of subject lookups must engage");
     assert_eq!(actual_vars, rhs_vars);
     assert_eq!(actual.len(), 5);
     assert_eq!(bag(&actual), bag(&expected));
     for query in [
-      "SELECT * WHERE { GRAPH ?g { ?s <http://example.org/role> ?value } }",
-      "SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { FILTER(BOUND(?s)) } }",
+        "SELECT * WHERE { GRAPH ?g { ?s <http://example.org/role> ?value } }",
+        "SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { FILTER(BOUND(?s)) } }",
     ] {
-      let unsafe_right = where_clause(query);
-      assert!(super::bind_join::try_subject_bind_join(&store, &unsafe_right, &ctx, &seed, &rows, &vars).unwrap().is_none(), "{query}");
+        let unsafe_right = where_clause(query);
+        assert!(
+            super::bind_join::try_subject_bind_join(
+                &store,
+                &unsafe_right,
+                &ctx,
+                &seed,
+                &rows,
+                &vars
+            )
+            .unwrap()
+            .is_none(),
+            "{query}"
+        );
     }
 }
 
@@ -622,5 +641,9 @@ fn subject_bind_declines_an_actual_project_boundary() {
     let (rows, vars) = eval_pattern_seeded(&store, &left, &ctx, &seed).unwrap();
     let Query::Select { pattern, .. } = SparqlParser::new().parse_query("SELECT ?s ?value WHERE { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } }").unwrap() else { panic!("SELECT"); };
     assert!(matches!(pattern, GraphPattern::Project { .. }));
-    assert!(super::bind_join::try_subject_bind_join(&store, &pattern, &ctx, &seed, &rows, &vars).unwrap().is_none());
+    assert!(
+        super::bind_join::try_subject_bind_join(&store, &pattern, &ctx, &seed, &rows, &vars)
+            .unwrap()
+            .is_none()
+    );
 }
