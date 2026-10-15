@@ -11,6 +11,50 @@ use serde_json::Value as JsonValue;
 use crate::error::{Error, Result};
 use crate::store::Store;
 
+/// MCP tool: `quipu_graph_create` -- register a committed-class named graph.
+///
+/// Input: `{ "graph": "<iri>", "actor"?: "<declared creator>", "timestamp"?: "<RFC3339>" }`.
+/// Output includes `graph`, `g`, `created` and retained creation provenance.
+///
+/// This exists because `Store::graph_create` had no caller outside its own
+/// tests (camayoc-s0h): the registration `set_graph_label` presumes was
+/// written and unreachable, so a consumer could write into a named graph via
+/// `/episode` — which interns the IRI without registering it — and then find
+/// the graph could not be labelled. Routing without labelling is worse than
+/// neither, because it produces separate graphs every query still reads at
+/// equal trust.
+///
+/// Idempotent. Re-creating an existing committed graph is a no-op, and
+/// `created` reports which happened rather than leaving the caller to guess
+/// from a bare success.
+pub fn tool_graph_create(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    let graph = input
+        .get("graph")
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| Error::InvalidValue("missing 'graph' parameter".into()))?;
+    let now = crate::time::now_iso();
+    let timestamp =
+        match input.get("timestamp") {
+            None => now,
+            Some(value) => crate::time::normalize_rfc3339_utc(value.as_str().ok_or_else(|| {
+                Error::InvalidValue("'timestamp' must be an RFC 3339 string".into())
+            })?)
+            .ok_or_else(|| {
+                Error::InvalidValue("'timestamp' must be an RFC 3339 date-time".into())
+            })?,
+        };
+    let actor = match input.get("actor") {
+        None => None,
+        Some(value) => Some(
+            value
+                .as_str()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or_else(|| Error::InvalidValue("'actor' must be a non-empty string".into()))?,
+        ),
+    };
+    store.graph_create_recorded(graph, &timestamp, actor)
+}
+
 /// List registered graphs, optionally filtered.
 ///
 /// Input: `{ "kind": "<token>", "lifecycle": "frozen" }` — both optional.
@@ -44,6 +88,7 @@ pub fn tool_graph_list(store: &Store, input: &JsonValue) -> Result<JsonValue> {
             "class": gi.class,
             "source": gi.source,
             "lifecycle": gi.lifecycle,
+            "creation": store.graph_creation_provenance(gi.g)?,
             "labels": {
                 "freshness": gi.freshness,
                 "durability": gi.durability,

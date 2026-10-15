@@ -1,11 +1,18 @@
 # Quipu
 
-**Structured knowledge encoded in knotted strings.**
+The Quipu stack is built around a governed, bitemporal knowledge store: shared
+facts, decisions and work history your agents can query. Quipu can check writes
+against your rules, records where each fact came from, and answers what was true
+when.
 
-A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Incan knotted-string
-recording system. Cords are entities, knots are facts, colors are types, and
-trained readers interpret the structure. Quipu brings this philosophy to modern
-knowledge graphs: strict structure, enforced by AI agents.
+**Quipu is that store.** *Bitemporal* means keeping both when a fact was recorded
+and, when supplied, when it was true. Write enforcement is opt-in:
+`shacl.validate_on_write` and `governance.enforce_on_write` default to `false`
+([configuration](getting-started/configuration.md)). Enable the checks you need
+before relying on automatic refusal.
+
+A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record:
+cords are entities, knots are facts.
 
 ## See it
 
@@ -34,8 +41,8 @@ An embeddable Rust library and server for building knowledge graphs with:
 - **RDF data model** — IRIs, blank nodes, typed literals via oxrdf
 - **SPARQL 1.1 query engine** — SELECT, CONSTRUCT, ASK, DESCRIBE with
   property paths, aggregates, RDFS inference
-- **SHACL validation** — strict schema enforcement at write time with
-  structured agent-friendly feedback
+- **SHACL validation** — configurable write checks with structured,
+  agent-friendly feedback
 - **Hybrid search** — SPARQL + vector similarity in a single query
 - **Episode ingestion** — structured write path for agent-extracted knowledge
 - **Bulk import + promote** — load or migrate a whole dataset validated in a

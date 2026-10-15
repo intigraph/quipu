@@ -1,0 +1,9 @@
+BEFORE (installed binary, private DB): quipu 0.13.0; git_sha: f5cd1bb38381696bc57b265380339607fb94f4e9; git_dirty: false
+tools/list -> {"count": 50, "create": false, "label": false}
+tools/call {"name": "quipu_graph_create", "arguments": {"graph": "urn:example:demo", "actor": "urn:example:agent", "timestamp": "2026-10-14T12:00:00Z"}}
+response -> {"code": -32602, "message": "unknown Quipu tool"}
+AFTER (candidate binary, private DB): quipu 0.13.0; git_sha: 1cea235b355a8e85fab3d9c522df8ecec934d33a; git_dirty: false
+tools/list -> {"count": 52, "create": true, "label": true}
+tools/call {"name": "quipu_graph_create", "arguments": {"graph": "urn:example:demo", "actor": "urn:example:agent", "timestamp": "2026-10-14T12:00:00Z"}}
+response -> {"created": true, "creation": {"actor": "urn:example:agent", "timestamp": "2026-10-14T12:00:00Z"}, "g": 2, "graph": "urn:example:demo"}
+repeat create as later actor -> {"created": false, "creation": {"actor": "urn:example:agent", "timestamp": "2026-10-14T12:00:00Z"}, "g": 2, "graph": "urn:example:demo"}

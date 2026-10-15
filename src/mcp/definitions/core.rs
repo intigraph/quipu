@@ -216,6 +216,89 @@ pub(super) fn defs() -> Vec<JsonValue> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_graph_create",
+            "description": "Register a committed named graph before graph-scoped knot writes or labeling. Idempotent: an existing graph retains its original creation timestamp and declared actor. Interned terms are not registration.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": {
+                        "type": "string",
+                        "description": "IRI of a committed named graph to register"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "description": "RFC 3339 creation time; defaults to current UTC"
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Declared creator; retained on the creation record, not authenticated identity"
+                    }
+                },
+                "required": [
+                    "graph"
+                ]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_graph_label",
+            "description": "Declare lattice labels on an already registered committed graph. Create first with quipu_graph_create. Declarations are versioned; policy tokens describe data, not authorization.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": {
+                        "type": "string"
+                    },
+                    "timestamp": {
+                        "type": "string"
+                    },
+                    "actor": {
+                        "type": "string"
+                    },
+                    "trust": {
+                        "type": "object",
+                        "properties": {
+                            "iri": {
+                                "type": "string"
+                            },
+                            "chain": {
+                                "type": "string"
+                            },
+                            "rank": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "iri",
+                            "chain",
+                            "rank"
+                        ]
+                    },
+                    "freshness": {
+                        "type": "string"
+                    },
+                    "durability": {
+                        "type": "string"
+                    },
+                    "policy": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "kind": {
+                        "type": "string"
+                    },
+                    "valid_to": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "graph",
+                    "timestamp"
+                ]
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_graph_list",
             "description": "List registered named graphs with class, source, lifecycle and labels (freshness/durability/trust/policy/kind). Filter with `kind` (a dataKind token, e.g. operational | archive) and/or `lifecycle` (frozen). Also the capability probe for the graph-kinds surface: a store without this tool predates it.",
             "inputSchema": {

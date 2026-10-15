@@ -408,11 +408,7 @@ fn native_count(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<Option<Output>> {
-    if !variables.is_empty()
-        || !seed.is_empty()
-        || store.has_attachments()
-        || ctx.string_narrows.is_some()
-    {
+    if !variables.is_empty() || !seed.is_empty() || ctx.string_narrows.is_some() {
         return Ok(None);
     }
     let (tp, scoped) = match inner {
