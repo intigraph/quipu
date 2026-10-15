@@ -313,7 +313,7 @@ pub fn eval_pattern_seeded(
 
         GraphPattern::OrderBy { inner, expression } => {
             let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
-            Ok((super::order::sort_rows(store, rows, expression)?, vars))
+            Ok((super::order::sort_rows(store, rows, expression, ctx)?, vars))
         }
 
         GraphPattern::Reduced { inner } => eval_pattern_seeded(store, inner, ctx, seed),
