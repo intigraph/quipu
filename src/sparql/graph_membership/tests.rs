@@ -458,3 +458,22 @@ fn unknown_named_graph_does_not_scan_the_predicate_range() {
     assert_eq!(rows.len(), 0);
     assert!(steps.load(Ordering::Relaxed) == 0, "unknown graph must not step a facts scan: {}", steps.load(Ordering::Relaxed));
 }
+
+#[test]
+fn constant_subject_fields_use_the_same_covering_graph_membership() {
+    let (store, graph) = fixture(); index(&store);
+    let (mut pattern, _) = shape();
+    pattern.subject = TermPattern::NamedNode(oxrdf::NamedNode::new(format!("{EX}one")).unwrap());
+    let ctx = TemporalContext { graph: GraphScope::Named(vec![graph]), ..Default::default() };
+    let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let e = store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(e), Box::new(a)];
+    let scope = predicate(&store, &ctx, &pattern, &Bindings::new(), &[graph], &mut params).unwrap()
+        .expect("constant subject must retain the same physical graph membership");
+    let sql = format!("SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE e=?1 AND a=?2 AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)");
+    assert_eq!(table_columns(&store, &sql, &[e,a,graph]), 0);
+    let q = format!("SELECT ?text WHERE {{ GRAPH <{EX}g> {{ <{EX}one> <{EX}title> ?text }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+    let foreign = format!("SELECT ?text WHERE {{ GRAPH <{EX}g> {{ <{EX}foreign> <{EX}title> ?text }} }}");
+    assert!(query(&store, &foreign).unwrap().rows().is_empty());
+}

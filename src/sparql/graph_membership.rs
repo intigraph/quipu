@@ -27,7 +27,7 @@ pub(super) fn predicate(
     // A positive local subject and constant predicate already narrow the leaf.
     // Only graph membership changes: every original value, temporal and bag
     // condition remains in the caller, and the same physical rowid is tested.
-    let bound_leaf = matches!(
+    let bound_leaf = matches!((&pattern.subject, &pattern.predicate), (TermPattern::NamedNode(_), NamedNodePattern::NamedNode(_))) || matches!(
         (&pattern.subject, &pattern.predicate),
         (TermPattern::Variable(subject), NamedNodePattern::NamedNode(_))
         if matches!(seed.get(subject.as_str()), Some(crate::Value::Ref(id)) if *id >= 0)
@@ -84,7 +84,7 @@ pub(super) fn predicate(
 #[cfg(test)]
 mod tests;
 
-/// A strict value-leading source for a retained object-bound local leaf.
+/// A strict value-leading source for an object-bound local leaf.
 pub(super) fn object_source(
     store: &Store,
     ctx: &TemporalContext,
