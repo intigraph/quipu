@@ -325,6 +325,11 @@ impl Metrics {
         h.observe(seconds);
     }
 
+    /// Count a completed `/query` by its DECLARED agent (aegis-ufw); see [`agents`].
+    pub fn observe_agent_query(&self, client: &str, ep: &str, agent: Option<&str>, secs: f64) {
+        self.agent_queries.observe(client, ep, agent, secs);
+    }
+
     /// Attribute one request's TIME to a caller (aegis-ma1hy).
     ///
     /// Call with the already-normalised label from [`normalize_client`]; this
@@ -333,11 +338,6 @@ impl Metrics {
     ///
     /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
     /// constant for why the cap is not optional.
-    /// Count a completed `/query` by its DECLARED agent (aegis-ufw); see [`agents`].
-    pub fn observe_agent_query(&self, client: &str, ep: &str, agent: Option<&str>, secs: f64) {
-        self.agent_queries.observe(client, ep, agent, secs);
-    }
-
     pub fn observe_client(&self, client: &str, task: &str, endpoint: &str, seconds: f64) {
         let mut map = self.clients.lock().unwrap();
         // `MAX_CLIENTS - 1`, not `MAX_CLIENTS`: the `other` bucket needs a slot
