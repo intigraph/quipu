@@ -68,10 +68,6 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     }
     super::pattern_util::check_eval_budget(ctx,0,0)?;
     let sql=format!("SELECT f.e,f.value_hash,f.fact_id FROM main.substring_fts CROSS JOIN main.substring_facts AS f NOT INDEXED WHERE {} ORDER BY f.e,f.value_hash",conditions.join(" AND "));
-    // Return owned bindings before restoring the connection-local cache policy.
-    // The scalar reader guard also bounds this compact subject-only sort; no
-    // SQLite row, statement, or mapped value escapes its closure.
-    super::count_mmap::scalar(store, || {
     let mut statement=store.conn.prepare(&sql)?;
     let mut cursor=statement.query(rusqlite::params_from_iter(params))?;
     let mut output=Vec::new();let mut previous:Option<(i64,Vec<u8>,i64)>=None;
@@ -92,5 +88,4 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     }
     super::pattern_util::check_eval_budget(ctx,visited,output.len())?;
     Ok(Some((output,vars.to_vec())))
-    })
 }

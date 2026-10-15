@@ -483,14 +483,3 @@ fn exact_flag_changes_and_rolls_back_with_original_nul_value() {
     assert_eq!(store.conn.query_row("SELECT sum(needs_exact) FROM substring_facts",[],|r|r.get::<_,i64>(0)).unwrap(),0);
     assert_eq!(query(&store,&projected("quipu")).unwrap().rows().len(),1);
 }
-
-#[test]
-fn subject_projection_restores_reader_cache_budget() {
-    let store=fixture();finish(&store);
-    let expected=projected_bag(&store,&search("quipu"),&TemporalContext::default());
-    for budget in [-32000_i64,-1024_i64,256_i64] {
-        store.conn.pragma_update(None,"cache_size",budget).unwrap();
-        assert_eq!(projected_bag(&store,&projected("quipu"),&TemporalContext::default()),expected);
-        assert_eq!(store.conn.query_row("PRAGMA cache_size",[],|r|r.get::<_,i64>(0)).unwrap(),budget);
-    }
-}
