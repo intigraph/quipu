@@ -1,0 +1,4 @@
+@prefix ex: <https://example.org/shop/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+ex:orders-db ex:runsOn ex:db-b .
