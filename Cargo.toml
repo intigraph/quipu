@@ -125,6 +125,7 @@ oxsdatatypes = "=0.2.2"
 regex = "1"
 glob = "0.3"
 rudof_rdf = { version = "=0.3.25", default-features = false, optional = true }
+rudof_iri = { version = "=0.3.25", default-features = false, optional = true }
 shacl_engine = { package = "shacl", version = "=0.3.25", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -180,7 +181,7 @@ tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_
 default = ["shacl"]
 # Rudof enables RDF 1.2 terms; every parser/serializer must agree in this
 # feature bundle. Defaultless builds retain their existing RDF 1.1 matches.
-shacl = ["dep:rudof_rdf", "dep:shacl_engine", "oxttl/rdf-12", "oxrdfio/rdf-12", "sparesults/sparql-12", "spargebra/sparql-12"]
+shacl = ["dep:rudof_rdf", "dep:rudof_iri", "dep:shacl_engine", "oxttl/rdf-12", "oxrdfio/rdf-12", "sparesults/sparql-12", "spargebra/sparql-12"]
 owl = []
 # The HTTP surfaces, split because they are different directions and only one of
 # them is a server. `remote` is the federation CLIENT (`RemoteProvider` over
