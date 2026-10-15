@@ -77,7 +77,7 @@ stops being read.
 | `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
 | `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
 | `search.rrf_k` | `60.0` | Positive RRF denominator offset. |
-| `search.named_graphs` | `false` | Explicit graph search and automatic named-only embedding text. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
+| `search.named_graphs` | `false` | Explicit graph scope for semantic and hybrid search, and automatic named-only embedding text. Keyword search accepts an explicit scope without it. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |
