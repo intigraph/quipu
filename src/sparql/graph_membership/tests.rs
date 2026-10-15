@@ -369,3 +369,46 @@ fn bound_object_membership_uses_covering_graph_index_without_payload_columns() {
     let foreign=format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"seeds FOREIGN ONLY\" }} }}");
     assert!(query(&store,&foreign).unwrap().rows().is_empty());
 }
+
+#[test]
+fn retained_object_lookup_seeks_the_value_leading_index() {
+    let (store,graph)=fixture();index(&store);
+    let (pattern,_)=shape();
+    let ctx=TemporalContext {graph:GraphScope::Named(vec![graph]),..TemporalContext::default()};
+    let seed=Bindings::from([("text".to_owned(),crate::Value::Str("SEEDS alpha".into()))]);
+    let a=store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let source=object_source(&store,&ctx,&pattern,&seed).unwrap().unwrap_or("facts");
+    let sql=format!("EXPLAIN QUERY PLAN SELECT e,a,v FROM {source} WHERE a=?1 AND v IN (?2,?3) AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)");
+    let value=crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let plans:Vec<String>=store.conn.prepare(&sql).unwrap().query_map(rusqlite::params![a,value,value],|r|r.get(3)).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+    assert!(plans.iter().any(|p|p.contains("idx_vaet")&&p.contains("v=?")&&p.contains("a=?")),"object point seek required: {plans:?}");
+    let q=format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store,&q).unwrap().rows().len(),1);
+}
+
+#[test]
+fn value_source_declines_unproved_shapes_and_index() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext { graph: GraphScope::Named(vec![graph]), ..Default::default() };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    assert!(object_source(&store, &ctx, &pattern, &seed).unwrap().is_some());
+    assert!(object_source(&store, &ctx, &pattern, &Bindings::new()).unwrap().is_none());
+    let mut bound = seed.clone();
+    bound.insert("s".to_owned(), crate::Value::Ref(1));
+    assert!(object_source(&store, &ctx, &pattern, &bound).unwrap().is_none());
+    for graph in [GraphScope::Default(vec![0]), GraphScope::Named(vec![0]), GraphScope::Named(vec![graph, 0])] {
+        let other = TemporalContext { graph, ..Default::default() };
+        assert!(object_source(&store, &other, &pattern, &seed).unwrap().is_none());
+    }
+    let historic = TemporalContext { graph: ctx.graph.clone(), as_of_tx: Some(1), ..Default::default() };
+    assert!(object_source(&store, &historic, &pattern, &seed).unwrap().is_none());
+    store.conn.execute_batch("DROP INDEX idx_vaet; CREATE INDEX idx_vaet ON facts(a,v,e,valid_from)").unwrap();
+    assert!(object_source(&store, &ctx, &pattern, &seed).unwrap().is_none());
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+    store.conn.execute_batch("DROP INDEX idx_vaet").unwrap();
+    assert!(object_source(&store, &ctx, &pattern, &seed).unwrap().is_none());
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+}
