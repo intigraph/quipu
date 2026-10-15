@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Quipu demo stage</title>
+<link rel="stylesheet" href="/node_modules/@xterm/xterm/css/xterm.css">
+<style>
+  html,body{margin:0;height:100%;background:#0f1424;color:#dfe6f3;font:14px system-ui,sans-serif}
+  .wrap{display:grid;grid-template-columns:44% 56%;grid-template-rows:36px 1fr;height:100%}
+  .bar{grid-column:1/3;display:flex;align-items:center;gap:12px;padding:0 14px;background:#151b30;border-bottom:1px solid #26304d}
+  .bar b{color:#e8496b;letter-spacing:.04em}
+  .cap{color:#9fb0d0}
+  #term{padding:10px;background:#0b0f1c;border-right:1px solid #26304d;overflow:hidden}
+  iframe{width:100%;height:100%;border:0;background:#161d33}
+  .flash{position:fixed;inset:36px 0 0 44%;pointer-events:none;box-shadow:inset 0 0 0 4px #e8496b;opacity:0;transition:opacity .25s}
+  .flash.on{opacity:1}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="bar"><b>QUIPU</b><span class="cap" id="cap">An agent records what it learns. Quipu checks every write.</span></div>
+  <div id="term"></div>
+  <iframe id="graph"></iframe>
+</div>
+<div class="flash" id="flash"></div>
+<script src="/node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="/node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script>
+  const term = new Terminal({fontSize: 12.5, convertEol: true, cursorBlink: false,
+    theme: {background: '#0b0f1c', foreground: '#dfe6f3'}});
+  const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
+  term.open(document.getElementById('term')); fit.fit();
+  // The driver calls these; nothing here reaches the network except the iframe.
+  window.stage = {
+    write: (s) => new Promise(r => term.write(s, r)),
+    caption: (s) => { document.getElementById('cap').textContent = s; },
+    flash: () => { const f = document.getElementById('flash'); f.classList.add('on'); setTimeout(() => f.classList.remove('on'), 1400); },
+    graph: (url) => { document.getElementById('graph').src = url; },
+  };
+</script>
+</body></html>
