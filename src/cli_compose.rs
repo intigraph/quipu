@@ -3,6 +3,9 @@
 use crate::cli::{chrono_now, flag_value};
 
 pub fn cmd_compose(args: &[String], db_path: &str) {
+    if let Some(repo) = flag_value(args, "--repo") {
+        return cmd_compose_repo(args, db_path, repo);
+    }
     let result = run(args, db_path);
     match result {
         Ok(result) => {
@@ -23,7 +26,7 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
     let mut index = 2;
     while index < args.len() {
         match args[index].as_str() {
-            "--db" | "--shapes-from" | "--actor" | "--destination" => {
+            "--db" | "--shapes-from" | "--actor" | "--destination" | "--repo" => {
                 if args.get(index + 1).is_none() {
                     return Err(quipu::Error::InvalidValue(format!(
                         "{} needs a value",
@@ -32,6 +35,7 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
                 }
                 index += 2;
             }
+            "--rollback" => index += 1,
             value if value.starts_with('-') => {
                 return Err(quipu::Error::InvalidValue(format!(
                     "unknown compose option: {value}"
@@ -81,4 +85,121 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
         &chrono_now(),
         flag_value(args, "--actor"),
     )
+}
+
+/// Pendant autoload repository mode: `--repo R <pack-key>=<path>...` composes and
+/// moves `urn:quipu:repo:R:current`; `--repo R --rollback` moves it back.
+fn cmd_compose_repo(args: &[String], db_path: &str, repo: &str) {
+    let outcome = if args.iter().any(|a| a == "--rollback") {
+        run_rollback(args, db_path, repo)
+    } else {
+        run_repo(args, db_path, repo)
+    };
+    match outcome {
+        Ok((json, quarantined)) => {
+            println!("{json}");
+            if quarantined {
+                std::process::exit(2);
+            }
+        }
+        Err(error) => {
+            eprintln!("composition error: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_rollback(args: &[String], db_path: &str, repo: &str) -> quipu::Result<(String, bool)> {
+    if positional(args)?.next().is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "--rollback takes no packs; it moves CURRENT back to the previous snapshot".into(),
+        ));
+    }
+    let mut store = crate::cli_open::open_store(db_path);
+    let result = quipu::share_current::rollback_current(
+        &mut store,
+        repo,
+        &chrono_now(),
+        flag_value(args, "--actor"),
+    )?;
+    Ok((serde_json::to_string_pretty(&result).unwrap(), false))
+}
+
+fn run_repo(args: &[String], db_path: &str, repo: &str) -> quipu::Result<(String, bool)> {
+    let mut keys = Vec::new();
+    let mut paths = Vec::new();
+    for value in positional(args)? {
+        let (key, path) = value.split_once('=').ok_or_else(|| {
+            quipu::Error::InvalidValue(format!(
+                "with --repo every pack is <pack-key>=<path>, the key naming the pack across \
+                 commits (got {value:?})"
+            ))
+        })?;
+        keys.push(key.to_string());
+        paths.push(path);
+    }
+    if paths.is_empty() {
+        return Err(quipu::Error::InvalidValue(
+            "--repo needs at least one <pack-key>=<path>".into(),
+        ));
+    }
+    let authority = flag_value(args, "--shapes-from")
+        .map(|key| {
+            keys.iter().position(|k| k == key).ok_or_else(|| {
+                quipu::Error::InvalidValue("--shapes-from must name one of the pack keys".into())
+            })
+        })
+        .transpose()?;
+    let destination = match flag_value(args, "--destination") {
+        None | Some("outward") => quipu::share::ShareDestination::Outward,
+        Some("internal") => quipu::share::ShareDestination::Internal,
+        Some(value) => {
+            return Err(quipu::Error::InvalidValue(format!(
+                "unknown destination: {value}"
+            )));
+        }
+    };
+    let requests = paths
+        .into_iter()
+        .map(|path| {
+            crate::cli_pack::warn_deprecated_extension(path);
+            let mut request = quipu::share_transport::read_local(path)?;
+            request.destination = destination;
+            Ok(request)
+        })
+        .collect::<quipu::Result<Vec<_>>>()?;
+    let mut store = crate::cli_open::open_store(db_path);
+    let result = quipu::share_current::compose_current(
+        &mut store,
+        repo,
+        &keys,
+        &requests,
+        authority,
+        &chrono_now(),
+        flag_value(args, "--actor"),
+    )?;
+    let quarantined = result.composition.outcome == "quarantined";
+    Ok((serde_json::to_string_pretty(&result).unwrap(), quarantined))
+}
+
+/// Positional (non-flag) arguments after the subcommand.
+fn positional(args: &[String]) -> quipu::Result<impl Iterator<Item = &str>> {
+    let mut out = Vec::new();
+    let mut index = 2;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--db" | "--shapes-from" | "--actor" | "--destination" | "--repo" => index += 2,
+            "--rollback" => index += 1,
+            value if value.starts_with('-') => {
+                return Err(quipu::Error::InvalidValue(format!(
+                    "unknown compose option: {value}"
+                )));
+            }
+            value => {
+                out.push(value);
+                index += 1;
+            }
+        }
+    }
+    Ok(out.into_iter())
 }

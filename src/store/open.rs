@@ -245,6 +245,7 @@ impl Store {
         Self::migrate_term_spaces(&conn)?;
         Self::migrate_graph_labels(&conn)?;
         Self::migrate_datasets(&conn)?;
+        Self::migrate_pendant_repos(&conn)?;
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_decision_nonces(&conn)?;

@@ -177,6 +177,24 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("dataset_members", "dataset", TermIdKind::None),
     ("dataset_members", "graph_iri", TermIdKind::None),
     ("dataset_members", "ord", TermIdKind::None),
+    // -- Store::migrate_pendant_repos (aegis-koxp0u) --
+    // Repository, pack key, snapshot and graph names are IRIs/keys stored as
+    // text; members is JSON of the same; tombstones are N-Triples text. None
+    // holds a term id, so a respace never touches them.
+    ("pendant_repo_pointers", "repo", TermIdKind::None),
+    ("pendant_repo_pointers", "slot", TermIdKind::None),
+    ("pendant_repo_pointers", "snapshot", TermIdKind::None),
+    ("pendant_repo_pointers", "members", TermIdKind::None),
+    ("pendant_repo_pointers", "moved_at", TermIdKind::None),
+    ("pendant_repo_graphs", "repo", TermIdKind::None),
+    ("pendant_repo_graphs", "pack_key", TermIdKind::None),
+    ("pendant_repo_graphs", "graph", TermIdKind::None),
+    ("pendant_repo_graphs", "share_id", TermIdKind::None),
+    ("pendant_repo_graphs", "composed_at", TermIdKind::None),
+    ("pendant_repo_tombstones", "repo", TermIdKind::None),
+    ("pendant_repo_tombstones", "pack_key", TermIdKind::None),
+    ("pendant_repo_tombstones", "statement", TermIdKind::None),
+    ("pendant_repo_tombstones", "recorded_at", TermIdKind::None),
     // -- Store::migrate_bitemporal_registries (quipu #71) --
     ("shapes", "valid_from", TermIdKind::None),
     ("shapes", "valid_to", TermIdKind::None),
