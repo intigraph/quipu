@@ -72,7 +72,7 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/graph/label` | `quipu_graph_label` |
 | `/graph/thaw` | `quipu_graph_thaw` |
 | `/graphs` | `quipu_graph_list` |
-| `/health` | No dedicated native tool |
+| `/health` | `quipu_health` |
 | `/hybrid_search` | `quipu_hybrid_search` |
 | `/impact` | `quipu_impact` |
 | `/import` | `quipu_import` |
@@ -115,7 +115,7 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/shapes` | `quipu_shapes` |
 | `/share` | `quipu_share` |
 | `/spotlight` | `quipu_spotlight` |
-| `/stats` | No dedicated native tool |
+| `/stats` | `quipu_stats` |
 | `/subscriptions` | `quipu_subscriptions` |
 | `/transactions` | `quipu_transactions` |
 | `/ui` | No dedicated native tool |
@@ -126,7 +126,7 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/vendor/three.module.min.js` | No dedicated native tool |
 | `/verdict/verify` | `quipu_verdict_verify` |
 | `/verifier/authorized` | `quipu_verifier_authorized` |
-| `/version` | No dedicated native tool |
+| `/version` | `quipu_version` |
 | `/workflow/capabilities` | `quipu_workflow_capabilities` |
 
 ## Every top-level CLI verb compared with native MCP
@@ -188,7 +188,7 @@ asserted to have the same options or behavior.
 | `search-index` | Local index lifecycle; no native tool |
 | `shapes` | quipu_shapes |
 | `share` | quipu_share |
-| `stats` | No native stats tool |
+| `stats` | quipu_stats (server store; CLI local --db selection stays local) |
 | `status` | Local project-bundle status |
 | `trust-root` | Local root trust bootstrap; no native tool |
 | `unpack` | Local pack merge; portable import uses quipu_import / quipu_import_promote |
@@ -208,9 +208,10 @@ client check workflow enforcement before using the update surface.
 - Entity format suffixes are content-negotiation alternatives to `quipu_entity`
   JSON-LD, not additional graph mutations. History retains the existing endpoint's
   MAIN-only semantics; this work does not repair composed audit completeness.
-- Static UI assets, HTML preview cards and service discovery/health/version/
-  metrics remain HTTP presentation/operations interfaces. CLI stats remains a
-  local database diagnostic; no new remote service-management authority is added.
+- Static UI assets, HTML preview cards, RDF service discovery and metrics
+  retain HTTP presentation/protocol contracts. Server health, version and stats
+  also have MCP read tools; CLI --db selects a local store rather than the server.
+  No remote service-management authority is added.
 - SSE routes retain their streaming HTTP protocol. The same durable events and
   changes are accessible via bounded MCP pull tools, with explicit cursor commit.
 - RDF Graph Store is an HTTP-standard alternative; MCP scoped knot/query/update

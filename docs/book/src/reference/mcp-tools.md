@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **73 tools** in a default build, or
-**75** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **76 tools** in a default build, or
+**78** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -1164,3 +1164,18 @@ processing with `quipu_events_commit`. `quipu_changes` returns `next_tx` and
 supports exact `graph` filtering. Both are bounded pull APIs; they do not
 promise a persistent SSE connection. Subscription creation can trigger external
 webhook delivery and retains the REST write classification even for list.
+
+### `quipu_stats`
+
+Read serving-store statistics with no arguments. Unlike CLI `stats --db`, this
+operates on the server's store, not a caller-selected local path.
+
+### `quipu_health`
+
+Read server health with no arguments. A positive liveness control does not
+certify target coverage or graph completeness.
+
+### `quipu_version`
+
+Read serving version, source commit and dirty-build identity without REST.
+No arguments; version identity does not replace behavioral acceptance.

@@ -33,6 +33,9 @@ def exercise(call, tool_body, unpack, token):
     assert good('quipu_subscriptions', {'action':'list'}, True)['count'] == 0
     refused('quipu_subscriptions', {'action':'create','consumer_id':'fixture','webhook_url':'https://example.org/never-delivered','sparql_ask':'ASK {}'}, True)
     assert good('quipu_subscriptions', {'action':'list'}, True)['count'] == 0
+    assert good('quipu_health')['status'] == 'ok'
+    assert good('quipu_version')['git_sha']
+    assert good('quipu_stats')['store_id']
     capability = good('quipu_workflow_capabilities')
     assert isinstance(capability['enabled'], bool)
 

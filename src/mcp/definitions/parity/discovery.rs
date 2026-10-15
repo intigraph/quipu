@@ -190,5 +190,32 @@ pub(super) fn defs() -> Vec<Value> {
                 "additionalProperties": false
             }
         }),
+        serde_json::json!({
+            "name": "quipu_stats",
+            "description": "Read server graph and transaction statistics. This describes the serving store, not a client-local database.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_health",
+            "description": "Read server health as a positive liveness control; healthy does not prove complete graph coverage.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_version",
+            "description": "Read served version, source commit and dirty-build identity through MCP without a REST fallback.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
     ]
 }

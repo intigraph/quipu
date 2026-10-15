@@ -33,6 +33,9 @@ pub struct McpServer {
 fn endpoint(name: &str) -> (Method, String) {
     let path = match name {
         "quipu_graph_list" => return (Method::GET, "/graphs".into()),
+        "quipu_stats" => return (Method::GET, "/stats".into()),
+        "quipu_health" => return (Method::GET, "/health".into()),
+        "quipu_version" => return (Method::GET, "/version".into()),
         "quipu_events" => return (Method::GET, "/events".into()),
         "quipu_changes" => return (Method::GET, "/changes".into()),
         "quipu_transactions" => return (Method::GET, "/transactions".into()),
