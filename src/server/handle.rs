@@ -240,6 +240,13 @@ impl StoreHandle {
         guard
     }
 
+    /// Whether `/episode` can resolve on a pooled reader (aegis-xi0): only when
+    /// `vector_read()` would NOT fall back to the writer, which would put the
+    /// resolution back under the writer mutex with nothing gained.
+    pub(crate) fn resolves_off_writer(&self) -> bool {
+        self.vector_reads_pooled && !self.readers.conns.is_empty()
+    }
+
     /// A read connection that preserves the configured vector backend.
     pub(crate) fn vector_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
         if self.vector_reads_pooled {
