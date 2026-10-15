@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-15
+
+### Fixed
+
+- *(batch)* Land reviewed #550 #551 #552 #553 #555 (#557)([f22e463](https://github.com/scbrown/quipu/commit/f22e46343b5501325a2e80e4bb23bc3bac7f575a))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 900cfae9 (#556)([d491b66](https://github.com/scbrown/quipu/commit/d491b666b19ac786dda6807b3fe5f9a325061417))
+
 ## [0.14.0] - 2026-10-14
 
 ### Added
