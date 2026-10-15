@@ -22,10 +22,13 @@
 # Docker publishes the same official image on ECR Public. Shared CI runners
 # exhausted Docker Hub's anonymous pull quota before the image smoke could run.
 # Keep CI and release on this shared reference; no credentials are required.
-# CI overrides BASE_IMAGE with a locally tagged copy of the same digest, pulled
-# with fallbacks, because ECR Public's anonymous data limit also runs out on
-# shared runners (429 "Data limit exceeded"). Release builds use this default.
-ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim
+# Pinned by digest, and this default is the digest's ONE home:
+# scripts/ci/oci-base.sh reads it here, pulls it with mirror fallbacks (ECR
+# Public's anonymous data limit runs out on shared runners: 429 "Data limit
+# exceeded") and tags it locally. CI and the release both build FROM that tag,
+# so the image CI smoke-tests and the image we ship share the same bytes
+# (aegis-r38). Bump the base by changing the digest here.
+ARG BASE_IMAGE=public.ecr.aws/docker/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
 FROM ${BASE_IMAGE}
 
 # The registry refuses to list the image unless this equals server.json `name`.
