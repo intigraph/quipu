@@ -447,3 +447,39 @@ fn exact_trigram_phrase_matches_lowercase_substrings_including_punctuation() {
         assert_eq!(actual,expected,"{needle:?}");
     }
 }
+
+#[test]
+fn ordinary_projection_never_opens_fts_content_pages() {
+    use rusqlite::hooks::{AuthAction,AuthContext,Authorization};
+    let store=fixture();finish(&store);
+    store.conn.authorizer(Some(|context:AuthContext<'_>| {
+        if matches!(context.action,AuthAction::Read { table_name:"substring_fts_content",.. }) { Authorization::Deny } else { Authorization::Allow }
+    })).unwrap();
+    let result=query(&store,&projected("quipu"));
+    assert!(result.is_ok(),"ordinary phrase projection must not open FTS content: {result:?}");
+    assert_eq!(result.unwrap().rows().len(),1);
+}
+
+#[test]
+fn sparse_v3_without_exact_flag_refuses_readiness_without_upgrade() {
+    let store=fixture();finish(&store);
+    store.conn.execute("UPDATE substring_progress SET version=3",[]).unwrap();
+    assert!(!store.substring_index_ready().unwrap());
+    assert_eq!(query(&store,&projected("quipu")).unwrap().rows().len(),1);
+    assert_eq!(store.conn.query_row("SELECT version FROM substring_progress",[],|r|r.get::<_,i64>(0)).unwrap(),3);
+}
+
+#[test]
+fn exact_flag_changes_and_rolls_back_with_original_nul_value() {
+    let store=fixture();finish(&store);
+    let entity=store.lookup("http://example.org/a").unwrap().unwrap();
+    assert_eq!(store.conn.query_row("SELECT sum(needs_exact) FROM substring_facts",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    store.conn.execute_batch("SAVEPOINT nul_flag_test").unwrap();
+    store.conn.execute("UPDATE facts SET v=?1 WHERE e=?2",params![Value::Str("a\0b after".into()).to_bytes(),entity]).unwrap();
+    assert_eq!(store.conn.query_row("SELECT sum(needs_exact) FROM substring_facts",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+    assert!(query(&store,&projected("a b")).unwrap().rows().is_empty());
+    assert_eq!(query(&store,&projected("after")).unwrap().rows().len(),1);
+    store.conn.execute_batch("ROLLBACK TO nul_flag_test;RELEASE nul_flag_test").unwrap();
+    assert_eq!(store.conn.query_row("SELECT sum(needs_exact) FROM substring_facts",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    assert_eq!(query(&store,&projected("quipu")).unwrap().rows().len(),1);
+}

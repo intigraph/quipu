@@ -56,8 +56,9 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     // needle() requires >=3 Unicode characters without NUL. Ordinary stored
     // text is already lowercase: the quoted phrase proves the substring.
     // Normalized NUL text alone may have false positives and must be checked.
-    // Avoid fetching the potentially wide ordinary text column again.
-    let mut conditions=vec!["substring_fts MATCH ?1".to_owned(),"(substring_fts.exact_text IS NULL OR instr(substring_fts.exact_text,?2)>0)".into(),"f.g=?3".into(),"f.a=?4".into(),"f.plain=1".into(),"f.fact_id=substring_fts.rowid".into()];
+    // The transaction-maintained compact flag avoids even opening an ordinary
+    // FTS content row just to discover that exact_text is NULL.
+    let mut conditions=vec!["substring_fts MATCH ?1".to_owned(),"(f.needs_exact=0 OR instr(substring_fts.exact_text,?2)>0)".into(),"f.g=?3".into(),"f.a=?4".into(),"f.plain=1".into(),"f.fact_id=substring_fts.rowid".into()];
     if let Some(value)=seed.get(name) {
         let Value::Ref(id)=value else{return Ok(None);};
         if *id<0{return Ok(None);}
