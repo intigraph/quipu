@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-14
+
+### Added
+
+- *(batch)* Land reviewed #532 #533 #534 #535 #537 #527 #513 #526 #542 (#544)([3392682](https://github.com/scbrown/quipu/commit/3392682256648f3ec088dd768b270a0097089a7a))
+- *(explore)* Redesign workbench and carry reviewed public receiver policy (#483)([f5cd1bb](https://github.com/scbrown/quipu/commit/f5cd1bb38381696bc57b265380339607fb94f4e9))
+
+### Documentation
+
+- Share the canonical stack overview (#549)([0f23ef3](https://github.com/scbrown/quipu/commit/0f23ef3be3cc6ed32d62dacd4cf7c0986fc803bb))
+
+### Fixed
+
+- *(episode)* Stop resolution when the request budget expires (#536)([b465744](https://github.com/scbrown/quipu/commit/b4657449f9d2dbecee1a7260ef3d1ee300d7f17b))
+- *(share)* Stamp pendant layouts and repair naming drift (#531)([97e8484](https://github.com/scbrown/quipu/commit/97e84848ab4977739280e4ce3f9f683e437733ba))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at ec3b707d (#530)([16df215](https://github.com/scbrown/quipu/commit/16df215ad1acc220c661a8e76c14a6867a679acf))
+- *(conformance)* Re-derive ledgers at 97e84848 (#543)([0b0a1ad](https://github.com/scbrown/quipu/commit/0b0a1adbce4e5e4a8f0dbac1aa97e27a60b4cdba))
+- *(conformance)* Re-derive ledgers at 33926822 (#545)([f49f728](https://github.com/scbrown/quipu/commit/f49f72849cc76df25fb4e3374cc2a7562e91a23e))
+- *(conformance)* Re-derive ledgers at 9193dffa (#548)([809021a](https://github.com/scbrown/quipu/commit/809021afaeb9c7ad0e994a2a574789e1b4a71110))
+
+### Perf
+
+- *(batch)* Land reviewed #538 and #546 (#547)([9193dff](https://github.com/scbrown/quipu/commit/9193dffabc634422e63e0fcd39405f9167c87e6e))
+
 ## [0.13.0] - 2026-10-13
 
 ### Added
