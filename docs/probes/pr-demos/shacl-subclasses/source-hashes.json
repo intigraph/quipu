@@ -1,0 +1,10 @@
+{
+  "base": "f13fc1bf1dc938a703a85e7f6bac2519392d5fbe",
+  "candidate_binary_sha256": "2f0b5c942cb71b2e791dad314eae4cd860e7b4f74dda48e3aa859e1a009dbadc",
+  "source_sha256": {
+    "Cargo.toml": "3187e1975fc495e82de1127d8b2eaa854887cfd19cccb5c3dcf1c7dc0edab4f8",
+    "Cargo.lock": "5c0666d60711cbfa317a29c4e7d1750193a5faeb6f97ba1392a24022312a6ab1",
+    "src/shacl.rs": "2a708350ef7fcb003f41c172ac13819d611e33ed0dadc8bd0760a3436dde0015",
+    "src/shacl_targets.rs": "dfb6830c4e9ac7d7c15707b40877877ac6f1af01e9d0af81e727fd7cb0dab8d3"
+  }
+}
