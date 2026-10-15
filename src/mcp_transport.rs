@@ -15,6 +15,12 @@ use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt as _;
 
+#[path = "mcp_transport/input.rs"]
+mod input;
+#[cfg(test)]
+#[path = "mcp_transport/parity_tests.rs"]
+mod parity_tests;
+
 /// MCP dispatch paired with an already guarded REST router.
 #[derive(Clone)]
 pub struct McpServer {
@@ -27,6 +33,17 @@ pub struct McpServer {
 fn endpoint(name: &str) -> (Method, String) {
     let path = match name {
         "quipu_graph_list" => return (Method::GET, "/graphs".into()),
+        "quipu_events" => return (Method::GET, "/events".into()),
+        "quipu_changes" => return (Method::GET, "/changes".into()),
+        "quipu_transactions" => return (Method::GET, "/transactions".into()),
+        "quipu_entity" => return (Method::GET, "/entity".into()),
+        "quipu_fragments" => return (Method::GET, "/fragments".into()),
+        "quipu_workflow_capabilities" => return (Method::GET, "/workflow/capabilities".into()),
+        "quipu_import_promote" => "/import/promote",
+        "quipu_acquire_composed" => "/acquire/composed",
+        "quipu_events_commit" => "/events/commit",
+        "quipu_knot_stage" => "/knot/stage",
+        "quipu_knot_promote" => "/knot/promote",
         "quipu_graph_create" => "/graph/create",
         "quipu_graph_label" => "/graph/label",
         "quipu_load_ontology" => "/ontology",
@@ -91,25 +108,62 @@ impl McpServer {
         input: Value,
         headers: &HeaderMap,
     ) -> Result<CallToolResult, ErrorData> {
-        if !self.tools.iter().any(|tool| tool.name == name) {
-            return Err(ErrorData::invalid_params("unknown Quipu tool", None));
+        let tool = self
+            .tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .ok_or_else(|| ErrorData::invalid_params("unknown Quipu tool", None))?;
+        // New workflow schemas are strict: a misspelled scope or a wrong-typed
+        // graph must refuse before a legacy handler can default to ROOT.
+        let schema = serde_json::to_value(&tool.input_schema)
+            .map_err(|_| ErrorData::internal_error("cannot read tool schema", None))?;
+        if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+            input::validate(&schema, &input, "arguments")?;
         }
         let (method, mut path) = endpoint(name);
         if method == Method::GET {
             let mut query = url::form_urlencoded::Serializer::new(String::new());
             for (key, value) in input.as_object().into_iter().flatten() {
-                let value = value.as_str().ok_or_else(|| {
-                    ErrorData::invalid_params("graph filters must be strings", None)
-                })?;
-                query.append_pair(key, value);
+                let value = match value {
+                    Value::String(value) => value.clone(),
+                    Value::Number(_) | Value::Bool(_) => value.to_string(),
+                    _ => {
+                        return Err(ErrorData::invalid_params(
+                            "GET parameters must be scalar strings, numbers or booleans",
+                            None,
+                        ));
+                    }
+                };
+                query.append_pair(key, &value);
             }
             path.push('?');
             path.push_str(&query.finish());
         }
+        // SPARQL Update is a protocol body, not a JSON handler. Encode declared
+        // provenance as form fields so the same REST attribution parser owns it.
+        let (content_type, body) = if name == "quipu_update" {
+            let mut form = url::form_urlencoded::Serializer::new(String::new());
+            let update = input
+                .get("update")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ErrorData::invalid_params("update must be a string", None))?;
+            form.append_pair("update", update);
+            for key in ["actor", "source"] {
+                if let Some(value) = input.get(key) {
+                    let value = value.as_str().ok_or_else(|| {
+                        ErrorData::invalid_params("update provenance must be strings", None)
+                    })?;
+                    form.append_pair(key, value);
+                }
+            }
+            ("application/x-www-form-urlencoded", form.finish())
+        } else {
+            ("application/json", input.to_string())
+        };
         let mut builder = Request::builder()
             .method(method)
             .uri(path)
-            .header("content-type", "application/json")
+            .header("content-type", content_type)
             .header("accept", "application/json")
             .header("x-quipu-client", "native-mcp");
         for key in ["authorization", "x-quipu-task"] {
@@ -118,7 +172,7 @@ impl McpServer {
             }
         }
         let request = builder
-            .body(Body::from(input.to_string()))
+            .body(Body::from(body))
             .map_err(|_| ErrorData::internal_error("cannot construct tool request", None))?;
         let response = self
             .app
@@ -404,7 +458,9 @@ mod tests {
                 source.contains(&format!("\"{path}\""))
                     || include_str!("server/align.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/merge_decisions.rs").contains(&format!("\"{path}\""))
-                    || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\"")),
+                    || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\""))
+                    || include_str!("server/publication.rs").contains(&format!("\"{path}\""))
+                    || include_str!("server/base.rs").contains(&format!("\"{path}\"")),
                 "{name}: {path}"
             );
         }

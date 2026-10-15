@@ -1953,13 +1953,13 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_merge_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 52);
+        assert_eq!(defs.len(), 75);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 50);
+        assert_eq!(defs.len(), 73);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }

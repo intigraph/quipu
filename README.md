@@ -165,7 +165,7 @@ Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, an
 `quipu mcp --db store.db` provides stdio using the companion server binary.
 Build both with `cargo build --release --features full`. Protected stdio writes use
 `--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
-Quipu defines 50 MCP tools (52 with `owl`), from one shared schema manifest.
+Quipu defines 73 MCP tools (75 with `owl`), from one shared schema manifest.
 Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
 See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 

@@ -16,7 +16,7 @@ graph path through the actual native MCP transport.
 | Freeze / thaw | `graph freeze` / `graph thaw` | `POST /graph/freeze` / `/graph/thaw` | `quipu_graph_freeze` / `quipu_graph_thaw` |
 | Create / write / compose overlay | `graph overlay-create` / `overlay-write` / `overlay-compose --input JSON` | `/overlay/create` / `/overlay/write` / `/overlay/compose` | `quipu_overlay_create` / `quipu_overlay_write` / `quipu_overlay_compose` |
 | Load vocabulary / write / query | `shapes load` / `knot --graph` / `query --graph` | `/shapes` / `/knot` / `/query` | `quipu_shapes` / `quipu_knot` / `quipu_query` |
-| Import local database file | `graph import file --as IRI` | Portable share `/import` then `/import/promote` | No native portable-share tool yet |
+| Import local database file | `graph import file --as IRI` | Portable share `/import` then `/import/promote` | `quipu_share` / `quipu_import` / `quipu_import_promote` |
 
 The create/label gaps are closed by sharing existing handlers, not copying
 registration logic into each transport. Actor is caller-declared creation
@@ -35,37 +35,36 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | --- | --- |
 | `/` | No dedicated native tool |
 | `/.well-known/void` | No dedicated native tool |
-| `/acquire` | No dedicated native tool |
-| `/acquire/composed` | No dedicated native tool |
+| `/acquire` | `quipu_acquire` |
+| `/acquire/composed` | `quipu_acquire_composed` |
 | `/align/apply` | `quipu_align_apply` |
 | `/align/decide` | `quipu_align_decide` |
 | `/align/propose` | `quipu_align_propose` |
 | `/ask` | `quipu_ask` |
-| `/changes` | No dedicated native tool |
+| `/changes` | `quipu_changes` |
 | `/changes/stream` | No dedicated native tool |
 | `/context` | `quipu_context` |
 | `/cooccurrence` | `quipu_cooccurrence` |
 | `/cord` | `quipu_cord` |
 | `/datalinks.js` | No dedicated native tool |
 | `/datasets` | `quipu_datasets` |
-| `/done` | No dedicated native tool |
-| `/embed_backfill` | No dedicated native tool |
-| `/embed_backfill_graph` | No dedicated native tool |
-| `/entity` | No dedicated native tool |
+| `/embed_backfill` | `quipu_embed_backfill` |
+| `/embed_backfill_graph` | `quipu_embed_backfill_graph` |
+| `/entity` | `quipu_entity` |
 | `/entity/{iri}` | No dedicated native tool |
 | `/entity/{iri}/html` | No dedicated native tool |
 | `/entity/{iri}/json` | No dedicated native tool |
 | `/entity/{iri}/ttl` | No dedicated native tool |
-| `/entity_history` | No dedicated native tool |
+| `/entity_history` | `quipu_entity_history` |
 | `/episode` | `quipu_episode` |
 | `/episode/retract` | `quipu_retract_episode` |
 | `/episodes/complete` | `quipu_episodes_complete` |
-| `/events` | No dedicated native tool |
-| `/events/commit` | No dedicated native tool |
+| `/events` | `quipu_events` |
+| `/events/commit` | `quipu_events_commit` |
 | `/events/stream` | No dedicated native tool |
 | `/explain` | `quipu_explain` |
 | `/export` | `quipu_export` |
-| `/fragments` | No dedicated native tool |
+| `/fragments` | `quipu_fragments` |
 | `/graph` | `quipu_graph` |
 | `/graph-canvas.js` | No dedicated native tool |
 | `/graph/create` | `quipu_graph_create` |
@@ -76,11 +75,11 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/health` | No dedicated native tool |
 | `/hybrid_search` | `quipu_hybrid_search` |
 | `/impact` | `quipu_impact` |
-| `/import` | No dedicated native tool |
-| `/import/promote` | No dedicated native tool |
+| `/import` | `quipu_import` |
+| `/import/promote` | `quipu_import_promote` |
 | `/knot` | `quipu_knot` |
-| `/knot/promote` | No dedicated native tool |
-| `/knot/stage` | No dedicated native tool |
+| `/knot/promote` | `quipu_knot_promote` |
+| `/knot/stage` | `quipu_knot_stage` |
 | `/merge/apply` | `quipu_merge_apply` |
 | `/merge/decisions` | `quipu_merge_decisions` |
 | `/metrics` | No dedicated native tool |
@@ -90,7 +89,6 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/overlay/write` | `quipu_overlay_write` |
 | `/path/backtest` | `quipu_path_backtest` |
 | `/path/cone` | `quipu_path_cone` |
-| `/pending` | No dedicated native tool |
 | `/policy/check` | `quipu_policy_check` |
 | `/preview/{iri}` | No dedicated native tool |
 | `/project` | `quipu_project` |
@@ -102,8 +100,8 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/query` | `quipu_query` |
 | `/quipu-components.js` | No dedicated native tool |
 | `/rdf-graph-store` | No dedicated native tool |
-| `/reason` | No dedicated native tool |
-| `/reconcile` | No dedicated native tool |
+| `/reason` | `quipu_reason` |
+| `/reconcile` | `quipu_reconcile` |
 | `/report` | `quipu_report` |
 | `/resolve` | `quipu_resolve_entity` |
 | `/retract` | `quipu_retract` |
@@ -112,24 +110,24 @@ Homelab proxy is a separate compatibility surface and is not this inventory.
 | `/search/nodes` | No dedicated native tool |
 | `/search_facts` | `quipu_search_facts` |
 | `/search_nodes` | `quipu_search_nodes` |
-| `/search_query` | No dedicated native tool |
+| `/search_query` | `quipu_search_query` |
 | `/set` | `quipu_set` |
 | `/shapes` | `quipu_shapes` |
-| `/share` | No dedicated native tool |
-| `/spotlight` | No dedicated native tool |
+| `/share` | `quipu_share` |
+| `/spotlight` | `quipu_spotlight` |
 | `/stats` | No dedicated native tool |
-| `/subscriptions` | No dedicated native tool |
-| `/transactions` | No dedicated native tool |
+| `/subscriptions` | `quipu_subscriptions` |
+| `/transactions` | `quipu_transactions` |
 | `/ui` | No dedicated native tool |
 | `/unified_search` | `quipu_unified_search` |
 | `/unravel` | `quipu_unravel` |
-| `/update` | No dedicated native tool |
+| `/update` | `quipu_update` |
 | `/validate` | `quipu_validate` |
 | `/vendor/three.module.min.js` | No dedicated native tool |
 | `/verdict/verify` | `quipu_verdict_verify` |
 | `/verifier/authorized` | `quipu_verifier_authorized` |
 | `/version` | No dedicated native tool |
-| `/workflow/capabilities` | No dedicated native tool |
+| `/workflow/capabilities` | `quipu_workflow_capabilities` |
 
 ## Every top-level CLI verb compared with native MCP
 
@@ -143,7 +141,7 @@ asserted to have the same options or behavior.
 | `align` | quipu_align_propose / quipu_align_decide / quipu_align_apply |
 | `attest` | Local identity registration; no native tool |
 | `audit` | Local verification audit; no native tool |
-| `changes` | No native changes tool |
+| `changes` | quipu_changes |
 | `compose` | Local composition/share workflow; no equivalent native tool |
 | `cord` | quipu_cord |
 | `db` | Local database/file maintenance |
@@ -151,7 +149,7 @@ asserted to have the same options or behavior.
 | `diff-textconv` | Local Git integration |
 | `doctor` | Local label doctor; no native tool |
 | `episode` | quipu_episode |
-| `events` | No native event reader/cursor tool |
+| `events` | quipu_events / quipu_events_commit |
 | `explain` | quipu_explain (owl) |
 | `export` | quipu_export |
 | `fork` | Local transaction fork lifecycle |
@@ -162,7 +160,7 @@ asserted to have the same options or behavior.
 | `hook` | Local session hook |
 | `hooks` | Local session hook |
 | `impact` | quipu_impact |
-| `import` | No native portable-import tool |
+| `import` | quipu_import / quipu_import_promote |
 | `ingest` | Local directory ingestion |
 | `install-alias` | Local executable installation |
 | `knot` | quipu_knot |
@@ -181,7 +179,7 @@ asserted to have the same options or behavior.
 | `propose` | quipu_propose_schema_change / quipu_list_proposals / quipu_accept_proposal / quipu_reject_proposal |
 | `query` | quipu_query |
 | `read` | quipu_query |
-| `reason` | No native reasoning tool |
+| `reason` | quipu_reason |
 | `repl` | Interactive client, not a tool |
 | `report` | quipu_report |
 | `restore` | Local database/file replacement |
@@ -189,31 +187,44 @@ asserted to have the same options or behavior.
 | `search` | quipu_search (configuration/options differ) |
 | `search-index` | Local index lifecycle; no native tool |
 | `shapes` | quipu_shapes |
-| `share` | No native portable-share tool |
+| `share` | quipu_share |
 | `stats` | No native stats tool |
 | `status` | Local project-bundle status |
 | `trust-root` | Local root trust bootstrap; no native tool |
-| `unpack` | Local pack merge; portable import is a native-MCP gap |
+| `unpack` | Local pack merge; portable import uses quipu_import / quipu_import_promote |
 | `unravel` | quipu_unravel |
 | `validate` | quipu_validate |
 
-## Remaining gaps and deliberate transport differences
+## Coverage and deliberate transport differences
 
-- Native MCP lacks portable share/import/promote, although CLI/REST and the
-  Homelab compatibility proxy support them. This is a functional coverage gap.
-- Native MCP lacks `reason`, subscriptions/cursor administration, and a SPARQL
-  Update tool. REST exposes these; the CLI has `reason` and event readers. These
-  are functional coverage gaps, not empty graph results.
-- Search-query fusion, entity/history, embedding backfill and acquisition
-  workflows also have REST-only dedicated entry points. Query/cord/search cover
-  some reads, but do not certify equivalent options or workflow actions.
-- Static UI resources, health/version/metrics, RDF Graph Store protocol and SSE
-  streams are transport-specific. Their lack of identically named MCP tools is
-  intentional; ordinary graph reads/writes remain available through MCP tools.
-- CLI pack files, local database attachment/import/restore, git integration,
-  installation and hooks require local filesystem/process authority. They are
-  not silently represented as remote file-path operations.
+Portable share/import/promotion, Datalog reasoning, SPARQL Update, subscription
+administration and consumer cursors now have explicit native MCP tools. The
+same guarded REST router owns each operation; no separate store mutation path
+or raw arbitrary-route proxy is introduced. Entity/history, bounded acquisition,
+embedding backfill, search-query fusion, reconciliation, fragments and snapshot
+staging/promotion are also advertised. `quipu_workflow_capabilities` lets a
+client check workflow enforcement before using the update surface.
 
-This inventory does **not** claim full global CLI/REST/MCP parity. The named
-creation/label recipe is complete; the functional gaps above must be resolved
-or explicitly dispositioned before closing a task that requires global parity.
+- Entity format suffixes are content-negotiation alternatives to `quipu_entity`
+  JSON-LD, not additional graph mutations. History retains the existing endpoint's
+  MAIN-only semantics; this work does not repair composed audit completeness.
+- Static UI assets, HTML preview cards and service discovery/health/version/
+  metrics remain HTTP presentation/operations interfaces. CLI stats remains a
+  local database diagnostic; no new remote service-management authority is added.
+- SSE routes retain their streaming HTTP protocol. The same durable events and
+  changes are accessible via bounded MCP pull tools, with explicit cursor commit.
+- RDF Graph Store is an HTTP-standard alternative; MCP scoped knot/query/update
+  use existing graph validation. No claim of identical wire encoding is made.
+- Local packs, file attachment/import/restore, Git integration, installation,
+  index migration, doctor/audit, trust-root bootstrap and hooks retain local
+  filesystem/process authority. A remote tool cannot safely assume the caller's
+  path exists on the server. Portable share/import is the remote transfer path.
+- REST aliases such as `/search/nodes` and entity format suffixes reuse existing
+  search/entity semantics; protocol and output differences remain explicit.
+
+Every advertised native tool maps to a registered classified REST route; the
+transport test checks that direction, including routes split across modules.
+The top-level CLI table covers portable counterparts and explicit local-only
+operations. Subcommand option identity and composed-history correctness are not
+implied by manifest coverage. The book's fresh-store recipe and workflow
+acceptance probes verify behavior separately from this inventory.
