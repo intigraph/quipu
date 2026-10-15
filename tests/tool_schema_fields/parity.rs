@@ -80,7 +80,7 @@ pub(super) fn wire_fields(file: &str, name: &str) -> BTreeSet<String> {
                         syn::Meta::Path(p)
                             if p.is_ident("skip") || p.is_ident("skip_deserializing") =>
                         {
-                            skip = true
+                            skip = true;
                         }
                         syn::Meta::NameValue(n) if n.path.is_ident("rename") => {
                             if let syn::Expr::Lit(syn::ExprLit {
