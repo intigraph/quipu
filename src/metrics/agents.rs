@@ -55,9 +55,19 @@ fn bounded<'a>(known: &BTreeSet<&str>, value: &'a str, cap: usize) -> &'a str {
 }
 
 impl AgentQueryMetrics {
-    /// Count one completed `/query` request. `client` is already normalised;
-    /// `declared_agent` is the raw header value, if any.
-    pub(crate) fn observe(&self, client: &str, declared_agent: Option<&str>, seconds: f64) {
+    /// Count one completed request if it is `/query`; other route templates are
+    /// ignored (`quipu_http_client_requests_total` covers them). `client` is
+    /// already normalised; `declared_agent` is the raw header value, if any.
+    pub(crate) fn observe(
+        &self,
+        client: &str,
+        endpoint: &str,
+        declared_agent: Option<&str>,
+        seconds: f64,
+    ) {
+        if endpoint != "/query" {
+            return;
+        }
         let agent = normalize_agent(declared_agent);
         let mut map = self
             .map
@@ -132,10 +142,10 @@ mod tests {
     fn agents_fold_into_other_at_the_cap_and_existing_ones_keep_counting() {
         let m = AgentQueryMetrics::default();
         for i in 0..MAX_AGENTS + 10 {
-            m.observe("seeds", Some(&format!("crew{i}")), 0.5);
+            m.observe("seeds", "/query", Some(&format!("crew{i}")), 0.5);
         }
-        m.observe("seeds", Some("crew0"), 0.5);
-        m.observe("seeds", None, 0.25);
+        m.observe("seeds", "/query", Some("crew0"), 0.5);
+        m.observe("seeds", "/query", None, 0.25);
         let map = m.map.lock().unwrap();
         let agents: BTreeSet<&str> = map.keys().map(|(_, a)| a.as_str()).collect();
         assert!(agents.len() <= MAX_AGENTS, "{}", agents.len());
@@ -147,8 +157,9 @@ mod tests {
     #[test]
     fn render_names_both_series_and_escapes_nothing_unsafe() {
         let m = AgentQueryMetrics::default();
-        m.observe("seeds", Some("tim"), 1.5);
-        m.observe("seeds", None, 0.5);
+        m.observe("seeds", "/query", Some("tim"), 1.5);
+        m.observe("seeds", "/knot", Some("tim"), 9.0);
+        m.observe("seeds", "/query", None, 0.5);
         let mut out = String::new();
         m.render(&mut out);
         assert!(

@@ -333,18 +333,9 @@ impl Metrics {
     ///
     /// Folds into `other` past [`MAX_CLIENTS`] distinct values — see that
     /// constant for why the cap is not optional.
-    /// Count a completed `/query` by its DECLARED agent (aegis-ufw). Other
-    /// endpoints are ignored here; `quipu_http_client_requests_total` covers them.
-    pub fn observe_agent_query(
-        &self,
-        client: &str,
-        endpoint: &str,
-        declared_agent: Option<&str>,
-        seconds: f64,
-    ) {
-        if endpoint == "/query" {
-            self.agent_queries.observe(client, declared_agent, seconds);
-        }
+    /// Count a completed `/query` by its DECLARED agent (aegis-ufw); see [`agents`].
+    pub fn observe_agent_query(&self, client: &str, ep: &str, agent: Option<&str>, secs: f64) {
+        self.agent_queries.observe(client, ep, agent, secs);
     }
 
     pub fn observe_client(&self, client: &str, task: &str, endpoint: &str, seconds: f64) {
