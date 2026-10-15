@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF 1.1 syntax suites (Turtle, N-Triples, N-Quads, TriG)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "f13fc1bf1dc938a703a85e7f6bac2519392d5fbe",
-  "quipu_version": "quipu 0.14.1\ngit_sha: f13fc1bf1dc938a703a85e7f6bac2519392d5fbe\ngit_dirty: false",
+  "quipu_revision": "9e30f5d2fc5f4f02529108cfcd95e252e171cd87",
+  "quipu_version": "quipu 0.14.1\ngit_sha: 9e30f5d2fc5f4f02529108cfcd95e252e171cd87\ngit_dirty: false",
   "scope": "every manifest case; loading through `quipu knot`, evaluation compared after `quipu export --format ntriples`; N-Quads and TriG unsupported",
   "departures": [
     "Turtle inputs get a leading @base line naming the suite's retrieval IRI",
@@ -9283,6 +9283,6 @@
       "diagnostic": "Quipu has no TriG parser"
     }
   ],
-  "generated_at": "2026-10-15T13:06:30Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38738961485"
+  "generated_at": "2026-10-15T18:58:07Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/38787106232"
 }
