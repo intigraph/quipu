@@ -34,6 +34,7 @@ mod numeric_value;
 pub mod onnx_embedder;
 mod search_graph_scope;
 pub mod search_trace;
+pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;

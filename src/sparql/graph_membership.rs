@@ -18,21 +18,26 @@ pub(super) fn predicate(
     graphs: &[i64],
     params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
 ) -> Result<Option<String>> {
-    let (TermPattern::Variable(_), NamedNodePattern::NamedNode(_), TermPattern::Variable(value)) =
-        (&pattern.subject, &pattern.predicate, &pattern.object)
-    else {
-        return Ok(None);
-    };
-    if !seed.is_empty()
+    let text_leaf = matches!(
+        (&pattern.subject, &pattern.predicate, &pattern.object),
+        (TermPattern::Variable(_), NamedNodePattern::NamedNode(_), TermPattern::Variable(value))
+        if seed.is_empty() && ctx.string_narrows.as_ref()
+            .is_some_and(|narrows| narrows.iter().any(|n| n.var == value.as_str()))
+    );
+    // A positive local subject and constant predicate already narrow the leaf.
+    // Only graph membership changes: every original value, temporal and bag
+    // condition remains in the caller, and the same physical rowid is tested.
+    let bound_leaf = matches!(
+        (&pattern.subject, &pattern.predicate),
+        (TermPattern::Variable(subject), NamedNodePattern::NamedNode(_))
+        if matches!(seed.get(subject.as_str()), Some(crate::Value::Ref(id)) if *id >= 0)
+    );
+    if (!text_leaf && !bound_leaf)
         || store.has_attachments()
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()
         || graphs.len() != 1
         || graphs[0] == 0
-        || !ctx
-            .string_narrows
-            .as_ref()
-            .is_some_and(|narrows| narrows.iter().any(|n| n.var == value.as_str()))
     {
         return Ok(None);
     }

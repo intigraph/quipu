@@ -17,6 +17,49 @@ use crate::store::Store;
 
 const G: &str = "http://example.org/g";
 
+#[test]
+fn seeded_literal_object_drives_small_metadata_relation() {
+    let store = store();
+    store.set_read_model_enabled(false);
+    let graph = store.lookup(G).unwrap().unwrap();
+    let ctx = TemporalContext {
+        graph: super::GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let pattern = where_clause(
+        "SELECT * WHERE { ?s <http://example.org/team> <http://example.org/red> . ?s <http://example.org/role> ?role }",
+    );
+    let GraphPattern::Bgp { patterns } = pattern else {
+        panic!("BGP required")
+    };
+    let seed = Bindings::from([("role".into(), crate::types::Value::Str("admin".into()))]);
+    let optimized = super::sparse_bgp::try_eval(&store, &patterns, &ctx, &seed)
+        .unwrap()
+        .expect("a bound literal must engage the finite selective plan");
+    assert_eq!(optimized.0.len(), 1);
+    assert_eq!(optimized.0[0].get("role"), seed.get("role"));
+    assert_eq!(
+        optimized.0[0].get("s"),
+        Some(&crate::types::Value::Ref(
+            store.lookup("http://example.org/alice").unwrap().unwrap()
+        ))
+    );
+    assert_eq!(optimized.1, vec!["s", "role"]);
+    let absent = Bindings::from([("role".into(), crate::types::Value::Str("absent".into()))]);
+    assert!(
+        super::sparse_bgp::try_eval(&store, &patterns, &ctx, &absent)
+            .unwrap()
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert!(
+        super::sparse_bgp::try_eval(&store, &patterns, &ctx, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
+}
+
 fn store() -> Store {
     let mut store = Store::open_in_memory().unwrap();
     let root = r#"@prefix ex: <http://example.org/> .
@@ -350,4 +393,234 @@ fn a_values_graph_iri_the_store_lacks_matches_no_graph() {
         &TemporalContext::default(),
     );
     assert_eq!(bind, hash);
+}
+
+#[test]
+fn projected_subject_lookup_bounds_metadata_join() {
+    let mut store = store();
+    store.set_read_model_enabled(false);
+    let mut triples = String::new();
+    for n in 0..64 {
+        triples.push_str(&format!(r#"<http://example.org/unrelated{n}> <http://example.org/name> "Unrelated{n}" ; <http://example.org/age> 100 ."#));
+        triples.push('\n');
+    }
+    ingest_rdf(
+        &mut store,
+        triples.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = super::query_temporal(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+        SELECT ?s ?name WHERE {
+          { SELECT ?s WHERE { VALUES ?s { ex:alice } } }
+          ?s ex:name ?name ; ex:age ?age
+        }"#,
+        &TemporalContext {
+            row_cap: Some(8),
+            ..TemporalContext::default()
+        },
+    );
+    assert!(
+        result.is_ok(),
+        "a one-subject lookup scanned unrelated rows: {result:?}"
+    );
+    assert_eq!(result.unwrap().rows().len(), 1);
+}
+
+#[test]
+fn subject_bind_join_preserves_projected_duplicate_bags_and_headers() {
+    let store = store();
+    let pattern = where_clause(
+        r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s WHERE { VALUES ?s { ex:alice ex:alice ex:bob } } }
+        ?s ex:name ?name ; ex:age ?age
+      }"#,
+    );
+    let (left, right) = join_operands(&pattern);
+    let ctx = TemporalContext::default();
+    let seed = Bindings::new();
+    let (left_rows, left_vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
+    let (right_rows, right_vars) = eval_pattern_seeded(&store, right, &ctx, &seed).unwrap();
+    let (bound, header) =
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &left_rows, &left_vars)
+            .unwrap()
+            .expect("projected subject relation should engage");
+    assert_eq!(
+        bag(&bound),
+        bag(&join_rows(&left_rows, &right_rows, &ctx).unwrap())
+    );
+    assert_eq!(bound.len(), 3);
+    assert_eq!(header, right_vars);
+}
+
+#[test]
+fn subject_bind_join_declines_undef_and_preserves_its_bag() {
+    let store = store();
+    let sparql = r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s WHERE { VALUES ?s { UNDEF ex:alice } } }
+        ?s ex:name ?name
+      }"#;
+    let pattern = where_clause(sparql);
+    let (left, right) = join_operands(&pattern);
+    let ctx = TemporalContext::default();
+    let seed = Bindings::new();
+    let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
+    assert!(
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &rows, &vars,)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(query(&store, sparql).unwrap().rows().len(), 4);
+}
+
+#[test]
+fn subject_bind_join_never_correlates_a_right_filter() {
+    let store = store();
+    let sparql = r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s ?x WHERE { VALUES (?s ?x) { (ex:alice "yes") } } }
+        { ?s ex:name ?name FILTER(?x = "yes") }
+      }"#;
+    let pattern = where_clause(sparql);
+    let (left, right) = join_operands(&pattern);
+    assert!(matches!(right, GraphPattern::Filter { .. }));
+    let ctx = TemporalContext::default();
+    let seed = Bindings::new();
+    let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
+    assert!(
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &rows, &vars,)
+            .unwrap()
+            .is_none()
+    );
+    assert!(query(&store, sparql).unwrap().rows().is_empty());
+}
+
+#[test]
+fn subject_bind_join_retains_output_fanout_cap() {
+    let mut store = store();
+    let triples = (0..20)
+        .map(|n| format!("<http://example.org/alice> <http://example.org/tag> {n} .\n"))
+        .collect::<String>();
+    ingest_rdf(
+        &mut store,
+        triples.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-15T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = super::query_temporal(
+        &store,
+        r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s WHERE { VALUES ?s { ex:alice } } }
+        ?s ex:tag ?tag
+      }"#,
+        &TemporalContext {
+            row_cap: Some(8),
+            ..TemporalContext::default()
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(crate::Error::QueryComplexity { limit: 8 })
+    ));
+}
+
+#[test]
+fn subject_bind_join_refuses_a_wide_or_non_subject_driver() {
+    let store = store();
+    let pattern = where_clause(
+        r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s WHERE { VALUES ?s { ex:alice } } }
+        ?s ex:name ?name
+      }"#,
+    );
+    let (left, right) = join_operands(&pattern);
+    let ctx = TemporalContext::default();
+    let seed = Bindings::new();
+    let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
+    let wide = vec![rows[0].clone(); super::bind_join::SUBJECT_BIND_MAX_ROWS + 1];
+    assert!(
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &wide, &vars,)
+            .unwrap()
+            .is_none()
+    );
+    let mut literal = rows[0].clone();
+    literal.insert("s".into(), crate::types::Value::Str("not a subject".into()));
+    assert!(
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &[literal], &vars,)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn subject_bind_join_checks_deadline_before_lookup() {
+    let store = store();
+    let pattern = where_clause(
+        r#"PREFIX ex: <http://example.org/>
+      SELECT * WHERE {
+        { SELECT ?s WHERE { VALUES ?s { ex:alice } } }
+        ?s ex:name ?name
+      }"#,
+    );
+    let (left, right) = join_operands(&pattern);
+    let seed = Bindings::new();
+    let (rows, vars) =
+        eval_pattern_seeded(&store, left, &TemporalContext::default(), &seed).unwrap();
+    let ctx = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..TemporalContext::default()
+    };
+    assert!(matches!(
+        super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &rows, &vars,),
+        Err(crate::Error::QueryTimeout { .. })
+    ));
+}
+
+#[test]
+fn subject_bind_constant_graph_union_matches_bottom_up_bags_and_headers() {
+    let store = store();
+    let seed = Bindings::new();
+    let ctx = TemporalContext::default();
+    let left = where_clause("SELECT * WHERE { VALUES ?s { <http://example.org/alice> <http://example.org/alice> <http://example.org/bob> } }");
+    let right = where_clause("SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { GRAPH <http://example.org/g> { ?s <http://example.org/team> ?team } } }");
+    let (rows, vars) = eval_pattern_seeded(&store, &left, &ctx, &seed).unwrap();
+    let (rhs, rhs_vars) = eval_pattern_seeded(&store, &right, &ctx, &seed).unwrap();
+    let expected = join_rows(&rows, &rhs, &ctx).unwrap();
+    let (actual, actual_vars) = super::bind_join::try_subject_bind_join(&store, &right, &ctx, &seed, &rows, &vars).unwrap().expect("constant GRAPH/UNION of subject lookups must engage");
+    assert_eq!(actual_vars, rhs_vars);
+    assert_eq!(actual.len(), 5);
+    assert_eq!(bag(&actual), bag(&expected));
+    for query in [
+      "SELECT * WHERE { GRAPH ?g { ?s <http://example.org/role> ?value } }",
+      "SELECT * WHERE { { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } } UNION { FILTER(BOUND(?s)) } }",
+    ] {
+      let unsafe_right = where_clause(query);
+      assert!(super::bind_join::try_subject_bind_join(&store, &unsafe_right, &ctx, &seed, &rows, &vars).unwrap().is_none(), "{query}");
+    }
+}
+
+#[test]
+fn subject_bind_declines_an_actual_project_boundary() {
+    let store = store();
+    let seed = Bindings::new();
+    let ctx = TemporalContext::default();
+    let left = where_clause("SELECT * WHERE { VALUES ?s { <http://example.org/alice> } }");
+    let (rows, vars) = eval_pattern_seeded(&store, &left, &ctx, &seed).unwrap();
+    let Query::Select { pattern, .. } = SparqlParser::new().parse_query("SELECT ?s ?value WHERE { GRAPH <http://example.org/g> { ?s <http://example.org/role> ?value } }").unwrap() else { panic!("SELECT"); };
+    assert!(matches!(pattern, GraphPattern::Project { .. }));
+    assert!(super::bind_join::try_subject_bind_join(&store, &pattern, &ctx, &seed, &rows, &vars).unwrap().is_none());
 }

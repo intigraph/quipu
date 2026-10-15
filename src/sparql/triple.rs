@@ -280,8 +280,8 @@ fn visit_triple_pattern_limited(
 
     // aegis-tl2q4j: string FILTERs over this BGP narrow the scan. Only an
     // UNBOUND variable position; a bound one is already an id lookup.
-    let narrows_active =
-        push_string_narrows(store, tp, bindings, ctx, &mut conditions, &mut sql_params);
+    let (narrows_active, substring_candidates) =
+        push_string_narrows(store, tp, bindings, ctx, &mut conditions, &mut sql_params)?;
 
     // Temporal filtering.
     conditions.push("op = 1".to_string());
@@ -306,6 +306,14 @@ fn visit_triple_pattern_limited(
                     gids,
                     &mut sql_params,
                 )?,
+                ScanMode::Streamed
+                    if matches!(&tp.subject, TermPattern::Variable(v)
+                        if matches!(bindings.get(v.as_str()), Some(Value::Ref(id)) if *id >= 0)) =>
+                {
+                    super::graph_membership::predicate(
+                        store, ctx, tp, bindings, gids, &mut sql_params,
+                    )?
+                }
                 ScanMode::Streamed | ScanMode::CompleteRelation => None,
             };
             conditions.push(membership.unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)));
@@ -402,8 +410,15 @@ fn visit_triple_pattern_limited(
     // `facts` are either the write path, local bookkeeping, or deliberately
     // ROOT-scoped — and an attachment contributes only NAMED graphs, so a
     // ROOT-scoped read could not see one even if it composed.
-    let facts = store.facts_source();
-    let sql = if emit.is_none() {
+    // A complete scoped FTS list must drive primary-key lookups. Without
+    // this hint SQLite prefers the predicate index and retests every value.
+    // The candidate flag proves primary-only facts and retains every filter.
+    let facts = if substring_candidates {
+        "facts NOT INDEXED"
+    } else {
+        store.facts_source()
+    };
+    let sql = if emit.is_none() && !substring_candidates {
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
             format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
@@ -607,9 +622,9 @@ fn push_string_narrows(
     ctx: &TemporalContext,
     conditions: &mut Vec<String>,
     sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
-) -> bool {
+) -> Result<(bool, bool)> {
     let Some(narrows) = &ctx.string_narrows else {
-        return false;
+        return Ok((false, false));
     };
     let unbound = |name: &str| !bindings.contains_key(name);
     let subject = match &tp.subject {
@@ -630,6 +645,7 @@ fn push_string_narrows(
     // a 0.5 s join into a 30 s timeout (measured). There, narrow only by value.
     let scan_terms = subject.is_some() && object.is_some();
     let mut added = false;
+    let mut substring_candidates = false;
     for (k, narrow) in narrows.iter().enumerate() {
         let var = Some(narrow.var.as_str());
         let n = sql_params.len() + 1;
@@ -667,7 +683,25 @@ fn push_string_narrows(
         if pushed {
             sql_params.push(Box::new(i64::try_from(k).unwrap_or(i64::MAX)));
             added = true;
+            if object == var
+                && bindings.is_empty()
+                && !store.has_attachments()
+                && let Some(phrase) = narrow.substring_phrase()
+                && let Some(graph) = ctx.graph.single_graph()
+                && let NamedNodePattern::NamedNode(predicate) = &tp.predicate
+                && store.substring_index_ready()?
+            {
+                let ids = store.lookup_all(predicate.as_str())?;
+                if let [predicate] = ids.as_slice() {
+                    let parameter = sql_params.len() + 1;
+                    sql_params.push(Box::new(format!(
+                        "scope:\"g={graph};p={predicate};\" AND text:{phrase}"
+                    )));
+                    conditions.push(format!("facts.rowid IN (SELECT rowid FROM main.substring_fts WHERE substring_fts MATCH ?{parameter})"));
+                    substring_candidates = true;
+                }
+            }
         }
     }
-    added
+    Ok((added, substring_candidates))
 }

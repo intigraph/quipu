@@ -277,3 +277,74 @@ fn graph_membership_streamed_reads_keep_the_existing_plan() {
         "positive retained control proves the authorizer sees the index probe"
     );
 }
+
+#[test]
+fn bound_subject_metadata_uses_same_rowid_cover_without_wide_fact_reads() {
+    let (store,graph)=fixture();index(&store);
+    let subject=store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let title=store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let parsed=SparqlParser::new().parse_query("SELECT ?v WHERE { ?s <https://example.org/title> ?v }").unwrap();
+    let Query::Select{pattern,..}=parsed else {unreachable!()};
+    let GraphPattern::Project{inner,..}=pattern else {unreachable!()};
+    let GraphPattern::Bgp{patterns}=*inner else {unreachable!()};
+    let seed=Bindings::from([("s".to_owned(),crate::Value::Ref(subject))]);
+    let ctx=TemporalContext{graph:GraphScope::Named(vec![graph]),..Default::default()};
+    let mut params:Vec<Box<dyn rusqlite::types::ToSql>>=vec![Box::new(title),Box::new(subject)];
+    let membership=predicate(&store,&ctx,&patterns[0],&seed,&[graph],&mut params).unwrap().expect("bound metadata should use proven membership");
+    let sql=|scope:&str|format!("SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND e=?2 AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)");
+    assert!(table_columns(&store,&sql("g=?3"),&[title,subject,graph])>0);
+    assert_eq!(table_columns(&store,&sql(&membership),&[title,subject,graph]),0);
+    assert_eq!(table_columns(&store,&sql(&membership).replace(" INDEXED BY idx_current_aev", ""),&[title,subject,graph]),0,"actual unhinted caller plan must cover");
+    let collect=|sql:String|store.conn.prepare(&sql).unwrap().query_map([title,subject,graph],|r|Ok((r.get::<_,i64>(0)?,r.get::<_,i64>(1)?,r.get::<_,Vec<u8>>(2)?))).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
+    assert_eq!(collect(sql("g=?3")),collect(sql(&membership)));
+}
+
+#[test]
+fn bound_metadata_preserves_variable_constant_and_reference_bags() {
+    let (store,graph)=fixture();
+    let queries=[
+      format!("SELECT ?s ?v WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> <{EX}foreign> }} GRAPH <{EX}g> {{ ?s <{EX}title> ?v }} }} ORDER BY STR(?s) STR(?v)"),
+      format!("SELECT ?s WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> }} GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }} ORDER BY STR(?s)"),
+      format!("SELECT ?s WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> }} GRAPH <{EX}g> {{ ?s <{EX}type> <{EX}Action> }} }} ORDER BY STR(?s)"),
+    ];
+    let rows=|q:&str|query(&store,q).unwrap().rows().iter().map(|r|format!("{:?}",r.iter().collect::<std::collections::BTreeMap<_,_>>())).collect::<Vec<_>>();
+    let before=queries.iter().map(|q|rows(q)).collect::<Vec<_>>();assert_eq!(before.iter().map(Vec::len).collect::<Vec<_>>(),[2,1,1]);
+    // Two assertions for one triple still produce one RDF triple, as before.
+    store.conn.execute("INSERT INTO transactions(timestamp) VALUES('2026-01-02T00:00:00Z')",[]).unwrap();
+    let tx=store.conn.last_insert_rowid();
+    store.conn.execute("INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT e,a,v,g,?3,valid_from,op FROM facts WHERE e=?1 AND g=?2",rusqlite::params![store.lookup(&format!("{EX}one")).unwrap().unwrap(),graph,tx]).unwrap();
+    assert_eq!(queries.iter().map(|q|rows(q)).collect::<Vec<_>>(),before);
+    index(&store);
+    assert_eq!(queries.iter().map(|q|rows(q)).collect::<Vec<_>>(),before);
+}
+
+#[test]
+fn bound_metadata_declines_unknown_subject_history_and_unproved_scope() {
+    let (store,graph)=fixture();index(&store);let (pattern,_)=shape();
+    let id=store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let seed=Bindings::from([("s".to_owned(),crate::Value::Ref(id))]);
+    let check=|ctx:TemporalContext,seed:&Bindings,graphs:&[i64]|{
+      let mut params=Vec::new();assert!(predicate(&store,&ctx,&pattern,seed,graphs,&mut params).unwrap().is_none());assert!(params.is_empty());
+    };
+    check(TemporalContext::default(),&Bindings::new(),&[graph]);
+    check(TemporalContext::default(),&Bindings::from([("s".to_owned(),crate::Value::Ref(-1))]),&[graph]);
+    check(TemporalContext::default(),&Bindings::from([("s".to_owned(),crate::Value::Str("not an IRI".into()))]),&[graph]);
+    check(TemporalContext{as_of_tx:Some(1),..Default::default()},&seed,&[graph]);
+    check(TemporalContext{valid_at:Some("2026-01-01T00:00:00Z".into()),..Default::default()},&seed,&[graph]);
+    check(TemporalContext::default(),&seed,&[0]);check(TemporalContext::default(),&seed,&[graph,0]);
+    store.conn.execute_batch("DROP INDEX idx_current_g;CREATE INDEX idx_current_g ON facts(g) WHERE op=1 AND valid_to IS NULL AND g=0").unwrap();
+    check(TemporalContext::default(),&seed,&[graph]);
+}
+
+#[test]
+fn bound_streamed_metadata_uses_same_membership_without_changing_rows() {
+    use rusqlite::hooks::{AuthAction,AuthContext,Authorization};
+    use std::sync::atomic::{AtomicUsize,Ordering};
+    let (store,graph)=fixture();index(&store);let (pattern,mut ctx)=shape();ctx.graph=GraphScope::Named(vec![graph]);ctx.string_narrows=None;
+    let seed=Bindings::from([("s".to_owned(),crate::Value::Ref(store.lookup(&format!("{EX}one")).unwrap().unwrap()))]);
+    let reads=Arc::new(AtomicUsize::new(0));let observed=Arc::clone(&reads);
+    store.conn.authorizer(Some(move|c:AuthContext<'_>| {if matches!(c.action,AuthAction::Read{table_name:"sqlite_master",column_name:"sql"}) {observed.fetch_add(1,Ordering::Relaxed);}Authorization::Allow})).unwrap();
+    let mut streamed=Vec::new();let count=crate::sparql::triple::visit_triple_pattern(&store,&pattern,&seed,&ctx,&mut|r|{streamed.push(r);Ok(())}).unwrap();
+    assert_eq!(count,1);assert!(reads.load(Ordering::Relaxed)>0,"bound streaming must check validated membership index");
+    let retained=crate::sparql::triple::eval_triple_pattern_limited(&store,&pattern,&seed,&ctx,None).unwrap();assert_eq!(streamed,retained);
+}
