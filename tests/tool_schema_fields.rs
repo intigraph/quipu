@@ -235,7 +235,7 @@ fn http_only_fields_match_handler_reads() {
     };
     assert_eq!(
         array.elems.len(),
-        5,
+        6,
         "audit new HTTP-only handlers explicitly"
     );
     for entry in &array.elems {
@@ -250,6 +250,7 @@ fn http_only_fields_match_handler_reads() {
             panic!("expected name")
         };
         let function = match name.value().as_str() {
+            "quipu_prepare" => "tool_prepare",
             "quipu_subscriptions" => "tool_subscriptions",
             "quipu_reason" => "reason",
             "quipu_search_query" => "tool_search_query",
@@ -277,10 +278,26 @@ fn http_only_fields_match_handler_reads() {
                 key.value()
             })
             .collect();
-        assert_eq!(
-            declared,
-            fs.get(function).expect("handler found").keys,
-            "{function}"
-        );
+        if function == "tool_prepare" {
+            // This handler deserializes a strict typed request rather than
+            // indexing JsonValue. Audit the actual serialized field set.
+            let request = quipu::render::RenderRequest {
+                spec: Some("urn:example:spec".into()),
+                adhoc: None,
+                valid_at: None,
+                graph: Some("urn:example:graph".into()),
+            };
+            let mut value = serde_json::to_value(request).unwrap();
+            let fields: BTreeSet<_> = value.as_object().unwrap().keys().cloned().collect();
+            assert_eq!(declared, fields, "typed render request declaration");
+            value["dest"] = serde_json::json!("untrusted-server-destination");
+            assert!(serde_json::from_value::<quipu::render::RenderRequest>(value).is_err());
+        } else {
+            assert_eq!(
+                declared,
+                fs.get(function).expect("handler found").keys,
+                "{function}"
+            );
+        }
     }
 }

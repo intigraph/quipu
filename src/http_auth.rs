@@ -128,6 +128,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Reads the store, mutates nothing.
     "/metrics",
     "/query",
+    // Produces bounded bytes only; the client owns filesystem publication.
+    "/render",
     "/cord",
     // Render-ready node-link projection for the UI. Reads the fact log only.
     "/graph",

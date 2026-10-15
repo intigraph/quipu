@@ -1,0 +1,18 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix render: <urn:quipu:render:> .
+
+render:RenderSpec a rdfs:Class ;
+    rdfs:label "Render specification" .
+
+render:RenderSpecShape a sh:NodeShape ;
+    sh:targetClass render:RenderSpec ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path render:query ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:format ; sh:datatype xsd:string ; sh:in ( "markdown" ) ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:layout ; sh:datatype xsd:string ; sh:in ( "single" "per-entity" ) ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:path ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:template ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:includes ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path render:provenance ; sh:datatype xsd:boolean ; sh:maxCount 1 ] .

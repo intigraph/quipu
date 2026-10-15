@@ -63,6 +63,7 @@ mod rdf_scope;
 pub mod read_pin;
 pub mod reasoner;
 pub mod reconcile;
+pub mod render;
 pub mod report;
 pub mod request_usage;
 pub mod resolution;

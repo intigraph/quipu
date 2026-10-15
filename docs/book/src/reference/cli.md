@@ -318,6 +318,14 @@ quipu project --algorithm shortest_path --from <IRI> --to <IRI> --db my.db
 | `--limit <N>` | Max results (default: 20) |
 | `--from` / `--to` | Endpoints for `shortest_path` |
 
+### `quipu render`
+
+Render markdown and byte-addressed includes from a stored specification or an
+ad-hoc query into an owned destination. Supports single-file and per-entity
+hierarchies, `--valid-at`, a no-write destination dry-run and local/remote reads.
+See [the render reference](render.md) for the command, manifest and refusal
+contract. A remote server prepares bytes; only the client publishes files.
+
 ### `quipu report`
 
 Graph health report: hub entities (god-nodes), surprising connections, and

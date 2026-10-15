@@ -1377,6 +1377,11 @@ fn every_pooled_tool_survives_a_read_only_connection() {
     );
     let cases: Vec<ToolCase> = vec![
         (
+            "render_prepare",
+            quipu::render::tool_prepare,
+            json!({"adhoc":{"query":"SELECT ?label WHERE { <http://example.org/n> <http://example.org/label> ?label }"}}),
+        ),
+        (
             "tool_query",
             quipu::tool_query,
             json!({"query": "SELECT ?s WHERE { ?s ?p ?o } LIMIT 2"}),
