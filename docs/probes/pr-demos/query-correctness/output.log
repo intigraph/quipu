@@ -1,0 +1,39 @@
+Script started on 2026-10-15 00:27:07-04:00 [COMMAND="bash docs/probes/pr-demos/query-correctness/run.sh" <not executed on terminal>]
+Baseline: f22e4634 + regression tests (retained real failures)
+Observed baseline: f22e4634 plus regression tests, before production-code edits.
+
+thread 'sparql::tests::f79_iri_order_is_lexical_independent_of_intern_order' (2624239) panicked at src/sparql/tests.rs:4347:9:
+assertion `left == right` failed
+  left: ["urn:order:z", "urn:order:a", "urn:order:m"]
+ right: ["urn:order:a", "urn:order:m", "urn:order:z"]
+
+thread 'tests::f79_standard_results_signal_actual_truncation' (2815641) panicked at src/server/tests.rs:1795:13:
+assertion `left == right` failed: application/sparql-results+json: 1
+  left: None
+ right: Some("false")
+
+Candidate implementation: 013538f7 (owned in-memory fixtures)
+$ cargo test --lib f79_iri_order -- --nocapture
+running 1 test
+ORDER BY ?s: ["urn:order:a", "urn:order:m", "urn:order:z"]
+ORDER BY DESC(?s): ["urn:order:z", "urn:order:m", "urn:order:a"]
+test sparql::tests::f79_iri_order_is_lexical_independent_of_intern_order ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2293 filtered out; finished in 0.01s
+$ cargo test --features shacl,onnx,server --bin quipu-server f79_standard_results -- --nocapture
+running 1 test
+application/sparql-results+json VALUES 1: X-Quipu-Truncated=Some("false")
+application/sparql-results+xml VALUES 1: X-Quipu-Truncated=Some("false")
+text/csv VALUES 1: X-Quipu-Truncated=Some("false")
+text/tab-separated-values VALUES 1: X-Quipu-Truncated=Some("false")
+application/sparql-results+json VALUES 1 2: X-Quipu-Truncated=Some("false")
+application/sparql-results+xml VALUES 1 2: X-Quipu-Truncated=Some("false")
+text/csv VALUES 1 2: X-Quipu-Truncated=Some("false")
+text/tab-separated-values VALUES 1 2: X-Quipu-Truncated=Some("false")
+application/sparql-results+json VALUES 1 2 3: X-Quipu-Truncated=Some("true")
+application/sparql-results+xml VALUES 1 2 3: X-Quipu-Truncated=Some("true")
+text/csv VALUES 1 2 3: X-Quipu-Truncated=Some("true")
+text/tab-separated-values VALUES 1 2 3: X-Quipu-Truncated=Some("true")
+test tests::f79_standard_results_signal_actual_truncation ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 145 filtered out; finished in 0.03s
+
+Script done on 2026-10-15 00:27:50-04:00 [COMMAND_EXIT_CODE="0"]

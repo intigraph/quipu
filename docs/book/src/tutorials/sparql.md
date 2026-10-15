@@ -428,6 +428,13 @@ client that ignores headers gets no signal, which is a reason to prefer the
 default JSON shape when the distinction matters. Full `expandedTypes` detail is
 available in the default JSON response.
 
+Standard HTTP responses also carry `X-Quipu-Truncated: true` when the server
+row ceiling removed results, or `false` when the result is complete. This
+header applies to SPARQL JSON/XML, CSV/TSV and RDF graph output; browser clients
+can read it through CORS. Check it before treating a result as a complete
+answer. A result exactly at the ceiling is complete if no extra row was removed.
+The default JSON format continues to report its existing `truncated` field.
+
 ## 10. Property Paths
 
 SPARQL 1.1 property paths let you traverse edges without binding

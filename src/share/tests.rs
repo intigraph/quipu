@@ -466,6 +466,7 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
 fn internal_opts() -> ShareOptions {
     ShareOptions {
         destination: ShareDestination::Internal,
+        pointers: Vec::new(),
         ..Default::default()
     }
 }
