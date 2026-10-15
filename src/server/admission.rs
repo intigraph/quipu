@@ -135,8 +135,65 @@ pub(crate) fn init_request_budget_ms(ms: u64) {
     }
 }
 
+/// `/episode`'s own admission budget; `0` falls back to [`request_budget`].
+static EPISODE_BUDGET_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Set the `/episode` admission budget. Called once, from `serve`. Inert at 0.
+pub(crate) fn init_episode_budget_ms(ms: u64) {
+    EPISODE_BUDGET_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
+    if ms > 0 {
+        eprintln!("episode budget: {ms}ms from admission (covers resolution + commit)");
+    }
+}
+
+/// The deadline for one `/episode` request, stamped once at its start and
+/// carried through BOTH of its admissions (aegis-xi0). Stamping per admission
+/// would hand the commit a fresh budget after resolution had spent the first.
+pub(crate) fn episode_budget() -> (std::time::Instant, Option<quipu::time::Deadline>) {
+    let started = std::time::Instant::now();
+    let ms = EPISODE_BUDGET_MS.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    let ms = TEST_EPISODE_BUDGET_MS
+        .try_with(|value| *value)
+        .unwrap_or(ms);
+    let deadline = if ms > 0 {
+        Some(quipu::time::Deadline::after_millis(ms))
+    } else {
+        request_budget()
+    };
+    (started, deadline)
+}
+
+/// Read admission under a deadline the caller already stamped.
+pub(crate) async fn read_blocking_until<T, F>(
+    started: std::time::Instant,
+    deadline: Option<quipu::time::Deadline>,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    admit_with_deadline(read_admission(), "read", deadline, started, f).await
+}
+
+/// Write admission under a deadline the caller already stamped.
+pub(crate) async fn write_blocking_until<T, F>(
+    started: std::time::Instant,
+    deadline: Option<quipu::time::Deadline>,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    admit_with_deadline(&WRITE_ADMISSION, "write", deadline, started, f).await
+}
+
 #[cfg(test)]
 tokio::task_local! { static TEST_REQUEST_BUDGET_MS: u64; }
+#[cfg(test)]
+tokio::task_local! { pub(crate) static TEST_EPISODE_BUDGET_MS: u64; }
 
 fn request_budget() -> Option<quipu::time::Deadline> {
     let ms = REQUEST_BUDGET_MS.load(std::sync::atomic::Ordering::Relaxed);

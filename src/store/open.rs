@@ -133,6 +133,10 @@ impl Store {
         self.labels_config.clone_from(&other.labels_config);
         self.owl_config.clone_from(&other.owl_config);
         self.embedding_config.clone_from(&other.embedding_config);
+        // A pooled reader resolves `/episode` nodes before the writer commits
+        // them (aegis-xi0), and serves `/resolve`; both must use the served
+        // `[quipu.resolution]` policy, not the defaults.
+        self.resolution_config.clone_from(&other.resolution_config);
         self.embedding_provider
             .clone_from(&other.embedding_provider);
     }

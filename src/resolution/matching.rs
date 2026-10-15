@@ -205,3 +205,101 @@ pub fn resolve_episode_nodes(
         opts.strict_mode,
     )
 }
+
+/// What a resolution pass read, so the writer can tell whether it is stale.
+///
+/// A two-phase `/episode` (aegis-xi0) resolves on a read connection and commits
+/// under the writer. Between the two, another write may commit. The generation
+/// is the last transaction id plus the set of mounted frozen layers: equal means
+/// nothing the matcher reads can have changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolutionGeneration {
+    /// `MAX(id)` of `transactions` when the pass started.
+    pub tx: i64,
+    /// Mounted frozen-pack aliases, in order.
+    pub frozen: Vec<String>,
+}
+
+impl ResolutionGeneration {
+    /// The generation `store` currently reads.
+    ///
+    /// # Errors
+    /// Propagates store failures.
+    pub fn of(store: &Store) -> Result<Self> {
+        Ok(Self {
+            tx: store.latest_tx_id()?,
+            frozen: store
+                .attachments
+                .iter()
+                .filter(|a| a.alias.starts_with("fz_"))
+                .map(|a| a.alias.clone())
+                .collect(),
+        })
+    }
+}
+
+/// Bring a resolution computed at `read_at` up to date under the writer.
+///
+/// Returns `None` when the delta cannot be bounded (the frozen layers changed),
+/// and the caller must resolve again in full. Otherwise every node is re-checked
+/// against the labels asserted after `read_at.tx` with the same matcher and
+/// threshold, and the graph's recorded `distinctFrom` is re-read, so a
+/// near-duplicate or an excusal committed between the phases is reflected.
+/// Embedding matches against entities committed in between are not added: their
+/// vectors are written after their own commit, so the in-lock path cannot rely
+/// on them either.
+///
+/// # Errors
+/// Propagates store and decode failures.
+pub fn revalidate_episode_resolution(
+    store: &Store,
+    nodes: &[crate::episode::Node],
+    base_ns: &str,
+    opts: &crate::episode::IngestResolutionOpts,
+    read_at: &ResolutionGeneration,
+    resolved: EpisodeResolution,
+) -> Result<Option<EpisodeResolution>> {
+    let now = ResolutionGeneration::of(store)?;
+    if now == *read_at {
+        return Ok(Some(resolved));
+    }
+    if now.frozen != read_at.frozen || opts.strict_mode {
+        return Ok(None);
+    }
+    crate::time::check_request_deadline()?;
+    let delta = super::LabelIndex::build_since(store, read_at.tx)?;
+    let mut previous: std::collections::HashMap<String, Vec<super::EntityCandidate>> =
+        resolved.hints.into_iter().collect();
+    let mut hints = Vec::new();
+    let mut claims: Vec<(String, String, f64)> = Vec::new();
+    for node in nodes {
+        crate::time::check_request_deadline()?;
+        let iri = crate::episode::node_iri(&node.name, base_ns);
+        let mut excused = recorded_distinct_from(store, &iri)?;
+        excused.extend(node.distinct_from.iter().cloned());
+        let mut candidates = previous.remove(&node.name).unwrap_or_default();
+        candidates.extend(delta.candidates(store, &node.name, opts.threshold)?);
+        if !excused.is_empty() {
+            let excused: std::collections::HashSet<&str> =
+                excused.iter().map(String::as_str).collect();
+            candidates.retain(|c| !excused.contains(c.iri.as_str()));
+        }
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        super::dedup_by_iri(&mut candidates);
+        candidates.truncate(opts.top_k);
+        if let Some(top) = candidates.first() {
+            claims.push((top.iri.clone(), node.name.clone(), top.score));
+            hints.push((node.name.clone(), candidates));
+        }
+    }
+    Ok(Some(EpisodeResolution {
+        hints,
+        contentions: contentions(claims),
+        refusal: None,
+        vector_scope: resolved.vector_scope,
+    }))
+}
