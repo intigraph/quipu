@@ -359,6 +359,14 @@ fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
     )
     .unwrap();
     assert_eq!(all["count"], 3);
+    // Hybrid at alpha=0 is pure keyword ranking and takes the keyword path.
+    let pure = crate::tool_search(
+        &s,
+        &json!({"mode":"hybrid","query":"shared","alpha":0.0,"graph":"urn:graph:a"}),
+    )
+    .unwrap();
+    assert_eq!(pure["count"], 1);
+    assert_eq!(pure["results"][0]["entity"], "urn:alpha");
     for input in [
         json!({"mode":"semantic","embedding":[1.0,0.0],"graph":"urn:graph:a"}),
         json!({"mode":"hybrid","query":"shared","alpha":0.5,"graph":"urn:graph:a"}),

@@ -409,7 +409,8 @@ Explicit graph selection in semantic and hybrid search requires
 vectors with bounded backfill before enabling it; the flag also gates automatic
 named-only embedding text. Keyword mode does not need it: the lexical index
 records each assertion's graph, so keyword search accepts an explicit scope
-whenever `keyword = true` and the index is complete.
+whenever `keyword = true` and the index is complete. Hybrid with `alpha = 0`
+is pure keyword ranking and follows the keyword rule.
 
 Keyword mode returns `score` (positive relevance, higher first), raw SQLite
 `bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
