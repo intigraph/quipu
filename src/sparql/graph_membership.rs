@@ -119,3 +119,32 @@ pub(super) fn object_source(
     }
     Ok(Some("facts INDEXED BY idx_vaet"))
 }
+
+/// A narrow current index avoids loading wide value-bearing index pages for
+/// a subject already known by the evaluator. Missing indexes retain fallback.
+pub(super) fn subject_source(
+    store: &Store,
+    ctx: &TemporalContext,
+    pattern: &TriplePattern,
+    seed: &Bindings,
+) -> Result<Option<&'static str>> {
+    let local_graph = matches!(&ctx.graph,
+        super::GraphScope::Named(graphs) if graphs.len() == 1 && graphs[0] > 0);
+    let bound_subject = match &pattern.subject {
+        TermPattern::NamedNode(_) => true,
+        TermPattern::Variable(subject) => matches!(seed.get(subject.as_str()),Some(crate::Value::Ref(id)) if *id >= 0),
+        _ => false,
+    };
+    if !local_graph || !bound_subject
+        || !matches!(&pattern.predicate, NamedNodePattern::NamedNode(_))
+        || store.has_attachments() || ctx.valid_at.is_some() || ctx.as_of_tx.is_some()
+    { return Ok(None); }
+    let definition: Option<String> = store.conn.query_row(
+        "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='substring_current_eag'",
+        [], |row| row.get(0),
+    ).optional()?;
+    let Some(definition) = definition else { return Ok(None); };
+    let normalized:String=definition.chars().filter(|c| !c.is_ascii_whitespace()).flat_map(char::to_lowercase).collect();
+    if normalized != "createindexsubstring_current_eagonfacts(e,a,g)whereop=1andvalid_toisnull" { return Ok(None); }
+    Ok(Some("facts INDEXED BY substring_current_eag"))
+}

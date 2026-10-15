@@ -17,6 +17,7 @@ CREATE TABLE substring_facts (
  fact_id INTEGER PRIMARY KEY, e INTEGER NOT NULL, a INTEGER NOT NULL, g INTEGER NOT NULL,
  plain INTEGER NOT NULL, value_hash BLOB NOT NULL, needs_exact INTEGER NOT NULL
 );
+CREATE INDEX substring_current_eag ON facts(e,a,g) WHERE op=1 AND valid_to IS NULL;
 CREATE VIEW substring_source AS
  SELECT rowid AS fact_id,
  quipu_substring_text(v) AS text, quipu_substring_exact(v) AS exact_text,
@@ -140,7 +141,7 @@ impl Store {
     }
     /// Remove only derived data and its triggers; preserve the fact log.
     pub fn drop_substring_index(&self)->Result<()> {
-        atomic(&self.conn,||{self.conn.execute_batch("DROP TRIGGER IF EXISTS substring_insert;DROP TRIGGER IF EXISTS substring_update;DROP TRIGGER IF EXISTS substring_delete;DROP VIEW IF EXISTS substring_source;DROP TABLE IF EXISTS substring_fts;DROP TABLE IF EXISTS substring_facts;DROP TABLE IF EXISTS substring_progress")?;Ok(())})
+        atomic(&self.conn,||{self.conn.execute_batch("DROP TRIGGER IF EXISTS substring_insert;DROP TRIGGER IF EXISTS substring_update;DROP TRIGGER IF EXISTS substring_delete;DROP VIEW IF EXISTS substring_source;DROP TABLE IF EXISTS substring_fts;DROP TABLE IF EXISTS substring_facts;DROP INDEX IF EXISTS substring_current_eag;DROP TABLE IF EXISTS substring_progress")?;Ok(())})
     }
 }
 #[cfg(test)]mod tests;
