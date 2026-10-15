@@ -1,0 +1,2 @@
+Retained independent candidate94db memory control, 2000 rows / 4 literal keys:
+REVIEW563 rows=2000 keys=4 literal_bytes=16385 query_bytes=74492 peak_before_kib=9496 peak_after_kib=139904 delta_kib=130408 elapsed_ms=68
