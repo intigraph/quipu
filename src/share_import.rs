@@ -236,6 +236,8 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
         )));
     }
     crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
+    // A hand-edited manifest must not carry what the producer would have refused.
+    crate::share::validate_pointers(&request.manifest.pointers)?;
     let expected = sha256(&manifest_bytes(&request.manifest, false)?);
     if request.manifest.share_id != expected {
         return Err(Error::InvalidValue(format!(

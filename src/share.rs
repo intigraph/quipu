@@ -110,6 +110,8 @@ pub struct ShareOptions {
     /// travels with the bytes rather than living in the shell history of
     /// whoever ran the command.
     pub destination: ShareDestination,
+    /// Graphs to name without carrying (aegis-3fy1kp). Empty for an ordinary share.
+    pub pointers: Vec<SharePointer>,
 }
 
 impl Default for ShareOptions {
@@ -125,6 +127,7 @@ impl Default for ShareOptions {
             #[cfg(not(target_arch = "wasm32"))]
             attest: None,
             destination: ShareDestination::default(),
+            pointers: Vec::new(),
         }
     }
 }
@@ -185,6 +188,10 @@ impl SharePayloadRequest {
             // (aegis-auw0o7). An internal share is produced at the machine that
             // owns the store, with `quipu share --destination internal`.
             destination: ShareDestination::Outward,
+            // Not settable over HTTP: pointers are a property of the producing
+            // repository (aegis-3fy1kp), and a caller who does not own it must not
+            // make this server's share point anywhere.
+            pointers: Vec::new(),
         }
     }
 
@@ -227,6 +234,95 @@ pub struct ShareFiles {
     /// queries, so such a manifest is byte-identical to one from before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
+}
+
+/// A graph a share NAMES without carrying (aegis-3fy1kp, pendant autoload).
+///
+/// A repository that only points at knowledge ships a share with no facts and one
+/// or more pointers. Pointers are declarations, never loads: composition reports
+/// them, and following one is the consumer's trust decision (caboodle `packs trust`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharePointer {
+    /// The named graph the pointer is about.
+    pub graph: String,
+    /// Where that graph is.
+    #[serde(flatten)]
+    pub target: PointerTarget,
+}
+
+/// The two pointer kinds of the pendant autoload design (section 4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PointerTarget {
+    /// A live graph reached through federation, never copied locally.
+    Endpoint {
+        /// SPARQL endpoint, `http(s)`, with no credentials in the URL.
+        endpoint: String,
+    },
+    /// A pinned pack fetched, verified and composed on first use.
+    Pack {
+        /// Where the pack archive is fetched from, `http(s)`.
+        url: String,
+        /// sha256 of the exact archive, `sha256:<64 hex>` or bare hex.
+        sha256: String,
+    },
+}
+
+/// Refuse a malformed or credential-bearing pointer, or two pointers for one graph.
+///
+/// Run where a manifest is PRODUCED and where one is VERIFIED, so a hand-edited
+/// manifest cannot smuggle in what the producer would have refused.
+pub(crate) fn validate_pointers(pointers: &[SharePointer]) -> Result<()> {
+    let mut seen = std::collections::BTreeSet::new();
+    for pointer in pointers {
+        oxrdf::NamedNode::new(&pointer.graph).map_err(|e| {
+            Error::InvalidValue(format!(
+                "share pointer graph {:?} is not an IRI: {e}",
+                pointer.graph
+            ))
+        })?;
+        if !seen.insert(pointer.graph.as_str()) {
+            return Err(Error::InvalidValue(format!(
+                "share pointer graph {} is declared twice",
+                pointer.graph
+            )));
+        }
+        let (url, what) = match &pointer.target {
+            PointerTarget::Endpoint { endpoint } => (endpoint, "endpoint"),
+            PointerTarget::Pack { url, sha256 } => {
+                let hex = sha256.strip_prefix("sha256:").unwrap_or(sha256);
+                if hex.len() != 64
+                    || !hex
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                {
+                    return Err(Error::InvalidValue(format!(
+                        "share pointer {} has sha256 {sha256:?}; expected 64 lowercase hex digits",
+                        pointer.graph
+                    )));
+                }
+                (url, "pack url")
+            }
+        };
+        let rest = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .filter(|rest| !rest.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidValue(format!(
+                    "share pointer {} {what} {url:?} is not an http(s) URL",
+                    pointer.graph
+                ))
+            })?;
+        if rest.split('/').next().unwrap_or_default().contains('@') {
+            return Err(Error::InvalidValue(format!(
+                "share pointer {} {what} carries credentials; a share is published, so it \
+                 must not",
+                pointer.graph
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Versioned, hash-checked share envelope.
@@ -308,6 +404,15 @@ pub struct ShareManifest {
     /// produced before this existed — the field is additive, not a format break.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<ShareDestination>,
+    /// Graphs this share names but does not carry (aegis-3fy1kp).
+    ///
+    /// INSIDE `share_id`, like `destination`: removing or editing a pointer makes
+    /// the manifest hash to something else and `verify_share` refuses. Skipped
+    /// when empty, so every share produced before this field is byte-identical.
+    /// An older reader drops the unknown field, recomputes a different id and
+    /// refuses the share: it fails closed rather than silently ignoring pointers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<SharePointer>,
 }
 
 /// The directory name a share uses when its manifest does not say.
@@ -494,7 +599,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             .destination
             .is_internal()
             .then_some(ShareDestination::Internal),
+        pointers: opts.pointers.clone(),
     };
+    validate_pointers(&manifest.pointers)?;
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
     // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
     // stripped from the hashed form (see `manifest_bytes`), so assigning it here
@@ -672,3 +779,7 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "share/pointer_tests.rs"]
+mod pointer_tests;
