@@ -696,6 +696,7 @@ fn push_string_narrows(
             sql_params.push(Box::new(i64::try_from(k).unwrap_or(i64::MAX)));
             added = true;
             if object == var
+                && ctx.valid_at.is_none() && ctx.as_of_tx.is_none()
                 && bindings.is_empty()
                 && !store.has_attachments()
                 && let Some(phrase) = narrow.substring_phrase()

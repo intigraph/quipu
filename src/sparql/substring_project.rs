@@ -44,7 +44,7 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
     let [triple]=patterns.as_slice() else{return Ok(None);};
     let (TermPattern::Variable(subject),NamedNodePattern::NamedNode(predicate),TermPattern::Variable(object))=(&triple.subject,&triple.predicate,&triple.object) else{return Ok(None);};
     let name=subject.as_str();
-    if vars.len()!=1||vars[0]!=name||name==object.as_str()||ctx.row_limit.is_some()||store.has_attachments(){return Ok(None);}
+    if vars.len()!=1||vars[0]!=name||name==object.as_str()||ctx.row_limit.is_some()||store.has_attachments()||ctx.valid_at.is_some()||ctx.as_of_tx.is_some(){return Ok(None);}
     let Some(needle)=needle(expr,object.as_str()) else{return Ok(None);};
     let Some(graph)=ctx.graph.single_graph().filter(|g|*g>=0) else{return Ok(None);};
     if !store.substring_index_ready()? {return Ok(None);}
@@ -66,12 +66,6 @@ pub(super) fn try_eval(store:&Store,inner:&GraphPattern,vars:&[String],ctx:&Temp
         if *id<0{return Ok(None);}
         params.push((*id).into());conditions.push(format!("f.e=?{}",params.len()));
     }
-    if let Some(at)=&ctx.valid_at {
-        params.push(at.clone().into());let n=params.len();conditions.push(format!("f.valid_from<=?{n} AND (f.valid_to IS NULL OR f.valid_to>?{n})"));
-    } else if let Some(tx)=ctx.as_of_tx {
-        params.push(tx.into());conditions.push(format!("(f.valid_to IS NULL OR f.retracted_tx>?{})",params.len()));
-    } else {conditions.push("f.valid_to IS NULL".into());}
-    if let Some(tx)=ctx.as_of_tx {params.push(tx.into());conditions.push(format!("f.tx<=?{}",params.len()));}
     super::pattern_util::check_eval_budget(ctx,0,0)?;
     let sql=format!("SELECT f.e,f.value_hash,f.fact_id FROM main.substring_fts CROSS JOIN main.substring_facts AS f NOT INDEXED WHERE {} ORDER BY f.e,f.value_hash",conditions.join(" AND "));
     let mut statement=store.conn.prepare(&sql)?;
