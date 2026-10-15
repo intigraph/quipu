@@ -101,3 +101,57 @@ A distinct historical snapshot is a separate inspection graph, not a restoration
 of ROOT or an automatic replacement of the selected dataset. Historical source
 membership records what a snapshot contained, not whether its facts remain current.
 Retract in the graph whose view you intend to change.
+
+## A stable name per repository
+
+Each composition gets a new dataset name, so an agent has nothing stable to
+ask for "this repository's knowledge now". Repository mode gives it one:
+
+```bash
+quipu compose --repo scbrown/demo packs/main=./main.pendant packs/ops=./ops.pendant \
+  --db store.db
+```
+
+Each input is `<pack-key>=<path>`. The pack key (its path in the repository, for
+example) is what makes two commits of a pack the same pack, so it is supplied,
+never inferred from the bytes. An admitted composition moves two datasets:
+
+- `urn:quipu:repo:<repo>:current` names the latest admitted snapshot.
+- `urn:quipu:repo:<repo>:previous` names the snapshot before it.
+
+A quarantined composition stays inspectable under its own
+`urn:quipu:repo:<repo>:snapshot:HASH` dataset, but it never moves CURRENT.
+Recomposing the snapshot CURRENT already names moves nothing.
+
+```sparql
+SELECT ?item ?name FROM <urn:quipu:repo:scbrown/demo:current>
+WHERE { ?item <https://example.org/name> ?name }
+```
+
+Pack graphs in this mode are scoped to the repository
+(`urn:quipu:repo:<repo>:pack:<key>:SHARE_HASH`). Two repositories composing
+identical bytes therefore get two graphs, and a retraction in one never shows
+through the other. Older snapshot graphs that neither pointer names are dropped:
+their facts are retracted and the graph is unregistered, and history stays
+bitemporal. A graph that another dataset still names is kept and reported under
+`retained_shared`.
+
+**Local retractions carry forward.** Before each composition, statements
+retracted locally in this repository's pack graphs are recorded as tombstones
+for that pack key. They are removed from every later snapshot of the pack before
+validation, so validation sees the union an agent will actually query. This
+holds across a version where the statement is absent, a version where it
+returns, retention pruning and rollback. Blank nodes are renamed per snapshot,
+so a retraction of a blank-node statement cannot be matched later. That case
+refuses the composition and names the statement; re-assert it, or give the node
+an IRI in the pack.
+
+Roll back by moving the pointer:
+
+```bash
+quipu compose --repo scbrown/demo --rollback --db store.db
+```
+
+This swaps CURRENT and previous, and first applies any tombstone recorded since
+previous was current. The whole operation is one transaction: a failure at any
+step leaves both pointers, the graphs and the caches as they were.

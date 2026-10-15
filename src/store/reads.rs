@@ -42,6 +42,22 @@ impl Store {
         Self::collect_visible_facts(&mut stmt, params![g])
     }
 
+    /// Statements a pack composition asserted into graph `g` that are no longer
+    /// live there: the local retractions pendant autoload carries forward to the
+    /// next snapshot of the same pack (aegis-koxp0u). A statement re-asserted
+    /// since (a live row exists) is not a retraction and is excluded.
+    pub(crate) fn retracted_composition_facts_in_graph(&self, g: i64) -> Result<Vec<Fact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts f \
+             WHERE f.g = ?1 AND f.op = 1 AND f.valid_to IS NOT NULL \
+               AND f.tx IN (SELECT id FROM transactions WHERE source LIKE 'share-composition:%') \
+               AND NOT EXISTS (SELECT 1 FROM facts l WHERE l.g = f.g AND l.e = f.e \
+                               AND l.a = f.a AND l.v = f.v AND l.op = 1 AND l.valid_to IS NULL) \
+             ORDER BY e, a, tx",
+        )?;
+        Self::collect_visible_facts(&mut stmt, params![g])
+    }
+
     /// Current asserted facts across a SET of graphs, unioned. The read the
     /// entailment regime needs (quipu-0b6): an engine's premises are a graph
     /// plus its companion inferred graph, so derived facts can feed further

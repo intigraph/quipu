@@ -62,6 +62,13 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("pending_share_queries", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
+    // Pendant autoload repository state (aegis-koxp0u) travels with the datasets
+    // it describes. Restored without it, a store would hold CURRENT/previous
+    // datasets that no pointer owns, and its next commit would start over: the
+    // local tombstones lost, every retracted statement back in CURRENT.
+    ("pendant_repo_pointers", Disposition::Content),
+    ("pendant_repo_graphs", Disposition::Content),
+    ("pendant_repo_tombstones", Disposition::Content),
     ("forks", Disposition::Content),
     ("proposals", Disposition::Content),
     ("term_spaces", Disposition::Content),

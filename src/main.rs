@@ -405,6 +405,7 @@ COMMANDS:
     qp import delta <parent-share> <delta-share> [--actor <id>]
     qp load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
     qp compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
+    qp compose --repo <repo> <pack-key>=<pack>... [--shapes-from <pack-key>] | --repo <repo> --rollback [--db <path>]
     qp import promote <share-id> [--actor <id>] [--db <path>]
     qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
