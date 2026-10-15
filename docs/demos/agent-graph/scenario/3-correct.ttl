@@ -1,0 +1,5 @@
+@prefix ex: <https://example.org/shop/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+ex:cache a ex:Service ; ex:name "cache" ; ex:dependsOn ex:orders ;
+    ex:sourceKind "observed" ; prov:wasDerivedFrom ex:trace-1107 .
