@@ -436,13 +436,11 @@ async fn query_core(
         } else {
             run(&store)
         };
-        if require_substring {
-            if let Ok(response) = &mut result {
-                response.headers_mut().insert(
-                    axum::http::HeaderName::from_static("x-quipu-substring-index"),
-                    axum::http::HeaderValue::from_static("v6"),
-                );
-            }
+        if require_substring && let Ok(response) = &mut result {
+            response.headers_mut().insert(
+                axum::http::HeaderName::from_static("x-quipu-substring-index"),
+                axum::http::HeaderValue::from_static("v6"),
+            );
         }
         // Recorded while the guard is STILL ALIVE, so `held` is genuinely the
         // lock-holding interval and not "until the response was serialised".
