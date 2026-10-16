@@ -1,6 +1,7 @@
+import { createPackLoader } from "./pack-loader.js";
 import { createEngineApi } from "./engine-api.js";
 import { createConstellation } from "./constellation.js";
-import { setupWorkbench, loadStarted, loaded, setQuery } from "./workbench.js";
+import { setupWorkbench, setQuery } from "./workbench.js";
 
 setupWorkbench();
 
@@ -753,26 +754,8 @@ async function runSparql() {
 
 // ------------------------------------------------------------------- boot
 
-async function loadPack(bytes, source) {
-  loadStarted(bytes.byteLength);
-  status(`Verifying and importing ${fmt(bytes.byteLength)} bytes from ${source}…`);
-  const t0 = performance.now();
-  const report = await ask({ cmd: "load", bytes, source });
-  const load = performance.now() - t0;
-  renderProvenance(report, source, { load });
-  loaded(report);
-  status(`Loaded ${fmt(report.import.triples.accepted)} triples — everything below is a live `
-    + `query against this tab's copy.`);
-  $("main").hidden = false;
-  await renderTypes();
-  await constellation.load();
-  await renderBrowser();
-  await refreshExport();
-  setQuery(CANNED[0].sparql, CANNED[0].name);
-  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
-  await runSparql();
-  reportReleaseFreshness(report.manifest.producer.version);
-}
+const loadPack = createPackLoader({ ask, constellation, renderProvenance, status, fmt,
+  renderTypes, renderBrowser, refreshExport, runSparql, reportReleaseFreshness, initialQuestion: CANNED[0] });
 
 async function boot() {
   const bundle = await fetch("./pkg/quipu_wasm_explorer_bg.wasm", { method: "HEAD" })
