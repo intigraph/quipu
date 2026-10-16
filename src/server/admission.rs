@@ -3,7 +3,7 @@
 //! Writes have been admitted here since this module was written; reads were
 //! added after aegis-raq1ok, where the missing read half wedged the server.
 
-use super::base::{AppError, blocking};
+use super::base::AppError;
 
 #[path = "admission/tracked.rs"]
 mod tracked;

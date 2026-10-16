@@ -7,8 +7,8 @@ exports process-local gauges at `/metrics` independently of the store lock:
 | --- | --- |
 | `quipu_http_requests_in_flight{lane="write"}` | HTTP handler futures that have started but have not produced a response or been cancelled. |
 | `quipu_http_oldest_write_age_seconds` | Monotonic age of the oldest such write handler; zero with no write handler. |
-| `quipu_store_requests_in_flight{lane="write",phase="waiting"}` | Work in the store admission path. Waiting includes permit and blocking-pool queueing; active begins inside the executing blocking closure. |
-| `quipu_store_oldest_write_age_seconds` | Age since the oldest outstanding write entered admission, including both phases; zero when idle. |
+| `quipu_store_requests_in_flight{lane="write",phase="waiting"}` | HTTP blocking work and store admission. Waiting includes permit and blocking-pool queueing; active begins inside the executing blocking closure. |
+| `quipu_store_oldest_write_age_seconds` | Age since the oldest outstanding write entered blocking work or admission, including both phases; zero when idle. |
 
 The table shows example labels. HTTP lanes are `write`, `read`, and `other`;
 store lanes are `write`, `read`, and `point-read`, with `waiting` or `active`
@@ -27,14 +27,17 @@ HTTP gauge drops, but its store guard moves with the blocking closure and
 remains active until the work actually exits, including error or unwind. A
 cancelled admission waiter is removed without starting work. Oldest age is
 recomputed from the remaining writes after completion; a newer write cannot
-reset an older stalled write's age. The registry contains only current work and
-scraping it never acquires the store connection or writer mutex.
+reset an older stalled write's age. Generic blocking writes such as `/knot`
+and promote receive the same lifetime guard even though they bypass admission.
+Admitted work carries its existing token through the blocking adapter and is
+not counted twice. The registry contains only current work; scraping it never
+acquires the store connection or writer mutex.
 
 These ages include queue time. They are **not writer-lock hold time**, evidence
 of transaction progress, or proof of a wedge on their own. One request can be
 represented in both HTTP and store scopes, and an episode can enter admission
 more than once; do not add the two scopes together. Internal writers that never
-enter HTTP/store admission are outside these request metrics.
+enter HTTP blocking or store admission are outside these request metrics.
 
 The private controlled stall-shape test holds 35 writes (one active, 34 waiting)
 for 300 simulated seconds, checks count >=10 and increasing oldest age, then

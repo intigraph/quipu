@@ -12,6 +12,20 @@ tokio::task_local! {
     static REQUEST_ID: u64;
 }
 
+#[derive(Clone)]
+pub(super) struct StoreWorkContext {
+    pub lane: quipu::metrics::inflight::Lane,
+    pub registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+}
+
+tokio::task_local! {
+    static STORE_WORK: StoreWorkContext;
+}
+
+pub(super) fn request_store_work() -> Option<StoreWorkContext> {
+    STORE_WORK.try_with(Clone::clone).ok()
+}
+
 pub(super) fn request_id() -> Option<u64> {
     REQUEST_ID.try_with(|id| *id).ok()
 }
@@ -107,6 +121,23 @@ async fn log_request_tracked(
     next: axum::middleware::Next,
     sequence: &AtomicU64,
     registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
+    log_request_tracked_stores(
+        req,
+        next,
+        sequence,
+        registry,
+        quipu::metrics::inflight::store().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked_stores(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+    store_registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
 ) -> axum::response::Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
@@ -207,12 +238,18 @@ async fn log_request_tracked(
         }),
         finished: false,
     };
-    let resp = REQUEST_WRITE_KIND
+    let resp = STORE_WORK
         .scope(
-            quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_ID.scope(
-                id,
-                REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            StoreWorkContext {
+                lane,
+                registry: store_registry,
+            },
+            REQUEST_WRITE_KIND.scope(
+                quipu::write_kind::WriteKind::for_route(&endpoint),
+                REQUEST_ID.scope(
+                    id,
+                    REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                ),
             ),
         )
         .await;
@@ -436,3 +473,7 @@ mod tests {
 #[cfg(test)]
 #[path = "request_inflight_tests.rs"]
 mod inflight_tests;
+
+#[cfg(test)]
+#[path = "request_generic_inflight_tests.rs"]
+mod generic_inflight_tests;

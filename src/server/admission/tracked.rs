@@ -1,5 +1,6 @@
 //! Admission and telemetry ownership follow the actual blocking closure.
-use super::{AdmissionStamp, AppError, WriteWaitGuard, blocking, reject_expired_write};
+use super::{AdmissionStamp, AppError, WriteWaitGuard, reject_expired_write};
+use crate::base::blocking_pretracked;
 
 pub(super) async fn admit_tracked<T, F>(
     admission: &'static tokio::sync::Semaphore,
@@ -47,7 +48,7 @@ where
     if let Some(stamp) = stamp {
         let _ = stamp.set(std::time::Instant::now());
     }
-    blocking(move || {
+    blocking_pretracked(move || {
         let _permit = permit;
         work.activate();
         let _work = work;
