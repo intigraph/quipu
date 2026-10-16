@@ -150,3 +150,56 @@ fn write_annotations_cover_new_workflows_and_reads_stay_read_only() {
         assert_eq!(definition["annotations"]["readOnlyHint"], !write, "{name}");
     }
 }
+
+#[tokio::test]
+async fn search_mcp_hides_diagnostic_neighbors_and_preserves_admitted_positive() {
+    for accepted in [false, true] {
+        let app = Router::new().route("/search", post(move || async move {
+            axum::Json(json!({"results":[{"entity":"urn:wrong","text":"must not be injected","similarity":0.99}],
+                "count":1,"scoped":true,"ranking":"semantic","insufficient_context":!accepted,
+                "context":{"contract":"quipu-context/v1","outcome":if accepted {"CONTEXT"} else {"NO CONTEXT"},"similarity_floor":0.52},
+                "context_results":if accepted {json!([{"entity":"urn:good","text":"admitted positive","similarity":0.8,"source":"knowledge","valid_from":"2026-01-01"}])} else {json!([])}}))
+        }));
+        let out = payload(
+            McpServer::new(app)
+                .dispatch(
+                    "quipu_search",
+                    json!({"query":"subject"}),
+                    &HeaderMap::new(),
+                )
+                .await
+                .unwrap(),
+        );
+        assert!(!out.to_string().contains("urn:wrong"));
+        assert_eq!(out["count"], usize::from(accepted));
+        assert_eq!(out["scoped"], true);
+        assert_eq!(out["ranking"], "semantic");
+        assert_eq!(
+            out["context"]["outcome"],
+            if accepted { "CONTEXT" } else { "NO CONTEXT" }
+        );
+        if accepted {
+            assert_eq!(out["results"][0]["valid_from"], "2026-01-01");
+        }
+    }
+}
+
+#[tokio::test]
+async fn search_mcp_unknown_contract_is_an_error_not_an_empty_success() {
+    let app = Router::new().route(
+        "/search",
+        post(|| async { axum::Json(json!({"results":[{"text":"legacy neighbor"}]})) }),
+    );
+    let out = McpServer::new(app)
+        .dispatch(
+            "quipu_search",
+            json!({"query":"subject"}),
+            &HeaderMap::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.is_error, Some(true));
+    let text = &out.content[0].as_text().unwrap().text;
+    assert!(text.contains("UNKNOWN"));
+    assert!(!text.contains("legacy neighbor"));
+}
