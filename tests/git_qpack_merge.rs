@@ -351,6 +351,16 @@ fn ci_entrypoint_replays_historical_merges_and_has_a_positive_control() {
         } else {
             assert!(f.merge().status.success());
         }
+        // A non-pack fixture must neither poison a valid historical pack nor
+        // mask an invalid one in the same merge.
+        std::fs::create_dir(f.path().join("fixture")).unwrap();
+        std::fs::write(
+            f.path().join("fixture/export.nt"),
+            "<urn:a> <urn:b> <urn:c> .\n",
+        )
+        .unwrap();
+        f.commit();
+        g(f.path(), &["mv", "fixture/export.nt", "fixture/payload.nq"]);
         f.commit();
         let event = f.temp.path().join("event.json");
         std::fs::write(
