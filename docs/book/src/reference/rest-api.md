@@ -271,6 +271,23 @@ invalidate the result.
 
 All POST endpoints accept `Content-Type: application/json`.
 
+### `GET /watermark`
+
+A bounded, read-only metadata endpoint for replication observers. Returns
+`{"store_id":"<store lineage>","watermark_tx":123}` using the indexed latest
+transaction ID. It does not enumerate facts, advance a cursor or create a
+transaction. A shared store ID establishes lineage, not proof that two copies
+have identical contents.
+
+Opt-in [read-only followers](../getting-started/configuration.md#read-only-follower-serving)
+poll their configured primary every 15 seconds (two-second HTTP timeout). Their
+responses carry `X-Quipu-Replica-Lag-Tx`: primary minus follower transaction IDs
+from the last fresh observation, or `unknown`. Metrics
+`quipu_replica_lag_transactions` (-1 for unknown) and `quipu_replica_lag_known`
+expose the same bounded observation. Failure, stale metadata or mismatched
+lineage never means zero lag. Replica writes return 503 naming the primary;
+they are not forwarded.
+
 ### `GET /health`
 
 Health check.

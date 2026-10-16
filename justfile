@@ -342,3 +342,7 @@ search-eval cmd="test" *args="":
     @if [ "{{cmd}}" = "test" ]; then python3 scripts/test_search_eval.py; \
     elif [ "{{cmd}}" = "run" ]; then python3 scripts/search-eval.py {{args}}; \
     else echo "unknown search-eval command: {{cmd}}" >&2; exit 1; fi
+
+# Scratch follower: actual start, 100 reads, write refusals, lag and no DB writes.
+replica-test server cli:
+    python3 scripts/test-replica-server.py {{quote(server)}} {{quote(cli)}}
