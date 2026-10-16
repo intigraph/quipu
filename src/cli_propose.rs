@@ -92,7 +92,7 @@ fn cmd_propose_submit(args: &[String], store: &quipu::Store) {
 /// `--decided-by <id>` wins; otherwise the CLI names the invoking identity as
 /// `cli:<QUIPU_AGENT or USER>`. It NEVER records an anonymous fixed string:
 /// with no flag and no identity in the environment it refuses, matching the
-/// MCP and REST paths where decided_by is required.
+/// MCP and REST paths where `decided_by` is required.
 fn resolve_decided_by(
     args: &[String],
     env: impl Fn(&str) -> Option<String>,
@@ -233,7 +233,7 @@ mod decided_by_tests {
     use super::resolve_decided_by;
 
     fn a(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| s.to_string()).collect()
+        v.iter().map(ToString::to_string).collect()
     }
 
     #[test]
