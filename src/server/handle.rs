@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use super::writer_timing::StoreGuard;
 use parking_lot::FairMutex;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
@@ -31,7 +32,7 @@ pub(crate) struct StoreHandle {
     /// Coalesced hints only; durable rows remain in the existing SQLite logs.
     pub(crate) commit_wake: tokio::sync::watch::Sender<()>,
     pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
-    pub(crate) writer: FairMutex<quipu::Store>,
+    writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
     /// Opt-in log-only admission timing; immutable after startup.
     pub(crate) log_query_admission: bool,
@@ -185,11 +186,16 @@ impl StoreHandle {
         }
     }
 
+    /// A pure synchronization barrier, without attestation settlement.
+    pub(crate) fn writer_barrier(&self) -> StoreGuard<'_> {
+        StoreGuard::writer(self.writer.lock(), "barrier")
+    }
+
     /// The WRITER connection. Unchanged semantics: one at a time, FIFO-fair.
     /// Every pre-existing `.lock()` call site means exactly what it meant
     /// before, which is why this refactor does not have to audit them.
-    pub(crate) fn lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        let guard = self.writer.lock();
+    pub(crate) fn lock(&self) -> StoreGuard<'_> {
+        let guard = StoreGuard::writer(self.writer.lock(), "writer");
         // A signed write settles HERE, in the same lock hold as its work: its
         // binding is re-checked (a revocation that landed while it queued is
         // honoured) and its nonce spent, even if the work turns out to be a
@@ -203,10 +209,8 @@ impl StoreHandle {
 
     /// First writer acquisition for tool handlers. Budget rejection precedes
     /// attestation settlement, so a refused unrun write does not spend its nonce.
-    pub(crate) fn write_lock(
-        &self,
-    ) -> Result<parking_lot::FairMutexGuard<'_, quipu::Store>, super::base::AppError> {
-        let guard = self.writer.lock();
+    pub(crate) fn write_lock(&self) -> Result<StoreGuard<'_>, super::base::AppError> {
+        let guard = StoreGuard::writer(self.writer.lock(), "writer");
         super::admission::reject_expired_write()?;
         if let Some(pending) = quipu::transaction_auth::current_attestation() {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
@@ -221,13 +225,13 @@ impl StoreHandle {
     /// attempted through it fails at `SQLite` rather than corrupting anything —
     /// but failing a request is still a bug, and the borrow checker cannot
     /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
-    pub(crate) fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+    pub(crate) fn read(&self) -> StoreGuard<'_> {
         let readers = &self.readers.conns[usize::from(self.readers.point_reserve)..];
         let guard = if readers.is_empty() {
-            self.writer.lock()
+            StoreGuard::writer(self.writer.lock(), "read-fallback")
         } else if let Some(g) = readers.iter().find_map(FairMutex::try_lock) {
             // Work-conserving fast path.
-            g
+            StoreGuard::reader(g)
         } else {
             // All busy: queue FIFO on one connection. Relaxed is right — this
             // is a load-spreading hint, not a synchronisation edge.
@@ -236,7 +240,7 @@ impl StoreHandle {
                 .next
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
                 % readers.len();
-            readers[i].lock()
+            StoreGuard::reader(readers[i].lock())
         };
         Self::sync_reader(guard)
     }
@@ -244,17 +248,15 @@ impl StoreHandle {
     /// The reserved connection is never borrowed by ordinary readers. Keeping
     /// both connection and async admission separate prevents either FIFO from
     /// recreating the expensive backlog in front of a point request.
-    pub(crate) fn point_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+    pub(crate) fn point_read(&self) -> StoreGuard<'_> {
         if self.readers.point_reserve {
-            Self::sync_reader(self.readers.conns[0].lock())
+            Self::sync_reader(StoreGuard::reader(self.readers.conns[0].lock()))
         } else {
             self.read()
         }
     }
 
-    fn sync_reader(
-        mut guard: parking_lot::FairMutexGuard<'_, quipu::Store>,
-    ) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+    fn sync_reader(mut guard: StoreGuard<'_>) -> StoreGuard<'_> {
         // Deep freeze: a pooled reader opened before a freeze has no pack
         // attached, and its `facts_source` is plain "facts" — a query over
         // the frozen graph would silently read zero rows. Sync against the
@@ -281,11 +283,11 @@ impl StoreHandle {
     }
 
     /// A read connection that preserves the configured vector backend.
-    pub(crate) fn vector_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+    pub(crate) fn vector_read(&self) -> StoreGuard<'_> {
         if self.vector_reads_pooled {
             self.read()
         } else {
-            self.lock()
+            self.lock().read_fallback()
         }
     }
 }

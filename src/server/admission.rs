@@ -364,7 +364,7 @@ mod write_timeout_tests {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let thread = std::thread::spawn(move || {
-            let _held = shared.writer.lock();
+            let _held = shared.writer_barrier();
             ready_tx.send(()).unwrap();
             let _released = release_rx.recv();
         });

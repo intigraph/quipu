@@ -135,7 +135,7 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
         let store = store.clone();
         let envelope = envelope.clone();
         let (method, path, content_type) = (method.clone(), path.clone(), content_type.clone());
-        tokio::task::spawn_blocking(move || {
+        crate::writer_timing::spawn_blocking(move || {
             let reader = store.read();
             // v2 signs THIS store's id. Taken from the store, never from the
             // envelope: the envelope's claim is only compared against it.
@@ -212,9 +212,11 @@ fn decode(header: &str) -> Result<AttestationEnvelope, Refusal> {
 async fn spend_durably(store: &SharedStore, pending: &PendingAttestation) -> quipu::Result<bool> {
     let store = store.clone();
     let (session, nonce) = (pending.session.clone(), pending.nonce.clone());
-    tokio::task::spawn_blocking(move || store.lock().attestation_ensure_spent(&session, &nonce))
-        .await
-        .map_err(|e| quipu::Error::InvalidValue(format!("durable nonce spend failed: {e}")))?
+    crate::writer_timing::spawn_blocking(move || {
+        store.lock().attestation_ensure_spent(&session, &nonce)
+    })
+    .await
+    .map_err(|e| quipu::Error::InvalidValue(format!("durable nonce spend failed: {e}")))?
 }
 
 fn refuse(refusal: &Refusal) -> Response {

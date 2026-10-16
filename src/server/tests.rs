@@ -1028,23 +1028,16 @@ pub(super) fn pooled_handle_with_provider(
         r.adopt_read_config_from(&store);
         conns.push(parking_lot::FairMutex::new(r));
     }
-    let handle = super::StoreHandle {
-        commit_wake: super::StoreHandle::commit_wake_for(&store),
-        graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
-        embedding_provider: store.embedding_provider(),
-        search_config: store.search_config().clone(),
-        writer: parking_lot::FairMutex::new(store),
-        vector_reads_pooled: true,
-        log_query_admission: false,
-        federation: quipu::config::FederationConfig::default(),
-        readers: super::ReadPool {
+    let handle = super::StoreHandle::serving(
+        store,
+        super::ReadPool {
             conns,
             next: std::sync::atomic::AtomicUsize::new(0),
             point_reserve: false,
         },
-        #[cfg(feature = "reactive-reasoner")]
-        reasoner: None,
-    };
+        &path,
+        quipu::config::FederationConfig::default(),
+    );
     (dir, handle)
 }
 

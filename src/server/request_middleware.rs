@@ -10,6 +10,11 @@ static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
 
 tokio::task_local! {
     static REQUEST_ID: u64;
+    static WRITER_CONTEXT: super::writer_timing::Context;
+}
+
+pub(super) fn writer_context() -> Option<super::writer_timing::Context> {
+    WRITER_CONTEXT.try_with(Clone::clone).ok()
 }
 
 pub(super) fn request_id() -> Option<u64> {
@@ -29,6 +34,7 @@ pub(crate) fn render_request_starts(out: &mut String) {
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
     request_completion::cancellations().render(out);
+    super::writer_timing::registry().render(out);
 }
 
 tokio::task_local! {
@@ -182,12 +188,15 @@ async fn log_request_with_sequence(
         }),
         finished: false,
     };
-    let resp = REQUEST_WRITE_KIND
+    let resp = WRITER_CONTEXT
         .scope(
-            quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_ID.scope(
-                id,
-                REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            super::writer_timing::Context::route(&endpoint),
+            REQUEST_WRITE_KIND.scope(
+                quipu::write_kind::WriteKind::for_route(&endpoint),
+                REQUEST_ID.scope(
+                    id,
+                    REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                ),
             ),
         )
         .await;

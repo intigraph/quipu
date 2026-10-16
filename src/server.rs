@@ -693,3 +693,6 @@ async fn main() {
     quipu::write_kind::set_serving();
     quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
 }
+
+#[path = "server/writer_timing.rs"]
+mod writer_timing;

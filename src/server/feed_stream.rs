@@ -122,7 +122,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 if blocking(move || {
                     // Do not settle a request attestation: this is a pure
                     // synchronization barrier, not an authenticated write.
-                    drop(writer.writer.lock());
+                    drop(writer.writer_barrier());
                     Ok(())
                 })
                 .await
