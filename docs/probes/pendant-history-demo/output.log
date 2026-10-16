@@ -1,10 +1,10 @@
-Script started on 2026-10-16 17:33:38-04:00 [COMMAND="python3 docs/probes/pendant-history-demo/record.py "$DEMO_QUIPU"" <not executed on terminal>]
+Script started on 2026-10-16 17:33:59-04:00 [COMMAND="sh docs/probes/pendant-history-demo/run.sh" <not executed on terminal>]
 BEFORE: 65db3e3c strict historical replay
 {
   "historical_nonpack_repaired_head_pass": false,
   "returncode": 1,
   "stdout": "",
-  "stderr": "qpack merge refused: 4852d8219f5159f848258df14d25225a538777f7:fixture missing manifest"
+  "stderr": "qpack merge refused: 750c9105b261aaccc78fa512a3864c83b7e08aec:fixture missing manifest"
 }
 AFTER: deb2e38e historical non-pack distinction
 {
@@ -15,4 +15,4 @@ AFTER: deb2e38e historical non-pack distinction
 }
 Expected failure before and successful repaired-history verification after: PASS
 
-Script done on 2026-10-16 17:33:39-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-16 17:33:59-04:00 [COMMAND_EXIT_CODE="0"]
