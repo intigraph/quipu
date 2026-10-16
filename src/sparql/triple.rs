@@ -487,10 +487,8 @@ fn visit_triple_pattern_limited(
         }
         _ => None,
     };
-    let canonical = |id| match &aliases {
-        Some(aliases) => Ok(aliases.get(&id).copied().unwrap_or(id)),
-        None => store.canonical_id(id),
-    };
+    let canonicalizer = super::triple_alias::Canonicalizer::new(store, aliases);
+    let canonical = |id| canonicalizer.resolve(id);
     let mut stmt = store.prepare(&sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
