@@ -133,21 +133,27 @@ let browser;
     for (const [name, ok] of Object.entries(cacheChecks)) check("cache boundary " + name, ok);
     // A synthetic worker refusal proves a saved picture cannot stand in for
     // successful native verification. The earlier positive controls use WASM.
-    await page.addInitScript(() => {
+    const savedPreview = await page.evaluate(() => localStorage.getItem("quipu:map-preview:v1"));
+    await page.addInitScript((seed) => {
+      if (location.search.includes("injected-refusal")) localStorage.setItem("quipu:map-preview:v1", seed);
       const NativeWorker = Worker;
       window.Worker = class extends NativeWorker {
         postMessage(message, ...rest) {
           if (message.cmd !== "load") return super.postMessage(message, ...rest);
           setTimeout(() => this.dispatchEvent(new MessageEvent("message", { data: {
-            id: message.id, ok: false, error: "Injected verification refusal",
+            id: message.id, ...(location.search.includes("refused-report")
+              ? { ok: true, result: { promotion: null } }
+              : { ok: false, error: "Injected verification refusal" }),
           } })), 300);
         }
       };
-    });
-    await page.goto(new URL("?embed=1&theme=intigraph", target).href);
-    await page.waitForFunction(() => document.querySelector("main").hidden
-      && document.querySelector("#status").textContent.includes("Injected verification refusal"));
-    check("verification refusal removes saved preview", await page.evaluate(() => localStorage.getItem("quipu:map-preview:v1") === null));
+    }, savedPreview);
+    for (const [mode, message] of [["worker-error", "Injected verification refusal"], ["refused-report", "fresh pack was not promoted"]]) {
+      await page.goto(new URL(`?embed=1&theme=intigraph&injected-refusal=${mode}`, target).href);
+      await page.waitForFunction((text) => document.querySelector("main").hidden
+        && document.querySelector("#status").textContent.includes(text), message);
+      check(`${mode} removes saved preview`, await page.evaluate(() => localStorage.getItem("quipu:map-preview:v1") === null));
+    }
     check("no browser errors", errors.length === 0, errors);
     console.log(JSON.stringify({ samples, fullReadySamples, warmUnderFiveSeconds: samples[1] < 5000 }));
     // Keep performance explicit; presentation correctness must not turn a slow

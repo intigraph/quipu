@@ -27,11 +27,13 @@ export function createPackLoader({ ask, constellation, renderProvenance, status,
       unlock?.();
       throw error;
     }
-    unlock?.();
     if (saved && report.promotion?.outcome !== "promoted") {
       $("main").hidden = true;
       cache.remove();
+      unlock?.();
+      throw new Error("Saved preview discarded: fresh pack was not promoted.");
     }
+    unlock?.();
     const load = performance.now() - t0;
     renderProvenance(report, source, { load });
     loaded(report);
