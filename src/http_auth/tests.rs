@@ -368,6 +368,8 @@ fn routes_in_server_source() -> Vec<String> {
         // WAL reset + passive checkpoint maintenance (aegis-raq1ok): a
         // startup call and a background tick, no routes.
         "server/wal_maintenance.rs",
+        // Writer-lock telemetry and owning guards; no HTTP routes.
+        "server/writer_timing.rs",
     ];
     let server_rs = include_str!("../server.rs");
     let mut declared = Vec::new();
