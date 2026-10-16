@@ -9,7 +9,7 @@ fn file_collection_fixture(body: &str) -> String {
             @prefix aegis: <http://aegis.gastown.local/ontology/> .
             @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
             @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-            aegis:koror__datalore_unknown a aegis:NFSExport ; rdfs:label "koror:/datalore/unknown" .
+            aegis:koror__datalore_unknown a aegis:NFSExport ; rdfs:label "korimako:/datalore/unknown" .
             aegis:a-host rdfs:label "a host" .
             {body}
         "#

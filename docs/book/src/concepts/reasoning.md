@@ -12,7 +12,7 @@ composes it explicitly:
 
 ```sparql
 ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred>
-    { <traefik> <runsOn> <koror> }
+    { <traefik> <runsOn> <korimako> }
 ```
 
 Within the companion, derived facts behave like any other fact — SPARQL,
@@ -30,10 +30,10 @@ Consider a homelab with containers running on hosts. You've recorded:
 
 ```text
 traefik  runsOn  webproxy
-webproxy runsOn  koror
+webproxy runsOn  korimako
 ```
 
-A human reads this and concludes "traefik transitively runs on koror." But
+A human reads this and concludes "traefik transitively runs on korimako." But
 SPARQL doesn't know that unless you either:
 
 1. **Query-time**: write a property path (`runsOn+`) every time you ask
@@ -167,7 +167,7 @@ hypothetical facts, runs your closure, then rolls back. The store is never
 modified. This lets you answer questions like:
 
 - "What would change if I remove this package from this container?"
-- "If koror goes down, which derived dependencies break?"
+- "If korimako goes down, which derived dependencies break?"
 - "What's the blast radius of upgrading this library?"
 
 ## Provenance: Tracing Derived Facts

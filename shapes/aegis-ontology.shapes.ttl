@@ -63,7 +63,7 @@ aegis:LXCContainerShape a sh:NodeShape ;
 
 # ── ProxmoxNode ────────��────────────────────────────────────��────
 #
-# A physical Proxmox host (e.g., koror, kota).
+# A physical Proxmox host (e.g., korimako, kotare).
 
 aegis:ProxmoxNodeShape a sh:NodeShape ;
     sh:targetClass aegis:ProxmoxNode ;

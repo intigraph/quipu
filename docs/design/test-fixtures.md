@@ -47,8 +47,8 @@ fn main():
   4. Ingest agent platform subgraph (Turtle, 2026-02-01)
   5. Ingest knowledge subgraph (Turtle, 2026-02-15)
   6. Temporal mutations:
-     a. koror status online -> down (2026-03-27)
-     b. koror status down -> online (2026-03-29)
+     a. korimako status online -> down (2026-03-27)
+     b. korimako status down -> online (2026-03-29)
      c. postgres status -> restarted (2026-03-27)
      d. traefik status -> degraded -> healthy
   7. Ingest episodes from test-fixtures/test-episodes.json
@@ -65,14 +65,14 @@ Timestamp: 2026-01-15T10:00:00Z, actor: "seed", source: "fixture:infra"
 
 | Type | Entities | Count |
 |------|----------|-------|
-| ProxmoxNode | koror (compute), kota (storage), niue (backup) | 3 |
-| LXCContainer | ct-100..ct-103 on koror, ct-200..ct-203 on kota, ct-300..ct-303 on niue | 12 |
+| ProxmoxNode | korimako (compute), kotare (storage), niue (backup) | 3 |
+| LXCContainer | ct-100..ct-103 on korimako, ct-200..ct-203 on kotare, ct-300..ct-303 on niue | 12 |
 | SystemdService | traefik, grafana, prometheus, quipu-server, forgejo, postgresql, dolt, falkordb, plex, pihole, restic, minio, node-exporter, alertmanager, caddy | 15 |
 
-koror is the dense hub with 8+ edges:
-ct-100..ct-103 `runs_on` koror, node-exporter `runs_on` koror,
-prometheus `monitors` koror, grafana `depends_on` prometheus,
-traefik `routes_to` containers on koror, koror `managed_by` stiwi.
+korimako is the dense hub with 8+ edges:
+ct-100..ct-103 `runs_on` korimako, node-exporter `runs_on` korimako,
+prometheus `monitors` korimako, grafana `depends_on` prometheus,
+traefik `routes_to` containers on korimako, korimako `managed_by` stiwi.
 
 ### Agent platform subgraph (~15 entities)
 
@@ -93,11 +93,11 @@ Timestamp: 2026-02-15T10:00:00Z, actor: "seed", source: "fixture:knowledge"
 |------|----------|-------|
 | Directive | hla-001..hla-003, ops-001, ops-002 | 5 |
 | DesignDoc | design-quipu-ui, design-reasoner, design-federation | 3 |
-| Probe | probe-koror-downtime, probe-dolt-performance | 2 |
+| Probe | probe-korimako-downtime, probe-dolt-performance | 2 |
 
 ### Temporal mutations
 
-- koror: online (01-15) -> down (03-27T09:00) -> online (03-29T14:00)
+- korimako: online (01-15) -> down (03-27T09:00) -> online (03-29T14:00)
 - postgresql: running (01-15) -> crashed (03-27T09:15) -> running (03-27T11:00)
 - traefik: healthy (01-15) -> degraded (03-27T09:05) -> healthy (03-29T14:30)
 
@@ -111,8 +111,8 @@ From `test-fixtures/test-episodes.json`, timestamps spanning 2026-01 to 2026-04:
 | Episode | Source Type | Group |
 |---------|------------|-------|
 | infra-discovery-2026-01 | crew/mayor | infrastructure |
-| koror-incident-2026-03-27 | monitoring/alertmanager | incidents |
-| koror-recovery-2026-03-29 | crew/goldblum | incidents |
+| korimako-incident-2026-03-27 | monitoring/alertmanager | incidents |
+| korimako-recovery-2026-03-29 | crew/goldblum | incidents |
 | directive-broadcast-2026-02 | hla/stiwi | directives |
 | agent-observation-dolt | crew/muldoon | observations |
 | handoff-owen-to-ellie | crew/owen | handoffs |
@@ -147,8 +147,8 @@ store.load_shapes(name, turtle, timestamp)                 // embed shapes
 The seed binary prints a summary and asserts:
 
 - 50+ entities created
-- koror has 8+ edges (dense hub)
-- koror status history has 5 entries (3 asserts + 2 retracts)
+- korimako has 8+ edges (dense hub)
+- korimako status history has 5 entries (3 asserts + 2 retracts)
 - 7+ episode transactions
 - Shapes loaded successfully
 - `quipu-server --db test-fixtures/test-store.db` starts and serves all endpoints

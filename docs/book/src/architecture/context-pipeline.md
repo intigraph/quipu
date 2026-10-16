@@ -53,7 +53,7 @@ Each entity includes its label, types, relevance, and all its facts:
   "relevance": "Direct",
   "score": 1.0,
   "facts": [
-    { "predicate": "http://example.org/runsOn", "value": "http://example.org/kota", "value_type": "Entity" },
+    { "predicate": "http://example.org/runsOn", "value": "http://example.org/kotare", "value_type": "Entity" },
     { "predicate": "http://example.org/port", "value": "443", "value_type": "Literal" }
   ]
 }
