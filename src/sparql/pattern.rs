@@ -242,7 +242,10 @@ pub fn eval_pattern_seeded(
                 }
                 _ => ctx,
             };
-            let (rows, vars) = eval_pattern_seeded(store, inner, inner_ctx, seed)?;
+            let lazy = length.is_some() && super::limited_scan::eligible(inner, inner_ctx, seed);
+            let (rows, vars) = super::limited_scan::scoped(lazy, || {
+                eval_pattern_seeded(store, inner, inner_ctx, seed)
+            })?;
             let sliced: Vec<Bindings> = match length {
                 Some(len) => rows.into_iter().skip(*start).take(*len).collect(),
                 None => rows.into_iter().skip(*start).collect(),
