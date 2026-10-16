@@ -48,6 +48,8 @@ mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
+#[path = "server/point_reads.rs"]
+mod point_reads;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
@@ -308,15 +310,7 @@ async fn main() {
     // and a dead one is not.
     wal_maintenance::reset_at_startup(&store);
 
-    let read_pool = ReadPool::open(&db_path, &store, config.server.read_pool_size);
-
-    if read_pool.len() > 0 {
-        eprintln!("read pool: {} read-only connections", read_pool.len());
-    } else {
-        eprintln!("read pool: DISABLED — every read serialises behind the writer lock");
-    }
-
-    admission::init_read_admission_for_pool(read_pool.len());
+    let read_pool: ReadPool = point_reads::open_pool(&db_path, &store, &config.server);
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 

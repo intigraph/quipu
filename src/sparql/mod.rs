@@ -36,6 +36,7 @@ mod status_pushdown_tests;
 pub mod string_pushdown;
 #[cfg(test)]
 mod string_pushdown_tests;
+mod substring_project;
 #[cfg(test)]
 mod tests;
 mod triple_alias;
@@ -45,13 +46,14 @@ mod bind_join;
 mod bind_join_tests;
 mod construct;
 mod count_cover;
-mod count_mmap;
+pub(crate) mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
 mod graph_membership;
 mod group;
 mod join;
+mod limited_scan;
 mod progress;
 mod sql_in;
 pub mod triple;

@@ -8,6 +8,14 @@ mod request_completion;
 
 static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
 
+tokio::task_local! {
+    static REQUEST_ID: u64;
+}
+
+pub(super) fn request_id() -> Option<u64> {
+    REQUEST_ID.try_with(|id| *id).ok()
+}
+
 /// Arrivals include pending/cancelled requests and the metrics scrape itself.
 /// Completion counters cannot distinguish low traffic from stalled handlers.
 pub(crate) fn render_request_starts(out: &mut String) {
@@ -133,18 +141,20 @@ async fn log_request_with_sequence(
     };
     eprintln!(
         "{}",
-        attributed(quipu::request_usage::structured_request_log(
-            "request_start",
-            id,
-            &client,
-            &task,
-            method.as_str(),
-            &path,
-            &endpoint,
-            None,
-            None,
-            quipu::request_usage::AuthOutcome::Pending,
-            None,
+        super::query_usage::with_process_id(attributed(
+            quipu::request_usage::structured_request_log(
+                "request_start",
+                id,
+                &client,
+                &task,
+                method.as_str(),
+                &path,
+                &endpoint,
+                None,
+                None,
+                quipu::request_usage::AuthOutcome::Pending,
+                None,
+            )
         ))
     );
     let completion_provenance = provenance.clone();
@@ -163,11 +173,11 @@ async fn log_request_with_sequence(
         emit: Box::new(move |log| {
             eprintln!(
                 "{}",
-                quipu::request_usage::with_request_context(
+                super::query_usage::with_process_id(quipu::request_usage::with_request_context(
                     log,
                     peer,
                     completion_provenance.as_deref()
-                )
+                ))
             );
         }),
         finished: false,
@@ -175,7 +185,10 @@ async fn log_request_with_sequence(
     let resp = REQUEST_WRITE_KIND
         .scope(
             quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            REQUEST_ID.scope(
+                id,
+                REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            ),
         )
         .await;
     let status = resp.status().as_u16();
@@ -197,6 +210,49 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn server_request_identity_is_task_local_across_overlapping_requests() {
+        let sequence = Arc::new(AtomicU64::new(0));
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let handler_barrier = barrier.clone();
+        let app = axum::Router::new()
+            .route(
+                "/identity",
+                axum::routing::get(move || {
+                    let barrier = handler_barrier.clone();
+                    async move {
+                        barrier.wait().await;
+                        request_id().unwrap().to_string()
+                    }
+                }),
+            )
+            .layer(axum::middleware::from_fn(move |req, next| {
+                let sequence = sequence.clone();
+                async move { log_request_with_sequence(req, next, &sequence).await }
+            }));
+        let request = || {
+            axum::http::Request::builder()
+                .uri("/identity")
+                .body(axum::body::Body::empty())
+                .unwrap()
+        };
+        let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            tokio::join!(app.clone().oneshot(request()), app.oneshot(request()))
+        })
+        .await
+        .unwrap();
+        let mut ids = Vec::new();
+        for response in [a.unwrap(), b.unwrap()] {
+            let bytes = axum::body::to_bytes(response.into_body(), 64)
+                .await
+                .unwrap();
+            ids.push(std::str::from_utf8(&bytes).unwrap().parse::<u64>().unwrap());
+        }
+        ids.sort();
+        assert_eq!(ids, [0, 1]);
+        assert_eq!(request_id(), None);
+    }
 
     #[tokio::test]
     async fn arrivals_count_before_completion_and_survive_cancellation() {
@@ -314,5 +370,40 @@ mod tests {
             "camayoc-ingress|/knot|absent"
         );
         assert_eq!(body(call("/query", &named).await.unwrap()).await, "none");
+    }
+
+    /// aegis-ufw: a completed `/query` is counted by its DECLARED agent; a
+    /// missing agent is `undeclared`; other routes do not enter this counter.
+    #[tokio::test]
+    async fn query_completions_are_counted_by_declared_agent() {
+        async fn ok() -> &'static str {
+            "ok"
+        }
+        let app = axum::Router::new()
+            .route("/query", axum::routing::post(ok))
+            .route("/knot", axum::routing::post(ok))
+            .layer(axum::middleware::from_fn(log_request));
+        let send = |uri: &'static str, agent: Option<&'static str>| {
+            let mut req = axum::http::Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("x-quipu-client", "ufw-agent-probe");
+            if let Some(agent) = agent {
+                req = req.header("x-quipu-agent", agent);
+            }
+            app.clone()
+                .oneshot(req.body(axum::body::Body::empty()).unwrap())
+        };
+        send("/query", Some("Tim")).await.unwrap();
+        send("/query", Some("tim")).await.unwrap();
+        send("/query", None).await.unwrap();
+        send("/knot", Some("tim")).await.unwrap();
+        let metrics = quipu::metrics::metrics().render(0, 0, 0, None);
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"tim\"} 2\n"
+        ), "{metrics}");
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"undeclared\"} 1\n"
+        ));
     }
 }

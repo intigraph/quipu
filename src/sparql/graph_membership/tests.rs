@@ -277,3 +277,496 @@ fn graph_membership_streamed_reads_keep_the_existing_plan() {
         "positive retained control proves the authorizer sees the index probe"
     );
 }
+
+#[test]
+fn bound_subject_metadata_uses_same_rowid_cover_without_wide_fact_reads() {
+    let (store, graph) = fixture();
+    index(&store);
+    let subject = store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let title = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let parsed = SparqlParser::new()
+        .parse_query("SELECT ?v WHERE { ?s <https://example.org/title> ?v }")
+        .unwrap();
+    let Query::Select { pattern, .. } = parsed else {
+        unreachable!()
+    };
+    let GraphPattern::Project { inner, .. } = pattern else {
+        unreachable!()
+    };
+    let GraphPattern::Bgp { patterns } = *inner else {
+        unreachable!()
+    };
+    let seed = Bindings::from([("s".to_owned(), crate::Value::Ref(subject))]);
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(title), Box::new(subject)];
+    let membership = predicate(&store, &ctx, &patterns[0], &seed, &[graph], &mut params)
+        .unwrap()
+        .expect("bound metadata should use proven membership");
+    let sql = |scope: &str| {
+        format!(
+            "SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND e=?2 AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)"
+        )
+    };
+    assert!(table_columns(&store, &sql("g=?3"), &[title, subject, graph]) > 0);
+    assert_eq!(
+        table_columns(&store, &sql(&membership), &[title, subject, graph]),
+        0
+    );
+    assert_eq!(
+        table_columns(
+            &store,
+            &sql(&membership).replace(" INDEXED BY idx_current_aev", ""),
+            &[title, subject, graph]
+        ),
+        0,
+        "actual unhinted caller plan must cover"
+    );
+    let collect = |sql: String| {
+        store
+            .conn
+            .prepare(&sql)
+            .unwrap()
+            .query_map([title, subject, graph], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, Vec<u8>>(2)?,
+                ))
+            })
+            .unwrap()
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .unwrap()
+    };
+    assert_eq!(collect(sql("g=?3")), collect(sql(&membership)));
+}
+
+#[test]
+fn bound_metadata_preserves_variable_constant_and_reference_bags() {
+    let (store, graph) = fixture();
+    let queries = [
+        format!(
+            "SELECT ?s ?v WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> <{EX}foreign> }} GRAPH <{EX}g> {{ ?s <{EX}title> ?v }} }} ORDER BY STR(?s) STR(?v)"
+        ),
+        format!(
+            "SELECT ?s WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> }} GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }} ORDER BY STR(?s)"
+        ),
+        format!(
+            "SELECT ?s WHERE {{ VALUES ?s {{ <{EX}one> <{EX}two> }} GRAPH <{EX}g> {{ ?s <{EX}type> <{EX}Action> }} }} ORDER BY STR(?s)"
+        ),
+    ];
+    let rows = |q: &str| {
+        query(&store, q)
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| {
+                format!(
+                    "{:?}",
+                    r.iter().collect::<std::collections::BTreeMap<_, _>>()
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let before = queries.iter().map(|q| rows(q)).collect::<Vec<_>>();
+    assert_eq!(before.iter().map(Vec::len).collect::<Vec<_>>(), [2, 1, 1]);
+    // Two assertions for one triple still produce one RDF triple, as before.
+    store
+        .conn
+        .execute(
+            "INSERT INTO transactions(timestamp) VALUES('2026-01-02T00:00:00Z')",
+            [],
+        )
+        .unwrap();
+    let tx = store.conn.last_insert_rowid();
+    store.conn.execute("INSERT INTO facts(e,a,v,g,tx,valid_from,op) SELECT e,a,v,g,?3,valid_from,op FROM facts WHERE e=?1 AND g=?2",rusqlite::params![store.lookup(&format!("{EX}one")).unwrap().unwrap(),graph,tx]).unwrap();
+    assert_eq!(queries.iter().map(|q| rows(q)).collect::<Vec<_>>(), before);
+    index(&store);
+    assert_eq!(queries.iter().map(|q| rows(q)).collect::<Vec<_>>(), before);
+}
+
+#[test]
+fn bound_metadata_declines_unknown_subject_history_and_unproved_scope() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let id = store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let seed = Bindings::from([("s".to_owned(), crate::Value::Ref(id))]);
+    let check = |ctx: TemporalContext, seed: &Bindings, graphs: &[i64]| {
+        let mut params = Vec::new();
+        assert!(
+            predicate(&store, &ctx, &pattern, seed, graphs, &mut params)
+                .unwrap()
+                .is_none()
+        );
+        assert!(params.is_empty());
+    };
+    check(TemporalContext::default(), &Bindings::new(), &[graph]);
+    check(
+        TemporalContext::default(),
+        &Bindings::from([("s".to_owned(), crate::Value::Ref(-1))]),
+        &[graph],
+    );
+    check(
+        TemporalContext::default(),
+        &Bindings::from([("s".to_owned(), crate::Value::Str("not an IRI".into()))]),
+        &[graph],
+    );
+    check(
+        TemporalContext {
+            as_of_tx: Some(1),
+            ..Default::default()
+        },
+        &seed,
+        &[graph],
+    );
+    check(
+        TemporalContext {
+            valid_at: Some("2026-01-01T00:00:00Z".into()),
+            ..Default::default()
+        },
+        &seed,
+        &[graph],
+    );
+    check(TemporalContext::default(), &seed, &[0]);
+    check(TemporalContext::default(), &seed, &[graph, 0]);
+    store.conn.execute_batch("DROP INDEX idx_current_g;CREATE INDEX idx_current_g ON facts(g) WHERE op=1 AND valid_to IS NULL AND g=0").unwrap();
+    check(TemporalContext::default(), &seed, &[graph]);
+}
+
+#[test]
+fn bound_streamed_metadata_uses_same_membership_without_changing_rows() {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, mut ctx) = shape();
+    ctx.graph = GraphScope::Named(vec![graph]);
+    ctx.string_narrows = None;
+    let seed = Bindings::from([(
+        "s".to_owned(),
+        crate::Value::Ref(store.lookup(&format!("{EX}one")).unwrap().unwrap()),
+    )]);
+    let reads = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&reads);
+    store
+        .conn
+        .authorizer(Some(move |c: AuthContext<'_>| {
+            if matches!(
+                c.action,
+                AuthAction::Read {
+                    table_name: "sqlite_master",
+                    column_name: "sql"
+                }
+            ) {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+            Authorization::Allow
+        }))
+        .unwrap();
+    let mut streamed = Vec::new();
+    let count =
+        crate::sparql::triple::visit_triple_pattern(&store, &pattern, &seed, &ctx, &mut |r| {
+            streamed.push(r);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(count, 1);
+    assert!(
+        reads.load(Ordering::Relaxed) > 0,
+        "bound streaming must check validated membership index"
+    );
+    let retained =
+        crate::sparql::triple::eval_triple_pattern_limited(&store, &pattern, &seed, &ctx, None)
+            .unwrap();
+    assert_eq!(streamed, retained);
+}
+
+#[test]
+fn bound_object_membership_uses_covering_graph_index_without_payload_columns() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let title = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(title)];
+    let scope = predicate(&store, &ctx, &pattern, &seed, &[graph], &mut params)
+        .unwrap()
+        .expect("bound object must keep graph checks on the covering rowid index");
+    let bytes = crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let sql = |scope: &str| {
+        format!(
+            "SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND v=X'{hex}' AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)"
+        )
+    };
+    assert!(table_columns(&store, &sql("g=?2"), &[title, graph]) > 0);
+    assert_eq!(table_columns(&store, &sql(&scope), &[title, graph]), 0);
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+    let foreign =
+        format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"seeds FOREIGN ONLY\" }} }}");
+    assert!(query(&store, &foreign).unwrap().rows().is_empty());
+}
+
+#[test]
+fn retained_object_lookup_seeks_the_value_leading_index() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..TemporalContext::default()
+    };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let source = object_source(&store, &ctx, &pattern, &seed)
+        .unwrap()
+        .unwrap_or("facts");
+    let sql = format!(
+        "EXPLAIN QUERY PLAN SELECT e,a,v FROM {source} WHERE a=?1 AND v IN (?2,?3) AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)"
+    );
+    let value = crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let plans: Vec<String> = store
+        .conn
+        .prepare(&sql)
+        .unwrap()
+        .query_map(rusqlite::params![a, value, value], |r| r.get(3))
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap();
+    assert!(
+        plans
+            .iter()
+            .any(|p| p.contains("idx_vaet") && p.contains("v=?") && p.contains("a=?")),
+        "object point seek required: {plans:?}"
+    );
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+}
+
+#[test]
+fn value_source_declines_unproved_shapes_and_index() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    assert!(
+        object_source(&store, &ctx, &pattern, &seed)
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        object_source(&store, &ctx, &pattern, &Bindings::new())
+            .unwrap()
+            .is_none()
+    );
+    let mut bound = seed.clone();
+    bound.insert("s".to_owned(), crate::Value::Ref(1));
+    assert!(
+        object_source(&store, &ctx, &pattern, &bound)
+            .unwrap()
+            .is_none()
+    );
+    for graph in [
+        GraphScope::Default(vec![0]),
+        GraphScope::Named(vec![0]),
+        GraphScope::Named(vec![graph, 0]),
+    ] {
+        let other = TemporalContext {
+            graph,
+            ..Default::default()
+        };
+        assert!(
+            object_source(&store, &other, &pattern, &seed)
+                .unwrap()
+                .is_none()
+        );
+    }
+    let historic = TemporalContext {
+        graph: ctx.graph.clone(),
+        as_of_tx: Some(1),
+        ..Default::default()
+    };
+    assert!(
+        object_source(&store, &historic, &pattern, &seed)
+            .unwrap()
+            .is_none()
+    );
+    store
+        .conn
+        .execute_batch("DROP INDEX idx_vaet; CREATE INDEX idx_vaet ON facts(a,v,e,valid_from)")
+        .unwrap();
+    assert!(
+        object_source(&store, &ctx, &pattern, &seed)
+            .unwrap()
+            .is_none()
+    );
+    let q = format!("SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> \"SEEDS alpha\" }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+    store.conn.execute_batch("DROP INDEX idx_vaet").unwrap();
+    assert!(
+        object_source(&store, &ctx, &pattern, &seed)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+}
+
+#[test]
+fn streamed_bound_object_avoids_the_predicate_range_scan() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (mut store, graph) = fixture();
+    let data: String = (0..1500)
+        .map(|i| format!("<{EX}bulk{i}> <{EX}title> \"unrelated\" .\n"))
+        .collect();
+    ingest_rdf_to_graph(
+        &mut store,
+        data.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let steps = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&steps);
+    store
+        .conn
+        .progress_handler(
+            100,
+            Some(move || {
+                observed.fetch_add(1, Ordering::Relaxed);
+                false
+            }),
+        )
+        .unwrap();
+    let mut rows = Vec::new();
+    let count =
+        crate::sparql::triple::visit_triple_pattern(&store, &pattern, &seed, &ctx, &mut |row| {
+            rows.push(row);
+            Ok(())
+        })
+        .unwrap();
+    store
+        .conn
+        .progress_handler(0, None::<fn() -> bool>)
+        .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(rows.len(), 1);
+    assert!(
+        steps.load(Ordering::Relaxed) < 50,
+        "object point lookup exceeded 5000 VM steps: {}",
+        steps.load(Ordering::Relaxed)
+    );
+}
+
+#[test]
+fn unknown_named_graph_does_not_scan_the_predicate_range() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let (mut store, graph) = fixture();
+    let data: String = (0..1500)
+        .map(|i| format!("<{EX}bulk{i}> <{EX}title> \"unrelated\" .\n"))
+        .collect();
+    ingest_rdf_to_graph(
+        &mut store,
+        data.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![-1]),
+        ..Default::default()
+    };
+    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let steps = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&steps);
+    store
+        .conn
+        .progress_handler(
+            100,
+            Some(move || {
+                observed.fetch_add(1, Ordering::Relaxed);
+                false
+            }),
+        )
+        .unwrap();
+    let mut rows = Vec::new();
+    let count =
+        crate::sparql::triple::visit_triple_pattern(&store, &pattern, &seed, &ctx, &mut |row| {
+            rows.push(row);
+            Ok(())
+        })
+        .unwrap();
+    store
+        .conn
+        .progress_handler(0, None::<fn() -> bool>)
+        .unwrap();
+    assert_eq!(count, 0);
+    assert_eq!(rows.len(), 0);
+    assert!(
+        steps.load(Ordering::Relaxed) == 0,
+        "unknown graph must not step a facts scan: {}",
+        steps.load(Ordering::Relaxed)
+    );
+}
+
+#[test]
+fn constant_subject_fields_use_the_same_covering_graph_membership() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (mut pattern, _) = shape();
+    pattern.subject = TermPattern::NamedNode(oxrdf::NamedNode::new(format!("{EX}one")).unwrap());
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let e = store.lookup(&format!("{EX}one")).unwrap().unwrap();
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(e), Box::new(a)];
+    let scope = predicate(
+        &store,
+        &ctx,
+        &pattern,
+        &Bindings::new(),
+        &[graph],
+        &mut params,
+    )
+    .unwrap()
+    .expect("constant subject must retain the same physical graph membership");
+    let sql = format!(
+        "SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE e=?1 AND a=?2 AND {scope} AND op=1 AND valid_to IS NULL GROUP BY e,a,quipu_term_key(v)"
+    );
+    assert_eq!(table_columns(&store, &sql, &[e, a, graph]), 0);
+    let q = format!("SELECT ?text WHERE {{ GRAPH <{EX}g> {{ <{EX}one> <{EX}title> ?text }} }}");
+    assert_eq!(query(&store, &q).unwrap().rows().len(), 1);
+    let foreign =
+        format!("SELECT ?text WHERE {{ GRAPH <{EX}g> {{ <{EX}foreign> <{EX}title> ?text }} }}");
+    assert!(query(&store, &foreign).unwrap().rows().is_empty());
+}

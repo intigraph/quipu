@@ -9,7 +9,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
-use super::{SharedStore, admission::read_blocking, base::AppError};
+use super::{SharedStore, admission::query_blocking, base::AppError};
 
 /// Conservative bounds for the two standard SPARQL Protocol transports.
 /// GET is intentionally small enough for common proxies; clients with larger
@@ -209,8 +209,31 @@ async fn query_core(
     // shared function is a stronger guarantee of agreement than one shared value
     // passed through two layers.
     let client = super::query_usage::client(&headers);
+    let require_substring = match headers.get("x-quipu-require-substring") {
+        None => false,
+        Some(value) if value.as_bytes() == b"v6" => true,
+        Some(_) => {
+            return Err(
+                quipu::Error::InvalidValue("unsupported substring read contract".into()).into(),
+            );
+        }
+    };
+    if require_substring
+        && (input.get("tx").is_some()
+            || input.get("valid_at").is_some()
+            || input.get("federated").and_then(JsonValue::as_bool) == Some(true))
+    {
+        return Err(quipu::Error::InvalidValue(
+            "substring read contract is current and local only".into(),
+        )
+        .into());
+    }
 
-    read_blocking(move || {
+    let point = store.readers.point_reserve && super::point_reads::eligible(&input);
+    let mut observation =
+        super::query_usage::Observation::new(&input, super::request_middleware::request_id());
+    query_blocking(point, move || {
+        observation.dispatched();
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query
@@ -225,13 +248,19 @@ async fn query_core(
         // them is what makes a queued caller look like an expensive one.
         let federation = store.federation.clone();
         let lock_t0 = std::time::Instant::now();
+        observation.waiting();
         // POOLED READ. SPARQL is read-only, so this takes a
         // read-only connection instead of the writer's mutex. `wait_secs` keeps
         // meaning the same thing — time spent acquiring — which is what makes
         // the before/after curve comparable rather than merely different.
-        let store = store.read();
+        let store = if point {
+            store.point_read()
+        } else {
+            store.read()
+        };
         let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
+        observation.acquired();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
             // quipu-tkh: `"federated": true` fans the WHOLE query text out
@@ -410,7 +439,19 @@ async fn query_core(
             ))
         };
 
-        let result = run(&store);
+        // Pin readiness and evaluation to the same schema/fact snapshot: a
+        // concurrent explicit index drop cannot turn this into a scan fallback.
+        let mut result = if require_substring {
+            store.substring_query(|| run(&store))?
+        } else {
+            run(&store)
+        };
+        if require_substring && let Ok(response) = &mut result {
+            response.headers_mut().insert(
+                axum::http::HeaderName::from_static("x-quipu-substring-index"),
+                axum::http::HeaderValue::from_static("v6"),
+            );
+        }
         // Recorded while the guard is STILL ALIVE, so `held` is genuinely the
         // lock-holding interval and not "until the response was serialised".
         quipu::metrics::metrics().observe_store_time(
@@ -441,6 +482,7 @@ async fn query_core(
             let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
         }
+        observation.finished(result.is_ok());
         result
     })
     .await

@@ -1,0 +1,66 @@
+{
+  "baseline": {
+    "git_sha": "26e791ec2cad0077073d6e37a6d6cae2cb859c16",
+    "probes": [
+      {
+        "inflight": 87,
+        "true_seconds": 9.23233,
+        "true": true,
+        "false_seconds": 9.232292,
+        "false": false
+      },
+      {
+        "inflight": 0,
+        "true_seconds": 0.001512,
+        "true": true,
+        "false_seconds": 0.001204,
+        "false": false
+      },
+      {
+        "inflight": 0,
+        "true_seconds": 0.00139,
+        "true": true,
+        "false_seconds": 0.00109,
+        "false": false
+      }
+    ],
+    "drain_seconds": 13.262432612944394,
+    "peak_bytes": 302424064,
+    "expensive_200": 64,
+    "expensive_408": 26,
+    "all_200_counts_correct": true,
+    "all_health_200": true
+  },
+  "candidate": {
+    "git_sha": "5fefecee6531c252f9e6aaab3c0072890eeed965",
+    "probes": [
+      {
+        "inflight": 86,
+        "true_seconds": 0.001227,
+        "true": true,
+        "false_seconds": 0.001283,
+        "false": false
+      },
+      {
+        "inflight": 77,
+        "true_seconds": 0.001158,
+        "true": true,
+        "false_seconds": 0.001131,
+        "false": false
+      },
+      {
+        "inflight": 69,
+        "true_seconds": 0.096203,
+        "true": true,
+        "false_seconds": 0.096282,
+        "false": false
+      }
+    ],
+    "drain_seconds": 10.129580767010339,
+    "peak_bytes": 250068992,
+    "expensive_200": 75,
+    "expensive_408": 15,
+    "all_200_counts_correct": true,
+    "all_health_200": true
+  }
+}

@@ -1,0 +1,18 @@
+Script started on 2026-10-15 17:51:39-04:00 [COMMAND="python3 demo.py" <not executed on terminal>]
+Retained private 500-triple fixture, 90 COUNT requests; no workload replay.
+Same CPU 25%, pool 4, 4 GiB RAM, no swap, 10-second admission budget.
+baseline: 26e791ec
+  in flight=87; true=9.232330s false=9.232292s; truth correct
+  in flight=0; true=0.001512s false=0.001204s; truth correct
+  in flight=0; true=0.001390s false=0.001090s; truth correct
+  COUNT: 64 correct 62500 results, 26 HTTP 408; drain 13.262s
+  health all 200; peak 288.4 MiB
+candidate: 5fefecee
+  in flight=86; true=0.001227s false=0.001283s; truth correct
+  in flight=77; true=0.001158s false=0.001131s; truth correct
+  in flight=69; true=0.096203s false=0.096282s; truth correct
+  COUNT: 75 correct 62500 results, 15 HTTP 408; drain 10.130s
+  health all 200; peak 238.5 MiB
+PASS point-ASK target <=1s. Off by default; production LIMIT-1 incident unresolved.
+
+Script done on 2026-10-15 17:51:39-04:00 [COMMAND_EXIT_CODE="0"]

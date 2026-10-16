@@ -69,6 +69,7 @@ fn every_table_a_real_store_creates_is_classified() {
     // Opt-in virtual tables create engine-owned shadow tables absent from
     // source DDL. Exercise actual activation, rather than exempt their names.
     store.initialize_lexical_index().unwrap();
+    store.initialize_substring_index().unwrap();
     let mut stmt = store
         .prepare(
             "SELECT name FROM sqlite_master \
@@ -123,6 +124,7 @@ fn every_table_a_real_store_creates_is_classified() {
 fn nothing_is_declared_that_nothing_creates() {
     let store = Store::open_in_memory().unwrap();
     store.initialize_lexical_index().unwrap();
+    store.initialize_substring_index().unwrap();
     let mut stmt = store
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
         .unwrap();

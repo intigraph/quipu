@@ -210,6 +210,9 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
             assert by_tx[tx]['authenticated']['principal'] == expected, by_tx[tx]
             assert by_tx[tx]['actor'] == 'urn:spoof'
 
+        from native_mcp_workflows import exercise
+        exercise(call, tool_body, unpack, TOKENS['one'])
+
         assert unpack(call('quipu_knot', turtle)).get('isError') is True  # no previous-identity leak
         print('HTTP: manifest, reads, spoofing, concurrent named/shared attribution, origins, bad/no bearer passed')
 
@@ -219,7 +222,10 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         ready(proc)
         assert unpack(call('quipu_knot', turtle, TOKENS['one'])).get('isError') is True
         for name, body in [('quipu_graph_create', dict(graph_input, graph='urn:fixture:forbidden')),
-                           ('quipu_graph_label', label_input)]:
+                           ('quipu_graph_label', label_input),
+                           ('quipu_update', {'update':'INSERT DATA { <urn:forbidden> <urn:p> \"no\" }'}),
+                           ('quipu_events_commit', {'consumer_id':'forbidden','offset':0}),
+                           ('quipu_reason', {'rules':'', 'graph':'urn:fixture:portable'})]:
             assert unpack(call(name, body, TOKENS['one'])).get('isError') is True
         assert tool_body(call('quipu_query', query))['count'] == 3
         print('HTTP: restart without stale session and read-only refusal passed')

@@ -1,0 +1,3 @@
+BEFORE: required index absent -> HTTP 400 (no scan fallback)
+AFTER: prepared index -> HTTP 200, v6 acknowledgement, 1 synthetic hit
+SDK: --full finds the description-only synthetic hit

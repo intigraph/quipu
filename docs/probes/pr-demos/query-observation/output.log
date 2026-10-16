@@ -1,0 +1,14 @@
+Script started on 2026-10-15 19:44:15-04:00 [COMMAND="python3 docs/probes/pr-demos/query-observation/demo.py" <not executed on terminal>]
+BEFORE (source inspection): Source inspection at 4cac4848: legacy query text capped at 300 characters; no full-query fingerprint or shared process/request linkage.
+AFTER: Owned in-memory HTTP query + logging middleware control; no network, no authentication claim.
+request_start pid=1117706 request=0
+query_observation_start pid=1117706 request=0
+query_observation_end pid=1117706 request=0
+  query SHA-256: f456f04e46f9b65bab49dea5250b1bcdc53851d2b78e7de814b4f5ebdca20c5e
+  input SHA-256: 5fd2643c831cd031327b6923a644e9e5da908d42e7de0d943a9c0e228176ea03
+  dispatch/wait/held ms: 0.682693 0.13199 4.8208
+request_complete pid=1117706 request=0
+  status/result rows: 200 1
+Private producer control only; production cause and recovery are unproven.
+
+Script done on 2026-10-15 19:44:15-04:00 [COMMAND_EXIT_CODE="0"]

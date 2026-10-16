@@ -36,7 +36,7 @@ impl Drop for Mapping<'_> {
     }
 }
 
-pub(super) fn scalar<T>(store: &Store, evaluate: impl FnOnce() -> Result<T>) -> Result<T> {
+pub(crate) fn scalar<T>(store: &Store, evaluate: impl FnOnce() -> Result<T>) -> Result<T> {
     let mut guard = Mapping {
         store,
         previous: Vec::new(),
