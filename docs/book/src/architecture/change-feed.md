@@ -63,7 +63,7 @@ Both return one page:
     {
       "tx": 43, "sequence": 0, "timestamp": "2026-04-03", "actor": "ingest",
       "source": "episode:...", "op": "assert", "graph": "ROOT",
-      "entity": "http://example.org/koror",
+      "entity": "http://example.org/korimako",
       "attribute": "http://example.org/cpuCores", "value": 8
     }
   ],

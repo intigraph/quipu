@@ -13,21 +13,21 @@ fn parse_episode(json: &str) -> Episode {
 fn deserialize_episode() {
     let ep = parse_episode(
         r#"{
-        "name": "koror-discovery",
-        "episode_body": "Discovered koror runs ct-205",
+        "name": "korimako-discovery",
+        "episode_body": "Discovered korimako runs ct-205",
         "source": "crew/mayor",
         "group_id": "aegis-ontology",
         "nodes": [
-            {"name": "koror", "type": "ProxmoxNode", "description": "Primary Proxmox node"},
+            {"name": "korimako", "type": "ProxmoxNode", "description": "Primary Proxmox node"},
             {"name": "ct-205", "type": "LXCContainer"}
         ],
         "edges": [
-            {"source": "koror", "target": "ct-205", "relation": "runs_on"}
+            {"source": "korimako", "target": "ct-205", "relation": "runs_on"}
         ]
     }"#,
     );
 
-    assert_eq!(ep.name, "koror-discovery");
+    assert_eq!(ep.name, "korimako-discovery");
     assert_eq!(ep.nodes.len(), 2);
     assert_eq!(ep.edges.len(), 1);
     assert_eq!(ep.nodes[0].node_type.as_deref(), Some("ProxmoxNode"));
@@ -231,11 +231,11 @@ fn ingest_episode_writes_to_store() {
         "source": "crew/mayor",
         "group_id": "aegis-ontology",
         "nodes": [
-            {"name": "koror", "type": "ProxmoxNode", "description": "Proxmox host"},
+            {"name": "korimako", "type": "ProxmoxNode", "description": "Proxmox host"},
             {"name": "ct-205", "type": "LXCContainer", "description": "Dolt container"}
         ],
         "edges": [
-            {"source": "koror", "target": "ct-205", "relation": "runs"}
+            {"source": "korimako", "target": "ct-205", "relation": "runs"}
         ]
     }"#,
     );
@@ -245,14 +245,14 @@ fn ingest_episode_writes_to_store() {
 
     assert!(tx_id > 0);
     // Episode: type + label + comment + actor + group + time + content hash = 7.
-    // + koror (4: type + label + comment + wasGeneratedBy = 4)
+    // + korimako (4: type + label + comment + wasGeneratedBy = 4)
     // + ct-205 (4: type + label + comment + wasGeneratedBy = 4)
     // + 1 edge = 14 total
     assert!(count >= 10, "expected at least 10 triples, got {count}");
 
     // Verify entities are in the store.
-    let koror = store.lookup(&format!("{TEST_BASE_NS}koror")).unwrap();
-    assert!(koror.is_some(), "koror entity should exist");
+    let korimako = store.lookup(&format!("{TEST_BASE_NS}korimako")).unwrap();
+    assert!(korimako.is_some(), "korimako entity should exist");
 
     let ct205 = store.lookup(&format!("{TEST_BASE_NS}ct-205")).unwrap();
     assert!(ct205.is_some(), "ct-205 entity should exist");
@@ -421,7 +421,7 @@ fn minimal_episode_with_body_only() {
     let ep = parse_episode(
         r#"{
         "name": "simple-note",
-        "episode_body": "Koror was rebooted at 14:00 UTC"
+        "episode_body": "Korimako was rebooted at 14:00 UTC"
     }"#,
     );
 

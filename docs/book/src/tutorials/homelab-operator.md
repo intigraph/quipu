@@ -1,6 +1,6 @@
 # The Homelab Operator
 
-> "I want to know what breaks if koror goes down."
+> "I want to know what breaks if korimako goes down."
 
 You run a homelab — a handful of machines with dozens of services, wired
 together with reverse proxies, DNS, and hope. You need a way to track what
@@ -25,9 +25,9 @@ hw:WebApp     rdfs:subClassOf hw:Service .
 hw:Database   rdfs:subClassOf hw:Service .
 
 # Hosts
-hw:koror a hw:Host ;
-    rdfs:label   "koror" ;
-    hw:hostname  "koror.example" ;
+hw:korimako a hw:Host ;
+    rdfs:label   "korimako" ;
+    hw:hostname  "korimako.example" ;
     hw:cpuCores  "8"^^xsd:integer ;
     hw:memoryMB  "32768"^^xsd:integer .
 
@@ -40,18 +40,18 @@ hw:palau a hw:Host ;
 # Services
 hw:traefik a hw:WebApp ;
     rdfs:label    "traefik" ;
-    hw:runsOn     hw:koror ;
+    hw:runsOn     hw:korimako ;
     hw:port       "443"^^xsd:integer ;
     hw:dependsOn  hw:pihole .
 
 hw:pihole a hw:Service ;
     rdfs:label  "pihole" ;
-    hw:runsOn   hw:koror ;
+    hw:runsOn   hw:korimako ;
     hw:port     "53"^^xsd:integer .
 
 hw:grafana a hw:WebApp ;
     rdfs:label    "grafana" ;
-    hw:runsOn     hw:koror ;
+    hw:runsOn     hw:korimako ;
     hw:dependsOn  hw:prometheus ;
     hw:dependsOn  hw:postgres .
 
@@ -103,16 +103,16 @@ SELECT ?hostLabel ?svcLabel WHERE {
 
 | ?hostLabel | ?svcLabel |
 |------------|-----------|
-| koror | grafana |
-| koror | pihole |
-| koror | traefik |
+| korimako | grafana |
+| korimako | pihole |
+| korimako | traefik |
 | palau | nginx |
 | palau | postgres |
 | palau | prometheus |
 
-## Step 3: Impact Analysis — What Breaks if Koror Goes Down?
+## Step 3: Impact Analysis — What Breaks if Korimako Goes Down?
 
-This is the killer query. Find all services on koror, then find everything
+This is the killer query. Find all services on korimako, then find everything
 that depends on them (directly or transitively):
 
 ```sparql
@@ -121,24 +121,24 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT ?affected ?label
 WHERE {
-  ?affected hw:dependsOn+/hw:runsOn hw:koror .
+  ?affected hw:dependsOn+/hw:runsOn hw:korimako .
   ?affected rdfs:label ?label .
 }
 ```
 
 The property path `hw:dependsOn+/hw:runsOn` means: follow one or more
-`dependsOn` edges, then one `runsOn` edge, and check if it lands on koror.
+`dependsOn` edges, then one `runsOn` edge, and check if it lands on korimako.
 
 | ?affected | ?label |
 |-----------|--------|
 | `hw:traefik` | traefik |
 
-Traefik depends on pihole, which runs on koror. But traefik itself also
-runs on koror — so if koror goes down, you lose traefik, pihole, and grafana
+Traefik depends on pihole, which runs on korimako. But traefik itself also
+runs on korimako — so if korimako goes down, you lose traefik, pihole, and grafana
 (all locally hosted), plus anything that transitively depends on them.
 
-A more complete impact query — services that run on koror OR depend on
-services running on koror:
+A more complete impact query — services that run on korimako OR depend on
+services running on korimako:
 
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
@@ -147,11 +147,11 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT DISTINCT ?svc ?label
 WHERE {
   {
-    ?svc hw:runsOn hw:koror .
+    ?svc hw:runsOn hw:korimako .
   }
   UNION
   {
-    ?svc hw:dependsOn+/hw:runsOn hw:koror .
+    ?svc hw:dependsOn+/hw:runsOn hw:korimako .
   }
   ?svc rdfs:label ?label .
 }
@@ -311,7 +311,7 @@ Run it:
 quipu reason --rules infra-rules.ttl --db homelab.db
 ```
 
-Now the "what breaks if koror goes down?" query simplifies — no property
+Now the "what breaks if korimako goes down?" query simplifies — no property
 paths needed:
 
 ```sparql
@@ -320,13 +320,13 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 SELECT DISTINCT ?svc ?label
 WHERE {
-  ?svc hw:runsOn hw:koror .
+  ?svc hw:runsOn hw:korimako .
   ?svc rdfs:label ?label .
 }
 ```
 
 This returns both directly-hosted services AND services that transitively
-run on koror via containers, because the reasoner already computed the
+run on korimako via containers, because the reasoner already computed the
 transitive closure.
 
 ### Stay Fresh with Reactive Evaluation
@@ -338,7 +338,7 @@ infrastructure:
 quipu reason --reactive --rules infra-rules.ttl --db homelab.db
 ```
 
-Now when a monitoring agent reports a new container on koror, the
+Now when a monitoring agent reports a new container on korimako, the
 transitive `runsOn` edges update automatically in the same transaction.
 
 ### "What If?" Before You Change
@@ -346,11 +346,11 @@ transitive `runsOn` edges update automatically in the same transaction.
 Before decommissioning a host, ask the reasoner what would break:
 
 ```rust
-// Hypothetical: retract all runsOn edges to koror
+// Hypothetical: retract all runsOn edges to korimako
 let report = store.speculate(&koror_retractions, timestamp, |s| {
     evaluate(s, &ruleset, timestamp)
 })?;
-println!("Decommissioning koror would retract {} derived facts", report.retracted);
+println!("Decommissioning korimako would retract {} derived facts", report.retracted);
 ```
 
 The store remains unchanged — you see the impact without making the change.
