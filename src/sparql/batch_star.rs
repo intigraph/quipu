@@ -62,6 +62,58 @@ pub(super) fn try_eval(
     if selected.len() <= super::sparse_bgp::SMALL || selected.len() > MAX_SUBJECTS {
         return Ok(None);
     }
+    evaluate_selected(store, patterns, ctx, selected, Some(anchor))
+}
+
+/// Reuse a subject-only driving relation already proven by the guarded join.
+pub(super) fn from_selected(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    selected: &[Bindings],
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    if !(1..=8).contains(&patterns.len())
+        || selected.len() > MAX_SUBJECTS
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.entails_rdfs
+        || ctx.row_limit.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.row_cap.is_some_and(|cap| cap < MAX_ROWS + 1)
+        || !matches!(&ctx.graph, super::GraphScope::Named(ids) if !ids.is_empty() && ids.iter().all(|id| *id > 0))
+        || !matches!(patterns[0].subject, TermPattern::Variable(_))
+        || patterns.iter().any(|p| {
+            p.subject != patterns[0].subject
+                || !matches!(p.predicate, NamedNodePattern::NamedNode(_))
+                || matches!(p.object, TermPattern::BlankNode(_))
+        })
+    {
+        return Ok(None);
+    }
+    let TermPattern::Variable(subject) = &patterns[0].subject else {
+        unreachable!()
+    };
+    let mut bytes = 0usize;
+    for (i, row) in selected.iter().enumerate() {
+        check_eval_budget(ctx, i, 0)?;
+        if row.len() != 1 || !matches!(row.get(subject.as_str()), Some(Value::Ref(id)) if *id > 0) {
+            return Ok(None);
+        }
+        bytes = bytes.saturating_add(binding_bytes(row));
+        if bytes > MAX_BYTES {
+            return Ok(None);
+        }
+    }
+    evaluate_selected(store, patterns, ctx, selected.to_vec(), None)
+}
+
+fn evaluate_selected(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    selected: Vec<Bindings>,
+    skip: Option<usize>,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
     let TermPattern::Variable(subject) = &patterns[0].subject else {
         unreachable!()
     };
@@ -94,7 +146,7 @@ pub(super) fn try_eval(
     }
     let mut rows = selected;
     for (index, pattern) in patterns.iter().enumerate() {
-        if index == anchor {
+        if skip == Some(index) {
             continue;
         }
         let mut relation = Vec::new();

@@ -126,7 +126,7 @@ pub(super) fn try_eval(
         && matches!(&ctx.graph, super::GraphScope::Named(ids) if !ids.is_empty() && ids.iter().all(|id| *id > 0));
     #[cfg(test)]
     let dense = dense && !tests::v1_disabled();
-    if dense && let Some(rows) = dense_rows(store, left, right, &unbounded, seed)? {
+    if dense && let Some(rows) = dense_rows(store, left, right, &unbounded, &driving)? {
         return Ok(Some((rows, vars)));
     }
     let mut rows = Vec::new();
@@ -153,7 +153,7 @@ fn dense_rows(
     left: &GraphPattern,
     right: &GraphPattern,
     ctx: &TemporalContext,
-    seed: &Bindings,
+    driving: &[Bindings],
 ) -> Result<Option<Vec<Bindings>>> {
     let mut filters = Vec::new();
     let mut leaf = left;
@@ -170,9 +170,14 @@ fn dense_rows(
     if patterns.len() + trailing.len() > 8 {
         return Ok(None);
     }
-    let mut patterns = patterns.clone();
-    patterns.extend(trailing.iter().cloned());
-    let Some((mut rows, _)) = super::batch_star::try_eval(store, &patterns, ctx, seed)? else {
+    if !patterns.iter().chain(trailing).any(|p| {
+        matches!(&p.predicate,
+        spargebra::term::NamedNodePattern::NamedNode(n) if n.as_str() == crate::namespace::RDF_TYPE)
+    }) {
+        return Ok(None);
+    }
+    let Some((mut rows, _)) = super::batch_star::from_selected(store, patterns, ctx, driving)?
+    else {
         return Ok(None);
     };
     for expr in filters.into_iter().rev() {

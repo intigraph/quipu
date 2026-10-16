@@ -223,3 +223,19 @@ fn oversized_speculative_relation_falls_back_without_losing_rows() {
     assert_eq!(new.variables(), old.variables());
     assert_eq!(bag(new.rows()), bag(old.rows()));
 }
+
+#[test]
+fn dense_guard_preserves_a_shared_non_subject_binding() {
+    let (mut store, _dir) = fixture_density(false, true);
+    put(
+        &mut store,
+        "http://example.org/board",
+        "<http://example.org/0/dense/0> <http://example.org/status> \"target\" .\n",
+    );
+    let text = "SELECT ?s ?bad WHERE { GRAPH <http://example.org/board> { { ?s <http://example.org/status> ?bad . FILTER(?bad = \"target\") } ?s <https://schema.org/agent> ?bad } }";
+    let old = reference(|| query(&store, text).unwrap());
+    let new = query(&store, text).unwrap();
+    assert_eq!(old.rows().len(), 1, "positive shared-binding control");
+    assert_eq!(new.variables(), old.variables());
+    assert_eq!(bag(new.rows()), bag(old.rows()));
+}

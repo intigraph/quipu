@@ -16,9 +16,10 @@ existing planner; it never returns
 a truncated relation. ROOT, historical reads, explicit entailment, variable
 graphs, unsupported expressions, and unsafe scopes retain their prior paths.
 
-For the existing grouped guard join, dense inputs combine only BGPs whose
-trailing variables are already bound by the guarded BGP. Filters retain their
-original order. A plain-property absence test can batch its selected subjects
+For the existing grouped guard join, dense inputs reuse an already proven
+subject-only driving relation. The trailing BGP may not introduce variables
+absent from the guarded BGP. Extra driving bindings retain the preceding path.
+Filters retain their original order. A plain-property absence test can batch its selected subjects
 when the property variable has no outer binding. Other filters keep the existing
 evaluator. Physical aliases, duplicate facts, named scope, and final bindings use
 the shared triple reader. Speculative malformed rows fall back; deadlines and
