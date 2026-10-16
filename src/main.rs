@@ -8,7 +8,7 @@
 //!   quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]...  Impact walk
 //!   quipu explain <s> <p> <o> [--depth N]  Walk a derived fact back to its premises
 //!   quipu reason [--rules <file.ttl>] [--db <path>]  Run the Datalog reasoner
-//!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
+//!   quipu validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]  Validate without writing
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
@@ -69,6 +69,7 @@ mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
 mod cli_trust_root;
+mod cli_validate;
 mod hook_session_capture;
 mod hooks_install;
 
@@ -174,7 +175,7 @@ fn main() {
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path, &config.base_ns),
         "ontology" => cmd_ontology(&args, db_path),
-        "validate" => cli_commands::cmd_validate(&args),
+        "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
@@ -368,7 +369,7 @@ COMMANDS:
     qp gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
     qp propose list|submit|accept|reject [--status pending] [--db <path>]
     qp ontology load|list|remove [--db <path>]
-    qp validate --shapes <shapes.ttl> --data <data.ttl>
+    qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
