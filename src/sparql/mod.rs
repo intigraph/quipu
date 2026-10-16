@@ -390,7 +390,7 @@ pub fn query_row_labeled(
     ctx: &TemporalContext,
 ) -> Result<QueryResult> {
     let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
-        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
+        .map_err(|e| crate::sparql_structure::query_error(sparql, &e))?;
     let g_var = match &parsed {
         Query::Select { pattern, .. }
         | Query::Construct { pattern, .. }
@@ -490,7 +490,7 @@ pub fn dataset_member_ids(store: &Store, sparql: &str, ctx: &TemporalContext) ->
     // decides what the query actually reads — labelling a dataset the query
     // does not read is precisely the failure this is meant to prevent.
     let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
-        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
+        .map_err(|e| crate::sparql_structure::query_error(sparql, &e))?;
     let dataset = match &parsed {
         Query::Select { dataset, .. }
         | Query::Construct { dataset, .. }
@@ -535,7 +535,7 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
     }
 
     let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
-        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
+        .map_err(|e| crate::sparql_structure::query_error(sparql, &e))?;
 
     let started = crate::time::Stopwatch::start();
     root_scope::check(&parsed)?;

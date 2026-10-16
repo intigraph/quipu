@@ -10,7 +10,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
     vec![
         serde_json::json!({
             "name": "quipu_query",
-            "description": "Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)",
+            "description": "Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx). Declare every prefixed name with an explicit PREFIX; namespaces are not assumed. For exploratory text discovery use quipu_search instead of unbound FILTER(CONTAINS(...)) scans. Search does not replace exact-ID, owner-plate, named-graph or absence checks.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -131,7 +131,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_knot",
-            "description": "Assert facts into the knowledge graph (with optional SHACL validation)",
+            "description": "Assert facts into the knowledge graph (with optional SHACL validation). When a loaded class vocabulary exists, unknown rdf:type IRIs refuse before writing. Inspect quipu_shapes with action=vocabulary; similar class names are not semantic equivalence. Propose and load a shape if no sanctioned type fits.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

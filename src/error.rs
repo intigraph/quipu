@@ -32,8 +32,10 @@ pub enum Error {
 
     #[error(
         "query timeout: exceeded {limit_ms}ms (ran {elapsed_ms}ms) — narrow the query \
-         (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) \
-         or raise [quipu.search] query_timeout_ms"
+         (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns). \
+         For exploratory text discovery use quipu_search instead; search is not an authoritative \
+         exact-ID, owner-plate, named-graph or absence check. Otherwise narrow the authoritative \
+         query or explicitly raise [quipu.search] query_timeout_ms"
     )]
     QueryTimeout { elapsed_ms: u128, limit_ms: u128 },
 
