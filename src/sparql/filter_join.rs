@@ -115,6 +115,20 @@ pub(super) fn try_eval(
     if driving.len() > super::bind_join::SUBJECT_BIND_MAX_ROWS {
         return Ok(None);
     }
+    let dense = driving.len() > super::sparse_bgp::SMALL
+        && seed.is_empty()
+        && ctx.valid_at.is_none()
+        && ctx.as_of_tx.is_none()
+        && !ctx.entails_rdfs
+        && ctx.row_limit.is_none()
+        && ctx.string_narrows.is_none()
+        && !ctx.row_cap.is_some_and(|cap| cap < 50_001)
+        && matches!(&ctx.graph, super::GraphScope::Named(ids) if !ids.is_empty() && ids.iter().all(|id| *id > 0));
+    #[cfg(test)]
+    let dense = dense && !tests::v1_disabled();
+    if dense && let Some(rows) = dense_rows(store, left, right, &unbounded, &driving)? {
+        return Ok(Some((rows, vars)));
+    }
     let mut rows = Vec::new();
     for (i, bound) in driving.iter().enumerate() {
         check_eval_budget(ctx, i, rows.len())?;
@@ -128,3 +142,58 @@ pub(super) fn try_eval(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(super) fn reference_disabled() -> bool {
+    tests::disabled() || tests::v1_disabled()
+}
+
+fn dense_rows(
+    store: &Store,
+    left: &GraphPattern,
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+    driving: &[Bindings],
+) -> Result<Option<Vec<Bindings>>> {
+    let mut filters = Vec::new();
+    let mut leaf = left;
+    while let GraphPattern::Filter { expr, inner } = leaf {
+        filters.push(expr);
+        leaf = inner;
+    }
+    let GraphPattern::Bgp { patterns } = leaf else {
+        return Ok(None);
+    };
+    let GraphPattern::Bgp { patterns: trailing } = right else {
+        return Ok(None);
+    };
+    if patterns.len() + trailing.len() > 8 {
+        return Ok(None);
+    }
+    if !patterns.iter().chain(trailing).any(|p| {
+        matches!(&p.predicate,
+        spargebra::term::NamedNodePattern::NamedNode(n) if n.as_str() == crate::namespace::RDF_TYPE)
+    }) {
+        return Ok(None);
+    }
+    let Some((mut rows, _)) = super::batch_star::from_selected(store, patterns, ctx, driving)?
+    else {
+        return Ok(None);
+    };
+    for expr in filters.into_iter().rev() {
+        rows = match super::batch_absence::filter(store, expr, &rows, ctx)? {
+            Some(rows) => rows,
+            None => {
+                let mut selected = Vec::new();
+                for (i, row) in rows.into_iter().enumerate() {
+                    check_eval_budget(ctx, i, selected.len())?;
+                    if super::filter::eval_filter(store, expr, &row, ctx)? {
+                        selected.push(row);
+                    }
+                }
+                selected
+            }
+        };
+    }
+    Ok(Some(rows))
+}
