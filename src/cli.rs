@@ -228,6 +228,21 @@ pub fn cmd_project(args: &[String], db_path: &str) {
     if let Some(t) = get_val("--to") {
         input["to"] = serde_json::Value::String(t);
     }
+    if args.iter().any(|arg| arg == "--persist") {
+        input["persist"] = serde_json::json!(true);
+    }
+    if let Some(timestamp) = get_val("--timestamp") {
+        input["timestamp"] = serde_json::json!(timestamp);
+    }
+    if let Some(threshold) = get_val("--match-threshold") {
+        match threshold.parse::<f64>() {
+            Ok(value) if value.is_finite() => input["match_threshold"] = serde_json::json!(value),
+            _ => {
+                eprintln!("error: invalid --match-threshold");
+                std::process::exit(1);
+            }
+        }
+    }
     // --seed is repeatable (personalized PageRank seeds, as IRIs).
     let seeds: Vec<serde_json::Value> = args
         .windows(2)

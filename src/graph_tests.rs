@@ -360,7 +360,9 @@ fn louvain_persist_writes_queryable_membership() {
 
     // SPARQL: a1 has exactly one community membership.
     let pred = format!("{}memberOfCommunity", namespace::QUIPU);
-    let q = format!("SELECT ?c WHERE {{ <http://example.org/a1> <{pred}> ?c }}");
+    let graph = result["derived_graph"].as_str().unwrap();
+    let q =
+        format!("SELECT ?c WHERE {{ GRAPH <{graph}> {{ <http://example.org/a1> <{pred}> ?c }} }}");
     let rows = crate::sparql::query(&store, &q).unwrap();
     assert_eq!(
         rows.rows().len(),
@@ -396,30 +398,27 @@ fn persist_supersedes_prior_membership() {
         .lookup(&format!("{}memberOfCommunity", namespace::QUIPU))
         .unwrap()
         .unwrap();
-    let active: Vec<_> = store
-        .current_facts()
-        .unwrap()
-        .into_iter()
-        .filter(|f| f.attribute == pred_id)
-        .collect();
-    assert_eq!(
-        active.len(),
-        2,
-        "exactly one active membership per entity (no accumulation)"
+    let graph = format!(
+        "urn:quipu:communities:{}",
+        super::communities::scope(&serde_json::json!({}))
     );
-
-    // Both now point at the latest derivation's community_0.
-    let comm0 = store
-        .lookup(&format!("{}community_0", namespace::QUIPU))
-        .unwrap()
+    let g = store.registered_graph_id(&graph).unwrap().unwrap();
+    let active = store
+        .current_facts_for_attributes_in_graph(&[pred_id], g)
         .unwrap();
-    for f in &active {
-        assert_eq!(
-            f.value,
-            Value::Ref(comm0),
-            "memberships reflect the latest run"
-        );
-    }
+    assert_eq!(active.len(), 2, "exactly one active membership per entity");
+    assert_eq!(
+        active[0].value, active[1].value,
+        "merged members share a stable identity"
+    );
+    assert!(
+        store
+            .current_facts()
+            .unwrap()
+            .iter()
+            .all(|f| f.attribute != pred_id),
+        "ROOT stays unchanged"
+    );
 }
 
 /// Phase 3 (quipu-mq7): persisting `PageRank` supersedes prior scores the same
@@ -639,4 +638,64 @@ fn counterfactual_ranking_shifts_influence_without_mutating() {
     // The fork rolled back: nothing landed.
     assert_eq!(store.current_facts().unwrap().len(), facts_before);
     assert_eq!(store.latest_tx_id().unwrap(), tx_before);
+}
+
+#[test]
+fn community_description_is_read_only_and_scope_qualified() {
+    let mut store = two_cluster_store();
+    let before = store.latest_tx_id().unwrap();
+    let input = serde_json::json!({"algorithm":"louvain", "predicate":"http://example.org/link"});
+    let first = tool_project(&mut store, &input).unwrap();
+    let second = tool_project(&mut store, &input).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+    assert!(
+        store
+            .registered_graph_id(first["derived_graph"].as_str().unwrap())
+            .unwrap()
+            .is_none()
+    );
+    for group in first["communities"].as_array().unwrap() {
+        assert!(!group["label"].as_str().unwrap().is_empty());
+        assert!(
+            group["community"]
+                .as_str()
+                .unwrap()
+                .starts_with("urn:quipu:community:")
+        );
+        assert!(group["label_basis"].is_object());
+    }
+    assert_ne!(
+        super::communities::scope(&serde_json::json!({})),
+        super::communities::scope(&serde_json::json!({"graph":"ROOT"}))
+    );
+    assert!(
+        tool_project(
+            &mut store,
+            &serde_json::json!({"algorithm":"louvain", "match_threshold":0})
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn community_failed_publication_rolls_back_graph_and_terms() {
+    let mut store = two_cluster_store();
+    let input = serde_json::json!({"algorithm":"louvain", "predicate":"http://example.org/link", "persist":true});
+    let graph = format!(
+        "urn:quipu:communities:{}",
+        super::communities::scope(&input)
+    );
+    let before = store.latest_tx_id().unwrap();
+    store.conn.execute_batch("CREATE TEMP TRIGGER refuse_community_fixture BEFORE INSERT ON facts BEGIN SELECT RAISE(ABORT, 'owned fixture refusal'); END;").unwrap();
+    assert!(tool_project(&mut store, &input).is_err());
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+    assert!(store.registered_graph_id(&graph).unwrap().is_none());
+    store
+        .conn
+        .execute_batch("DROP TRIGGER refuse_community_fixture")
+        .unwrap();
+    let success = tool_project(&mut store, &input).unwrap();
+    assert_eq!(success["persisted"], 6);
+    assert!(store.registered_graph_id(&graph).unwrap().is_some());
 }

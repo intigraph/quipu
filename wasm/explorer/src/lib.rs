@@ -173,6 +173,29 @@ impl Explorer {
         serde_json::to_string(&out).map_err(err_js)
     }
 
+    /// Compute stable, labeled Louvain communities without persisting edits.
+    /// Options select the source graph/type/predicate and overlap threshold.
+    ///
+    /// # Errors
+    /// Invalid options or an attempted persistence request are refused.
+    #[wasm_bindgen(js_name = projectCommunities)]
+    pub fn project_communities(&mut self, options: &str) -> Result<String, JsValue> {
+        let mut input: serde_json::Value = serde_json::from_str(options).map_err(err_js)?;
+        if !input.is_object()
+            || input
+                .get("persist")
+                .is_some_and(|value| value != &serde_json::json!(false))
+        {
+            return Err(JsValue::from_str(
+                "projectCommunities is read-only; persist is not supported",
+            ));
+        }
+        input["algorithm"] = serde_json::json!("louvain");
+        input["persist"] = serde_json::json!(false);
+        let result = quipu::tool_project(&mut self.store, &input).map_err(err_js)?;
+        serde_json::to_string(&result).map_err(err_js)
+    }
+
     /// Store-level counts (`quipu stats`), as JSON.
     ///
     /// # Errors
