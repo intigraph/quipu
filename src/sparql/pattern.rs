@@ -146,6 +146,8 @@ pub fn eval_pattern_seeded(
             // aegis-tl2q4j: narrow the scan by the filter's string tests.
             let narrowed = super::string_pushdown::narrowed(expr, inner, inner_seed, ctx);
             let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
+            let graph_narrowed = super::graph_filter::narrowed(store, expr, inner, inner_ctx)?;
+            let inner_ctx = graph_narrowed.as_ref().unwrap_or(inner_ctx);
             let (rows, vars) = match super::status_pushdown::candidates(
                 store, expr, inner, inner_ctx, inner_seed,
             )? {
@@ -412,6 +414,8 @@ pub fn eval_pattern_seeded(
                     graph_seed.insert(graph_var.clone(), Value::Ref(graph.g));
                     let mut graph_ctx = ctx.clone();
                     graph_ctx.graph = GraphScope::Named(vec![graph.g]);
+                    #[cfg(test)]
+                    super::graph_filter::record_scan();
                     let (mut graph_rows, graph_vars) =
                         eval_pattern_seeded(store, inner, &graph_ctx, &graph_seed)?;
                     rows.append(&mut graph_rows);
