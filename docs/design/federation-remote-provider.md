@@ -55,8 +55,8 @@ peer. Extend it:
 
 ```toml
 [[quipu.federation.remotes]]
-name       = "kota"
-url        = "http://quipu.kota.example:3030"
+name       = "kotare"
+url        = "http://quipu.kotare.example:3030"
 auth_token = "…"     # optional; sent as `Authorization: Bearer …`
 timeout_ms = 5000    # optional; default 5000
 ```
@@ -99,7 +99,7 @@ silently incomplete.
   "rows": [ … ],
   "providers": [
     {"name": "local", "ok": true,  "rows": 12},
-    {"name": "kota",  "ok": false, "error": "timeout after 5000ms"}
+    {"name": "kotare",  "ok": false, "error": "timeout after 5000ms"}
   ],
   "complete": false
 }
@@ -141,7 +141,7 @@ byte-identical to today's local-only behaviour.
 ## 6. Testing
 
 Unit-level against a mock HTTP server, per issue #47's constraint — **no live
-interop test** (kota is memory-contended, aegis-vj9g). A tiny
+interop test** (kotare is memory-contended, aegis-vj9g). A tiny
 `std::net::TcpListener` on an ephemeral port serving canned responses is
 sufficient and adds no dependency:
 

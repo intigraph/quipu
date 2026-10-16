@@ -48,7 +48,7 @@ fn identity_string(expr: &Expression, name: &str) -> bool {
         || (variable(b, name) && str_of(a, name)))
 }
 
-fn plain_guard(expr: &Expression, name: &str) -> bool {
+pub(super) fn plain_guard(expr: &Expression, name: &str) -> bool {
     matches!(expr, Expression::And(a, b)
         if (is_literal(a, name) && identity_string(b, name))
         || (is_literal(b, name) && identity_string(a, name)))

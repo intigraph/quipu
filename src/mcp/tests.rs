@@ -872,9 +872,9 @@ fn test_retract_episode_scoped_isolation() {
             "timestamp": "2026-04-01T00:00:00Z",
             "nodes": [
                 {"name": "quipu-server", "type": "WebApplication"},
-                {"name": "kota", "type": "LXCContainer"}
+                {"name": "kotare", "type": "LXCContainer"}
             ],
-            "edges": [{"source": "quipu-server", "target": "kota", "relation": "runs_on"}]
+            "edges": [{"source": "quipu-server", "target": "kotare", "relation": "runs_on"}]
         }),
     )
     .unwrap();
@@ -900,7 +900,7 @@ fn test_retract_episode_scoped_isolation() {
     ));
     assert!(ask(
         &store,
-        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kotare>")
     ));
 
     let out = tool_retract_episode(
@@ -927,7 +927,7 @@ fn test_retract_episode_scoped_isolation() {
     // …but the shared entity and the real episode's facts are intact.
     assert!(ask(
         &store,
-        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kotare>")
     ));
     assert!(ask(
         &store,

@@ -6,16 +6,16 @@
     "group_id": "infrastructure",
     "nodes": [
       {
-        "name": "koror",
+        "name": "korimako",
         "type": "ProxmoxNode",
         "description": "Primary compute node — runs most workloads",
-        "properties": { "nodeId": "koror", "role": "compute" }
+        "properties": { "nodeId": "korimako", "role": "compute" }
       },
       {
-        "name": "kota",
+        "name": "kotare",
         "type": "ProxmoxNode",
         "description": "Storage-focused node — ZFS pools, Dolt, backups",
-        "properties": { "nodeId": "kota", "role": "storage" }
+        "properties": { "nodeId": "kotare", "role": "storage" }
       },
       {
         "name": "niue",
@@ -187,14 +187,14 @@
       }
     ],
     "edges": [
-      { "source": "ct-100", "target": "koror", "relation": "runs_on" },
-      { "source": "ct-101", "target": "koror", "relation": "runs_on" },
-      { "source": "ct-102", "target": "koror", "relation": "runs_on" },
-      { "source": "ct-103", "target": "koror", "relation": "runs_on" },
-      { "source": "ct-200", "target": "kota", "relation": "runs_on" },
-      { "source": "ct-201", "target": "kota", "relation": "runs_on" },
-      { "source": "ct-202", "target": "kota", "relation": "runs_on" },
-      { "source": "ct-203", "target": "kota", "relation": "runs_on" },
+      { "source": "ct-100", "target": "korimako", "relation": "runs_on" },
+      { "source": "ct-101", "target": "korimako", "relation": "runs_on" },
+      { "source": "ct-102", "target": "korimako", "relation": "runs_on" },
+      { "source": "ct-103", "target": "korimako", "relation": "runs_on" },
+      { "source": "ct-200", "target": "kotare", "relation": "runs_on" },
+      { "source": "ct-201", "target": "kotare", "relation": "runs_on" },
+      { "source": "ct-202", "target": "kotare", "relation": "runs_on" },
+      { "source": "ct-203", "target": "kotare", "relation": "runs_on" },
       { "source": "ct-300", "target": "niue", "relation": "runs_on" },
       { "source": "ct-301", "target": "niue", "relation": "runs_on" },
       { "source": "ct-302", "target": "niue", "relation": "runs_on" },
@@ -213,9 +213,9 @@
       { "source": "pihole", "target": "ct-301", "relation": "runs_on" },
       { "source": "caddy", "target": "ct-302", "relation": "runs_on" },
       { "source": "alertmanager", "target": "ct-303", "relation": "runs_on" },
-      { "source": "node-exporter", "target": "koror", "relation": "runs_on" },
-      { "source": "prometheus", "target": "koror", "relation": "monitors" },
-      { "source": "prometheus", "target": "kota", "relation": "monitors" },
+      { "source": "node-exporter", "target": "korimako", "relation": "runs_on" },
+      { "source": "prometheus", "target": "korimako", "relation": "monitors" },
+      { "source": "prometheus", "target": "kotare", "relation": "monitors" },
       { "source": "prometheus", "target": "niue", "relation": "monitors" },
       { "source": "grafana", "target": "prometheus", "relation": "depends_on" },
       { "source": "traefik", "target": "ct-101", "relation": "routes_to" },
@@ -226,13 +226,13 @@
     ]
   },
   {
-    "name": "koror-incident-2026-03-27",
-    "episode_body": "Koror node went down at 09:00 UTC. Multiple services affected including traefik (degraded) and postgresql (crashed). Alertmanager triggered incident response.",
+    "name": "korimako-incident-2026-03-27",
+    "episode_body": "Korimako node went down at 09:00 UTC. Multiple services affected including traefik (degraded) and postgresql (crashed). Alertmanager triggered incident response.",
     "source": "monitoring/alertmanager",
     "group_id": "incidents",
     "nodes": [
       {
-        "name": "koror",
+        "name": "korimako",
         "type": "ProxmoxNode",
         "properties": { "status": "down" }
       },
@@ -250,13 +250,13 @@
     "edges": []
   },
   {
-    "name": "koror-recovery-2026-03-29",
-    "episode_body": "Koror recovered after hardware diagnostics and service restart. All services confirmed healthy by goldblum's automated recovery playbook.",
+    "name": "korimako-recovery-2026-03-29",
+    "episode_body": "Korimako recovered after hardware diagnostics and service restart. All services confirmed healthy by goldblum's automated recovery playbook.",
     "source": "crew/goldblum",
     "group_id": "incidents",
     "nodes": [
       {
-        "name": "koror",
+        "name": "korimako",
         "type": "ProxmoxNode",
         "properties": { "status": "online" }
       },
@@ -369,7 +369,7 @@
   },
   {
     "name": "new-service-deployed",
-    "episode_body": "Goldblum deployed quipu-server v0.4.0 to ct-102 on koror. Includes new SPARQL endpoint and web component serving. Verified via health check.",
+    "episode_body": "Goldblum deployed quipu-server v0.4.0 to ct-102 on korimako. Includes new SPARQL endpoint and web component serving. Verified via health check.",
     "source": "crew/goldblum",
     "group_id": "deployments",
     "nodes": [
@@ -458,10 +458,10 @@
         "properties": { "status": "draft", "author": "owen" }
       },
       {
-        "name": "probe-koror-downtime",
+        "name": "probe-korimako-downtime",
         "type": "Probe",
-        "description": "Investigation into koror downtime on 2026-03-27",
-        "properties": { "title": "Koror Downtime Investigation", "domain": "infrastructure", "date": "2026-03-27" }
+        "description": "Investigation into korimako downtime on 2026-03-27",
+        "properties": { "title": "Korimako Downtime Investigation", "domain": "infrastructure", "date": "2026-03-27" }
       },
       {
         "name": "probe-dolt-performance",
@@ -475,10 +475,10 @@
       { "source": "malcolm", "target": "aegis", "relation": "member_of" },
       { "source": "alan", "target": "bobbin", "relation": "member_of" },
       { "source": "muldoon", "target": "aegis", "relation": "member_of" },
-      { "source": "koror", "target": "stiwi", "relation": "managed_by" },
-      { "source": "kota", "target": "stiwi", "relation": "managed_by" },
+      { "source": "korimako", "target": "stiwi", "relation": "managed_by" },
+      { "source": "kotare", "target": "stiwi", "relation": "managed_by" },
       { "source": "niue", "target": "stiwi", "relation": "managed_by" },
-      { "source": "probe-koror-downtime", "target": "koror", "relation": "applies_to" },
+      { "source": "probe-korimako-downtime", "target": "korimako", "relation": "applies_to" },
       { "source": "probe-dolt-performance", "target": "dolt", "relation": "applies_to" }
     ]
   }

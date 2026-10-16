@@ -3,18 +3,18 @@
 Everything in Quipu is a **triple**: a subject, a predicate, and an object.
 
 ```text
-<koror>  <runs>  <traefik>
+<korimako>  <runs>  <traefik>
  subject  predicate  object
 ```
 
-This triple says "koror runs traefik." Three triples can encode a complete
+This triple says "korimako runs traefik." Three triples can encode a complete
 service dependency:
 
 ```turtle
 @prefix hw: <http://example.org/homelab/> .
 
-hw:koror    a               hw:Host .
-hw:koror    hw:runs         hw:traefik .
+hw:korimako    a               hw:Host .
+hw:korimako    hw:runs         hw:traefik .
 hw:traefik  hw:dependsOn    hw:pihole .
 ```
 
@@ -27,7 +27,7 @@ Every entity and predicate is identified by an **IRI** (Internationalized
 Resource Identifier) — a globally unique name like a URL:
 
 ```text
-http://example.org/homelab/koror
+http://example.org/homelab/korimako
 ```
 
 Prefixes keep things readable. Instead of writing the full IRI every time:
@@ -35,10 +35,10 @@ Prefixes keep things readable. Instead of writing the full IRI every time:
 ```turtle
 @prefix hw: <http://example.org/homelab/> .
 
-hw:koror  hw:runs  hw:traefik .
+hw:korimako  hw:runs  hw:traefik .
 ```
 
-`hw:koror` expands to `http://example.org/homelab/koror`.
+`hw:korimako` expands to `http://example.org/homelab/korimako`.
 
 ## Objects: References vs Literals
 
@@ -48,9 +48,9 @@ The object of a triple can be either:
 - **A literal** value (a string, number, boolean, or date)
 
 ```turtle
-hw:koror  hw:runs      hw:traefik .          # reference → another entity
-hw:koror  hw:hostname  "koror.example" .          # literal → a string
-hw:koror  hw:cpuCores  "4"^^xsd:integer .     # literal → a typed number
+hw:korimako  hw:runs      hw:traefik .          # reference → another entity
+hw:korimako  hw:hostname  "korimako.example" .          # literal → a string
+hw:korimako  hw:cpuCores  "4"^^xsd:integer .     # literal → a typed number
 ```
 
 ## How Quipu Stores Triples
@@ -59,7 +59,7 @@ Under the hood, Quipu stores triples as **EAVT facts** in an immutable log:
 
 | Field | Meaning | Example |
 |-------|---------|---------|
-| **E** (entity) | The subject | `hw:koror` |
+| **E** (entity) | The subject | `hw:korimako` |
 | **A** (attribute) | The predicate | `hw:runs` |
 | **V** (value) | The object | `hw:traefik` |
 | **T** (transaction) | When it was written | `tx:42` |
@@ -94,7 +94,7 @@ From the REST API:
 curl -s localhost:3030/knot -X POST \
   -H "Content-Type: application/json" \
   -d '{
-    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.example\" ."
+    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:korimako a hw:Host ; hw:hostname \"korimako.example\" ."
   }'
 ```
 
@@ -106,11 +106,11 @@ curl -s localhost:3030/episode -X POST \
   -d '{
     "name": "homelab-inventory",
     "nodes": [
-      {"name": "koror", "type": "Host", "properties": {"hostname": "koror.example"}},
+      {"name": "korimako", "type": "Host", "properties": {"hostname": "korimako.example"}},
       {"name": "traefik", "type": "WebApp"}
     ],
     "edges": [
-      {"source": "koror", "target": "traefik", "relation": "runs"}
+      {"source": "korimako", "target": "traefik", "relation": "runs"}
     ]
   }'
 ```

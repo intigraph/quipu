@@ -11,7 +11,23 @@ use crate::{
     types::Value,
 };
 
-thread_local! { static DISABLED: Cell<bool> = const { Cell::new(false) }; }
+thread_local! {
+ static DISABLED: Cell<bool> = const { Cell::new(false) };
+ static V1: Cell<bool> = const { Cell::new(false) };
+}
+pub(super) fn v1_disabled() -> bool {
+    V1.get()
+}
+fn v1_reference<T>(run: impl FnOnce() -> T) -> T {
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            V1.set(self.0);
+        }
+    }
+    let _reset = Reset(V1.replace(true));
+    run()
+}
 pub(super) fn disabled() -> bool {
     DISABLED.get()
 }
@@ -55,6 +71,13 @@ fn put(store: &mut Store, graph: &str, data: &str) {
 }
 
 fn fixture(composed: bool) -> (Store, tempfile::TempDir) {
+    fixture_density(composed, false)
+}
+
+fn fixture_density(composed: bool, dense: bool) -> (Store, tempfile::TempDir) {
+    fixture_count(composed, if dense { 320 } else { 0 })
+}
+fn fixture_count(composed: bool, count: usize) -> (Store, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let main = dir.path().join("main.db");
     let mut store = Store::open(main.to_str().unwrap()).unwrap();
@@ -106,6 +129,23 @@ fn fixture(composed: bool) -> (Store, tempfile::TempDir) {
                 statuses.push_str(&format!(
                     "{subject} <http://example.org/status> {value} .\n"
                 ));
+            }
+        }
+        if count > 0 {
+            for i in 0..count {
+                let subject = format!("<http://example.org/{gi}/dense/{i}>");
+                let owner = if i % 2 == 0 {
+                    "\"target\""
+                } else {
+                    "<http://example.org/principal/target>"
+                };
+                identity.push_str(&format!("{subject} <https://schema.org/agent> {owner} .\n{subject} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Action> .\n"));
+                statuses.push_str(&format!(
+                    "{subject} <http://example.org/status> \"open\" .\n"
+                ));
+            }
+            if composed {
+                put(&mut provider, graph, &identity);
             }
         }
         put(&mut store, graph, &identity);
@@ -294,3 +334,6 @@ fn owner_guard_demo_12000_actions() {
         );
     }
 }
+
+#[path = "dense_tests.rs"]
+mod dense_tests;
