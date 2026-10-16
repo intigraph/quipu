@@ -586,6 +586,24 @@ class LedgerProvenancePrModeTest(unittest.TestCase):
             self.assertEqual(code, 1, messages)
             self.assertIn("mine.rs", " ".join(messages))
 
+    def test_code_changing_revert_requires_exact_merge_rederive(self):
+        with contextlib.ExitStack() as stack:
+            root, run, measured = self._repo(stack)
+            for name in ("mine.rs", "theirs.rs"):
+                (root / "src" / name).write_text("// v2\n")
+            run("add", "-A")
+            run("commit", "-qm", "main: change both files")
+            run("checkout", "-qb", "revert")
+            (root / "src" / "mine.rs").write_text("// v1\n")
+            run("add", "-A")
+            run("commit", "-qm", "revert: restore measured file")
+
+            code, messages = self._provenance(root, {"quipu_revision": measured}, "main")
+            self.assertEqual(code, 1, messages)
+            self.assertIn("exact PR merge", " ".join(messages))
+            self.assertEqual(self._provenance(root, {"quipu_revision": measured})[0], 1)
+            self.assertEqual(self._provenance(root, {"quipu_revision": "0" * 40}, "main")[0], 2)
+
     def test_pr_mode_with_an_unresolvable_base_is_UNVERIFIED(self):
         import contextlib
 
