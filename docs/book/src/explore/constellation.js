@@ -8,11 +8,11 @@ export function createConstellation({ query, prefixes, short, inspect }) {
   const svg = $("graph"), layer = $("graph-targets");
   const NS = "http://www.w3.org/2000/svg";
   const groups = [
-    { name: "Vision & book", color: "#f4c86a" },
-    { name: "Decisions & rules", color: "#ac9bff" },
-    { name: "Episodes", color: "#72d8ba" },
-    { name: "Code", color: "#7cbbff" },
-    { name: "Reading trail", color: "#f3a6c8" },
+    { name: "Vision & book", color: "var(--map-vision, #f4c86a)" },
+    { name: "Decisions & rules", color: "var(--map-decision, #ac9bff)" },
+    { name: "Episodes", color: "var(--map-episode, #72d8ba)" },
+    { name: "Code", color: "var(--map-code, #7cbbff)" },
+    { name: "Reading trail", color: "var(--map-trail, #f3a6c8)" },
   ];
   let nodes = new Map(), edges = [], active = null, camera = { x: 0, y: 0, z: 1 };
   let width = 600, height = 460, generation = 0, selection = 0, overview = false;
@@ -110,6 +110,12 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     const e = document.createElement(tag); e.textContent = value; parent.append(e); return e;
   };
   async function open(id, historyMode = "push") {
+    if (!ready) {
+      const known = nodes.get(id);
+      if (known) { active = id; overview = false; camera = { x: known.x, y: known.y, z: .8 }; draw(); }
+      $("node-card").textContent = "Saved map preview. Details and edits will be available after this copy is verified.";
+      return;
+    }
     const card = $("node-card"), ticket = ++selection;
     try {
       entityIri(id);
@@ -210,7 +216,7 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     const item = addText($("graph-legend"), "span", "● " + g.name); item.style.color = g.color;
   }
   return {
-    async load() {
+    async load(preview = null, onSnapshot = null) {
       const ticket = ++generation; ready = false; ++selection;
       const sparql = `${prefixes}
 SELECT ?subject ?predicate ?object WHERE {
@@ -218,7 +224,17 @@ SELECT ?subject ?predicate ?object WHERE {
   BIND(STR(?s) AS ?subject) BIND(STR(?p) AS ?predicate) BIND(STR(?o) AS ?object)
 } LIMIT 2000`;
       $("graph-showq").onclick = (e) => { e.preventDefault(); $("sparql").value = sparql; $("sparql").scrollIntoView(); };
-      const result = await query(sparql);
+      const result = preview ? preview.knowledge : await query(sparql);
+      if (ticket !== generation) return;
+      // Join to the real indexed code/doc nodes, including their own type and
+      // label. Missing targets never become fabricated code nodes in this view.
+      const files = preview ? preview.files : await query(`${prefixes} SELECT ?subject ?kind ?path WHERE {
+        ?s rdf:type ?type ; aegis:filePath ?path .
+        FILTER(?type = aegis:CodeModule || ?type = aegis:Document)
+        BIND(STR(?s) AS ?subject) BIND(STR(?type) AS ?kind)
+      } ORDER BY ?path LIMIT 2000`);
+      if (ticket !== generation) return;
+      if (onSnapshot) await onSnapshot({ knowledge: result, files });
       if (ticket !== generation) return;
       nodes = new Map(); edges = []; active = null;
       for (const row of result.rows ?? []) {
@@ -232,14 +248,6 @@ SELECT ?subject ?predicate ?object WHERE {
         else if (r.p.endsWith("#wasDerivedFrom")) n.source = r.o;
         else if (r.p.startsWith(K) && /^https?:/.test(r.o)) edges.push({ from: r.s, to: r.o, rel: r.p });
       }
-      // Join to the real indexed code/doc nodes, including their own type and
-      // label. Missing targets never become fabricated code nodes in this view.
-      const files = await query(`${prefixes} SELECT ?subject ?kind ?path WHERE {
-        ?s rdf:type ?type ; aegis:filePath ?path .
-        FILTER(?type = aegis:CodeModule || ?type = aegis:Document)
-        BIND(STR(?s) AS ?subject) BIND(STR(?type) AS ?kind)
-      } ORDER BY ?path LIMIT 2000`);
-      if (ticket !== generation) return;
       const targets = new Set(edges.map((e) => e.to));
       const fallback = !nodes.size;
       for (const row of files.rows ?? []) {
@@ -252,9 +260,15 @@ SELECT ?subject ?predicate ?object WHERE {
       $("graph-search").value = ""; $("graph-results").replaceChildren();
       $("node-card").textContent = fallback
         ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a star to follow its story.";
-      ready = true;
+      ready = !preview;
       const requested = new URL(location.href).searchParams.get("entity");
       const first = nodes.get(K + "vision") ?? nodes.values().next().value;
+      if (preview) {
+        const initial = nodes.get(requested) ?? nodes.get(K + "vision") ?? nodes.values().next().value;
+        if (initial) await open(initial.id, "none");
+        draw();
+        return;
+      }
       if (requested) $("tab-map")?.click();
       if (requested || first) await open(requested || first.id, "replace");
       draw();
