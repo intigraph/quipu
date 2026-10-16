@@ -230,9 +230,13 @@ async fn query_core(
     }
 
     let point = store.readers.point_reserve && super::point_reads::eligible(&input);
-    let mut observation =
-        super::query_usage::Observation::new(&input, super::request_middleware::request_id());
-    query_blocking(point, move || {
+    let mut observation = super::query_usage::Observation::new(
+        &input,
+        super::request_middleware::request_id(),
+        store.log_query_admission,
+    );
+    let stamp = observation.admission_stamp();
+    query_blocking(point, stamp, move || {
         observation.dispatched();
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the

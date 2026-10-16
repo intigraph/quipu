@@ -1,0 +1,14 @@
+{
+  "base": "dd007300dc35c922aa4da8e4b3c710ecd3829cf0",
+  "source_files": {
+    "src/config.rs": "675502ede6134992663f1640beb1d640aa7f49d82c92987904c06730c644c661",
+    "src/query_endpoint.rs": "0bb78ba91b6d8056ab088c92d3f13d3fb2c4569f47469fe128386a82068f1ebb",
+    "src/server.rs": "98ee19762ce41e7fd1214025f9ddf2c94900070ad73138ba8ebf44c202b4ce36",
+    "src/server/admission.rs": "ff9fafe8cba19b8015433e4e46a07d77adc9094f4ed3ff2054547ffd3c637200",
+    "src/server/handle.rs": "ff49f58416070f3f5051ea8e6037daf62fa830c0448045f324a282417f025653",
+    "src/server/query_usage.rs": "4994adb9ee5aaefcc3793f221370fed880393186c4d35a0e6e25589cff5c750c",
+    "src/server/tests.rs": "b7337757293407eda8e5eb0a5fc418bf37029023cbd15d93d5ffe3c2e18b72f2",
+    "src/server/admission/observation_tests.rs": "5c50bb8a431b116c2f2c061373aee2f6e27906d3b34aed0051c0825d7d1108c6",
+    "src/server/query_usage/admission_tests.rs": "b2a53a565b3dc65de68012da7fa6fe73147aaa3a2682260d7e607e05fdfeb460"
+  }
+}

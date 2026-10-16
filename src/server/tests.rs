@@ -1035,6 +1035,7 @@ pub(super) fn pooled_handle_with_provider(
         search_config: store.search_config().clone(),
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
+        log_query_admission: false,
         federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,
