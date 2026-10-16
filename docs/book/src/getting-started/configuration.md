@@ -212,3 +212,68 @@ CLI flags always take precedence:
 quipu read "SELECT ..." --db /tmp/test.db    # Overrides store_path
 quipu-server --bind 0.0.0.0:8080             # Overrides server.bind
 ```
+
+## Read-only follower serving
+
+A file-level replication operator can serve a changing follower with:
+
+```toml
+[quipu.server.replica]
+primary_url = "https://primary.example"
+```
+
+Start `quipu-server --read-only --db /path/to/follower.db` from that configuration
+directory. Keep `--read-only` in the service invocation: it refuses startup if
+neither config nor `--primary-url URL` supplies a valid primary, even if the
+config file disappears. `--primary-url URL` overrides the configured primary.
+This is an opt-in serving role, separate from the older `server.read_only`
+HTTP-only access-control flag. The default primary serving role is unchanged. Server startup now refuses invalid
+or unreadable existing configuration instead of silently falling back to defaults.
+Replica mode opens **only existing SQLite databases read-only**, with no schema
+setup or migration. Every read connection explicitly waits up to one second for
+short apply locks. It never falls back to opening a writable database. SQLite
+may create WAL/SHM sidecars; the directory must support the follower's locking
+protocol. Do not use `immutable=1` for a database that replication updates.
+
+The replica does not initialize a keyword index, materialize OWL, register write
+observers, load a signing identity, reset/checkpoint WAL, deliver subscriptions,
+refresh graph-count snapshots, or prune events. Read policies (namespace, search
+limits, labels and resolution) are still configured. Keyword search requires an
+index already present on the primary. Attachments and external vector backends
+currently refuse startup rather than silently dropping configured providers.
+Graph-count metrics remain unavailable until an independent read-only refresh
+contract is implemented; they must not be interpreted as healthy zeros.
+
+Mutating HTTP routes return **503** with `reason: "read_only_replica"` and the
+configured `primary` URL. Writes are never forwarded or redirected, including
+signed writes: the refusal occurs before credential/nonce settlement. SQLite's
+read-only handle independently refuses a planted writer that bypasses HTTP.
+This role does not provision, replicate, promote or fail over a database.
+
+### Lag observations
+
+`GET /watermark` returns the serving store's `store_id` and `watermark_tx` using
+indexed reads. A replica polls that endpoint on its configured primary every
+15 seconds, with a two-second HTTP timeout, no redirects and a bounded response.
+This is its only background task and performs no database writes.
+
+Responses include `X-Quipu-Replica-Lag-Tx`. The metrics are:
+
+- `quipu_replica_lag_transactions`: primary minus follower transaction IDs;
+  **-1 means UNKNOWN**.
+- `quipu_replica_lag_known`: 1 only for a successful observation no older than
+  30 seconds; otherwise 0.
+
+A failed request, malformed response, mismatched store lineage, primary behind
+the follower, unavailable local connection, or stale observation gives UNKNOWN,
+not zero. Values describe the most recent bounded observation, not an atomic
+cross-host snapshot, elapsed seconds or proof of identical contents. The
+replication operator must establish the same primary lineage and common-prefix
+contract before interpreting transaction distance. A primary without
+`/watermark` yields UNKNOWN until upgraded; no expensive fallback query runs.
+
+`just replica-test /path/to/quipu-server /path/to/quipu` checks a scratch follower:
+100 positive reads, unchanged main DB hash/counter/mtime across start and stop,
+503 write responses, lag failure handling and a pending-subscription trap that
+must never deliver. Library/server tests also plant a write against the actual
+read-only connection. The scratch test does not change or probe production.
