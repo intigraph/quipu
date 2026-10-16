@@ -1,0 +1,9 @@
+Script started on 2026-10-16 18:49:19-04:00 [COMMAND="bash docs/probes/graph-filter-demo/run.sh" <not executed on terminal>]
+Synthetic named graphs; the filter is CONTAINS(STR(?g),"seeds").
+Original control: the same filter OR false, disabling this optimization.
+The test compares actual result bags and grouped counts, then leaf scans.
+$ cargo test --offline --features shacl --lib sparql::graph_filter_tests::graph_filter_reduces_actual_leaf_scans_and_preserves_count_groups -- --exact --nocapture
+GRAPH_LEAF_SCANS original=27 narrowed=7
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 0.06s
+
+Script done on 2026-10-16 18:49:42-04:00 [COMMAND_EXIT_CODE="0"]
