@@ -162,9 +162,14 @@ fn limited_attached_rows_preserve_subject_predicate_and_object_aliases() {
     let main = scratch.path().join("main.db");
     let source = scratch.path().join("source.db");
     let layer = scratch.path().join("layer.db");
-    for path in [&main, &source] {
+    for (path, graph_iri) in [
+        (&main, "http://example.org/main-g"),
+        (&source, "http://example.org/layer-g"),
+    ] {
         let mut store = Store::open(path.to_str().unwrap()).unwrap();
-        let graph = store.overlay_create("http://example.org/g", 0).unwrap();
+        // Main knows the layer graph's name without claiming its provider.
+        store.intern("http://example.org/layer-g").unwrap();
+        let graph = store.overlay_create(graph_iri, 0).unwrap();
         crate::rdf::ingest_rdf_to_graph(
             &mut store,
             b"<http://example.org/s> <http://example.org/p> <http://example.org/o> .".as_slice(),
@@ -194,7 +199,28 @@ fn limited_attached_rows_preserve_subject_predicate_and_object_aliases() {
         count >= 4,
         "graph, subject, predicate and object aliases are real"
     );
-    let text = "SELECT ?s ?p ?o FROM <http://example.org/g> WHERE {?s ?p ?o}";
+    let predicates = store.lookup_all("http://example.org/p").unwrap();
+    assert_eq!(
+        predicates.len(),
+        2,
+        "both dictionaries contribute a predicate ID"
+    );
+    let physical: i64 = store
+        .conn
+        .query_row(
+            &format!(
+                "SELECT COUNT(*) FROM {} WHERE a IN (?1,?2) AND op=1 AND valid_to IS NULL",
+                store.facts_source()
+            ),
+            rusqlite::params![predicates[0], predicates[1]],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        physical, 2,
+        "both providers really contribute the duplicate"
+    );
+    let text = "SELECT ?s ?p ?o FROM <http://example.org/main-g> FROM <http://example.org/layer-g> WHERE {?s ?p ?o}";
     let full = crate::sparql::query(&store, text).unwrap();
     let limited = crate::sparql::query(&store, &format!("{text} LIMIT 100")).unwrap();
     assert_eq!(full.rows().len(), 1);
