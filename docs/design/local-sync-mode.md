@@ -1,6 +1,6 @@
 # Design: Local sync mode — scoped replicas against one master
 
-> **Status (2026-10-16, revision 2 after architecture review): design for
+> **Status (2026-10-16, revision 3 after architecture review): design for
 > review. Nothing here is implemented.**
 > It records the contract to build, the shipped primitives it reuses, and
 > the defects in those primitives that block replication today. Every
@@ -205,23 +205,57 @@ confused with the local tx or an event offset.
 | **Reorder** within a session: `frame_seq` not exactly last+1, or `source_tx` ≤ cursor | Stop, discard the session, reconnect from the cursor. This is a transport fault, not data. |
 | **Dropped frame** | Detected by the `frame_seq` gap, or by a coverage `W` ahead of the cursor with no `tx` frame for an in-scope transaction. Never inferred from tx-id gaps. |
 | Gap in tx ids | Normal. Out-of-scope transactions are skipped (`src/store/changes.rs:116-117`). Completeness comes only from signed coverage. |
-| **Quiet source** (no commits for an hour) | Heartbeat coverage keeps arriving, so the follower is provably current at `W`. |
-| **Disconnected follower** | No coverage arrives. Freshness ages on the follower's own clock and crosses the bound (below). It must not report "current". |
+| **Quiet source** (no commits for an hour) | Heartbeat coverage keeps proving completeness at `W`. Freshness comes from a challenge answer (below), not from the heartbeat. |
+| **Disconnected follower** | No challenge is answered, so no valid proof exists. Freshness is UNKNOWN and bounded reads refuse. It must never report "current". |
 | **Filtered no-op** (source busy, nothing in scope) | Coverage advances `W` with no `tx` frames |
 | **Dropped matching tx** (an in-scope tx omitted, coverage still sent) | Coverage claims `W` ≥ that tx while the follower never applied it. Detected and refused when the follower audits coverage against the as-of digest (P1 test fixture). A source that signs false coverage is a source fault; the signature makes it attributable. |
 | `log_epoch` or `store_id` mismatch | Stop. Canonical state is rebuilt from a fresh as-of share. The overlay is handled by §7's stale-base rules, never retargeted. |
 | Cursor below a retention floor | The change log has no GC today (`changes.rs:30-31`). Any future floor must answer an explicit "cursor too old", forcing a re-bootstrap, never a silent resume. |
 | Transaction over budget | §6 |
 
-**Freshness, on one clock.** A follower records the local monotonic time
-at which it verified each coverage frame. Its staleness is `now − t_W`,
-where `t_W` is when it last verified coverage that covers its cursor.
-Uncertainty is bounded by the heartbeat interval plus one network delivery
-time, and is reported with every answer. `bounded=<ms>` (§9) is satisfied
-only when staleness plus uncertainty ≤ ms. A relay reports its own staleness
-against its upstream. A leaf adds it to the relay-reported staleness on
-receipt. No wall clocks from different hosts are compared. The upstream
-commit timestamp is carried for provenance only.
+**Freshness needs a challenge, not a heartbeat.** A signature proves who
+sent a frame and what it says, not when. A valid heartbeat delayed 60 s in a
+queue arrives in order and correctly signed. Heartbeats and coverage frames
+therefore prove **completeness** (everything ≤ `W` was sent), never
+**freshness**, and never reset a freshness clock.
+
+Freshness is proven by a same-clock challenge:
+
+1. The follower sends a challenge on the session. It carries an
+   unpredictable 128-bit nonce bound to the session id, and the follower
+   records its own monotonic time `t_send`.
+2. The source answers with a signed coverage frame that echoes the nonce.
+   It states `W` as observed **after** it received the challenge.
+3. When the follower receives it, it verifies the signature, the nonce and
+   the session. The coverage was then true at some instant in
+   `[t_send, t_recv]`, so **staleness ≤ now − `t_send`** for as long as the
+   cursor is at or past `W`. This is a conservative upper bound that
+   includes every queueing and network delay. No delivery time is assumed.
+
+Rules:
+
+- A proof is valid only for its session and only while the follower's
+  monotonic clock is continuous. A process restart or a detected suspend
+  discards it. Cached, replayed or unsolicited coverage is never a proof.
+- **Per hop.** A relay answers a child's challenge only with coverage from an
+  upstream challenge that it issued **after** the child's challenge
+  arrived. The bound at the leaf is still `now − t_send(leaf)`, and it
+  covers every hop by construction. Hop ages are never added or compared
+  across clocks.
+- Followers may challenge periodically. A `bounded=<ms>` read (§9) is
+  satisfied only if `now − t_send` of the latest valid proof is at most ms.
+- With no valid unexpired proof, freshness is **UNKNOWN**: a bounded read
+  refuses or falls back to the primary. It never uses a guessed delivery
+  time.
+- The upstream commit timestamp is carried for provenance only.
+
+**Controls (P2):**
+
+- Delay a valid next heartbeat by 60 s, with no loss or reorder: a
+  `bounded=100ms` read **refuses**.
+- A fresh challenge answered within 100 ms **passes**.
+- A quiet source passes through a challenge, with no commits.
+- A proof is rejected after a restart, or with a replayed nonce.
 
 ## 6. Bounded transfer, recovery and relay
 
@@ -237,7 +271,7 @@ metric.
 | `max_concurrent_stages` | per consumer | at most one in-flight transaction per session |
 | `stage_timeout` | an unfinished stage | stage discarded; reconnect resumes from the cursor |
 | `max_concurrent_exports` | source and each relay | as-of share builds queue; excess requests get 503 with retry-after |
-| `share_cache_quota_bytes`, `share_cache_ttl` | cached as-of shares | LRU eviction; a request for an evicted `(scope_digest, T)` is served at the newest cached `T'` ≥ the requested one, or rebuilt under the export limit. A cache entry is never pinned forever. |
+| `share_cache_quota_bytes`, `share_cache_ttl` | cached as-of shares | LRU eviction. Only a **latest-bootstrap** request may be served from a newer cached `T'`, with an explicit manifest naming `T'`. An **exact as-of** request, such as an overlay base or a historical cut, is never substituted: it is rebuilt under the export limit, or refused. A cache entry is never pinned forever. |
 | `max_streams` (64 today) | source | 503; jittered exponential backoff, never a tight retry |
 | `offline_max` | client | after this duration offline, the client must re-bootstrap canonical state; its overlay is kept (§7) |
 
@@ -286,8 +320,11 @@ whole-graph export per agent.
 - **A base journal.** When the overlay is opened, the client freezes an
   immutable copy of the slice it touches, as of `base_tx`. It is stored as
   canonical N-Quads that include the graph and valid time, using RDFC-1.0
-  as shares already do (`src/share.rs:493`). `base_slice_hash` is its
-  digest.
+  as shares already do (`src/share.rs:493`). RDFC-1.0 canonicalizes quads
+  only, so valid time is bound separately: each quad's canonical N-Quad
+  line is paired with its `valid_from` and `valid_to` (or `open`), the
+  pairs are sorted, and `base_slice_hash` is the SHA-256 over that list.
+  It is not the RDFC-1.0 hash alone.
 
 The base journal is retained until every changeset built on it resolves
 (accepted, refused, or superseded by a rebase). Canonical state advancing,
@@ -478,7 +515,7 @@ rollback.
 |---|---|---|
 | **P0** feed correctness | F1–F5: supersede retracts, freeze epoch bump, valid time, lossless bytes, `store_id`/`log_epoch` on pages | A replica built from the feed equals an as-of read for every graph in the conformance fixtures, including OWL supersede and freeze. Mutation tests fail without each fix. The `adopt`/`restore` ownership step refuses a copied store until run. |
 | **P1** cut and authz | as-of scoped share with the §5 manifest; per-graph read authorization on query, export and stream | Bootstrap at `T` under concurrent writes followed by a tail from `T` has no gap or overlap. A denied graph is refused on every route, metadata included (positive and negative controls). Revocation refuses a cached share and a resume token; an expired lease fails closed for a second principal. |
-| **P2** follower (= s34 phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; quiet source stays current via coverage; disconnected follower goes stale; filtered no-op; dropped matching tx detected; a >1 MiB tx through a relay; zero visible facts and unchanged cursor on disconnect mid-part, quota, oversize and corrupt part; revocation mid-chunk; restart, restore and epoch change; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
+| **P2** follower (= s34 phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; freshness challenge controls (§5: 60 s-delayed heartbeat refuses `bounded=100ms`, fresh challenge passes, restart and replayed nonce rejected); quiet source passes by challenge; disconnected follower goes UNKNOWN; filtered no-op; dropped matching tx detected; a >1 MiB tx through a relay; zero visible facts and unchanged cursor on disconnect mid-part, quota, oversize and corrupt part; revocation mid-chunk; restart, restore and epoch change; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
 | **P3** client | overlay, changeset envelope, admission, receipts | offline proposal → master receipt → all replicas converge; stale shapes and conflicting edits return DecisionRecords; `foreign-epoch`, `base-unavailable` and `base-mismatch` refused with the overlay intact, then rebased under a new `operation_id`; tamper, replay and revoked-key cases refused; identical retries return the same receipt |
 | **P4** stack | Seeds plates, Yupana rebuild, Bobbin indexing, Tambo marker round-trip | master read load and client footprint measured before and after; UNKNOWN and no-false-zero controls |
 | **P5** browser | wasm verification, key custody, OPFS | explicit support boundary; no assumed parity |
