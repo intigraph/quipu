@@ -1,4 +1,5 @@
 //! Non-pack history is distinct from malformed final or declared packs.
+#![cfg(feature = "shacl")]
 use std::{
     path::Path,
     process::{Command, Output},
