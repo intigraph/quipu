@@ -38,7 +38,7 @@ depends on postgres, then A appears in the results.
 
 ## Host-Level Impact
 
-"Everything that breaks if koror goes down" — services running on koror
+"Everything that breaks if korimako goes down" — services running on korimako
 plus anything that depends on them:
 
 ```sparql
@@ -48,13 +48,13 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT DISTINCT ?affected ?label ?reason
 WHERE {
   {
-    ?affected ont:runsOn <http://aegis.gastown.local/ontology/koror> .
-    BIND("runs on koror" AS ?reason)
+    ?affected ont:runsOn <http://aegis.gastown.local/ontology/korimako> .
+    BIND("runs on korimako" AS ?reason)
   }
   UNION
   {
-    ?affected ont:dependsOn+/ont:runsOn <http://aegis.gastown.local/ontology/koror> .
-    BIND("depends on service on koror" AS ?reason)
+    ?affected ont:dependsOn+/ont:runsOn <http://aegis.gastown.local/ontology/korimako> .
+    BIND("depends on service on korimako" AS ?reason)
   }
   ?affected rdfs:label ?label .
 }
@@ -62,9 +62,9 @@ WHERE {
 
 | ?label | ?reason |
 |--------|---------|
-| traefik | runs on koror |
-| pihole | runs on koror |
-| grafana | runs on koror |
+| traefik | runs on korimako |
+| pihole | runs on korimako |
+| grafana | runs on korimako |
 
 The `BIND` clause annotates each row with the reason it appears.
 

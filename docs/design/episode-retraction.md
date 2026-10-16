@@ -26,7 +26,7 @@ retraction internally (`op=Retract`, `valid_to`) but nothing surfaced it. So
 removing a bad or test-only episode meant hand-surgery on SQLite.
 
 That is dangerous because episodes reuse **real, shared entity IRIs**. A test
-episode that touched `quipu-server` and `kota` cannot be undone by deleting all
+episode that touched `quipu-server` and `kotare` cannot be undone by deleting all
 triples about those entities — that would destroy legitimate graph data.
 
 ## The Unit: the Episode's Transaction
@@ -48,7 +48,7 @@ transaction carried `source = "episode:X"`.
 ### Why this is shared-IRI-safe
 
 Retracting episode X closes only the facts X's transaction actually wrote. A fact
-about a shared entity (`quipu-server`, `kota`) that was first asserted by a real
+about a shared entity (`quipu-server`, `kotare`) that was first asserted by a real
 episode keeps that real episode as its owner, so it survives. Re-ingests of the
 same episode create multiple transactions that all share the source tag, so every
 one of the episode's currently-active contributions is caught.
@@ -182,12 +182,12 @@ deploy verification:
 - `goldblum-final-verify-032`
 - (plus any dearing co-verify / ian tx341 test episodes, if present)
 
-> **Ownership:** this cleanup runs against the live Quipu store on **kota**
+> **Ownership:** this cleanup runs against the live Quipu store on **kotare**
 > (`/var/lib/quipu/quipu.db`). It is a **separate goldblum deploy step** — it
 > requires the new `quipu-server` binary to be deployed there first. The
 > implementing polecat does **not** touch the live store.
 
-### Runbook (run by goldblum after the binary is deployed to kota)
+### Runbook (run by goldblum after the binary is deployed to kotare)
 
 ```bash
 # 1. Confirm a test episode's facts are currently live (expect rows).
