@@ -4,15 +4,15 @@
 
 # ── Proxmox Nodes ────────────────────────────────────────────
 
-aegis:koror a aegis:ProxmoxNode ;
-    rdfs:label "koror" ;
-    aegis:nodeId "koror" ;
+aegis:korimako a aegis:ProxmoxNode ;
+    rdfs:label "korimako" ;
+    aegis:nodeId "korimako" ;
     aegis:role "compute" ;
     aegis:status "online" .
 
-aegis:kota a aegis:ProxmoxNode ;
-    rdfs:label "kota" ;
-    aegis:nodeId "kota" ;
+aegis:kotare a aegis:ProxmoxNode ;
+    rdfs:label "kotare" ;
+    aegis:nodeId "kotare" ;
     aegis:role "storage" .
 
 aegis:niue a aegis:ProxmoxNode ;
@@ -20,65 +20,65 @@ aegis:niue a aegis:ProxmoxNode ;
     aegis:nodeId "niue" ;
     aegis:role "backup" .
 
-# ── LXC Containers: koror ────────────────────────────────────
+# ── LXC Containers: korimako ────────────────────────────────────
 
 aegis:ct-100 a aegis:LXCContainer ;
     rdfs:label "ct-100" ;
     aegis:ctId "100"^^xsd:integer ;
     aegis:hostname "ct-100" ;
     aegis:ipAddress "192.0.2.100" ;
-    aegis:runs_on aegis:koror .
+    aegis:runs_on aegis:korimako .
 
 aegis:ct-101 a aegis:LXCContainer ;
     rdfs:label "ct-101" ;
     aegis:ctId "101"^^xsd:integer ;
     aegis:hostname "ct-101" ;
     aegis:ipAddress "192.0.2.101" ;
-    aegis:runs_on aegis:koror .
+    aegis:runs_on aegis:korimako .
 
 aegis:ct-102 a aegis:LXCContainer ;
     rdfs:label "ct-102" ;
     aegis:ctId "102"^^xsd:integer ;
     aegis:hostname "ct-102" ;
     aegis:ipAddress "192.0.2.102" ;
-    aegis:runs_on aegis:koror .
+    aegis:runs_on aegis:korimako .
 
 aegis:ct-103 a aegis:LXCContainer ;
     rdfs:label "ct-103" ;
     aegis:ctId "103"^^xsd:integer ;
     aegis:hostname "ct-103" ;
     aegis:ipAddress "192.0.2.103" ;
-    aegis:runs_on aegis:koror .
+    aegis:runs_on aegis:korimako .
 
-# ── LXC Containers: kota ─────────────────────────────────────
+# ── LXC Containers: kotare ─────────────────────────────────────
 
 aegis:ct-200 a aegis:LXCContainer ;
     rdfs:label "ct-200" ;
     aegis:ctId "200"^^xsd:integer ;
     aegis:hostname "ct-200" ;
     aegis:ipAddress "192.0.2.200" ;
-    aegis:runs_on aegis:kota .
+    aegis:runs_on aegis:kotare .
 
 aegis:ct-201 a aegis:LXCContainer ;
     rdfs:label "ct-201" ;
     aegis:ctId "201"^^xsd:integer ;
     aegis:hostname "ct-201" ;
     aegis:ipAddress "192.0.2.201" ;
-    aegis:runs_on aegis:kota .
+    aegis:runs_on aegis:kotare .
 
 aegis:ct-202 a aegis:LXCContainer ;
     rdfs:label "ct-202" ;
     aegis:ctId "202"^^xsd:integer ;
     aegis:hostname "ct-202" ;
     aegis:ipAddress "192.0.2.202" ;
-    aegis:runs_on aegis:kota .
+    aegis:runs_on aegis:kotare .
 
 aegis:ct-203 a aegis:LXCContainer ;
     rdfs:label "ct-203" ;
     aegis:ctId "203"^^xsd:integer ;
     aegis:hostname "ct-203" ;
     aegis:ipAddress "192.0.2.203" ;
-    aegis:runs_on aegis:kota .
+    aegis:runs_on aegis:kotare .
 
 # ── LXC Containers: niue ─────────────────────────────────────
 
@@ -136,8 +136,8 @@ aegis:prometheus a aegis:SystemdService ;
     aegis:healthEndpoint "/-/healthy" ;
     aegis:status "running" ;
     aegis:runs_on aegis:ct-101 ;
-    aegis:monitors aegis:koror ;
-    aegis:monitors aegis:kota ;
+    aegis:monitors aegis:korimako ;
+    aegis:monitors aegis:kotare ;
     aegis:monitors aegis:niue .
 
 aegis:quipu-server a aegis:SystemdService ;
@@ -199,7 +199,7 @@ aegis:node-exporter a aegis:SystemdService ;
     rdfs:label "node-exporter" ;
     aegis:port "9100"^^xsd:integer ;
     aegis:status "running" ;
-    aegis:runs_on aegis:koror .
+    aegis:runs_on aegis:korimako .
 
 aegis:alertmanager a aegis:SystemdService ;
     rdfs:label "alertmanager" ;

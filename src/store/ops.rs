@@ -581,7 +581,7 @@ impl Store {
     /// **Shared-IRI safety.** Idempotent assertion (see `transact`) means each
     /// active `(e, a, v)` belongs to exactly one owning transaction. Retracting
     /// episode X therefore closes only the facts X's transaction actually wrote;
-    /// facts about shared entities (e.g. `quipu-server`, `kota`) asserted by
+    /// facts about shared entities (e.g. `quipu-server`, `kotare`) asserted by
     /// other episodes or write paths stay active. Re-ingests of the same episode
     /// produce multiple transactions that all share the source tag, so every one
     /// of the episode's currently-active contributions is caught.
@@ -853,7 +853,7 @@ impl Store {
 /// Measured on the live graph (aegis-a0ne), counting only what `entity_facts`
 /// actually returns (`op = 1 AND valid_to IS NULL`): 86 duplicate groups over
 /// 29 of 972 entities (3.0%), worst single group 132 rows. The affected set is
-/// the graph's most-referenced nodes — graphiti (+273 redundant rows), kota
+/// the graph's most-referenced nodes — graphiti (+273 redundant rows), kotare
 /// (+123), bobbin, traefik, dolt — i.e. retraction failed precisely on the
 /// entities most likely to need correcting. `luvu` carried 29 rows of one
 /// `rdf:type` value, 2 of another, and 32 `rdfs:label` rows.

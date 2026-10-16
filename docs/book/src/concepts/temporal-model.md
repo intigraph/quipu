@@ -13,27 +13,27 @@ This is called a **bitemporal model**, and it means you can always answer:
 
 ## Why Bitemporality Matters
 
-Say you record on April 1 that koror has 4 CPU cores:
+Say you record on April 1 that korimako has 4 CPU cores:
 
 ```bash
 quipu knot - --db homelab.db --timestamp 2026-04-01 <<'EOF'
 @prefix hw: <http://example.org/homelab/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-hw:koror hw:cpuCores "4"^^xsd:integer .
+hw:korimako hw:cpuCores "4"^^xsd:integer .
 EOF
 ```
 
 On April 3 you upgrade to 8 cores and record the change:
 
 ```bash
-quipu retract "http://example.org/homelab/koror" \
+quipu retract "http://example.org/homelab/korimako" \
   --predicate "http://example.org/homelab/cpuCores" \
   --db homelab.db --timestamp 2026-04-03
 
 quipu knot - --db homelab.db --timestamp 2026-04-03 <<'EOF'
 @prefix hw: <http://example.org/homelab/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-hw:koror hw:cpuCores "8"^^xsd:integer .
+hw:korimako hw:cpuCores "8"^^xsd:integer .
 EOF
 ```
 
@@ -42,13 +42,13 @@ Now you can time-travel:
 ```bash
 # What's the current state?
 quipu read "SELECT ?cores WHERE {
-  <http://example.org/homelab/koror> <http://example.org/homelab/cpuCores> ?cores
+  <http://example.org/homelab/korimako> <http://example.org/homelab/cpuCores> ?cores
 }" --db homelab.db
 # → 8
 
 # What was true on April 2?
 quipu read "SELECT ?cores WHERE {
-  <http://example.org/homelab/koror> <http://example.org/homelab/cpuCores> ?cores
+  <http://example.org/homelab/korimako> <http://example.org/homelab/cpuCores> ?cores
 }" --db homelab.db --valid-at 2026-04-02
 # → 4
 ```
@@ -59,9 +59,9 @@ Under the hood, facts are stored as immutable rows:
 
 | E (entity) | A (attribute) | V (value) | T (tx) | valid_from | valid_to | op |
 |------------|---------------|-----------|--------|------------|----------|-----|
-| `hw:koror` | `hw:cpuCores` | 4 | 1 | 2026-04-01 | 2026-04-03 | Assert |
-| `hw:koror` | `hw:cpuCores` | 4 | 2 | 2026-04-03 | 2026-04-03 | Retract |
-| `hw:koror` | `hw:cpuCores` | 8 | 3 | 2026-04-03 | *null* | Assert |
+| `hw:korimako` | `hw:cpuCores` | 4 | 1 | 2026-04-01 | 2026-04-03 | Assert |
+| `hw:korimako` | `hw:cpuCores` | 4 | 2 | 2026-04-03 | 2026-04-03 | Retract |
+| `hw:korimako` | `hw:cpuCores` | 8 | 3 | 2026-04-03 | *null* | Assert |
 
 Nothing is deleted. Retractions close the `valid_to` window on old facts
 and add a new retraction record. The full history is always available.

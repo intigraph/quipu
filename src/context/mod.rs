@@ -423,7 +423,7 @@ impl<'a> ContextPipeline<'a> {
         // A direct hit means the entity is itself *about* the query term: the
         // term appears in its own IRI or in one of its literal values. Object
         // IRI references are deliberately excluded — an entity that merely
-        // points at the query term (e.g. `ex:kota ex:manages ex:traefik` for
+        // points at the query term (e.g. `ex:kotare ex:manages ex:traefik` for
         // the query "traefik") is a *linked* result, surfaced by link
         // expansion, not a direct hit. Counting those as direct hits caused
         // ranking drift where a referencing node could outrank the entity the

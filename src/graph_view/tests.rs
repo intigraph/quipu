@@ -24,10 +24,10 @@ const FIXTURE: &str = r#"
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
 
-ex:kota   a ex:Host    ; rdfs:label "Kota"    ; ex:runs ex:traefik ; ex:runs ex:forgejo .
+ex:kotare   a ex:Host    ; rdfs:label "Kotare"    ; ex:runs ex:traefik ; ex:runs ex:forgejo .
 ex:traefik a ex:Service ; rdfs:label "Traefik" ; ex:routes_to ex:forgejo .
 ex:forgejo a ex:Service ; rdfs:label "Forgejo" .
-ex:ep1    a prov:Activity ; rdfs:label "episode" ; ex:touched ex:kota .
+ex:ep1    a prov:Activity ; rdfs:label "episode" ; ex:touched ex:kotare .
 "#;
 
 fn view(store: &Store, input: &serde_json::Value) -> JsonValue {
@@ -41,7 +41,7 @@ fn projects_nodes_and_index_based_edges() {
 
     let nodes = g["nodes"].as_array().unwrap();
     let edges = g["edges"].as_array().unwrap();
-    assert_eq!(nodes.len(), 3, "kota + traefik + forgejo, episode excluded");
+    assert_eq!(nodes.len(), 3, "kotare + traefik + forgejo, episode excluded");
     assert_eq!(edges.len(), 3, "2x runs + 1x routes_to");
 
     // Edges address nodes by index — the payload-size win — and resolve back.
@@ -118,7 +118,7 @@ fn labels_prefer_rdfs_label_and_fall_back_to_short_iri() {
 
 #[test]
 fn degree_ranks_the_cap_and_truncation_is_reported() {
-    // kota has degree 2, traefik 2, forgejo 2 — cap to 1 and the survivor must
+    // kotare has degree 2, traefik 2, forgejo 2 — cap to 1 and the survivor must
     // be a highest-degree node, with the drop stated rather than silent.
     let store = store_with(FIXTURE);
     let g = view(&store, &json!({"limit": 1}));
@@ -164,7 +164,7 @@ fn type_filter_scopes_both_nodes_and_edges() {
     assert_eq!(
         g["edges"].as_array().unwrap().len(),
         1,
-        "only routes_to survives; kota's runs edges leave the filtered set"
+        "only routes_to survives; kotare's runs edges leave the filtered set"
     );
 }
 

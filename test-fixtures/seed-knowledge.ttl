@@ -60,12 +60,12 @@ aegis:design-federation a aegis:DesignDoc ;
 
 # ── Probes ───────────────────────────────────────────────────
 
-aegis:probe-koror-downtime a aegis:Probe ;
-    rdfs:label "probe-koror-downtime" ;
-    aegis:title "Koror Downtime Investigation" ;
+aegis:probe-korimako-downtime a aegis:Probe ;
+    rdfs:label "probe-korimako-downtime" ;
+    aegis:title "Korimako Downtime Investigation" ;
     aegis:domain "infrastructure" ;
     aegis:date "2026-03-27"^^xsd:date ;
-    aegis:applies_to aegis:koror .
+    aegis:applies_to aegis:korimako .
 
 aegis:probe-dolt-performance a aegis:Probe ;
     rdfs:label "probe-dolt-performance" ;

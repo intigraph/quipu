@@ -562,7 +562,7 @@ Governance: `Directive`, `Observation`, `DecisionRecord`, `DesignDoc`
 
 ### Known Issues
 
-1. **Duplicate nodes** — Graphiti creates per-episode copies (koror appears 4x)
+1. **Duplicate nodes** — Graphiti creates per-episode copies (korimako appears 4x)
 2. **No formal OWL** — uses JSON-LD `@context` but no `.owl` or `.ttl` schema files
 3. **No SHACL shapes** — no write-time validation, any triple accepted
 4. **No temporal metadata** — facts have no `valid_from`/`valid_until`
@@ -772,7 +772,7 @@ SQLite schema: `(entity, attribute, value, tx_id, valid_from, valid_to, op)`
 
 This enables:
 
-- **Time-travel queries**: "What did we believe about koror on March 15?"
+- **Time-travel queries**: "What did we believe about korimako on March 15?"
 - **Speculative transactions**: Fork in memory, apply hypothetical writes,
   query without persisting — "What breaks if we decommission this host?"
 - **Contradiction detection** (Graphiti's killer feature): Query for
