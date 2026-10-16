@@ -53,6 +53,7 @@ mod count_stream;
 mod graph_membership;
 mod group;
 mod join;
+mod limited_scan;
 mod progress;
 mod sql_in;
 pub mod triple;
