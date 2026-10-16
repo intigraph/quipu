@@ -90,6 +90,13 @@ impl Store {
         Ok(Self::with_connection(conn))
     }
 
+    /// Set this connection's bounded wait for transient SQLite apply locks.
+    /// This changes only connection-local policy, never persistent store state.
+    pub fn set_busy_timeout(&self, timeout: std::time::Duration) -> Result<()> {
+        self.conn.busy_timeout(timeout)?;
+        Ok(())
+    }
+
     /// Open a store FILE that must not change, such as a pack being verified
     /// (aegis-s8jra2).
     ///
