@@ -18,16 +18,26 @@ static WRITE_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_n
 /// cannot consume it; point floods cannot consume ordinary admission either.
 static POINT_READ_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-pub(crate) async fn query_blocking<T, F>(point: bool, f: F) -> Result<T, AppError>
+/// Single-assignment, log-only observation of a granted admission permit.
+pub(super) type AdmissionStamp = std::sync::Arc<std::sync::OnceLock<std::time::Instant>>;
+
+pub(crate) async fn query_blocking<T, F>(
+    point: bool,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+) -> Result<T, AppError>
 where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    if point {
-        admit_blocking_with(&POINT_READ_ADMISSION, "point-read", f).await
+    let (admission, kind) = if point {
+        (&POINT_READ_ADMISSION, "point-read")
     } else {
-        read_blocking(f).await
-    }
+        (read_admission(), "read")
+    };
+    let started = std::time::Instant::now();
+    let deadline = request_budget();
+    admit_with_deadline_observed(admission, kind, deadline, started, stamp, f).await
 }
 
 pub(crate) async fn write_blocking<T, F>(f: F) -> Result<T, AppError>
@@ -84,6 +94,21 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
+    admit_with_deadline_observed(admission, kind, deadline, started, None, f).await
+}
+
+async fn admit_with_deadline_observed<T, F>(
+    admission: &'static tokio::sync::Semaphore,
+    kind: &'static str,
+    deadline: Option<quipu::time::Deadline>,
+    started: std::time::Instant,
+    stamp: Option<AdmissionStamp>,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
     let acquire = admission.acquire();
     let acquired = if kind == "point-read" {
         if let Some(deadline) = deadline {
@@ -108,6 +133,9 @@ where
             "{kind} admission is closed"
         )))
     })?;
+    if let Some(stamp) = stamp {
+        let _ = stamp.set(std::time::Instant::now());
+    }
     blocking(move || {
         let _permit = permit;
         // Held across `f()` and restored on drop: blocking threads are pooled
@@ -586,3 +614,7 @@ mod write_timeout_tests {
 #[cfg(test)]
 #[path = "admission/point_timeout_tests.rs"]
 mod point_timeout_tests;
+
+#[cfg(test)]
+#[path = "admission/observation_tests.rs"]
+mod observation_tests;
