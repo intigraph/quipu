@@ -103,7 +103,9 @@ agents a clear remediation path instead of a dead-end error.
 - Proposals only mutate shape/ontology definitions — they never touch the EAVT
   fact store directly.
 - Over MCP and REST there is no default approver: accept and reject refuse a
-  request without `decided_by`. The `quipu propose accept|reject` CLI records
-  every decision as `cli-user` and takes no approver argument, so a CLI
-  decision does not name a person. A capability-based
+  request without `decided_by`. The `quipu propose accept|reject` CLI takes
+  `--decided-by <id>` (or `--decided-by=<id>`); without the flag the CLI records
+  `cli:<QUIPU_AGENT or USER>`, and with neither set it refuses rather than record an
+  anonymous decision. A flag given with no usable value also refuses; it never falls
+  back to the environment. A capability-based
   authorization system (`quipu.schema.approve`) is a future concern.
