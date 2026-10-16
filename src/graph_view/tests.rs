@@ -41,7 +41,11 @@ fn projects_nodes_and_index_based_edges() {
 
     let nodes = g["nodes"].as_array().unwrap();
     let edges = g["edges"].as_array().unwrap();
-    assert_eq!(nodes.len(), 3, "kotare + traefik + forgejo, episode excluded");
+    assert_eq!(
+        nodes.len(),
+        3,
+        "kotare + traefik + forgejo, episode excluded"
+    );
     assert_eq!(edges.len(), 3, "2x runs + 1x routes_to");
 
     // Edges address nodes by index — the payload-size win — and resolve back.
