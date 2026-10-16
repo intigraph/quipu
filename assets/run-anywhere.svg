@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="Quipu runs anywhere: one store file, six ways to use it. Claude Code and any MCP client through quipu mcp; the quipu command line; quipu-server over HTTP with REST, MCP and a web UI; the quipu-ai Rust library embedded in your app; fully offline as a single SQLite file; and in the browser through WebAssembly with no server.">
+  <defs>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#FFF1C9"/><stop offset="70%" stop-color="#FFC24D"/><stop offset="100%" stop-color="#FF5A4E"/>
+    </radialGradient>
+    <radialGradient id="bloom" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF4FA0" stop-opacity=".35"/><stop offset="100%" stop-color="#FF4FA0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="#FFC24D"/><stop offset="1" stop-color="#FF4FA0"/></linearGradient>
+  </defs>
+  <rect width="960" height="540" rx="20" fill="#12121f"/>
+  <text x="40" y="52" fill="#ecebf5" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="24" font-weight="700">Run it anywhere</text>
+  <text x="40" y="78" fill="#a7a6c2" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="14">One store, one engine, six ways in. The same rules, provenance and history wherever it runs.</text>
+
+  <g stroke="#ff8a70" stroke-width="2" stroke-dasharray="5 6" fill="none" opacity=".75">
+    <line x1="480" y1="300" x2="190" y2="170"/>
+    <line x1="480" y1="300" x2="480" y2="150"/>
+    <line x1="480" y1="300" x2="770" y2="170"/>
+    <line x1="480" y1="300" x2="190" y2="430"/>
+    <line x1="480" y1="300" x2="480" y2="455"/>
+    <line x1="480" y1="300" x2="770" y2="430"/>
+  </g>
+
+  <circle cx="480" cy="300" r="120" fill="url(#bloom)"/>
+  <circle cx="480" cy="300" r="62" fill="url(#core)" stroke="#FF4FA0" stroke-width="3"/>
+  <text x="480" y="294" text-anchor="middle" fill="#1a1a2e" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="17" font-weight="700">Quipu</text>
+  <text x="480" y="314" text-anchor="middle" fill="#1a1a2e" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="11">store.db</text>
+
+  <g font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif">
+    <g transform="translate(70,120)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">Claude Code &amp; MCP</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">Any MCP client, local or HTTP</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu mcp</text>
+    </g>
+    <g transform="translate(360,92)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">Command line</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">Write, query, share, merge</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu read "SELECT …"</text>
+    </g>
+    <g transform="translate(650,120)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">HTTP server</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">REST, MCP over HTTP, web UI</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu-server</text>
+    </g>
+    <g transform="translate(70,392)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">Embedded library</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">Inside your Rust app</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu-ai crate</text>
+    </g>
+    <g transform="translate(360,420)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">Offline</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">One SQLite file, no server</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">back up with cp</text>
+    </g>
+    <g transform="translate(650,392)">
+      <rect width="240" height="88" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="30" fill="#ecebf5" font-size="16" font-weight="600">In the browser</text>
+      <text x="16" y="52" fill="#a7a6c2" font-size="13">WebAssembly, stays in the tab</text>
+      <text x="16" y="74" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">load any pack</text>
+    </g>
+  </g>
+</svg>

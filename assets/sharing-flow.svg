@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 470" role="img" aria-label="Sharing knowledge between Quipu stores. quipu share writes a git-native bundle of export.nt, shapes.ttl and manifest.json with stable hashes, and refuses to publish internal identifiers. quipu import verifies the hashes and checks the shapes, landing the share in quarantine, never in the main graph. quipu import promote is an explicit operator step into the main graph. When two copies diverge, quipu merge runs a three-way, shape-aware merge and exits with code 2 on a conflict. The same pack also loads in a browser tab.">
+  <defs>
+    <linearGradient id="flow" x1="0" x2="1"><stop offset="0" stop-color="#FFC24D"/><stop offset="1" stop-color="#FF4FA0"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FF4FA0"/>
+    </marker>
+  </defs>
+  <rect width="960" height="470" rx="20" fill="#12121f"/>
+  <text x="40" y="52" fill="#ecebf5" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="24" font-weight="700">Share knowledge without trusting it blindly</text>
+  <text x="40" y="78" fill="#a7a6c2" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="14">A share is plain files you can diff in git. Nothing reaches your main graph until someone promotes it.</text>
+
+  <g font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif">
+    <g transform="translate(40,120)">
+      <rect width="180" height="120" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="32" fill="#ecebf5" font-size="16" font-weight="600">Their store</text>
+      <text x="16" y="56" fill="#a7a6c2" font-size="13">Facts, shapes,</text>
+      <text x="16" y="74" fill="#a7a6c2" font-size="13">lineage</text>
+      <text x="16" y="102" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu share</text>
+    </g>
+    <g transform="translate(270,120)">
+      <rect width="190" height="120" rx="12" fill="#1a1a2e" stroke="#ffc24d" stroke-dasharray="4 4"/>
+      <text x="16" y="32" fill="#ffc24d" font-size="16" font-weight="600">Bundle</text>
+      <text x="16" y="56" fill="#ecebf5" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">export.nt</text>
+      <text x="16" y="74" fill="#ecebf5" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">shapes.ttl</text>
+      <text x="16" y="92" fill="#ecebf5" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">manifest.json</text>
+      <text x="16" y="110" fill="#a7a6c2" font-size="12">stable hashes, git-diffable</text>
+    </g>
+    <g transform="translate(510,120)">
+      <rect width="190" height="120" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="16" y="32" fill="#ecebf5" font-size="16" font-weight="600">Quarantine</text>
+      <text x="16" y="56" fill="#a7a6c2" font-size="13">Hashes verified,</text>
+      <text x="16" y="74" fill="#a7a6c2" font-size="13">shapes checked</text>
+      <text x="16" y="102" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu import</text>
+    </g>
+    <g transform="translate(750,120)">
+      <rect width="170" height="120" rx="12" fill="#20203a" stroke="#ff4fa0"/>
+      <text x="16" y="32" fill="#ecebf5" font-size="16" font-weight="600">Your graph</text>
+      <text x="16" y="56" fill="#a7a6c2" font-size="13">Only by an</text>
+      <text x="16" y="74" fill="#a7a6c2" font-size="13">explicit step</text>
+      <text x="16" y="102" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">import promote</text>
+    </g>
+  </g>
+
+  <g stroke="#ff8a70" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+    <line x1="222" y1="180" x2="264" y2="180"/>
+    <line x1="462" y1="180" x2="504" y2="180"/>
+    <line x1="702" y1="180" x2="744" y2="180"/>
+  </g>
+
+  <g font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif">
+    <g transform="translate(40,290)">
+      <rect width="420" height="140" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="18" y="34" fill="#ecebf5" font-size="16" font-weight="600">Diverged? Merge three ways, by the rules</text>
+      <text x="18" y="60" fill="#a7a6c2" font-size="13">Your shapes decide what counts as a conflict: a single-valued</text>
+      <text x="18" y="78" fill="#a7a6c2" font-size="13">property can't hold two answers, a set can take both.</text>
+      <text x="18" y="112" fill="#ff4fa0" font-family="JetBrains Mono,Menlo,Consolas,monospace" font-size="12">quipu status ./share &amp;&amp; quipu merge ./share</text>
+      <text x="18" y="130" fill="#a7a6c2" font-size="12">a conflict exits 2 and nothing is guessed</text>
+    </g>
+    <g transform="translate(500,290)">
+      <rect width="420" height="140" rx="12" fill="#20203a" stroke="#2e2e4d"/>
+      <text x="18" y="34" fill="#ecebf5" font-size="16" font-weight="600">Safe to publish, easy to open</text>
+      <text x="18" y="60" fill="#a7a6c2" font-size="13">The producer refuses to publish internal identifiers</text>
+      <text x="18" y="78" fill="#a7a6c2" font-size="13">your rules mark as private, before any byte leaves.</text>
+      <text x="18" y="104" fill="#a7a6c2" font-size="13">The same pack opens in a browser tab, no server,</text>
+      <text x="18" y="122" fill="#a7a6c2" font-size="13">or joins a read-only federation with trust labels.</text>
+    </g>
+  </g>
+</svg>
