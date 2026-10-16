@@ -1,0 +1,24 @@
+{
+  "bindings": {
+    "namespace": "http://example.org/perf/",
+    "knowledge_graph": "urn:perf:graph:knowledge",
+    "subject_needle": "case-lmi",
+    "label_regex": "index\\.example|case-9ka",
+    "literal_needle": "drain",
+    "comment_needle": "Dolt",
+    "label_needle": "quipu",
+    "graph_needle": "seeds"
+  },
+  "max_p95_ms": {
+    "C0_control_exact": 30000,
+    "Q1_status_pred": 30000,
+    "Q2_graph_literal_substr": 30000,
+    "Q3_label_regex": 30000,
+    "Q4_subject_contains": 30000,
+    "Q5_comment_contains": 30000,
+    "Q6_type_regex_count": 30000,
+    "Q7_graph_var_contains": 30000,
+    "Q8_label_lcase_contains": 30000,
+    "Q9_subject_strstarts": 30000
+  }
+}

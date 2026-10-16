@@ -77,9 +77,40 @@ target/release/quipu-server --db /dev/shm/qp.db --bind 127.0.0.1:3030 &
 scripts/quipu-query-perf.py gate --budget benchmark/query-perf-budget.json
 ```
 
-`smoke --url <served>` runs only the pushed form of every class and reports
-p50/p95. Use it after a deploy. The defeated forms are full scans and do not
-belong on a production server.
+`smoke --url <served> --profile <reviewed-profile.json>
+--expected-revision <full-deployed-sha> --reps 3 --timeout 5`
+runs only the pushed form of all ten classes and reports p50/p95. A profile
+binds the existing query shapes to the store's vocabulary and supplies an
+explicit ceiling for every class. It cannot replace or remove query shapes.
+The example profile targets the synthetic fixture; its 30-second demonstration
+ceilings are **not production acceptance budgets**. Choose store-specific
+bindings with positive coverage and measured ceilings before admission.
+
+Without a profile, smoke still targets the neutral fixture. It must not be
+reported as served-store coverage. Empty results, zero/missing COUNT values,
+malformed responses and transport errors fail. Smoke aborts on the first failed
+sample or exceeded ceiling, leaves later classes explicitly `not_run`, writes
+the partial report, and exits nonzero. Each sample must fit its profile's
+`max_p95_ms` ceiling; this deliberately stronger guard stops degraded reads
+before another query, rather than waiting to compute the percentile. There is
+no warmup or defeated-query request in smoke mode.
+
+A served profile requires `--expected-revision`. The harness checks the exact
+40-character `/version.git_sha` before any query and again afterwards; a
+mismatch or unavailable version fails. The post-deploy event owner must retain
+the expected deployed source revision, serving identities, exact profile bytes/hash,
+command, exit status and JSON report in its receipt. A version mismatch/change,
+missing class, `not_run` class or nonzero exit is incomplete acceptance. Run only
+after the existing deployment/read-cost admission; a date is not permission.
+Do not add a timer or retry after an abort. The defeated forms are full scans and
+do not belong on a production server.
+
+`just test-query-perf` also proves the smoke CLI's exit/report behavior with
+healthy, timeout and empty responses; partial errors, zero counts, malformed
+bindings, profile validation and early abort have offline controls. This is
+harness evidence. The deployment event must still invoke the installed harness
+and retain a real same-class served report; CI success does not prove that hook
+is armed or has run.
 
 ## Budgets
 

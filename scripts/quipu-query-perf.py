@@ -6,7 +6,7 @@ into the SQL scan, which took agent-written string filters from timeouts to
 well under a second on the production store. Nothing in CI exercised those
 shapes, so a change that undid the narrowing would have passed every check.
 
-Three subcommands:
+Subcommands:
 
   generate  write a deterministic production-shaped fixture as N-Triples, one
             file per graph, plus a manifest (counts and sha256 per file).
@@ -21,7 +21,10 @@ Three subcommands:
                 the in-run C0 control.
             A known-slow class is reported, and fails only on its timeout.
   smoke     run the pushed form of every class against a served store and
-            report p50/p95 per class. No defeated runs: those are full scans,
+            require positive coverage and report p50/p95 per class. Optional
+            --profile binds the same shapes to the served store vocabulary
+            and supplies ceilings. Abort on errors, missing data or slow samples.
+            No defeated runs: those are full scans,
             and this mode points at production after a deploy.
 
 The defeated form is the positive control, and it runs on every PR: if the
@@ -241,7 +244,7 @@ def render(cls: dict, defeated: bool, limit: bool) -> str:
         q = q.replace("{f}", f)
     if limit and cls.get("limit"):
         q += f" LIMIT {cls['limit']}"
-    return PREFIXES + q
+    return cls.get("prefixes", PREFIXES) + q
 
 
 def run_query(url: str, sparql: str, timeout: float) -> tuple[float, str, list | None]:
@@ -354,10 +357,87 @@ def gate(url: str, budget: dict, reps: int, timeout: float, only: list[str] | No
     return report, failures
 
 
-def smoke(url: str, reps: int, timeout: float) -> dict:
-    out = {"url": url, "reps": reps, "classes": {}}
-    for name, cls in CLASSES.items():
-        out["classes"][name] = measure(url, name, cls, reps, timeout, False)
+def served_revision(url: str, timeout: float) -> str:
+    request = urllib.request.Request(url.rstrip("/") + "/version",
+                                     headers={"X-Quipu-Client": "perf-gate"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.load(response)
+    revision = data.get("git_sha") if isinstance(data, dict) else None
+    if not isinstance(revision, str) or len(revision) != 40 or any(
+            c not in "0123456789abcdef" for c in revision):
+        raise ValueError("version has no exact source revision")
+    return revision
+
+
+def smoke_classes(profile: dict | None) -> tuple[dict, dict]:
+    """Bind store vocabulary without replacing the ten query shapes."""
+    if profile is None:
+        return CLASSES, {}
+    fields = {"namespace", "knowledge_graph", "subject_needle", "label_regex",
+              "literal_needle", "comment_needle", "label_needle", "graph_needle"}
+    bindings = profile.get("bindings", {})
+    limits = profile.get("max_p95_ms", {})
+    if set(bindings) != fields or set(limits) != set(CLASSES):
+        raise ValueError("profile requires every binding and all ten class budgets")
+    if any(not isinstance(v, str) or not v for v in bindings.values()):
+        raise ValueError("bindings must be nonempty strings")
+    for key in ("namespace", "knowledge_graph"):
+        value = bindings[key]
+        if ":" not in value or any(c.isspace() or c in '<>\\"{}' for c in value):
+            raise ValueError(f"invalid IRI binding: {key}")
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or
+           not math.isfinite(v) or v <= 0 for v in limits.values()):
+        raise ValueError("budgets must be finite positive milliseconds")
+    classes = {name: dict(cls) for name, cls in CLASSES.items()}
+    for cls in classes.values():
+        cls["prefixes"] = PREFIXES.replace(NS, bindings["namespace"])
+    classes["Q2_graph_literal_substr"]["q"] = CLASSES["Q2_graph_literal_substr"]["q"].replace(
+        GRAPH_NS + "knowledge", bindings["knowledge_graph"])
+    literal = json.dumps
+    classes["Q2_graph_literal_substr"]["f"] = (
+        'isLiteral(?o) && CONTAINS(LCASE(STR(?o)), ' + literal(bindings["literal_needle"]) + ')')
+    classes["Q3_label_regex"]["f"] = 'REGEX(STR(?l), ' + literal(bindings["label_regex"]) + ')'
+    classes["Q4_subject_contains"]["f"] = 'CONTAINS(STR(?s), ' + literal(bindings["subject_needle"]) + ')'
+    classes["Q5_comment_contains"]["f"] = 'CONTAINS(STR(?o), ' + literal(bindings["comment_needle"]) + ')'
+    classes["Q7_graph_var_contains"]["f"] = 'CONTAINS(STR(?g), ' + literal(bindings["graph_needle"]) + ')'
+    classes["Q8_label_lcase_contains"]["f"] = 'CONTAINS(LCASE(?l), ' + literal(bindings["label_needle"]) + ')'
+    classes["Q9_subject_strstarts"]["f"] = 'STRSTARTS(STR(?s), ' + literal(
+        bindings["namespace"] + bindings["subject_needle"]) + ')'
+    return classes, limits
+
+
+def smoke(url: str, reps: int, timeout: float, profile: dict | None = None) -> dict:
+    """Pushed-only, bounded replay. Abort on the first failed class/sample."""
+    classes, limits = smoke_classes(profile)
+    out = {"url": url, "reps": reps, "classes": {}, "failures": [],
+           "profile": profile, "mode": "pushed-only"}
+    out["classes"] = {name: {"status": "not_run"} for name in classes}
+    for name, cls in classes.items():
+        samples = []
+        entry = {"samples": samples, "p50_ms": None, "p95_ms": None, "status": "failed"}
+        out["classes"][name] = entry
+        for _ in range(reps):
+            elapsed, status, rows = run_query(url, render(cls, False, True), timeout)
+            covered = valid_rows(rows) and bool(rows) and all(bool(row) for row in rows)
+            # COUNT returns one binding even when it exercised no matching data.
+            if covered and "COUNT" in cls["q"]:
+                try:
+                    covered = all(math.isfinite(float(row["n"])) and float(row["n"]) > 0 for row in rows)
+                except (KeyError, TypeError, ValueError):
+                    covered = False
+            ms = round(elapsed * 1000, 2)
+            samples.append({"ms": ms, "status": status,
+                            "rows": len(rows) if valid_rows(rows) else None})
+            if status != "ok" or not covered:
+                out["failures"].append(f"{name}: failed coverage/status ({status})")
+                return out
+            if name in limits and ms > limits[name]:
+                out["failures"].append(f"{name}: sample {ms}ms > {limits[name]}ms")
+                return out
+        times = [sample["ms"] for sample in samples]
+        entry["p50_ms"] = round(statistics.median(times), 2)
+        entry["p95_ms"] = pctl(times, .95)
+        entry["status"] = "passed"
     return out
 
 
@@ -448,10 +528,15 @@ def main() -> int:
         p.add_argument("--reps", type=int, default=7)
         p.add_argument("--timeout", type=float, default=30.0)
         p.add_argument("--output", type=Path)
+        if name == "smoke":
+            p.add_argument("--profile", type=Path)
+            p.add_argument("--expected-revision")
         if name == "gate":
             p.add_argument("--budget", type=Path, required=True)
             p.add_argument("--only", nargs="+")
     args = parser.parse_args()
+    if args.cmd in ("gate", "smoke") and (args.reps < 1 or not math.isfinite(args.timeout) or args.timeout <= 0):
+        parser.error("reps and timeout must be positive and finite")
     if args.cmd == "generate":
         m = generate(args.out, args.entities, args.seed, args.graphs)
         print(json.dumps({k: m[k] for k in ("entities", "triples", "graphs")}))
@@ -472,7 +557,44 @@ def main() -> int:
             return 2
         report, failures = gate(args.url, budget, args.reps, args.timeout, args.only)
     else:
-        report, failures = smoke(args.url, args.reps, args.timeout), []
+        try:
+            profile_bytes = args.profile.read_bytes() if args.profile else None
+            profile = json.loads(profile_bytes) if profile_bytes is not None else None
+            smoke_classes(profile)  # Validate before any request.
+            if (profile is not None) != bool(args.expected_revision):
+                raise ValueError("served smoke requires profile and expected-revision together")
+            if args.expected_revision and (len(args.expected_revision) != 40 or
+                    any(c not in "0123456789abcdef" for c in args.expected_revision)):
+                raise ValueError("expected-revision must be a full lowercase source SHA")
+            report = {"expected_revision": args.expected_revision, "url": args.url,
+                      "reps": args.reps, "mode": "pushed-only",
+                      "classes": {name: {"status": "not_run"} for name in CLASSES},
+                      "failures": [], "profile": profile}
+            if profile:
+                try:
+                    before = served_revision(args.url, args.timeout)
+                    report["serving_before"] = before
+                    if before != args.expected_revision:
+                        raise ValueError("serving revision differs from expected deployment")
+                except (ValueError, OSError) as error:
+                    report["failures"].append(f"version before: {error}")
+            if not report["failures"]:
+                report = smoke(args.url, args.reps, args.timeout, profile)
+                if profile:
+                    report["expected_revision"] = args.expected_revision
+                    report["serving_before"] = before
+                    try:
+                        report["serving_after"] = served_revision(args.url, args.timeout)
+                        if report["serving_after"] != before:
+                            raise ValueError("serving revision changed during smoke")
+                    except (ValueError, OSError) as error:
+                        report["failures"].append(f"version after: {error}")
+        except (ValueError, OSError, AttributeError) as error:
+            print(f"invalid smoke profile: {error}", file=sys.stderr)
+            return 2
+        if args.profile:
+            report["profile_sha256"] = hashlib.sha256(profile_bytes).hexdigest()
+        failures = report["failures"]
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.write_text(text + "\n")
