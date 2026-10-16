@@ -526,6 +526,13 @@ impl Default for QuipuConfig {
     }
 }
 
+/// Opt-in read-only follower; primary metadata is polled every 15 seconds.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplicaConfig {
+    /// Primary URL named by write refusals; the replica never forwards writes.
+    pub primary_url: String,
+}
+
 /// REST API server configuration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -556,6 +563,9 @@ pub struct ServerConfig {
 
     /// Reject all write endpoints with 403 (hq-azs). Reads stay available.
     pub read_only: bool,
+
+    /// Opt-in follower serving: SQLite read-only opens, no writers, 503 on writes.
+    pub replica: Option<ReplicaConfig>,
 
     /// CORS origin allowlist (hq-azs). Empty (default) = allow any origin,
     /// preserving the existing browser-tab behaviour; non-empty restricts
@@ -602,6 +612,7 @@ impl Default for ServerConfig {
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
             read_only: false,
+            replica: None,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
             reserve_point_reads: false,
