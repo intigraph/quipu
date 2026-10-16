@@ -1,0 +1,12 @@
+Script started on 2026-10-16 06:40:45-04:00 [COMMAND="bash docs/probes/owner-status-guard/run-demo.sh" <not executed on terminal>]
+Synthetic fixture: 12,000 Actions, two named graphs, four owned subjects per graph.
+Baseline uses the retained independent-join path; candidate binds existing subject variables.
+test sparql::filter_join::tests::owner_guard_demo_12000_actions ... GUARD_DEMO mode=independent_join result=false elapsed_ms=252.177
+GUARD_DEMO mode=subject_bound result=false elapsed_ms=5.363
+GUARD_DEMO mode=subject_bound result=false elapsed_ms=6.096
+GUARD_DEMO mode=independent_join result=false elapsed_ms=229.410
+GUARD_DEMO mode=independent_join invalid_owned_positive=true
+GUARD_DEMO mode=subject_bound invalid_owned_positive=true
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2379 filtered out; finished in 5.91s
+
+Script done on 2026-10-16 06:41:25-04:00 [COMMAND_EXIT_CODE="0"]
