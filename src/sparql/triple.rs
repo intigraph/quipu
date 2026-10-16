@@ -12,8 +12,8 @@ mod limited_tests;
 
 pub(super) use model::eval_triple_pattern_from_model;
 
-pub(super) use scan::eval_complete_relation;
 use scan::{ScanMode, collect_triple_pattern};
+pub(super) use scan::{binding_bytes, eval_complete_relation, selected_relation, subject_relation};
 
 use std::collections::HashSet;
 
@@ -41,6 +41,9 @@ pub fn eval_bgp(
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
     if patterns.is_empty() {
         return Ok((vec![seed.clone()], vec![]));
+    }
+    if let Some(result) = super::batch_star::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
     }
     if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
         return Ok(result);
@@ -181,7 +184,7 @@ fn visit_triple_pattern_limited(
     bindings: &Bindings,
     ctx: &TemporalContext,
     limit: Option<usize>,
-    mode: ScanMode,
+    mode: ScanMode<'_>,
     mut emit: Option<&mut dyn FnMut(Bindings) -> Result<()>>,
 ) -> Result<usize> {
     let streaming = matches!(mode, ScanMode::Streamed);
@@ -234,24 +237,13 @@ fn visit_triple_pattern_limited(
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let direct_refs = super::count_stream::direct_refs() && !store.has_attachments();
 
-    // Subject
-    let subject_ref = match &tp.subject {
-        TermPattern::Variable(v) => bindings.get(v.as_str()),
-        TermPattern::BlankNode(v) => bindings.get(v.as_str()),
-        _ => None,
-    };
-    if direct_refs
-        && let Some(Value::Ref(id)) = subject_ref
-        && *id >= 0
+    if let Some(condition) =
+        scan::subject_condition(store, tp, bindings, direct_refs, mode, &mut sql_params)?
     {
-        conditions.push(format!("e = ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(*id));
-    } else if let Some(iri) = resolve_subject_pattern(store, &tp.subject, bindings)? {
-        let ids = store.lookup_all(&iri)?;
-        if ids.is_empty() {
-            return Ok(0); // IRI not in dictionary -> no matches
+        if condition.is_empty() {
+            return Ok(0);
         }
-        conditions.push(sql_id_in("e", &ids, &mut sql_params));
+        conditions.push(condition);
     }
 
     // Predicate
@@ -335,7 +327,9 @@ fn visit_triple_pattern_limited(
                         &mut sql_params,
                     )?
                 }
-                ScanMode::Streamed | ScanMode::CompleteRelation => None,
+                ScanMode::Streamed
+                | ScanMode::CompleteRelation
+                | ScanMode::BoundedRelation(_, _) => None,
             };
             conditions.push(membership.unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)));
             None
@@ -446,7 +440,10 @@ fn visit_triple_pattern_limited(
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
             format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
-    } else if matches!(mode, ScanMode::CompleteRelation) {
+    } else if matches!(
+        mode,
+        ScanMode::CompleteRelation | ScanMode::BoundedRelation(_, _)
+    ) {
         let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
         // Prove primary membership inside this bounded scan. Missing or
         // attached-only subjects retain normal resolution and its errors.
@@ -505,8 +502,10 @@ fn visit_triple_pattern_limited(
     while let Some(row) = rows.next()? {
         let physical_e_id = row.get(0)?;
         let e_id = canonical(physical_e_id)?;
-        let verified_subject = matches!(mode, ScanMode::CompleteRelation)
-            && e_id == physical_e_id
+        let verified_subject = matches!(
+            mode,
+            ScanMode::CompleteRelation | ScanMode::BoundedRelation(_, _)
+        ) && e_id == physical_e_id
             && row.get::<_, bool>(if want_g { 4 } else { 3 })?;
         let a_id = canonical(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;

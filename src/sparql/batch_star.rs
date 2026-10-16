@@ -1,0 +1,145 @@
+//! Batch a dense selected subject star through the ordinary canonical leaf.
+use super::pattern_util::{check_eval_budget, triple_pattern_vars};
+use super::triple::{binding_bytes, selected_relation, subject_relation};
+use super::{Bindings, TemporalContext};
+use crate::{Result, Store, Value};
+use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
+use std::collections::HashSet;
+
+const MAX_SUBJECTS: usize = 16_384;
+const MAX_ROWS: usize = 50_000;
+pub(super) const MAX_BYTES: usize = 8 * 1024 * 1024;
+
+pub(super) fn try_eval(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    #[cfg(test)]
+    if super::filter_join::reference_disabled() {
+        return Ok(None);
+    }
+    if !(2..=8).contains(&patterns.len())
+        || !patterns.iter().any(|p| matches!(&p.predicate, NamedNodePattern::NamedNode(n) if n.as_str() == crate::namespace::RDF_TYPE))
+        || !seed.is_empty()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.entails_rdfs
+        || ctx.row_limit.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.row_cap.is_some_and(|cap| cap < MAX_ROWS + 1)
+        || !matches!(&ctx.graph, super::GraphScope::Named(ids) if !ids.is_empty() && ids.iter().all(|id| *id > 0))
+        || !matches!(patterns[0].subject, TermPattern::Variable(_))
+        || patterns.iter().any(|p| {
+            p.subject != patterns[0].subject
+                || !matches!(p.predicate, NamedNodePattern::NamedNode(_))
+                || matches!(p.object, TermPattern::BlankNode(_))
+        })
+    {
+        return Ok(None);
+    }
+    let Some(anchor) = patterns.iter().position(|p| {
+        matches!(
+            p.object,
+            TermPattern::Literal(_) | TermPattern::NamedNode(_)
+        ) && !matches!(&p.predicate, NamedNodePattern::NamedNode(n)
+            if n.as_str() == crate::namespace::RDF_TYPE)
+    }) else {
+        return Ok(None);
+    };
+    let Some(selected) = speculative(selected_relation(
+        store,
+        &patterns[anchor],
+        ctx,
+        MAX_SUBJECTS + 1,
+        MAX_BYTES,
+    ))?
+    else {
+        return Ok(None);
+    };
+    // Small stars retain the proven sparse plan. Overflow never returns a prefix.
+    if selected.len() <= super::sparse_bgp::SMALL || selected.len() > MAX_SUBJECTS {
+        return Ok(None);
+    }
+    let TermPattern::Variable(subject) = &patterns[0].subject else {
+        unreachable!()
+    };
+    let mut seen = HashSet::new();
+    let mut groups = Vec::new();
+    for (i, row) in selected.iter().enumerate() {
+        check_eval_budget(ctx, i, 0)?;
+        let Some(Value::Ref(id)) = row.get(subject.as_str()) else {
+            return Ok(None);
+        };
+        if *id <= 0 {
+            return Ok(None);
+        }
+        if !seen.insert(*id) {
+            continue;
+        }
+        let aliases = store.lookup_all(&store.resolve(*id)?)?;
+        if aliases.is_empty() || aliases.len() > 128 {
+            return Ok(None);
+        }
+        groups.push(aliases);
+    }
+    let mut variables = Vec::new();
+    for p in patterns {
+        for v in triple_pattern_vars(p) {
+            if !variables.contains(&v) {
+                variables.push(v);
+            }
+        }
+    }
+    let mut rows = selected;
+    for (index, pattern) in patterns.iter().enumerate() {
+        if index == anchor {
+            continue;
+        }
+        let mut relation = Vec::new();
+        let mut bytes = 0usize;
+        for (step, chunk) in groups.chunks(128).enumerate() {
+            check_eval_budget(ctx, step, relation.len())?;
+            let ids: Vec<_> = chunk.iter().flatten().copied().collect();
+            let remaining = MAX_ROWS + 1 - relation.len();
+            let Some(found) = speculative(subject_relation(
+                store,
+                pattern,
+                ctx,
+                &ids,
+                remaining,
+                MAX_BYTES - bytes,
+            ))?
+            else {
+                return Ok(None);
+            };
+            bytes += found.iter().map(binding_bytes).sum::<usize>();
+            relation.extend(found);
+            if relation.len() > MAX_ROWS {
+                return Ok(None);
+            }
+        }
+        rows = super::join::hash_join_bindings(&rows, &relation, ctx)?;
+        if rows.is_empty() {
+            break;
+        }
+    }
+    Ok(Some((rows, variables)))
+}
+
+// Speculation can see a malformed row that the ordinary source-order plan
+// would eliminate earlier. Only cancellation/budget errors must propagate.
+pub(super) fn speculative(result: Result<Vec<Bindings>>) -> Result<Option<Vec<Bindings>>> {
+    match result {
+        Ok(rows) => Ok(Some(rows)),
+        Err(crate::Error::InvalidValue(_) | crate::Error::UnknownTerm(_)) => Ok(None),
+        Err(crate::Error::Sqlite(error))
+            if !matches!(&error,
+            rusqlite::Error::SqliteFailure(code, _) if code.code == rusqlite::ErrorCode::OperationInterrupted) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
+}

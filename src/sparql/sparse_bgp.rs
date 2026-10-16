@@ -7,7 +7,7 @@ use super::triple::eval_triple_pattern_limited;
 use super::{Bindings, TemporalContext};
 use crate::{Result, Store};
 
-const SMALL: usize = 128;
+pub(super) const SMALL: usize = 128;
 
 pub(super) fn try_eval(
     store: &Store,
