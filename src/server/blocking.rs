@@ -23,6 +23,24 @@ where
     .await
 }
 
+/// Detached HTTP jobs retain their token after their handler has returned.
+pub(crate) fn spawn_tracked<T: Send + 'static>(
+    f: impl FnOnce() -> T + Send + 'static,
+) -> tokio::task::JoinHandle<T> {
+    let work = request_middleware::request_store_work().map(|context| {
+        context
+            .registry
+            .start(context.lane, quipu::metrics::inflight::Phase::Waiting)
+    });
+    tokio::task::spawn_blocking(move || {
+        if let Some(work) = &work {
+            work.activate();
+        }
+        let _work = work;
+        f()
+    })
+}
+
 /// Admission already owns a token spanning its queue; never count it twice.
 pub(crate) async fn blocking_pretracked<T, F>(f: F) -> Result<T, AppError>
 where

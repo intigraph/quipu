@@ -84,7 +84,7 @@ async fn promote(
     let identity = super::auth::request_identity();
     let kind = super::request_middleware::request_write_kind();
     let provenance = super::request_middleware::request_write_provenance();
-    tokio::task::spawn_blocking(move || {
+    crate::base::spawn_tracked(move || {
         quipu::transaction_auth::with_identity(identity, || {
             quipu::write_provenance::scoped(provenance, || {
                 quipu::write_kind::scoped(kind, || {

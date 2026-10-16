@@ -190,7 +190,7 @@ fn compiled_features() -> serde_json::Value {
 /// serializes the HTTP server itself.
 #[path = "blocking.rs"]
 mod blocking_work;
-pub(crate) use blocking_work::{blocking, blocking_pretracked};
+pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 
 /// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
 ///

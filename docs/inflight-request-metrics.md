@@ -30,7 +30,8 @@ recomputed from the remaining writes after completion; a newer write cannot
 reset an older stalled write's age. Generic blocking writes such as `/knot`
 and promote receive the same lifetime guard even though they bypass admission.
 Admitted work carries its existing token through the blocking adapter and is
-not counted twice. The registry contains only current work; scraping it never
+not counted twice. Detached snapshot promotion and attestation thread hops
+capture their own token before spawning; the token survives a returned response. The registry contains only current work; scraping it never
 acquires the store connection or writer mutex.
 
 These ages include queue time. They are **not writer-lock hold time**, evidence
@@ -42,7 +43,8 @@ enter HTTP blocking or store admission are outside these request metrics.
 The private controlled stall-shape test holds 35 writes (one active, 34 waiting)
 for 300 simulated seconds, checks count >=10 and increasing oldest age, then
 checks cleanup and an idle fresh registry. Other tests exercise actual admission
-and HTTP middleware cancellation, including detached blocking work. This is not
+and HTTP middleware cancellation, including generic blocking work and an
+actual native stage/promote blocked behind the writer after its HTTP response. This is not
 a reconstruction of October 1 telemetry: that incident predates these series.
 Historical episode classification and alert thresholds require runtime evidence
 after installation; an ordinary restart gap must not be called idle merely
