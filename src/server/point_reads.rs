@@ -11,6 +11,14 @@ pub(crate) fn open_pool(
 ) -> super::handle::ReadPool {
     use super::handle::ReadPool;
     let mut read_pool = ReadPool::open(db_path, store, config.read_pool_size);
+    if config.replica.is_some() {
+        for connection in &read_pool.conns {
+            connection
+                .lock()
+                .set_busy_timeout(std::time::Duration::from_secs(1))
+                .expect("configuring replica read-only connection timeout");
+        }
+    }
     if config.reserve_point_reads && store.search_config().request_timeout_ms == 0 {
         eprintln!("error: reserve_point_reads requires a positive request_timeout_ms");
         std::process::exit(1);
