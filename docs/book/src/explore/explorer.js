@@ -1,3 +1,4 @@
+import { createEngineApi } from "./engine-api.js";
 import { createConstellation } from "./constellation.js";
 import { setupWorkbench, loadStarted, loaded, setQuery } from "./workbench.js";
 
@@ -42,11 +43,11 @@ const worker = new Worker("./worker.js", { type: "module" });
 let nextId = 1;
 const pending = new Map();
 worker.onmessage = (e) => {
-  const { id, ok, result, error } = e.data;
+  const { id, ok, result, error, validation } = e.data;
   const p = pending.get(id);
   pending.delete(id);
   if (!p) return;
-  ok ? p.resolve(result) : p.reject(new Error(error));
+  ok ? p.resolve(result) : p.reject(Object.assign(new Error(error), validation ? { validation } : {}));
 };
 worker.onerror = (e) => {
   for (const p of pending.values()) p.reject(new Error(e.message || "worker failed"));
@@ -430,7 +431,7 @@ async function writeSet(item, predicate, value) {
       value: JSON.stringify({ str: value }) });
     await afterWrite(item, outcome,
       `set ${short(predicate)} (${outcome.retracted} retracted, ${outcome.asserted} asserted)`);
-  } catch (err) { editNote(err.message, true); }
+  } catch (err) { editNote(err.validation ? `${err.message}\n${JSON.stringify(err.validation, null, 2)}` : err.message, true); }
 }
 
 async function writeRetract(item, predicate, value) {
@@ -438,7 +439,7 @@ async function writeRetract(item, predicate, value) {
     const outcome = await ask({ cmd: "retract", entity: item.iri, predicate,
       value: value === null ? "" : JSON.stringify({ str: value }) });
     await afterWrite(item, outcome, `retracted ${outcome.retracted} × ${short(predicate)}`);
-  } catch (err) { editNote(err.message, true); }
+  } catch (err) { editNote(err.validation ? `${err.message}\n${JSON.stringify(err.validation, null, 2)}` : err.message, true); }
 }
 
 function editNote(text, bad = false) {
@@ -506,47 +507,10 @@ async function refreshExport() {
 // `outcome`/`count` fields all travel because the same code emits them.
 //
 // That means this object is a NAMED SURFACE over work that already existed,
-// which is why it is small. Client code written against a quipu HTTP server
-// runs here unchanged.
+// which is why it is small. Native query/write result shapes stay intact;
+// browser semantic search returns the adapter's ranked array of documents.
 
-const UNSUPPORTED_SEARCH = {
-  error: "unsupported",
-  verb: "search",
-  // Named, not vague: a reader has to be able to tell "this build cannot" from
-  // "this query found nothing", and from "the feature is broken".
-  reason: "semantic search needs embeddings, which need quipu's `onnx` feature. "
-    + "This bundle is built with default-features = false, so `onnx` is not linked "
-    + "and there is no model to run. It is unavailable in the page, not failing.",
-  available: ["query", "episode", "set", "retract", "stats", "delta", "share", "version"],
-  server: "A quipu HTTP server answers POST /search; this page cannot.",
-};
-
-window.quipu = {
-  query: (sparql) => ask({ cmd: "query", sparql }),
-  stats: () => ask({ cmd: "stats" }),
-  episode: (body) =>
-    ask({ cmd: "episode", episode: typeof body === "string" ? body : JSON.stringify(body) }),
-  set: (entity, predicate, value) =>
-    ask({ cmd: "set", entity, predicate,
-          value: typeof value === "string" ? value : JSON.stringify(value) }),
-  retract: (entity, predicate = "", value = "") =>
-    ask({ cmd: "retract", entity, predicate,
-          value: value === "" ? "" : (typeof value === "string" ? value : JSON.stringify(value)) }),
-  delta: () => ask({ cmd: "delta" }),
-  share: () => ask({ cmd: "exportPack" }),
-  version: () => ask({ cmd: "version" }),
-
-  // REJECTS, and never resolves to an empty result.
-  //
-  // An empty array is indistinguishable from "nothing matched", which is the
-  // exact failure this codebase keeps paying for — a check that cannot see its
-  // target reporting the same value as a check that looked and found nothing.
-  // A 404-shaped absence would be just as bad: it reads as "wrong URL".
-  //
-  // Same discipline the load report already applies to SHACL, where the page
-  // says "not compiled" rather than claiming a conformance it never checked.
-  search: () => Promise.reject(Object.assign(new Error(UNSUPPORTED_SEARCH.reason), UNSUPPORTED_SEARCH)),
-};
+window.quipu = createEngineApi(ask);
 
 // --- The Service Worker half: fetch() into this page's store (§4.2) ---------
 //
@@ -563,6 +527,9 @@ window.quipu = {
 
 const SW_VERB_TO_CMD = {
   query: (b) => ({ cmd: "query", sparql: b.query ?? b.sparql }),
+  search: (b) => ({ cmd: "search", query: b.query, limit: b.limit }),
+  validate: (b) => ({ cmd: "validate", shapes: b.shapes, data: b.data }),
+  ontology: (b) => ({ cmd: "ontology", input: JSON.stringify(b) }),
   episode: (b) => ({ cmd: "episode", episode: JSON.stringify(b) }),
   set: (b) => ({ cmd: "set", entity: b.entity, predicate: b.predicate,
                  value: JSON.stringify(b.value) }),
@@ -584,7 +551,7 @@ navigator.serviceWorker?.addEventListener("message", async (event) => {
     // The message goes back as an error, never as an empty success. The service
     // worker turns it into a 500 with the reason, so a caller can tell "the
     // store refused this" from "the store answered nothing".
-    port.postMessage({ ok: false, error: String(err?.message ?? err) });
+    port.postMessage({ ok: false, error: String(err?.message ?? err), validation: err?.validation });
   }
 });
 
@@ -663,7 +630,7 @@ async function prepareDelta() {
       + "Review the update above before opening GitHub.");
   } catch (err) {
     box.replaceChildren(el("p", { class: "bad", text: err.message }));
-    editNote(err.message, true);
+    editNote(err.validation ? `${err.message}\n${JSON.stringify(err.validation, null, 2)}` : err.message, true);
   }
 }
 
@@ -709,7 +676,7 @@ async function downloadPack() {
       + "(load the matching shapes in your database first; promotion is separate).");
     $("#export-status").textContent = `Downloaded ${fmt(bytes.byteLength)} bytes.`;
   } catch (err) {
-    editNote(err.message, true);
+    editNote(err.validation ? `${err.message}\n${JSON.stringify(err.validation, null, 2)}` : err.message, true);
     $("#export-status").textContent = "Export refused by the graph's policy. Inspect the editor's report for details.";
   } finally {
     button.disabled = false;
@@ -725,7 +692,7 @@ async function downloadNtriples() {
     editNote(`Downloaded ${fmt(nt.length)} bytes of N-Triples. It is line-oriented and `
       + "canonically ordered, so `diff` against the pack you started from shows exactly "
       + "what this tab changed.");
-  } catch (err) { editNote(err.message, true); }
+  } catch (err) { editNote(err.validation ? `${err.message}\n${JSON.stringify(err.validation, null, 2)}` : err.message, true); }
 }
 
 // ------------------------------------------------------------ graph panel

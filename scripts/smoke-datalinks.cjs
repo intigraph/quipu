@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
         if (!path.startsWith(root + sep)) { res.writeHead(403); return res.end(); }
         try {
           const bytes = readFileSync(path);
-          const mime = { '.html': 'text/html', '.js': 'text/javascript', '.wasm': 'application/wasm', '.gz': 'application/gzip' };
+          const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.wasm': 'application/wasm', '.gz': 'application/gzip' };
           res.setHeader('Content-Type', mime[extname(path)] || 'application/octet-stream');
           res.end(bytes);
         } catch { res.writeHead(404); res.end(); }
