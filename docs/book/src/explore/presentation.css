@@ -1,0 +1,52 @@
+/* Intigraph's site tokens, with its system-selected light variant. */
+:root[data-theme="intigraph"] {
+  color-scheme:dark;
+  --bg:#12121f; --panel:#1a1a2e; --card:#20203a; --sunk:#12121f; --line:#2e2e4d;
+  --fg:#ecebf5; --muted:#a7a6c2; --gold:#ffc24d; --coral:#ff5a4e; --pink:#ff4fa0;
+  --indigo:var(--gold); --indigo-soft:var(--card); --red:var(--coral);
+  --red-soft:#38202b; --fiber:var(--pink);
+  --map-vision:var(--gold); --map-decision:var(--pink); --map-trail:var(--coral);
+  --map-episode:#72d8ba; --map-code:#7cbbff;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:light) {
+  :root[data-theme="intigraph"] {
+    color-scheme:light;
+    --bg:#fbfaf6; --panel:#f2efe6; --card:#fff; --sunk:#f2efe6; --line:#e3ded0;
+    --fg:#1a1a2e; --muted:#5b5a73; --gold:#b97a00; --coral:#d23c30; --pink:#c42e7a;
+    --red-soft:#fbe9e6; --ok:#1f7a4d;
+    --map-episode:#247b65; --map-code:#3569af;
+  }
+}
+[data-theme="intigraph"] body { font-family:Inter,system-ui,sans-serif; }
+[data-theme="intigraph"] .pane { background:var(--card); }
+[data-theme="intigraph"] #graph-viewport { background:var(--bg); border-color:var(--line); }
+[data-theme="intigraph"] #constellation button { border-color:var(--line); }
+[data-theme="intigraph"] #constellation button:hover,
+[data-theme="intigraph"] #constellation button:focus-visible { border-color:var(--gold); outline-color:var(--gold); }
+[data-theme="intigraph"] #graph-targets .cluster-target { background:var(--panel); }
+[data-theme="intigraph"] #node-card .eyebrow { color:var(--pink); }
+[data-embed="true"] .top,
+[data-embed="true"] .hero,
+[data-embed="true"] .take,
+[data-embed="true"] footer { display:none; }
+[data-embed="true"] body { padding:12px; }
+[data-embed="true"] .bench { grid-template-columns:160px minmax(0,1fr) 240px; gap:12px; }
+[data-embed="true"] .inspector { grid-column:auto; }
+[data-embed="true"] .pane { padding:12px; }
+[data-embed="true"] #graph-viewport { height:340px; }
+[data-embed="true"] #graph { height:340px; }
+@media (max-width:1000px) {
+  [data-embed="true"] .bench { grid-template-columns:160px minmax(0,1fr); }
+  [data-embed="true"] .inspector { grid-column:1 / -1; }
+}
+@media (max-width:760px) {
+  [data-embed="true"] .bench { grid-template-columns:minmax(0,1fr); }
+  [data-embed="true"] .center { grid-row:1; }
+  [data-embed="true"] .wrap { padding:0; }
+}
+
+[data-map-preview="true"] #pack-provenance { display:none; }
+@media (min-width:1001px) {
+  [data-embed="true"] .inspector { max-height:760px; overflow:auto; }
+}

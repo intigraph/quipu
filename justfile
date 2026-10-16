@@ -268,6 +268,10 @@ docs-demo-test:
 explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
 
+# Presentation acceptance against the same staged browser engine.
+explorer-presentation *args:
+    node scripts/test-explore-presentation.cjs {{args}}
+
 # Author a canonical demo share from explicit data, shapes and reviewed policy.
 docs-data graph shapes policy:
     ./scripts/export-datalinks.sh {{quote(graph)}} {{quote(shapes)}} {{quote(policy)}}
