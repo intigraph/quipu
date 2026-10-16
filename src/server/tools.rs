@@ -9,7 +9,9 @@ use axum::extract::State;
 use serde_json::{Value as JsonValue, json};
 
 use super::SharedStore;
-use super::admission::{read_blocking, read_blocking_until, write_blocking, write_blocking_until};
+use super::admission::{
+    episode_read_blocking_until, read_blocking, write_blocking, write_blocking_until,
+};
 use super::base::{AppError, blocking};
 
 macro_rules! ro_handler {
@@ -438,7 +440,7 @@ pub(crate) async fn episode(
     let (started, deadline) = super::admission::episode_budget();
     let prepared = if s.resolves_off_writer() {
         let (reader_store, input) = (s.clone(), i.clone());
-        read_blocking_until(started, deadline, move || {
+        episode_read_blocking_until(started, deadline, move || {
             let mut reader = reader_store.vector_read();
             // `read()` reports a failed frozen-pack sync and carries on with
             // the archives absent. Resolution must not: a duplicate in a

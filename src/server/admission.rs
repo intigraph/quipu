@@ -18,6 +18,10 @@ static WRITE_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_n
 /// cannot consume it; point floods cannot consume ordinary admission either.
 static POINT_READ_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
+/// Long episode resolution may occupy only one ordinary read slot. Acquire
+/// this before read admission, so queued episodes cannot reserve the pool.
+static EPISODE_READ_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
 /// Single-assignment, log-only observation of a granted admission permit.
 pub(super) type AdmissionStamp = std::sync::Arc<std::sync::OnceLock<std::time::Instant>>;
 
@@ -110,17 +114,21 @@ where
     T: Send + 'static,
 {
     let acquire = admission.acquire();
-    let acquired = if kind == "point-read" {
+    let acquired = if matches!(kind, "point-read" | "episode-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
             tokio::time::timeout(std::time::Duration::from_millis(remaining), acquire)
                 .await
                 .map_err(|_| {
-                    AppError::from(quipu::Error::RequestTimeout {
-                        elapsed_ms: started.elapsed().as_millis(),
-                        limit_ms,
-                    })
+                    if kind == "episode-read" {
+                        AppError::from(deadline.request_timeout())
+                    } else {
+                        AppError::from(quipu::Error::RequestTimeout {
+                            elapsed_ms: started.elapsed().as_millis(),
+                            limit_ms,
+                        })
+                    }
                 })?
         } else {
             acquire.await
@@ -227,8 +235,8 @@ pub(crate) fn episode_budget() -> (std::time::Instant, Option<quipu::time::Deadl
     (started, deadline)
 }
 
-/// Read admission under a deadline the caller already stamped.
-pub(crate) async fn read_blocking_until<T, F>(
+/// Bound phase-zero episodes separately while retaining ordinary read admission.
+pub(crate) async fn episode_read_blocking_until<T, F>(
     started: std::time::Instant,
     deadline: Option<quipu::time::Deadline>,
     f: F,
@@ -237,7 +245,135 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    admit_with_deadline(read_admission(), "read", deadline, started, f).await
+    episode_read_with(
+        &EPISODE_READ_ADMISSION,
+        read_admission(),
+        started,
+        deadline,
+        f,
+    )
+    .await
+}
+
+async fn episode_read_with<T, F>(
+    episodes: &'static tokio::sync::Semaphore,
+    reads: &'static tokio::sync::Semaphore,
+    started: std::time::Instant,
+    deadline: Option<quipu::time::Deadline>,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    let acquire = episodes.acquire();
+    let permit = if let Some(deadline) = deadline {
+        tokio::time::timeout(
+            std::time::Duration::from_millis(deadline.remaining_millis()),
+            acquire,
+        )
+        .await
+        .map_err(|_| AppError::from(deadline.request_timeout()))?
+    } else {
+        acquire.await
+    }
+    .map_err(|_| {
+        AppError::from(quipu::Error::InvalidValue(
+            "episode admission is closed".into(),
+        ))
+    })?;
+    // Ownership must cross spawn_blocking: cancellation of the HTTP future
+    // cannot release capacity while its uncancellable resolution is running.
+    admit_with_deadline(reads, "episode-read", deadline, started, move || {
+        let _episode_permit = permit;
+        quipu::time::check_request_deadline()?;
+        f()
+    })
+    .await
+}
+
+#[cfg(test)]
+mod episode_cap_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn episode_deadline_covers_wait_for_ordinary_read_capacity() {
+        let episodes = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let reads = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let held = reads.acquire().await.unwrap();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            episode_read_with(
+                episodes,
+                reads,
+                std::time::Instant::now(),
+                Some(quipu::time::Deadline::after_millis(20)),
+                || -> Result<(), AppError> { panic!("expired episode ran") },
+            ),
+        )
+        .await;
+        assert!(
+            result
+                .expect("read admission ignored episode deadline")
+                .is_err()
+        );
+        assert_eq!(episodes.available_permits(), 1);
+        drop(held);
+    }
+
+    #[tokio::test]
+    async fn cancelled_running_episode_keeps_cap_and_waiter_leaves_reads_free() {
+        let episodes: &'static tokio::sync::Semaphore =
+            Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
+        let reads: &'static tokio::sync::Semaphore =
+            Box::leak(Box::new(tokio::sync::Semaphore::new(4)));
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let running = tokio::spawn(episode_read_with(
+            episodes,
+            reads,
+            std::time::Instant::now(),
+            None,
+            move || {
+                let _ = entered_tx.send(());
+                release_rx.recv().unwrap();
+                Ok(())
+            },
+        ));
+        entered_rx.await.unwrap();
+        running.abort();
+        assert!(running.await.unwrap_err().is_cancelled());
+        let result = episode_read_with(
+            episodes,
+            reads,
+            std::time::Instant::now(),
+            Some(quipu::time::Deadline::after_millis(20)),
+            || -> Result<(), AppError> { panic!("queued episode ran") },
+        )
+        .await;
+        assert!(result.is_err());
+        assert_eq!(episodes.available_permits(), 0);
+        assert_eq!(reads.available_permits(), 3);
+        let ordinary =
+            admit_with_deadline(reads, "read", None, std::time::Instant::now(), || Ok(7))
+                .await
+                .unwrap();
+        assert_eq!(ordinary, 7);
+        release_tx.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while episodes.available_permits() != 1 || reads.available_permits() != 4 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            episode_read_with(episodes, reads, std::time::Instant::now(), None, || Ok(9))
+                .await
+                .unwrap(),
+            9
+        );
+    }
 }
 
 /// Write admission under a deadline the caller already stamped.
