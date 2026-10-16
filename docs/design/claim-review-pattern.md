@@ -20,9 +20,9 @@ A public knowledge graph of fact-checked claims built by GESIS: about 74k
 claims and 72k reviews from 13 fact-checking sites (Politifact, Snopes, Full
 Fact, AFP and others), 1996 to 2023. Last release January 2023.
 
-- Home: https://data.gesis.org/claimskg/
-- SPARQL: https://data.gesis.org/claimskg/sparql
-- Dataset DOI: https://doi.org/10.7802/2620
+- Home: <https://data.gesis.org/claimskg/>
+- SPARQL: <https://data.gesis.org/claimskg/sparql>
+- Dataset DOI: <https://doi.org/10.7802/2620>
 - Paper: Tchechmedjiev et al., "ClaimsKG: A Knowledge Graph of Fact-Checked
   Claims", ISWC 2019.
 
