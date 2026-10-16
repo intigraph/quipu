@@ -28,7 +28,7 @@
 //! cost us the first time was not the missing coverage, it was that missing
 //! coverage and "no duplicates exist" returned the same empty list.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -207,8 +207,22 @@ fn build_resolution_text(name: &str, properties: &[(String, String)]) -> String 
 /// The IRI is resolved lazily — only for rows that actually clear the threshold
 /// — because `store.resolve` is a query per id and most labels match nothing.
 pub(crate) struct LabelIndex {
-    /// `(canonical entity id, label)` for every current `rdfs:label` fact.
-    entries: Vec<(i64, String)>,
+    /// One entry per current `rdfs:label` fact, lowercased ONCE here.
+    ///
+    /// `candidates` runs per node over every label, so lowercasing inside it
+    /// allocated one string per label per node: on a 361k-label store that was
+    /// ~600 ms per node and pushed any 19-node episode past the 10 s write
+    /// budget (aegis-nmuwsi, aegis-xi0).
+    entries: Vec<LabelEntry>,
+    /// Lowercased label -> indexes into `entries`, for the exact-match arm.
+    exact: HashMap<String, Vec<usize>>,
+}
+
+struct LabelEntry {
+    entity_id: i64,
+    lower: String,
+    /// `lower.chars().count()`; Jaro-Winkler compares chars.
+    chars: usize,
 }
 
 impl LabelIndex {
@@ -229,6 +243,7 @@ impl LabelIndex {
         if label_ids.is_empty() {
             return Ok(Self {
                 entries: Vec::new(),
+                exact: HashMap::new(),
             }); // No labels interned yet.
         }
 
@@ -260,12 +275,25 @@ impl LabelIndex {
             // An attached layer and the local store can intern the same IRI at
             // different ids; canonicalising here means one entity yields one
             // candidate rather than one per layer that mentions it.
-            entries.push((store.canonical_id(entity_id)?, label));
+            let lower = label.to_lowercase();
+            entries.push(LabelEntry {
+                entity_id: store.canonical_id(entity_id)?,
+                chars: lower.chars().count(),
+                lower,
+            });
         }
-        Ok(Self { entries })
+        let mut exact: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, entry) in entries.iter().enumerate() {
+            exact.entry(entry.lower.clone()).or_default().push(i);
+        }
+        Ok(Self { entries, exact })
     }
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
+    ///
+    /// Same candidates, in the same order, as comparing `name` against every
+    /// label: exact matches come from the hash index, and a label is skipped
+    /// only when [`jaro_winkler_upper_bound`] proves it cannot reach `threshold`.
     fn candidates(
         &self,
         store: &Store,
@@ -273,17 +301,28 @@ impl LabelIndex {
         threshold: f64,
     ) -> Result<Vec<EntityCandidate>> {
         let name_lower = name.to_lowercase();
+        let name_chars = name_lower.chars().count();
+        let name_is_commit = is_slash_qualified_commit_id(&name_lower);
+        let exact: HashSet<usize> = self
+            .exact
+            .get(&name_lower)
+            .map(|ids| ids.iter().copied().collect())
+            .unwrap_or_default();
         let mut candidates = Vec::new();
-        for (entity_id, label) in &self.entries {
-            let label_lower = label.to_lowercase();
-
+        for (i, entry) in self.entries.iter().enumerate() {
             // Exact match (case-insensitive).
-            if name_lower == label_lower {
+            if exact.contains(&i) {
                 candidates.push(EntityCandidate {
-                    iri: store.resolve(*entity_id)?,
+                    iri: store.resolve(entry.entity_id)?,
                     score: 1.0,
                     matched_on: "canonical_name:exact".to_string(),
                 });
+                continue;
+            }
+
+            // A label too short or too long relative to `name` cannot reach the
+            // threshold; skip the comparison (and its allocation) entirely.
+            if jaro_winkler_upper_bound(name_chars, entry.chars) < threshold {
                 continue;
             }
 
@@ -292,17 +331,15 @@ impl LabelIndex {
             // `commit/<repo>/` prefix gives them a high Jaro-Winkler score.
             // Keep exact matching above for idempotent reuse, and keep this
             // deliberately narrower than a generic kind-prefix exemption.
-            if is_slash_qualified_commit_id(&name_lower)
-                && is_slash_qualified_commit_id(&label_lower)
-            {
+            if name_is_commit && is_slash_qualified_commit_id(&entry.lower) {
                 continue;
             }
 
             // Jaro-Winkler similarity.
-            let jw = strsim::jaro_winkler(&name_lower, &label_lower);
+            let jw = strsim::jaro_winkler(&name_lower, &entry.lower);
             if jw >= threshold {
                 candidates.push(EntityCandidate {
-                    iri: store.resolve(*entity_id)?,
+                    iri: store.resolve(entry.entity_id)?,
                     score: jw,
                     matched_on: format!("canonical_name:jaro_winkler:{jw:.2}"),
                 });
@@ -310,6 +347,22 @@ impl LabelIndex {
         }
         Ok(candidates)
     }
+}
+
+/// Upper bound on `strsim::jaro_winkler` for strings of `a` and `b` chars.
+///
+/// Jaro is `(m/a + m/b + (m - t)/m) / 3` with matches `m <= min(a, b)`, so it is
+/// at most `(min/a + min/b + 1) / 3`. Winkler adds at most `4 * 0.1 * (1 - jaro)`,
+/// so the result is at most `0.6 * jaro + 0.4`. Returns 1.0 (never prunes) when
+/// either string is empty, where strsim's own edge cases apply.
+#[allow(clippy::cast_precision_loss)]
+pub(crate) fn jaro_winkler_upper_bound(a: usize, b: usize) -> f64 {
+    if a == 0 || b == 0 {
+        return 1.0;
+    }
+    let min = a.min(b) as f64;
+    let jaro = (min / a as f64 + min / b as f64 + 1.0) / 3.0;
+    0.6 * jaro + 0.4
 }
 
 /// Whether `name` is a canonical `commit/<repo>/<hex-sha>` node name.

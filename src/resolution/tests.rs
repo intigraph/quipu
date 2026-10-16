@@ -806,3 +806,48 @@ fn batch_resolution_agrees_with_the_single_entity_path() {
         }
     }
 }
+
+/// The length bound used to skip Jaro-Winkler comparisons must never be BELOW
+/// the real score, or pruning would drop a true candidate .
+#[test]
+fn jaro_winkler_upper_bound_never_undercuts_the_real_score() {
+    let words = [
+        "",
+        "a",
+        "ab",
+        "store",
+        "Store",
+        "store-server",
+        "store.example",
+        "quipu",
+        "quipu-server",
+        "quipu-ai",
+        "seeds",
+        "item-abc123",
+        "item-abc124",
+        "commit/quipu/abcdef0",
+        "alpha",
+        "alpine",
+        "beta",
+        "a much longer label with spaces in it",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ünïcödé-label",
+        "日本語",
+    ];
+    let mut checked = 0;
+    for a in words {
+        for b in words {
+            let (la, lb) = (a.to_lowercase(), b.to_lowercase());
+            let real = strsim::jaro_winkler(&la, &lb);
+            let bound = super::jaro_winkler_upper_bound(la.chars().count(), lb.chars().count());
+            assert!(
+                bound + 1e-12 >= real,
+                "bound {bound} < real {real} for {la:?} vs {lb:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, words.len() * words.len());
+    // And it actually prunes: a 4-char name cannot match a 40-char label at 0.85.
+    assert!(super::jaro_winkler_upper_bound(4, 40) < 0.85);
+}
