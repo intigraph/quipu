@@ -1,0 +1,11 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix schema: <https://schema.org/> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+# A read projection, not the source tracker's write schema.
+<urn:brief:ActionShape> a sh:NodeShape ; sh:targetClass schema:Action ;
+    sh:property [ sh:path schema:identifier ; sh:minCount 1 ] ;
+    sh:property [ sh:path schema:name ; sh:minCount 1 ] .
+<urn:brief:DocumentShape> a sh:NodeShape ; sh:targetClass aegis:Document .
+<urn:brief:IdentifierPolicyShape> a sh:NodeShape ;
+    sh:targetClass aegis:InternalIdentifierPattern .
