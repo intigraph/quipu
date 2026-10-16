@@ -9,6 +9,7 @@ mod casts;
 mod composed_absence;
 pub mod exists;
 pub mod filter;
+mod filter_join;
 pub mod filter_pushdown;
 #[cfg(test)]
 mod filter_pushdown_tests;

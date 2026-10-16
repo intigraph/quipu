@@ -113,6 +113,9 @@ pub fn eval_pattern_seeded(
         } => eval_values(store, variables, bindings, seed),
 
         GraphPattern::Join { left, right } => {
+            if let Some(done) = super::filter_join::try_eval(store, left, right, ctx, seed)? {
+                return Ok(done);
+            }
             // aegis-roth88: a small VALUES table seeds the other side per row.
             if let Some(done) = try_values_bind_join(store, left, right, ctx, seed)? {
                 return Ok(done);
