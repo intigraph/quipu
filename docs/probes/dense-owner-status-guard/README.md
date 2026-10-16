@@ -42,5 +42,13 @@ binary, with only the new batching paths disabled. That bypass is compiled only
 for tests. These synthetic timings are not production acceptance or total-memory
 measurements. Existing result, intermediate-row, and deadline budgets remain.
 
-The recording and its measured timings are linked in the pull request. Revert
-the actual merge commit to roll back the source change.
+Recorded on production-code commit `5c7d9203` (the recording commit changes only
+these demonstration artifacts): preceding planner 3290.660 / 3936.776 ms;
+candidate 509.213 / 413.662 ms. All four positive controls returned `true`.
+See [recorded output](output.log) and [terminal timing](timing.log).
+
+The separate exact inbox-query private fixture measured 1050.868 / 944.211 ms
+versus its preceding baseline 3621.593 / 2942.526 ms. One candidate sample still
+exceeded the 999 ms acceptance target; that target remains unmet. The public
+fixture demonstrates the optimization, without claiming production recovery.
+Revert the actual merge commit to roll back the source change.
