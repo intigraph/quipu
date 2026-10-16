@@ -27,7 +27,7 @@ fn retract_datum(e: i64, a: i64, value: Value) -> Datum {
 #[test]
 fn asserts_arrive_in_commit_order_and_pages_end_on_tx_boundaries() {
     let mut store = Store::open_in_memory().unwrap();
-    let e = store.intern("http://example.org/koror").unwrap();
+    let e = store.intern("http://example.org/korimako").unwrap();
     let a = store.intern("http://example.org/cpuCores").unwrap();
     let tx1 = store
         .transact(
@@ -52,7 +52,7 @@ fn asserts_arrive_in_commit_order_and_pages_end_on_tx_boundaries() {
     assert_eq!(page.records.len(), 1);
     assert_eq!(page.records[0]["op"], "assert");
     assert_eq!(page.records[0]["value"], 4);
-    assert_eq!(page.records[0]["entity"], "http://example.org/koror");
+    assert_eq!(page.records[0]["entity"], "http://example.org/korimako");
     assert_eq!(page.watermark_tx, tx2);
 
     let page2 = store
@@ -78,14 +78,14 @@ fn asserts_arrive_in_commit_order_and_pages_end_on_tx_boundaries() {
 #[test]
 fn capture_modes_carry_exactly_what_they_promise() {
     let mut store = Store::open_in_memory().unwrap();
-    let e = store.intern("http://example.org/koror").unwrap();
+    let e = store.intern("http://example.org/korimako").unwrap();
     let a = store.intern("http://example.org/cpuCores").unwrap();
     let name = store.intern("http://example.org/name").unwrap();
     store
         .transact(
             &[
                 assert_datum(e, a, Value::Int(4)),
-                assert_datum(e, name, Value::Str("koror".into())),
+                assert_datum(e, name, Value::Str("korimako".into())),
             ],
             "2026-04-01",
             None,
@@ -124,7 +124,7 @@ fn capture_modes_carry_exactly_what_they_promise() {
         .unwrap();
     let row = &with_row.records[0]["row"];
     assert!(row.get("http://example.org/cpuCores").is_none(), "{row:#?}");
-    assert_eq!(row["http://example.org/name"], "koror");
+    assert_eq!(row["http://example.org/name"], "korimako");
 }
 
 #[test]

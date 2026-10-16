@@ -1,7 +1,7 @@
 # The Rule Builder
 
 > "I don't want to write the same SPARQL property path in every query.
-> I want the graph to *know* that traefik transitively runs on koror."
+> I want the graph to *know* that traefik transitively runs on korimako."
 
 You have a knowledge graph full of infrastructure facts. You've been writing
 SPARQL queries with `dependsOn+` and `runsOn+` property paths to chase
@@ -23,12 +23,12 @@ quipu knot - --db lab.db <<'EOF'
 @prefix hw: <http://example.org/homelab/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
-hw:koror a hw:Host ;
-    rdfs:label "koror" .
+hw:korimako a hw:Host ;
+    rdfs:label "korimako" .
 
 hw:webproxy a hw:Container ;
     rdfs:label "webproxy" ;
-    hw:runsOn hw:koror .
+    hw:runsOn hw:korimako .
 
 hw:traefik a hw:WebApp ;
     rdfs:label "traefik" ;
@@ -37,7 +37,7 @@ hw:traefik a hw:WebApp ;
 
 hw:pihole a hw:Service ;
     rdfs:label "pihole" ;
-    hw:runsOn hw:koror .
+    hw:runsOn hw:korimako .
 
 hw:grafana a hw:WebApp ;
     rdfs:label "grafana" ;
@@ -46,19 +46,19 @@ hw:grafana a hw:WebApp ;
 
 hw:prometheus a hw:Service ;
     rdfs:label "prometheus" ;
-    hw:runsOn hw:koror ;
+    hw:runsOn hw:korimako ;
     hw:dependsOn hw:postgres .
 
 hw:postgres a hw:Database ;
     rdfs:label "postgres" ;
-    hw:runsOn hw:koror .
+    hw:runsOn hw:korimako .
 EOF
 ```
 
 ## Step 1: Your First Rule — Transitive `runsOn`
 
-Traefik runs on webproxy, and webproxy runs on koror. You want to
-materialise the fact that traefik runs on koror without writing a property
+Traefik runs on webproxy, and webproxy runs on korimako. You want to
+materialise the fact that traefik runs on korimako without writing a property
 path query every time.
 
 Create `my-rules.ttl`:
@@ -105,7 +105,7 @@ per-rule contributions:
 ```
 
 Three new facts were derived. The reasoner found that traefik, grafana,
-and prometheus all transitively run on koror (via webproxy or directly).
+and prometheus all transitively run on korimako (via webproxy or directly).
 
 Query the derived facts:
 
@@ -300,8 +300,8 @@ use quipu::types::{Datum, Op, Value};
 let mut store = Store::open("lab.db")?;
 let ruleset = parse_rules(&std::fs::read_to_string("my-rules.ttl")?, None)?;
 
-// Hypothetical: retract all runsOn edges to koror
-let koror_id = store.lookup("http://example.org/homelab/koror")?.unwrap();
+// Hypothetical: retract all runsOn edges to korimako
+let koror_id = store.lookup("http://example.org/homelab/korimako")?.unwrap();
 let runs_on_id = store.lookup("http://example.org/homelab/runsOn")?.unwrap();
 
 let retractions: Vec<Datum> = store
@@ -323,7 +323,7 @@ let report = store.speculate(&retractions, "2026-04-04T00:00:00Z", |s| {
     evaluate(s, &ruleset, "2026-04-04T00:00:00Z")
 })?;
 
-println!("If koror went down: {} facts retracted", report.retracted);
+println!("If korimako went down: {} facts retracted", report.retracted);
 ```
 
 The store is **unchanged** after `speculate()` returns. The hypothetical
