@@ -42,10 +42,10 @@ pub fn eval_bgp(
     if patterns.is_empty() {
         return Ok((vec![seed.clone()], vec![]));
     }
-    if let Some(result) = super::batch_star::try_eval(store, patterns, ctx, seed)? {
+    if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
         return Ok(result);
     }
-    if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
+    if let Some(result) = super::batch_star::try_eval(store, patterns, ctx, seed)? {
         return Ok(result);
     }
     if let Some(result) = super::sql_star::try_eval(store, patterns, ctx, seed)? {
