@@ -191,6 +191,7 @@ async fn query_core(
     headers: HeaderMap,
     input: JsonValue,
 ) -> Result<axum::response::Response, AppError> {
+    let budget = super::admission::ReadBudget::from_headers(&headers, &store.search_config)?;
     let query_shape =
         quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));
     // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
@@ -236,7 +237,7 @@ async fn query_core(
         store.log_query_admission,
     );
     let stamp = observation.admission_stamp();
-    query_blocking(point, stamp, move || {
+    query_blocking(point, stamp, budget, move || {
         observation.dispatched();
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the

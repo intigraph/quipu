@@ -1,0 +1,11 @@
+Before: installed fc6d989ef102527126c3dd85a4cbe834d3589694, one bounded ASK {} request with X-Quipu-Timeout-Ms: 0
+{"body": {"labels": null, "result": true}, "elapsed_ms": 16.469, "header_remaining_ms": 0, "status": 200}
+
+After: private candidate native handler fixture, source base 453845adccd9a6c3ce56950a21ffa3feb8420a1f; cargo test client_budget -- --nocapture
+endpoint=/query remaining_ms=0 status=408 Request Timeout
+endpoint=/query remaining_ms=None status=200 OK positive={"labels":null,"result":true}
+endpoint=/query remaining_ms=Some("10000") status=200 OK positive={"labels":null,"result":true}
+endpoint=/context remaining_ms=0 status=408 Request Timeout
+endpoint=/context remaining_ms=None status=200 OK positive={"entities":[{"facts":[{"predicate":"http://www.w3.org/2000/01/rdf-schema#label","value":"budgetneedle","value_type":"Literal"}],"facts_capped":false,"iri":"https://example.test/s","label":"budgetneedle","relevance":"Direct","score":0.8999999761581421,"source":"knowledge","types":[]}],"query":"budgetneedle","summary":{"direct_hits":1,"embeddings":{"configured":false,"embedded_entities":0},"linked_additions":0,"total_entities":1,"total_facts":1,"truncated":{"entities_considered":1,"entities_shown":1,"entities_with_more_facts":0,"more_available":true}}}
+endpoint=/context remaining_ms=Some("10000") status=200 OK positive={"entities":[{"facts":[{"predicate":"http://www.w3.org/2000/01/rdf-schema#label","value":"budgetneedle","value_type":"Literal"}],"facts_capped":false,"iri":"https://example.test/s","label":"budgetneedle","relevance":"Direct","score":0.8999999761581421,"source":"knowledge","types":[]}],"query":"budgetneedle","summary":{"direct_hits":1,"embeddings":{"configured":false,"embedded_entities":0},"linked_additions":0,"total_entities":1,"total_facts":1,"truncated":{"entities_considered":1,"entities_shown":1,"entities_with_more_facts":0,"more_available":true}}}
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 167 filtered out; finished in 0.69s

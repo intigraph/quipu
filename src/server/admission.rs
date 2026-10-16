@@ -5,6 +5,10 @@
 
 use super::base::{AppError, blocking};
 
+#[path = "admission/read_budget.rs"]
+mod read_budget;
+pub(crate) use read_budget::{ReadBudget, client_read_blocking, query_blocking};
+
 /// Admit one write before moving it onto Tokio's uncancellable blocking pool.
 ///
 /// A request future can be cancelled while it waits for this permit, so an
@@ -20,25 +24,6 @@ static POINT_READ_ADMISSION: tokio::sync::Semaphore = tokio::sync::Semaphore::co
 
 /// Single-assignment, log-only observation of a granted admission permit.
 pub(super) type AdmissionStamp = std::sync::Arc<std::sync::OnceLock<std::time::Instant>>;
-
-pub(crate) async fn query_blocking<T, F>(
-    point: bool,
-    stamp: Option<AdmissionStamp>,
-    f: F,
-) -> Result<T, AppError>
-where
-    F: FnOnce() -> Result<T, AppError> + Send + 'static,
-    T: Send + 'static,
-{
-    let (admission, kind) = if point {
-        (&POINT_READ_ADMISSION, "point-read")
-    } else {
-        (read_admission(), "read")
-    };
-    let started = std::time::Instant::now();
-    let deadline = request_budget();
-    admit_with_deadline_observed(admission, kind, deadline, started, stamp, f).await
-}
 
 pub(crate) async fn write_blocking<T, F>(f: F) -> Result<T, AppError>
 where
@@ -110,7 +95,7 @@ where
     T: Send + 'static,
 {
     let acquire = admission.acquire();
-    let acquired = if kind == "point-read" {
+    let acquired = if kind == "point-read" || kind == "client-read" {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
@@ -145,8 +130,14 @@ where
         let _wait = WriteWaitGuard::start((kind == "write").then_some(started));
         if kind == "write" {
             reject_expired_write()?;
+        } else if kind == "client-read" || kind == "point-read" {
+            quipu::time::check_request_deadline()?;
         }
-        f()
+        let result = f();
+        if kind == "client-read" || kind == "point-read" {
+            quipu::time::check_request_deadline()?;
+        }
+        result
     })
     .await
 }
@@ -618,3 +609,7 @@ mod point_timeout_tests;
 #[cfg(test)]
 #[path = "admission/observation_tests.rs"]
 mod observation_tests;
+
+#[cfg(test)]
+#[path = "admission/client_budget_tests.rs"]
+mod client_budget_tests;

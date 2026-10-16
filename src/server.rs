@@ -350,6 +350,7 @@ async fn main() {
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
+            axum::http::HeaderName::from_static("x-quipu-timeout-ms"),
         ]);
 
     if args.iter().any(|a| a == "--embed-backfill") {

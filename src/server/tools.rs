@@ -408,7 +408,21 @@ pub(crate) async fn report_get(
     })
     .await
 }
-ro_handler!(context, quipu::tool_context);
+pub(crate) async fn context(
+    State(s): State<SharedStore>,
+    headers: axum::http::HeaderMap,
+    axum::Json(i): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let budget = super::admission::ReadBudget::from_headers(&headers, &s.search_config)?;
+    super::admission::client_read_blocking(budget, move || {
+        Ok(axum::Json(super::input_fields::annotate(
+            "quipu::tool_context",
+            &i,
+            quipu::tool_context(&s.read(), &i)?,
+        )))
+    })
+    .await
+}
 
 // aegis-e163: propose/accept/reject all WRITE (insert_proposal / accept_proposal
 // / reject_proposal persist proposal state through `&self`), so they are

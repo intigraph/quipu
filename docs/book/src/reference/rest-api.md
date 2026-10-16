@@ -33,6 +33,38 @@ verify the requested facts and preserve the same payload before retrying.
 These diagnostics do not change the configured request budget or bound direct
 protocol handlers that bypass tool-write admission.
 
+## Client read budgets
+
+`/query` (GET, JSON POST and SPARQL protocol POST) and `POST /context`
+accept an optional `X-Quipu-Timeout-Ms` header containing the client's remaining
+budget as one unsigned integer number of milliseconds. For example:
+
+```http
+X-Quipu-Timeout-Ms: 250
+```
+
+The server stamps one monotonic deadline before read admission. The effective
+budget is the minimum of the supplied value, a nonzero configured
+`request_timeout_ms`, and a nonzero store `query_timeout_ms`. Zero means the
+client budget is exhausted; it does not disable a limit. Missing headers keep
+the existing server-budget behavior. Duplicate headers, nondecimal values and
+values beyond the unsigned 64-bit range return HTTP 400.
+
+Queueing and execution consume the same budget. An expired queued read returns
+HTTP 408 without starting its tool; admitted work carries the deadline through
+the existing cooperative query checks and SQLite interruption. A disconnected
+HTTP future does not release admission while detached blocking work still runs.
+Noninterruptible work and waiting for a mutex are not forcibly killed; expiration
+is checked before and after the tool as well. This is a cooperative execution
+budget, not a hard bound on response latency or an operating-system thread kill.
+
+Clients must calculate the remaining budget separately for **each** request,
+including time already spent on earlier reads. Sending the original invocation
+budget on every request renews it incorrectly. Transit and body decoding before
+handler admission are not measured by this header, and client-side timeouts
+remain necessary. Existing clients that omit it gain no client-specific budget;
+server support alone does not prove client adoption or lower abandoned work.
+
 ## Unrecognized request fields
 
 Successful tool-backed JSON endpoints report unrecognized top-level request keys
