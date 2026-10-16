@@ -5,6 +5,8 @@
 //! ORDER BY/GROUP BY, aggregates, HAVING, EXTEND, RDFS, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod batch_absence;
+mod batch_star;
 mod casts;
 mod composed_absence;
 pub mod exists;
