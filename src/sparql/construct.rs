@@ -49,13 +49,7 @@ pub(super) fn eval_construct(
             };
 
             let object = match &tp.object {
-                TermPattern::NamedNode(n) => {
-                    if let Some(id) = store.lookup(n.as_str())? {
-                        Value::Ref(id)
-                    } else {
-                        Value::Str(n.as_str().to_string())
-                    }
-                }
+                TermPattern::NamedNode(n) => Value::Ref(store.query_ref(n.as_str())?),
                 TermPattern::Literal(lit) => super::filter::literal_to_value(lit),
                 TermPattern::Variable(v) => match row.get(v.as_str()) {
                     Some(val) => val.clone(),

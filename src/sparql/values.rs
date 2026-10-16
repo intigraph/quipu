@@ -59,16 +59,13 @@ pub fn eval_values(
 
 /// Convert a `VALUES` ground term into the store's `Value` representation.
 ///
-/// An IRI resolves to the interned `Ref` the fact log uses, so it joins with a
-/// BGP binding for the same IRI. An IRI absent from the dictionary keeps its
-/// lexical form (`Str`) — the same fallback the BGP subject binding uses. That
-/// matters: a sentinel id would make two *different* unknown IRIs compare
-/// equal, while `Str` stays distinct and still matches no fact.
+/// Persisted IRIs keep their dictionary id for BGP joins. Unknown IRIs use the
+/// same bounded, cache-only references as BIND and expression constants: term
+/// identity must not depend on whether an IRI has already been ingested, and a
+/// read must not write to the persistent dictionary.
 fn ground_term_to_value(store: &Store, term: &GroundTerm) -> Result<Value> {
     Ok(match term {
-        GroundTerm::NamedNode(n) => store
-            .lookup(n.as_str())?
-            .map_or_else(|| Value::Str(n.as_str().to_string()), Value::Ref),
+        GroundTerm::NamedNode(n) => Value::Ref(store.query_ref(n.as_str())?),
         GroundTerm::Literal(lit) => super::filter::literal_to_value(lit),
         // Quoted triples (RDF-star) are not stored as values, so one can never
         // match. Bind the lexical form rather than erroring: the row is then

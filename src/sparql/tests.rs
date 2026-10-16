@@ -4379,3 +4379,115 @@ fn f79_iri_keyset_pages_do_not_skip_interned_subjects() {
     }
     assert_eq!(seen, ["urn:order:a", "urn:order:m", "urn:order:z"]);
 }
+
+#[test]
+fn unknown_iri_values_preserve_term_kind_without_dictionary_writes() {
+    let store = Store::open_in_memory().unwrap();
+    store.intern("http://e/known").unwrap();
+    let term_count = || {
+        store
+            .conn
+            .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get::<_, i64>(0))
+            .unwrap()
+    };
+    let before = term_count();
+    store.conn.execute_batch("PRAGMA query_only=ON").unwrap();
+    let result = query(
+        &store,
+        r#"SELECT ?v (isIRI(?v) AS ?i) (isLiteral(?v) AS ?l) {
+        VALUES ?v { <http://e/known> <http://e/unknown> "http://e/unknown" }
+    }"#,
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 3);
+    let mut iris = Vec::new();
+    let mut literals = 0;
+    for row in result.rows() {
+        match &row["v"] {
+            Value::Ref(id) => {
+                iris.push(store.resolve(*id).unwrap());
+                assert_eq!(row["i"], Value::Bool(true));
+                assert_eq!(row["l"], Value::Bool(false));
+            }
+            Value::Str(value) => {
+                assert_eq!(value, "http://e/unknown");
+                assert_eq!(row["i"], Value::Bool(false));
+                assert_eq!(row["l"], Value::Bool(true));
+                literals += 1;
+            }
+            other => panic!("unexpected term {other:?}"),
+        }
+    }
+    iris.sort();
+    assert_eq!(iris, ["http://e/known", "http://e/unknown"]);
+    assert_eq!(literals, 1);
+    assert_eq!(term_count(), before);
+    assert_eq!(store.lookup("http://e/unknown").unwrap(), None);
+}
+
+#[test]
+fn unknown_iri_bind_and_values_share_identity_but_not_literal_identity() {
+    let store = Store::open_in_memory().unwrap();
+    for (term, expected) in [
+        ("<http://e/unknown>", 1),
+        ("\"http://e/unknown\"", 0),
+        ("<http://e/other>", 0),
+    ] {
+        let result = query(&store, &format!("SELECT ?v WHERE {{ VALUES ?v {{ {term} }} BIND(<http://e/unknown> AS ?b) FILTER(sameTerm(?v,?b)) }}")).unwrap();
+        assert_eq!(result.rows().len(), expected, "{term}");
+    }
+    let direct = query(
+        &store,
+        "SELECT (isIRI(<http://e/new>) AS ?i) (BOUND(?b) AS ?bound) { BIND(<http://e/new> AS ?b) }",
+    )
+    .unwrap();
+    assert_eq!(direct.rows()[0]["i"], Value::Bool(true));
+    assert_eq!(direct.rows()[0]["bound"], Value::Bool(true));
+    assert_eq!(store.lookup("http://e/unknown").unwrap(), None);
+    assert_eq!(store.lookup("http://e/other").unwrap(), None);
+    assert_eq!(store.lookup("http://e/new").unwrap(), None);
+}
+
+#[test]
+fn unknown_iri_construct_preserves_rdf_object_type_on_read_only_store() {
+    let store = Store::open_in_memory().unwrap();
+    store.conn.execute_batch("PRAGMA query_only=ON").unwrap();
+    let result = query(
+        &store,
+        r#"CONSTRUCT {
+        <http://e/s> <http://e/p> <http://e/new> .
+        <http://e/s> <http://e/p> "http://e/new" .
+    } WHERE {}"#,
+    )
+    .unwrap();
+    let QueryResult::Graph(triples) = &result else {
+        panic!("expected graph")
+    };
+    assert_eq!(
+        triples.len(),
+        2,
+        "IRI and same lexical literal are distinct triples"
+    );
+    assert!(triples.iter().any(
+        |t| matches!(t.object, Value::Ref(id) if store.resolve(id).unwrap() == "http://e/new")
+    ));
+    assert!(
+        triples
+            .iter()
+            .any(|t| t.object == Value::Str("http://e/new".into()))
+    );
+    let (_, bytes) = crate::w3c::serialize(&store, &result, crate::w3c::ResultFormat::NTriples)
+        .unwrap()
+        .unwrap();
+    let output = String::from_utf8(bytes).unwrap();
+    assert!(output.contains("<http://e/s> <http://e/p> <http://e/new> ."));
+    assert!(output.contains("<http://e/s> <http://e/p> \"http://e/new\" ."));
+    assert_eq!(store.lookup("http://e/new").unwrap(), None);
+    assert_eq!(
+        store
+            .conn
+            .query_row("SELECT COUNT(*) FROM facts", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+}

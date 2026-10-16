@@ -1,0 +1,8 @@
+running 6 tests
+test sparql::tests::unknown_iri_construct_preserves_rdf_object_type_on_read_only_store ... ok
+test sparql::tests::values_unknown_iri_yields_no_rows ... ok
+test sparql::tests::unknown_iri_bind_and_values_share_identity_but_not_literal_identity ... ok
+test sparql::tests::unknown_iri_values_preserve_term_kind_without_dictionary_writes ... ok
+test sparql::tests::graph_unknown_iri_is_empty_not_default ... ok
+test sparql::tests::graph_query_param_unknown_iri_is_empty ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 2217 filtered out; finished in 0.06s
