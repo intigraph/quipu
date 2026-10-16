@@ -1080,6 +1080,15 @@ def ledger_provenance(data: dict, pr_base: str | None = None) -> tuple[int, list
         return 2, unknown
     if drifted:
         return 1, drifted
+    if own:
+        # A revert can restore its own files to an older measured version,
+        # while other code inherited from main still differs from that ledger.
+        # The merge gate requires a re-derive of the exact PR merge for every
+        # code-changing PR; matching old blobs is not that measurement.
+        return 1, [
+            "code-changing PR requires an exact PR merge re-derive, even when "
+            "its own files match a previously measured revision"
+        ]
     return 0, []
 
 
