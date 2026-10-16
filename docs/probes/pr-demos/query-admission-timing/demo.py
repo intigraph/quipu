@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Print real, allowlisted observation fields from isolated native HTTP tests."""
 
+import atexit
 import json
 import subprocess
 import sys
@@ -11,9 +12,12 @@ def main():
         # Preserve literal LF output in a terminal recording and its byte timings.
         import termios
 
-        attributes = termios.tcgetattr(sys.stdout.fileno())
+        descriptor = sys.stdout.fileno()
+        attributes = termios.tcgetattr(descriptor)
+        original = attributes.copy()
+        atexit.register(termios.tcsetattr, descriptor, termios.TCSANOW, original)
         attributes[1] &= ~termios.ONLCR
-        termios.tcsetattr(sys.stdout.fileno(), termios.TCSANOW, attributes)
+        termios.tcsetattr(descriptor, termios.TCSANOW, attributes)
     command = [
         "cargo", "test", "--offline", "--locked", "--features", "full",
         "--bin", "quipu-server", "query_usage::tests::http_query_",
