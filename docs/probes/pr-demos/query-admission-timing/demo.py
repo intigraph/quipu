@@ -3,9 +3,17 @@
 
 import json
 import subprocess
+import sys
 
 
 def main():
+    if sys.stdout.isatty():
+        # Preserve literal LF output in a terminal recording and its byte timings.
+        import termios
+
+        attributes = termios.tcgetattr(sys.stdout.fileno())
+        attributes[1] &= ~termios.ONLCR
+        termios.tcsetattr(sys.stdout.fileno(), termios.TCSANOW, attributes)
     command = [
         "cargo", "test", "--offline", "--locked", "--features", "full",
         "--bin", "quipu-server", "query_usage::tests::http_query_",
