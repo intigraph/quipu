@@ -301,3 +301,33 @@ class ResultSetGraphTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpdateCaseReadinessTests(unittest.TestCase):
+    """aegis-84g: an update case whose server never answers /health is a case ERROR.
+
+    It used to fall through to the /update POST, whose URLError escaped the case
+    handler and aborted the whole runner, so no ledger was written at all.
+    """
+
+    def _run(self, server_body: str):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            server = root / "fake-server"
+            server.write_text("#!/usr/bin/env python3\nimport sys, time\n" + server_body)
+            server.chmod(0o755)
+            update = root / "u.rq"
+            update.write_text("INSERT DATA { <urn:a> <urn:b> <urn:c> }")
+            case = mock.Mock(update_request=update, expected_data=[], expected_graph_data=[], update_graph_data=[])
+            with self.assertRaises(ValueError) as raised:
+                MODULE.run_update_case(case, root / "quipu", server, root / "db", root)
+            return str(raised.exception)
+
+    def test_a_server_that_exits_reports_its_stderr(self):
+        message = self._run("sys.stderr.write('bind failed: boom')\nsys.exit(3)\n")
+        self.assertIn("exited before health", message)
+        self.assertIn("bind failed: boom", message)
+
+    def test_a_server_that_never_listens_is_not_a_fall_through(self):
+        message = self._run("time.sleep(30)\n")
+        self.assertEqual(message, "quipu-server did not become healthy")
