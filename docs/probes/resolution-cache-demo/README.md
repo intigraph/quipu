@@ -8,7 +8,9 @@ request path. `cache_labels = false` keeps the original scan path.
 This recording runs the same resolve input and one-node episode body against
 separate copies of a private 268,000-label synthetic store. Each child starts in
 a fresh process. OFF is the original scan behavior; ON warms the cache first.
-The fixture has no embedding provider or attachments. This demonstrates the
+The fixture has no embedding provider or attachments. Composed stores always
+retain exact scans because read-only mounting does not certify immutable provider
+lifetimes; the private external-provider mutation regression enforces this. This demonstrates the
 label-scan cost, not production latency or provider/composition parity.
 
 Run from the repository root:
@@ -55,3 +57,8 @@ Fallback configuration:
 [resolution]
 cache_labels = false
 ```
+
+Follow-up safety correction keeps the recorded unattached path unchanged, and
+refuses caching whenever any provider is attached. The external-provider mutation
+control fails on the original candidate and passes with exact scan fallback.
+The recording does not demonstrate acceleration for composed stores.

@@ -38,10 +38,12 @@ pub(crate) struct CachedLabels {
 }
 
 /// Never trust a process-local invalidation signal instead of the database.
+/// Read-only attachments do not certify immutable provider lifetimes, so composed
+/// stores always use exact scans instead of caching an uncertified generation.
 /// Cold/stale requests use the original exact scan until the off-request warmer
 /// publishes a current snapshot. They never wait for or serve a stale snapshot.
 pub(super) fn get(store: &Store) -> Result<Arc<LabelIndex>> {
-    if !store.resolution_config.cache_labels {
+    if !store.resolution_config.cache_labels || !store.attachments.is_empty() {
         *store.resolution_cache.lock() = None;
     } else if store.conn.is_autocommit() {
         let Ok(key) = Key::of(store) else {
@@ -59,12 +61,13 @@ pub(super) fn get(store: &Store) -> Result<Arc<LabelIndex>> {
 impl Store {
     /// Warm resolution labels before accepting traffic or from a commit-hint
     /// worker. Returns false if a concurrent write prevents a coherent publish.
-    /// A disabled cache uses the original per-request scan and retains no index.
+    /// A disabled cache or a composed store uses the original per-request scan and
+    /// retains no index; read-only mounting does not guarantee provider immutability.
     ///
     /// # Errors
     /// Propagates label-scan/store errors; no write is performed.
     pub fn prepare_resolution_index(&self) -> Result<bool> {
-        if !self.resolution_config.cache_labels {
+        if !self.resolution_config.cache_labels || !self.attachments.is_empty() {
             *self.resolution_cache.lock() = None;
             return Ok(false);
         }

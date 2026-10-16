@@ -138,8 +138,7 @@ fn unknown_commit_and_outer_rollback_never_publish_uncommitted_labels() {
     assert_eq!(entries(&store), oracle(&store));
 }
 
-#[test]
-fn maintaining_a_local_alias_preserves_unchanged_labels_in_attached_graphs() {
+fn composed_store() -> (Store, tempfile::TempDir, std::path::PathBuf) {
     use crate::store::attach::Attachment;
     let dir = tempfile::tempdir().unwrap();
     let main = dir.path().join("main.db");
@@ -177,11 +176,17 @@ fn maintaining_a_local_alias_preserves_unchanged_labels_in_attached_graphs() {
         .unwrap();
     }
     crate::store::respace::respace_file(&src, &layer, 31).unwrap();
-    let mut store = Store::open_with_attachments(
+    let store = Store::open_with_attachments(
         main.to_str().unwrap(),
         &[Attachment::read_only("layer", layer.to_str().unwrap())],
     )
     .unwrap();
+    (store, dir, layer)
+}
+
+#[test]
+fn maintaining_a_local_alias_preserves_unchanged_labels_in_attached_graphs() {
+    let (mut store, _dir, _layer) = composed_store();
     store.prepare_resolution_index().unwrap();
     assert_eq!(entries(&store).len(), 2);
     write(&mut store, 1, "Local", Op::Retract);
@@ -223,4 +228,33 @@ fn configured_fallback_round_trips_and_reaches_pooled_readers() {
     reader.adopt_read_config_from(&writer);
     assert!(!reader.resolution_config().cache_labels);
     assert!(!reader.prepare_resolution_index().unwrap());
+}
+
+#[test]
+fn externally_changed_read_only_provider_never_reuses_cached_labels() {
+    let (store, _dir, layer) = composed_store();
+    store.prepare_resolution_index().unwrap();
+    assert!(entries(&store).iter().any(|(_, label)| label == "packed"));
+    // mode=ro constrains this handle, not other writers of the mounted file.
+    // This private fixture intentionally changes it without touching MAIN.
+    let provider = rusqlite::Connection::open(layer).unwrap();
+    provider
+        .execute(
+            "UPDATE facts SET v=?1 WHERE a IN (SELECT id FROM terms WHERE iri=?2) AND op=1",
+            rusqlite::params![
+                Value::Str("Provider changed".into()).to_bytes(),
+                format!("{}label", namespace::RDFS)
+            ],
+        )
+        .unwrap();
+    assert_eq!(entries(&store), oracle(&store));
+    assert!(
+        entries(&store)
+            .iter()
+            .any(|(_, label)| label == "provider changed")
+    );
+    assert!(
+        store.resolution_cache.lock().is_none(),
+        "uncertified attached lifetimes must use exact scans"
+    );
 }
