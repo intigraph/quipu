@@ -643,6 +643,7 @@ fn counterfactual_ranking_shifts_influence_without_mutating() {
 #[test]
 fn community_description_is_read_only_and_scope_qualified() {
     let mut store = two_cluster_store();
+    ingest_rdf(&mut store, b"<http://example.org/a1> <http://www.w3.org/2000/01/rdf-schema#label> \"Alpha\" . <http://example.org/b1> <http://www.w3.org/2000/01/rdf-schema#label> \"Beta\" .".as_slice(), oxrdfio::RdfFormat::Turtle, None, "2026-01-01T00:00:00Z", None, None).unwrap();
     let before = store.latest_tx_id().unwrap();
     let input = serde_json::json!({"algorithm":"louvain", "predicate":"http://example.org/link"});
     let first = tool_project(&mut store, &input).unwrap();
@@ -665,6 +666,17 @@ fn community_description_is_read_only_and_scope_qualified() {
         );
         assert!(group["label_basis"].is_object());
     }
+    // Prefer a real member label over an opaque local-name fallback.
+    assert!(first["communities"].as_array().unwrap().iter().any(|g| {
+        g["label"]
+            .as_str()
+            .is_some_and(|label| label.contains("Alpha"))
+    }));
+    assert!(first["communities"].as_array().unwrap().iter().any(|g| {
+        g["label"]
+            .as_str()
+            .is_some_and(|label| label.contains("Beta"))
+    }));
     assert_ne!(
         super::communities::scope(&serde_json::json!({})),
         super::communities::scope(&serde_json::json!({"graph":"ROOT"}))
@@ -687,7 +699,7 @@ fn community_failed_publication_rolls_back_graph_and_terms() {
         super::communities::scope(&input)
     );
     let before = store.latest_tx_id().unwrap();
-    store.conn.execute_batch("CREATE TEMP TRIGGER refuse_community_fixture BEFORE INSERT ON facts BEGIN SELECT RAISE(ABORT, 'owned fixture refusal'); END;").unwrap();
+    store.conn.execute_batch(&format!("CREATE TEMP TRIGGER refuse_community_fixture BEFORE INSERT ON facts WHEN NEW.g = (SELECT id FROM terms WHERE iri = '{graph}') BEGIN SELECT RAISE(ABORT, 'owned fixture refusal'); END;")).unwrap();
     assert!(tool_project(&mut store, &input).is_err());
     assert_eq!(store.latest_tx_id().unwrap(), before);
     assert!(store.registered_graph_id(&graph).unwrap().is_none());
@@ -698,4 +710,191 @@ fn community_failed_publication_rolls_back_graph_and_terms() {
     let success = tool_project(&mut store, &input).unwrap();
     assert_eq!(success["persisted"], 6);
     assert!(store.registered_graph_id(&graph).unwrap().is_some());
+}
+
+#[test]
+fn community_history_preserves_prior_partition() {
+    let mut store = Store::open_in_memory().unwrap();
+    let a = store.intern("urn:example:a").unwrap();
+    let b = store.intern("urn:example:b").unwrap();
+    persist_communities(&mut store, &[vec![a], vec![b]], "2026-01-01T00:00:00Z").unwrap();
+    let first_tx = store.latest_tx_id().unwrap();
+    persist_communities(&mut store, &[vec![a, b]], "2026-01-02T00:00:00Z").unwrap();
+    let graph = format!(
+        "urn:quipu:communities:{}",
+        super::communities::scope(&serde_json::json!({}))
+    );
+    let query = format!(
+        "SELECT DISTINCT ?c WHERE {{ GRAPH <{graph}> {{ ?s <{}memberOfCommunity> ?c }} }}",
+        namespace::QUIPU
+    );
+    let historical = crate::sparql::query_temporal(
+        &store,
+        &query,
+        &crate::sparql::TemporalContext {
+            as_of_tx: Some(first_tx),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(historical.rows().len(), 2);
+    assert_eq!(
+        crate::sparql::query(&store, &query).unwrap().rows().len(),
+        1
+    );
+}
+
+#[test]
+fn community_foreign_assertion_refuses_without_erasing_it() {
+    let mut store = two_cluster_store();
+    let input = serde_json::json!({"algorithm":"louvain", "predicate":"http://example.org/link", "persist":true});
+    let first = tool_project(&mut store, &input).unwrap();
+    let g = store
+        .registered_graph_id(first["derived_graph"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    let e = store.intern("urn:example:foreign").unwrap();
+    let a = store.intern("urn:example:note").unwrap();
+    store
+        .transact_to_graph(
+            &[crate::store::Datum {
+                entity: e,
+                attribute: a,
+                value: Value::Str("retained".into()),
+                valid_from: "2026-01-03T00:00:00Z".into(),
+                valid_to: None,
+                op: crate::types::Op::Assert,
+            }],
+            "2026-01-03T00:00:00Z",
+            None,
+            Some("foreign-fixture"),
+            g,
+        )
+        .unwrap();
+    let tx = store.latest_tx_id().unwrap();
+    let error = tool_project(&mut store, &input).unwrap_err();
+    assert!(error.to_string().contains("foreign assertions"));
+    assert_eq!(store.latest_tx_id().unwrap(), tx);
+    assert!(
+        store
+            .entity_facts_in_graph(e, g)
+            .unwrap()
+            .iter()
+            .any(|f| f.value == Value::Str("retained".into()))
+    );
+}
+
+/// Private cost profile: identical projection/partition, old resolve-only output
+/// versus full descriptions. Timing is reported, never a flaky test assertion.
+#[test]
+#[ignore = "manual bounded community label cost profile"]
+fn community_label_cost_profile() {
+    let mut store = Store::open_in_memory().unwrap();
+    let mut ttl = String::new();
+    for group in 0..500 {
+        for member in 0..8 {
+            ttl.push_str(&format!("<urn:fixture:g{group}:m{member}> <http://www.w3.org/2000/01/rdf-schema#label> \"Group {group} member {member}\" .\n"));
+            for other in member + 1..8 {
+                ttl.push_str(&format!("<urn:fixture:g{group}:m{member}> <urn:fixture:link> <urn:fixture:g{group}:m{other}> .\n"));
+            }
+        }
+    }
+    ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let pg = project(&store, None, Some("urn:fixture:link")).unwrap();
+    assert_eq!(pg.node_count(), 4000);
+    let input = serde_json::json!({"predicate":"urn:fixture:link"});
+    for mode in ["resolve_only", "described", "described", "resolve_only"] {
+        let start = std::time::Instant::now();
+        let partition = louvain(&pg);
+        assert_eq!(partition.groups.len(), 500);
+        if mode == "described" {
+            let (_, groups) =
+                super::communities::describe(&store, &pg, &partition.groups, &input).unwrap();
+            assert_eq!(groups.len(), 500);
+            assert!(groups.iter().all(|g| !g.label.is_empty() && g.size == 8));
+        } else {
+            let resolved: Vec<Vec<String>> = partition
+                .groups
+                .iter()
+                .map(|group| group.iter().map(|id| store.resolve(*id).unwrap()).collect())
+                .collect();
+            assert_eq!(resolved.len(), 500);
+        }
+        println!(
+            "community_cost mode={mode} nodes=4000 groups=500 elapsed_ms={:.3}",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+}
+
+#[test]
+fn community_label_keeps_shared_literal_punctuation() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = "<urn:example:a> <urn:example:link> <urn:example:b> ; <urn:example:topic> \"CLI: sd create\" . <urn:example:b> <urn:example:topic> \"CLI: sd create\" .";
+    ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = tool_project(
+        &mut store,
+        &serde_json::json!({"algorithm":"louvain","predicate":"urn:example:link"}),
+    )
+    .unwrap();
+    assert!(
+        result["communities"][0]["label"]
+            .as_str()
+            .unwrap()
+            .contains("CLI: sd create")
+    );
+}
+
+#[test]
+fn community_labels_never_fall_back_from_named_graph_to_root() {
+    let mut store = Store::open_in_memory().unwrap();
+    let root = "<urn:example:a> <http://www.w3.org/2000/01/rdf-schema#label> \"ROOT-only label\" .";
+    ingest_rdf(
+        &mut store,
+        root.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let g = store.graph_create("urn:example:selected").unwrap();
+    let selected = "<urn:example:a> <urn:example:link> <urn:example:b> . <urn:example:b> <http://www.w3.org/2000/01/rdf-schema#label> \"Selected label\" .";
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        selected.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+        g,
+    )
+    .unwrap();
+    let result = tool_project(&mut store,&serde_json::json!({"algorithm":"louvain","graph":"urn:example:selected","predicate":"urn:example:link"})).unwrap();
+    assert!(!result.to_string().contains("ROOT-only label"));
+    assert!(result.to_string().contains("Selected label"));
+    assert_eq!(
+        result["communities"][0]["label_basis"]["source_graph"],
+        "urn:example:selected"
+    );
 }

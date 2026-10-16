@@ -29,7 +29,7 @@ fn local(iri: &str) -> String {
         60,
     )
 }
-fn label(store: &Store, entity: i64, graph: i64) -> Result<String> {
+fn label(store: &Store, entity: i64, graph: i64) -> Result<Option<String>> {
     let mut labels = Vec::new();
     for fact in store.entity_facts_in_graph(entity, graph)? {
         let pred = store.resolve(fact.attribute)?;
@@ -44,10 +44,7 @@ fn label(store: &Store, entity: i64, graph: i64) -> Result<String> {
         }
     }
     labels.sort();
-    Ok(labels
-        .into_iter()
-        .next()
-        .unwrap_or(local(&store.resolve(entity)?)))
+    Ok(labels.into_iter().next())
 }
 
 pub(super) fn labels(
@@ -62,7 +59,7 @@ pub(super) fn labels(
     groups.iter().map(|members| {
         let mut top = Vec::new();
         let mut types: BTreeMap<String, usize> = BTreeMap::new();
-        let mut pairs: BTreeMap<(String, String), usize> = BTreeMap::new();
+        let mut pairs: BTreeMap<(String, String, bool), usize> = BTreeMap::new();
         for &member in members {
             let iri = store.resolve(member)?;
             top.push((ranks.get(&member).copied().unwrap_or(0.0), iri, label(store, member, graph)?));
@@ -82,7 +79,7 @@ pub(super) fn labels(
                     Value::Ref(id) => store.resolve(*id)?,
                     value => match text(value) { Some(s) if s.chars().count() <= 256 => s.to_string(), _ => continue },
                 };
-                seen_pairs.insert((pred, object));
+                seen_pairs.insert((pred, object, matches!(fact.value, Value::Ref(_))));
             }
             for t in seen_types { *types.entry(t).or_default() += 1; }
             for pair in seen_pairs { *pairs.entry(pair).or_default() += 1; }
@@ -94,15 +91,17 @@ pub(super) fn labels(
             .min_by(|a,b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let mut segments = Vec::new();
         if let Some((t,_)) = &dominant { segments.push(local(t)); }
-        if let Some(((_, object),_)) = &shared { segments.push(local(object)); }
-        if let Some((_,_,name)) = top.first() { segments.push(name.clone()); }
+        if let Some(((_, object, is_iri),_)) = &shared { segments.push(if *is_iri { local(object) } else { short(object, 60) }); }
+        let label_member = top.iter().find(|(_,_,label)| label.is_some()).or_else(|| top.first());
+        if let Some((_,iri,label)) = label_member { segments.push(label.clone().unwrap_or_else(|| local(iri))); }
         segments.dedup();
         let name = short(&segments.join(" · "), 60);
         Ok((name, json!({
             "algorithm":"louvain-label/v1",
+            "label_member":label_member.map(|(score,iri,label)|json!({"entity":iri,"page_rank":score,"label":label})),
             "top_members":top.iter().take(2).map(|(score,iri,label)|json!({"entity":iri,"page_rank":score,"label":label})).collect::<Vec<_>>(),
             "dominant_type":dominant.map(|(iri,count)|json!({"entity":iri,"member_count":count})),
-            "shared_fact":shared.map(|((predicate,object),count)|json!({"predicate":predicate,"object":object,"member_count":count})),
+            "shared_fact":shared.map(|((predicate,object,is_iri),count)|json!({"predicate":predicate,"object":object,"object_is_iri":is_iri,"member_count":count})),
         })))
     }).collect()
 }
