@@ -27,6 +27,7 @@ use std::sync::{Mutex, OnceLock};
 pub mod agents;
 pub(crate) mod attestation;
 mod histogram;
+pub mod inflight;
 use histogram::Hist;
 pub(crate) mod write_provenance;
 pub mod writes;

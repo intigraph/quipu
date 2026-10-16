@@ -29,6 +29,8 @@ pub(crate) fn render_request_starts(out: &mut String) {
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
     request_completion::cancellations().render(out);
+    quipu::metrics::inflight::http().render(out, false);
+    quipu::metrics::inflight::store().render(out, true);
 }
 
 tokio::task_local! {
@@ -91,6 +93,21 @@ async fn log_request_with_sequence(
     next: axum::middleware::Next,
     sequence: &AtomicU64,
 ) -> axum::response::Response {
+    log_request_tracked(
+        req,
+        next,
+        sequence,
+        quipu::metrics::inflight::http().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     // Use the route template, not the raw path, to bound metric cardinality.
@@ -98,6 +115,14 @@ async fn log_request_with_sequence(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+    let lane = if quipu::http_auth::is_write_request(&endpoint, method.as_str()) {
+        quipu::metrics::inflight::Lane::Write
+    } else if quipu::http_auth::READ_ENDPOINTS.contains(&endpoint.as_str()) {
+        quipu::metrics::inflight::Lane::Read
+    } else {
+        quipu::metrics::inflight::Lane::Other
+    };
+    let _inflight = registry.start(lane, quipu::metrics::inflight::Phase::Active);
     let client = quipu::metrics::normalize_client(
         req.headers()
             .get("x-quipu-client")
@@ -407,3 +432,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "request_inflight_tests.rs"]
+mod inflight_tests;
