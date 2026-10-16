@@ -1,5 +1,7 @@
 // Presentation around the existing engine controls. All answers stay in the
 // explorer's real query path; there are no mockup rows or simulated verdicts.
+import { setupPresentation } from "./presentation.js";
+
 const $ = (selector) => document.querySelector(selector);
 let report = null;
 
@@ -95,16 +97,12 @@ export function setupWorkbench() {
       tabs[next].focus();
     });
   }
-  showTab("ask");
+  showTab(setupPresentation());
   $("#sparql").readOnly = true;
   $("#edit-query").addEventListener("click", () => {
     $("#sparql").readOnly = !$("#sparql").readOnly;
     $("#edit-query").textContent = $("#sparql").readOnly ? "Edit query" : "Done editing";
     $("#sparql").focus();
-  });
-  $("#theme-choice").addEventListener("change", (event) => {
-    if (event.target.value === "auto") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = event.target.value;
   });
 
   // Mirror the shipped starter controls rather than duplicating their queries

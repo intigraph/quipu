@@ -12,7 +12,7 @@ const retained = process.env.OUT_DIR;
 const out = retained || fs.mkdtempSync(path.join(os.tmpdir(), "explore-navigation-"));
 let browser;
 fs.mkdirSync(out, { recursive: true });
-const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css",
+const mime = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css",
   ".wasm": "application/wasm", ".gz": "application/gzip" };
 const server = http.createServer((req, res) => {
   try {
