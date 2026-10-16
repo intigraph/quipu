@@ -16,7 +16,13 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
         response["insufficient_context"].as_bool(),
         context["outcome"].as_str(),
     ) {
-        (Some(true), Some("NO CONTEXT")) => Vec::new(),
+        (Some(true), Some("NO CONTEXT")) => {
+            let rows = response["context_results"]
+                .as_array()
+                .filter(|rows| rows.is_empty())
+                .ok_or("UNKNOWN: invalid negative context evidence")?;
+            rows.clone()
+        }
         (Some(false), Some("CONTEXT")) => {
             let rows = response["context_results"]
                 .as_array()
@@ -46,6 +52,22 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn negative_outcome_requires_explicit_empty_context_rows() {
+        for rows in [
+            json!([{"entity":"urn:wrong","similarity":0.8}]),
+            Value::Null,
+            json!({}),
+        ] {
+            let body = json!({"insufficient_context":true,"context_results":rows,
+                "context":{"contract":"quipu-context/v1","outcome":"NO CONTEXT","similarity_floor":0.52}});
+            assert!(render(&body.to_string()).is_err());
+        }
+        let missing = json!({"insufficient_context":true,
+            "context":{"contract":"quipu-context/v1","outcome":"NO CONTEXT","similarity_floor":0.52}});
+        assert!(render(&missing.to_string()).is_err());
+    }
 
     #[test]
     fn negative_outcome_requires_supported_floor() {
