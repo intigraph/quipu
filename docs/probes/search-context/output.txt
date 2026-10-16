@@ -1,0 +1,6 @@
+Script started on 2026-10-16 12:48:59-04:00 [COMMAND="stty -onlcr && bash run-demo.sh" <not executed on terminal>]
+Implementation source: 1ed662dcbcea10fbea94dbce80a4db940c2b04cc
+{"case":"missing subject","context_count":0,"diagnostic_count":1,"outcome":"NO CONTEXT","reason":"subject_not_covered"}
+{"case":"present subject","context_count":1,"diagnostic_count":1,"outcome":"CONTEXT","reason":"sufficient_context"}
+
+Script done on 2026-10-16 12:49:03-04:00 [COMMAND_EXIT_CODE="0"]
