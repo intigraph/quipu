@@ -1,0 +1,13 @@
+Script started on 2026-10-16 08:57:13-04:00 [COMMAND="bash docs/probes/dense-owner-status-guard/run-demo.sh" <not executed on terminal>]
+Synthetic fixture: 12,001 subjects in two named graphs, with dense literal/IRI ownership.
+The preceding planner evaluates the status guard per selected subject; the candidate batches selected subjects.
+Both paths must find the same deliberately invalid status (ASK true).
+test sparql::filter_join::tests::dense_tests::dense_owner_guard_demo ... DENSE_GUARD_DEMO fixture_start=true
+DENSE_GUARD_DEMO fixture_ready=true
+DENSE_GUARD_DEMO mode=preceding_per_subject positive_guard=true elapsed_ms=3290.660
+DENSE_GUARD_DEMO mode=batched positive_guard=true elapsed_ms=509.213
+DENSE_GUARD_DEMO mode=batched positive_guard=true elapsed_ms=413.662
+DENSE_GUARD_DEMO mode=preceding_per_subject positive_guard=true elapsed_ms=3936.776
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2385 filtered out; finished in 10.91s
+
+Script done on 2026-10-16 08:57:49-04:00 [COMMAND_EXIT_CODE="0"]
