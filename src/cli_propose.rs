@@ -97,8 +97,22 @@ fn resolve_decided_by(
     args: &[String],
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<String, &'static str> {
-    if let Some(w) = args.windows(2).find(|w| w[0] == "--decided-by") {
-        let v = w[1].trim();
+    // Decide PRESENCE first, then the value. A flag that is present but has no
+    // usable value must refuse: falling through to the environment would record
+    // a different actor than the one the caller tried to name.
+    let mut explicit = None;
+    for (i, arg) in args.iter().enumerate() {
+        if arg == "--decided-by" {
+            explicit = Some(args.get(i + 1).map_or("", String::as_str));
+            break;
+        }
+        if let Some(v) = arg.strip_prefix("--decided-by=") {
+            explicit = Some(v);
+            break;
+        }
+    }
+    if let Some(v) = explicit {
+        let v = v.trim();
         if v.is_empty() || v.starts_with("--") {
             return Err("--decided-by needs a non-empty identity");
         }
@@ -294,6 +308,42 @@ mod decided_by_tests {
                 none
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn explicit_flag_without_a_value_refuses_even_with_a_fallback_identity() {
+        // wu's falsifier on #608: a TRAILING --decided-by had no two-token window,
+        // so it was read as absent and the decision was recorded as cli:<USER>.
+        let env = |k: &str| (k == "USER").then(|| "review-user".to_string());
+        for verb in ["accept", "reject"] {
+            for tail in [
+                &["--decided-by"][..],
+                &["--decided-by", ""][..],
+                &["--decided-by", "   "][..],
+                &["--decided-by", "--note", "x"][..],
+                &["--decided-by="][..],
+            ] {
+                let mut argv = vec!["quipu", "propose", verb, "7"];
+                argv.extend_from_slice(tail);
+                assert!(
+                    resolve_decided_by(&a(&argv), env).is_err(),
+                    "{argv:?} must refuse, not fall back to cli:review-user"
+                );
+            }
+        }
+        // Positive controls under the same environment.
+        assert_eq!(
+            resolve_decided_by(
+                &a(&["quipu", "propose", "reject", "7", "--decided-by=ian"]),
+                env
+            )
+            .unwrap(),
+            "ian"
+        );
+        assert_eq!(
+            resolve_decided_by(&a(&["quipu", "propose", "reject", "7"]), env).unwrap(),
+            "cli:review-user"
         );
     }
 }
