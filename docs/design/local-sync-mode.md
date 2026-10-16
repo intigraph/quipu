@@ -1,6 +1,7 @@
 # Design: Local sync mode — scoped replicas against one master
 
-> **Status (2026-10-16): design for review. Nothing here is implemented.**
+> **Status (2026-10-16, revision 2 after architecture review): design for
+> review. Nothing here is implemented.**
 > It records the contract to build, the shipped primitives it reuses, and
 > the defects in those primitives that block replication today. Every
 > source claim cites the file at `origin/main` 453845ad. The store and
@@ -44,7 +45,7 @@ offline erasure of data a client already holds (§4).
 | Write authority | Per-graph authority along the principal chain, opt-in (`src/governance/authority.rs`, `src/store/gate.rs:379-399`) | Must be on for changeset admission |
 
 **Feed defects that replication would turn into silent divergence.** These
-are prerequisites (phase P0, §11). F1, F2 and F6 are findings from reading
+are prerequisites (phase P0, §12). F1, F2 and F6 are findings from reading
 the code at 453845ad; P0's first tests must reproduce each one before it is
 fixed.
 
@@ -104,11 +105,33 @@ Scope is **authorization and semantic completeness at once**:
   subscribe must all enforce the same authenticated per-graph read policy,
   metadata included. Every relay enforces it again for its own children.
   Today no read route checks anything (§2).
-- **Revocation.** A client learns of a grant revocation from a `scope.revoked`
-  record on its stream. It then stops serving the revoked graphs and drops
-  them at its next open. Data already copied to an offline device cannot be
-  remotely erased. The guarantee is "no new data after revocation, and the
-  data stops being served once the client sees the record", not erasure.
+- **Authorization is checked at every transfer, not only at subscribe
+  time.** The source and every relay re-check the principal's current grant
+  for the scope at each of these points:
+  - building or serving an as-of share, including one from cache;
+  - emitting each `tx` frame or chunk part;
+  - accepting a reconnect or resume.
+
+  A resume token or cached share is bound to `(principal, scope_digest,
+  policy_digest, log_epoch)` and is re-authorized when it is used. A graph
+  hash, or possession of a cached share, is never authority.
+- **Revocation travels on the control channel.** It is delivered as a signed
+  `control` frame on every open session for that principal (§5), which is
+  never graph-filtered. It is also returned in place of data on the next
+  transfer attempt. Revocation mid-chunk discards the stage. Revocation
+  between bootstrap and tail refuses the tail.
+- **Offline serving is lease-bound.** A client holds a grant lease with an
+  expiry, renewed while connected:
+  - Before expiry, it may serve the scope locally.
+  - After expiry, or once it has seen a revocation, it **fails closed**
+    for any other principal, such as a relay child or a local service
+    acting for another user.
+  - Its own reads of data it already holds stay available, labelled
+    **advisory: authority unverified since t**.
+
+  Data already copied to an offline device cannot be remotely erased. The
+  guarantee is "no new data after revocation or lease expiry, and no serving
+  to others", not erasure.
 - **Shape and policy context crosses slices.** SHACL class and inverse
   constraints, inference rules and policy may reference graphs outside the
   slice. A slice manifest declares its context graphs. Local validation of a
@@ -123,9 +146,15 @@ Scope is **authorization and semantic completeness at once**:
 chosen transaction `T` and scoped to the graph set. The cut is one
 consistent snapshot read at `T`. Its manifest adds:
 
-- `source = {store_id, log_epoch}`. `log_epoch` is new (F5): it is minted at
-  store creation and re-minted on restore, on clone detection, and on any
-  history-removing operation such as deep freeze (F2).
+- `source = {store_id, log_epoch}`. `log_epoch` is new (F5). It is minted at
+  store creation and re-minted by any history-removing operation such as
+  deep freeze (F2). It is also re-minted by an **explicit ownership step**:
+  `quipu store restore` and `quipu store adopt` mint a new epoch and record
+  it in an ownership file bound to the host and the data path. A store
+  opened at a different path or host than its ownership record refuses to
+  serve replication or accept writes until an operator runs `adopt`. That
+  is what prevents two copies from serving the same epoch; clone detection
+  alone does not.
 - `watermark_tx = T`, the last source transaction included.
 - `scope_digest` (the sorted graph IRIs plus declared context graphs) and a
   `policy_digest`.
@@ -133,69 +162,161 @@ consistent snapshot read at `T`. Its manifest adds:
 - `completeness`, which must cover valid time (F3) and lossless bytes (F4).
   A bootstrap that cannot carry them is refused, not degraded.
 
-**Tail:** `GET /changes/stream?graph=…&since=T`. The applier enforces these
-rules:
+**Tail: one stream for the whole graph set.** The shipped `graph` filter
+takes one graph (`src/server/feed_stream.rs:72-86`). Tailing N graphs as N
+streams would split a multi-graph transaction across streams, with no
+atomicity between them. The replication stream therefore takes the scope
+itself: `GET /replicate/stream?scope=<scope_digest>&since=T`. Each frame
+carries every in-scope record of one source transaction, across all its
+graphs, and is applied as one unit.
 
-- One local transaction applies a frame's facts, any registry or metadata
-  rows, and the cursor `(store_id, log_epoch, source_tx)` together.
-- The source tx is persisted as provenance. It is never confused with the
-  local tx or with an event offset.
+**Frames.** Every frame is bound to a **stream session**: the source
+`(store_id, log_epoch)`, the `scope_digest`, the authenticated principal
+and a session id. Each frame carries a strictly increasing `frame_seq`
+within that session. There are three kinds:
+
+- `tx`: the in-scope records of one source transaction, or its chunk
+  header (§6).
+- `coverage`: a **source-issued high-watermark** saying "every source
+  transaction ≤ `W` that touches this scope, in this epoch, has been sent
+  in this session". It is emitted after every `tx` frame, and on a fixed
+  heartbeat while the source is idle or every transaction is filtered out.
+  It is independent of whether any changes were returned.
+- `control`: revocation, epoch end, and protocol errors (§4). It is never
+  filtered by graph.
+
+`coverage` and `control` frames are signed by the source's stream key,
+using the shared crate (S0). A relay forwards them unchanged and emits its
+own signed coverage for its own children. A coverage frame is an
+assertion by its signer, not an inference from silence.
+
+**Applying.** One local transaction applies a `tx` frame's facts, any
+registry or metadata rows, and the progress record. The progress record
+holds the cursor `(store_id, log_epoch, source_tx)`, the last verified
+coverage `W` and the last `frame_seq`. Coverage frames update the progress
+record alone. The source tx is persisted as provenance and is never
+confused with the local tx or an event offset.
 
 | Case | Required outcome |
 |---|---|
-| Crash before the local commit | No facts and no cursor change; resume from the old cursor |
-| Crash after the local commit | Cursor is already advanced; the next frame resumes cleanly |
-| Duplicate frame (`source_tx` ≤ cursor) | Skip; count it in a metric |
-| Out-of-order frame (`source_tx` decreases within an epoch) | Refuse and stop the applier; this is a protocol fault, not data |
-| Gap in tx ids under a graph filter | Normal. Filtered transactions are skipped (`changes.rs:116-117`). A gap is never treated as lost data. Completeness comes from the page watermark, not from contiguity. |
-| `log_epoch` or `store_id` mismatch | Stop and re-bootstrap from a fresh as-of share. Never apply a foreign sequence. |
-| Cursor below a retention floor | The change log has no GC today (`changes.rs:30-31`). Any future floor must answer an explicit "cursor too old", which forces a re-bootstrap. It must never silently resume. |
-| Frame over the size budget | Chunked delivery (§6) |
+| Crash before the local commit | No facts and no progress change; resume from the stored cursor in a new session |
+| Crash after the local commit | Progress already advanced; resume cleanly |
+| **Duplicate**: a new session redelivers `source_tx` ≤ cursor | Verify its digest equals the applied one, then skip and count it. A mismatch stops the applier. |
+| **Reorder** within a session: `frame_seq` not exactly last+1, or `source_tx` ≤ cursor | Stop, discard the session, reconnect from the cursor. This is a transport fault, not data. |
+| **Dropped frame** | Detected by the `frame_seq` gap, or by a coverage `W` ahead of the cursor with no `tx` frame for an in-scope transaction. Never inferred from tx-id gaps. |
+| Gap in tx ids | Normal. Out-of-scope transactions are skipped (`src/store/changes.rs:116-117`). Completeness comes only from signed coverage. |
+| **Quiet source** (no commits for an hour) | Heartbeat coverage keeps arriving, so the follower is provably current at `W`. |
+| **Disconnected follower** | No coverage arrives. Freshness ages on the follower's own clock and crosses the bound (below). It must not report "current". |
+| **Filtered no-op** (source busy, nothing in scope) | Coverage advances `W` with no `tx` frames |
+| **Dropped matching tx** (an in-scope tx omitted, coverage still sent) | Coverage claims `W` ≥ that tx while the follower never applied it. Detected and refused when the follower audits coverage against the as-of digest (P1 test fixture). A source that signs false coverage is a source fault; the signature makes it attributable. |
+| `log_epoch` or `store_id` mismatch | Stop. Canonical state is rebuilt from a fresh as-of share. The overlay is handled by §7's stale-base rules, never retargeted. |
+| Cursor below a retention floor | The change log has no GC today (`changes.rs:30-31`). Any future floor must answer an explicit "cursor too old", forcing a re-bootstrap, never a silent resume. |
+| Transaction over budget | §6 |
 
-**Through a relay**, upstream identity survives unchanged: each frame keeps
-the upstream `(store_id, log_epoch, source_tx)` and the upstream commit
-timestamp. Wall clocks are **not** compared across hops. A relay states
-freshness as "upstream watermark and that commit's timestamp", plus its
-own lag measured on its own clock.
+**Freshness, on one clock.** A follower records the local monotonic time
+at which it verified each coverage frame. Its staleness is `now − t_W`,
+where `t_W` is when it last verified coverage that covers its cursor.
+Uncertainty is bounded by the heartbeat interval plus one network delivery
+time, and is reported with every answer. `bounded=<ms>` (§9) is satisfied
+only when staleness plus uncertainty ≤ ms. A relay reports its own staleness
+against its upstream. A leaf adds it to the relay-reported staleness on
+receipt. No wall clocks from different hosts are compared. The upstream
+commit timestamp is carried for provenance only.
 
 ## 6. Bounded transfer, recovery and relay
 
-- **Chunked transactions (recommended over re-pull).** The producer streams
-  a large transaction's rows from SQLite in bounded parts, each tagged
-  `(source_tx, part i of n, running digest)`. It does not materialise the
-  whole transaction. The consumer stages parts on disk. It applies them and
-  advances the cursor only after the final part verifies, so a partial
-  transaction is never visible. This replaces the F6 dead end. **OPEN
-  (quipu lead)** whether chunking or an authenticated "re-pull the as-of
-  share at tx N" fallback is preferred. Either one must bound producer
-  memory, not only client memory.
-- **Acceptance case:** a transaction larger than 1 MiB goes primary → relay
-  → leaf with no partial visibility, no cursor advance before commit, and
-  no reconnect or retry storm. Peak producer and consumer memory is
-  measured.
-- **Fan-out.** Relays form a tree, so the master's 64-stream cap counts one
-  stream per relay, not per agent. A 503 at capacity means jittered
-  exponential backoff, never a tight retry.
-- **Bootstrap cost.** As-of shares are cached by `(scope_digest, T)` on the
-  master and on relays. A new agent bootstraps from its relay's cached
-  share plus a short tail, never from a fresh whole-graph export per agent.
-- **Offline duration** is unbounded while the epoch is unchanged. An epoch
-  change forces a re-bootstrap; the overlay survives as a pending
-  changeset (§7).
+**Configurable limits.** The values are deployment configuration, not
+numbers this design guesses. Every limit has a hard refusal outcome and a
+metric.
+
+| Limit | Applies to | When exceeded |
+|---|---|---|
+| `part_max_bytes`, `part_max_rows` | one chunk | the producer splits further; never exceeded |
+| `tx_max_bytes`, `tx_max_rows` | one source transaction | `tx_too_large` control frame. The consumer stops; recovery is a re-bootstrap from an as-of share at or after that tx. The cursor is unchanged. |
+| `stage_quota_bytes` per consumer | on-disk staging | `stage_quota_exceeded`. The partial stage is discarded; cursor unchanged. |
+| `max_concurrent_stages` | per consumer | at most one in-flight transaction per session |
+| `stage_timeout` | an unfinished stage | stage discarded; reconnect resumes from the cursor |
+| `max_concurrent_exports` | source and each relay | as-of share builds queue; excess requests get 503 with retry-after |
+| `share_cache_quota_bytes`, `share_cache_ttl` | cached as-of shares | LRU eviction; a request for an evicted `(scope_digest, T)` is served at the newest cached `T'` ≥ the requested one, or rebuilt under the export limit. A cache entry is never pinned forever. |
+| `max_streams` (64 today) | source | 503; jittered exponential backoff, never a tight retry |
+| `offline_max` | client | after this duration offline, the client must re-bootstrap canonical state; its overlay is kept (§7) |
+
+**Chunked transactions.** A transaction over `part_max_*` is sent as:
+
+1. a header carrying `source_tx`, `parts = n`, total bytes, total rows and
+   the whole-transaction digest. The producer computes these in a bounded
+   pre-pass that counts rows; it does not hold them in memory. If the
+   header already exceeds `tx_max_*`, the source sends `tx_too_large`
+   instead.
+2. `n` parts, each with its index and a running digest;
+3. a commit barrier that repeats the whole-transaction digest.
+
+The consumer writes parts to a staging table under `stage_quota_bytes`. It
+applies the staged transaction and advances progress in one local
+transaction, and only after the barrier digest verifies. Interruption,
+oversize, quota, timeout or digest mismatch discard the stage. Every
+restart replays the transaction from part 1. Partial stages are never
+resumed, so no partial transaction is ever visible.
+
+**Acceptance cases.**
+
+- A transaction larger than 1 MiB goes primary → relay → leaf, with no
+  partial visibility and no cursor advance before the barrier.
+- Each of disconnect mid-part, `stage_quota_exceeded`, `tx_too_large` and
+  a corrupted part leaves **zero** visible facts and an **unchanged**
+  cursor, with no reconnect storm.
+- Peak producer, relay and consumer memory and disk are measured against
+  the configured limits.
+
+**OPEN (quipu lead):** chunking, versus an authenticated "re-pull the as-of
+share at tx N" fallback as the only big-transaction path.
+
+**Fan-out.** Relays form a tree, so the master's stream cap counts one
+stream per relay, not per agent. **Bootstrap cost:** a new agent bootstraps
+from its relay's cached as-of share plus a short tail, never from a fresh
+whole-graph export per agent.
 
 ## 7. Overlay and merge-back
 
-**Client layout.** A client keeps a canonical **base**, which only the
-applier writes, plus an **overlay**, a local fork-like graph that holds
-proposals. The base keeps advancing from the tail. The overlay records the
-base `(store_id, log_epoch, base_tx)` it was opened against. **Local
-inference** writes into a separate derived graph that is never included in
-a changeset, so derived facts are never proposed as assertions.
+**Client layout.** A client keeps three things:
+
+- **Canonical state.** Only the applier writes it, and it keeps advancing
+  from the tail.
+- **The overlay.** A local fork-like graph that holds proposals.
+- **A base journal.** When the overlay is opened, the client freezes an
+  immutable copy of the slice it touches, as of `base_tx`. It is stored as
+  canonical N-Quads that include the graph and valid time, using RDFC-1.0
+  as shares already do (`src/share.rs:493`). `base_slice_hash` is its
+  digest.
+
+The base journal is retained until every changeset built on it resolves
+(accepted, refused, or superseded by a rebase). Canonical state advancing,
+or being rebuilt after an epoch change, never touches it. **Local inference**
+writes into a separate derived graph that is never included in a changeset,
+so derived facts are never proposed as assertions.
 
 **Changeset** = ordered N-Quads asserts and retracts with explicit graphs,
 plus `base = {store_id, log_epoch, base_tx, base_slice_hash}`. Optional
 valid-time intervals may be proposed. Transaction time is always the
 master's.
+
+**Stale bases are explicit refusals, never retargets:**
+
+| Condition at admission | Outcome |
+|---|---|
+| `base.log_epoch` ≠ the master's current epoch | `foreign-epoch` refusal |
+| Master cannot reconstruct the as-of base, for example because a deep freeze removed it | `base-unavailable` refusal |
+| Reconstructed base digest ≠ `base_slice_hash` | `base-mismatch` refusal (client bug or tamper) |
+
+In every case nothing is written, and the pending work stays in the
+overlay and base journal.
+
+**Rebase workflow.** The client bootstraps fresh canonical state. It runs a
+local three-way merge (old base journal → new base, overlay on top) and
+records conflicts the same way the master would. It opens a new base journal
+and signs a **new** changeset with a **new** `operation_id`. The old
+operation is marked superseded locally. An old changeset is never re-signed
+or silently pointed at a new base.
 
 **Admission on the master is one transaction:**
 
@@ -289,7 +410,7 @@ clone (F5).
 
 - **Phase 1 followers are read-only.** Failover is phase 2 and separately
   gated.
-- **Per-request consistency.** A read may declare `eventual`,
+- **Per-request consistency** (staleness as defined in §5). A read may declare `eventual`,
   `bounded=<ms>`, or `min-tx=<store_id:log_epoch:tx>` (read-your-write after a
   receipt). The router picks a follower that satisfies it, else the
   primary, else answers 503 with UNKNOWN freshness. It never answers from a
@@ -311,14 +432,14 @@ clone (F5).
 
 ## 10. Stack components as clients
 
-| Component | Profile and scope | Freshness need | Offline writes | Key custody | Bootstrap and rejoin |
+| Component | Profile and scope | Freshness need | Offline writes | Signing key / read credential | Bootstrap and rejoin |
 |---|---|---|---|---|---|
-| **Seeds** | client: the agent's board graphs | bounded, seconds; plate reads tagged | **No.** Claims, assignment and outbox receipts stay master-atomic. An offline plate read must never authorize a claim. | agent key on host | relay share plus tail |
-| **Yupana** | client: policy-projection graphs | every verdict states freshness | signed verdicts promoted as changesets | yupana key; shared crate (S0) | rebuilt on this loop (below) |
-| **Chaski** | scoped follower | bounded | none | n/a | already a stream consumer; point it at a relay |
-| **st agents** | client: plate, policies, recent context | bounded | proposals only | per-agent key | relay share plus tail |
-| **Bobbin** | scoped follower | eventual | none | n/a | index from the change stream, not polling |
-| **Tambo** | provisions replicas | n/a | n/a | installs keys | proves the loop: a marker written locally, merged, and visible on the master |
+| **Seeds** | client: the agent's board graphs | bounded, seconds; plate reads tagged | **No.** Claims, assignment and outbox receipts stay master-atomic. An offline plate read must never authorize a claim. | signing key on host; read credential for its scope | relay share plus tail |
+| **Yupana** | client: policy-projection graphs | every verdict states freshness | signed verdicts promoted as changesets | signing key (shared crate, S0); read credential | rebuilt on this loop (below) |
+| **Chaski** | scoped follower | bounded | none | no signing key; read credential required | already a stream consumer; point it at a relay |
+| **st agents** | client: plate, policies, recent context | bounded | proposals only | per-agent signing key; read credential | relay share plus tail |
+| **Bobbin** | scoped follower | eventual | none | no signing key; read credential required | index from the change stream, not polling |
+| **Tambo** | provisions replicas | n/a | n/a | installs signing keys and read credentials | proves the loop: a marker written locally, merged, and visible on the master |
 | **Browser (wasm)** | client | eventual | proposals only | **unsupported until** wasm attestation verification and key custody exist (§2) | OPFS persistence first |
 
 **Yupana as a client.** It is rebuilt on this protocol, not used as its
@@ -334,24 +455,48 @@ Only advisory evaluations may fail open, and each one is named. A failed
 authority lookup is UNKNOWN, never "ungoverned". No existing enforcement
 gate changes.
 
-## 11. Phasing and proof
+## 11. Operator rollback
+
+Rollback never rewinds accepted master history.
+
+- **Withdraw routing.** Remove replicas from read routing, so reads go to the
+  master again, and stop relays. Clients fall back to master reads.
+- **Keep the record.** Proposal journals, base journals, `ChangesetReceipt`s
+  and accepted transactions are all retained. A rolled-back client loses
+  no pending work.
+- **Rebuild only caches.** Follower and client canonical state is
+  disposable and is rebuilt from an as-of share when replication resumes.
+- **Admission off.** The changeset admission endpoint can be disabled on its
+  own; clients keep their overlays until it returns.
+
+## 12. Phasing and proof
 
 Each phase is a separate source change, merge, runtime activation and
 rollback.
 
 | Phase | Deliverable | Acceptance (falsifiable) |
 |---|---|---|
-| **P0** feed correctness | F1–F5: supersede retracts, freeze epoch bump, valid time, lossless bytes, `store_id`/`log_epoch` on pages | A replica built from the feed equals an as-of read for every graph in the conformance fixtures, including OWL supersede and freeze. Mutation tests fail without each fix. |
-| **P1** cut and authz | as-of scoped share with the §5 manifest; per-graph read authorization on query, export and stream | Bootstrap at `T` under concurrent writes followed by a tail from `T` has no gap or overlap. A denied graph is refused on every route, metadata included (positive and negative controls). |
-| **P2** follower (= s34 phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; a >1 MiB tx through a relay; restart, restore and epoch change; permission loss at the relay; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
-| **P3** client | overlay, changeset envelope, admission, receipts | offline proposal → master receipt → all replicas converge; stale shapes and conflicting edits return DecisionRecords; tamper, replay and revoked-key cases refused; identical retries return the same receipt |
+| **P0** feed correctness | F1–F5: supersede retracts, freeze epoch bump, valid time, lossless bytes, `store_id`/`log_epoch` on pages | A replica built from the feed equals an as-of read for every graph in the conformance fixtures, including OWL supersede and freeze. Mutation tests fail without each fix. The `adopt`/`restore` ownership step refuses a copied store until run. |
+| **P1** cut and authz | as-of scoped share with the §5 manifest; per-graph read authorization on query, export and stream | Bootstrap at `T` under concurrent writes followed by a tail from `T` has no gap or overlap. A denied graph is refused on every route, metadata included (positive and negative controls). Revocation refuses a cached share and a resume token; an expired lease fails closed for a second principal. |
+| **P2** follower (= s34 phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; quiet source stays current via coverage; disconnected follower goes stale; filtered no-op; dropped matching tx detected; a >1 MiB tx through a relay; zero visible facts and unchanged cursor on disconnect mid-part, quota, oversize and corrupt part; revocation mid-chunk; restart, restore and epoch change; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
+| **P3** client | overlay, changeset envelope, admission, receipts | offline proposal → master receipt → all replicas converge; stale shapes and conflicting edits return DecisionRecords; `foreign-epoch`, `base-unavailable` and `base-mismatch` refused with the overlay intact, then rebased under a new `operation_id`; tamper, replay and revoked-key cases refused; identical retries return the same receipt |
 | **P4** stack | Seeds plates, Yupana rebuild, Bobbin indexing, Tambo marker round-trip | master read load and client footprint measured before and after; UNKNOWN and no-false-zero controls |
 | **P5** browser | wasm verification, key custody, OPFS | explicit support boundary; no assumed parity |
+
+**Hard phase gates.** Merging this document approves the direction only.
+These rulings must exist before the phase that depends on them starts:
+
+- the quipu lead's store and merge rulings (§13 item 1) before P0 and P2;
+- the read-authorization model (P1) before any scoped follower or client
+  serves a second principal;
+- the S0 shared signing crate before P3.
+
+Merging this document does not count as any of those rulings.
 
 Benchmarks and production replays need their own authorization. None are
 granted by this document.
 
-## 12. Open questions
+## 13. Open questions
 
 1. **OPEN (quipu lead):** the six store and merge recommendations as filed
    on aegis-s24: named-graph unit; F1/F2 fix by emitting records rather than
