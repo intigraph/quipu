@@ -127,19 +127,19 @@ fn temporal_mutations(store: &mut Store) -> quipu::Result<()> {
     let ns = DEFAULT_BASE_NS;
     let status_attr = store.intern(&format!("{ns}status"))?;
 
-    // koror: online (01-15) -> down (03-27T09:00)
-    let koror = store
-        .lookup(&format!("{ns}koror"))?
-        .expect("koror not found");
+    // korimako: online (01-15) -> down (03-27T09:00)
+    let korimako = store
+        .lookup(&format!("{ns}korimako"))?
+        .expect("korimako not found");
     store.retract_entity(
-        koror,
+        korimako,
         Some(status_attr),
         "2026-03-27T09:00:00Z",
         Some("seed"),
     )?;
     store.transact(
         &[status_datum(
-            koror,
+            korimako,
             status_attr,
             "down",
             "2026-03-27T09:00:00Z",
@@ -149,16 +149,16 @@ fn temporal_mutations(store: &mut Store) -> quipu::Result<()> {
         Some("fixture:temporal"),
     )?;
 
-    // koror: down -> online (03-29T14:00)
+    // korimako: down -> online (03-29T14:00)
     store.retract_entity(
-        koror,
+        korimako,
         Some(status_attr),
         "2026-03-29T14:00:00Z",
         Some("seed"),
     )?;
     store.transact(
         &[status_datum(
-            koror,
+            korimako,
             status_attr,
             "online",
             "2026-03-29T14:00:00Z",
@@ -240,7 +240,7 @@ fn temporal_mutations(store: &mut Store) -> quipu::Result<()> {
         Some("fixture:temporal"),
     )?;
 
-    println!("  temporal:   6 mutations (koror, postgresql, traefik)");
+    println!("  temporal:   6 mutations (korimako, postgresql, traefik)");
     Ok(())
 }
 
@@ -272,10 +272,10 @@ fn verify(store: &Store) -> quipu::Result<()> {
     );
     println!("\n  verify: {entity_count} distinct subjects (>= 50)");
 
-    // koror edge count.
+    // korimako edge count.
     let koror_id = store
-        .lookup(&format!("{ns}koror"))?
-        .expect("koror not found");
+        .lookup(&format!("{ns}korimako"))?
+        .expect("korimako not found");
     let koror_facts = store.entity_facts(koror_id)?;
     let outgoing: i64 = koror_facts
         .iter()
@@ -285,26 +285,26 @@ fn verify(store: &Store) -> quipu::Result<()> {
         .unwrap_or(0);
 
     // Count incoming edges via SPARQL.
-    let incoming_q = format!("SELECT (COUNT(?s) AS ?c) WHERE {{ ?s ?p <{ns}koror> }}");
+    let incoming_q = format!("SELECT (COUNT(?s) AS ?c) WHERE {{ ?s ?p <{ns}korimako> }}");
     let incoming_result = quipu::sparql_query(store, &incoming_q)?;
     let incoming = count_from_row(incoming_result.rows().first(), "c");
     let total_edges = outgoing + incoming;
     assert!(
         total_edges >= 8,
-        "koror expected 8+ edges, found {total_edges} ({outgoing} out + {incoming} in)"
+        "korimako expected 8+ edges, found {total_edges} ({outgoing} out + {incoming} in)"
     );
-    println!("  verify: koror has {total_edges} edges ({outgoing} out + {incoming} in) (>= 8)");
+    println!("  verify: korimako has {total_edges} edges ({outgoing} out + {incoming} in) (>= 8)");
 
-    // koror status history.
+    // korimako status history.
     let status_attr = store.lookup(&format!("{ns}status"))?.expect("status attr");
     let koror_history = store.attribute_history(koror_id, status_attr)?;
     assert!(
         koror_history.len() >= 5,
-        "koror status history expected 5+ entries, found {}",
+        "korimako status history expected 5+ entries, found {}",
         koror_history.len()
     );
     println!(
-        "  verify: koror status history has {} entries (>= 5)",
+        "  verify: korimako status history has {} entries (>= 5)",
         koror_history.len()
     );
 

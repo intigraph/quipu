@@ -476,7 +476,7 @@ curl -s localhost:3030/episode -X POST \
   -d '{
     "name": "deploy-v2",
     "nodes": [{"name": "myapp", "type": "WebApplication"}],
-    "edges": [{"source": "myapp", "target": "kota", "relation": "runs_on"}]
+    "edges": [{"source": "myapp", "target": "kotare", "relation": "runs_on"}]
   }'
 ```
 
@@ -1243,7 +1243,7 @@ Body: optional `limit` (nodes, ranked by degree; default 250, max 2000),
 
 ```json
 {
-  "nodes": [{"iri": "…", "label": "kota", "type": "…/ProxmoxNode", "deg": 8}],
+  "nodes": [{"iri": "…", "label": "kotare", "type": "…/ProxmoxNode", "deg": 8}],
   "edges": [[0, 10, "managed_by"]],
   "types": [{"iri": "…", "label": "SystemdService", "count": 15}],
   "truncated": {"shown": 250, "of": 1180},

@@ -211,7 +211,7 @@ top-level dependencies) via a seed SPARQL query. Neighborhood expansion
 client-side join via Graphology. This keeps the graph explorer responsive
 even against a large knowledge base: only visible neighborhoods are loaded.
 
-For complex cross-cutting queries (e.g., "everything that depends on koror
+For complex cross-cutting queries (e.g., "everything that depends on korimako
 transitively"), the SPARQL workbench is the right tool — the graph explorer
 is for browsing, not querying.
 
@@ -230,7 +230,7 @@ Split-pane: editor on top, results on bottom.
   parser compiled to WASM. Red squiggles on syntax errors before you hit Run.
 - **Query templates**: Pre-loaded examples from the mdbook tutorials, organized
   by persona (operator, agent builder, archaeologist, gardener).
-- **Natural language bar** (future): "What depends on koror?" → generates SPARQL.
+- **Natural language bar** (future): "What depends on korimako?" → generates SPARQL.
 
 **Results**:
 
@@ -268,14 +268,14 @@ Scrubbing either slider re-queries Quipu with `AS OF` (transaction time) or
 For a selected entity, show every assertion and retraction:
 
 ```text
-koror (ProxmoxNode)
+korimako (ProxmoxNode)
 ──────────────────────────────────────────────────
  2026-03-27  ✗ status: "online" retracted
  2026-03-27  ✓ status: "down" asserted
-             ↳ episode: koror-p0-recovery
+             ↳ episode: korimako-p0-recovery
  2026-03-29  ✗ status: "down" retracted
  2026-03-29  ✓ status: "online" asserted
-             ↳ episode: koror-recovery-complete
+             ↳ episode: korimako-recovery-complete
  2026-04-01  ✓ depends_on: dns.example asserted
              ↳ episode: dns-migration
 ```
@@ -357,7 +357,7 @@ Chronological view of ingested episodes — the "how did we learn this?" view.
 
 ```text
 2026-04-04
-  ┣━ 14:30  Incident: koror NFS timeout cascade
+  ┣━ 14:30  Incident: korimako NFS timeout cascade
   ┃         extracted: 3 entities, 5 edges
   ┃         source: hq-3wmc (handoff mail)
   ┃
@@ -393,7 +393,7 @@ Bobbin search results that match knowledge entities get a badge:
 
 ```text
 search_result.rs:42  — HybridSearch trait definition
-  📊 koror (ProxmoxNode)  →  http://quipu.example:3030/entity/aegis:koror
+  📊 korimako (ProxmoxNode)  →  http://quipu.example:3030/entity/aegis:korimako
 ```
 
 The badge is a hyperlink. Clicking it opens Quipu's standalone UI. Bobbin
@@ -420,7 +420,7 @@ or web component. Quipu renders itself — Bobbin just provides the viewport.
 │ ┌─ Knowledge (powered by Quipu) ────────────┐ │
 │ │ ┌─────────────────────────────────────────┐│ │
 │ │ │  << Quipu renders this entire area >>   ││ │
-│ │ │  Graph: dns.example → AdGuard → koror       ││ │
+│ │ │  Graph: dns.example → AdGuard → korimako       ││ │
 │ │ │  Entities: 3 | Edges: 5 | Valid ✓       ││ │
 │ │ └─────────────────────────────────────────┘│ │
 │ └───────────────────────────────────────────┘ │
@@ -598,8 +598,8 @@ Every knowledge entity in Quipu gets its own dereferenceable URL. The same
 URL returns different formats based on the `Accept` header:
 
 ```text
-GET /entity/koror
-Accept: text/html           → Quipu's standalone UI page for koror
+GET /entity/korimako
+Accept: text/html           → Quipu's standalone UI page for korimako
 Accept: application/ld+json → JSON-LD document
 Accept: text/turtle         → Turtle RDF
 ```
@@ -607,12 +607,12 @@ Accept: text/turtle         → Turtle RDF
 With format-specific sub-paths for debugging:
 
 ```text
-/entity/koror/html
-/entity/koror/json
-/entity/koror/ttl
+/entity/korimako/html
+/entity/korimako/json
+/entity/korimako/ttl
 ```
 
-**Why this matters**: Bobbin links to `quipu.example/entity/koror`. Browsers get a
+**Why this matters**: Bobbin links to `quipu.example/entity/korimako`. Browsers get a
 rich HTML page. API clients get JSON-LD. SPARQL engines get Turtle. Zero extra
 integration code — just HTTP content negotiation doing its job.
 
@@ -631,11 +631,11 @@ A Quipu API endpoint that takes unstructured text and returns matched entities:
 
 ```text
 POST /quipu/spotlight
-{"text": "koror NFS mount timeout cascaded to dolt-server", "confidence": 0.5}
+{"text": "korimako NFS mount timeout cascaded to dolt-server", "confidence": 0.5}
 
 → {
     "annotations": [
-      {"surface": "koror", "iri": "aegis:koror", "type": "ProxmoxNode",
+      {"surface": "korimako", "iri": "aegis:korimako", "type": "ProxmoxNode",
        "confidence": 0.98, "offset": 0},
       {"surface": "dolt-server", "iri": "aegis:dolt-server", "type": "SystemdService",
        "confidence": 0.95, "offset": 42}
@@ -672,7 +672,7 @@ parseConfig
     team-platform (CrewMember)
 
   Runs On ──────────────────────────
-    config-service → kota (ProxmoxNode)
+    config-service → kotare (ProxmoxNode)
 
   Recent Episodes ──────────────────
     2026-04-03: "config parser refactored for YAML 1.2"
@@ -688,8 +688,8 @@ Instead of Bobbin proxying SPARQL queries to Quipu, Quipu exposes a minimal
 Triple Pattern Fragments endpoint:
 
 ```text
-GET /fragments?predicate=aegis:dependsOn&object=aegis:koror
-→ All triples where something depends on koror
+GET /fragments?predicate=aegis:dependsOn&object=aegis:korimako
+→ All triples where something depends on korimako
   + total count
   + hypermedia links to next page
 ```
@@ -769,14 +769,14 @@ mod tests {
     #[test]
     fn entity_card_renders_type_badge() {
         let entity = ViewEntity {
-            iri: "aegis:koror".into(),
-            label: "koror".into(),
+            iri: "aegis:korimako".into(),
+            label: "korimako".into(),
             entity_type: "ProxmoxNode".into(),
             ..Default::default()
         };
         let html = render_entity_card(&entity);
         assert!(html.contains("ProxmoxNode"));
-        assert!(html.contains("koror"));
+        assert!(html.contains("korimako"));
     }
 
     #[test]
@@ -831,7 +831,7 @@ async fn graph_explorer_loads_entities() {
 #[wasm_bindgen_test]
 async fn web_component_responds_to_attributes() {
     let el = document().create_element("quipu-entity").unwrap();
-    el.set_attribute("iri", "aegis:koror").unwrap();
+    el.set_attribute("iri", "aegis:korimako").unwrap();
     el.set_attribute("endpoint", "http://localhost:3030").unwrap();
     document().body().unwrap().append_child(&el).unwrap();
 
@@ -870,9 +870,9 @@ test('graph explorer shows entities from SPARQL query', async ({ page }) => {
 });
 
 test('clicking entity opens detail panel', async ({ page }) => {
-  await page.goto('http://localhost:3030/entity/aegis:koror');
+  await page.goto('http://localhost:3030/entity/aegis:korimako');
 
-  await expect(page.locator('.entity-label')).toContainText('koror');
+  await expect(page.locator('.entity-label')).toContainText('korimako');
   await expect(page.locator('.entity-type')).toContainText('ProxmoxNode');
   await expect(page.locator('.edge-list')).toBeVisible();
 });
@@ -956,7 +956,7 @@ UI depends on. These run without a browser — pure HTTP.
 #[tokio::test]
 async fn entity_endpoint_returns_json_ld() {
     let client = reqwest::Client::new();
-    let resp = client.get("http://localhost:3030/entity/aegis:koror")
+    let resp = client.get("http://localhost:3030/entity/aegis:korimako")
         .header("Accept", "application/ld+json")
         .send().await.unwrap();
 
@@ -965,7 +965,7 @@ async fn entity_endpoint_returns_json_ld() {
 
     let body: serde_json::Value = resp.json().await.unwrap();
     assert_eq!(body["@type"], "aegis:ProxmoxNode");
-    assert!(body["@id"].as_str().unwrap().contains("koror"));
+    assert!(body["@id"].as_str().unwrap().contains("korimako"));
 }
 
 #[tokio::test]
@@ -973,14 +973,14 @@ async fn content_negotiation_html_vs_json() {
     let client = reqwest::Client::new();
 
     // HTML request
-    let html = client.get("http://localhost:3030/entity/aegis:koror")
+    let html = client.get("http://localhost:3030/entity/aegis:korimako")
         .header("Accept", "text/html")
         .send().await.unwrap();
     assert!(html.headers()["content-type"].to_str().unwrap()
         .contains("text/html"));
 
     // JSON-LD request
-    let json = client.get("http://localhost:3030/entity/aegis:koror")
+    let json = client.get("http://localhost:3030/entity/aegis:korimako")
         .header("Accept", "application/ld+json")
         .send().await.unwrap();
     assert!(json.headers()["content-type"].to_str().unwrap()
@@ -992,7 +992,7 @@ async fn spotlight_endpoint_annotates_text() {
     let client = reqwest::Client::new();
     let resp = client.post("http://localhost:3030/spotlight")
         .json(&serde_json::json!({
-            "text": "koror NFS mount timeout",
+            "text": "korimako NFS mount timeout",
             "confidence": 0.5
         }))
         .send().await.unwrap();
@@ -1000,7 +1000,7 @@ async fn spotlight_endpoint_annotates_text() {
     let body: serde_json::Value = resp.json().await.unwrap();
     let annotations = body["annotations"].as_array().unwrap();
     assert!(!annotations.is_empty());
-    assert_eq!(annotations[0]["surface"], "koror");
+    assert_eq!(annotations[0]["surface"], "korimako");
 }
 ```
 
@@ -1151,7 +1151,7 @@ The existing bobbin-fal bead and micro-ui.md design should be revised:
 5. **Dark, monospace, terminal-aesthetic.** This is a homelab tool. It should
    feel like it belongs next to a terminal, not a corporate dashboard.
 6. **Deep-linkable everything.** Every entity, query, time point, and schema
-   shape has a URL. Share a link to "koror as of March 27th" and it works.
+   shape has a URL. Share a link to "korimako as of March 27th" and it works.
 
 ## References
 

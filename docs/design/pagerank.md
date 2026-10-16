@@ -176,18 +176,18 @@ This is something HippoRAG's ephemeral, LLM-built graph cannot offer.
 
 ## Episode-driven use cases
 
-- **Emergent importance** — global PageRank surfaces `kota` as central because
+- **Emergent importance** — global PageRank surfaces `kotare` as central because
   many deploy/rebuild episodes reference it; powers a "top entities" panel, web
   UI node sizing, per-type centrality in the schema inspector.
 - **Query-relevant multi-hop** — PPR seeded by vector/text hits ("traefik
-  issues") surfaces `kota`, the cert service, the bead that last touched it —
+  issues") surfaces `kotare`, the cert service, the bead that last touched it —
   even when not textually similar.
 - **Episode-impact delta** — run PPR before/after an episode's nodes to answer
   "which entities did this episode make more central?", tying provenance to
   importance.
-- **Temporal PageRank** — `as_of` past transactions: "`kota`'s importance rose
+- **Temporal PageRank** — `as_of` past transactions: "`kotare`'s importance rose
   after the rebuild episodes."
-- **Counterfactual PageRank** — via `Store::speculate()`: "if we retire `koror`,
+- **Counterfactual PageRank** — via `Store::speculate()`: "if we retire `korimako`,
   how does importance redistribute?"
 
 ## Performance

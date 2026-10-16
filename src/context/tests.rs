@@ -17,22 +17,22 @@ fn setup_test_store() -> Store {
 
 ex:traefik rdf:type ex:WebApplication ;
     rdfs:label "Traefik" ;
-    ex:runsOn ex:kota ;
+    ex:runsOn ex:kotare ;
     ex:port "443" .
 
-ex:kota rdf:type ex:ProxmoxNode ;
-    rdfs:label "Kota" ;
-    ex:hostname "kota.example" ;
+ex:kotare rdf:type ex:ProxmoxNode ;
+    rdfs:label "Kotare" ;
+    ex:hostname "kotare.example" ;
     ex:manages ex:traefik .
 
 ex:forgejo rdf:type ex:WebApplication ;
     rdfs:label "Forgejo" ;
-    ex:runsOn ex:koror ;
+    ex:runsOn ex:korimako ;
     ex:port "3000" .
 
-ex:koror rdf:type ex:ProxmoxNode ;
-    rdfs:label "Koror" ;
-    ex:hostname "koror.example" .
+ex:korimako rdf:type ex:ProxmoxNode ;
+    rdfs:label "Korimako" ;
+    ex:hostname "korimako.example" .
     "#;
 
     let mut store = store;
@@ -78,10 +78,10 @@ fn link_expansion() {
     );
 
     let ctx = pipeline.query("traefik").unwrap();
-    // Should find traefik (direct) and kota (linked via runsOn/manages).
+    // Should find traefik (direct) and kotare (linked via runsOn/manages).
     assert!(ctx.entities.len() >= 2);
     assert!(ctx.entities.iter().any(|e| e.iri.contains("traefik")));
-    assert!(ctx.entities.iter().any(|e| e.iri.contains("kota")));
+    assert!(ctx.entities.iter().any(|e| e.iri.contains("kotare")));
     assert!(ctx.summary.linked_additions > 0);
 }
 
@@ -118,7 +118,7 @@ fn max_entities_respected() {
         },
     );
 
-    let ctx = pipeline.query("kota").unwrap();
+    let ctx = pipeline.query("kotare").unwrap();
     assert!(ctx.entities.len() <= 1);
 }
 
