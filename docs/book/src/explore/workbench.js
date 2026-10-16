@@ -134,6 +134,25 @@ export function setupWorkbench() {
     $(`#${id}`).addEventListener("click", () => showTab("ask"));
   }
 
+  $("#semantic-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("#semantic-run"), out = $("#semantic-results");
+    button.disabled = true;
+    out.textContent = "Loading the model and searching this tab's graph…";
+    try {
+      const results = await window.quipu.search($("#semantic-query").value, 6);
+      out.replaceChildren();
+      if (!results.length) out.textContent = "No documents in this graph.";
+      for (const result of results) {
+        const item = document.createElement("p");
+        const title = document.createElement("strong"); title.textContent = result.entity;
+        const text = document.createElement("span"); text.textContent = ` — ${result.text}`;
+        item.append(title, text); out.append(item);
+      }
+    } catch (error) { out.textContent = `Search could not complete: ${error.message}`; }
+    finally { button.disabled = false; }
+  });
+
   $("#bad-write").addEventListener("click", async () => {
     const button = $("#bad-write");
     button.disabled = true;
@@ -164,7 +183,8 @@ export function setupWorkbench() {
         try {
           await window.quipu.episode({ name, source: "interactive vocabulary refusal",
             nodes: [{ name, type: "https://quipu.dev/knowledge/Widget" }], edges: [] });
-        } catch (error) { refusal = error.message; }
+        } catch (error) { refusal = error.validation
+          ? `${error.message}\n${JSON.stringify(error.validation, null, 2)}` : error.message; }
         const after = await window.quipu.query(probe);
         const positive = await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1");
         if (!refusal || !/unknown|ungoverned|vocabulary|type/i.test(refusal)
@@ -191,7 +211,8 @@ export function setupWorkbench() {
           name, source: "interactive SHACL refusal demonstration",
           nodes: [{ name, type: "InternalIdentifierPattern" }], edges: [],
         });
-      } catch (error) { refusal = error.message; }
+      } catch (error) { refusal = error.validation
+          ? `${error.message}\n${JSON.stringify(error.validation, null, 2)}` : error.message; }
       const after = await window.quipu.query(probe);
       const positive = await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1");
       if (!refusal || !/shacl|shape|validation/i.test(refusal)
