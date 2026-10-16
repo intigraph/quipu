@@ -23,6 +23,7 @@ pub(super) struct Observation {
     identity: Value,
     started: Instant,
     dispatched_ms: Option<f64>,
+    admission_stamp: Option<super::admission::AdmissionStamp>,
     wait_started: Option<Instant>,
     wait_ms: Option<f64>,
     acquired: Option<Instant>,
@@ -32,13 +33,19 @@ pub(super) struct Observation {
 }
 
 impl Observation {
-    pub(super) fn new(input: &Value, request_id: Option<u64>) -> Self {
-        Self::with_sink(input, request_id, Box::new(|record| eprintln!("{record}")))
+    pub(super) fn new(input: &Value, request_id: Option<u64>, log_admission: bool) -> Self {
+        Self::with_sink(
+            input,
+            request_id,
+            log_admission,
+            Box::new(|record| eprintln!("{record}")),
+        )
     }
 
     fn with_sink(
         input: &Value,
         request_id: Option<u64>,
+        log_admission: bool,
         emit: Box<dyn FnMut(Value) + Send>,
     ) -> Self {
         let serialized = input.to_string();
@@ -57,6 +64,7 @@ impl Observation {
             }),
             started: Instant::now(),
             dispatched_ms: None,
+            admission_stamp: log_admission.then(|| std::sync::Arc::new(std::sync::OnceLock::new())),
             wait_started: None,
             wait_ms: None,
             acquired: None,
@@ -72,6 +80,10 @@ impl Observation {
     pub(super) fn dispatched(&mut self) {
         self.dispatched_ms = Some(self.started.elapsed().as_secs_f64() * 1_000.0);
         self.outcome = "unfinished";
+    }
+
+    pub(super) fn admission_stamp(&self) -> Option<super::admission::AdmissionStamp> {
+        self.admission_stamp.clone()
     }
 
     pub(super) fn waiting(&mut self) {
@@ -95,6 +107,14 @@ impl Observation {
         record["timestamp"] = json!(quipu::time::now_iso());
         record["event"] = json!(event);
         record["dispatch_ms"] = json!(self.dispatched_ms);
+        if let Some(stamp) = &self.admission_stamp {
+            // Same origin as dispatch_ms. Missing acquisition stays null,
+            // including cancellation while still waiting for a permit.
+            record["admission_ms"] =
+                json!(stamp.get().map(|acquired| {
+                    acquired.duration_since(self.started).as_secs_f64() * 1_000.0
+                }));
+        }
         record["store_wait_ms"] = json!(self.wait_ms);
         record["store_held_ms"] = json!(self.held_ms);
         record["worker_outcome"] = json!(self.outcome);
@@ -163,6 +183,15 @@ mod tests {
 
     #[tokio::test]
     async fn http_query_observation_demo_has_a_real_result_positive_control() {
+        http_query_demo(false).await;
+    }
+
+    #[tokio::test]
+    async fn http_query_admission_enabled_demo_has_a_real_result_positive_control() {
+        http_query_demo(true).await;
+    }
+
+    async fn http_query_demo(log_admission: bool) {
         use tower::ServiceExt;
 
         let mut store = quipu::Store::open_in_memory().unwrap();
@@ -171,7 +200,9 @@ mod tests {
             &json!({"turtle":"<urn:demo:s> <urn:demo:p> <urn:demo:o> ."}),
         )
         .unwrap();
-        let shared: crate::SharedStore = Arc::new(crate::StoreHandle::writer_only(store));
+        let mut handle = crate::StoreHandle::writer_only(store);
+        handle.log_query_admission = log_admission;
+        let shared: crate::SharedStore = Arc::new(handle);
         let app = axum::Router::new()
             .route("/query", axum::routing::post(crate::query))
             .with_state(shared)
@@ -199,7 +230,7 @@ mod tests {
             .unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["count"], 1);
-        eprintln!("PRIVATE_HTTP_CONTROL status=200 count=1");
+        eprintln!("PRIVATE_HTTP_CONTROL status=200 count=1 admission_logging={log_admission}");
     }
 
     fn capture(input: &Value, id: Option<u64>) -> (Observation, Arc<Mutex<Vec<Value>>>) {
@@ -208,6 +239,7 @@ mod tests {
         let observation = Observation::with_sink(
             input,
             id,
+            false,
             Box::new(move |record| sink.lock().unwrap().push(record)),
         );
         (observation, records)
@@ -328,3 +360,7 @@ mod tests {
         assert_eq!(records[1]["worker_outcome"], "ok");
     }
 }
+
+#[cfg(test)]
+#[path = "query_usage/admission_tests.rs"]
+mod admission_tests;

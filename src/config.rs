@@ -577,6 +577,10 @@ pub struct ServerConfig {
     /// the remaining readers and admission permits. No extra connection opens.
     pub reserve_point_reads: bool,
 
+    /// Include an optional permit-acquisition timestamp in query observation
+    /// logs. Off by default; does not change admission or enable point reads.
+    pub log_query_admission: bool,
+
     /// Ceiling on facts copied for one `/update` that cannot be sliced (an
     /// open subject with an open predicate copies the whole store). Past it
     /// the update is refused with advice instead of exhausting memory
@@ -597,6 +601,7 @@ impl Default for ServerConfig {
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
             reserve_point_reads: false,
+            log_query_admission: false,
             update_full_copy_max_facts: 250_000,
         }
     }

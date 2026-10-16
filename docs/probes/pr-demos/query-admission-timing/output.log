@@ -1,0 +1,10 @@
+Script started on 2026-10-15 23:56:26-04:00 [COMMAND="python3 docs/probes/pr-demos/query-admission-timing/demo.py" <not executed on terminal>]
+Synthetic in-memory HTTP fixture; no listening socket or live service.
+$ cargo test --offline --locked --features full --bin quipu-server query_usage::tests::http_query_ -- --nocapture --test-threads=1
+{"admission_ms": null, "admission_ms_present": true, "dispatch_ms": null, "event": "query_observation_start", "worker_outcome": "not_started"}
+{"admission_ms": 0.06351799999999999, "admission_ms_present": true, "dispatch_ms": 0.553448, "event": "query_observation_end", "worker_outcome": "ok"}
+{"admission_ms_present": false, "dispatch_ms": null, "event": "query_observation_start", "worker_outcome": "not_started"}
+{"admission_ms_present": false, "dispatch_ms": 0.340219, "event": "query_observation_end", "worker_outcome": "ok"}
+PASS: both modes return HTTP 200 / one row; disabled omits the field, enabled observes acquisition.
+
+Script done on 2026-10-15 23:57:04-04:00 [COMMAND_EXIT_CODE="0"]
