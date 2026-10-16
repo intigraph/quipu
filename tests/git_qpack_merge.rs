@@ -450,3 +450,45 @@ fn repository_qpack_is_a_positive_control() {
         1
     );
 }
+
+#[test]
+fn historical_base_manifest_cannot_be_hidden_by_deleting_both_side_manifests() {
+    let f = Fixture::new("disjoint");
+    let mut parents = Vec::new();
+    for side in [&f.ours, &f.theirs] {
+        g(f.path(), &["checkout", "--detach", side]);
+        g(f.path(), &["rm", "qpack/manifest.json"]);
+        g(f.path(), &["commit", "-m", "delete declared pack manifest"]);
+        parents.push(g(f.path(), &["rev-parse", "HEAD"]));
+    }
+    let tree = g(
+        f.path(),
+        &["rev-parse", &format!("{}^{{tree}}", parents[0])],
+    );
+    let result = g(
+        f.path(),
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            &parents[0],
+            "-p",
+            &parents[1],
+            "-m",
+            "unsafe historical merge",
+        ],
+    );
+    let output = cli(
+        f.path(),
+        &[
+            "pendant-check",
+            "--history",
+            &f.base,
+            &parents[0],
+            &parents[1],
+            &result,
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing manifest"));
+}
