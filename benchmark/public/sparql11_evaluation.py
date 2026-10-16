@@ -708,10 +708,21 @@ def run_update_case(case: Case, quipu: Path, server: Path, database: Path, tempo
     port = reserve_port()
     process = subprocess.Popen([str(server), "--db", str(database), "--bind", f"127.0.0.1:{port}"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     try:
+        # Same readiness contract as the protocol and result-format cases: a server
+        # that never answers /health is a case ERROR with its stderr, never a fall
+        # through to the /update POST. That POST raised URLError, which the case
+        # handler does not catch, so one slow start aborted the whole runner and
+        # no ledger was written (aegis-84g; main 257f502a, run 38819284985).
         for _ in range(100):
             try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.2): break
-            except (urllib.error.URLError, TimeoutError): time.sleep(0.02)
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.2):
+                    break
+            except (urllib.error.URLError, TimeoutError):
+                if process.poll() is not None:
+                    raise ValueError(f"quipu-server exited before health: {process.stderr.read().strip()}")
+                time.sleep(0.02)
+        else:
+            raise ValueError("quipu-server did not become healthy")
         request = urllib.request.Request(f"http://127.0.0.1:{port}/update", data=case.update_request.read_bytes(), headers={"Content-Type": "application/sparql-update"}, method="POST")
         with urllib.request.urlopen(request, timeout=20) as response:
             response.read()
