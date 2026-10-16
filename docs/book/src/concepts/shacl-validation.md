@@ -10,8 +10,8 @@ explaining exactly what's wrong.
 Without validation, agents can write anything:
 
 ```turtle
-hw:koror hw:cpuCores "lots" .   # Should be an integer
-hw:koror a hw:Host .            # Missing required hostname
+hw:korimako hw:cpuCores "lots" .   # Should be an integer
+hw:korimako a hw:Host .            # Missing required hostname
 ```
 
 With SHACL shapes loaded, Quipu catches these problems before they enter

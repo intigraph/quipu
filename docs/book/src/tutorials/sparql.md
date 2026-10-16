@@ -15,9 +15,9 @@ Save this as `homelab.ttl`:
 @prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 
 # --- Hosts ---
-hw:koror      a hw:Host ;
-    rdfs:label      "koror" ;
-    hw:hostname     "koror.example" ;
+hw:korimako      a hw:Host ;
+    rdfs:label      "korimako" ;
+    hw:hostname     "korimako.example" ;
     hw:cpuCores     "8"^^xsd:integer ;
     hw:memoryMB     "32768"^^xsd:integer ;
     hw:role         "hypervisor" .
@@ -39,18 +39,18 @@ hw:yap        a hw:Host ;
 # --- Services ---
 hw:traefik    a hw:WebApp ;
     rdfs:label      "traefik" ;
-    hw:runsOn       hw:koror ;
+    hw:runsOn       hw:korimako ;
     hw:port         "443"^^xsd:integer ;
     hw:dependsOn    hw:pihole .
 
 hw:pihole     a hw:Service ;
     rdfs:label      "pihole" ;
-    hw:runsOn       hw:koror ;
+    hw:runsOn       hw:korimako ;
     hw:port         "53"^^xsd:integer .
 
 hw:grafana    a hw:WebApp ;
     rdfs:label      "grafana" ;
-    hw:runsOn       hw:koror ;
+    hw:runsOn       hw:korimako ;
     hw:port         "3000"^^xsd:integer ;
     hw:dependsOn    hw:prometheus .
 
@@ -104,7 +104,7 @@ quipu read "SELECT ?host WHERE { ?host a <http://example.org/homelab/Host> }" \
 
 | ?host |
 |-------|
-| `http://example.org/homelab/koror` |
+| `http://example.org/homelab/korimako` |
 | `http://example.org/homelab/palau` |
 | `http://example.org/homelab/yap` |
 
@@ -123,7 +123,7 @@ WHERE {
 
 | ?host | ?cores |
 |-------|--------|
-| `hw:koror` | 8 |
+| `hw:korimako` | 8 |
 | `hw:palau` | 4 |
 | `hw:yap` | 4 |
 
@@ -162,7 +162,7 @@ WHERE {
 
 | ?host | ?mem |
 |-------|------|
-| `hw:koror` | 32768 |
+| `hw:korimako` | 32768 |
 | `hw:palau` | 16384 |
 
 ### String filters
@@ -252,10 +252,10 @@ LIMIT 2
 
 | ?host | ?mem |
 |-------|------|
-| `hw:koror` | 32768 |
+| `hw:korimako` | 32768 |
 | `hw:palau` | 16384 |
 
-`OFFSET 1 LIMIT 1` would skip koror and return only palau.
+`OFFSET 1 LIMIT 1` would skip korimako and return only palau.
 
 ## 8. Aggregates: COUNT, SUM, AVG
 
@@ -274,7 +274,7 @@ ORDER BY DESC(?serviceCount)
 
 | ?host | ?serviceCount |
 |-------|---------------|
-| `hw:koror` | 3 |
+| `hw:korimako` | 3 |
 | `hw:palau` | 2 |
 | `hw:yap` | 1 |
 
@@ -310,7 +310,7 @@ HAVING(?n > 1)
 
 | ?host | ?n |
 |-------|----|
-| `hw:koror` | 3 |
+| `hw:korimako` | 3 |
 | `hw:palau` | 2 |
 
 ## 9. RDFS Subclass Inference
@@ -458,7 +458,7 @@ WHERE {
 
 | ?app | ?depHost |
 |------|----------|
-| `hw:traefik` | `hw:koror` |
+| `hw:traefik` | `hw:korimako` |
 | `hw:grafana` | `hw:palau` |
 | `hw:nginx` | `hw:palau` |
 
@@ -494,14 +494,14 @@ WHERE {
 
 ### Reverse (`^`)
 
-"What services does koror host?" using reverse traversal:
+"What services does korimako host?" using reverse traversal:
 
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
 
 SELECT ?svc
 WHERE {
-  hw:koror ^hw:runsOn ?svc .
+  hw:korimako ^hw:runsOn ?svc .
 }
 ```
 
@@ -549,7 +549,7 @@ quipu read "SELECT ?s ?p ?o WHERE { ?s ?p ?o }" --db homelab.db --tx 5
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
 
-ASK { hw:koror a hw:Host }
+ASK { hw:korimako a hw:Host }
 ```
 
 Returns `true` or `false`.
@@ -576,10 +576,10 @@ Returns triples showing which services share a host.
 ```sparql
 PREFIX hw: <http://example.org/homelab/>
 
-DESCRIBE hw:koror
+DESCRIBE hw:korimako
 ```
 
-Returns all triples where koror is the subject.
+Returns all triples where korimako is the subject.
 
 ## Cheat Sheet
 
