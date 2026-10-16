@@ -93,10 +93,12 @@ class Reader:
 
 
 def generate(config, out, work, bundle, binary):
+    out, work = out.resolve(), work.resolve()
+    if out == work or out in work.parents or work in out.parents:
+        raise ValueError("Publish output and private work must not overlap")
     if out.exists() or work.exists():
         raise ValueError("Output and work directories must both be new")
-    out.mkdir(parents=True)
-    work.mkdir(parents=True)
+    work.mkdir(parents=True, mode=0o700)
     ranks = read_json(config["ranks_file"])["ranks"]
     curated = read_json(config["asks_file"])
     binding_receipt = read_json(config["row_bindings_file"])
@@ -227,6 +229,24 @@ def generate(config, out, work, bundle, binary):
         add(subject, SCHEMA + "description", literal(json.dumps(document, ensure_ascii=False)))
         for record in rows:
             add(subject, SCHEMA + "about", term(record["s"]))
+    ask_by_item = {ask["item"]: ask for ask in asks}
+    visible_asks = [{**ask_by_item[ask["item"]], "order": ask["order"]}
+                    for ask in sorted(curated["asks"], key=lambda ask: ask["order"])]
+    ops = build_row_ops(priorities, visible_asks, bindings)
+    # Operator operations and source graph identity are not page assets. Keep
+    # them beside the raw responses, never in the publish-ready directory.
+    (work / "rows.json").write_text(json.dumps({"ops": ops}, indent=2) + "\n")
+    (work / "provenance.json").write_text(json.dumps({"graph": config["graph"]}) + "\n")
+    metadata = {"generated_at": datetime.now(timezone.utc).isoformat(),
+                "items": {k: v["s"]["value"] for k, v in records.items()},
+                "selected_items": len(records), "linked_nodes": len(linked),
+                "coverage": "Curated items, exact selected fields and bounded one-hop links; no comments.",
+                "omissions": omissions, "desk_count": len(cards)}
+    metadata_text = json.dumps(metadata, indent=2, ensure_ascii=False) + "\n"
+    # Browser metadata travels INSIDE the guarded, manifest-bound pendant.
+    # There is no separately published JSON sidecar outside native admission.
+    (work / "publication-metadata.json").write_text(metadata_text)
+    add("urn:brief:publication-metadata", SCHEMA + "description", literal(metadata_text))
     (work / "data.nt").write_text("".join(sorted(triples)))
     (work / "catalogue.nt").write_text("".join(
         f"{term(r['s'])} {term(r['p'])} {term(r['o'])} .\n" for r in catalogue))
@@ -257,20 +277,10 @@ def generate(config, out, work, bundle, binary):
                 tar.addfile(info, source)
     encoded = {"encoding": "base64", "sha256": hashlib.sha256(archive.getvalue()).hexdigest(),
                "data": base64.b64encode(archive.getvalue()).decode()}
+    # All published data is in the native-checked pendant. A refusal leaves
+    # no output directory; owner operations and provenance stay private.
+    out.mkdir(parents=True)
     (out / "pendant.json").write_text(json.dumps(encoded) + "\n")
-    ask_by_item = {ask["item"]: ask for ask in asks}
-    visible_asks = [{**ask_by_item[ask["item"]], "order": ask["order"]}
-                    for ask in sorted(curated["asks"], key=lambda ask: ask["order"])]
-    ops = build_row_ops(priorities, visible_asks, bindings)
-    (out / "rows.json").write_text(json.dumps({"ops": ops}, indent=2) + "\n")
-    metadata = {"generated_at": datetime.now(timezone.utc).isoformat(),
-                "graph": config["graph"], "items": {k: v["s"]["value"] for k, v in records.items()},
-                "selected_items": len(records), "linked_nodes": len(linked),
-                "coverage": "Curated items, exact selected fields and bounded one-hop links; no comments.",
-                "omissions": omissions,
-                "today_updated": today.get("updated"), "priorities": priorities, "asks": asks,
-                "desk_count": len(cards)}
-    (out / "snapshot.json").write_text(json.dumps(metadata, indent=2) + "\n")
     (out / "pkg").mkdir()
     for name in ("quipu_wasm_explorer.js", "quipu_wasm_explorer_bg.wasm"):
         shutil.copyfile(bundle / name, out / "pkg" / name)
@@ -278,6 +288,7 @@ def generate(config, out, work, bundle, binary):
         shutil.copyfile(ASSETS / name, out / name)
     print(json.dumps({"items": len(records), "priorities": len(priorities),
                       "visible_asks": len(visible_asks), "desk_cards": len(cards),
+                      "operator_rows": str(work / "rows.json"),
                       "share_id": read_json(work / "pendant/manifest.json")["share_id"]}))
 
 

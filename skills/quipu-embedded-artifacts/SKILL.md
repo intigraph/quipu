@@ -67,7 +67,9 @@ python3 skills/quipu-embedded-artifacts/scripts/generate.py \
   --bundle docs/book/src/explore/pkg --quipu /path/to/quipu
 ```
 
-Both output directories must be new. The generator reads at most 100 selected
+Both directories must be new and non-overlapping, including resolved parent
+paths. The work directory has owner-only filesystem permissions; never publish
+it. The generator reads at most 100 selected
 IDs, 500 links, and 1,000 linked-node facts, with sentinel limits and a 2 MB
 response cap. It fails on missing or ambiguous selected records rather than
 shipping a silently shorter brief. Rank, visible-ask selection, concise titles,
@@ -80,12 +82,19 @@ native `quipu share`. No listener or live-store write is needed. Optional
 descriptions containing blocking private identifiers are omitted with visible
 notices. An unsafe ask uses its source title with an explicit withholding
 notice. Identities are never rewritten; unsafe required fields still meet the
-unchanged outward refusal. Keep raw query responses and producer logs outside
+unchanged outward refusal. Browser metadata lives inside the RDF pendant,
+checked by the same native guard and its manifest. The viewer queries it only
+after verified import; no separate data sidecar is published. A refusal leaves
+no publish-ready directory. Keep raw query responses,
+producer logs, source-graph provenance and owner-only operations outside
 the published folder and public repository.
 
-The resulting folder contains engine assets, `pendant.json`, `snapshot.json`,
-`rows.json` and the presentation modules. Native manifest, RDF, shapes and
-stored queries remain in the work directory and inside the pendant envelope.
+The resulting folder contains engine assets, `pendant.json` and the
+presentation modules. Browser metadata is a record inside the verified
+pendant, not a separate `snapshot.json`. Owner `rows.json`, private
+`provenance.json` and a diagnostic metadata copy stay only in the work
+directory. Native manifest, RDF, shapes and stored queries remain there and
+inside the pendant envelope.
 Do not hand-edit a manifest or checksum. Regenerate instead.
 
 ## Integrate with the existing page
@@ -108,8 +117,9 @@ deskLink.onclick = () => explorer.openDesk();
 ```
 
 Preserve the original database read subscriptions and their ordering. The
-page does not apply `rows.json`: the existing authorized owner applies those
-operations through ArtifactData. Only version-checked `update` operations are
+page never receives `rows.json`: the existing authorized owner reads it from
+the private work directory and applies those operations through ArtifactData.
+Only version-checked `update` operations are
 generated: priority, owner, item and approved rank for priorities; item identity
 only for asks. Never replace a curated row with a raw tracker title or state.
 Use actual current document IDs and versions; an absent binding refuses rather
@@ -118,6 +128,17 @@ status log remain owner-written prose. Never infer a new human approval,
 Desk admission or enrollment from a displayed row.
 
 ## Verify, publish and refresh
+
+With matching installed native binaries, run the owner-patch and native
+publication controls from the repository root:
+
+```bash
+just --command python3 skills/quipu-embedded-artifacts/scripts/test_row_ops.py
+just --command python3 skills/quipu-embedded-artifacts/scripts/test_publication.py
+```
+
+The publication controls use synthetic remote inputs and an unexecuted bundle;
+native admission is real. They do not replace the browser tests below.
 
 Test the actual generated page at a subpath in a real browser. Verify row
 counts and ordering, exact priority-to-node and ask-to-node drilldown, the

@@ -83,7 +83,8 @@ in a `bindings` field with its observation timestamp:
 }
 ```
 
-The generator emits `rows.json` with version-checked `update` operations. It
+The generator emits `rows.json` in the private **work directory**, outside the
+publish-ready folder, with version-checked `update` operations. It
 never creates, replaces, deletes or writes a document. Priority patches contain
 only `priority`, `owner`, `item` and curator rank. Ask patches contain only
 `item`. Concise title, next step, presentation state, ask wording and status prose
@@ -91,6 +92,13 @@ remain curator-owned. A missing ID/version fails closed. On a version conflict,
 read the document again and regenerate the proposed patch; do not drop the
 precondition or replace the document. Review the operations and original rules
 before the existing owner applies them. Keep the input snapshot for rollback.
+Source graph identity is retained only in that work directory's
+`provenance.json`; it is not needed by the browser and is not published.
+Browser metadata is stored in the pendant's RDF at
+`urn:brief:publication-metadata`, under `https://schema.org/description`.
+The viewer queries that record after verified import. A diagnostic
+`publication-metadata.json` copy stays in private work; neither it nor
+owner operations belong in the published folder.
 
 Four bounded queries read selected item fields, one-hop relations, linked
 record summaries and the current privacy catalogue. This is a dated read

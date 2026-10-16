@@ -116,13 +116,19 @@ export async function attachExplorer(root) {
       const response = await fetch(url); if (!response.ok) throw new Error(`Asset HTTP ${response.status}: ${url}`);
       return response.json();
     };
-    const [encoded, metadata, version] = await Promise.all([
-      fetchJSON('./pendant.json'), fetchJSON('./snapshot.json'), ask({cmd:'version'}),
+    const [encoded, version] = await Promise.all([
+      fetchJSON('./pendant.json'), ask({cmd:'version'}),
     ]);
     if (encoded.encoding !== 'base64' || typeof encoded.data !== 'string') throw new Error('Unknown pendant transport');
     const bytes = Uint8Array.from(atob(encoded.data), character => character.charCodeAt(0));
     // The native receiving ceremony verifies the manifest and each payload hash.
     const report = await ask({cmd:'load', bytes});
+    const metadataResult = await ask({cmd:'query', sparql:
+      'SELECT ?payload WHERE { <urn:brief:publication-metadata> <https://schema.org/description> ?payload }'});
+    if (metadataResult.rows?.length !== 1 || typeof metadataResult.rows[0].payload !== 'string') {
+      throw new Error('The verified pendant has no unique browser metadata record');
+    }
+    const metadata = JSON.parse(metadataResult.rows[0].payload);
     snapshot = metadata; verified = true; run.disabled = false;
     desk.disabled = false; desk.textContent = `All Desk cards (${snapshot.desk_count})`;
     receipt.textContent = JSON.stringify({version, snapshot:metadata, report}, null, 2);
