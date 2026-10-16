@@ -28,3 +28,9 @@ These are private fixtures, not a replay of a running graph or a claim of a
 lower observed client failure rate. The new native MCP descriptions propagate
 only when that server/tool catalog refreshes; proxy tool descriptions have
 separate ownership.
+
+[Actual response transcript](transcript.txt) compares the same private CLI inputs
+on the installed before binary and a clean source-built candidate; the native
+MCP class controls are labeled separately. This is a text fallback, not video,
+and does not prove Mac adoption. The before file is a different source revision;
+no runtime service was changed.

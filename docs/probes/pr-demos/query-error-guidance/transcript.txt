@@ -1,0 +1,21 @@
+BEFORE: installed CLI fc6d989ef102527126c3dd85a4cbe834d3589694, isolated fixture
+AFTER: source-built CLI 185d8e1284300a0dbd3758747f7d8255216c9437, clean, isolated fixture
+Same inputs and commands; no runtime service changed. Timeout elapsed values are observations, not a performance comparison.
+
+BEFORE
+missing: {"rc": 1, "stdout": "", "stderr": "query error: SPARQL parse error: error at 1:32: expected one of Prefix not found, ['%'], ['-' | '0' ..= '9' | '\\u{00B7}' | '\\u{0300}'..='\\u{036F}' |\n'\\u{203F}'..='\\u{2040}'], ['.'], [':'], ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], ['\\\\'], ['_']"}
+explicit: {"rc": 0, "stdout": "s\n--------------------\n\n0 results", "stderr": ""}
+positive: {"rc": 0, "stdout": "true", "stderr": ""}
+timeout: {"rc": 2, "stdout": "", "stderr": "query error: query timeout: exceeded 1ms (ran 12ms) \u2014 narrow the query (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns) or raise [quipu.search] query_timeout_ms"}
+
+AFTER
+missing: {"rc": 1, "stdout": "", "stderr": "query error: SPARQL parse error: Undeclared prefix(es): rdfs: (PREFIX rdfs: <intended-namespace-IRI>); include explicit PREFIX declarations. No namespace is assumed or inserted. Parser verdict: error at 1:32: expected one of Prefix not found, ['%'], ['-' | '0' ..= '9' | '\\u{00B7}' | '\\u{0300}'..='\\u{036F}' |\n'\\u{203F}'..='\\u{2040}'], ['.'], [':'], ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], ['\\\\'], ['_']"}
+explicit: {"rc": 0, "stdout": "s\n--------------------\n\n0 results", "stderr": ""}
+positive: {"rc": 0, "stdout": "true", "stderr": ""}
+timeout: {"rc": 2, "stdout": "", "stderr": "query error: query timeout: exceeded 1ms (ran 1ms) \u2014 narrow the query (exact-IRI or rdfs:label lookups, not FILTER(CONTAINS(...)) over unbound patterns). For exploratory text discovery use quipu_search instead; search is not an authoritative exact-ID, owner-plate, named-graph or absence check. Otherwise narrow the authoritative query or explicitly raise [quipu.search] query_timeout_ms"}
+
+Native MCP tool class-before.log
+refused/no-write with legal-type positive: unknown rdf:type IRIs: urn:fixture:job#Role. No loaded shape sanctions these classes; choose a class from POST /shapes {"action":"vocabulary"} or propose and load a shape before retrying. No facts were written
+
+Native MCP tool class-after.log
+refused/no-write with legal-type positive: unknown rdf:type IRIs: urn:fixture:job#Role. No loaded shape sanctions these classes; choose a class from POST /shapes {"action":"vocabulary"} or propose and load a shape before retrying. Similar loaded class IRIs: https://example.test/Role (lexical similarity only, not semantic equivalence; inspect the shapes before choosing, or propose a new shape if none fits). No facts were written
