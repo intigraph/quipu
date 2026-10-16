@@ -1,4 +1,4 @@
-//! Additional CLI commands: shapes, validate, export, episode, retract, repl, stats.
+//! Additional CLI commands: shapes, export, episode, retract, repl, stats.
 
 use std::io::{self, BufRead, Read, Write};
 
@@ -197,68 +197,6 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
                     std::process::exit(1);
                 }
             }
-        }
-    }
-}
-
-pub fn cmd_validate(args: &[String]) {
-    let shapes_path = args
-        .windows(2)
-        .find(|w| w[0] == "--shapes")
-        .map(|w| w[1].as_str());
-    let data_path = args
-        .windows(2)
-        .find(|w| w[0] == "--data")
-        .map(|w| w[1].as_str());
-
-    let (Some(shapes_path), Some(data_path)) = (shapes_path, data_path) else {
-        eprintln!("usage: quipu validate --shapes <shapes.ttl> --data <data.ttl>");
-        std::process::exit(1);
-    };
-
-    let shapes = match std::fs::read_to_string(shapes_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error reading shapes: {e}");
-            std::process::exit(1);
-        }
-    };
-    let data = match std::fs::read_to_string(data_path) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error reading data: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    match quipu::validate_shapes(&shapes, &data) {
-        Ok(feedback) => {
-            if feedback.conforms {
-                println!("valid ({} warnings)", feedback.warnings);
-            } else {
-                println!(
-                    "invalid: {} violation(s), {} warning(s)",
-                    feedback.violations, feedback.warnings
-                );
-                for issue in &feedback.results {
-                    println!(
-                        "  [{:>9}] {} -- {}{}",
-                        issue.severity,
-                        issue.focus_node,
-                        issue.message.as_deref().unwrap_or("constraint violated"),
-                        issue
-                            .path
-                            .as_ref()
-                            .map(|p| format!(" (path: {p})"))
-                            .unwrap_or_default()
-                    );
-                }
-                std::process::exit(1);
-            }
-        }
-        Err(e) => {
-            eprintln!("validation error: {e}");
-            std::process::exit(1);
         }
     }
 }

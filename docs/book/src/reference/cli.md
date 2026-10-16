@@ -135,7 +135,15 @@ Dry-run SHACL validation without writing.
 
 ```bash
 quipu validate --shapes schema.ttl --data test-data.ttl
+quipu validate --shapes schema.ttl --data test-data.ttl --format json
 ```
+
+`--format json` prints one JSON object with `conforms`, `violations`,
+`warnings` and every result (severity, focus node, component, path, value,
+source shape, message), in the order the engine reported them and without
+deduplication. The text form prints only the counts on a conforming run and
+omits the shape, component and value. The exit status is the same in both
+forms: 0 when the data conforms, 1 otherwise or on an error.
 
 ### `quipu export`
 
