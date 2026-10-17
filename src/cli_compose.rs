@@ -3,6 +3,9 @@
 use crate::cli::{chrono_now, flag_value};
 
 pub fn cmd_compose(args: &[String], db_path: &str) {
+    if flag_value(args, "--use-pointer").is_some() {
+        return crate::cli_pointer::cmd_use_pointer(args, db_path);
+    }
     if let Some(repo) = flag_value(args, "--repo") {
         return cmd_compose_repo(args, db_path, repo);
     }

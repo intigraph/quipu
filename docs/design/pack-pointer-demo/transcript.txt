@@ -1,0 +1,10 @@
+Script started on 2026-10-17 02:25:22-04:00 [COMMAND="xvfb-run -a node demo.js" <not executed on terminal>]
+BASE installed CLI: quipu 0.14.1; git_sha: 8700bad3965615da8a18a029a83df65602087682; git_dirty: false
+BEFORE same graph-use request: refused unknown --use-pointer; target downloads0
+PASS native trust refusal before network
+PASS native first graph use fetches once and query finds target
+PASS native fresh receiver offline persistent cache
+PASS actual Chromium wasm: declaration0, trust refusal, first-use query1, ROOT0, revoked trust, memory cache, fresh persistent offline cache, corrupt cache refusal/no partial state
+{"report":{"before":0,"denied":true,"found":1,"noRoot":0,"revoked":true,"sameMemory":true,"samePersistent":true,"refused":true,"noPartial":true},"targetDownloads":2}
+
+Script done on 2026-10-17 02:25:32-04:00 [COMMAND_EXIT_CODE="0"]
