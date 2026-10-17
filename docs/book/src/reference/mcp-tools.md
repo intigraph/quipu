@@ -496,13 +496,11 @@ Graph projection and algorithms.
 | `max_iters` | No | PageRank max iterations (default: 100) |
 | `tolerance` | No | PageRank convergence tolerance (default: 1e-6) |
 | `from` / `to` | No | Source/target entity IRIs for `shortest_path` |
-| `persist` | No | `louvain`: persist stable identities, labels, provenance and `quipu:memberOfCommunity` in a dedicated derived named graph; `pagerank` (global runs only — a seeded run refuses): persist `quipu:pageRank` scores. Both supersede any prior derivation (default: `false`). Communities are emergent clustering, **not** an access boundary. |
+| `persist` | No | `louvain`: persist `quipu:memberOfCommunity` facts; `pagerank` (global runs only — a seeded run refuses): persist `quipu:pageRank` scores. Both supersede any prior derivation (default: `false`). Communities are emergent clustering, **not** an access boundary. |
 
 The `louvain` algorithm runs deterministic modularity-based community detection
-and returns `{ communities: [{ community, entities, size, label, label_basis, derived_from }], modularity, derived_graph }`.
-Identities hash sorted member IRIs and the projection scope. Persisted partitions
-reuse prior identities by deterministic one-to-one Jaccard overlap (default 0.5).
-Read-only unless `persist: true`; community persistence never writes ROOT.
+and returns `{ communities: [{ community, entities, size }], modularity }`.
+Read-only unless `persist: true`.
 
 ### `quipu_context`
 
