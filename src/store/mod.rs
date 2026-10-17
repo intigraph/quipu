@@ -30,6 +30,7 @@ mod migrate;
 mod open;
 pub(crate) use open::open_file_immutable;
 mod graph_creation;
+mod graph_registry_repair;
 pub mod ops;
 pub mod overlays;
 pub mod push;

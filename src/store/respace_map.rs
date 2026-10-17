@@ -37,6 +37,8 @@ pub enum TermIdKind {
 /// column that exists in the database and not here is the failure case, and a
 /// list that drives the work can never notice it.
 pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
+    // -- once-only graph registry repair --
+    ("quipu_schema_repairs", "name", TermIdKind::None),
     // -- schema::INIT_SQL --
     ("terms", "id", TermIdKind::Id),
     ("terms", "iri", TermIdKind::None),

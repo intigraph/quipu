@@ -140,3 +140,41 @@ fn registering_never_rewrites_an_overlay_graph() {
         overlay
     );
 }
+
+#[test]
+fn registry_followup_failure_rolls_back_endpoint_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.db");
+    let store = Store::open(path.to_str().unwrap()).unwrap();
+    let shared = Arc::new(StoreHandle::writer_only(store));
+    apply_update_as(
+        &shared,
+        "INSERT DATA { <urn:positive:s> <urn:positive:p> \"ok\" }",
+        false,
+    )
+    .unwrap();
+    assert_eq!(
+        count(
+            &shared,
+            "SELECT ?o WHERE { <urn:positive:s> <urn:positive:p> ?o }"
+        ),
+        1
+    );
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("CREATE TRIGGER fixture_refuse_registry BEFORE INSERT ON graphs WHEN NEW.g != 0 BEGIN SELECT RAISE(ABORT,'fixture registry refusal'); END;").unwrap();
+    assert!(
+        apply_update_as(
+            &shared,
+            &format!("INSERT DATA {{ GRAPH <{G}> {{ <urn:failed:s> <urn:failed:p> \"x\" }} }}"),
+            false
+        )
+        .is_err()
+    );
+    let n = count(
+        &shared,
+        &format!("SELECT ?o WHERE {{ GRAPH <{G}> {{ <urn:failed:s> <urn:failed:p> ?o }} }}"),
+    );
+    println!("REGISTRY_FAILURE target_facts={n}");
+    assert_eq!(n, 0, "registry refusal must roll back committed data too");
+    assert!(shared.lock().registered_graph_id(G).unwrap().is_none());
+}

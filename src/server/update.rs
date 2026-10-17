@@ -389,14 +389,6 @@ pub(super) fn apply_update_attributed(
         attribution.actor.as_deref(),
         Some(&attribution.source),
     )?;
-    // Register every named graph this update asserted into, so the next
-    // update's dataset includes it (aegis-e9o5ci). After the commit, so a
-    // refused write leaves no empty registry row behind.
-    for (graph_id, datums) in &batches {
-        if datums.iter().any(|d| d.op == quipu::Op::Assert) {
-            store.graph_ensure_registered(*graph_id)?;
-        }
-    }
     Ok(Applied {
         path,
         changes: batches,

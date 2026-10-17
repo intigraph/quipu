@@ -1,0 +1,7 @@
+Baseline source abb9e5a1, private fixtures only:
+ROOT write positive control PASS.
+REGISTRY_FAILURE target_facts=1 (expected0): FAIL.
+Read-only open leaves missing registry row absent: PASS.
+LEGACY_REOPEN registered=false (expectedtrue): FAIL.
+Both test commands failed; wrapperexit1. HOME157paths+5resources untouched.
+No production graph scan, update or repair was performed.

@@ -35,7 +35,15 @@ impl Store {
         self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
         let mut txs = Vec::with_capacity(batches.len());
         for (graph, datums) in batches {
-            match self.transact_to_graph(datums, timestamp, actor, source, *graph) {
+            let result = self
+                .transact_to_graph(datums, timestamp, actor, source, *graph)
+                .and_then(|tx| {
+                    if datums.iter().any(|d| d.op == crate::types::Op::Assert) {
+                        self.graph_ensure_registered(*graph)?;
+                    }
+                    Ok(tx)
+                });
+            match result {
                 Ok(tx) => txs.push((*graph, tx)),
                 Err(error) => {
                     self.conn.execute_batch(
