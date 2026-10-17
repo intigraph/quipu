@@ -36,3 +36,24 @@ statement work. Neither is a production performance measurement.
 Negative eligibility controls and graph-isolation, empty, absent, numeric,
 language-literal and dataset-exclusion answer controls accompany the probe.
 Roll back with a normal revert of the actual merge commit.
+
+## Recorded demonstration
+
+[Output recording](output.log) and [timing data](timing.log) use the sanitized
+fixture above. Download both files, then replay with:
+
+```sh
+scriptreplay --log-out output.log --log-timing timing.log
+```
+
+The preceding product source is `cb035080`, with only the counter and reproducer
+added. Candidate product code matches `82ce157d`; the recording binary predates
+one additional test-only attachment control. Product files were unchanged.
+The actual recording shows entries **0 → 3**, VM steps **135,088 → 74**, and
+instrumented evaluator time **63.443 → 0.265 ms**, with the same two markers on
+both sides. SQLite progress callbacks affect elapsed time; these are debug-build
+synthetic results, not service latency, total memory or fleet acceptance.
+
+Terminal carriage returns were removed for text publication and timing byte
+counts adjusted accordingly; original timings and observed output are retained.
+Playback was checked locally. This is a terminal recording, not an inline video.
