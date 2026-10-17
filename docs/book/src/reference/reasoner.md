@@ -316,6 +316,30 @@ live schema activation or automatic trust-policy loader. Preserve UNKNOWN
 when those prerequisites are unavailable. Retaining an old receipt does not
 extend its admission validity.
 
+### Bounded standards mapping
+
+This profile makes a conceptual mapping to
+[LegalRuleML 1.0, sections 4.3.1, 4.3.5 and 4.4](https://docs.oasis-open.org/legalruleml/legalruleml-core-spec/v1.0/os/legalruleml-core-spec-v1.0-os.html).
+LegalRuleML separates legal entry, efficacy and applicability and supports
+source associations and temporal parameters for parts of rules. Here, one
+immutable executable edition has one applicability interval and separately
+linked primary sources. That interval is not its assertion time, execution
+time, event time, legal entry or efficacy. This is not LegalRuleML XML
+interchange or a conformance claim.
+
+The catalogue reuses DCMI `isVersionOf` and `source`, PROV `value`, SPDX checksum
+terms and [OWL-Time](https://www.w3.org/TR/owl-time/) interval/instant
+relationships. Half-open applicability intervals, whole-second UTC and exact
+executable-byte SHA256 are application profile choices; OWL-Time does not
+mandate these choices.
+
+Unsupported constructs include temporal associations below edition granularity,
+legal authority and jurisdiction reasoning, deontic operators, defeasible
+priorities, penalties and reparations, legal completeness, and civil calendar
+arithmetic. Synthetic transition facts are precomputed inputs, not calculated
+legal deadlines. A reviewed teaching-case oracle is required before presenting
+any jurisdiction-specific example as an accepted model result.
+
 ### Reactive Evaluation
 
 Requires the `reactive-reasoner` feature.
