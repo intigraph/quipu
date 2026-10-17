@@ -24,6 +24,8 @@ mod assets;
 mod auth;
 #[path = "server/auth_response.rs"]
 mod auth_response;
+#[path = "server/background.rs"]
+mod background;
 #[path = "server/base.rs"]
 mod base;
 #[path = "server/entity.rs"]
@@ -57,6 +59,8 @@ mod query_endpoint;
 mod query_usage;
 #[path = "server/reason.rs"]
 mod reason;
+#[path = "server/replica.rs"]
+mod replica;
 #[path = "server/request_middleware.rs"]
 mod request_middleware;
 #[path = "server/service_description.rs"]
@@ -115,16 +119,18 @@ async fn main() {
         eprintln!("warning: {warning}");
     }
 
-    let mut store =
-        quipu::open_with_configured_attachments(&db_path, &config).unwrap_or_else(|e| {
-            eprintln!("error opening store {db_path}: {e}");
-            std::process::exit(1);
-        });
+    let mut store = replica::open_store(&db_path, &config).unwrap_or_else(|e| {
+        eprintln!("error opening store {db_path}: {e}");
+        std::process::exit(1);
+    });
 
     // quipu-lv7: `vector.backend` selects the store's vector backend in-binary.
     // It refuses when this build cannot construct the configured one rather
     // than falling back to the SQLite table a migrated deployment has left.
-    base::apply_vector_backend(&mut store, &config);
+    let is_replica = config.server.replica.is_some();
+    if !is_replica {
+        base::apply_vector_backend(&mut store, &config);
+    }
 
     // quipu-at2: announce what the `[[quipu.attachments]]` declarations became.
     // A composed layer that nobody can see is how "it returned no rows" becomes
@@ -152,7 +158,14 @@ async fn main() {
 
     // Apply search/limit guardrails so callers can't request unbounded result
     // sets or scan the whole fact log (hq-gkd).
-    base::apply_search(&mut store, &config.search);
+    if is_replica {
+        replica::apply_search(&mut store, &config.search).unwrap_or_else(|e| {
+            eprintln!("error configuring replica search: {e}");
+            std::process::exit(1);
+        });
+    } else {
+        base::apply_search(&mut store, &config.search);
+    }
     // quipu #68: the floors and their consumer land together — a settable knob
     // that nothing reads is the bug config.rs guards against.
     store.labels_config_mut().clone_from(&config.label_floors);
@@ -176,7 +189,9 @@ async fn main() {
     // Apply the OWL write-time constraint policy and opt-in reactive
     // materialization (aegis-bmqup, quipu-923) — see base::apply_owl for why
     // the clone_from is load-bearing.
-    base::apply_owl(&mut store, &config);
+    if !is_replica {
+        base::apply_owl(&mut store, &config);
+    }
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
     // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
@@ -201,7 +216,9 @@ async fn main() {
     // needed a restart. Now /shapes hot-swaps the ruleset through the Arc kept
     // on StoreHandle, and an empty reasoner is a per-write no-op.
     #[cfg(feature = "reactive-reasoner")]
-    let reactive_reasoner = {
+    let reactive_reasoner = if is_replica {
+        None
+    } else {
         let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
         // A malformed ruleset must not take the server down, but it must not
         // pass unremarked either: the failure mode being avoided is a reasoner
@@ -280,20 +297,22 @@ async fn main() {
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
-    let signing_key_path = quipu::signing::default_key_path();
-    match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
-        Ok(id) => {
-            eprintln!(
-                "verdict signing enabled (verifier=quipu, key={})",
-                signing_key_path.display()
-            );
-            eprintln!(
-                "  register this public key to trust its verdicts: {}",
-                id.public_key_hex()
-            );
-            store.set_signing_identity(Arc::new(id));
+    if !is_replica {
+        let signing_key_path = quipu::signing::default_key_path();
+        match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
+            Ok(id) => {
+                eprintln!(
+                    "verdict signing enabled (verifier=quipu, key={})",
+                    signing_key_path.display()
+                );
+                eprintln!(
+                    "  register this public key to trust its verdicts: {}",
+                    id.public_key_hex()
+                );
+                store.set_signing_identity(Arc::new(id));
+            }
+            Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
         }
-        Err(e) => eprintln!("warning: verdict signing disabled -- {e}"),
     }
 
     // Build the read pool LAST, from the fully-configured writer.
@@ -308,7 +327,9 @@ async fn main() {
     // nothing. Same for a store we cannot open read-only — announce it and run
     // serialised rather than fail to boot, since a slow server is recoverable
     // and a dead one is not.
-    wal_maintenance::reset_at_startup(&store);
+    if !is_replica {
+        wal_maintenance::reset_at_startup(&store);
+    }
 
     let read_pool: ReadPool = point_reads::open_pool(&db_path, &store, &config.server);
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
@@ -316,6 +337,11 @@ async fn main() {
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.replica = config
+        .server
+        .replica
+        .as_ref()
+        .map(|_| Arc::new(replica::ReplicaStatus::default()));
     #[cfg(feature = "reactive-reasoner")]
     let handle = handle.with_reasoner(reactive_reasoner);
     let state: SharedStore = Arc::new(handle);
@@ -324,7 +350,8 @@ async fn main() {
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
     // in quipu::http_auth (unit-tested); this only wires it into axum.
     let auth_policy = auth::bearer_policy(&config.server);
-    let read_only = config.server.read_only;
+    let read_only = config.server.read_only || is_replica;
+    let replica_config = config.server.replica.clone();
     if read_only {
         eprintln!("server is READ-ONLY — write endpoints will return 403");
     }
@@ -461,6 +488,7 @@ async fn main() {
         .route("/transactions", get(transactions))
         // Event log pull API (event-log P1)
         .route("/changes", get(changes_get))
+        .route("/watermark", get(replica::watermark))
         .route("/events", get(events_get))
         .route("/events/stream", get(feed_stream::events_stream))
         .route("/changes/stream", get(feed_stream::changes_stream))
@@ -477,9 +505,13 @@ async fn main() {
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
                 let attest_store = attest_store.clone();
+                let replica_config = replica_config.clone();
                 async move {
                     let path = req.uri().path().to_string();
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
+                    if let Some(replica) = &replica_config && is_write {
+                        return replica::write_refusal(replica, &path);
+                    }
                     // A signed write authenticates by attestation, never by a
                     // bearer on the same request (aegis-bys8d1).
                     if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
@@ -612,80 +644,13 @@ async fn main() {
         // stderr on purpose: stdout is block-buffered under systemd, stderr is
         // not, and the journal timestamps every line itself.
         .layer(axum::middleware::from_fn(request_middleware::log_request))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), replica::headers))
         .with_state(state);
 
-    // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
-    // real poster; each tick runs under spawn_blocking (SQLite + ureq are
-    // sync). Cursor semantics make every tick idempotent, so the loop needs no
-    // state of its own and a missed tick delays, never loses.
-    {
-        let push_store = push_store_outer.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                let store = push_store.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    let store = store.lock();
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
-                    let mut post = |url: &str, body: &serde_json::Value| -> bool {
-                        matches!(
-                            ureq::post(url)
-                                .set("Content-Type", "application/json")
-                                .timeout(std::time::Duration::from_secs(10))
-                                .send_string(&body.to_string()),
-                            Ok(r) if (200..300).contains(&r.status())
-                        )
-                    };
-                    match quipu::store::push::deliver_tick(&store, now, &mut post) {
-                        Ok(outcomes) => {
-                            for (sub, o) in outcomes {
-                                if let quipu::store::push::Delivery::Failed = o {
-                                    eprintln!(
-                                        "push: delivery to '{sub}' failed; will retry (cursor held)"
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => eprintln!("push: tick error: {e}"),
-                    }
-                })
-                .await;
-            }
-        });
-    }
-
-    wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
-    graph_metrics::spawn_refresh(&push_store_outer);
-
-    // Event-log retention (quipu-9z9). Opt-in via `[quipu.events]
-    // retention_days`; unset keeps today's keep-forever behaviour and spawns
-    // nothing. An hourly cadence (first tick immediate) is plenty: the policy
-    // is measured in days, and `prune_events` never touches an offset a
-    // registered consumer has not committed past, so an aggressive cadence
-    // could not break replay anyway — it would only burn cycles.
-    if let Some(days) = config.events.retention_days {
-        let prune_store = push_store_outer;
-        tokio::spawn(async move {
-            let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
-            loop {
-                tick.tick().await;
-                let store = prune_store.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    let cutoff = quipu::time::iso_days_ago(u64::from(days));
-                    let store = store.lock();
-                    match store.prune_events(&cutoff) {
-                        Ok(0) => {}
-                        Ok(n) => eprintln!(
-                            "events: retention pruned {n} event(s) older than {cutoff} ({days}d)"
-                        ),
-                        Err(e) => eprintln!("events: retention prune failed: {e}"),
-                    }
-                })
-                .await;
-            }
-        });
+    if let Some(replica) = config.server.replica {
+        replica::start_metadata_reader(push_store_outer, replica);
+    } else {
+        background::start(push_store_outer, config.events.retention_days);
     }
 
     // Everything committed before this line is STARTUP in quipu_write_facts_total

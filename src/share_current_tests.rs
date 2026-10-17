@@ -176,6 +176,253 @@ fn a_local_retraction_survives_commits_absence_reappearance_and_pruning() {
 }
 
 #[test]
+fn explicit_revocation_survives_recomposition_and_rollback_then_allows_new_retraction() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = commit(
+        &mut store,
+        REPO,
+        "<urn:a> <urn:p> \"v1\" ; <urn:q> \"secret\" .",
+        T1,
+    );
+    retract(
+        &mut store,
+        &first.current.unwrap().members[0].graph,
+        "urn:a",
+        "urn:q",
+        "secret",
+    );
+    let second_pack = pack("<urn:a> <urn:p> \"v2\" ; <urn:q> \"secret\" .", "");
+    let second = compose_current(
+        &mut store,
+        REPO,
+        &keys(&["packs/main"]),
+        std::slice::from_ref(&second_pack),
+        None,
+        T2,
+        None,
+    )
+    .unwrap();
+    let before = second.current.unwrap().snapshot;
+    // Negative control: the old manual repair does not revoke the policy.
+    store
+        .conn
+        .execute(
+            "DELETE FROM pendant_repo_tombstones WHERE repo = ?1",
+            params![REPO],
+        )
+        .unwrap();
+    compose_current(
+        &mut store,
+        REPO,
+        &keys(&["packs/main"]),
+        std::slice::from_ref(&second_pack),
+        None,
+        T3,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        tombstone_counts(&store, REPO).unwrap()["packs/main"],
+        1,
+        "retained retractions recreate a manually deleted row"
+    );
+    assert!(!has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    let receipt = revoke_tombstone(
+        &mut store,
+        REPO,
+        "packs/main",
+        "<urn:a> <urn:q> \"secret\" .",
+        "undo mistaken local suppression",
+        T3,
+        Some("test"),
+    )
+    .unwrap();
+    assert!(receipt.revoked);
+    assert_eq!(receipt.graphs_restored, 1);
+    assert_eq!(
+        read_pointer(&store, REPO, "current")
+            .unwrap()
+            .unwrap()
+            .snapshot,
+        before
+    );
+    assert!(
+        !has(&store, &current_dataset(REPO), "urn:q", "secret"),
+        "the newer graph never stored this suppressed triple"
+    );
+    assert!(has(&store, &previous_dataset(REPO), "urn:q", "secret"));
+    assert!(tombstone_counts(&store, REPO).unwrap().is_empty());
+    let again = revoke_tombstone(
+        &mut store,
+        REPO,
+        "packs/main",
+        "<urn:a> <urn:q> \"secret\" .",
+        "repeat",
+        T3,
+        None,
+    )
+    .unwrap();
+    assert!(!again.revoked);
+    assert_eq!(again.graphs_restored, 0);
+    let replay = compose_current(
+        &mut store,
+        REPO,
+        &keys(&["packs/main"]),
+        &[second_pack],
+        None,
+        T3,
+        None,
+    )
+    .unwrap();
+    assert!(!replay.moved);
+    assert!(
+        !has(&store, &current_dataset(REPO), "urn:q", "secret"),
+        "same stripped snapshot never refills"
+    );
+    assert!(tombstone_counts(&store, REPO).unwrap().is_empty());
+    commit(
+        &mut store,
+        REPO,
+        "<urn:a> <urn:p> \"v3\" ; <urn:q> \"secret\" .",
+        T4,
+    );
+    assert!(has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    rollback_current(&mut store, REPO, T5, None).unwrap();
+    assert!(
+        !has(&store, &current_dataset(REPO), "urn:q", "secret"),
+        "rollback selects the stripped snapshot without inventing content"
+    );
+    assert!(
+        tombstone_counts(&store, REPO).unwrap().is_empty(),
+        "not harvested again"
+    );
+    let back = rollback_current(&mut store, REPO, T5, None).unwrap();
+    assert!(has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    retract(
+        &mut store,
+        &back.current.members[0].graph,
+        "urn:a",
+        "urn:q",
+        "secret",
+    );
+    commit(
+        &mut store,
+        REPO,
+        "<urn:a> <urn:p> \"v4\" ; <urn:q> \"secret\" .",
+        T5,
+    );
+    assert!(!has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    assert_eq!(tombstone_counts(&store, REPO).unwrap()["packs/main"], 1);
+}
+
+#[test]
+fn revoke_is_scoped_and_refuses_ambiguous_inputs_without_changes() {
+    let mut store = Store::open_in_memory().unwrap();
+    for repo in [REPO, "org/other"] {
+        let first = commit(&mut store, repo, "<urn:a> <urn:q> \"secret\" .", T1);
+        retract(
+            &mut store,
+            &first.current.unwrap().members[0].graph,
+            "urn:a",
+            "urn:q",
+            "secret",
+        );
+        commit(
+            &mut store,
+            repo,
+            "<urn:a> <urn:q> \"secret\" ; <urn:r> \"new\" .",
+            T2,
+        );
+    }
+    for bad in [
+        "",
+        "_:b <urn:q> \"secret\" .",
+        "<urn:a> <urn:q> \"secret\" .\n<urn:a> <urn:r> \"new\" .",
+    ] {
+        assert!(
+            revoke_tombstone(&mut store, REPO, "packs/main", bad, "invalid", T3, None).is_err()
+        );
+        assert!(!has(&store, &current_dataset(REPO), "urn:q", "secret"));
+        assert_eq!(tombstone_counts(&store, REPO).unwrap()["packs/main"], 1);
+    }
+    let unknown = revoke_tombstone(
+        &mut store,
+        REPO,
+        "packs/other",
+        "<urn:a> <urn:q> \"secret\" .",
+        "wrong pack",
+        T3,
+        None,
+    )
+    .unwrap();
+    assert!(!unknown.revoked);
+    revoke_tombstone(
+        &mut store,
+        REPO,
+        "packs/main",
+        "<urn:a> <urn:q> \"secret\" .",
+        "undo",
+        T3,
+        None,
+    )
+    .unwrap();
+    assert!(!has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    commit(
+        &mut store,
+        REPO,
+        "<urn:a> <urn:q> \"secret\" ; <urn:r> \"fresh\" .",
+        T4,
+    );
+    assert!(has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    assert!(!has(
+        &store,
+        &current_dataset("org/other"),
+        "urn:q",
+        "secret"
+    ));
+    assert_eq!(
+        tombstone_counts(&store, "org/other").unwrap()["packs/main"],
+        1
+    );
+    assert!(store.current_facts().unwrap().is_empty());
+}
+
+#[test]
+fn failed_ledger_update_rolls_back_restoration() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = commit(&mut store, REPO, "<urn:a> <urn:q> \"secret\" .", T1);
+    retract(
+        &mut store,
+        &first.current.unwrap().members[0].graph,
+        "urn:a",
+        "urn:q",
+        "secret",
+    );
+    commit(
+        &mut store,
+        REPO,
+        "<urn:a> <urn:q> \"secret\" ; <urn:r> \"new\" .",
+        T2,
+    );
+    store.conn.execute_batch("CREATE TRIGGER refuse_revoke BEFORE DELETE ON pendant_repo_tombstones BEGIN SELECT RAISE(ABORT, 'injected refusal'); END;").unwrap();
+    assert!(
+        revoke_tombstone(
+            &mut store,
+            REPO,
+            "packs/main",
+            "<urn:a> <urn:q> \"secret\" .",
+            "undo",
+            T3,
+            None
+        )
+        .is_err()
+    );
+    assert!(!has(&store, &current_dataset(REPO), "urn:q", "secret"));
+    assert!(!has(&store, &previous_dataset(REPO), "urn:q", "secret"));
+    assert_eq!(tombstone_counts(&store, REPO).unwrap()["packs/main"], 1);
+}
+
+#[test]
 fn rollback_moves_the_pointer_back_and_applies_newer_tombstones() {
     let mut store = Store::open_in_memory().unwrap();
     commit(
