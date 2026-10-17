@@ -15,27 +15,27 @@ change -- it packages that knowledge as an episode with typed nodes and edges.
 
 ```json
 {
-  "name": "koror-rebuild-2026-03-29",
-  "episode_body": "Koror was rebuilt on kota after disk failure",
+  "name": "korimako-rebuild-2026-03-29",
+  "episode_body": "Korimako was rebuilt on kotare after disk failure",
   "source": "aegis/crew/ellie",
   "group_id": "aegis-ontology",
   "nodes": [
     {
-      "name": "koror",
+      "name": "korimako",
       "type": "ProxmoxNode",
       "description": "Proxmox host, rebuilt after failure",
-      "properties": { "hostname": "koror.example", "status": "recovered" }
+      "properties": { "hostname": "korimako.example", "status": "recovered" }
     },
     {
-      "name": "kota",
+      "name": "kotare",
       "type": "ProxmoxNode",
       "description": "Primary Proxmox host"
     }
   ],
   "edges": [
     {
-      "source": "koror",
-      "target": "kota",
+      "source": "korimako",
+      "target": "kotare",
       "relation": "rebuilt_on"
     }
   ]
@@ -120,7 +120,7 @@ Every entity created by an episode carries a provenance link:
 ```sparql
 SELECT ?entity WHERE {
   ?entity <http://www.w3.org/ns/prov#wasGeneratedBy>
-          <http://aegis.gastown.local/ontology/episode/koror-rebuild-2026-03-29>
+          <http://aegis.gastown.local/ontology/episode/korimako-rebuild-2026-03-29>
 }
 ```
 

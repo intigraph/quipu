@@ -35,8 +35,8 @@ fn locals(report: &Report) -> Vec<&str> {
 const DRIFT: &str = r#"{
     "name": "drift-episode",
     "nodes": [
-        {"name": "koror", "type": "ProxmoxNode",
-         "properties": {"hostname": "koror.local", "rackUnit": 7}}
+        {"name": "korimako", "type": "ProxmoxNode",
+         "properties": {"hostname": "korimako.local", "rackUnit": 7}}
     ]
 }"#;
 
@@ -141,7 +141,7 @@ fn structural_predicates_are_not_agent_drift() {
         r#"{
             "name": "grouped",
             "group_id": "aegis-ontology",
-            "nodes": [{"name": "koror", "type": "ProxmoxNode"}]
+            "nodes": [{"name": "korimako", "type": "ProxmoxNode"}]
         }"#,
     );
 
@@ -162,10 +162,10 @@ fn an_edge_relation_is_not_reported_as_a_minted_property() {
         r#"{
             "name": "edges",
             "nodes": [
-                {"name": "koror", "type": "ProxmoxNode"},
+                {"name": "korimako", "type": "ProxmoxNode"},
                 {"name": "ct-205", "type": "LXCContainer"}
             ],
-            "edges": [{"source": "ct-205", "target": "koror", "relation": "runs_on"}]
+            "edges": [{"source": "ct-205", "target": "korimako", "relation": "runs_on"}]
         }"#,
     );
 

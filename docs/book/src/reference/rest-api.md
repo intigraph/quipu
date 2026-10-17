@@ -271,6 +271,23 @@ invalidate the result.
 
 All POST endpoints accept `Content-Type: application/json`.
 
+### `GET /watermark`
+
+A bounded, read-only metadata endpoint for replication observers. Returns
+`{"store_id":"<store lineage>","watermark_tx":123}` using the indexed latest
+transaction ID. It does not enumerate facts, advance a cursor or create a
+transaction. A shared store ID establishes lineage, not proof that two copies
+have identical contents.
+
+Opt-in [read-only followers](../getting-started/configuration.md#read-only-follower-serving)
+poll their configured primary every 15 seconds (two-second HTTP timeout). Their
+responses carry `X-Quipu-Replica-Lag-Tx`: primary minus follower transaction IDs
+from the last fresh observation, or `unknown`. Metrics
+`quipu_replica_lag_transactions` (-1 for unknown) and `quipu_replica_lag_known`
+expose the same bounded observation. Failure, stale metadata or mismatched
+lineage never means zero lag. Replica writes return 503 naming the primary;
+they are not forwarded.
+
 ### `GET /health`
 
 Health check.
@@ -459,7 +476,7 @@ curl -s localhost:3030/episode -X POST \
   -d '{
     "name": "deploy-v2",
     "nodes": [{"name": "myapp", "type": "WebApplication"}],
-    "edges": [{"source": "myapp", "target": "kota", "relation": "runs_on"}]
+    "edges": [{"source": "myapp", "target": "kotare", "relation": "runs_on"}]
   }'
 ```
 
@@ -900,6 +917,72 @@ curl -s localhost:3030/explain -X POST \
 
 ### `POST /search`
 
+#### Usable context versus ranked candidates
+
+Every successful response also carries the `quipu-context/v1` contract:
+
+```json
+{
+  "insufficient_context": true,
+  "context_results": [],
+  "context": {
+    "contract": "quipu-context/v1",
+    "outcome": "NO CONTEXT",
+    "reason": "subject_not_covered",
+    "similarity_floor": 0.52,
+    "minimum_term_coverage": 0.5,
+    "subject_term": "unrecordedsubject",
+    "required_identifiers": [],
+    "top_term_coverage": 0.6667,
+    "candidate_count": 3,
+    "admitted_count": 0
+  }
+}
+```
+
+Consumer validation requires a finite declared floor in `[0.52, 1]` before
+accepting either CONTEXT or NO CONTEXT. A lower, missing or malformed floor
+is UNKNOWN in these consumers, even when the server reports no context.
+
+`results`, `count`, ranking scores, ordering, scope and temporal provenance remain
+unchanged diagnostic search output. They are **not** evidence that an answer
+exists. Context consumers must render **NO CONTEXT** when
+`insufficient_context` is true and must not inject diagnostic candidate text.
+When it is false, consume only `context_results`. A missing or unknown contract,
+transport error or malformed response is **UNKNOWN**, never an empty successful
+search. This contract does not change storage, ranking or graph isolation. Native MCP
+renders only this admitted-context view: its `results` and `count` describe the
+admitted rows and omit diagnostic neighbors. Unsupported context responses are
+MCP errors marked UNKNOWN. REST retains the diagnostic candidate view.
+
+Admission requires the top candidate's raw `similarity` to reach the floor,
+the first non-stopword query term to occur as a complete word, every explicit
+identifier to occur exactly, and at least half the distinct non-stopword query
+terms to occur. Matching is case-insensitive. Identifier boundaries preserve
+hostnames, unit names, item IDs, IRIs/paths and hexadecimal identifiers of seven
+or more characters. An uncorroborated top candidate produces NO CONTEXT even
+if a lower candidate appears usable. Admitted rows preserve source and valid-time
+metadata. An admitted historical incident is not a verified cause or current state.
+
+The default raw-cosine floor is **0.52**, provisionally measured on a small set
+with only a 0.023 separation margin. `context_similarity_floor` may explicitly
+select a finite floor in `[0,1]`; it does not change ranking. Coverage and subject
+checks are conservative heuristics, not a calibrated answerability probability.
+The first-subject rule is order-sensitive; an entity-first query is clearest.
+A high score alone is insufficient: a nonsense subject with domain vocabulary
+can exceed the floor. Re-evaluate thresholds against positive and truly absent
+controls before changing policy.
+
+Without query terms, or without a finite raw cosine (for example a keyword-only
+or lexical-only fusion result), context admission refuses with an explicit
+reason. BM25, normalized fusion, content and graph scores never substitute for
+cosine. Empty candidates produce `no_candidates`; all candidates below the floor
+produce `no_result_above_floor`. A below-floor top hit with another above-floor
+candidate produces `top_result_below_floor`. Other reasons include
+`similarity_unavailable`, `query_terms_unavailable`, `query_too_long`,
+`subject_not_covered`, `identifier_not_covered`, and `insufficient_term_coverage`.
+Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
+
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
@@ -1226,7 +1309,7 @@ Body: optional `limit` (nodes, ranked by degree; default 250, max 2000),
 
 ```json
 {
-  "nodes": [{"iri": "…", "label": "kota", "type": "…/ProxmoxNode", "deg": 8}],
+  "nodes": [{"iri": "…", "label": "kotare", "type": "…/ProxmoxNode", "deg": 8}],
   "edges": [[0, 10, "managed_by"]],
   "types": [{"iri": "…", "label": "SystemdService", "count": 15}],
   "truncated": {"shown": 250, "of": 1180},

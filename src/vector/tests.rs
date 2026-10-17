@@ -2,6 +2,18 @@
 
 use super::*;
 
+#[test]
+fn expired_batch_scan_refuses_even_without_rows() {
+    let store = Store::open_in_memory().unwrap();
+    let query = [1.0_f32; 8];
+    let _deadline = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
+    let result = store.vector_search_batch(&[&query], 1, None);
+    assert!(
+        matches!(result, Err(crate::Error::RequestTimeout { .. })),
+        "{result:?}"
+    );
+}
+
 fn make_embedding(seed: f32, dim: usize) -> Vec<f32> {
     (0..dim).map(|i| (seed + i as f32 * 0.1).sin()).collect()
 }

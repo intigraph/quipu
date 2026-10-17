@@ -268,6 +268,10 @@ docs-demo-test:
 explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
 
+# Presentation acceptance against the same staged browser engine.
+explorer-presentation *args:
+    node scripts/test-explore-presentation.cjs {{args}}
+
 # Author a canonical demo share from explicit data, shapes and reviewed policy.
 docs-data graph shapes policy:
     ./scripts/export-datalinks.sh {{quote(graph)}} {{quote(shapes)}} {{quote(policy)}}
@@ -342,3 +346,7 @@ search-eval cmd="test" *args="":
     @if [ "{{cmd}}" = "test" ]; then python3 scripts/test_search_eval.py; \
     elif [ "{{cmd}}" = "run" ]; then python3 scripts/search-eval.py {{args}}; \
     else echo "unknown search-eval command: {{cmd}}" >&2; exit 1; fi
+
+# Scratch follower: actual start, 100 reads, write refusals, lag and no DB writes.
+replica-test server cli:
+    python3 scripts/test-replica-server.py {{quote(server)}} {{quote(cli)}}

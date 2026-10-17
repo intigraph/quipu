@@ -20,6 +20,8 @@ mod input;
 #[cfg(test)]
 #[path = "mcp_transport/parity_tests.rs"]
 mod parity_tests;
+#[path = "mcp_transport/search_context.rs"]
+mod search_context;
 
 /// MCP dispatch paired with an already guarded REST router.
 #[derive(Clone)]
@@ -189,6 +191,14 @@ impl McpServer {
             .map_err(|_| ErrorData::internal_error("tool response exceeds limit", None))?;
         let text = String::from_utf8(bytes.to_vec())
             .map_err(|_| ErrorData::internal_error("tool response is not text", None))?;
+        let text = if success && name == "quipu_search" {
+            match search_context::render(&text) {
+                Ok(text) => text,
+                Err(reason) => return Ok(CallToolResult::error(vec![Content::text(reason)])),
+            }
+        } else {
+            text
+        };
         Ok(if success {
             CallToolResult::success(vec![Content::text(text)])
         } else {
