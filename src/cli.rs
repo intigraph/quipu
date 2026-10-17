@@ -193,7 +193,6 @@ pub fn cmd_unravel(args: &[String], db_path: &str) {
 ///                 [--max-iters 100] [--tolerance 1e-6] [--type <IRI>]
 ///                 [--predicate <IRI>] [--graph <IRI>] [--limit 20]
 ///                 [--from <IRI>] [--to <IRI>]
-/// Louvain: [--persist] [--timestamp <ISO-8601>] [--match-threshold 0.5]
 pub fn cmd_project(args: &[String], db_path: &str) {
     let get_val = |flag: &str| -> Option<String> {
         args.windows(2).find(|w| w[0] == flag).map(|w| w[1].clone())
@@ -228,25 +227,6 @@ pub fn cmd_project(args: &[String], db_path: &str) {
     }
     if let Some(t) = get_val("--to") {
         input["to"] = serde_json::Value::String(t);
-    }
-    if args.iter().any(|arg| arg == "--persist") {
-        if !matches!(algorithm.as_str(), "louvain" | "community") {
-            eprintln!("error: --persist is supported here only for Louvain communities");
-            std::process::exit(1);
-        }
-        input["persist"] = serde_json::json!(true);
-    }
-    if let Some(timestamp) = get_val("--timestamp") {
-        input["timestamp"] = serde_json::json!(timestamp);
-    }
-    if let Some(threshold) = get_val("--match-threshold") {
-        match threshold.parse::<f64>() {
-            Ok(value) if value.is_finite() => input["match_threshold"] = serde_json::json!(value),
-            _ => {
-                eprintln!("error: invalid --match-threshold");
-                std::process::exit(1);
-            }
-        }
     }
     // --seed is repeatable (personalized PageRank seeds, as IRIs).
     let seeds: Vec<serde_json::Value> = args

@@ -91,14 +91,12 @@ graph and returns a partition plus its Newman–Girvan modularity. Exposed as
   C-backed clustering dependency.)
 - **Opt-in persistence.** Read-only by default. With `persist: true`, each
   entity's community is written as a `quipu:memberOfCommunity` fact through the
-  store in a scope-qualified derived named graph (provenance
-  `source = "algo:louvain-communities/v1"`), with stable community IRIs, labels
-  and run provenance. ROOT is unchanged, and clusters become queryable,
+  store (provenance `source = "algo:louvain"`), so clusters become queryable,
   time-travelable knowledge — exactly like persisted PageRank scores.
 - **Supersede on re-run.** Membership is *derived* and goes stale when the graph
   changes, so a re-run bitemporally supersedes the prior derivation: changed
   memberships are retracted (`valid_to` closed) and new ones asserted, reconciled
-  by `(entity, community-term)`. A current-facts query in the derived graph returns only the
+  by `(entity, community-term)`. A default current-facts query returns only the
   latest partition — stale clusters never accumulate.
 - **Not an access boundary.** Community membership is *emergent clustering*, not a
   tenancy or authorization primitive. Like `group_id` (hq-2u3: provenance, not
