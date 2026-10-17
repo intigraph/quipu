@@ -13,4 +13,3 @@ hung trust CLI: bounded refusal, child reaped, no request
 malformed policy: refused before network
 receiver ROOT: 0 facts, no imported remote data
 ALL endpoint SERVICE acceptance controls PASS
-
