@@ -88,6 +88,9 @@ pub struct RepoRollback {
     pub tombstones_reapplied: usize,
 }
 
+mod revocation;
+pub use revocation::{TombstoneRevocation, revoke_tombstone};
+
 /// A repository or pack key: path-like, no `:` (it would collide with the
 /// `:pack:` and `:snapshot:` structure of the IRIs built from it).
 fn check_name(kind: &str, value: &str) -> Result<()> {

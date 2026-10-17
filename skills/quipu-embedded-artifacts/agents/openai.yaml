@@ -1,0 +1,3 @@
+interface:
+  display_name: "Quipu Embedded Artifacts"
+  short_description: "Build graph-backed pages with the real Quipu browser engine"

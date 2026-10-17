@@ -108,7 +108,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "properties": {
                     "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
-                    "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." }
+                    "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." },
+                    "slot_scoped": { "type": "boolean", "default": false, "description": "Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes." }
                 },
                 "required": ["incoming", "base"]
             }

@@ -66,6 +66,7 @@ pub(super) struct Completion<'a> {
     pub(super) endpoint: String,
     pub(super) declared_host: Option<String>,
     pub(super) declared_agent: Option<String>,
+    pub(super) command_context: super::request_command::CommandContext,
     pub(super) started: Instant,
     pub(super) metrics: &'a quipu::metrics::Metrics,
     pub(super) cancellations: &'a Cancellations,
@@ -126,7 +127,7 @@ impl Completion<'_> {
         );
         let mut log: serde_json::Value = serde_json::from_str(&log).unwrap();
         log["completion_outcome"] = if cancelled { "cancelled" } else { "response" }.into();
-        (self.emit)(log.to_string());
+        (self.emit)(self.command_context.annotate(log.to_string()));
     }
 }
 
