@@ -175,6 +175,9 @@ fn governed_history_integrates_admission_catalogue_clocks_and_premise_scope() {
         )
         .unwrap();
         let answer = evaluate_governed_history(&source, PACKAGE).unwrap();
+        if std::env::var_os("QUIPU_HISTORY_DEMO").is_some() {
+            println!("DEMO {date}: {}", serde_json::to_string(&answer).unwrap());
+        }
         assert_eq!(
             answer.selected_edition.edition,
             format!("https://example.org/editions/{expected}")
