@@ -62,6 +62,7 @@ mod cli_merge;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
+mod cli_pointer;
 mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;

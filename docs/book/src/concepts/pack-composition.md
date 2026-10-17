@@ -191,3 +191,60 @@ it again. A failed operation rolls back both restoration and the ledger update.
 
 Deleting a tombstone row by hand does not have these semantics: retracted facts
 in a retained graph would be harvested again on the next composition.
+
+## Pack pointers on first use
+
+A manifest's `kind = "pack"` pointers remain declarations at checkout and
+ordinary composition. A consumer follows only the graph it needs, using
+`share_pointer_load::LazyPacks::use_graph` or the native first-use command:
+
+```sh
+quipu compose --use-pointer urn:project:api \
+  --declaration repository.pendant.tar.gz \
+  --authority local-policy.pendant.tar.gz \
+  --repo-remote https://github.com/example/project.git \
+  --pointer-cache ./verified-archives --db ./inspection.db
+```
+
+The receiver supplies the repository remote and local authority. The command
+runs `caboodle packs trust check` against that repository and the pointed
+archive hash before reading the cache or fetching. A missing trust tool or a
+refused decision stops the operation. Foreign bundles never become global
+shape policy, and nothing is promoted into ROOT. Use the returned `dataset` in
+an explicit SPARQL `FROM` clause. This command does not move repository CURRENT.
+
+The archive sha256 and the enclosed manifest's `share_id`, graph, shapes and
+query hashes are verified independently. Cache keys use the archive digest;
+reads reverify the bytes and recheck trust. Cached archives work offline. A
+corrupt cache entry refuses rather than silently fetching a replacement.
+Fetch, integrity and validation failures name the requested pointer and leave
+no partial composition. Nested pointers are reported, not recursively loaded.
+The download limit is 16 MiB and the expanded archive limit is 64 MiB.
+
+Library consumers supply their own trust and transport callbacks plus an
+`ArchiveCache`. Construction performs no network access. Invoke `use_graph`
+when a graph is first requested, rather than scanning and following every
+pointer. `DirectoryCache` provides atomic native archive writes.
+
+### Browser consumers
+
+The explorer wasm bundle exports `PointerExplorer`. Supply the declaration
+archive and an authority archive chosen by the receiving application. The
+separate `wasm/explorer/runtime/pointers.mjs` helper provides bounded Fetch and optional
+CacheStorage persistence:
+
+```js
+const engine = new PointerExplorer(declarationBytes, localAuthorityBytes);
+const cache = await caches.open('project-pointer-archives');
+const result = await usePointerGraph(engine, 'urn:project:api', authorize, { cache });
+const rows = engine.query(`SELECT ?s ?p ?o FROM <${result.dataset}> WHERE { ?s ?p ?o }`);
+```
+
+`authorize(pointer)` is the receiving application's policy decision, such as a
+Caboodle policy exported by its trusted host. It must return the literal
+boolean `true`; the archive cannot supply consent. The helper checks it before
+cache or network access. Rust checks trust and both integrity layers before
+composition, using the same implementation as native. Browser requests omit
+credentials and refuse redirects. Cached archives can be used by a fresh
+instance offline. This is a read-only named dataset; it does not use the
+ordinary explorer's separate ROOT promotion ceremony.
