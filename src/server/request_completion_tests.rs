@@ -16,6 +16,7 @@ fn completion<'a>(
         endpoint: "/pending".into(),
         declared_host: None,
         declared_agent: None,
+        command_context: super::super::request_command::CommandContext::default(),
         started: Instant::now(),
         metrics,
         cancellations: counters,
@@ -104,4 +105,36 @@ fn cancellation_cardinality_reserves_overflow_and_escapes_labels() {
     counters.render(&mut text);
     assert!(text.contains("client=\"other\",endpoint=\"/pending\"} 69"));
     assert!(text.contains("endpoint=\"/route/\\\"quoted\\\"\""));
+}
+
+#[test]
+fn response_and_cancellation_preserve_the_same_command_context() {
+    for cancelled in [false, true] {
+        let metrics = quipu::metrics::Metrics::default();
+        let counters = Cancellations::default();
+        let logs = Arc::new(Mutex::new(Vec::new()));
+        let mut guard = completion(&metrics, &counters, logs.clone());
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("x-quipu-source", "st-stop_policy".parse().unwrap());
+        headers.insert("x-quipu-operation", "list".parse().unwrap());
+        guard.command_context =
+            super::super::request_command::CommandContext::from_headers(&headers);
+        if !cancelled {
+            guard.finish(
+                200,
+                quipu::request_usage::AuthOutcome::NotRequired,
+                None,
+                false,
+            );
+        }
+        drop(guard);
+        let logs = logs.lock().unwrap();
+        assert_eq!(logs.len(), 1);
+        let event: serde_json::Value = serde_json::from_str(&logs[0]).unwrap();
+        assert_eq!(event["declared_source"], "st-stop_policy");
+        assert_eq!(event["declared_operation"], "list");
+        assert_eq!(event["status"], if cancelled { 499 } else { 200 });
+        assert_eq!(event["request_id"], 7);
+        assert!(!metrics.render(0, 0, 0, None).contains("st-stop_policy"));
+    }
 }
