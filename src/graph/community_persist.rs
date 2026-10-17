@@ -30,33 +30,42 @@ pub(super) fn persist(
     input: &Json,
     modularity: f64,
     timestamp: &str,
+    expected_source_tx: i64,
 ) -> Result<()> {
-    // The graph is reserved to this producer. Never reconcile user/other producer
-    // assertions merely because they use one of our predicates.
-    if let Some(g) = store.registered_graph_id(graph)? {
-        let foreign: i64 = store.conn.query_row(
-            "SELECT COUNT(*) FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.g=?1 AND f.op=1 AND f.valid_to IS NULL AND (t.source IS NULL OR t.source<>?2)",
-            rusqlite::params![g,SOURCE], |r|r.get(0))?;
-        if foreign != 0 {
-            return Err(Error::InvalidValue(
-                "derived community graph contains foreign assertions".into(),
-            ));
-        }
-    }
-    let old_groups = previous(store, graph)?;
-    let source_tx = store.latest_tx_id()?;
-    let params = json!({"algorithm":"louvain/v1", "graph":input.get("graph"),"type":input.get("type"),"predicate":input.get("predicate"),"match_threshold":input.get("match_threshold").cloned().unwrap_or(json!(0.5))});
-    let run = format!(
-        "urn:quipu:grouping-run:{}",
-        digest(&[
-            graph.into(),
-            timestamp.into(),
-            source_tx.to_string(),
-            params.to_string()
-        ])
-    );
+    // Establish the SQLite snapshot before any ownership or provenance read.
+    // A concurrent commit after this snapshot makes the later write upgrade
+    // fail rather than reconciling a newer graph against stale descriptions.
     store.conn.execute_batch("SAVEPOINT quipu_community_run")?;
     let result = (|| {
+        let source_tx = store.latest_tx_id()?;
+        if source_tx != expected_source_tx {
+            return Err(Error::InvalidValue(
+                "community source changed during projection; refusing persistence".into(),
+            ));
+        }
+        // The graph is reserved to this producer. Never reconcile user/other producer
+        // assertions merely because they use one of our predicates.
+        if let Some(g) = store.registered_graph_id(graph)? {
+            let foreign: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.g=?1 AND f.op=1 AND f.valid_to IS NULL AND (t.source IS NULL OR t.source<>?2)",
+            rusqlite::params![g,SOURCE], |r|r.get(0))?;
+            if foreign != 0 {
+                return Err(Error::InvalidValue(
+                    "derived community graph contains foreign assertions".into(),
+                ));
+            }
+        }
+        let old_groups = previous(store, graph)?;
+        let params = json!({"algorithm":"louvain/v1", "graph":input.get("graph"),"type":input.get("type"),"predicate":input.get("predicate"),"match_threshold":input.get("match_threshold").cloned().unwrap_or(json!(0.5))});
+        let run = format!(
+            "urn:quipu:grouping-run:{}",
+            digest(&[
+                graph.into(),
+                timestamp.into(),
+                source_tx.to_string(),
+                params.to_string()
+            ])
+        );
         let existed = store.registered_graph_id(graph)?.is_some();
         let g = store.graph_create(graph)?;
         if !existed {
@@ -230,3 +239,7 @@ pub(super) fn persist(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "community_persist_tests.rs"]
+mod reviewer_concurrency;

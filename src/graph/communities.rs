@@ -103,7 +103,12 @@ pub(super) fn describe(
     Ok((derived, descriptions))
 }
 
-pub(super) fn run(store: &mut Store, pg: &ProjectedGraph, input: &Json) -> Result<Json> {
+pub(super) fn run(
+    store: &mut Store,
+    pg: &ProjectedGraph,
+    input: &Json,
+    source_tx: Option<i64>,
+) -> Result<Json> {
     let partition = louvain(pg);
     let (derived_graph, descriptions) = describe(store, pg, &partition.groups, input)?;
     let persisted = if input
@@ -123,6 +128,8 @@ pub(super) fn run(store: &mut Store, pg: &ProjectedGraph, input: &Json) -> Resul
             input,
             partition.modularity,
             timestamp,
+            source_tx
+                .ok_or_else(|| Error::InvalidValue("missing community source generation".into()))?,
         )?;
         Some(descriptions.iter().map(|d| d.size).sum::<usize>())
     } else {
@@ -141,8 +148,17 @@ pub fn persist_communities(
     timestamp: &str,
 ) -> Result<usize> {
     let input = json!({});
+    let source_tx = store.latest_tx_id()?;
     let pg = super::project(store, None, None)?;
     let (derived, descriptions) = describe(store, &pg, groups, &input)?;
-    super::community_persist::persist(store, &derived, &descriptions, &input, 0.0, timestamp)?;
+    super::community_persist::persist(
+        store,
+        &derived,
+        &descriptions,
+        &input,
+        0.0,
+        timestamp,
+        source_tx,
+    )?;
     Ok(descriptions.iter().map(|d| d.size).sum())
 }

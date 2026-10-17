@@ -512,6 +512,18 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .unwrap_or("stats");
 
+    // Bind persisted communities to the generation before projection, identity
+    // matching and labels. Read-only algorithms incur no extra generation read.
+    let community_source_tx = if matches!(algorithm, "louvain" | "community")
+        && input
+            .get("persist")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false)
+    {
+        Some(store.latest_tx_id()?)
+    } else {
+        None
+    };
     let pg = project_cached(store, type_filter, pred_filter, graph)?;
 
     match algorithm {
@@ -560,7 +572,7 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 "count": results.len()
             }))
         }
-        "louvain" | "community" => communities::run(store, &pg, input),
+        "louvain" | "community" => communities::run(store, &pg, input, community_source_tx),
         "shortest_path" => {
             let from = input.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
                 crate::Error::InvalidValue("missing 'from' IRI for shortest_path".into())
