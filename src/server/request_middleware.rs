@@ -133,7 +133,7 @@ async fn log_request_with_sequence(
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
         .map(|info| info.0);
     let provenance = write_provenance_of(req.headers(), &client, &endpoint);
-    let attributed = |log| {
+    let attributed = |log: String| {
         let mut record: serde_json::Value = serde_json::from_str(&log).unwrap();
         record["purpose"] = purpose.into();
         record["purpose_source"] = "declared_header".into();
