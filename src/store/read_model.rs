@@ -168,6 +168,7 @@ impl Store {
     /// - It could not vouch (OWL inference, functional supersede): drop, and
     ///   let the next read rebuild. Correct by construction.
     pub(crate) fn maintain_read_model(&self, graph: i64, effective: Option<&[Datum]>, tx_id: i64) {
+        crate::resolution::cache::maintain(self, effective, tx_id);
         let mut models = self.read_model.borrow_mut();
         // Only the WRITTEN graph's model is touched (quipu-nip): a model over
         // ROOT is genuinely unaffected by a write to graph 7, because

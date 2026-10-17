@@ -159,6 +159,7 @@ impl Store {
         // them (aegis-xi0), and serves `/resolve`; both must use the served
         // `[quipu.resolution]` policy, not the defaults.
         self.resolution_config.clone_from(&other.resolution_config);
+        self.resolution_cache = other.resolution_cache.clone();
         self.embedding_provider
             .clone_from(&other.embedding_provider);
     }
@@ -492,6 +493,7 @@ impl Store {
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
+            resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),

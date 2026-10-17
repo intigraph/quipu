@@ -208,6 +208,7 @@ fn resolution_fires_on_duplicate_node() {
 fn resolution_opts_from_config_round_trip() {
     // The config→opts bridge that the handlers use must carry every field.
     let cfg = crate::config::ResolutionConfig {
+        cache_labels: true,
         enabled: true,
         threshold: 0.7,
         top_k: 5,

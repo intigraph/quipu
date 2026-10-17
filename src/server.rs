@@ -357,7 +357,7 @@ async fn main() {
         .map(|_| Arc::new(replica::ReplicaStatus::default()));
     #[cfg(feature = "reactive-reasoner")]
     let handle = handle.with_reasoner(reactive_reasoner);
-    let state: SharedStore = Arc::new(handle);
+    let state: SharedStore = handle.into_shared();
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
