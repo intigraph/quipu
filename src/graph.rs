@@ -3,7 +3,9 @@
 //! components, Louvain community detection).
 //!
 //! **Communities are not an access boundary.** `louvain` (with `persist:true`)
-//! writes `quipu:memberOfCommunity` facts, but community membership is *emergent
+//! writes labels, provenance and `quipu:memberOfCommunity` facts into a dedicated
+//! derived named graph (never ROOT). Stable identities reconcile within the same
+//! projection scope; read-only descriptions are the default. Membership is *emergent
 //! clustering* derived from graph structure — it is not a tenancy or
 //! authorization primitive. Like `group_id` (hq-2u3: provenance, not isolation),
 //! it must never be used to gate access; consumers must not build access control
@@ -18,8 +20,8 @@ use serde_json::Value as JsonValue;
 
 use crate::error::Result;
 use crate::namespace;
-use crate::store::{Datum, Store};
-use crate::types::{Op, Value};
+use crate::store::Store;
+use crate::types::Value;
 
 /// A projected graph with entity-to-index mappings.
 pub struct ProjectedGraph {
@@ -510,6 +512,18 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         .and_then(|v| v.as_str())
         .unwrap_or("stats");
 
+    // Bind persisted communities to the generation before projection, identity
+    // matching and labels. Read-only algorithms incur no extra generation read.
+    let community_source_tx = if matches!(algorithm, "louvain" | "community")
+        && input
+            .get("persist")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false)
+    {
+        Some(store.latest_tx_id()?)
+    } else {
+        None
+    };
     let pg = project_cached(store, type_filter, pred_filter, graph)?;
 
     match algorithm {
@@ -558,53 +572,7 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 "count": results.len()
             }))
         }
-        "louvain" | "community" => {
-            let communities = louvain(&pg);
-
-            // Resolve entity ids to IRIs (immutable reads) into owned JSON before
-            // any write, so nothing borrows the store across the persist call.
-            let results: Vec<JsonValue> = communities
-                .groups
-                .iter()
-                .enumerate()
-                .map(|(k, group)| {
-                    let entities: Vec<String> = group
-                        .iter()
-                        .map(|&id| store.resolve(id).unwrap_or_else(|_| format!("ref:{id}")))
-                        .collect();
-                    serde_json::json!({
-                        "community": format!("{}community_{k}", namespace::QUIPU),
-                        "entities": entities,
-                        "size": group.len(),
-                    })
-                })
-                .collect();
-
-            // Opt-in persistence (read-only by default). Writes
-            // quipu:memberOfCommunity facts, superseding any prior derivation.
-            let persist = input
-                .get("persist")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false);
-            let persisted = if persist {
-                let now = crate::time::now_iso();
-                let timestamp = input
-                    .get("timestamp")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(&now);
-                Some(persist_communities(store, &communities.groups, timestamp)?)
-            } else {
-                None
-            };
-
-            Ok(serde_json::json!({
-                "algorithm": "louvain",
-                "communities": results,
-                "count": results.len(),
-                "modularity": communities.modularity,
-                "persisted": persisted,
-            }))
-        }
+        "louvain" | "community" => communities::run(store, &pg, input, community_source_tx),
         "shortest_path" => {
             let from = input.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
                 crate::Error::InvalidValue("missing 'from' IRI for shortest_path".into())
@@ -627,81 +595,11 @@ pub fn tool_project(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     }
 }
 
-/// Persist a community partition as `quipu:memberOfCommunity` facts, bitemporally
-/// **superseding** any prior derivation (hq-zlph AC 5).
-///
-/// Community membership is derived from graph structure, so it goes stale when the
-/// graph changes. This reconciles the stored membership against the fresh
-/// partition in a single transaction stamped with `source = "algo:louvain"`:
-/// memberships that changed are retracted (their `valid_to` closed), genuinely
-/// new ones are asserted, and unchanged ones are left untouched (retaining their
-/// original assertion time). A default current-facts query (`valid_to IS NULL`)
-/// therefore always returns exactly the latest partition — no stale clusters
-/// accumulate. Community labels are positional (`community_<k>`) and not stable
-/// across runs, so the reconcile compares by `(entity, community-term)` rather
-/// than trusting a label.
-///
-/// (Retract-and-reassert is folded into a diff because the `facts` table is keyed
-/// by `(e, a, v, tx)` — retracting *and* re-asserting an identical triple in one
-/// transaction would collide on that key.)
-///
-/// This is emergent clustering, **not** an access boundary — see the module note
-/// and hq-zlph AC 6. Returns the total number of memberships in the new partition.
-pub fn persist_communities(
-    store: &mut Store,
-    groups: &[Vec<i64>],
-    timestamp: &str,
-) -> Result<usize> {
-    let pred_id = store.intern(&format!("{}memberOfCommunity", namespace::QUIPU))?;
-
-    // Desired membership set: (entity, community-term-id). Intern labels up front.
-    let mut desired: std::collections::HashSet<(i64, i64)> = std::collections::HashSet::new();
-    for (k, group) in groups.iter().enumerate() {
-        let comm_id = store.intern(&format!("{}community_{k}", namespace::QUIPU))?;
-        for &entity in group {
-            desired.insert((entity, comm_id));
-        }
-    }
-    let total = desired.len();
-
-    let mut datums: Vec<Datum> = Vec::new();
-
-    // Reconcile against current state: drop already-correct memberships from
-    // `desired`; retract the rest (stale).
-    for fact in store.current_facts()? {
-        if fact.attribute != pred_id {
-            continue;
-        }
-        let keep = matches!(fact.value, Value::Ref(cid) if desired.remove(&(fact.entity, cid)));
-        if !keep {
-            datums.push(Datum {
-                entity: fact.entity,
-                attribute: pred_id,
-                value: fact.value,
-                valid_from: timestamp.to_string(),
-                valid_to: None,
-                op: Op::Retract,
-            });
-        }
-    }
-
-    // Assert the genuinely-new memberships (deterministic order).
-    let mut to_assert: Vec<(i64, i64)> = desired.into_iter().collect();
-    to_assert.sort_unstable();
-    for (entity, comm_id) in to_assert {
-        datums.push(Datum {
-            entity,
-            attribute: pred_id,
-            value: Value::Ref(comm_id),
-            valid_from: timestamp.to_string(),
-            valid_to: None,
-            op: Op::Assert,
-        });
-    }
-
-    store.transact(&datums, timestamp, None, Some("algo:louvain"))?;
-    Ok(total)
-}
+mod communities;
+mod community_identity;
+mod community_labels;
+mod community_persist;
+pub use communities::persist_communities;
 
 mod pagerank;
 mod rank;
