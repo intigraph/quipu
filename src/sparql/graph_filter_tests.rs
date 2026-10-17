@@ -200,3 +200,56 @@ fn attached_graph_candidates_keep_composed_answers() {
     assert_eq!(new, 7);
     assert!(old >= 26);
 }
+
+fn candidate_context(store: &Store, ctx: &super::TemporalContext) -> super::TemporalContext {
+    use spargebra::algebra::GraphPattern;
+    let spargebra::Query::Select { pattern, .. } = super::sparql_parser()
+        .parse_query(
+            "SELECT ?g WHERE { GRAPH ?g { ?s <urn:p> ?o } FILTER(CONTAINS(STR(?g), \"seeds\")) }",
+        )
+        .unwrap()
+    else {
+        panic!("SELECT fixture")
+    };
+    let GraphPattern::Project { inner, .. } = pattern else {
+        panic!("project fixture")
+    };
+    let GraphPattern::Filter { expr, inner } = *inner else {
+        panic!("filter fixture")
+    };
+    graph_filter::narrowed(store, &expr, &inner, ctx)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn optimizer_preserves_implicit_dataset_provenance() {
+    let store = fixture();
+    let ctx = super::TemporalContext::default();
+    let narrowed = candidate_context(&store, &ctx);
+    assert_eq!(
+        narrowed.named_dataset, ctx.named_dataset,
+        "an optimizer scan restriction must not become explicit FROM NAMED"
+    );
+}
+
+#[test]
+fn optimizer_preserves_the_exact_explicit_dataset() {
+    let store = fixture();
+    let ids = store
+        .list_graphs(None, None)
+        .unwrap()
+        .into_iter()
+        .filter(|g| g.g != 0)
+        .map(|g| g.g)
+        .collect();
+    let ctx = super::TemporalContext {
+        named_dataset: Some(ids),
+        ..Default::default()
+    };
+    let narrowed = candidate_context(&store, &ctx);
+    assert_eq!(
+        narrowed.named_dataset, ctx.named_dataset,
+        "candidate pruning must not overwrite the explicit dataset"
+    );
+}

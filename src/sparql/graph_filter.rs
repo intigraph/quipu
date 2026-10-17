@@ -36,12 +36,16 @@ pub(super) fn narrowed(
                     .named_dataset
                     .as_ref()
                     .is_none_or(|ids| ids.contains(&g.g))
+                && ctx
+                    .graph_candidates
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(&g.g))
                 && narrow.keeps_text(&g.iri)
         })
         .map(|g| g.g)
         .collect();
     Ok(Some(TemporalContext {
-        named_dataset: Some(graphs),
+        graph_candidates: Some(std::sync::Arc::new(graphs)),
         ..ctx.clone()
     }))
 }

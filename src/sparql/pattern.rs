@@ -407,6 +407,10 @@ pub fn eval_pattern_seeded(
                             .named_dataset
                             .as_ref()
                             .is_some_and(|visible| !visible.contains(&graph.g))
+                        || ctx
+                            .graph_candidates
+                            .as_ref()
+                            .is_some_and(|ids| !ids.contains(&graph.g))
                     {
                         continue;
                     }
@@ -414,6 +418,7 @@ pub fn eval_pattern_seeded(
                     graph_seed.insert(graph_var.clone(), Value::Ref(graph.g));
                     let mut graph_ctx = ctx.clone();
                     graph_ctx.graph = GraphScope::Named(vec![graph.g]);
+                    graph_ctx.graph_candidates = None;
                     #[cfg(test)]
                     super::graph_filter::record_scan();
                     let (mut graph_rows, graph_vars) =
