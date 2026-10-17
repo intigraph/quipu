@@ -120,14 +120,14 @@ pub fn task_briefing(store: &Store, input: &Json) -> Result<Json> {
         if local(&store.resolve(fact.attribute)?) == "type" {
             continue;
         }
-        if let Value::Ref(target) = fact.value {
-            if !targets.contains(&target) {
-                if targets.len() == 8 {
-                    links_capped = true;
-                    break;
-                }
-                targets.push(target);
+        if let Value::Ref(target) = fact.value
+            && !targets.contains(&target)
+        {
+            if targets.len() == 8 {
+                links_capped = true;
+                break;
             }
+            targets.push(target);
         }
     }
     // Decisions and observations commonly point TO a task. These are indexed
@@ -146,14 +146,14 @@ pub fn task_briefing(store: &Store, input: &Json) -> Result<Json> {
         let rows = result.rows();
         links_capped |= rows.len() >= 9;
         for row in rows {
-            if let Some(Value::Ref(target)) = row.get("s") {
-                if !targets.contains(target) {
-                    if targets.len() == 8 {
-                        links_capped = true;
-                        break;
-                    }
-                    targets.push(*target);
+            if let Some(Value::Ref(target)) = row.get("s")
+                && !targets.contains(target)
+            {
+                if targets.len() == 8 {
+                    links_capped = true;
+                    break;
                 }
+                targets.push(*target);
             }
         }
     }
@@ -179,9 +179,14 @@ pub fn task_briefing(store: &Store, input: &Json) -> Result<Json> {
                     "description" | "notes" | "comment" => 4,
                     _ => 5,
                 };
+                // A linked entity's state must not displace the exact task's
+                // owner/state or its recorded decision evidence.
+                let rank = if target != id && rank < 2 { 3 } else { rank };
                 let (value, kind) = text(&fact.value, store)?;
                 if kind == "omitted"
                     || !seen.insert((
+                        target,
+                        *scope_id,
                         predicate.clone(),
                         format!("{:x}", Sha256::digest(value.as_bytes())),
                     ))
@@ -381,6 +386,35 @@ mod tests {
         assert_eq!(out["coverage_limited"], true);
         assert!(!out.to_string().contains(&"x".repeat(513)));
         assert!(out["first_screen"].as_str().unwrap().contains("closed"));
+    }
+
+    #[test]
+    fn linked_states_do_not_displace_task_or_merge_provenance() {
+        let mut store = fixture();
+        ingest_rdf(
+            &mut store,
+            &br#"<urn:task:one> <urn:related> <urn:linked> .
+                 <urn:linked> <urn:status> "open" ; <urn:owner> <urn:bob> ;
+                 <urn:closeReason> "Observed fix and cited source" ."#[..],
+            RdfFormat::Turtle,
+            None,
+            "2026-01-02T00:00:00Z",
+            None,
+            Some("fixture"),
+        )
+        .unwrap();
+        let out =
+            task_briefing(&store, &json!({"task_iri":"urn:task:one","graph":"ROOT"})).unwrap();
+        let entries = out["entries"].as_array().unwrap();
+        assert_eq!(entries[0]["entity"], "urn:task:one");
+        assert_eq!(entries[0]["value"], "closed");
+        assert_eq!(entries[1]["value"], "urn:alice");
+        let decisions: Vec<_> = entries
+            .iter()
+            .filter(|e| e["predicate"] == "urn:closeReason")
+            .collect();
+        assert_eq!(decisions.len(), 2);
+        assert_ne!(decisions[0]["entity"], decisions[1]["entity"]);
     }
 
     #[test]
