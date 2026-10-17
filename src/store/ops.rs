@@ -12,7 +12,7 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
-struct Staged {
+pub(super) struct Staged {
     tx_id: i64,
     /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
     /// from values staging computes anyway: no extra store read.
@@ -245,7 +245,7 @@ impl Store {
     /// success; any `Err` (including a policy denial) leaves the savepoint open
     /// for the caller to roll back.
     #[allow(clippy::too_many_arguments)]
-    fn stage_and_guard(
+    pub(super) fn stage_and_guard(
         &mut self,
         datums: &[Datum],
         timestamp: &str,
@@ -403,7 +403,7 @@ impl Store {
     /// Post-commit side effects: auto-embedding and reactive observers. Runs
     /// after the savepoint is released (the write is durable relative to the
     /// parent), preserving the previous ordering.
-    fn after_commit_hooks(
+    pub(super) fn after_commit_hooks(
         &mut self,
         datums: &[Datum],
         staged: Staged,

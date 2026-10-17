@@ -1,0 +1,33 @@
+Retained actual stdout excerpts; no new timing replay.
+Baseline source: 577eb1fe30a19a1a6bcd8ae1ff1da6aa9563a552
+Candidate change: 68f3558b (same aggregate blob after base refresh)
+Invocation per case: distinct_reference_cost positive | distinct_refs
+Input: synthetic intermediate reference bindings; no existing graph.
+
+BASELINE
+{"phase":"open","process_ms":0.0070940000000000005}
+{"phase":"fixture","process_ms":17.102088000000002}
+{"phase":"eval_start","process_ms":17.11778}
+{"phase":"eval_done","process_ms":17.612372}
+{"case":"positive","rows":64,"expected":64,"actual":64,"eval_ms":0.49324000000000007}
+{"phase":"open","process_ms":0.0062}
+{"phase":"fixture","process_ms":6.907324}
+{"phase":"eval_start","process_ms":14.48095}
+{"phase":"eval_done","process_ms":1408.124768}
+{"case":"distinct_refs","rows":30714,"expected":30714,"actual":30714,"eval_ms":1393.632589}
+
+CANDIDATE
+{"phase":"open","process_ms":0.0020700000000000002}
+{"phase":"fixture","process_ms":4.076604000000001}
+{"phase":"eval_start","process_ms":4.0869740000000006}
+{"phase":"eval_done","process_ms":4.097328}
+{"case":"positive","rows":64,"expected":64,"actual":64,"eval_ms":0.00963}
+{"phase":"open","process_ms":0.000925}
+{"phase":"fixture","process_ms":4.10808}
+{"phase":"eval_start","process_ms":8.570823}
+{"phase":"eval_done","process_ms":11.704423}
+{"case":"distinct_refs","rows":30714,"expected":30714,"actual":30714,"eval_ms":3.1269280000000004}
+
+LIMIT: one observation per fixed case, not whole-query latency.
+Candidate HOME guard reported a concurrent installed CLI change, cause UNKNOWN.
+Frozen measured copies were retained; no repeat to obtain a clean guard.

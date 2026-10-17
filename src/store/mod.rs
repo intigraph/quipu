@@ -9,6 +9,8 @@ pub mod attestation;
 mod batches;
 pub mod changes;
 pub mod datasets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod decision_deck;
 mod decision_nonces;
 pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;

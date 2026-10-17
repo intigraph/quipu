@@ -13,7 +13,8 @@ use serde_json::{Value as JsonValue, json};
 
 use crate::error::{Error, Result};
 use crate::share_merge_decisions::{
-    DecisionFile, InlineShare, SharePair, apply_pair, dry_run_pair, emit_pair, propose,
+    DecisionFile, InlineShare, SharePair, apply_pair, dry_run_pair, emit_pair, emit_pair_scoped,
+    propose,
 };
 use crate::store::Store;
 
@@ -36,7 +37,16 @@ fn pair(input: &JsonValue) -> Result<SharePair> {
 /// A missing or unverifiable share, a base that is not the incoming share's
 /// parent, or a store read error.
 pub fn tool_merge_decisions(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let mut file = emit_pair(store, pair(input)?)?;
+    let scoped = match input.get("slot_scoped") {
+        None | Some(JsonValue::Bool(false)) => false,
+        Some(JsonValue::Bool(true)) => true,
+        Some(_) => return Err(Error::InvalidValue("slot_scoped must be a boolean".into())),
+    };
+    let mut file = if scoped {
+        emit_pair_scoped(store, pair(input)?)?
+    } else {
+        emit_pair(store, pair(input)?)?
+    };
     if input.get("propose").and_then(JsonValue::as_bool) == Some(true) {
         file = propose(file);
     }
