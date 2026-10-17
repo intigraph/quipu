@@ -67,7 +67,10 @@ fn consistent_keys(
             };
             let class = match value {
                 Value::Int(_) => 0,
-                Value::Float(number) if number.is_finite() => 0,
+                // Integer/integer comparisons are exact, while mixed floating
+                // comparisons promote and can collapse distinct integers above
+                // 2^53. Mixing those relations is not a consistent heap order.
+                Value::Float(number) if number.is_finite() => 5,
                 Value::Float(_) => return Ok(false),
                 Value::Ref(_) => 1,
                 Value::Bool(_) => 2,

@@ -370,3 +370,6 @@ mod tests {
         println!("ORDER BY ordinary numeric control: {values:?}");
     }
 }
+
+#[cfg(test)]
+mod numeric_tests;
