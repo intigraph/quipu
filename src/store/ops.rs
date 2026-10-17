@@ -10,41 +10,9 @@ use super::{Datum, Store};
 
 pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome};
 
-/// Result of staging a transaction's rows into the open `quipu_transact`
-/// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
-struct Staged {
-    tx_id: i64,
-    /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
-    /// from values staging computes anyway: no extra store read.
-    counts: StagedCounts,
-    /// The COMPLETE set of changes this write made to the current-fact view, or
-    /// `None` when the write path cannot vouch that it is complete.
-    ///
-    /// `Some` lets the resident read model be maintained instead of rebuilt.
-    /// It is `None` whenever something closed or added facts that are not in
-    /// this list — OWL domain/range inference extends the batch, and
-    /// functional-property supersede closes prior values with a bulk
-    /// `UPDATE ... WHERE v != ?` that never enumerates what it hit. Neither is
-    /// reconstructible from the caller's datums, so the honest answer is to say
-    /// so and let the model rebuild.
-    effective: Option<Vec<Datum>>,
-    /// Datums actually asserted (skipping idempotent no-ops), for reactive
-    /// observer notification.
-    #[cfg(feature = "reactive-reasoner")]
-    asserts: Vec<Datum>,
-    /// Datums actually retracted, for reactive observer notification.
-    #[cfg(feature = "reactive-reasoner")]
-    retracts: Vec<Datum>,
-}
-
-/// Datum counts a staged write already knows (see `metrics::writes`).
-#[derive(Clone, Copy)]
-struct StagedCounts {
-    inferred: usize,
-    asserted: usize,
-    retracted: usize,
-    superseded: usize,
-}
+#[path = "ops_staged.rs"]
+mod staged;
+use staged::{Staged, StagedCounts};
 
 /// Every current fact one producer's source tag owns in one graph.
 ///
@@ -189,15 +157,14 @@ impl Store {
                     root: graph == crate::schema::ROOT_GRAPH,
                     kind,
                 });
-                // Count the commit under the requesting client's declared
-                // provenance (aegis-7zp4rc). The engine's own writers that a
-                // request merely triggers are not that client's writes.
+                // Count effective client commits, excluding no-ops and internal writers.
                 if !matches!(
                     kind,
                     crate::write_kind::WriteKind::Verdict
                         | crate::write_kind::WriteKind::Reasoner
                         | crate::write_kind::WriteKind::Migration
-                ) && let Some(p) = crate::write_provenance::current()
+                ) && counts.asserted + counts.retracted + counts.superseded > 0
+                    && let Some(p) = crate::write_provenance::current()
                 {
                     crate::metrics::metrics().observe_write_provenance(&p);
                 }
@@ -254,8 +221,7 @@ impl Store {
         graph: i64,
         retract_source: Option<&str>,
     ) -> Result<Staged> {
-        // The human trust-root registry as it stands BEFORE this write
-        // (aegis-kzt0ql.9.4). Compared with the post-state below.
+        // Trust-root snapshot before this write, compared with post-state below.
         let workflow_before = if self.governance_config().enforce_workflows {
             Some(crate::governance::workflow::capture(self, datums, graph)?)
         } else {
@@ -371,9 +337,7 @@ impl Store {
             graph,
         )?;
 
-        // Only vouch for the change set when nothing outside it touched the
-        // current-fact view. `superseded` counts functional-property closures;
-        // `inferred` is true when OWL inference extended the batch.
+        // Only vouch for the change set if nothing outside it changed the view.
         let effective = if superseded == 0 && !inferred {
             let mut all: Vec<Datum> =
                 Vec::with_capacity(written_asserts.len() + written_retracts.len());
@@ -384,6 +348,9 @@ impl Store {
             None
         };
 
+        if !written_asserts.is_empty() || !written_retracts.is_empty() || superseded > 0 {
+            crate::transaction_provenance::record(&self.conn, tx_id, actor, source)?;
+        }
         Ok(Staged {
             tx_id,
             counts: StagedCounts {

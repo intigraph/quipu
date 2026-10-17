@@ -196,3 +196,69 @@ async fn feed_wait_metric_detects_real_writer_fallback_wait() {
     assert!(response.0["events"].is_array());
     assert!(recorded_wait("feed-fallback", "/events") >= 0.1);
 }
+
+#[tokio::test]
+async fn provenance_page_is_scoped_bounded_and_filters_before_limit() {
+    let (_dir, handle) = crate::tests::pooled_handle(2);
+    let shared: crate::SharedStore = Arc::new(handle);
+    {
+        let mut s = shared.lock();
+        for (i, agent) in ["first", "second", "second"].iter().enumerate() {
+            let p = quipu::write_provenance::RequestProvenance::classify(
+                "page-client",
+                "/knot",
+                [
+                    Some(agent),
+                    Some("codex"),
+                    Some("host"),
+                    Some("session"),
+                    Some("model"),
+                ],
+            );
+            let datums = [quipu::Datum {
+                entity: s.intern(&format!("urn:page:{i}")).unwrap(),
+                attribute: s.intern("urn:page:label").unwrap(),
+                value: quipu::Value::Str("v".into()),
+                op: quipu::Op::Assert,
+                valid_from: "2026-01-01T00:00:00Z".into(),
+                valid_to: None,
+            }];
+            quipu::write_provenance::scoped(Some(Arc::new(p)), || {
+                s.transact(&datums, "2026-01-01T00:00:00Z", None, None)
+            })
+            .unwrap();
+        }
+    }
+    let params =
+        serde_json::from_value(json!({"session":"session", "agent":"second", "limit":1})).unwrap();
+    let first = feed::transactions(
+        State(shared.clone()),
+        headers("page-control"),
+        Query(params),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(first["count"], 1);
+    assert_eq!(first["has_more"], true);
+    assert_eq!(
+        first["transactions"][0]["provenance"]["declared"]["agent"],
+        "second"
+    );
+    assert_eq!(first["coverage"]["page-client"]["complete"], 1);
+    assert_eq!(first["coverage_scope"], "returned_page_only");
+    assert_eq!(first["scope"]["provider"], "local-store");
+    assert!(first["scope"]["store_id"].is_string());
+    assert!(first["scope"]["incarnation"].is_string());
+    let params = serde_json::from_value(
+        json!({"session":"session", "agent":"second", "limit":1, "since":first["next_tx"]}),
+    )
+    .unwrap();
+    let second = feed::transactions(State(shared), headers("page-control"), Query(params))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(second["count"], 1);
+    assert_eq!(second["has_more"], false);
+    assert!(second["next_tx"].as_i64().unwrap() > first["next_tx"].as_i64().unwrap());
+}

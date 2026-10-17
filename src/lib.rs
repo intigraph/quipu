@@ -36,6 +36,7 @@ mod search_graph_scope;
 pub mod search_trace;
 pub mod substring;
 pub mod transaction_auth;
+pub mod transaction_provenance;
 pub mod write_kind;
 pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two

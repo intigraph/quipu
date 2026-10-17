@@ -71,6 +71,7 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
                 }
             },
         ))
+        .layer(middleware::from_fn(crate::request_middleware::log_request))
         .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -82,6 +83,14 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
             ureq::post(&format!("http://{address}/set"))
             .set("authorization", &format!("Bearer {name}"))
             .set("x-quipu-principal", "urn:crew:spoofed")
+            .set("x-quipu-client", "test-provenance")
+            .set("x-quipu-agent", "declared-agent")
+            .set("x-quipu-harness", "codex")
+            .set("x-quipu-model", "fixture-model")
+            .set("x-quipu-session", "fixture-session")
+            .set("x-quipu-host", "fixture-host")
+            .set("x-quipu-task", "fixture-task")
+            .set("x-quipu-client-version", "1.0")
             .set("content-type", "application/json")
             .send_string(&json!({"entity":format!("urn:test:{name}"), "predicate":"urn:test:label", "value":name,
                              "actor":"spoofed", "source":"historical-source"}).to_string())
@@ -104,6 +113,11 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
     for tx in readback["transactions"].as_array().unwrap() {
         assert!(tx["authenticated"]["principal"].is_string());
         assert_eq!(tx["actor"], "spoofed");
+        assert_eq!(tx["provenance"]["declared"]["agent"], "declared-agent");
+        assert_eq!(tx["provenance"]["declared"]["session"], "fixture-session");
+        assert_eq!(tx["provenance"]["declared"]["task"], "fixture-task");
+        assert_eq!(tx["provenance"]["declared"]["client_version"], "1.0");
+        assert_eq!(tx["provenance"]["completeness"], "complete");
     }
     server.abort();
     let store = state.lock();

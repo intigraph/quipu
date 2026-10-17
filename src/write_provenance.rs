@@ -54,22 +54,50 @@ pub struct RequestProvenance {
     pub completeness: Completeness,
     /// Required fields the request did not declare, as names from `FIELDS`.
     pub missing: Vec<&'static str>,
+    /// Bounded caller declarations, never credential evidence.
+    pub declared: Declared,
 }
 
-/// A header value counts as declared when it has a printable character. A
-/// header that is present but blank is the same as no header.
-fn declared(value: Option<&str>) -> bool {
-    value.is_some_and(|v| v.chars().any(|c| !c.is_whitespace() && !c.is_control()))
+/// Retained values supplied by the request seam. Unknown stays null.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Declared {
+    pub agent: Option<String>,
+    pub harness: Option<String>,
+    pub host: Option<String>,
+    pub session: Option<String>,
+    pub model: Option<String>,
+    pub task: Option<String>,
+    pub client_version: Option<String>,
+}
+
+/// Bound storage at the seam; strip controls and never split UTF-8.
+fn normalized(value: Option<&str>) -> Option<String> {
+    let text: String = value?
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(128)
+        .collect();
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
 }
 
 impl RequestProvenance {
+    /// Retain optional task and client version without inventing either.
+    #[must_use]
+    pub fn with_context(mut self, task: Option<&str>, client_version: Option<&str>) -> Self {
+        self.declared.task = normalized(task);
+        self.declared.client_version = normalized(client_version);
+        self
+    }
+
     /// Classify one request from its five header values, given in `FIELDS`
     /// order: agent, harness, host, session, model.
     #[must_use]
     pub fn classify(client: &str, endpoint: &str, values: [Option<&str>; 5]) -> Self {
-        let present = values.map(declared);
-        let agent_harness = values[1]
-            .map(str::trim)
+        let retained = values.map(normalized);
+        let present = retained.each_ref().map(Option::is_some);
+        let agent_harness = retained[1]
+            .as_deref()
             .is_some_and(|h| AGENT_HARNESSES.contains(&h.to_ascii_lowercase().as_str()));
         let required = if agent_harness { 5 } else { 3 };
         let missing: Vec<&'static str> = FIELDS[..required]
@@ -90,6 +118,14 @@ impl RequestProvenance {
             endpoint: endpoint.to_string(),
             completeness,
             missing,
+            declared: Declared {
+                agent: retained[0].clone(),
+                harness: retained[1].clone(),
+                host: retained[2].clone(),
+                session: retained[3].clone(),
+                model: retained[4].clone(),
+                ..Declared::default()
+            },
         }
     }
 }

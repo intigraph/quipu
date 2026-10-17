@@ -65,3 +65,23 @@ fn scope_carries_and_restores() {
     });
     assert!(current().is_none());
 }
+
+#[test]
+fn retained_values_are_bounded_and_normalized_harness_still_requires_session() {
+    let p = class([
+        Some("  agent\r\n "),
+        Some("co\0dex"),
+        Some("host"),
+        None,
+        None,
+    ]);
+    assert_eq!(p.declared.agent.as_deref(), Some("agent"));
+    assert_eq!(p.declared.harness.as_deref(), Some("codex"));
+    assert_eq!(p.completeness, Completeness::Partial);
+    assert_eq!(p.missing, vec!["session", "model"]);
+    let long = "é".repeat(300);
+    let p = class([Some(&long), None, None, None, None]).with_context(Some("\n"), Some(&long));
+    assert_eq!(p.declared.agent.unwrap().chars().count(), 128);
+    assert!(p.declared.task.is_none());
+    assert_eq!(p.declared.client_version.unwrap().chars().count(), 128);
+}

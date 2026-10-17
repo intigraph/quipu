@@ -1,0 +1,7 @@
+Script started on 2026-10-16 23:15:55-04:00 [COMMAND="stty -onlcr; "$QUIPU_DEMO_BINARY"" <not executed on terminal>]
+BEFORE legacy read-only schema: None
+AFTER request-scoped commit: {"tx":1,"client":"demo-client","endpoint":"/knot","completeness":"complete","declared":{"agent":"demo-agent","harness":"codex","host":"demo-host","session":"demo-session","model":"demo-model","task":"demo-task","client_version":"1.0"}}
+CONTROL idempotent write declaration: None
+CONTROL unknown session writes: 0
+
+Script done on 2026-10-16 23:15:56-04:00 [COMMAND_EXIT_CODE="0"]

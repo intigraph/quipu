@@ -75,7 +75,8 @@ fn write_provenance_of(
                 value("x-quipu-session"),
                 value("x-quipu-model"),
             ],
-        ),
+        )
+        .with_context(value("x-quipu-task"), value("x-quipu-client-version")),
     ))
 }
 
@@ -407,3 +408,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "request_provenance_tests.rs"]
+mod provenance_tests;

@@ -44,6 +44,9 @@ impl Drop for StoreTiming {
 pub(crate) struct TransactionParams {
     since: Option<i64>,
     limit: Option<i64>,
+    provenance: Option<bool>,
+    session: Option<String>,
+    agent: Option<String>,
 }
 
 /// Query parameters for the event-log pull API (event-log P1).
@@ -219,6 +222,53 @@ pub(crate) async fn transactions(
         // Cursor for pollers (Shantytown's event subscription): `?since=<tx>`
         // returns only newer transactions so a watermarked poll is O(new), not
         // O(whole log). No params -> the full log, preserving prior behaviour.
+        if p.provenance == Some(true) || p.session.is_some() || p.agent.is_some() {
+            let since = p.since.unwrap_or(0);
+            let Some(scope) = store.provenance_state()? else {
+                return Ok(axum::Json(
+                    json!({"status":"unavailable", "population":"unknown"}),
+                ));
+            };
+            let limit = usize::try_from(p.limit.unwrap_or(100).clamp(1, 9999)).unwrap_or(100);
+            let mut rows = if p.session.is_some() || p.agent.is_some() {
+                store.provenance_transactions(
+                    since,
+                    limit + 1,
+                    p.session.as_deref(),
+                    p.agent.as_deref(),
+                )?
+            } else {
+                store.provenance_window(since, limit + 1)?
+            };
+            let has_more = rows.len() > limit;
+            rows.truncate(limit);
+            let next_tx = rows.last().map_or(since, |r| r.tx);
+            let mut coverage = std::collections::BTreeMap::<
+                String,
+                std::collections::BTreeMap<String, usize>,
+            >::new();
+            for row in &rows {
+                *coverage
+                    .entry(row.client.clone())
+                    .or_default()
+                    .entry(row.completeness.clone())
+                    .or_default() += 1;
+            }
+            let entries = rows
+                .iter()
+                .map(|r| {
+                    Ok(json!({
+                        "id": r.tx, "provenance": r, "authenticated": store.transaction_auth(r.tx)?
+                    }))
+                })
+                .collect::<quipu::Result<Vec<_>>>()?;
+            return Ok(axum::Json(
+                json!({"transactions":entries, "count":entries.len(),
+                "next_tx":next_tx, "has_more":has_more, "scope":scope, "coverage":coverage,
+                "coverage_scope":"returned_page_only", "legacy":"unknown_before_start_tx",
+                "population":"declared_effective_request_transactions"}),
+            ));
+        }
         let txns = if p.since.is_none() && p.limit.is_none() {
             store.list_transactions()?
         } else {
@@ -232,7 +282,8 @@ pub(crate) async fn transactions(
             .map(|t| {
                 Ok(
                     json!({ "id": t.id, "timestamp": t.timestamp, "actor": t.actor,
-                    "source": t.source, "authenticated": store.transaction_auth(t.id)? }),
+                    "source": t.source, "authenticated": store.transaction_auth(t.id)?,
+                    "provenance": store.transaction_provenance(t.id)? }),
                 )
             })
             .collect::<quipu::Result<_>>()?;

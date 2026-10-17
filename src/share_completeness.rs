@@ -108,6 +108,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Local request claims and floor are not reconstructed as local evidence.
+    ("transaction_provenance", Disposition::Excluded),
+    ("transaction_provenance_state", Disposition::Excluded),
     // REPLAY STATE, and wrong in BOTH directions: carry spent nonces and a
     // legitimate re-import is refused as a replay; omit them silently and a
     // replay the origin had already spent is accepted on the copy. Excluding it

@@ -1492,6 +1492,44 @@ is null when local credential evidence is absent; otherwise it contains
 both optional on `/knot`. Supply them for source provenance; authenticated
 credential evidence does not reconstruct a missing source or historical actor.
 
+#### Declared write provenance
+
+Each transaction entry also has `provenance`, either a local declaration or
+`null` (unknown). Its `declared` object retains the bounded `X-Quipu-Agent`,
+`-Harness`, `-Host`, `-Session`, `-Model`, `-Task` and `-Client-Version` values.
+`client`, `endpoint` and `completeness` describe the request. These are caller
+claims; the separate `authenticated` object is credential evidence. A declared
+agent never grants authority or replaces a signed principal.
+
+`GET /transactions?provenance=true&since=0&limit=100` returns a bounded keyset
+page of effective request commits. `session=<carrier>` and/or `agent=<name>`
+filter before the limit and enable this mode implicitly. Follow `next_tx` while
+`has_more` is true. Coverage counts are **only for the returned page** and are
+split by client and complete/partial/absent; accumulate pages for a chosen cut.
+Clients with no observed commits have no measured coverage.
+
+The response's `scope` names the local `store_id`, provenance `incarnation`,
+`start_tx` migration floor and `provider=local-store`. Bind cursors to that
+identity, not a bare transaction number or endpoint hostname. Session carriers
+are not global identities: distinguish returned agent, harness and host values.
+This provider does not claim to describe attached stores or composed datasets.
+The incarnation survives ordinary reopen and backups; it is not an independent
+physical-host identity. A restored copy requires its own endpoint binding.
+
+Read-only opens never migrate. Missing provenance schema returns
+`status=unavailable, population=unknown` in provenance mode. Older transactions
+are unknown, not evidence of missing actors or complete historical coverage.
+Request declarations and facts share a savepoint; refusal and audit failure roll
+both back. Internal reasoner/verdict/migration writes and idempotent no-op writes
+are outside this population. The committed-provenance metric uses the same
+effective-write population. There is no new write-blocking policy.
+
+Reconstruction shares and `pack --full` exclude local declarations and their
+schema floor under the existing local-evidence exclusion policy. A consistent SQLite
+backup including committed WAL state retains them; a restored reconstruction
+starts a new coverage floor. This does not retire any application's
+item-version attribution graph or create Session/Agent RDF projections.
+
 ### `POST /embed_backfill`
 
 Backfill embeddings for entities that lack them. Returns

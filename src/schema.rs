@@ -32,6 +32,26 @@ CREATE TABLE IF NOT EXISTS transaction_auth (
     auth_class TEXT NOT NULL
 );
 
+-- Local declarations belong to the same transaction, not the RDF fact log.
+CREATE TABLE IF NOT EXISTS transaction_provenance (
+    tx INTEGER PRIMARY KEY REFERENCES transactions(id),
+    client TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    completeness TEXT NOT NULL CHECK (completeness IN ('complete', 'partial', 'absent')),
+    agent TEXT, harness TEXT, host TEXT, session TEXT, model TEXT,
+    task TEXT, client_version TEXT
+);
+CREATE TABLE IF NOT EXISTS transaction_provenance_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    start_tx INTEGER NOT NULL,
+    incarnation TEXT NOT NULL
+);
+INSERT OR IGNORE INTO transaction_provenance_state
+    SELECT 1, COALESCE(MAX(id), 0), lower(hex(randomblob(16))) FROM transactions;
+CREATE INDEX IF NOT EXISTS idx_tx_provenance_session ON transaction_provenance(session, tx);
+CREATE INDEX IF NOT EXISTS idx_tx_provenance_agent ON transaction_provenance(agent, tx);
+CREATE INDEX IF NOT EXISTS idx_tx_provenance_session_agent ON transaction_provenance(session, agent, tx);
+
 CREATE TABLE IF NOT EXISTS store_identity (
     id       INTEGER PRIMARY KEY CHECK (id = 1),
     store_id TEXT NOT NULL UNIQUE
