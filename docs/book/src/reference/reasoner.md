@@ -306,7 +306,15 @@ predicates. A smaller positive configured SPARQL output ceiling remains in
 force, with a reserved sentinel row: reaching the ceiling is a capacity
 refusal, not a truncated successful answer. Zero means no configured output
 ceiling, while these profile bounds still apply. Query deadlines and join
-budgets remain enforced.
+budgets remain enforced for premise extraction. The same absolute deadline
+also covers derivation. Historical derivation streams one binding at a time,
+refuses before inserting a sentinel-sized derived relation, and shares one
+candidate-work budget across rules, strata and fixed-point rounds (at most
+1,000,000 candidate steps, reduced by a smaller positive caller row cap or
+configured join cap). It admits at most 64 body atoms per rule. Capacity or
+deadline exhaustion refuses the whole answer; it never returns a successful
+partial closure. This bounded historical evaluator does not change the legacy
+file evaluator.
 
 A matching artifact digest, store ID or known transaction cannot prove
 history completeness. That authority must come from the independently

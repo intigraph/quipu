@@ -7,8 +7,8 @@
 use std::collections::BTreeSet;
 
 use crate::sparql::{GraphScope, QueryResult, TemporalContext, query_temporal};
-use crate::store::{Datum, Store};
-use crate::types::{Op, Value};
+use crate::store::Store;
+use crate::types::Value;
 
 use super::RuleSet;
 
@@ -45,7 +45,7 @@ pub enum HistoricalError {
     #[error("historical evaluation refuses an empty ruleset")]
     EmptyRules,
     /// Preserve unknown coverage rather than returning a truncated answer.
-    #[error("historical premise view exceeds the bounded evaluation profile")]
+    #[error("historical evaluation exceeds the bounded execution profile")]
     Capacity,
     /// The current engine ignores literal tuples; historical mode refuses.
     #[error("historical Datalog evaluation does not support literal premises")]
@@ -64,8 +64,8 @@ pub enum HistoricalError {
 /// call. This function does not assert that the source retained all history:
 /// that evidence belongs to the catalogue admission boundary. It preserves
 /// the caller's temporal query budgets and refuses attached-store snapshots.
-/// Every derivation and term interning operation happens in an owned, fresh
-/// in-memory store, so repeated and concurrent contexts cannot share output.
+/// Every derivation happens in owned bounded relations, so repeated and
+/// concurrent contexts cannot share output or mutate the source.
 pub fn evaluate_temporal_view(
     source: &Store,
     rules: &RuleSet,
@@ -120,6 +120,13 @@ pub fn evaluate_temporal_view(
         .map_err(|e| crate::Error::InvalidValue(e.to_string()))?
         .join(" ");
     let ctx = TemporalContext {
+        deadline: context
+            .deadline
+            .or_else(crate::time::request_deadline)
+            .or_else(|| {
+                let ms = source.search_config().query_timeout_ms;
+                (ms > 0).then(|| crate::time::Deadline::after_millis(ms))
+            }),
         valid_at: Some(at.clone()),
         ..context.clone()
     };
@@ -139,42 +146,26 @@ pub fn evaluate_temporal_view(
     if rows.len() >= sentinel {
         return Err(HistoricalError::Capacity);
     }
-    let mut isolated = Store::open_in_memory()?;
-    let mut datums = Vec::with_capacity(rows.len());
+    let mut premises = Vec::with_capacity(rows.len());
     for row in rows {
         let (Some(Value::Ref(s)), Some(Value::Ref(p)), Some(Value::Ref(o))) =
             (row.get("s"), row.get("p"), row.get("o"))
         else {
             return Err(HistoricalError::LiteralPremise);
         };
-        datums.push(Datum {
-            entity: isolated.intern(&source.resolve(*s)?)?,
-            attribute: isolated.intern(&source.resolve(*p)?)?,
-            value: Value::Ref(isolated.intern(&source.resolve(*o)?)?),
-            valid_from: at.clone(),
-            valid_to: None,
-            op: Op::Assert,
+        premises.push(HistoricalFact {
+            subject: source.resolve(*s)?,
+            predicate: source.resolve(*p)?,
+            object: source.resolve(*o)?,
         });
     }
-    isolated.transact(&datums, &at, Some("historical-evaluation"), None)?;
-    super::evaluate(&mut isolated, rules, &at)?;
-    let companion = isolated
-        .lookup(&isolated.companion_inferred_iri(crate::schema::ROOT_GRAPH)?)?
-        .ok_or_else(|| crate::Error::Store("missing isolated inferred graph".into()))?;
-    let heads: BTreeSet<_> = rules.rules.iter().map(|r| &r.head.predicate).collect();
-    let mut answer = BTreeSet::new();
-    for fact in isolated.current_facts_in_graph(companion)? {
-        let predicate = isolated.resolve(fact.attribute)?;
-        if heads.contains(&predicate) {
-            let Value::Ref(object) = fact.value else {
-                return Err(HistoricalError::LiteralPremise);
-            };
-            answer.insert(HistoricalFact {
-                subject: isolated.resolve(fact.entity)?,
-                predicate,
-                object: isolated.resolve(object)?,
-            });
-        }
-    }
-    Ok(answer.into_iter().collect())
+    let configured_work = context
+        .row_cap
+        .unwrap_or(source.search_config().max_join_rows);
+    let work_cap = if configured_work == 0 {
+        1_000_000
+    } else {
+        configured_work.min(1_000_000)
+    };
+    super::historical_bounded::evaluate(rules, premises, sentinel, work_cap, ctx.deadline)
 }
