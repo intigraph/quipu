@@ -1,12 +1,24 @@
-//! Once-only repair for legacy writers that omitted graph registry rows.
+//! Explicit maintenance for legacy writers that omitted graph registry rows.
 use super::Store;
 use crate::error::Result;
 use rusqlite::Connection;
 
 impl Store {
-    /// Repair only local current data-bearing graphs, atomically with a marker.
-    /// Read-only opens never call this migration. Recovered creation time is an
-    /// explicit unknown epoch, not a claim about the original creator or date.
+    /// Count local current data-bearing graphs absent from the registry.
+    /// Works on a read-only store and creates no maintenance tables.
+    pub fn unregistered_data_graph_count(&self) -> Result<i64> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(DISTINCT f.g) FROM main.facts f LEFT JOIN main.graphs r ON r.g=f.g WHERE f.op=1 AND f.valid_to IS NULL AND f.g!=0 AND r.g IS NULL",
+            [], |row| row.get(0),
+        )?)
+    }
+
+    /// Explicit, once-only maintenance. Never called by opening a store.
+    /// Recovered creation time is an unknown epoch, not original provenance.
+    pub fn repair_data_graph_registry(&self) -> Result<()> {
+        Self::repair_data_graph_registry_once(&self.conn)
+    }
+
     pub(super) fn repair_data_graph_registry_once(conn: &Connection) -> Result<()> {
         conn.execute_batch("SAVEPOINT quipu_graph_registry_repair")?;
         let result = (|| -> Result<()> {
@@ -55,6 +67,12 @@ mod tests {
         }
     }
     fn reset_marker(store: &Store) {
+        store
+            .conn
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS quipu_schema_repairs (name TEXT PRIMARY KEY NOT NULL)",
+            )
+            .unwrap();
         store
             .conn
             .execute("DELETE FROM quipu_schema_repairs", [])

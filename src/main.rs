@@ -54,6 +54,7 @@ mod cli_fork;
 mod cli_gate;
 mod cli_git_merge;
 mod cli_graph;
+mod cli_graph_repair;
 mod cli_hooks;
 mod cli_ingest;
 mod cli_knot;
@@ -191,6 +192,7 @@ fn main() {
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "changes" => cli_changes::cmd_changes(&args, db_path),
+        "graph-registry-repair" => cli_graph_repair::run(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_pack::cmd_unpack(&args, db_path),

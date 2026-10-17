@@ -269,7 +269,6 @@ impl Store {
         Self::migrate_forks(&conn)?;
         Self::migrate_frozen_packs(&conn)?;
         attach::migrate_graph_source(&conn)?;
-        Self::repair_data_graph_registry_once(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which

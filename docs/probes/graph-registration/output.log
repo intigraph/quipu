@@ -1,25 +1,25 @@
-Script started on 2026-10-16 23:05:28-04:00 [COMMAND="bash docs/probes/graph-registration/run-demo.sh" <not executed on terminal>]
+Script started on 2026-10-16 23:23:19-04:00 [COMMAND="bash docs/probes/graph-registration/run-demo.sh" <not executed on terminal>]
 
 running 3 tests
-test store::graph_registry_repair::tests::repair_is_once_only_current_and_preserves_existing_graphs ... ok
 test store::graph_registry_repair::tests::marker_failure_rolls_back_recovered_registry_rows ... ok
 test store::graph_registry_repair::tests::batch_registry_failure_rolls_back_earlier_graphs_and_transactions ... ok
+test store::graph_registry_repair::tests::repair_is_once_only_current_and_preserves_existing_graphs ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 0.03s
 
 
 running 1 test
-LEGACY_REOPEN registered=true
-test registry_followup_writable_open_repairs_legacy_current_graph ... ok
+LEGACY_EXPLICIT_REPAIR registered=true
+test registry_followup_open_never_repairs_and_explicit_maintenance_does ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
 
 
 running 1 test
 REGISTRY_FAILURE target_facts=0
 test update::graph_tests::registry_followup_failure_rolls_back_endpoint_data ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 173 filtered out; finished in 0.51s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 173 filtered out; finished in 0.77s
 
 
-Script done on 2026-10-16 23:06:32-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-16 23:24:12-04:00 [COMMAND_EXIT_CODE="0"]
