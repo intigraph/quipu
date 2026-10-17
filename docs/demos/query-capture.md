@@ -18,7 +18,8 @@ Download [the terminal output](query-capture.output) and
 scriptreplay --log-out query-capture.output --log-timing query-capture.timing
 ```
 
-Replay was checked. This is a terminal recording with a readable transcript,
+Replay was checked. CRLF was normalized to LF; the original timing interval
+was retained and its byte count adjusted for removed carriage returns. This is a terminal recording with a readable transcript,
 not an inline video. The small recording is retained beside this caption in the
 repository. Reproduce the private demonstration from the reviewed source:
 
