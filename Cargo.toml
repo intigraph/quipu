@@ -92,6 +92,10 @@ name = "shape_e"
 path = "examples/shape_e.rs"
 required-features = ["shacl"]
 
+[[example]]
+name = "pendant_revoke_fixture"
+required-features = ["shacl"]
+
 [dependencies]
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
