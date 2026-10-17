@@ -33,6 +33,8 @@ pub mod historical;
 pub mod history_attestation;
 pub mod parse;
 pub mod provenance;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod raw_history;
 #[cfg(feature = "reactive-reasoner")]
 pub mod reactive;
 pub mod stratify;

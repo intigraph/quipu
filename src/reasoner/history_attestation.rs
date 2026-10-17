@@ -103,6 +103,8 @@ pub struct HistoryCoverageGrant<'a> {
     pub reviewed_evidence_ref: &'a str,
     /// Approved digest, not merely a digest supplied by the issuer.
     pub reviewed_evidence_sha256: &'a str,
+    /// Exact reviewed artifact; an issuer cannot swap it under the same review.
+    pub raw_artifact_sha256: &'a str,
     /// Exact authorized scope; no implicit widening to neighbouring graphs.
     pub coverage: &'a HistoryCoverage,
 }
@@ -218,6 +220,7 @@ pub fn verify_history_attestation<'a>(
         || p.grant_policy_sha256 != grant.policy_sha256
         || p.reviewed_evidence_ref != grant.reviewed_evidence_ref
         || p.reviewed_evidence_sha256 != grant.reviewed_evidence_sha256
+        || p.raw_artifact_sha256 != grant.raw_artifact_sha256
         || &p.coverage != grant.coverage
     {
         return Err(E::Unauthorized);
