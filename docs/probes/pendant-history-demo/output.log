@@ -1,0 +1,18 @@
+Script started on 2026-10-16 17:33:59-04:00 [COMMAND="sh docs/probes/pendant-history-demo/run.sh" <not executed on terminal>]
+BEFORE: 65db3e3c strict historical replay
+{
+  "historical_nonpack_repaired_head_pass": false,
+  "returncode": 1,
+  "stdout": "",
+  "stderr": "qpack merge refused: 750c9105b261aaccc78fa512a3864c83b7e08aec:fixture missing manifest"
+}
+AFTER: deb2e38e historical non-pack distinction
+{
+  "historical_nonpack_repaired_head_pass": true,
+  "returncode": 0,
+  "stdout": "pendant-check: 0 historical packs verified\npendant-check: 0 packs verified\n",
+  "stderr": ""
+}
+Expected failure before and successful repaired-history verification after: PASS
+
+Script done on 2026-10-16 17:33:59-04:00 [COMMAND_EXIT_CODE="0"]
