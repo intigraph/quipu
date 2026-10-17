@@ -47,3 +47,20 @@ and candidate, preserve UNKNOWN and scoped absence, then obtain independent
 paired judgments. Do not enable production task briefing or claim relevance,
 latency or memory improvements from unit tests. Rollback is the default OFF flag
 and normal reviewed source revert; retain usage evidence.
+
+## Recorded CLI fixture
+
+Candidate source 38619116: one synthetic exact task, one similar task, one
+explicit named graph. The recording compares default OFF refusal with explicit
+opt-in on the same existing database, then tests an absent exact ID and unchanged
+database bytes. It is a behavior demonstration, not the independent usefulness
+study or live deployment acceptance.
+
+Build and reproduce:
+
+    cargo build --no-default-features --features shacl --bin quipu
+    python3 docs/probes/task-briefing/reproduce.py target/debug/quipu
+
+Download terminal.log and timing.log together and replay with util-linux:
+
+    scriptreplay --log-timing timing.log --log-out terminal.log --divisor 10
