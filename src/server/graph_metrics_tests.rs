@@ -49,7 +49,7 @@ fn wal_stat_stays_current_between_count_refreshes() {
 /// Repeated scrapes must return the cached counts while no SQL can run.
 #[tokio::test(flavor = "current_thread")]
 async fn scrapes_do_not_acquire_any_store_connection() {
-    let (_dir, handle) = crate::tests::pooled_handle(2);
+    let (_dir, handle) = crate::server::tests::pooled_handle(2);
     let shared = Arc::new(handle);
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -63,7 +63,7 @@ async fn scrapes_do_not_acquire_any_store_connection() {
     ready_rx.recv().unwrap();
     // Release the holder even when the timeout catches a regression.
     let outcome = tokio::time::timeout(Duration::from_secs(1), async {
-        let cold = crate::base::metrics_handler(State(shared.clone()))
+        let cold = crate::server::base::metrics_handler(State(shared.clone()))
             .await
             .unwrap()
             .into_response();
@@ -75,7 +75,7 @@ async fn scrapes_do_not_acquire_any_store_connection() {
         assert!(!body.contains("quipu_graph_facts "));
         shared.graph_metrics.record(Ok((2, 5, 3)), Instant::now());
         for _ in 0..10 {
-            let response = crate::base::metrics_handler(State(shared.clone()))
+            let response = crate::server::base::metrics_handler(State(shared.clone()))
                 .await
                 .unwrap()
                 .into_response();
@@ -97,7 +97,7 @@ async fn scrapes_do_not_acquire_any_store_connection() {
 
 #[tokio::test]
 async fn startup_refresh_runs_without_a_scrape() {
-    let shared = Arc::new(crate::StoreHandle::writer_only(
+    let shared = Arc::new(crate::server::StoreHandle::writer_only(
         quipu::Store::open_in_memory().unwrap(),
     ));
     quipu::tool_knot(&mut shared.lock(), &serde_json::json!({"turtle":"<http://example.test/s> <http://example.test/p> <http://example.test/o> ."})).unwrap();

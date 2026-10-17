@@ -32,13 +32,19 @@ async fn post(app: &Router, path: &str, value: Value) -> Value {
 #[tokio::test]
 async fn rest_source_claims_preserve_identical_fact_until_last_owner() {
     for order in [["A", "B"], ["B", "A"]] {
-        let state = Arc::new(crate::StoreHandle::writer_only(
+        let state = Arc::new(crate::server::StoreHandle::writer_only(
             quipu::Store::open_in_memory().unwrap(),
         ));
         let app = Router::new()
             .route("/knot", post_route())
-            .route("/retract/source", route_post(crate::tools::retract_source))
-            .route("/query", route_post(crate::query_endpoint::query_post))
+            .route(
+                "/retract/source",
+                route_post(crate::server::tools::retract_source),
+            )
+            .route(
+                "/query",
+                route_post(crate::server::query_endpoint::query_post),
+            )
             .with_state(state);
         for source in ["A", "B", "B"] {
             post(&app, "/knot", json!({"source":source,"turtle":"<urn:test:overlap> <http://www.w3.org/2000/01/rdf-schema#label> \"overlap control\" ."})).await;
@@ -68,6 +74,6 @@ async fn rest_source_claims_preserve_identical_fact_until_last_owner() {
     }
 }
 
-fn post_route() -> axum::routing::MethodRouter<crate::SharedStore> {
-    axum::routing::post(crate::publication::knot)
+fn post_route() -> axum::routing::MethodRouter<crate::server::SharedStore> {
+    axum::routing::post(crate::server::publication::knot)
 }

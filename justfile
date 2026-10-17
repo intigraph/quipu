@@ -41,14 +41,14 @@ install bin_dir="":
     bin={{quote(bin_dir)}}
     root=${QUIPU_INSTALL_ROOT:-${CARGO_INSTALL_ROOT:-$HOME/.local}}
     bin=${bin:-"$root/bin"}
-    cargo build --locked --release --features full --bin quipu --bin quipu-server
+    cargo build --locked --release --features full --bin quipu
     target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
     "$target/release/quipu" install-alias --bin-dir "$bin" --check
     mkdir -p "$bin"
     stage=$(mktemp -d "$bin/.quipu-install.XXXXXX")
     trap 'rm -rf -- "$stage"' EXIT
     install -m 755 "$target/release/quipu" "$stage/quipu"
-    install -m 755 "$target/release/quipu-server" "$stage/quipu-server"
+    ln -s quipu "$stage/quipu-server"
     mv -f -- "$stage/quipu" "$bin/quipu"
     mv -f -- "$stage/quipu-server" "$bin/quipu-server"
     "$bin/quipu" install-alias --bin-dir "$bin"
@@ -108,7 +108,7 @@ seed:
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:
-    cargo run --bin quipu-server --features shacl,onnx,server -- --db test-fixtures/test-store.db
+    cargo run --bin quipu --features shacl,onnx,server -- serve --db test-fixtures/test-store.db
 
 # Build the paper PDF (docs/paper/): just paper [clean]
 paper cmd="build":
@@ -165,7 +165,7 @@ bench name *args:
 demo:
     rm -f /tmp/quipu-demo.db
     cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
-    cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
+    cargo run --bin quipu --features full -- serve --db /tmp/quipu-demo.db
 
 # Re-run the two-store transcript embedded in the Sharing & Federation chapter.
 sharing-demo:
@@ -184,7 +184,7 @@ align-demo:
 datalinks graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
     rm -f /tmp/quipu-datalinks.db
     cargo run --bin quipu --features shacl -- knot {{graph}} --db /tmp/quipu-datalinks.db
-    cargo run --bin quipu-server --features full -- --db /tmp/quipu-datalinks.db
+    cargo run --bin quipu --features full -- serve --db /tmp/quipu-datalinks.db
 
 # Ingest the sibling repos as code + doc entities, then serve them.
 # Produces CodeModule / CodeSymbol / Document / Section against the
@@ -193,7 +193,7 @@ ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
     ./scripts/ingest-repos.py {{repos}} -o /tmp/quipu-code.ttl
     rm -f /tmp/quipu-code.db
     cargo run --bin quipu --features shacl -- knot /tmp/quipu-code.ttl --db /tmp/quipu-code.db
-    cargo run --bin quipu-server --features full -- --db /tmp/quipu-code.db
+    cargo run --bin quipu --features full -- serve --db /tmp/quipu-code.db
 
 # === Documentation ===
 
@@ -335,11 +335,11 @@ mcp action="test":
     #!/usr/bin/env bash
     set -euo pipefail
     test "{{action}}" = test || { echo 'usage: just mcp test' >&2; exit 2; }
-    cargo build --features full --bin quipu --bin quipu-server
+    cargo build --features full --bin quipu
     cargo test --features full --lib mcp_transport
     target=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-    timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu-server"
-    timeout 120 python3 scripts/test-named-graph-recipe.py "$target/debug/quipu-server"
+    timeout 120 python3 scripts/test-native-mcp.py "$target/debug/quipu"
+    timeout 120 python3 scripts/test-named-graph-recipe.py "$target/debug/quipu"
 
 # Judged search evaluation; test is offline and CI-runnable.
 search-eval cmd="test" *args="":

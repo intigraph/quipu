@@ -54,29 +54,20 @@ cd quipu
 cargo build --release --features full
 ```
 
-This produces two binaries:
+This produces one runtime executable, `target/release/quipu`. Start HTTP with
+`quipu serve`, or native stdio MCP with `quipu mcp`. Both enter the same compiled
+server and cannot select a stale companion. `just install` and release archives
+retain `quipu-server` as a relative alias for one transition release.
 
-- `target/release/quipu` -- CLI tool
-- `target/release/quipu-server` -- REST API server
+The `full` bundle enables the HTTP and embedding features. A default CLI-only
+build remains supported and refuses `serve` and native MCP explicitly before
+opening configuration or a store. The ONNX runtime is loaded only when embedding
+work needs it; pure version/help inspection requires no runtime dylib.
 
-`quipu-server` requires **both** `onnx` (the embedding runtime it uses to
-auto-embed queries) and `server` (axum, tower-http and tokio — the HTTP stack is
-feature-gated so the library does not carry a web server; `server` also implies
-`remote`, the federation client). The `full` bundle is what releases are built
-with and enables both. Neither is a default feature, so a
-plain `cargo build --release` produces only the `quipu` CLI and **silently omits
-the server** (cargo skips a bin whose `required-features` are off). If you only
-want the CLI, `cargo build --release` is enough. Verify the server built:
-
-```bash
-ls target/release/quipu-server
-```
-
-Keep the CLI and server from the same build beside each other for `quipu mcp`.
-Both `quipu --version` and `quipu-server --version` report `git_sha` and
-`git_dirty` without opening a database or loading configuration. A source archive
-without Git metadata reports `git_sha: unknown`; a dirty build reports
-`git_dirty: true`. The HTTP `/version` response retains its existing format.
+`quipu --version` and `quipu serve --version` report the same compiled `git_sha`
+and `git_dirty` without opening a database or loading configuration. A source
+archive without Git metadata reports `git_sha: unknown`; a dirty build reports
+`git_dirty: true`. HTTP `/version` retains its existing response format.
 
 ## With Cargo
 

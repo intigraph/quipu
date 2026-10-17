@@ -13,7 +13,7 @@ use quipu::session_attestation::SessionBinding;
 use quipu::transaction_auth::{AttestState, AttestationSlot, Identity, PendingAttestation};
 use ring::signature::{Ed25519KeyPair, KeyPair};
 
-use crate::{SharedStore, StoreHandle};
+use crate::server::{SharedStore, StoreHandle};
 
 const GRAPH: &str = "urn:barrier:graph";
 
@@ -63,7 +63,7 @@ async fn a_refused_signed_graph_create_creates_no_graph() {
     let (store, pending, identity) = signed_request(true);
     let result = super::super::run_identified(
         Some(identity),
-        crate::tools::graph_create(
+        crate::server::tools::graph_create(
             State(store.clone()),
             axum::Json(serde_json::json!({ "graph": GRAPH })),
         ),
@@ -88,7 +88,7 @@ async fn control_the_same_signed_graph_create_lands_when_not_refused() {
     let (store, pending, identity) = signed_request(false);
     let result = super::super::run_identified(
         Some(identity),
-        crate::tools::graph_create(
+        crate::server::tools::graph_create(
             State(store.clone()),
             axum::Json(serde_json::json!({ "graph": GRAPH })),
         ),

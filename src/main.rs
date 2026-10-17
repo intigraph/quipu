@@ -66,16 +66,39 @@ mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;
 mod cli_search;
+mod cli_server;
 mod cli_share_diff;
 mod cli_share_review;
 mod cli_trust_root;
 mod cli_validate;
 mod hook_session_capture;
 mod hooks_install;
+#[cfg(all(feature = "server", feature = "onnx"))]
+#[path = "server.rs"]
+mod server;
 
 fn main() {
-    quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--runtime-layout") {
+        if cfg!(all(feature = "server", feature = "onnx")) {
+            println!("{}", cli_server::LAYOUT);
+        } else {
+            println!("quipu-runtime-layout/1;single-executable=1;server=0");
+        }
+        return;
+    }
+    if cli_server::legacy_name(&args[0]) {
+        return cli_server::run(&args);
+    }
+    if args.get(1).map(String::as_str) == Some("serve") {
+        let mut server_args = args.clone();
+        server_args.remove(1);
+        return cli_server::run(&server_args);
+    }
+    if args.get(1).map(String::as_str) == Some("mcp") {
+        cli_mcp::run(&args[2..]);
+    }
+    quipu::write_kind::set_cli();
 
     if args.len() < 2 {
         print_usage();
@@ -134,7 +157,6 @@ fn main() {
 
     let cmd = args[1].as_str();
     match cmd {
-        "mcp" => cli_mcp::run(&args[2..]),
         "demotions" => cli_demotions::run(&args, db_path),
         // `load <dir>` with a share manifest loads a project bundle into its own
         // graph (aegis-w3k75d.11). A directory can never be knotted, so the
@@ -372,6 +394,7 @@ COMMANDS:
     qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp serve [--db <path>] [--bind <addr>]  REST API server (full build)
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
     qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]

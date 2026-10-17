@@ -563,7 +563,7 @@ jobs:
         run: |
           cargo build --release --locked --features full \
             --target ${{ matrix.target }} \
-            --bin quipu --bin quipu-server
+            --bin quipu
 
       - name: Resolve package-qualified tag
         id: tag
@@ -632,7 +632,7 @@ jobs:
           # (src/cli_mcp.rs), so an archive missing either one, or nesting them
           # differently, ships an `mcp` subcommand that cannot start.
           cp "target/${TARGET}/release/quipu" "dist/${NAME}/"
-          cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
+          ln -s quipu "dist/${NAME}/quipu-server"
           ln -s quipu "dist/${NAME}/qp"
           cp README.md LICENSE "dist/${NAME}/"
 
@@ -692,6 +692,7 @@ jobs:
           grep -qx "${NAME}/quipu-server" <<<"${LISTING}"
           grep -qx "${NAME}/qp" <<<"${LISTING}"
           test "$(readlink "dist/${NAME}/qp")" = quipu
+          test "$(readlink "dist/${NAME}/quipu-server")" = quipu
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist
 
@@ -702,7 +703,7 @@ jobs:
           # --version must not touch disk (aegis-j0nq), so this is safe and it
           # proves the artifact actually executes on a clean runner.
           "${BIN}/quipu" --version
-          "${BIN}/quipu-server" --version
+          "${BIN}/quipu" serve --version
           ALIAS="dist/${{ steps.package.outputs.name }}"
           test -L "${ALIAS}/qp"
           test "${ALIAS}/qp" -ef "${ALIAS}/quipu"

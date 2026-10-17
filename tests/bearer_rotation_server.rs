@@ -23,7 +23,8 @@ fn spawn(root: &std::path::Path) -> Server {
     let address = reservation.local_addr().unwrap();
     drop(reservation);
     let log = std::fs::File::create(root.join("server.log")).unwrap();
-    let child = Command::new(env!("CARGO_BIN_EXE_quipu-server"))
+    let child = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .arg("serve")
         .args(["--bind", &address.to_string(), "--db"])
         .arg(root.join("store.db"))
         .current_dir(root)

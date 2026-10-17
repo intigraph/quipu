@@ -54,6 +54,7 @@ mod parse_guard_tests;
 mod point_reads;
 #[path = "server/publication.rs"]
 mod publication;
+#[path = "query_endpoint.rs"]
 mod query_endpoint;
 #[path = "server/query_usage.rs"]
 mod query_usage;
@@ -99,15 +100,14 @@ use reason::{explain, reason, shapes};
 use tools::*;
 
 #[tokio::main]
-async fn main() {
-    let args: Vec<String> = std::env::args().collect();
+pub(crate) async fn run(args: &[String]) {
     // Asking the binary who it is must NOT touch disk (aegis-j0nq). These are
     // pure reads of compiled-in constants and must stay above Store::open.
-    if base::handle_identity_args(&args) {
+    if base::handle_identity_args(args) {
         return;
     }
 
-    let config = base::load_config(&args);
+    let config = base::load_config(args);
 
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
@@ -656,5 +656,5 @@ async fn main() {
     // Everything committed before this line is STARTUP in quipu_write_facts_total
     // (aegis-gwkd76): the work every restart repeats.
     quipu::write_kind::set_serving();
-    quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    quipu::mcp_transport::serve(app, args, cors_origins, &bind_addr, &db_path).await;
 }

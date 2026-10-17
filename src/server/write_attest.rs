@@ -30,7 +30,7 @@ use quipu::session_attestation::{
 };
 use quipu::transaction_auth::{AttestState, AttestationSlot, Identity, PendingAttestation};
 
-use crate::SharedStore;
+use crate::server::SharedStore;
 
 /// The header carrying `base64url(JSON AttestationEnvelope)`, unpadded.
 pub(crate) const HEADER: &str = "x-quipu-attestation";

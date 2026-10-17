@@ -77,14 +77,11 @@ quipu repl --db my.db
 ## REST API Server
 
 ```bash
-# Build the server with the full bundle. quipu-server has
-# required-features = ["shacl", "onnx", "server"], and cargo SILENTLY SKIPS a
-# binary whose required features are missing — a plain `cargo build --release`
-# (or a partial feature list) builds only the `quipu` CLI and you'd never know.
-cargo build --release --features full
+# Build the single executable with the server and embedding features.
+cargo build --release --features full --bin quipu
 
 # Start
-quipu-server --db my.db --bind 0.0.0.0:3030
+quipu serve --db my.db --bind 0.0.0.0:3030
 
 # Health check
 curl localhost:3030/health

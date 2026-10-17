@@ -6,7 +6,7 @@
 use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value as JsonValue;
 
-use crate::{
+use crate::server::{
     SharedStore,
     base::{AppError, blocking},
 };
@@ -25,7 +25,7 @@ async fn merge_decisions(
 ) -> Result<Json<JsonValue>, AppError> {
     blocking(move || {
         let st = store.read();
-        Ok(Json(crate::input_fields::annotate(
+        Ok(Json(crate::server::input_fields::annotate(
             "quipu_merge_decisions",
             &input,
             quipu::tool_merge_decisions(&st, &input)?,
@@ -41,7 +41,7 @@ async fn merge_apply(
 ) -> Result<Json<JsonValue>, AppError> {
     blocking(move || {
         let mut st = store.lock();
-        Ok(Json(crate::input_fields::annotate(
+        Ok(Json(crate::server::input_fields::annotate(
             "quipu_merge_apply",
             &input,
             quipu::tool_merge_apply(&mut st, &input)?,

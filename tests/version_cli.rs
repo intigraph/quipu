@@ -15,11 +15,17 @@ fn version_aliases_report_build_identity_without_reading_config_or_creating_stor
 #[test]
 #[cfg(all(feature = "onnx", feature = "server"))]
 fn server_version_reports_same_build_identity_without_side_effects() {
-    check_version(
-        env!("CARGO_BIN_EXE_quipu-server"),
-        "quipu-server",
-        &["--version", "-V"],
-    );
+    let root = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_quipu"))
+        .args(["serve", "--version", "--db"])
+        .arg(root.path().join("never.db"))
+        .current_dir(root.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains(env!("QUIPU_GIT_SHA")));
+    assert!(!root.path().join("never.db").exists());
 }
 
 fn check_version(binary: &str, name: &str, flags: &[&str]) {

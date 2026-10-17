@@ -20,7 +20,7 @@ QUERY = STEPS[5]['arguments']['query']
 def session(server, root, write):
     env = {k: os.environ[k] for k in ('PATH', 'LANG', 'LD_LIBRARY_PATH', 'ORT_DYLIB_PATH') if k in os.environ}
     env['HOME'] = str(root / 'home')
-    process = subprocess.Popen([str(server), '--mcp-stdio', '--db', str(root / 'tutorial.db')],
+    process = subprocess.Popen([str(server), "serve", '--mcp-stdio', '--db', str(root / 'tutorial.db')],
                                cwd=root, env=env, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     selector = selectors.DefaultSelector()

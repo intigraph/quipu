@@ -38,6 +38,15 @@ Quipu answers standard SPARQL 1.1 as a CLI, REST server and Rust library, with i
 
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
 
+## One executable
+
+Build with `cargo build --release --features full --bin quipu`. Run the HTTP
+service with `quipu serve --db store.db`; `quipu mcp` enters the same compiled
+server over stdio. Neither path selects a sibling executable. The release and
+`just install` retain `quipu-server` as a relative alias for one transition
+release. Plain CLI commands load the ONNX runtime only when embedding work needs
+it. Feature-minimal builds refuse `serve` and native MCP explicitly.
+
 ## Why you would want it
 
 - **Check knowledge before accepting it.** With write validation enabled, a

@@ -25,15 +25,15 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
             .unwrap()
             .with_named(registry),
     );
-    let state = Arc::new(crate::StoreHandle::writer_only(
+    let state = Arc::new(crate::server::StoreHandle::writer_only(
         quipu::Store::open_in_memory().unwrap(),
     ));
     for name in ["alice", "bob", "shared"] {
         state.lock().intern(&format!("urn:test:{name}")).unwrap();
     }
     let app = Router::new()
-        .route("/set", post(crate::tools::set_predicate))
-        .route("/transactions", get(crate::feed::transactions))
+        .route("/set", post(crate::server::tools::set_predicate))
+        .route("/transactions", get(crate::server::feed::transactions))
         .layer(middleware::from_fn(
             move |mut req: axum::extract::Request, next| {
                 let policy = policy.clone();
@@ -60,7 +60,7 @@ async fn generic_writes_keep_named_shared_and_declared_identity_separate() {
                         req.extensions_mut()
                             .insert(AuthenticatedPrincipal::LEGACY_SHARED_BEARER);
                     }
-                    crate::auth::run_authorized(
+                    crate::server::auth::run_authorized(
                         req,
                         next,
                         &policy,

@@ -90,7 +90,7 @@ jobs:
             --pattern "${NAME}.tar.gz" --pattern "${NAME}.tar.gz.sha256"
           ( cd dl && sha256sum -c "${NAME}.tar.gz.sha256" )
           tar -C dl -xzf "dl/${NAME}.tar.gz"
-          cp "dl/${NAME}/quipu" "dl/${NAME}/quipu-server" oci-context/
+          cp "dl/${NAME}/quipu" oci-context/
 
       - name: Build
         env:

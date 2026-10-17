@@ -200,14 +200,14 @@ mod tests {
             &json!({"turtle":"<urn:demo:s> <urn:demo:p> <urn:demo:o> ."}),
         )
         .unwrap();
-        let mut handle = crate::StoreHandle::writer_only(store);
+        let mut handle = crate::server::StoreHandle::writer_only(store);
         handle.log_query_admission = log_admission;
-        let shared: crate::SharedStore = Arc::new(handle);
+        let shared: crate::server::SharedStore = Arc::new(handle);
         let app = axum::Router::new()
-            .route("/query", axum::routing::post(crate::query))
+            .route("/query", axum::routing::post(crate::server::query))
             .with_state(shared)
             .layer(axum::middleware::from_fn(
-                crate::request_middleware::log_request,
+                crate::server::request_middleware::log_request,
             ));
         let response = app
             .oneshot(

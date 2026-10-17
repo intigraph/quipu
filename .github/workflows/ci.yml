@@ -189,18 +189,18 @@ jobs:
       - run: cargo clippy --features full --all-targets -- -D warnings -A missing-docs
       - name: Native MCP protocol and credential boundaries
         run: |
-          cargo build --features full --bin quipu --bin quipu-server
+          cargo build --features full --bin quipu
           cargo test --features full --lib mcp_transport
-          timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
-          timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
-          timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
+          timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu
+          timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu
+          timeout 60 python3 scripts/test-replica-server.py target/debug/quipu target/debug/quipu
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the
       # /update sliced-vs-full differential (aegis-jm1lcl), whose soundness
       # argument rests on them. Reuses the full-feature build just above.
       - name: quipu-server binary tests
-        run: cargo test --features full --bin quipu-server
+        run: cargo test --features full --bin quipu
       - name: Reactive graph scope and withdrawal
         run: |
           cargo test --features full --test reactive_graph_scope
@@ -208,7 +208,7 @@ jobs:
       - name: Direct workflow processing and atomic updates
         run: |
           cargo test --features full --test workflow_processing
-          cargo test --features full --bin quipu-server workflow_update_tests
+          cargo test --features full --bin quipu workflow_update_tests
       # The MCP Registry image otherwise runs only at release time, which is
       # when a broken Dockerfile would first be seen: after the release shipped.
       # Same Dockerfile, same smoke as mcp-registry.yml, on the binaries just
@@ -217,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p oci-context
-          cp target/debug/quipu target/debug/quipu-server oci-context/
+          cp target/debug/quipu oci-context/
           # The Dockerfile's digest-pinned base, pulled with mirror fallbacks.
           # mcp-registry.yml builds the release image from the same script.
           scripts/ci/oci-base.sh quipu-oci-base:ci
@@ -282,7 +282,7 @@ jobs:
           key: ${{ runner.os }}-cargo-full-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-full-
-      - run: cargo build --locked --features full --bin quipu --bin quipu-server
+      - run: cargo build --locked --features full --bin quipu
 
   # The wasm32 target and browser harness (docs/design/wasm-support.md;
   # quipu-qd2/ajz/2l5). Per AGENTS.md a feature does not ship dark: this job
@@ -507,11 +507,11 @@ jobs:
       - name: Harness self-test
         run: scripts/quipu-load-test.py --self-test
       - name: Build server
-        run: cargo build --locked --features full --bin quipu-server
+        run: cargo build --locked --features full --bin quipu
       - name: Run mixed load ratchet
         run: |
           DB="$(mktemp --suffix=.db)"
-          target/debug/quipu-server --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
+          target/debug/quipu serve --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
           for _ in $(seq 1 60); do
@@ -564,7 +564,7 @@ jobs:
       - name: Reject failed and malformed defeated queries
         run: python3 scripts/ci/test-query-perf.py
       - name: Build release binaries
-        run: cargo build --release --locked --features full --bin quipu --bin quipu-server
+        run: cargo build --release --locked --features full --bin quipu
       - name: Restore generated query fixture
         id: query-fixture
         uses: actions/cache@v4
@@ -580,7 +580,7 @@ jobs:
             --db /dev/shm/query-perf.db --quipu target/release/quipu
       - name: Run the query performance gate
         run: |
-          target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
+          target/release/quipu serve --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
           for _ in $(seq 1 120); do

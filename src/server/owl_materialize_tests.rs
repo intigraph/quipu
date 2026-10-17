@@ -50,8 +50,8 @@ fn seeded() -> (tempfile::TempDir, SharedStore) {
             None,
         )
         .unwrap();
-    let readers = crate::ReadPool::open(path.to_str().unwrap(), &store, 1);
-    let mut handle = crate::StoreHandle::writer_only(store);
+    let readers = crate::server::ReadPool::open(path.to_str().unwrap(), &store, 1);
+    let mut handle = crate::server::StoreHandle::writer_only(store);
     handle.readers = readers;
     (dir, Arc::new(handle))
 }
@@ -67,7 +67,7 @@ async fn scheduled_handler_entails_and_leaves_ordinary_write_admission_free() {
     let held_reader = store.readers.conns[0].lock();
     let task_store = store.clone();
     let task = tokio::spawn(async move {
-        crate::tools::ontology(
+        crate::server::tools::ontology(
             State(task_store),
             axum::Json(json!({"action":"materialize"})),
         )

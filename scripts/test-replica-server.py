@@ -116,7 +116,7 @@ def run(server_binary, cli_binary):
             port = listener.getsockname()[1]
         url = f'http://127.0.0.1:{port}'
         with (root / 'server.log').open('w+') as log:
-            process = subprocess.Popen([server_binary, '--read-only', '--db', str(db), '--bind',
+            process = subprocess.Popen([server_binary, "serve", '--read-only', '--db', str(db), '--bind',
                                         f'127.0.0.1:{port}'],
                                        env=env, cwd=root, stdout=log, stderr=log,
                                        preexec_fn=die_with_parent)
@@ -163,13 +163,13 @@ def run(server_binary, cli_binary):
         for invalid in ('[quipu.server.replica]\n',
                         '[quipu.server.replica]\nprimary_url = 123\n'):
             (root / '.bobbin/config.toml').write_text(invalid)
-            result = subprocess.run([server_binary, '--db', str(db), '--bind',
+            result = subprocess.run([server_binary, "serve", '--db', str(db), '--bind',
                                      f'127.0.0.1:{port}'], env=env, cwd=root,
                                     capture_output=True, timeout=3,
                                     preexec_fn=die_with_parent)
             assert result.returncode != 0, 'invalid config fell back to a writer'
         (root / '.bobbin/config.toml').unlink()
-        result = subprocess.run([server_binary, '--read-only', '--db', str(db),
+        result = subprocess.run([server_binary, "serve", '--read-only', '--db', str(db),
                                  '--bind', f'127.0.0.1:{port}'], env=env, cwd=root,
                                 capture_output=True, timeout=3,
                                 preexec_fn=die_with_parent)

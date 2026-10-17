@@ -48,7 +48,7 @@
 # var; an unattributable deploy costs the next incident.
 set -euo pipefail
 
-BIN=quipu-server
+BIN=quipu
 # MUST match the `full` feature set that release.yml ships (Cargo.toml [features]),
 # not merely quipu-server's `required-features`. Those are the MINIMUM that makes
 # the bin compile, and building to that minimum silently ships a binary missing
@@ -283,11 +283,8 @@ command -v cargo >/dev/null 2>&1 \
 # sidecar is attribution only and is never trusted as the locking primitive.
 [ "${NO_DEPLOY:-0}" = 1 ] || acquire_deploy_lock
 
-# Prove the required features are still declared — if someone drops them from
-# Cargo.toml, a bare build would "succeed" and this script would build the
-# server WITHOUT the features rather than failing. Guard the assumption itself.
-grep -Eq 'required-features *= *\[.*"shacl".*"onnx"' Cargo.toml \
-  || die "Cargo.toml no longer declares required-features=[shacl,onnx] for $BIN — the feature contract this gate depends on has changed; re-verify before deploying."
+# Compile the single executable explicitly with the full feature bundle.
+# The resulting serve --help gate below refuses a feature-incomplete build.
 
 prior_sha=""
 [ -f "$ARTIFACT" ] && prior_sha=$(sha256sum "$ARTIFACT" | cut -d' ' -f1)
@@ -308,6 +305,7 @@ cargo build --release --bin "$BIN" --features "$FEATURES"
 [ -f "$ARTIFACT" ] \
   || die "$ARTIFACT was NOT produced despite an explicit --bin $BIN --features $FEATURES build. A bare build silently skips $BIN (required-features); something bypassed the feature flags."
 
+"$ARTIFACT" serve --help >/dev/null || die "built executable cannot serve"
 new_sha=$(sha256sum "$ARTIFACT" | cut -d' ' -f1)
 say "built: $ARTIFACT  sha256=${new_sha:0:12}  ($(stat -c %s "$ARTIFACT") bytes)"
 if [ -n "$prior_sha" ] && [ "$prior_sha" = "$new_sha" ]; then

@@ -6,10 +6,9 @@
 # exact bytes the release smoke-tested and checksummed, and it builds in seconds
 # instead of repeating a 20-minute `--features full` compile on another runner.
 #
-# The build context is a directory holding `quipu` and `quipu-server` side by
-# side (release.yml stages it from the release tarball; ci.yml from its own
-# build). They must stay side by side: `quipu mcp` execs the sibling
-# `quipu-server` and deliberately never searches PATH (src/cli_mcp.rs).
+# The build context contains the one release executable, `quipu`. HTTP and
+# stdio MCP enter its compiled server directly. The legacy command name is a
+# relative alias for one transition release, not an independently built server.
 #
 # linux/amd64 only, because that is the only release target today. Docker
 # Desktop on Apple Silicon runs it under emulation. Add arm64 here once the
@@ -38,7 +37,8 @@ LABEL org.opencontainers.image.source="https://github.com/scbrown/quipu"
 LABEL org.opencontainers.image.description="Quipu knowledge graph as a local MCP server over stdio"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
-COPY --chmod=755 quipu quipu-server /usr/local/bin/
+COPY --chmod=755 quipu /usr/local/bin/
+RUN ln -s quipu /usr/local/bin/quipu-server
 
 # Unprivileged, and /data owned by that user BEFORE a volume mounts there:
 # Docker seeds a new named volume from the image directory, ownership included,

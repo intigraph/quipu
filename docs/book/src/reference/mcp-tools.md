@@ -2,7 +2,7 @@
 
 Quipu exposes its API as MCP (Model Context Protocol) tools for agent
 integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
-`quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
+`quipu serve` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
 The registry (`tool_definitions()`) exposes **76 tools** in a default build, or
@@ -12,17 +12,17 @@ page and the README against the manifest.)
 
 ## Connect directly
 
-The server includes the native `mcp` feature. Build the CLI and its companion:
+The server includes the native `mcp` feature. Build the single executable:
 
 ```sh
-cargo build --release --features full --bin quipu --bin quipu-server
+cargo build --release --features full --bin quipu
 claude mcp add quipu -- /absolute/path/to/target/release/quipu mcp --db /absolute/path/to/store.db
 ```
 
-`quipu mcp` starts the sibling `quipu-server --mcp-stdio` with the same configuration
-and store initialization as HTTP mode. It opens no network listener. On Unix it
-replaces the CLI process, so signals and EOF reach the server directly. Install
-both binaries together. Protocol output uses stdout; diagnostics use stderr.
+`quipu mcp` enters the same compiled server as `quipu serve`, with the same
+configuration and store initialization as HTTP mode. It opens no network listener
+and does not spawn or search for a companion executable. Signals and EOF reach
+the server directly. Protocol output uses stdout; diagnostics use stderr.
 
 For an already running server, register its `/mcp` URL as streamable HTTP. Calls
 are stateless: a server restart does not leave stale MCP sessions. The HTTP caller

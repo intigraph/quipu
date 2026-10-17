@@ -1,37 +1,21 @@
-//! The local MCP command shares the companion server's startup and policy.
+//! MCP enters the server in this executable; no companion lookup or exec.
 pub(crate) fn run(args: &[String]) -> ! {
-    let executable = std::env::current_exe().unwrap_or_else(|error| {
-        eprintln!("cannot locate Quipu installation: {error}");
+    if !cfg!(all(feature = "server", feature = "onnx")) {
+        crate::cli_server::run(&[]);
         std::process::exit(1);
-    });
-    let server = executable.with_file_name(if cfg!(windows) {
-        "quipu-server.exe"
-    } else {
-        "quipu-server"
-    });
-    if let Err(error) = ensure_db_parent(args) {
+    }
+    if !args
+        .iter()
+        .any(|a| matches!(a.as_str(), "--help" | "-h" | "--version" | "-V"))
+        && let Err(error) = ensure_db_parent(args)
+    {
         eprintln!("{error}");
         std::process::exit(1);
     }
-    // No PATH search: a release installs this reviewed sibling beside the CLI.
-    // The child inherits the transport streams, not a token environment export.
-    let mut command = std::process::Command::new(server);
-    command.arg("--mcp-stdio").args(args);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        let error = command.exec();
-        eprintln!("cannot exec companion quipu-server (install it beside quipu): {error}");
-        std::process::exit(1);
-    }
-    #[cfg(not(unix))]
-    match command.status() {
-        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
-        Err(error) => {
-            eprintln!("cannot start companion quipu-server (install it beside quipu): {error}");
-            std::process::exit(1);
-        }
-    }
+    let mut server_args = vec!["quipu".to_owned(), "--mcp-stdio".to_owned()];
+    server_args.extend_from_slice(args);
+    crate::cli_server::run(&server_args);
+    std::process::exit(0);
 }
 
 /// Create the directory a `--db` path lives in (aegis-gys8sx).

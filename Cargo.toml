@@ -47,11 +47,6 @@ path = "src/main.rs"
 required-features = ["shacl"]
 
 [[bin]]
-name = "quipu-server"
-path = "src/server.rs"
-required-features = ["shacl", "onnx", "server"]
-
-[[bin]]
 name = "seed-fixtures"
 path = "src/bin/seed_fixtures.rs"
 required-features = ["dev-tools"]
@@ -226,8 +221,8 @@ oxicompare = ["dep:oxigraph", "oxigraph/rocksdb"]
 # what a release is built with.
 full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
 # Test/benchmark utilities (seed-fixtures, quipu-shacl-conformance). OFF by
-# default and outside `full`, so `cargo install quipu-ai` puts only quipu and
-# quipu-server on a user's PATH (aegis-wd3m38). Build them with
+# default and outside `full`, so `cargo install quipu-ai` puts only quipu with
+# no independent server executable on a user's PATH. Build dev tools with
 # `--features dev-tools`.
 dev-tools = ["shacl"]
 

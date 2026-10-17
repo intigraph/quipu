@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
     log = (root / 'server.log').open('w+')
 
     def start(*args):
-        proc = subprocess.Popen([str(server_binary), *args], cwd=root, env=env,
+        proc = subprocess.Popen([str(server_binary), "serve", *args], cwd=root, env=env,
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                 stderr=log, text=True, preexec_fn=_die_with_parent)
         processes.append(proc)
