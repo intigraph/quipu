@@ -133,6 +133,7 @@ const ROW_FIELDS: &[&str] = &[
     "ours",
     "theirs",
     "provenance",
+    "local_slot_hash",
     "proposal",
     "decision",
     "kind",
@@ -156,7 +157,7 @@ pub fn check_fields(bytes: &[u8]) -> Result<()> {
             .find(|k| !allowed.contains(&k.as_str()))
             .map(|k| {
                 Error::InvalidValue(format!(
-                    "unknown field '{k}' {where_}: merge-decisions/v1 does not define it, and apply would drop it. Nothing was written"
+                    "unknown field '{k}' {where_}: the merge-decisions schema does not define it, and apply would drop it. Nothing was written"
                 ))
             })
     };

@@ -14,7 +14,7 @@
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu status <share-dir> [--db <path>]  Report share divergence
 //!   quipu merge <share-dir> [--actor <id>] [--db <path>]  Reconnect a share
-//!   quipu merge <share-dir> --emit-decisions <file.json> [--propose]  Conflicts to resolve
+//!   quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose]
 //!   quipu merge <share-dir> --decisions <file.json> --reviewer <who>  Finish a decided merge
 //!   quipu import <share-dir|archive|URL> [--actor <id>]  Verify into memory
 //!   quipu import delta <parent-share> <delta-share>  Verify a delta chain
@@ -62,6 +62,7 @@ mod cli_merge;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
+mod cli_pointer;
 mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;
@@ -418,7 +419,7 @@ COMMANDS:
     qp align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     qp status <share-dir> [--db <path>]
     qp merge <share-dir> [--actor <id>] [--db <path>]
-    qp merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+    qp merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]
     qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
     qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
     qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
