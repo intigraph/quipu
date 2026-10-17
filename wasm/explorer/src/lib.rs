@@ -32,24 +32,6 @@ fn err_js(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-fn check_community_identity(
-    manifest: &quipu::share::ShareManifest,
-    parent: &str,
-    expected_hash: &str,
-) -> Result<(), &'static str> {
-    if manifest.parent_share.as_deref() != Some(parent) {
-        return Err("community companion parent mismatch");
-    }
-    if manifest.graph_hash != expected_hash {
-        return Err("community companion graph hash mismatch");
-    }
-    if !matches!(&manifest.scope, ShareScope::Graph(graph) if graph.strip_prefix("urn:quipu:communities:").is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())))
-    {
-        return Err("community companion must select its derived graph");
-    }
-    Ok(())
-}
-
 /// A loaded repository pack: an in-memory store plus the provenance a reader
 /// needs to check that what they are exploring is the artifact they think.
 #[wasm_bindgen]
@@ -70,8 +52,7 @@ pub struct Explorer {
     /// the pack's graph size a second time and that is the honest price of
     /// being able to say what changed.
     parent_export_ntriples: String,
-    /// Every ROOT edit made in this tab, newest last. Companion imports stay
-    /// named and report their own import result. Kept in Rust rather than in
+    /// Every write made in this tab, newest last. Kept in Rust rather than in
     /// the page so the count cannot drift from what the store actually did:
     /// each entry records the tx the store reported, not the request the UI
     /// sent.
@@ -191,81 +172,6 @@ impl Explorer {
         let out = quipu::tool_query(&self.store, &serde_json::json!({ "query": sparql }))
             .map_err(err_js)?;
         serde_json::to_string(&out).map_err(err_js)
-    }
-
-    /// Explicitly adopt a derived community companion for this repository pack.
-    /// The standard archive verifier checks hashes; parent identity and source
-    /// scope are checked before adopting shapes or importing. Imported facts stay
-    /// in their named staging graph; no ROOT promotion or clustering occurs.
-    ///
-    /// # Errors
-    /// Missing adoption, mismatched identity, non-community scope or refused
-    /// import. Integrity is verified; this does not attest the producer.
-    #[wasm_bindgen(js_name = loadCommunityPendant)]
-    pub fn load_community_pendant(
-        &mut self,
-        bytes: &[u8],
-        expected_graph_hash: &str,
-        adopt_shapes: bool,
-        source: &str,
-        timestamp: &str,
-    ) -> Result<String, JsValue> {
-        if !adopt_shapes {
-            return Err(err_js(
-                "community companion requires explicit shape adoption",
-            ));
-        }
-        let request = read_archive_bytes(bytes, source, true).map_err(err_js)?;
-        check_community_identity(&request.manifest, &self.parent_share, expected_graph_hash)
-            .map_err(err_js)?;
-        self.store
-            .load_shapes(
-                "derived-community-companion",
-                &request.shapes_turtle,
-                timestamp,
-            )
-            .map_err(err_js)?;
-        let imported =
-            quipu::share_import::import_share(&mut self.store, &request, timestamp, None)
-                .map_err(err_js)?;
-        if !imported.promotion.eligible || imported.triples.accepted == 0 {
-            return Err(err_js(
-                "community companion import refused; labels unavailable",
-            ));
-        }
-        serde_json::to_string(&serde_json::json!({
-            "derived_graph": imported.staging_graph,
-            "source_scope": request.manifest.scope,
-            "share_id": imported.share_id,
-            "graph_hash": imported.graph_hash,
-            "parent_share": self.parent_share,
-            "producer_authority": "UNKNOWN",
-            "import": imported,
-        }))
-        .map_err(err_js)
-    }
-
-    /// Compute stable, labeled Louvain communities without persisting edits.
-    /// Options select the source graph/type/predicate and overlap threshold.
-    ///
-    /// # Errors
-    /// Invalid options or an attempted persistence request are refused.
-    #[wasm_bindgen(js_name = projectCommunities)]
-    pub fn project_communities(&mut self, options: &str) -> Result<String, JsValue> {
-        let mut input: serde_json::Value = serde_json::from_str(options).map_err(err_js)?;
-        if !input.is_object()
-            || input
-                .get("persist")
-                .is_some_and(|value| value != &serde_json::json!(false))
-        {
-            return Err(JsValue::from_str(
-                "projectCommunities is read-only; persist is not supported",
-            ));
-        }
-        input["algorithm"] = serde_json::json!("louvain");
-        input["persist"] = serde_json::json!(false);
-        let result = quipu::tool_project(&mut self.store, &input).map_err(err_js)?;
-        serde_json::to_string(&result).map_err(err_js)
     }
 
     /// Store-level counts (`quipu stats`), as JSON.

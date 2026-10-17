@@ -314,15 +314,11 @@ Run graph algorithms over the projected knowledge graph: `stats`, `in_degree`,
 quipu project --algorithm pagerank --limit 10 --db my.db
 quipu project --algorithm pagerank --seed http://example.org/alice --db my.db  # PPR
 quipu project --algorithm shortest_path --from <IRI> --to <IRI> --db my.db
-quipu project --algorithm louvain --persist --match-threshold 0.5 --db my.db
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--algorithm <name>` | Algorithm to run (default: `stats`) |
-| `--persist` | Louvain only: write stable communities, labels and provenance into the returned derived named graph; ROOT is unchanged |
-| `--match-threshold <N>` | Louvain identity matching Jaccard threshold in (0, 1], default 0.5 |
-| `--timestamp <ISO-8601>` | Explicit timestamp for an opt-in Louvain persistence run |
 | `--type <IRI>` / `--predicate <IRI>` | Restrict the projection |
 | `--graph <IRI>` | Project one named graph's own facts instead of ROOT |
 | `--seed <IRI>` | PPR seed (repeatable; switches pagerank to personalized) |
