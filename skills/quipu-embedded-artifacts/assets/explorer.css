@@ -1,0 +1,13 @@
+.quipu-explorer {background:var(--surface,#fff);border:1px solid var(--line,#ddd);border-radius:8px;padding:16px;scroll-margin-top:16px}
+.quipu-explorer h3 {font-size:18px;margin:8px 0}
+.quipu-explorer pre {white-space:pre-wrap;overflow-wrap:anywhere;max-height:28rem;overflow:auto;font:12px/1.5 var(--font-mono,monospace)}
+.quipu-explorer textarea {box-sizing:border-box;width:100%;min-height:7rem;font:13px/1.5 var(--font-mono,monospace);background:var(--bg,#fff);color:var(--ink,#222);border:1px solid var(--line,#ddd);padding:8px}
+.quipu-explorer button,.quipu-node-link {font:inherit;color:var(--accent,#176c52);background:transparent;border:1px solid var(--line,#ccc);border-radius:4px;padding:4px 8px;cursor:pointer;overflow-wrap:anywhere;text-align:left}
+.quipu-explorer button:focus-visible,.quipu-node-link:focus-visible {outline:3px solid var(--accent,#176c52);outline-offset:3px}
+.quipu-explorer button:disabled {opacity:.5;cursor:wait}
+.quipu-facts {display:grid;grid-template-columns:minmax(7rem,1fr) minmax(0,3fr);gap:8px;margin:12px 0}
+.quipu-facts dt {font:12px var(--font-mono,monospace);overflow-wrap:anywhere;color:var(--muted,#666)}
+.quipu-facts dd {margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.quipu-error {color:var(--p0,#a22)}
+#asks .ask {overflow-wrap:anywhere}
+@media(max-width:560px){.quipu-facts{grid-template-columns:1fr}.quipu-facts dd{padding-bottom:8px}}
