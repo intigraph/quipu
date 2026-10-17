@@ -1,0 +1,26 @@
+[
+  {
+    "name": "brief-priorities",
+    "description": "Curated priorities in their explicit order",
+    "template": "SELECT ?item ?name ?rank WHERE { ?item <https://schema.org/position> ?rank ; <https://schema.org/name> ?name } ORDER BY ?rank",
+    "params": []
+  },
+  {
+    "name": "brief-record",
+    "description": "The bundled facts for one selected node",
+    "template": "SELECT ?predicate ?value WHERE { <{entity}> ?predicate ?value } ORDER BY ?predicate",
+    "params": [{"name": "entity", "kind": "iri", "required": true}]
+  },
+  {
+    "name": "brief-desk",
+    "description": "All cards from the admitted Decision Desk export",
+    "template": "SELECT ?document ?title ?item WHERE { ?document <https://schema.org/category> 'Decision Desk' ; <http://www.w3.org/2000/01/rdf-schema#label> ?title ; <https://schema.org/about> ?item }",
+    "params": []
+  },
+  {
+    "name": "brief-documents",
+    "description": "Status and ask documents with their linked work items",
+    "template": "SELECT ?document ?title ?item WHERE { ?document a <http://aegis.gastown.local/ontology/Document> ; <http://www.w3.org/2000/01/rdf-schema#label> ?title ; <https://schema.org/about> ?item }",
+    "params": []
+  }
+]
