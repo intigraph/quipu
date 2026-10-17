@@ -1160,8 +1160,14 @@ silence rather than a malformed response. Its guards, in order:
 | `QUIPU_HOOK_STATE_DIR` | `~/.quipu-hook` | Markers and `solicit-log.jsonl` |
 | `GT_CREW` | (unset) | The crew name, when the cwd does not carry it |
 
-The message tells the agent that writes need a bearer from `QUIPU_AUTH_TOKEN`
-and to send `X-Quipu-Client: session-capture`. The act rate is
+The message prefers authenticated Quipu MCP tools or the deployment's gated
+graph-extract helper. For HTTP fallback, `/search` stays open, but `/shapes`
+vocabulary reads require a bearer just like `/episode` and `/propose`.
+The agent resolves a non-empty `QUIPU_AUTH_TOKEN`, then
+`QUIPU_AUTH_TOKEN_FILE` or the configured client token file. A missing
+credential stops the request before HTTP; it is not a reason to send an
+unauthenticated probe. Credentials stay server-side where possible and must
+never be printed. Requests carry `X-Quipu-Client: session-capture`. The act rate is
 `episodes whose source carries the session id / lines in solicit-log.jsonl`.
 
 ## Create and label named graphs
