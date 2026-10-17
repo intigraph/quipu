@@ -240,10 +240,14 @@ pub fn message(settings: &Settings, session_id: &str) -> String {
 a decision, a new entity or relationship)? If nothing durable, reply 'skip' and stop. Skipping is a \
 legitimate outcome, not a failure.
 
-If yes, capture it as a Quipu episode in group {group}: POST {server}/episode. Writes require a \
-bearer token: send Authorization: Bearer $QUIPU_AUTH_TOKEN from your environment, and never print \
-the token. Reads such as /search stay open. Send the header X-Quipu-Client: session-capture on every \
-call so this traffic is attributable. Three rules:
+If yes, capture it as a Quipu episode in group {group}. Prefer the authenticated Quipu MCP \
+tools or your deployment's gated graph-extract helper. For HTTP fallback, /search stays open, \
+but /shapes vocabulary reads, POST {server}/episode and POST {server}/propose require \
+Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, then \
+QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop \
+before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the \
+bearer server-side where possible and never print it. Send the header X-Quipu-Client: \
+session-capture on every call so this traffic is attributable. Three rules:
 
 1. SEARCH BEFORE YOU MINT. POST {server}/search with {{\"query\":\"<your concept>\"}} and REUSE the \
 existing node's exact name if one matches. Do not create a second node for a concept that already \

@@ -20,6 +20,7 @@ for (const variant of ["asyncify", "jsep", "jspi"]) {
   }
 }
 await copyFile("browser-runtime.mjs", "dist/browser-runtime.mjs");
+await copyFile("pointers.mjs", "dist/pointers.mjs");
 await copyFile("model-assets.json", "dist/model-assets.json");
 for (const [source, target] of [
   ["node_modules/@huggingface/transformers/LICENSE", "dist/TRANSFORMERS-LICENSE"],

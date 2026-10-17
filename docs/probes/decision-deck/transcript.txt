@@ -1,0 +1,23 @@
+Base 0cb06945e5f43104cbd4dd7a6301426ab243bc24: Decision Deck module absent
+Candidate: temporary stores and software WebAuthn authenticators only
+$ just test --no-default-features --lib store::decision_deck -- --nocapture
+
+running 12 tests
+test store::decision_deck::tests::default_off_and_operator_scope_are_required ... ok
+test store::decision_deck::tests::failed_outer_savepoint_discards_provisional_term_memo ... ok
+test store::decision_deck::tests::malformed_client_data_and_counter_regression_do_not_consume_challenge ... ok
+test store::decision_deck::tests::independent_challenges_cannot_double_decide_one_revision ... ok
+test store::decision_deck::tests::graph_store_cannot_replace_or_delete_protected_projection ... ok
+test store::decision_deck::tests::late_settlement_failure_rolls_back_graph_nonce_counter_and_receipt ... ok
+webauthn-es256: accepted one curated revision; audit rows=1; historical signature=true
+same assertion: REFUSED replay; exact read-only receipt matches committed decision
+test store::decision_deck::tests::nested_transaction_is_refused_before_any_decision_write ... ok
+test store::decision_deck::tests::request_author_choice_and_revision_are_explicit ... ok
+webauthn-eddsa: accepted one curated revision; audit rows=1; historical signature=true
+same assertion: REFUSED replay; exact read-only receipt matches committed decision
+test store::decision_deck::tests::accepted_es256_and_eddsa_have_reverifiable_receipts_and_replay_refusal ... ok
+test store::decision_deck::tests::signature_origin_rp_flags_and_content_negatives_preserve_positive_control ... ok
+test store::decision_deck::tests::stale_expired_revoked_and_disabled_are_refused ... ok
+test store::decision_deck::tests::durable_reopen_and_lost_response_recovery ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 2225 filtered out; finished in 0.52s
