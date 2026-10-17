@@ -15,6 +15,12 @@ pub fn run(args: &[String]) {
         ("pendant-resolve", [base, ours, theirs, dir, key, choice]) => {
             quipu::git_merge::resolve(repo, base, ours, theirs, dir, key, choice)
         }
+        ("pendant-check", [mode, base, ours, theirs, result]) if mode == "--history" => {
+            quipu::git_merge::check_history(repo, base, ours, theirs, result).map(|n| {
+                println!("pendant-check: {n} historical packs verified");
+                true
+            })
+        }
         ("pendant-check", [base, ours, theirs, result]) => {
             quipu::git_merge::check(repo, base, ours, theirs, result).map(|n| {
                 println!("pendant-check: {n} packs verified");
@@ -23,7 +29,7 @@ pub fn run(args: &[String]) {
         }
         _ => {
             eprintln!(
-                "usage: quipu git-merge REF | merge-driver BASE OURS THEIRS PATH | pendant-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | pendant-check BASE_REF OURS_REF THEIRS_REF RESULT_REF"
+                "usage: quipu git-merge REF | merge-driver BASE OURS THEIRS PATH | pendant-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | pendant-check [--history] BASE_REF OURS_REF THEIRS_REF RESULT_REF"
             );
             std::process::exit(1);
         }
