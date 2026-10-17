@@ -1,0 +1,20 @@
+Script started on 2026-10-17 02:23:26-04:00 [COMMAND="python3 docs/probes/browser-attribution-headers/run-demo.py" <not executed on terminal>]
+BEFORE: missing attribution headers (old allowlist control)
+$ cargo test --features full --bin quipu-server cors::tests -- --nocapture
+running 2 tests
+Access-Control-Allow-Headers: content-type,authorization
+test cors::tests::browser_attribution_headers_are_admitted_without_wildcard_headers ... FAILED
+test cors::tests::attribution_does_not_bypass_configured_origin_allowlist ... ok
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 174 filtered out; finished in 0.00s
+exit=101; expected=101
+AFTER: candidate policy, identical preflight input
+$ cargo test --features full --bin quipu-server cors::tests -- --nocapture
+running 2 tests
+Access-Control-Allow-Headers: content-type,authorization,x-quipu-client,x-quipu-task
+test cors::tests::attribution_does_not_bypass_configured_origin_allowlist ... ok
+test cors::tests::browser_attribution_headers_are_admitted_without_wildcard_headers ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 174 filtered out; finished in 0.00s
+exit=0; expected=0
+Policy restored byte-for-byte; no service contacted.
+
+Script done on 2026-10-17 02:24:14-04:00 [COMMAND_EXIT_CODE="0"]

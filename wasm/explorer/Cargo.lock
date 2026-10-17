@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.12.1"
+version = "0.14.1"
 dependencies = [
  "base64",
  "bigdecimal",
@@ -1570,6 +1570,7 @@ dependencies = [
  "glob",
  "hex",
  "js-sys",
+ "libc",
  "md-5",
  "oxrdf",
  "oxrdfio",
@@ -1579,6 +1580,7 @@ dependencies = [
  "petgraph 0.7.1",
  "regex",
  "ring",
+ "rudof_iri",
  "rudof_rdf",
  "rusqlite",
  "serde",

@@ -7,7 +7,7 @@ impl Store {
     /// Post-commit side effects: auto-embedding and reactive observers. Runs
     /// after the savepoint is released (the write is durable relative to the
     /// parent), preserving the previous ordering.
-    pub(super) fn after_commit_hooks(
+    pub(in crate::store) fn after_commit_hooks(
         &mut self,
         datums: &[Datum],
         staged: Staged,
