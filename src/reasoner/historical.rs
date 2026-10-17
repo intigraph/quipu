@@ -125,12 +125,18 @@ pub fn evaluate_temporal_view(
     };
     // LIMIT has one sentinel row: reaching the cap is an explicit refusal,
     // never a successful partial premise view. Existing smaller caps still win.
+    let configured_cap = source.search_config().max_sparql_rows;
+    let sentinel = if configured_cap == 0 {
+        10_001
+    } else {
+        configured_cap.min(10_001)
+    };
     let query =
-        format!("SELECT ?s ?p ?o WHERE {{ VALUES ?p {{ {values} }} ?s ?p ?o }} LIMIT 10001");
+        format!("SELECT ?s ?p ?o WHERE {{ VALUES ?p {{ {values} }} ?s ?p ?o }} LIMIT {sentinel}");
     let QueryResult::Select { rows, .. } = query_temporal(source, &query, &ctx)? else {
         unreachable!("a SELECT query returns SELECT rows")
     };
-    if rows.len() > 10_000 {
+    if rows.len() >= sentinel {
         return Err(HistoricalError::Capacity);
     }
     let mut isolated = Store::open_in_memory()?;

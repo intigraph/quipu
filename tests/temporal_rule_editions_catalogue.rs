@@ -68,6 +68,151 @@ fn catalogue() -> String {
     )
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn governed_history_integrates_admission_catalogue_clocks_and_premise_scope() {
+    use quipu::{
+        config::QuipuConfig,
+        reasoner::{governed::*, history_attestation::*, raw_history::*},
+        signing::{public_key_hex, sign_hex},
+        store::{Datum, Store},
+        types::{Op, Value},
+    };
+    use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("raw.db");
+    let mut store = Store::open(path.to_str().unwrap()).unwrap();
+    quipu::rdf::ingest_rdf(
+        &mut store,
+        catalogue().as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2000-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let graph = store.graph_create("urn:test:premises").unwrap();
+    let datums: Vec<_> = [("oldDeadline", "old"), ("transitionDeadline", "transition")]
+        .into_iter()
+        .map(|(predicate, object)| Datum {
+            entity: store.intern("https://example.org/claim").unwrap(),
+            attribute: store
+                .intern(&format!("https://example.org/{predicate}"))
+                .unwrap(),
+            value: Value::Ref(
+                store
+                    .intern(&format!("https://example.org/{object}"))
+                    .unwrap(),
+            ),
+            valid_from: "2000-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    store
+        .transact_to_graph(&datums, "2000-01-01T00:00:01Z", None, None, graph)
+        .unwrap();
+    let tx = store.latest_tx_id().unwrap();
+    let lineage = store.store_id().unwrap();
+    drop(store);
+    let bytes = std::fs::read(&path).unwrap();
+    let digest = |b: &[u8]| format!("{:x}", Sha256::digest(b));
+    let policy_bytes = b"synthetic external reviewed grant v1";
+    let evidence = b"synthetic complete retained fixture including pre-window supports";
+    let key_bytes = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
+    let key = Ed25519KeyPair::from_pkcs8(key_bytes.as_ref()).unwrap();
+    let public_key = public_key_hex(&key);
+    let payload = HistoryAttestation {
+        schema_version: 1,
+        issuer_id: "synthetic-fixture-reviewer".into(),
+        grant_policy_sha256: digest(policy_bytes),
+        reviewed_evidence_ref: "urn:test:review:complete-fixture".into(),
+        reviewed_evidence_sha256: digest(evidence),
+        raw_artifact_sha256: digest(&bytes),
+        artifact_kind: HistoryArtifactKind::RawSqliteSnapshot,
+        provider_scope: HistoryProviderScope::NativeOnly,
+        coverage: HistoryCoverage {
+            source_store_id: lineage,
+            catalogue_graph: quipu::schema::ROOT_GRAPH_IRI.into(),
+            premise_graph: "urn:test:premises".into(),
+            transaction_first: 1,
+            transaction_last: tx,
+            valid_time_from: -2208988800,
+            valid_time_until: 4102444800,
+        },
+        issued_at: 0,
+        expires_at: 100,
+    };
+    let signature = sign_hex(&key, &history_attestation_message(&payload).unwrap());
+    let envelope = SignedHistoryAttestation { payload, signature };
+    let grant = HistoryCoverageGrant {
+        issuer_id: "synthetic-fixture-reviewer",
+        public_key_hex: &public_key,
+        policy_sha256: &envelope.payload.grant_policy_sha256,
+        policy_bytes,
+        reviewed_evidence_ref: &envelope.payload.reviewed_evidence_ref,
+        reviewed_evidence_sha256: &envelope.payload.reviewed_evidence_sha256,
+        raw_artifact_sha256: &envelope.payload.raw_artifact_sha256,
+        coverage: &envelope.payload.coverage,
+    };
+    let verified = verify_history_attestation(&envelope, &grant, Some(evidence), 50).unwrap();
+    let mut policy = Store::open_in_memory().unwrap();
+    for (date, expected) in [
+        ("2007-01-01T00:00:00Z", "old"),
+        ("2014-01-01T00:00:00Z", "transition"),
+    ] {
+        let source = admit_raw_history(
+            &bytes,
+            &verified,
+            RawHistoryRequest {
+                valid_at: quipu::time::epoch_of_rfc3339(date).unwrap(),
+                as_of_tx: tx,
+            },
+            &QuipuConfig::default(),
+            &policy,
+            50,
+        )
+        .unwrap();
+        let answer = evaluate_governed_history(&source, PACKAGE).unwrap();
+        assert_eq!(
+            answer.selected_edition.edition,
+            format!("https://example.org/editions/{expected}")
+        );
+        assert_eq!(answer.facts.len(), 1);
+        assert_eq!(
+            answer.facts[0].object,
+            format!("https://example.org/{expected}")
+        );
+        assert_eq!(answer.as_of_tx, tx);
+        assert_eq!(answer.source.raw_artifact_sha256, digest(&bytes));
+        assert!(matches!(
+            evaluate_governed_history(&source, "urn:test:missing-package"),
+            Err(GovernedHistoricalError::Selection(
+                SelectionError::MissingCatalogue(_)
+            ))
+        ));
+    }
+    policy.search_config_mut().max_sparql_rows = 1;
+    let source = admit_raw_history(
+        &bytes,
+        &verified,
+        RawHistoryRequest {
+            valid_at: 1388534400,
+            as_of_tx: tx,
+        },
+        &QuipuConfig::default(),
+        &policy,
+        50,
+    )
+    .unwrap();
+    assert!(matches!(
+        evaluate_governed_history(&source, PACKAGE),
+        Err(GovernedHistoricalError::Capacity)
+    ));
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
+}
+
 #[test]
 fn temporal_rule_editions_catalogue_boundary_and_identity() {
     let catalogue = catalogue();

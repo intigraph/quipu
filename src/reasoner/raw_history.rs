@@ -197,7 +197,20 @@ pub fn admit_raw_history(
         if crate::store::inferred::is_inferred_graph_iri(graph) {
             return Err(E::InvalidArtifact);
         }
-        if store.registered_graph_id(graph)?.is_none() {
+        let registered = if graph == crate::schema::ROOT_GRAPH_IRI {
+            // ROOT is reserved graph zero, not an interned named-graph IRI.
+            store
+                .conn
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM graphs WHERE g = ?1)",
+                    [crate::schema::ROOT_GRAPH],
+                    |row| row.get::<_, bool>(0),
+                )
+                .map_err(crate::Error::from)?
+        } else {
+            store.registered_graph_id(graph)?.is_some()
+        };
+        if !registered {
             return Err(E::MissingGraph);
         }
     }

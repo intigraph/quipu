@@ -44,6 +44,27 @@ fn context(tx: i64) -> TemporalContext {
 }
 
 #[test]
+fn temporal_rule_editions_refuses_smaller_configured_output_ceiling() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = datum(&store, "https://example.org/deadline-old", Op::Assert);
+    let tx = store.transact(&[first], START, None, None).unwrap();
+    assert_eq!(
+        evaluate_temporal_view(&store, &rules(), &context(tx))
+            .unwrap()
+            .len(),
+        1
+    );
+    store.search_config_mut().max_sparql_rows = 1;
+    assert!(
+        matches!(
+            evaluate_temporal_view(&store, &rules(), &context(tx)),
+            Err(HistoricalError::Capacity)
+        ),
+        "a smaller configured output ceiling must refuse at its sentinel, never be bypassed"
+    );
+}
+
+#[test]
 fn temporal_rule_editions_isolated_premise_snapshots() {
     let mut store = Store::open_in_memory().unwrap();
     let old = "https://example.org/deadline-old";
