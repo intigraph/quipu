@@ -582,6 +582,17 @@ pub struct ServerConfig {
     /// `SQLite` connection with its own page cache.
     pub read_pool_size: usize,
 
+    /// Total server memory budget in MiB, including all reader processes.
+    /// None preserves legacy SQLite settings. This sizes caches, not query heaps;
+    /// the service manager must enforce the same total as its cgroup limit.
+    pub memory_budget_mib: Option<u64>,
+
+    /// Separate read-only worker processes. Zero preserves in-process serving.
+    pub read_processes: usize,
+
+    /// First loopback port for opt-in reader workers (default3031).
+    pub read_process_base_port: u16,
+
     /// Reserve one existing reader for bounded ground point-ASK requests.
     /// Opt-in; requires at least two usable readers. Ordinary reads retain
     /// the remaining readers and admission permits. No extra connection opens.
@@ -611,6 +622,9 @@ impl Default for ServerConfig {
             replica: None,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
+            memory_budget_mib: None,
+            read_processes: 0,
+            read_process_base_port: 3031,
             reserve_point_reads: false,
             log_query_admission: false,
             update_full_copy_max_facts: 250_000,

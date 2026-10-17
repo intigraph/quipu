@@ -16,6 +16,21 @@ use crate::schema::INIT_SQL;
 use crate::vector::VECTORS_SQL;
 
 impl Store {
+    /// Apply a validated share of the aggregate service memory budget.
+    /// This changes connection-local SQLite policy, never database facts.
+    pub fn apply_memory_allocation(
+        &self,
+        allocation: crate::memory_budget::MemoryAllocation,
+    ) -> Result<()> {
+        let cache = i64::try_from(allocation.cache_kib)
+            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
+        let mmap = i64::try_from(allocation.mmap_bytes)
+            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
+        self.conn.pragma_update(None, "cache_size", -cache)?;
+        self.conn.pragma_update(None, "mmap_size", mmap)?;
+        Ok(())
+    }
+
     /// Open (or create) a Quipu store at the given path.
     pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -543,3 +558,7 @@ pub(crate) fn open_file_immutable(path: &str) -> Result<Connection> {
         flags,
     )?)
 }
+
+#[cfg(test)]
+#[path = "open_memory_tests.rs"]
+mod memory_tests;
