@@ -9,6 +9,8 @@ mod scan;
 
 #[cfg(test)]
 mod limited_tests;
+#[cfg(test)]
+mod named_limit_tests;
 
 pub(super) use model::eval_triple_pattern_from_model;
 

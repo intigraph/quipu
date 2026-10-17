@@ -121,6 +121,8 @@ fn emit_writes_nothing_and_binds_the_conflict_to_its_inputs() {
     let (local, incoming) = scenario(root.path());
     let before = fact_count(&local);
     let file = emit(&local, &incoming).unwrap();
+    assert_eq!(file.schema, DECISIONS_SCHEMA_V1);
+    assert!(file.rows.iter().all(|r| r.local_slot_hash.is_none()));
     assert_eq!(fact_count(&local), before);
     assert_eq!(file.rows.len(), 1);
     let row = &file.rows[0];
@@ -278,8 +280,12 @@ fn refusals_write_nothing() {
 
     assert_eq!((values(&local, STATUS), values(&local, TAG)), before);
 
-    // ROOT moved after emit: stale, even with every row decided.
+    // Legacy files retain their whole-ROOT binding even for unrelated writes.
     let mut decided = emitted.clone();
+    decided.schema = DECISIONS_SCHEMA_V1.into();
+    for row in &mut decided.rows {
+        row.local_slot_hash = None;
+    }
     decide(
         &mut decided,
         &Decision::Choose {
@@ -579,4 +585,290 @@ fn decisions_are_emitted_from_a_read_only_connection() {
     let from_reader = crate::mcp::merge_decisions::tool_merge_decisions(&reader, &input).unwrap();
     assert_eq!(from_reader, from_writer);
     assert!(!from_reader["rows"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn scoped_decisions_survive_unrelated_writes_and_preserve_them() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit_scoped(&local, &incoming).unwrap();
+    assert_eq!(file.schema, DECISIONS_SCHEMA);
+    assert!(file.rows.iter().all(|r| r.local_slot_hash.is_some()));
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    put(
+        &mut local,
+        "<urn:unrelated> <urn:p> \"later\" .",
+        "2026-10-07T00:30:00Z",
+    );
+    put(
+        &mut local,
+        &format!("<{S}> <{TAG}> \"same subject, other predicate\" ."),
+        "2026-10-07T00:30:01Z",
+    );
+    apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap();
+    assert_eq!(values(&local, STATUS), ["\"closed\""]);
+    assert_eq!(values(&local, "urn:p"), ["\"later\""]);
+    assert!(values(&local, TAG).contains(&"\"same subject, other predicate\"".to_string()));
+}
+
+#[test]
+fn scoped_decisions_refuse_changed_slot_and_same_value_new_provenance() {
+    for value in ["different", "blocked"] {
+        let root = tempfile::tempdir().unwrap();
+        let (mut local, incoming) = scenario(root.path());
+        let mut file = emit_scoped(&local, &incoming).unwrap();
+        let bytes = decide(
+            &mut file,
+            &Decision::Choose {
+                choose: Side::Theirs,
+            },
+        );
+        set_status(&mut local, value, "2026-10-07T00:30:00Z");
+        let before = root_graph(&local).unwrap();
+        assert!(
+            apply(
+                &mut local,
+                &incoming,
+                &file,
+                &bytes,
+                "r",
+                "2026-10-07T01:00:00Z",
+                None
+            )
+            .is_err()
+        );
+        assert_eq!(root_graph(&local).unwrap(), before);
+    }
+}
+
+#[test]
+fn scoped_decisions_refuse_missing_or_forged_slot_hash() {
+    for hash in [None, Some("sha256:invalid".into())] {
+        let root = tempfile::tempdir().unwrap();
+        let (mut local, incoming) = scenario(root.path());
+        let mut file = emit_scoped(&local, &incoming).unwrap();
+        file.rows[0].local_slot_hash = hash;
+        let bytes = decide(
+            &mut file,
+            &Decision::Choose {
+                choose: Side::Theirs,
+            },
+        );
+        let before = root_graph(&local).unwrap();
+        let err = apply(
+            &mut local,
+            &incoming,
+            &file,
+            &bytes,
+            "r",
+            "2026-10-07T01:00:00Z",
+            None,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("reviewed slot"));
+        assert_eq!(root_graph(&local).unwrap(), before);
+    }
+}
+
+#[test]
+fn scoped_decisions_refuse_changed_incoming_bindings() {
+    for field in ["incoming", "base", "graph"] {
+        let root = tempfile::tempdir().unwrap();
+        let (mut local, incoming) = scenario(root.path());
+        let mut file = emit_scoped(&local, &incoming).unwrap();
+        match field {
+            "incoming" => file.incoming_share.push_str("-changed"),
+            "base" => file.base_share.push_str("-changed"),
+            _ => file.incoming_graph_hash.push_str("-changed"),
+        }
+        let bytes = decide(
+            &mut file,
+            &Decision::Choose {
+                choose: Side::Theirs,
+            },
+        );
+        let before = root_graph(&local).unwrap();
+        assert!(
+            apply(
+                &mut local,
+                &incoming,
+                &file,
+                &bytes,
+                "r",
+                "2026-10-07T01:00:00Z",
+                None
+            )
+            .is_err()
+        );
+        assert_eq!(root_graph(&local).unwrap(), before);
+    }
+}
+
+#[test]
+fn scoped_decisions_refuse_new_conflicts_after_emit() {
+    let root = tempfile::tempdir().unwrap();
+    let mut source = store_with_base();
+    let mut local = store_with_base();
+    for store in [&mut source, &mut local] {
+        put(
+            store,
+            "<urn:second> <https://example.org/status> \"open\" .",
+            "2026-10-07T00:00:01Z",
+        );
+    }
+    let base = crate::share::share(
+        &source,
+        root.path().join("base").to_str().unwrap(),
+        &Default::default(),
+    )
+    .unwrap();
+    set_status(&mut source, "closed", "2026-10-07T00:01:00Z");
+    let second = source.lookup("urn:second").unwrap().unwrap();
+    let status = source.lookup(STATUS).unwrap().unwrap();
+    source
+        .retract_entity(second, Some(status), "2026-10-07T00:01:00Z", None)
+        .unwrap();
+    put(
+        &mut source,
+        "<urn:second> <https://example.org/status> \"closed\" .",
+        "2026-10-07T00:01:00Z",
+    );
+    let incoming = root.path().join("incoming");
+    crate::share::share(
+        &source,
+        incoming.to_str().unwrap(),
+        &crate::share::ShareOptions {
+            parent_share: Some(base.share_id),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    set_status(&mut local, "blocked", "2026-10-07T00:02:00Z");
+    let mut file = emit_scoped(&local, &incoming).unwrap();
+    assert_eq!(file.rows.len(), 1);
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    let second = local.lookup("urn:second").unwrap().unwrap();
+    let status = local.lookup(STATUS).unwrap().unwrap();
+    local
+        .retract_entity(second, Some(status), "2026-10-07T00:03:00Z", None)
+        .unwrap();
+    put(
+        &mut local,
+        "<urn:second> <https://example.org/status> \"blocked\" .",
+        "2026-10-07T00:03:00Z",
+    );
+    let before = root_graph(&local).unwrap();
+    let err = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("set of conflicts"));
+    assert_eq!(root_graph(&local).unwrap(), before);
+}
+
+#[test]
+fn legacy_decisions_still_apply_without_a_slot_hash_when_root_is_unchanged() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit(&local, &incoming).unwrap();
+    file.schema = DECISIONS_SCHEMA_V1.into();
+    for row in &mut file.rows {
+        row.local_slot_hash = None;
+    }
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "r",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap();
+    assert_eq!(values(&local, STATUS), ["\"closed\""]);
+}
+
+#[test]
+fn scoped_decisions_refuse_empty_slot_aba() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let entity = local.lookup(S).unwrap().unwrap();
+    let predicate = local.lookup(STATUS).unwrap().unwrap();
+    local
+        .retract_entity(entity, Some(predicate), "2026-10-07T00:03:00Z", None)
+        .unwrap();
+    let mut file = emit_scoped(&local, &incoming).unwrap();
+    assert!(file.rows[0].record.ours.is_empty());
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    put(
+        &mut local,
+        &format!("<{S}> <{STATUS}> \"temporary\" ."),
+        "2026-10-07T00:04:00Z",
+    );
+    local
+        .retract_entity(entity, Some(predicate), "2026-10-07T00:05:00Z", None)
+        .unwrap();
+    let before = root_graph(&local).unwrap();
+    let result = dry_run(&mut local, &incoming, &file, &bytes, "reviewer");
+    assert!(result.is_err(), "empty -> value -> empty must be stale");
+    assert_eq!(root_graph(&local).unwrap(), before);
+}
+
+#[test]
+fn inline_slot_scope_requires_explicit_boolean_opt_in() {
+    let root = tempfile::tempdir().unwrap();
+    let (local, incoming) = scenario(root.path());
+    let mut input = serde_json::json!({
+        "incoming": inline(&incoming),
+        "base": inline(&root.path().join("base")),
+    });
+    let emit_inline = |input: &serde_json::Value| {
+        crate::mcp::merge_decisions::tool_merge_decisions(&local, input)
+    };
+    assert_eq!(emit_inline(&input).unwrap()["schema"], DECISIONS_SCHEMA_V1);
+    input["slot_scoped"] = serde_json::json!(true);
+    assert_eq!(
+        emit_inline(&input).unwrap(),
+        serde_json::to_value(emit_scoped(&local, &incoming).unwrap()).unwrap()
+    );
+    input["slot_scoped"] = serde_json::json!(false);
+    assert_eq!(emit_inline(&input).unwrap()["schema"], DECISIONS_SCHEMA_V1);
+    input["slot_scoped"] = serde_json::json!("true");
+    assert!(emit_inline(&input).is_err());
 }
