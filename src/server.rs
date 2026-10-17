@@ -96,7 +96,6 @@ mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
 #[cfg(test)]
 use query_endpoint::query;
-use query_endpoint::{query_get, query_post_http};
 use reason::{explain, reason, shapes};
 use tools::*;
 
@@ -392,7 +391,7 @@ async fn main() {
         .merge(base::status_routes())
         .route("/.well-known/void", get(service_description::service_description))
         .route("/metrics", get(metrics_handler))
-        .route("/query", get(query_get).post(query_post_http))
+        .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
         .route("/export", post(publication::export))
         .merge(graph_store::routes())
