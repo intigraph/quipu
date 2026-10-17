@@ -54,6 +54,22 @@ a comparison): [Why Quipu](docs/book/src/why-quipu.md).
 
 ## Install
 
+**Debian and Ubuntu (amd64 and arm64):** install from the signed apt repository,
+which republishes each checksum-verified release, so `apt upgrade` (or
+unattended-upgrades) keeps it current. The package puts `quipu` and `quipu-server` in `/usr/bin`.
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://scbrown.github.io/apt/key.gpg | sudo tee /etc/apt/keyrings/scbrown-stack.gpg >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/scbrown-stack.list
+sudo apt update && sudo apt install quipu
+```
+
+Before trusting the key, `gpg --show-keys /etc/apt/keyrings/scbrown-stack.gpg`
+must print `AB5625C5612F643BF76464DF0DC99924994EC959`. Channels, pinning and
+rollback: [scbrown/apt](https://github.com/scbrown/apt#channels-and-pinning).
+
 Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
 checksummed release.
 
