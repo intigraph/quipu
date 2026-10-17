@@ -60,18 +60,31 @@ republishes each checksum-verified release. The package puts `quipu` and `quipu-
 commands stop if it does not match:
 
 ```bash
-curl -fsSL https://scbrown.github.io/apt/key.gpg -o scbrown-stack.gpg
-gpg --show-keys --with-colons scbrown-stack.gpg \
-  | grep -qx 'fpr:::::::::AB5625C5612F643BF76464DF0DC99924994EC959:' \
-  && sudo install -D -m 0644 scbrown-stack.gpg /etc/apt/keyrings/scbrown-stack.gpg \
-  && echo "deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main" \
-     | sudo tee /etc/apt/sources.list.d/scbrown-stack.list \
-  && sudo apt update && sudo apt install quipu
+(
+  set -euo pipefail
+  key_file=$(mktemp)
+  trap 'rm -f "$key_file"' EXIT
+  curl -fsSL https://scbrown.github.io/apt/key.gpg -o "$key_file"
+  fingerprints=$(gpg --batch --show-keys --with-colons "$key_file" \
+    | awk -F: '$1 == "pub" { primary=1; next } primary && $1 == "fpr" { print $10; primary=0 }')
+  if [ "$fingerprints" != 'AB5625C5612F643BF76464DF0DC99924994EC959' ]; then
+    printf 'Signing key fingerprint mismatch; stopping.\n' >&2
+    exit 1
+  fi
+  sudo install -D -m 0644 "$key_file" /etc/apt/keyrings/scbrown-stack.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main" \
+    | sudo tee /etc/apt/sources.list.d/scbrown-stack.list
+  sudo apt update
+  sudo apt install quipu
+)
 ```
 
-`apt upgrade` then picks up new releases. unattended-upgrades only installs
-from origins it allows, so to have it upgrade quipu too, add
-`"origin=scbrown,codename=stable";` to `Unattended-Upgrade::Origins-Pattern`.
+Run `apt update` and `apt upgrade` to pick up new releases manually. On Ubuntu,
+`unattended-upgrades` does not include third-party repositories by default.
+Automatic updates for this repository require explicitly configuring its origin
+in a drop-in, following the
+[official Ubuntu instructions](https://documentation.ubuntu.com/security/security-updates/#automatic-security-updates).
+The commands above do not enable unattended updates.
 Channels, pinning and rollback:
 [scbrown/apt](https://github.com/scbrown/apt#channels-and-pinning).
 
