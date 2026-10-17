@@ -1,6 +1,6 @@
 //! The commit half of an episode write whose resolution is already known.
 
-use super::{Episode, IngestResult, ingest_episode_outcome};
+use super::{Episode, IngestResult, ingest_episode_outcome_with_hints};
 use crate::error::Result;
 use crate::resolution;
 use crate::store::Store;
@@ -24,12 +24,15 @@ pub fn ingest_episode_resolved(
     if let Some(msg) = resolved.refusal {
         return Err(crate::error::Error::InvalidValue(msg));
     }
-    let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
+    let (tx_id, count, outcome, label_hints) =
+        ingest_episode_outcome_with_hints(store, episode, timestamp, base_ns)?;
+    let mut hints = resolved.hints;
+    hints.extend(label_hints);
     Ok(IngestResult {
         tx_id,
         count,
         outcome,
-        resolution_hints: resolved.hints,
+        resolution_hints: hints,
         resolution_contentions: resolved.contentions,
     })
 }

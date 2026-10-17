@@ -56,6 +56,8 @@ impl IngestResolutionOpts {
     }
 }
 
+type ResolutionHints = Vec<(String, Vec<EntityCandidate>)>;
+
 /// Result of episode ingestion, including resolution hints.
 #[derive(Debug)]
 pub struct IngestResult {
@@ -68,7 +70,7 @@ pub struct IngestResult {
     /// indistinguishable from a failed write.
     pub outcome: IngestOutcome,
     /// Per-node resolution candidates (node name → candidates).
-    /// Only populated when resolution is enabled and matches were found.
+    /// Includes kept-label diagnostics even when similarity resolution is disabled.
     pub resolution_hints: Vec<(String, Vec<EntityCandidate>)>,
     /// Existing entities claimed by MORE THAN ONE node of this episode: the
     /// write is about to fragment one entity. See `resolution::matching`.
@@ -138,13 +140,14 @@ pub fn ingest_episode_with_resolution(
         return ingest_episode_resolved(store, episode, timestamp, base_ns, resolved);
     }
 
-    let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
+    let (tx_id, count, outcome, hints) =
+        ingest_episode_outcome_with_hints(store, episode, timestamp, base_ns)?;
 
     Ok(IngestResult {
         tx_id,
         count,
         outcome,
-        resolution_hints: Vec::new(),
+        resolution_hints: hints,
         resolution_contentions: Vec::new(),
     })
 }
@@ -244,6 +247,17 @@ pub fn ingest_episode_outcome(
     timestamp: &str,
     base_ns: &str,
 ) -> Result<(i64, usize, IngestOutcome)> {
+    let (tx, count, outcome, _) =
+        ingest_episode_outcome_with_hints(store, episode, timestamp, base_ns)?;
+    Ok((tx, count, outcome))
+}
+
+fn ingest_episode_outcome_with_hints(
+    store: &mut Store,
+    episode: &Episode,
+    timestamp: &str,
+    base_ns: &str,
+) -> Result<(i64, usize, IngestOutcome, ResolutionHints)> {
     // One payload may mention a node name exactly once. Repeating it used to
     // look like the documented way to dual-type an entity, but each entry also
     // emitted its description as rdfs:comment. Two descriptions under one name
@@ -398,7 +412,7 @@ pub fn ingest_episode_outcome(
         &existing_hash,
         &new_hash,
     )? {
-        return Ok((NOOP_TX, 0, IngestOutcome::Unchanged));
+        return Ok((NOOP_TX, 0, IngestOutcome::Unchanged, Vec::new()));
     }
 
     let actor = episode.source.as_deref();
@@ -437,7 +451,7 @@ pub fn ingest_episode_outcome(
         descriptions::retract_activity(store, ep_id, graph, timestamp, actor, &source_str)?;
     }
 
-    let (tx_id, count) = if episode.replace_snapshot {
+    let (tx_id, count, hints) = if episode.replace_snapshot {
         let mut datums = store.plan_episode_retraction(&episode.name, graph)?;
         let mut assertions = parse_rdf(
             store,
@@ -457,11 +471,11 @@ pub fn ingest_episode_outcome(
         });
         datums.append(&mut assertions);
         let tx_id = store.transact_snapshot(&datums, timestamp, actor, &source_str, graph)?;
-        (tx_id, count)
+        (tx_id, count, Vec::new())
     } else {
         descriptions::ingest_reconciled(store, episode, &turtle, timestamp, base_ns, actor, graph)?
     };
-    Ok((tx_id, count, outcome))
+    Ok((tx_id, count, outcome, hints))
 }
 
 /// Transaction id returned when an episode ingest is a no-op (the identical

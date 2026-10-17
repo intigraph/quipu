@@ -93,7 +93,7 @@ pub(super) fn ingest_reconciled(
     base_ns: &str,
     actor: Option<&str>,
     graph: i64,
-) -> Result<(i64, usize)> {
+) -> Result<(i64, usize, super::ResolutionHints)> {
     let mut datums = crate::rdf::parse_rdf(
         store,
         turtle.as_bytes(),
@@ -102,11 +102,11 @@ pub(super) fn ingest_reconciled(
         timestamp,
     )?;
     reconcile_node_descriptions(store, episode, base_ns, graph, &mut datums)?;
-    keep_existing_node_labels(store, graph, &mut datums)?;
+    let hints = keep_existing_node_labels(store, graph, &mut datums)?;
     let count = datums.len();
     let source = format!("episode:{}", episode.name);
     let tx_id = store.transact_to_graph(&datums, timestamp, actor, Some(&source), graph)?;
-    Ok((tx_id, count))
+    Ok((tx_id, count, hints))
 }
 
 /// A node that already has a label keeps it (aegis-2mx55r).
@@ -122,7 +122,7 @@ pub(super) fn keep_existing_node_labels(
     store: &mut Store,
     graph: i64,
     datums: &mut Vec<Datum>,
-) -> Result<()> {
+) -> Result<super::ResolutionHints> {
     let label = store.intern(&format!("{}label", namespace::RDFS))?;
     let mut labelled: Vec<i64> = datums
         .iter()
@@ -131,27 +131,50 @@ pub(super) fn keep_existing_node_labels(
         .collect();
     labelled.sort_unstable();
     labelled.dedup();
-
     let mut existing: HashMap<i64, Vec<Value>> = HashMap::new();
-    for entity in labelled {
-        let current: Vec<Value> = store
-            .entity_history_in_graph(entity, graph)?
-            .into_iter()
-            .filter(|f| f.attribute == label && f.op == Op::Assert && f.valid_to.is_none())
-            .map(|f| f.value)
-            .collect();
-        if !current.is_empty() {
-            existing.insert(entity, current);
+    // Both axes and the graph are bound: unrelated hub facts and retired labels
+    // never enter the result. The store reader propagates SQL/decoding errors.
+    // Bound SQL parameters even for episodes with many distinct subjects.
+    for entities in labelled.chunks(256) {
+        for fact in store.current_facts_for_attributes_and_entities_in_graphs(
+            &[label],
+            entities,
+            &[graph],
+        )? {
+            existing.entry(fact.entity).or_default().push(fact.value);
         }
     }
-    datums.retain(|d| {
-        d.attribute != label
-            || d.op != Op::Assert
-            || existing
-                .get(&d.entity)
-                .is_none_or(|current| current.contains(&d.value))
-    });
-    Ok(())
+    let mut hints = Vec::new();
+    let mut retained = Vec::with_capacity(datums.len());
+    for datum in datums.drain(..) {
+        if datum.attribute == label
+            && datum.op == Op::Assert
+            && let Some(current) = existing.get(&datum.entity)
+            && !current.contains(&datum.value)
+        {
+            let name = match &datum.value {
+                Value::Str(name) => name.clone(),
+                _ => continue,
+            };
+            let iri = store.resolve(datum.entity)?;
+            let candidates = current
+                .iter()
+                .filter_map(|value| match value {
+                    Value::Str(value) => Some(crate::resolution::EntityCandidate {
+                        iri: iri.clone(),
+                        score: 1.0,
+                        matched_on: format!("label kept: {value}"),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            hints.push((name, candidates));
+        } else {
+            retained.push(datum);
+        }
+    }
+    *datums = retained;
+    Ok(hints)
 }
 
 /// Reconcile explicitly revised node descriptions into the pending episode tx.

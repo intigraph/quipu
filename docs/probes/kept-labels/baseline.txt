@@ -1,0 +1,6 @@
+Source baseline abb9e5a1, in-memory fixture; no service calls:
+LABEL_HUB calls=64 unrelated=10000 elapsed_us=1024702
+label_followup_hub_measurement PASS, all10001 history facts preserved.
+label_followup_dropped_slug_hint FAIL: dropped label must be visible: []
+1 passed;1 failed; command101. HOME157paths+5resources untouched.
+Earlier fixture compile errors were corrected before this valid baseline.

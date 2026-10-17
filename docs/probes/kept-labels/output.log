@@ -1,0 +1,14 @@
+Script started on 2026-10-16 22:43:50-04:00 [COMMAND="bash docs/probes/kept-labels/run-demo.sh" <not executed on terminal>]
+
+running 5 tests
+test episode::tests::label_followup_graph_current_and_fresh_controls ... ok
+test episode::tests::label_followup_preserves_similarity_hints_and_noop ... ok
+test episode::tests::label_followup_dropped_slug_hint ... ok
+test episode::tests::label_followup_batches_many_subjects ... ok
+LABEL_HUB calls=64 unrelated=10000 elapsed_us=3961
+test episode::tests::label_followup_hub_measurement ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 0.95s
+
+
+Script done on 2026-10-16 22:44:20-04:00 [COMMAND_EXIT_CODE="0"]

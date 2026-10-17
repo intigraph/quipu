@@ -1712,3 +1712,255 @@ fn reuse_by_the_existing_label_is_unchanged() {
         vec!["bead reference pattern"]
     );
 }
+
+#[test]
+fn label_followup_hub_measurement() {
+    let mut store = Store::open_in_memory().unwrap();
+    let entity = store.intern("urn:label:hub").unwrap();
+    let label = store.intern(&format!("{}label", namespace::RDFS)).unwrap();
+    let noise = store.intern("urn:label:unrelated").unwrap();
+    let mut facts: Vec<crate::store::Datum> = (0..10000)
+        .map(|i| crate::store::Datum {
+            entity,
+            attribute: noise,
+            value: crate::types::Value::Int(i),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::types::Op::Assert,
+        })
+        .collect();
+    facts.push(crate::store::Datum {
+        entity,
+        attribute: label,
+        value: crate::types::Value::Str("Hub label".into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op: crate::types::Op::Assert,
+    });
+    store
+        .transact(&facts, "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    let started = std::time::Instant::now();
+    for _ in 0..64 {
+        let mut proposed = vec![crate::store::Datum {
+            entity,
+            attribute: label,
+            value: crate::types::Value::Str("Hub_label".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::types::Op::Assert,
+        }];
+        super::descriptions::keep_existing_node_labels(&mut store, 0, &mut proposed).unwrap();
+        assert!(proposed.is_empty());
+    }
+    println!(
+        "LABEL_HUB calls=64 unrelated=10000 elapsed_us={}",
+        started.elapsed().as_micros()
+    );
+    assert_eq!(
+        store.entity_history_in_graph(entity, 0).unwrap().len(),
+        10001
+    );
+}
+
+#[test]
+fn label_followup_dropped_slug_hint() {
+    let mut store = Store::open_in_memory().unwrap();
+    let first = parse_episode(
+        r#"{"name":"label-original","nodes":[{"name":"Known label","type":"Service"}]}"#,
+    );
+    ingest_episode_with_resolution(
+        &mut store,
+        &first,
+        "2026-01-01T00:00:00Z",
+        TEST_BASE_NS,
+        None,
+    )
+    .unwrap();
+    let alias =
+        parse_episode(r#"{"name":"label-slug","nodes":[{"name":"Known_label","type":"Service"}]}"#);
+    let result = ingest_episode_with_resolution(
+        &mut store,
+        &alias,
+        "2026-01-02T00:00:00Z",
+        TEST_BASE_NS,
+        None,
+    )
+    .unwrap();
+    assert!(
+        result
+            .resolution_hints
+            .iter()
+            .any(|(name, candidates)| name == "Known_label"
+                && candidates
+                    .iter()
+                    .any(|c| c.matched_on == "label kept: Known label")),
+        "dropped label must be visible: {:?}",
+        result.resolution_hints
+    );
+}
+
+#[test]
+fn label_followup_graph_current_and_fresh_controls() {
+    use crate::{
+        store::Datum,
+        types::{Op, Value},
+    };
+    let mut store = Store::open_in_memory().unwrap();
+    let entity = store.intern("urn:label:shared").unwrap();
+    let label = store.intern(namespace::RDFS_LABEL).unwrap();
+    let graph = store.graph_create("urn:label:plane").unwrap();
+    let fresh = store.graph_create("urn:label:fresh").unwrap();
+    let datum = |text: &str, op| Datum {
+        entity,
+        attribute: label,
+        value: Value::Str(text.into()),
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: None,
+        op,
+    };
+    store
+        .transact(
+            &[datum("Root label", Op::Assert)],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[datum("Retired label", Op::Assert)],
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[
+                datum("Retired label", Op::Retract),
+                datum("Plane label", Op::Assert),
+            ],
+            "2026-01-02T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    for (g, expected) in [(0, "Root label"), (graph, "Plane label")] {
+        let mut proposed = vec![datum("incoming_slug", Op::Assert)];
+        let hints =
+            super::descriptions::keep_existing_node_labels(&mut store, g, &mut proposed).unwrap();
+        assert!(proposed.is_empty());
+        assert_eq!(hints.len(), 1);
+        assert_eq!(hints[0].1.len(), 1);
+        assert_eq!(hints[0].1[0].matched_on, format!("label kept: {expected}"));
+        assert_eq!(hints[0].1[0].iri, "urn:label:shared");
+    }
+    let mut same = vec![datum("Plane label", Op::Assert)];
+    assert!(
+        super::descriptions::keep_existing_node_labels(&mut store, graph, &mut same)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(same.len(), 1);
+    let mut unseen = vec![datum("incoming_slug", Op::Assert)];
+    assert!(
+        super::descriptions::keep_existing_node_labels(&mut store, fresh, &mut unseen)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        unseen.len(),
+        1,
+        "other graph's labels cannot suppress fresh labels"
+    );
+}
+
+#[test]
+fn label_followup_preserves_similarity_hints_and_noop() {
+    let mut store = Store::open_in_memory().unwrap();
+    let original = parse_episode(
+        r#"{"name":"retained-original","nodes":[{"name":"Known label","type":"Service"}]}"#,
+    );
+    ingest_episode(&mut store, &original, "2026-01-01T00:00:00Z", TEST_BASE_NS).unwrap();
+    let alias = parse_episode(
+        r#"{"name":"retained-alias","nodes":[{"name":"Known_label","type":"Service"}]}"#,
+    );
+    let opts = IngestResolutionOpts {
+        enabled: true,
+        threshold: 0.5,
+        top_k: 3,
+        strict_mode: false,
+    };
+    let result = ingest_episode_with_resolution(
+        &mut store,
+        &alias,
+        "2026-01-02T00:00:00Z",
+        TEST_BASE_NS,
+        Some(&opts),
+    )
+    .unwrap();
+    let reasons: Vec<_> = result
+        .resolution_hints
+        .iter()
+        .flat_map(|(_, cs)| cs.iter().map(|c| c.matched_on.as_str()))
+        .collect();
+    assert!(
+        reasons.iter().any(|s| s.starts_with("canonical_name:")),
+        "{reasons:?}"
+    );
+    assert!(reasons.contains(&"label kept: Known label"));
+    let replay = ingest_episode_with_resolution(
+        &mut store,
+        &alias,
+        "2026-01-03T00:00:00Z",
+        TEST_BASE_NS,
+        None,
+    )
+    .unwrap();
+    assert_eq!(replay.outcome, IngestOutcome::Unchanged);
+    assert!(
+        replay.resolution_hints.is_empty(),
+        "no new discarded assertion on idempotent replay"
+    );
+}
+
+#[test]
+fn label_followup_batches_many_subjects() {
+    use crate::{
+        store::Datum,
+        types::{Op, Value},
+    };
+    let mut store = Store::open_in_memory().unwrap();
+    let label = store.intern(namespace::RDFS_LABEL).unwrap();
+    let facts: Vec<_> = (0..300)
+        .map(|i| Datum {
+            entity: store.intern(&format!("urn:label:batch:{i}")).unwrap(),
+            attribute: label,
+            value: Value::Str(format!("Original {i}")),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    store
+        .transact(&facts, "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    let mut proposed: Vec<_> = facts
+        .into_iter()
+        .map(|mut d| {
+            d.value = Value::Str("incoming".into());
+            d
+        })
+        .collect();
+    let hints =
+        super::descriptions::keep_existing_node_labels(&mut store, 0, &mut proposed).unwrap();
+    assert!(proposed.is_empty());
+    assert_eq!(
+        hints.len(),
+        300,
+        "all batches must retain each subject's existing label"
+    );
+}
