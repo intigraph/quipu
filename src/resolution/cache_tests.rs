@@ -258,3 +258,67 @@ fn externally_changed_read_only_provider_never_reuses_cached_labels() {
         "uncertified attached lifetimes must use exact scans"
     );
 }
+
+#[test]
+fn reviewer_warm_delta_preserves_top_one_tied_candidate() {
+    let mut store = Store::open_in_memory().unwrap();
+    write(&mut store, 1, "Alice", Op::Assert);
+    write(&mut store, 2, "Alice", Op::Assert);
+    store.prepare_resolution_index().unwrap();
+    write(&mut store, 1, "ALICE", Op::Assert);
+    let cached = super::resolve_entity(&store, "Alice", &[], 1.0, 1).unwrap();
+    store.resolution_config_mut().cache_labels = false;
+    let exact = super::resolve_entity(&store, "Alice", &[], 1.0, 1).unwrap();
+    assert_eq!(
+        serde_json::to_value(cached).unwrap(),
+        serde_json::to_value(exact).unwrap()
+    );
+}
+
+#[test]
+fn tied_top_k_and_strict_target_match_across_cache_states() {
+    fn response(store: &Store, k: usize) -> serde_json::Value {
+        serde_json::to_value(super::resolve_entity(store, "Alice", &[], 1.0, k).unwrap()).unwrap()
+    }
+    fn strict(store: &Store) -> (serde_json::Value, Option<String>) {
+        let node = super::NodeQuery {
+            name: "Alice",
+            iri: "urn:new:Alice".into(),
+            properties: vec![],
+            declared_distinct: &[],
+        };
+        let r = super::resolve_nodes(store, &[node], 1.0, 1, true).unwrap();
+        (serde_json::to_value(r.hints).unwrap(), r.refusal)
+    }
+    let mut store = Store::open_in_memory().unwrap();
+    // Deliberately reverse numeric/insertion and lexical IRI order.
+    write(&mut store, 2, "Alice", Op::Assert);
+    write(&mut store, 11, "Alice", Op::Assert);
+    store.prepare_resolution_index().unwrap();
+    write(&mut store, 11, "ALICE", Op::Assert);
+    let warm = (response(&store, 1), response(&store, 3), strict(&store));
+    assert_eq!(warm.0["candidates"][0]["iri"], "urn:test:11");
+    assert_eq!(warm.1["candidates"][1]["iri"], "urn:test:2");
+    assert!(warm.2.1.is_some());
+    store.resolution_config_mut().cache_labels = false;
+    assert_eq!(
+        warm,
+        (response(&store, 1), response(&store, 3), strict(&store))
+    );
+    store.resolution_config_mut().cache_labels = true;
+    *store.resolution_cache.lock() = None;
+    assert_eq!(
+        warm,
+        (response(&store, 1), response(&store, 3), strict(&store))
+    );
+    store.prepare_resolution_index().unwrap();
+    let mut other = Store::open_in_memory().unwrap();
+    write(&mut other, 11, "Alice", Op::Assert);
+    write(&mut other, 2, "Alice", Op::Assert);
+    // Wrong-store cache key must fall back, never reuse a snapshot by shape.
+    other.resolution_cache = store.resolution_cache.clone();
+    assert_eq!(
+        warm,
+        (response(&other, 1), response(&other, 3), strict(&other))
+    );
+}

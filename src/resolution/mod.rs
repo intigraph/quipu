@@ -105,7 +105,7 @@ impl VectorScope {
 pub struct ResolutionResult {
     /// Whether any candidates exceeded the threshold.
     pub has_matches: bool,
-    /// Candidate entities sorted by descending score.
+    /// Candidate entities sorted by descending score, then ascending IRI for ties.
     pub candidates: Vec<EntityCandidate>,
     /// How much of a composed store the embedding half covered.
     pub vector_scope: VectorScope,
@@ -242,11 +242,14 @@ pub(crate) fn resolve_with_matches(
         candidates.retain(|c| !excused.contains(c.iri.as_str()));
     }
 
+    // SQL row order and cache delta insertion order are not selection policy.
+    // Use one explicit tie rule for cold/warm/stale/disabled paths before top_k.
     // Merge: deduplicate by IRI, keeping the highest score.
     candidates.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.iri.cmp(&b.iri))
     });
     dedup_by_iri(&mut candidates);
     candidates.truncate(top_k);
