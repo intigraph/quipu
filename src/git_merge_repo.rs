@@ -305,10 +305,43 @@ pub fn resolve(
 
 /// Mandatory CI verdict over immutable base/ours/theirs/result commits.
 pub fn check(repo: &Path, base: &str, ours: &str, theirs: &str, result: &str) -> Result<usize> {
+    check_snapshots(repo, base, ours, theirs, result, false)
+}
+
+/// Historical replay ignores export.nt fixtures that never declared a pack.
+/// The final CI verdict must still use `check`, including all malformed packs.
+pub fn check_history(
+    repo: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+    result: &str,
+) -> Result<usize> {
+    check_snapshots(repo, base, ours, theirs, result, true)
+}
+
+fn check_snapshots(
+    repo: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+    result: &str,
+    historical: bool,
+) -> Result<usize> {
     let r = refs(repo, base, ours, theirs)?;
     let result = commit(repo, result)?;
+    let snapshots = [r[0].as_str(), r[1].as_str(), r[2].as_str(), result.as_str()];
     let mut count = 0;
-    for dir in dirs(repo, &[&r[0], &r[1], &r[2], &result])? {
+    for dir in dirs(repo, &snapshots)? {
+        if historical {
+            let mut declared = false;
+            for snapshot in snapshots {
+                declared |= file(repo, snapshot, &format!("{dir}/manifest.json"))?.is_some();
+            }
+            if !declared {
+                continue;
+            }
+        }
         let (b, o, t, actual) = (
             pack(repo, &r[0], &dir)?,
             pack(repo, &r[1], &dir)?,
