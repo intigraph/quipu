@@ -291,6 +291,7 @@ fn routes_in_server_source() -> Vec<String> {
     // route moved into one of those fragments is still a registered route.
     let sources = [
         ("server.rs", include_str!("../server.rs")),
+        ("server/cors.rs", include_str!("../server/cors.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
         (
             "server/publication.rs",

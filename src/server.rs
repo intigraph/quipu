@@ -28,6 +28,8 @@ mod auth_response;
 mod background;
 #[path = "server/base.rs"]
 mod base;
+#[path = "server/cors.rs"]
+mod cors;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/feed.rs"]
@@ -371,28 +373,8 @@ async fn main() {
         eprintln!("server is READ-ONLY — write endpoints will return 403");
     }
 
-    // CORS: an allowlist restricts cross-origin requests when configured; an
-    // empty list preserves the prior allow-any behaviour. AUTHORIZATION is
-    // allowed so a browser can present the bearer token cross-origin.
     let cors_origins = config.server.cors_allowed_origins.clone();
-    let cors_base = if cors_origins.is_empty() {
-        tower_http::cors::CorsLayer::new().allow_origin(tower_http::cors::Any)
-    } else {
-        let origins: Vec<axum::http::HeaderValue> =
-            cors_origins.iter().filter_map(|o| o.parse().ok()).collect();
-        tower_http::cors::CorsLayer::new().allow_origin(origins)
-    };
-    let cors = cors_base
-        .expose_headers([axum::http::HeaderName::from_static("x-quipu-truncated")])
-        .allow_methods([
-            axum::http::Method::GET,
-            axum::http::Method::POST,
-            axum::http::Method::OPTIONS,
-        ])
-        .allow_headers([
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::AUTHORIZATION,
-        ]);
+    let cors = cors::layer(&cors_origins);
 
     if args.iter().any(|a| a == "--embed-backfill") {
         eprintln!("Running embedding backfill for all entities...");

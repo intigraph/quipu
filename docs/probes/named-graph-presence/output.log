@@ -1,0 +1,11 @@
+Script started on 2026-10-16 23:58:44-04:00 [COMMAND="bash docs/probes/named-graph-presence/run-demo.sh" <not executed on terminal>]
+BEFORE: synthetic 3,000-fact named graph, combined presence preflight
+test sparql::triple::named_limit_tests::named_graph_presence_preflight_work ... NAMED_PREFLIGHT entries=0 vm_steps=135088 elapsed_ms=63.443 rows=2
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 0.56s
+Observed exit 101 (expected 101); answer markers and header checked.
+AFTER: synthetic 3,000-fact named graph, combined presence preflight
+test sparql::triple::named_limit_tests::named_graph_presence_preflight_work ... NAMED_PREFLIGHT entries=3 vm_steps=74 elapsed_ms=0.265 rows=2
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2402 filtered out; finished in 0.30s
+Observed exit 0 (expected 0); answer markers and header checked.
+
+Script done on 2026-10-16 23:58:45-04:00 [COMMAND_EXIT_CODE="0"]

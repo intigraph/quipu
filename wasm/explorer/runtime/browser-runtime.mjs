@@ -1,3 +1,5 @@
+export { usePointerGraph } from "./pointers.mjs";
+
 // Browser-only adapters. No runtime, model, or remote request occurs at import.
 export class BrowserSemanticSearch {
   #pipeline;
