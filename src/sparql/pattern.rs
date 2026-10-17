@@ -230,13 +230,13 @@ pub fn eval_pattern_seeded(
             start,
             length,
         } => {
-            // LIMIT pushdown (quipu-0lr): when the subtree between here and
-            // the BGP is prefix-safe, the leaf may stop after start+len rows —
-            // solution order is unchanged, only completion is earlier. An
-            // OFFSET-only slice (no length) has no cap to push.
+            // Push only a prefix-safe subtree or a proven constant presence marker.
             let capped;
             let inner_ctx = match length {
-                Some(len) if limit_pushdown_safe(inner) => {
+                Some(len)
+                    if limit_pushdown_safe(inner)
+                        || super::limited_scan::named_presence(inner, ctx, seed) =>
+                {
                     capped = TemporalContext {
                         row_limit: Some(start.saturating_add(*len)),
                         ..ctx.clone()
