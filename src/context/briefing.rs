@@ -27,7 +27,7 @@ fn scope(store: &Store, graph: &str) -> Result<i64> {
 
 fn local(predicate: &str) -> String {
     predicate
-        .rsplit(['/', '#'])
+        .rsplit(['/', '#', ':'])
         .next()
         .unwrap_or(predicate)
         .chars()
