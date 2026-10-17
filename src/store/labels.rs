@@ -753,22 +753,6 @@ impl Store {
         Ok(())
     }
 
-    /// Every named graph's id (`g <> 0`, excluding the reserved meta-graph).
-    ///
-    /// The meta-graph is excluded deliberately: it holds labels *about* graphs,
-    /// so folding its own label into a dataset that merely ranges over "all
-    /// named graphs" would be a category error.
-    pub fn all_named_graph_ids(&self) -> Result<Vec<i64>> {
-        let meta_g = self.meta_graph_id()?;
-        let mut stmt = self
-            .conn
-            .prepare("SELECT g FROM graphs WHERE g <> 0 AND g <> ?1")?;
-        let ids = stmt
-            .query_map(params![meta_g], |r| r.get::<_, i64>(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        Ok(ids)
-    }
-
     /// Recompute every graph's label from the meta-graph facts and report where
     /// the cache disagrees. The source of truth is RDF; a non-empty result
     /// means the cache is wrong, never the other way round.

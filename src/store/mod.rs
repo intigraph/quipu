@@ -27,6 +27,7 @@ pub mod labels_advisory;
 mod literal_identity;
 mod literal_overlay;
 mod migrate;
+mod named_graphs;
 mod open;
 pub(crate) use open::open_file_immutable;
 mod graph_creation;

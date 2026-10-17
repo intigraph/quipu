@@ -1424,3 +1424,102 @@ fn kind_cache_drift_is_reported_on_the_kind_axis() {
     assert_eq!(drift[0].rdf, "operational");
     assert_eq!(drift[0].cached, "archive");
 }
+
+#[test]
+fn smdlnm_registered_companions_are_excluded_from_all_named_graph_ids() {
+    let store = Store::open_in_memory().unwrap();
+    let ordinary = store.graph_create("urn:test:asserted").unwrap();
+    let near = store.graph_create("urn:test:asserted-inferred").unwrap();
+    let upper = store.graph_create("urn:test:asserted#INFERRED").unwrap();
+    for iri in [
+        "urn:quipu:graph:root#inferred",
+        "urn:test:asserted#inferred",
+        "urn:test:asserted#fragment-inferred",
+    ] {
+        let companion = store.graph_create(iri).unwrap();
+        let ids = store.all_named_graph_ids().unwrap();
+        assert!(!ids.contains(&companion), "reserved companion {iri} leaked");
+        assert!(
+            ids.contains(&ordinary),
+            "asserted positive control disappeared"
+        );
+        assert!(ids.contains(&near), "non-reserved suffix disappeared");
+        assert!(
+            ids.contains(&upper),
+            "IRI suffix matching must be case-sensitive"
+        );
+    }
+}
+
+#[test]
+fn smdlnm_graph_variable_excludes_companions_but_explicit_names_include_them() {
+    let mut store = Store::open_in_memory().unwrap();
+    let asserted = store.graph_create("urn:test:asserted").unwrap();
+    let inferred = store.graph_create("urn:test:asserted#inferred").unwrap();
+    let predicate = store.intern("urn:test:p").unwrap();
+    let object = store.intern("urn:test:o").unwrap();
+    for (graph, subject) in [
+        (asserted, "urn:test:assertion"),
+        (inferred, "urn:test:derivation"),
+    ] {
+        let entity = store.intern(subject).unwrap();
+        store
+            .transact_to_graph(
+                &[Datum {
+                    entity,
+                    attribute: predicate,
+                    value: Value::Ref(object),
+                    valid_from: TS.to_string(),
+                    valid_to: None,
+                    op: Op::Assert,
+                }],
+                TS,
+                None,
+                Some(crate::store::inferred::PLANE_SOURCE),
+                graph,
+            )
+            .unwrap();
+    }
+    let leaf = crate::sparql::query_temporal(
+        &store,
+        "SELECT ?s WHERE { ?s <urn:test:p> <urn:test:o> }",
+        &crate::sparql::TemporalContext {
+            graph: crate::sparql::GraphScope::AnyNamed {
+                var: "g".into(),
+                restrict: None,
+            },
+            ..crate::sparql::TemporalContext::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        leaf.rows().len(),
+        1,
+        "unrestricted SQL leaf exposed inference"
+    );
+    let unrestricted = crate::sparql::query(
+        &store,
+        "SELECT ?s WHERE { GRAPH ?g { ?s <urn:test:p> <urn:test:o> } }",
+    )
+    .unwrap();
+    assert_eq!(unrestricted.rows().len(), 1, "GRAPH ?g exposed inference");
+    assert_eq!(
+        unrestricted.rows()[0]["s"],
+        Value::Ref(store.lookup("urn:test:assertion").unwrap().unwrap())
+    );
+    for query in [
+        "SELECT ?s FROM NAMED <urn:test:asserted#inferred> WHERE { GRAPH ?g { ?s <urn:test:p> <urn:test:o> } }",
+        "SELECT ?s WHERE { GRAPH <urn:test:asserted#inferred> { ?s <urn:test:p> <urn:test:o> } }",
+    ] {
+        let explicit = crate::sparql::query(&store, query).unwrap();
+        assert_eq!(
+            explicit.rows().len(),
+            1,
+            "explicit inferred control disappeared"
+        );
+        assert_eq!(
+            explicit.rows()[0]["s"],
+            Value::Ref(store.lookup("urn:test:derivation").unwrap().unwrap())
+        );
+    }
+}

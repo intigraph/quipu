@@ -27,3 +27,6 @@
 # config the attribute is inert and Git diffs the raw lines as before.
 *.nt diff=quipu
 *.nq diff=quipu
+
+# Preserve the literal PTY recording while retaining other whitespace checks.
+docs/probes/pr-demos/inferred-registry-filter/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

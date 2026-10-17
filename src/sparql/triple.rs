@@ -358,6 +358,8 @@ fn visit_triple_pattern_limited(
                         .lookup(crate::namespace::META_GRAPH_IRI)?
                         .unwrap_or(-1);
                     sql_params.push(Box::new(meta_g));
+                    // Registration must not implicitly admit engine-derived data.
+                    conditions.push(store.inferred_graph_exclusion_sql());
                 }
                 Some(ids) => conditions.push(sql_graph_in(ids, &mut sql_params)),
             }
