@@ -1,0 +1,42 @@
+Script started on 2026-10-16 16:07:28-04:00 [COMMAND="bash run-demo.sh" <not executed on terminal>]
+Private fixture: one carried-forward tombstone; unrelated keep fact present
+
+Baseline 21bd8e8e: same revoke command against private fixture
+composition error: unknown compose option: --revoke-tombstone
+Baseline exit: 1 (expected 1: unsupported option)
+
+Candidate: same command and same private database
+{
+  "repo": "scbrown/demo",
+  "pack_key": "packs/main",
+  "statement": "<urn:a> <urn:q> \"secret\" .",
+  "revoked": true,
+  "graphs_restored": 1,
+  "reason": "undo-local-retraction"
+}
+
+Visible fact and unrelated positive control:
+p	o
+----------------------------------------
+urn:q	"secret"
+urn:r	"keep"
+
+2 results
+
+Repeat (idempotent):
+{
+  "repo": "scbrown/demo",
+  "pack_key": "packs/main",
+  "statement": "<urn:a> <urn:q> \"secret\" .",
+  "revoked": false,
+  "graphs_restored": 0,
+  "reason": "undo-local-retraction"
+}
+
+Conflicting rollback/revoke action must refuse:
+composition error: invalid or repeated revocation option, or missing value: --rollback
+Conflicting action exit: 1 (expected 1)
+
+Private CLI demonstration PASS; no live endpoint used.
+
+Script done on 2026-10-16 16:07:28-04:00 [COMMAND_EXIT_CODE="0"]
