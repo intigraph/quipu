@@ -1,0 +1,9 @@
+Retained actual baseline stdout on b7068fdf; synthetic providers, no live service.
+Dimension-swap PASS is the existing refusal, not a rebuild. Same-dimension FAIL reproduces the identity gap.
+No baseline timing was recorded.
+
+MODEL_SWAP queued=0 current_dimensions=[8] search_refused=true
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2397 filtered out; finished in 0.01s
+SAME_DIMENSION_MODEL_SWAP queued=0 search_error=None
+same-dimension model swap silently retains old-model vectors
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2398 filtered out; finished in 0.02s

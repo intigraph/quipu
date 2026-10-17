@@ -601,6 +601,14 @@ pub(crate) fn backfill_embeddings(
         // embedded rather than overwritten or silently skipped.
         {
             let s = store.lock();
+            if !s
+                .embedding_provider()
+                .is_some_and(|current| std::sync::Arc::ptr_eq(&current, &provider))
+            {
+                return Err(
+                    "embedding provider changed during backfill; restart explicitly".into(),
+                );
+            }
             let vs = s.vector_store();
             for ((eid, text, version), emb) in snapshots.iter().zip(embs.iter()) {
                 let current_facts = s.entity_facts(*eid).map_err(|e| e.to_string())?;
@@ -615,8 +623,14 @@ pub(crate) fn backfill_embeddings(
                 // the prior current row first; otherwise both remain current and
                 // the search text lookup may return the obsolete one (aegis-eldb1).
                 vs.close_embedding(*eid, &ts).map_err(|e| e.to_string())?;
-                vs.embed_entity(*eid, text, emb, &ts)
-                    .map_err(|e| e.to_string())?;
+                vs.embed_entity_identified(
+                    *eid,
+                    text,
+                    emb,
+                    &ts,
+                    quipu::embedding::embedding_model_identity(provider.as_ref()).as_deref(),
+                )
+                .map_err(|e| e.to_string())?;
                 embedded += 1;
             }
         }

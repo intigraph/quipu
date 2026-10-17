@@ -25,6 +25,7 @@ struct State {
     snapshot: Option<Snapshot>,
     failures: u64,
     duration: f64,
+    model_counts: Option<(u64, u64)>,
 }
 
 /// Owned by one served store, so neither values nor refresh failures leak
@@ -66,6 +67,7 @@ impl GraphMetrics {
     pub(crate) fn render(&self) -> String {
         let state = self.state.lock();
         let (snapshot, failures, duration) = (state.snapshot, state.failures, state.duration);
+        let state_model_counts = state.model_counts;
         drop(state);
         // Keep the WAL gauge current without acquiring any database connection.
         // Missing/unreadable files remain unknown, never a fabricated zero.
@@ -76,6 +78,22 @@ impl GraphMetrics {
             .map(|m| m.len());
         let mut body = quipu::metrics::metrics()
             .render_with_graph_counts(snapshot.map(|s| s.counts), wal_bytes);
+        body.push_str("# HELP quipu_embedding_model_counts_ready Whether the backend reports current vector model provenance.\n# TYPE quipu_embedding_model_counts_ready gauge\n");
+        let _ = writeln!(
+            body,
+            "quipu_embedding_model_counts_ready {}",
+            u8::from(state_model_counts.is_some())
+        );
+        if let Some((mismatch, unknown)) = state_model_counts {
+            let _ = writeln!(
+                body,
+                "# HELP quipu_embedding_model_mismatch_vectors Current vectors from a different known model.\n# TYPE quipu_embedding_model_mismatch_vectors gauge\nquipu_embedding_model_mismatch_vectors {mismatch}"
+            );
+            let _ = writeln!(
+                body,
+                "# HELP quipu_embedding_model_unknown_vectors Current vectors whose model or configured provider identity is unknown.\n# TYPE quipu_embedding_model_unknown_vectors gauge\nquipu_embedding_model_unknown_vectors {unknown}"
+            );
+        }
         body.push_str("# HELP quipu_graph_counts_ready Whether a graph-count refresh has succeeded.\n# TYPE quipu_graph_counts_ready gauge\n");
         let _ = writeln!(
             body,
@@ -117,12 +135,25 @@ pub(crate) fn spawn_refresh(store: &SharedStore) {
             let Some(store) = weak.upgrade() else { break };
             let started = Instant::now();
             let reader = store.clone();
-            let result = tokio::task::spawn_blocking(move || reader.read().graph_counts()).await;
-            let result = result.unwrap_or_else(|e| {
-                Err(quipu::Error::InvalidValue(format!(
-                    "graph metrics task failed: {e}"
-                )))
+            let result = tokio::task::spawn_blocking(move || {
+                let s = reader.read();
+                let identity = s
+                    .embedding_provider()
+                    .as_deref()
+                    .and_then(quipu::embedding::embedding_model_identity);
+                let models = s.vector_store().embedding_model_counts(identity.as_deref());
+                (s.graph_counts(), models)
+            })
+            .await;
+            let (result, models) = result.unwrap_or_else(|e| {
+                (
+                    Err(quipu::Error::InvalidValue(format!(
+                        "graph metrics task failed: {e}"
+                    ))),
+                    Ok(None),
+                )
             });
+            store.graph_metrics.state.lock().model_counts = models.ok().flatten();
             store.graph_metrics.record(result, started);
             drop(store);
             tokio::time::sleep(REFRESH_INTERVAL).await;

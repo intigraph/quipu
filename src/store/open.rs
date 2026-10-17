@@ -224,6 +224,7 @@ impl Store {
         conn.execute_batch(INIT_SQL)?;
         Self::ensure_store_identity(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
+        crate::vector::model_identity::migrate(&conn)?;
         // Frozen packs re-attach on every open (deep freeze): read the
         // registry BEFORE attach_all so the caller's attachments and the
         // frozen ones verify as one composition. The table is read via a

@@ -10,6 +10,7 @@ use ndarray::Array2;
 use ort::ep::CPU;
 use ort::session::Session;
 use ort::value::Tensor;
+use sha2::{Digest, Sha256};
 use tokenizers::{PaddingStrategy, Tokenizer};
 
 use crate::embedding::EmbeddingProvider;
@@ -20,8 +21,21 @@ pub struct OnnxEmbeddingProvider {
     session: Mutex<Session>,
     tokenizer: Tokenizer,
     dim: usize,
+    model_identity: Option<String>,
     /// Hard cap on input tokens; longer inputs are truncated (hq-7v0).
     max_seq_len: usize,
+}
+
+fn model_revision(model: &[u8], tokenizer: &[u8], dimension: usize, max_seq_len: usize) -> String {
+    let mut hash = Sha256::new();
+    hash.update(b"quipu-onnx-mean-pool-normalized-v1");
+    hash.update((model.len() as u64).to_le_bytes());
+    hash.update(model);
+    hash.update((tokenizer.len() as u64).to_le_bytes());
+    hash.update(tokenizer);
+    hash.update((dimension as u64).to_le_bytes());
+    hash.update((max_seq_len as u64).to_le_bytes());
+    format!("sha256:{:x}", hash.finalize())
 }
 
 impl OnnxEmbeddingProvider {
@@ -39,25 +53,50 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
     ) -> Result<Self> {
-        let session = Session::builder()
-            .and_then(|b| b.with_intra_threads(1))
-            // Request shapes vary with batch size and token length. ORT's CPU
-            // arena and memory-pattern cache otherwise retain the largest
-            // allocation. Under sustained embedding traffic that correlated
-            // with monotonic RSS growth to the service cap and >100% CPU
-            // (aegis-2s6xpb). Prefer returning allocations to the OS over
-            // optimizing a shape that is not stable between requests.
-            .and_then(|b| b.with_memory_pattern(false))
-            .and_then(|b| {
-                b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
-            })
-            .and_then(|b| b.commit_from_file(model_path))
-            .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
-
-        let mut tokenizer = Tokenizer::from_file(tokenizer_path)
-            .map_err(|e| crate::Error::Store(format!("Tokenizer load failed: {e}")))?;
-
+        // Hash exactly the bytes used to construct an in-memory model/tokenizer.
+        // File-backed external-weight models retain support but remain UNKNOWN:
+        // hashing only the ONNX manifest would falsely identify external weights.
+        let model_bytes = std::fs::read(model_path)
+            .map_err(|e| crate::Error::Store(format!("Model read failed: {e}")))?;
+        let tokenizer_bytes = std::fs::read(tokenizer_path)
+            .map_err(|e| crate::Error::Store(format!("Tokenizer read failed: {e}")))?;
         let max_seq_len = if max_seq_len == 0 { 256 } else { max_seq_len };
+        let builder = || {
+            Session::builder()
+                .and_then(|b| b.with_intra_threads(1))
+                // Request shapes vary with batch size and token length. ORT's CPU
+                // arena and memory-pattern cache otherwise retain the largest
+                // allocation. Under sustained embedding traffic that correlated
+                // with monotonic RSS growth to the service cap and >100% CPU
+                // (aegis-2s6xpb). Prefer returning allocations to the OS over
+                // optimizing a shape that is not stable between requests.
+                .and_then(|b| b.with_memory_pattern(false))
+                .and_then(|b| {
+                    b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
+                })
+        };
+        let (session, model_identity) = match builder()
+            .and_then(|b| b.commit_from_memory(&model_bytes))
+        {
+            Ok(session) => (
+                session,
+                Some(model_revision(
+                    &model_bytes,
+                    &tokenizer_bytes,
+                    dim,
+                    max_seq_len,
+                )),
+            ),
+            Err(_) => (
+                builder()
+                    .and_then(|b| b.commit_from_file(model_path))
+                    .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?,
+                None,
+            ),
+        };
+
+        let mut tokenizer = Tokenizer::from_bytes(&tokenizer_bytes)
+            .map_err(|e| crate::Error::Store(format!("Tokenizer load failed: {e}")))?;
 
         // Truncate at the tokenizer so encodings never exceed the model's
         // sequence limit (hq-7v0). Without this, a long episode_body produces an
@@ -74,6 +113,7 @@ impl OnnxEmbeddingProvider {
             session: Mutex::new(session),
             tokenizer,
             dim,
+            model_identity,
             max_seq_len,
         })
     }
@@ -213,6 +253,9 @@ fn use_batch_longest_padding(tokenizer: &mut Tokenizer) {
 }
 
 impl EmbeddingProvider for OnnxEmbeddingProvider {
+    fn model_identity(&self) -> Option<String> {
+        self.model_identity.clone()
+    }
     fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let results = self.embed_batch_inner(&[text])?;
         results
@@ -233,6 +276,20 @@ impl EmbeddingProvider for OnnxEmbeddingProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn revision_tracks_model_tokenizer_dimension_and_preprocessing() {
+        let original = model_revision(b"model-a", b"tokenizer-a", 8, 256);
+        assert_eq!(original, model_revision(b"model-a", b"tokenizer-a", 8, 256));
+        for changed in [
+            model_revision(b"model-b", b"tokenizer-a", 8, 256),
+            model_revision(b"model-a", b"tokenizer-b", 8, 256),
+            model_revision(b"model-a", b"tokenizer-a", 16, 256),
+            model_revision(b"model-a", b"tokenizer-a", 8, 128),
+        ] {
+            assert_ne!(original, changed);
+        }
+    }
 
     #[test]
     fn fixed_model_padding_is_replaced_with_batch_longest() {

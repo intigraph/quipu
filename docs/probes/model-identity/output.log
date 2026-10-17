@@ -1,0 +1,23 @@
+Script started on 2026-10-16 21:50:17-04:00 [COMMAND="bash docs/probes/model-identity/run-demo.sh" <not executed on terminal>]
+Synthetic source fixture: unchanged text, Dummy8 -> different16 or different8.
+Observe queued vectors and current dimensions; no service or model download.
+$MODEL_IDENTITY_TEST_BIN swap_republish_rebuilds_or_surfaces_mismatch --nocapture
+
+running 2 tests
+MODEL_SWAP queued=1 current_dimensions=[16] search_refused=false error=None
+test embedding::tests::model_dimension_swap_republish_rebuilds_or_surfaces_mismatch ... ok
+SAME_DIMENSION_MODEL_SWAP queued=1 search_error=None
+test embedding::tests::same_dimension_model_swap_republish_rebuilds_or_surfaces_mismatch ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2404 filtered out; finished in 0.03s
+
+Control: partial rebuild, provider rollback and raw writes keep mismatched/UNKNOWN provenance observable.
+$MODEL_IDENTITY_TEST_BIN --exact embedding::tests::model_provenance_counts_partial_rebuild_and_raw_overwrite
+
+running 1 test
+test embedding::tests::model_provenance_counts_partial_rebuild_and_raw_overwrite ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2405 filtered out; finished in 0.03s
+
+
+Script done on 2026-10-16 21:50:18-04:00 [COMMAND_EXIT_CODE="0"]

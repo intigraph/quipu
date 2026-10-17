@@ -77,6 +77,14 @@ pub(crate) fn backfill_graph_embeddings(
         let texts: Vec<&str> = snapshots.iter().map(|(_, text)| text.as_str()).collect();
         let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
         let s = store.lock();
+        if !s
+            .embedding_provider()
+            .is_some_and(|current| std::sync::Arc::ptr_eq(&current, &provider))
+        {
+            return Err(
+                "embedding provider changed during graph backfill; restart explicitly".into(),
+            );
+        }
         let vs = s.vector_store();
         for ((eid, text), emb) in snapshots.iter().zip(embs.iter()) {
             let current =
@@ -102,8 +110,14 @@ pub(crate) fn backfill_graph_embeddings(
             // Vector validity is compared to ISO fact/query cutoffs. Numeric
             // epoch strings sort before ISO years and leak later text backwards.
             // Stamp after rechecking the snapshot, at this batch's actual apply.
-            vs.embed_entity(*eid, text, emb, &quipu::time::now_iso())
-                .map_err(|e| e.to_string())?;
+            vs.embed_entity_identified(
+                *eid,
+                text,
+                emb,
+                &quipu::time::now_iso(),
+                quipu::embedding::embedding_model_identity(provider.as_ref()).as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
             embedded += 1;
         }
     }

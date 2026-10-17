@@ -116,3 +116,22 @@ async fn startup_refresh_runs_without_a_scrape() {
     assert!(counts.1 > 0, "control: the seeded graph must contain facts");
     assert_eq!(counts, shared.read().graph_counts().unwrap());
 }
+
+#[test]
+fn model_metrics_distinguish_unsupported_from_zero_and_unknown_rows() {
+    let cache = GraphMetrics::new(":memory:");
+    let unsupported = cache.render();
+    assert!(unsupported.contains("quipu_embedding_model_counts_ready 0\n"));
+    assert!(!unsupported.contains("quipu_embedding_model_mismatch_vectors 0\n"));
+    cache.state.lock().model_counts = Some((2, 3));
+    let reported = cache.render();
+    assert!(reported.contains("quipu_embedding_model_counts_ready 1\n"));
+    assert!(reported.contains("quipu_embedding_model_mismatch_vectors 2\n"));
+    assert!(reported.contains("quipu_embedding_model_unknown_vectors 3\n"));
+    cache.state.lock().model_counts = None;
+    assert!(
+        !cache
+            .render()
+            .contains("quipu_embedding_model_mismatch_vectors 2\n")
+    );
+}

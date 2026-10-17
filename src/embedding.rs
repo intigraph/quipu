@@ -34,6 +34,12 @@ pub trait EmbeddingProvider: Send + Sync {
 
     /// Return the embedding dimension (e.g. 384 for all-MiniLM-L6-v2).
     fn dimension(&self) -> usize;
+
+    /// Immutable model/tokenizer/preprocessing revision for this provider lifetime.
+    /// None explicitly means UNKNOWN. Names or paths without revision are insufficient.
+    fn model_identity(&self) -> Option<String> {
+        None
+    }
 }
 
 /// What to configure when no [`EmbeddingProvider`] is attached (quipu #53).
@@ -193,13 +199,33 @@ pub(crate) fn touched_entity_ids(datums: &[Datum]) -> Vec<i64> {
 /// step can detect staleness: if another transaction changed the entity in
 /// the window between collect and apply, the stale vector is SKIPPED — the
 /// later writer's own embed pass owns that entity now.
-#[derive(Debug)]
 pub struct DeferredEmbed {
     /// `(entity_id, text-as-of-collect)` for each entity needing a vector.
     items: Vec<(i64, String)>,
     /// The originating transaction's timestamp; vectors carry it so the
     /// deferred path stamps embeddings exactly as the inline path would.
     timestamp: String,
+    /// Provider captured at collection; pointer identity also fences UNKNOWN providers.
+    provider: Option<Arc<dyn EmbeddingProvider>>,
+    model_identity: Option<String>,
+}
+
+impl std::fmt::Debug for DeferredEmbed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeferredEmbed")
+            .field("items", &self.items)
+            .field("timestamp", &self.timestamp)
+            .field("model_identity", &self.model_identity)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Known provider revision, including dimension as part of the vector space.
+pub fn embedding_model_identity(provider: &dyn EmbeddingProvider) -> Option<String> {
+    provider
+        .model_identity()
+        .filter(|id| !id.is_empty())
+        .map(|id| format!("{}:{id}", provider.dimension()))
 }
 
 impl DeferredEmbed {
@@ -221,8 +247,27 @@ impl DeferredEmbed {
     /// a drain). Later items win on staleness anyway, so order is preserved
     /// but not load-bearing.
     pub(crate) fn merge(&mut self, mut other: DeferredEmbed) {
+        // No computation has happened yet: the latest provider computes ALL
+        // pending texts. Apply still checks each text against current facts.
+        if !same_provider(&self.provider, &other.provider)
+            || self.model_identity != other.model_identity
+        {
+            self.provider = other.provider.clone();
+            self.model_identity = other.model_identity.clone();
+        }
         self.items.append(&mut other.items);
         self.timestamp = other.timestamp;
+    }
+}
+
+fn same_provider(
+    a: &Option<Arc<dyn EmbeddingProvider>>,
+    b: &Option<Arc<dyn EmbeddingProvider>>,
+) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+        (None, None) => true,
+        _ => false,
     }
 }
 
@@ -239,6 +284,8 @@ pub(crate) fn collect_embed_work(
     // Route vector writes through the configured backend (LanceDB, delegate,
     // or built-in SQLite) so auto-embed works with any vector backend.
     let vs = store.vector_store();
+    let provider = store.embedding_provider();
+    let model_identity = provider.as_deref().and_then(embedding_model_identity);
 
     // Determine which entities had retractions (need close_embedding).
     let retracted: BTreeSet<i64> = datums
@@ -264,7 +311,9 @@ pub(crate) fn collect_embed_work(
             }
             continue;
         }
-        if vs.current_embedding_text(eid)?.as_deref() == Some(text.as_str()) {
+        if let Some(identity) = model_identity.as_deref()
+            && vs.current_embedding_matches(eid, &text, identity)?
+        {
             continue;
         }
         // Close the old embedding before creating a new one.
@@ -280,6 +329,8 @@ pub(crate) fn collect_embed_work(
     Ok(DeferredEmbed {
         items,
         timestamp: timestamp.to_string(),
+        provider,
+        model_identity,
     })
 }
 
@@ -297,6 +348,12 @@ pub(crate) fn apply_deferred_embed(
     work: &DeferredEmbed,
     embeddings: &[Vec<f32>],
 ) -> Result<usize> {
+    let provider = store.embedding_provider();
+    if !same_provider(&work.provider, &provider)
+        || work.model_identity != provider.as_deref().and_then(embedding_model_identity)
+    {
+        return Ok(0);
+    }
     let vs = store.vector_store();
     let mut written = 0;
     for ((eid, text), emb) in work.items.iter().zip(embeddings.iter()) {
@@ -305,7 +362,13 @@ pub(crate) fn apply_deferred_embed(
             continue; // stale — a newer writer owns this entity's embedding
         }
         store.mark_named_search_embedding(*eid)?;
-        vs.embed_entity(*eid, text, emb, &work.timestamp)?;
+        vs.embed_entity_identified(
+            *eid,
+            text,
+            emb,
+            &work.timestamp,
+            work.model_identity.as_deref(),
+        )?;
         written += 1;
     }
     Ok(written)
@@ -341,7 +404,13 @@ pub(crate) fn auto_embed_entities(
 
         for ((eid, text), emb) in chunk.iter().zip(embeddings.iter()) {
             store.mark_named_search_embedding(*eid)?;
-            vs.embed_entity(*eid, text, emb, timestamp)?;
+            vs.embed_entity_identified(
+                *eid,
+                text,
+                emb,
+                timestamp,
+                embedding_model_identity(provider.as_ref()).as_deref(),
+            )?;
             embedded += 1;
         }
     }

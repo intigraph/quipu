@@ -112,3 +112,49 @@ Only the semantic half. Everything lexical keeps working:
 error naming the missing configuration, rather than an empty result set. You
 can also bypass the provider entirely by passing a pre-computed `embedding`
 array.
+
+### Model identity and unchanged text
+
+The built-in SQLite vector backend records a nullable model identity on each
+new embedding. Automatic embedding skips unchanged text only when both the text
+and a **known** model identity match. Changing the model, tokenizer, configured
+dimension or token limit therefore makes touched entities eligible for embedding
+again, even when their text is identical. This does not automatically rebuild the
+whole store; use the explicit embedding backfill to rebuild untouched entities.
+A failed or partial backfill leaves the remaining old-model vectors observable.
+Switching back to a previous provider does not certify a mixed store as current.
+
+`EmbeddingProvider::model_identity()` must describe an immutable model,
+tokenizer and preprocessing revision for the provider's lifetime. Its default is
+`None` (UNKNOWN); a model name or file path alone is insufficient. The standalone
+ONNX provider hashes the exact model/tokenizer bytes loaded into an in-memory
+session, dimension, token limit and pooling/normalization revision. Models that
+need file-backed external weights remain supported with UNKNOWN identity.
+UNKNOWN providers re-embed touched entities instead of skipping unchanged text.
+
+Legacy vectors, low-level writes without identity and vector backends that do
+not implement provenance are not silently assigned the configured model's
+identity. Rebuilding produces provenance where the backend supports it. Portable
+archive/import paths that copy only the vector fields also yield UNKNOWN.
+SQLite's migration adds a nullable column on writable open; read-only opens do
+not migrate. Older binaries can read the additive column, but writes from them
+carry no identity and need verification or backfill after returning to a newer
+binary. Deferred results are discarded if their provider changes before apply;
+a backfill refuses provider replacement rather than stamping old results with a
+new identity.
+
+The server caches provenance counts with its background graph metrics:
+
+- `quipu_embedding_model_mismatch_vectors`: current vectors with a different
+  known model identity.
+- `quipu_embedding_model_unknown_vectors`: current vectors without identity,
+  or all current vectors when the configured provider identity is UNKNOWN.
+- `quipu_embedding_model_counts_ready`: 1 when the backend reports these counts;
+  0 when unsupported, not yet measured, or the refresh failed. Unavailable counts
+  are omitted rather than reported as zero.
+
+Scraping these metrics does not scan vectors or acquire a store connection.
+There are no model-hash labels. Counts are observations, not proof of whole-store
+rebuild completion, and they do not by themselves disable semantic search.
+Older strict-schema maintenance tools may refuse the additional column; verify
+archive and migration compatibility before using them after a rollback.

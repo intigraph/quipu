@@ -9,6 +9,9 @@ use crate::vector::KnowledgeVectorStore;
 struct DummyProvider;
 
 impl EmbeddingProvider for DummyProvider {
+    fn model_identity(&self) -> Option<String> {
+        Some("dummy-text-sine-v1".into())
+    }
     fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let seed = text.len() as f32;
         Ok((0..8).map(|i| (seed + i as f32 * 0.1).sin()).collect())
@@ -129,7 +132,7 @@ ex:bob rdfs:label "Bob" .
     assert_eq!(work.texts().len(), 2);
 
     // Phase 2 (lock-free in the server) + phase 3.
-    let provider: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+    let provider = store.embedding_provider().unwrap();
     let embeddings = provider.embed_batch(&work.texts()).unwrap();
     let written = store.apply_deferred_embed(&work, &embeddings).unwrap();
     assert_eq!(written, 2);
@@ -537,7 +540,7 @@ fn republish_and_drain(store: &mut Store, turtle: &str, timestamp: &str) -> Vec<
         return Vec::new();
     };
     let texts: Vec<String> = work.texts().iter().map(|t| (*t).to_string()).collect();
-    let provider: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+    let provider = store.embedding_provider().unwrap();
     let embeddings = provider.embed_batch(&work.texts()).unwrap();
     store.apply_deferred_embed(&work, &embeddings).unwrap();
     texts
@@ -660,4 +663,257 @@ fn root_text_ignores_the_entitys_named_graph_facts() {
     );
     let id = store.lookup("http://example.org/alice").unwrap().unwrap();
     assert_eq!(build_entity_text(&store, id).unwrap(), "Alice");
+}
+
+#[test]
+fn model_dimension_swap_republish_rebuilds_or_surfaces_mismatch() {
+    struct DifferentDimension;
+    impl EmbeddingProvider for DifferentDimension {
+        fn model_identity(&self) -> Option<String> {
+            Some("different-dimension-v1".into())
+        }
+        fn embed_text(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![0.25; 16])
+        }
+        fn dimension(&self) -> usize {
+            16
+        }
+    }
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    let snapshot = "<http://ex/model> <http://www.w3.org/2000/01/rdf-schema#label> \"unchanged model fixture\" .";
+    assert_eq!(
+        republish_and_drain(&mut store, snapshot, "2026-10-17T01:00:00Z").len(),
+        1
+    );
+    store.set_embedding_provider(Arc::new(DifferentDimension));
+    let queued = republish_and_drain(&mut store, snapshot, "2026-10-17T01:01:00Z");
+    let dimensions: Vec<i64> = store
+        .conn
+        .prepare("SELECT length(embedding) / 4 FROM vectors WHERE valid_to IS NULL")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    let searched = store.vector_search(&[0.25; 16], 10, None);
+    let refused = searched.is_err();
+    println!(
+        "MODEL_SWAP queued={} current_dimensions={dimensions:?} search_refused={refused} error={:?}",
+        queued.len(),
+        searched.err()
+    );
+    assert!(
+        refused || (!queued.is_empty() && dimensions.iter().all(|&d| d == 16)),
+        "unchanged republish silently retains old-model vectors"
+    );
+}
+
+#[test]
+fn same_dimension_model_swap_republish_rebuilds_or_surfaces_mismatch() {
+    struct DifferentModel;
+    impl EmbeddingProvider for DifferentModel {
+        fn model_identity(&self) -> Option<String> {
+            Some("different-model-v1".into())
+        }
+        fn embed_text(&self, _text: &str) -> Result<Vec<f32>> {
+            Ok(vec![0.25; 8])
+        }
+        fn dimension(&self) -> usize {
+            8
+        }
+    }
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    let snapshot = "<http://ex/model> <http://www.w3.org/2000/01/rdf-schema#label> \"unchanged model fixture\" .";
+    assert_eq!(
+        republish_and_drain(&mut store, snapshot, "2026-10-17T01:00:00Z").len(),
+        1
+    );
+    store.set_embedding_provider(Arc::new(DifferentModel));
+    let queued = republish_and_drain(&mut store, snapshot, "2026-10-17T01:01:00Z");
+    let searched = store.vector_search(&[0.25; 8], 10, None);
+    println!(
+        "SAME_DIMENSION_MODEL_SWAP queued={} search_error={:?}",
+        queued.len(),
+        searched.as_ref().err()
+    );
+    assert!(
+        searched.is_err() || !queued.is_empty(),
+        "same-dimension model swap silently retains old-model vectors"
+    );
+}
+
+#[test]
+fn model_provenance_counts_partial_rebuild_and_raw_overwrite() {
+    let store = Store::open_in_memory().unwrap();
+    let vs = store.vector_store();
+    vs.embed_entity_identified(1, "one", &[1.0; 8], "1", Some("8:model-a"))
+        .unwrap();
+    vs.embed_entity_identified(2, "two", &[1.0; 8], "1", Some("8:model-a"))
+        .unwrap();
+    assert_eq!(
+        vs.embedding_model_counts(Some("8:model-b")).unwrap(),
+        Some((2, 0))
+    );
+    vs.close_embedding(1, "2").unwrap();
+    vs.embed_entity_identified(1, "one", &[2.0; 8], "2", Some("8:model-b"))
+        .unwrap();
+    assert_eq!(
+        vs.embedding_model_counts(Some("8:model-b")).unwrap(),
+        Some((1, 0))
+    );
+    assert_eq!(
+        vs.embedding_model_counts(Some("8:model-a")).unwrap(),
+        Some((1, 0)),
+        "provider rollback cannot bless mixed vectors"
+    );
+    vs.embed_entity(1, "one", &[3.0; 8], "2").unwrap();
+    assert_eq!(
+        vs.embedding_model_counts(Some("8:model-a")).unwrap(),
+        Some((0, 1))
+    );
+    assert!(!vs.current_embedding_matches(1, "one", "8:model-b").unwrap());
+    assert_eq!(vs.embedding_model_counts(None).unwrap(), Some((0, 2)));
+}
+
+#[test]
+fn deferred_provider_replacement_cannot_stamp_old_vectors() {
+    let mut store = Store::open_in_memory().unwrap();
+    let original: Arc<dyn EmbeddingProvider> = Arc::new(DummyProvider);
+    store.set_embedding_provider(original.clone());
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    ingest_rdf(
+        &mut store,
+        b"<urn:model:deferred> <http://www.w3.org/2000/01/rdf-schema#label> \"Deferred\" ."
+            .as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "1",
+        None,
+        None,
+    )
+    .unwrap();
+    let work = store.take_deferred_embed().unwrap();
+    let embeddings = original.embed_batch(&work.texts()).unwrap();
+    // Even an indistinguishable model revision cannot bless work computed by a
+    // replaced UNKNOWN provider. Pointer fence is intentionally conservative.
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    assert_eq!(store.apply_deferred_embed(&work, &embeddings).unwrap(), 0);
+    assert_eq!(store.vector_count().unwrap(), 0);
+}
+
+#[test]
+fn legacy_vectors_reopen_unknown_until_explicit_rebuild() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("legacy.db");
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch("CREATE TABLE vectors(entity_id INTEGER NOT NULL,text TEXT NOT NULL,embedding BLOB NOT NULL,valid_from TEXT NOT NULL,valid_to TEXT,PRIMARY KEY(entity_id,valid_from)); INSERT INTO vectors VALUES(1,'legacy',X'0000803F','1',NULL);").unwrap();
+    drop(conn);
+    let store = Store::open(db.to_str().unwrap()).unwrap();
+    assert_eq!(
+        store.embedding_model_counts(Some("1:new")).unwrap(),
+        Some((0, 1))
+    );
+    assert!(
+        !store
+            .current_embedding_matches(1, "legacy", "1:new")
+            .unwrap()
+    );
+    store
+        .embed_entity_identified(1, "legacy", &[1.0], "1", Some("1:new"))
+        .unwrap();
+    drop(store);
+    let reopened = Store::open(db.to_str().unwrap()).unwrap();
+    assert!(
+        reopened
+            .current_embedding_matches(1, "legacy", "1:new")
+            .unwrap()
+    );
+    assert_eq!(
+        reopened.embedding_model_counts(Some("1:new")).unwrap(),
+        Some((0, 0))
+    );
+}
+
+#[test]
+fn unknown_provider_never_treats_unchanged_text_as_known_current() {
+    struct Unknown;
+    impl EmbeddingProvider for Unknown {
+        fn embed_text(&self, _: &str) -> Result<Vec<f32>> {
+            Ok(vec![1.0; 8])
+        }
+        fn dimension(&self) -> usize {
+            8
+        }
+    }
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(Unknown));
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    let snapshot = "<urn:unknown:model> <http://www.w3.org/2000/01/rdf-schema#label> \"Unknown\" .";
+    assert_eq!(republish_and_drain(&mut store, snapshot, "1").len(), 1);
+    assert_eq!(republish_and_drain(&mut store, snapshot, "2").len(), 1);
+    assert_eq!(store.embedding_model_counts(None).unwrap(), Some((0, 1)));
+}
+
+#[test]
+fn matching_latest_row_does_not_bless_an_older_current_unknown_vector() {
+    let store = Store::open_in_memory().unwrap();
+    store.embed_entity(1, "same", &[1.0; 8], "1").unwrap();
+    store
+        .embed_entity_identified(1, "same", &[1.0; 8], "2", Some("8:known"))
+        .unwrap();
+    assert!(
+        !store
+            .current_embedding_matches(1, "same", "8:known")
+            .unwrap()
+    );
+    store.close_embedding(1, "3").unwrap();
+    store
+        .embed_entity_identified(1, "same", &[1.0; 8], "3", Some("8:known"))
+        .unwrap();
+    assert!(
+        store
+            .current_embedding_matches(1, "same", "8:known")
+            .unwrap()
+    );
+}
+
+#[test]
+fn provider_change_before_pending_drain_recomputes_all_pending_entities() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    store.embedding_config_mut().auto_embed = true;
+    store.set_defer_auto_embed(true);
+    for (id, timestamp) in [("alice", "1"), ("bob", "2")] {
+        if id == "bob" {
+            store.set_embedding_provider(Arc::new(DummyProvider));
+        }
+        let turtle = format!("<urn:{id}> <http://www.w3.org/2000/01/rdf-schema#label> \"{id}\" .");
+        ingest_rdf(
+            &mut store,
+            turtle.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            timestamp,
+            None,
+            None,
+        )
+        .unwrap();
+    }
+    let work = store.take_deferred_embed().unwrap();
+    assert_eq!(work.texts().len(), 2);
+    let embeddings = store
+        .embedding_provider()
+        .unwrap()
+        .embed_batch(&work.texts())
+        .unwrap();
+    assert_eq!(store.apply_deferred_embed(&work, &embeddings).unwrap(), 2);
+    assert_eq!(store.vector_count().unwrap(), 2);
 }

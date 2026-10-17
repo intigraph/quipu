@@ -303,4 +303,5 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("vectors", "embedding", TermIdKind::None),
     ("vectors", "valid_from", TermIdKind::None),
     ("vectors", "valid_to", TermIdKind::None),
+    ("vectors", "model_identity", TermIdKind::None),
 ];

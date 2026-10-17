@@ -9,12 +9,14 @@
 //! caller-provided, so Bobbin can supply its ONNX pipeline when Quipu is used
 //! as a subsystem.
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 
 use crate::error::Result;
 use crate::store::Store;
 
+pub(crate) mod model_identity;
 mod scoped;
+mod sqlite;
 
 /// Schema for the vectors table, created alongside the fact log.
 pub(crate) const VECTORS_SQL: &str = r#"
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS vectors (
     embedding  BLOB    NOT NULL,
     valid_from TEXT    NOT NULL,
     valid_to   TEXT,
+    model_identity TEXT,
     PRIMARY KEY (entity_id, valid_from)
 );
 CREATE INDEX IF NOT EXISTS idx_vectors_valid ON vectors(valid_to);
@@ -49,6 +52,35 @@ pub trait KnowledgeVectorStore {
         embedding: &[f32],
         valid_from: &str,
     ) -> Result<()>;
+
+    /// Persist a vector with immutable provider identity when supported.
+    /// Backends without provenance support retain UNKNOWN, never a fabricated match.
+    fn embed_entity_identified(
+        &self,
+        entity_id: i64,
+        text: &str,
+        embedding: &[f32],
+        valid_from: &str,
+        _identity: Option<&str>,
+    ) -> Result<()> {
+        self.embed_entity(entity_id, text, embedding, valid_from)
+    }
+
+    /// Whether the current vector has this known identity and exact source text.
+    fn current_embedding_matches(
+        &self,
+        _entity_id: i64,
+        _text: &str,
+        _identity: &str,
+    ) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// Current vector provenance counts: mismatched known identities and UNKNOWN rows.
+    /// None means this backend cannot report provenance.
+    fn embedding_model_counts(&self, _identity: Option<&str>) -> Result<Option<(u64, u64)>> {
+        Ok(None)
+    }
 
     /// Close an entity's embedding (set `valid_to`) when the entity is retracted.
     fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()>;
@@ -166,98 +198,6 @@ pub trait KnowledgeVectorStore {
 }
 
 // ── SQLite implementation ─────────────────────────────────────────
-
-impl KnowledgeVectorStore for Store {
-    fn text_search(
-        &self,
-        query: &str,
-        limit: usize,
-        valid_at: Option<&str>,
-    ) -> Result<Vec<VectorMatch>> {
-        if self.search_config().keyword {
-            self.keyword_search(query, limit, valid_at, None)
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    fn ensure_fts_index(&self) -> Result<()> {
-        if self.search_config().keyword {
-            self.initialize_lexical_index()?;
-        }
-        Ok(())
-    }
-    fn embed_entity(
-        &self,
-        entity_id: i64,
-        text: &str,
-        embedding: &[f32],
-        valid_from: &str,
-    ) -> Result<()> {
-        let blob = f32_slice_to_bytes(embedding);
-        self.conn.execute(
-            "INSERT OR REPLACE INTO vectors (entity_id, text, embedding, valid_from, valid_to) \
-             VALUES (?1, ?2, ?3, ?4, NULL)",
-            params![entity_id, text, blob, valid_from],
-        )?;
-        Ok(())
-    }
-
-    fn close_embedding(&self, entity_id: i64, valid_to: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE vectors SET valid_to = ?1 WHERE entity_id = ?2 AND valid_to IS NULL",
-            params![valid_to, entity_id],
-        )?;
-        Ok(())
-    }
-
-    fn current_embedding_text(&self, entity_id: i64) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare_cached(
-            "SELECT text FROM vectors WHERE entity_id = ?1 AND valid_to IS NULL \
-             ORDER BY valid_from DESC LIMIT 1",
-        )?;
-        Ok(stmt
-            .query_row(params![entity_id], |row| row.get(0))
-            .optional()?)
-    }
-
-    fn vector_search(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-        valid_at: Option<&str>,
-    ) -> Result<Vec<VectorMatch>> {
-        self.scan_vectors(query_embedding, limit, valid_at, None)
-    }
-
-    fn vector_search_where(
-        &self,
-        query: &[f32],
-        limit: usize,
-        valid_at: Option<&str>,
-        keep: &mut dyn FnMut(i64) -> Result<bool>,
-    ) -> Result<Vec<VectorMatch>> {
-        self.scan_vectors(query, limit, valid_at, Some(keep))
-    }
-
-    fn vector_search_batch(
-        &self,
-        queries: &[&[f32]],
-        limit: usize,
-        valid_at: Option<&str>,
-    ) -> Result<Vec<Vec<VectorMatch>>> {
-        self.scan_vectors_batch(queries, limit, valid_at)
-    }
-
-    fn vector_count(&self) -> Result<usize> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM vectors WHERE valid_to IS NULL",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(usize::try_from(count).unwrap_or(0))
-    }
-}
 
 impl Store {
     /// Brute-force cosine scan over current (or `valid_at`) vectors, returning
