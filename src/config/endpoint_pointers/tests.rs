@@ -47,7 +47,7 @@ fn exact_verified_endpoint_requires_current_consent_and_has_no_authority() {
     let (_dir, cfg) = declaration();
     let mut calls = 0;
     let remote = cfg
-        .pointer_endpoint_with("https://example.org/sparql/", |repo, endpoint| {
+        .pointer_endpoint_with("https://example.org/sparql/", None, |repo, endpoint| {
             assert_eq!(repo, "https://github.com/foreign/project.git");
             assert_eq!(endpoint, "https://example.org/sparql/");
             calls += 1;
@@ -62,7 +62,7 @@ fn exact_verified_endpoint_requires_current_consent_and_has_no_authority() {
     assert!(remote.trust.is_none());
     assert!(remote.freshness.is_none());
     let err = cfg
-        .pointer_endpoint_with("https://example.org/sparql/", |_, _| {
+        .pointer_endpoint_with("https://example.org/sparql/", None, |_, _| {
             Err(Error::InvalidValue("revoked".into()))
         })
         .unwrap_err()
@@ -85,7 +85,7 @@ fn url_neighbours_and_pack_pointers_never_call_policy_or_fetch() {
         "https://other.example/query",
     ] {
         assert!(
-            cfg.pointer_endpoint_with(url, |_, _| panic!("not declared"))
+            cfg.pointer_endpoint_with(url, None, |_, _| panic!("not declared"))
                 .unwrap()
                 .is_none()
         );
@@ -101,7 +101,7 @@ fn forged_declaration_is_refused_before_trust() {
     value["pointers"][0]["endpoint"] = "https://attacker.example/query".into();
     std::fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
     let err = cfg
-        .pointer_endpoint_with("https://attacker.example/query", |_, _| {
+        .pointer_endpoint_with("https://attacker.example/query", None, |_, _| {
             panic!("unverified")
         })
         .unwrap_err()
@@ -121,4 +121,81 @@ fn config_defaults_to_no_pointer_declarations() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn expired_query_never_reads_a_declaration_or_calls_policy() {
+    let cfg = FederationConfig {
+        pendants: vec![EndpointPendant {
+            path: "missing-declaration.pendant".into(),
+            repo_remote: "https://github.com/foreign/project.git".into(),
+        }],
+        ..Default::default()
+    };
+    let err = cfg
+        .pointer_endpoint_with(
+            "https://example.org/sparql/",
+            Some(Deadline::after_millis(0)),
+            |_, _| panic!("expired query reached policy"),
+        )
+        .unwrap_err();
+    assert!(matches!(err, Error::RequestTimeout { .. }), "{err}");
+}
+
+#[test]
+fn consent_that_finishes_after_the_query_deadline_is_not_admitted() {
+    let (_dir, cfg) = declaration();
+    let mut called = false;
+    let err = cfg
+        .pointer_endpoint_with(
+            "https://example.org/sparql/",
+            Some(Deadline::after_millis(100)),
+            |_, _| {
+                called = true;
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                Ok(())
+            },
+        )
+        .unwrap_err();
+    assert!(called, "positive policy arm was not reached");
+    assert!(matches!(err, Error::RequestTimeout { .. }), "{err}");
+}
+
+#[cfg(unix)]
+#[test]
+fn query_deadline_kills_and_reaps_the_policy_process() {
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+    let child = Command::new("sh")
+        .args(["-c", "exec sleep 10"])
+        .spawn()
+        .unwrap();
+    let pid = child.id().to_string();
+    let alive = || {
+        Command::new("kill")
+            .args(["-0", &pid])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    };
+    assert!(alive(), "positive child visibility control failed");
+    let started = Instant::now();
+    let err = wait_for_policy(child, Some(Deadline::after_millis(20))).unwrap_err();
+    assert!(matches!(err, Error::RequestTimeout { .. }), "{err}");
+    assert!(started.elapsed() < Duration::from_millis(120));
+    assert!(!alive(), "policy process survived the timed-out wait");
+}
+
+#[cfg(unix)]
+#[test]
+fn policy_wait_without_a_query_deadline_preserves_exit_status() {
+    for code in [0, 3, 2] {
+        let child = std::process::Command::new("sh")
+            .args(["-c", &format!("exit {code}")])
+            .spawn()
+            .unwrap();
+        assert_eq!(wait_for_policy(child, None).unwrap().code(), Some(code));
+    }
 }
