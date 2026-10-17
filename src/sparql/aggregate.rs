@@ -44,13 +44,7 @@ pub fn eval_aggregate(
                 .filter_map(|row| eval_expr(store, expr, row))
                 .collect();
             if *distinct {
-                let mut deduped = Vec::new();
-                for v in values {
-                    if !deduped.contains(&v) {
-                        deduped.push(v);
-                    }
-                }
-                values = deduped;
+                values = distinct_values(values);
             }
             match name {
                 AggregateFunction::Count => Some(Value::Int(values.len() as i64)),
@@ -191,6 +185,27 @@ pub fn eval_aggregate(
     }
 }
 
+// Reference equality is exactly ID equality. Preserve first-occurrence order
+// for SAMPLE/GROUP_CONCAT while avoiding a quadratic scan of subject groups.
+// Mixed values retain Value::PartialEq, including cross-representation aliases.
+fn distinct_values(mut values: Vec<Value>) -> Vec<Value> {
+    if values.iter().all(|value| matches!(value, Value::Ref(_))) {
+        let mut seen = std::collections::HashSet::new();
+        values.retain(|value| match value {
+            Value::Ref(id) => seen.insert(*id),
+            _ => unreachable!("reference-only values checked above"),
+        });
+        return values;
+    }
+    let mut deduped = Vec::new();
+    for value in values {
+        if !deduped.contains(&value) {
+            deduped.push(value);
+        }
+    }
+    deduped
+}
+
 fn comparable_values(values: &[Value]) -> bool {
     values.is_empty()
         || values.iter().all(|value| value.as_f64().is_some())
@@ -272,5 +287,52 @@ fn is_integral(v: &Value) -> bool {
                 | crate::namespace::XSD_UNSIGNED_INT
         ),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod distinct_controls {
+    use super::*;
+
+    #[test]
+    fn references_preserve_first_occurrence_order() {
+        assert_eq!(
+            distinct_values(vec![
+                Value::Ref(9),
+                Value::Ref(2),
+                Value::Ref(9),
+                Value::Ref(1)
+            ]),
+            vec![Value::Ref(9), Value::Ref(2), Value::Ref(1)]
+        );
+        assert!(distinct_values(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn mixed_values_preserve_the_existing_equality_oracle() {
+        let values = vec![
+            Value::Ref(9),
+            Value::Ref(9),
+            Value::Int(1),
+            Value::Typed {
+                lexical: "1".into(),
+                datatype: crate::namespace::XSD_INTEGER.into(),
+            },
+            Value::Str("1".into()),
+            Value::Bool(true),
+            Value::Int(1),
+            Value::Ref(2),
+        ];
+        for shift in 0..values.len() {
+            let mut input = values.clone();
+            input.rotate_left(shift);
+            let mut oracle = Vec::new();
+            for value in input.iter().cloned() {
+                if !oracle.contains(&value) {
+                    oracle.push(value);
+                }
+            }
+            assert_eq!(distinct_values(input), oracle);
+        }
     }
 }
