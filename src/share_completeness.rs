@@ -118,6 +118,16 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // refused; omitted silently, a spent one is accepted again.
     ("decision_nonces", Disposition::Excluded),
     ("registry_amendment_nonces", Disposition::Excluded),
+    // Decision Deck operator scope, enrolled keys, authoritative requests,
+    // one-use challenge state and local admission witnesses. A share may
+    // carry the projected historical graph facts, never authority to enroll,
+    // curate or admit actions on the receiving store. File backups are a
+    // separate trusted operation and retain these tables verbatim.
+    ("deck_config", Disposition::Excluded),
+    ("deck_credentials", Disposition::Excluded),
+    ("deck_requests", Disposition::Excluded),
+    ("deck_challenges", Disposition::Excluded),
+    ("deck_receipts", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
     // Receiver-local review decisions and notice routes. A foreign pack must

@@ -240,6 +240,26 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("forks", "fork_tx", TermIdKind::None),
     ("forks", "created_at", TermIdKind::None),
     ("forks", "status", TermIdKind::None),
+    // -- protected Decision Deck state: text/JSON, counters and tx IDs;
+    // no dictionary IDs are embedded in any of these payloads. --
+    ("deck_config", "id", TermIdKind::None),
+    ("deck_config", "data", TermIdKind::None),
+    ("deck_config", "enabled", TermIdKind::None),
+    ("deck_credentials", "id", TermIdKind::None),
+    ("deck_credentials", "data", TermIdKind::None),
+    ("deck_credentials", "revoked", TermIdKind::None),
+    ("deck_credentials", "sign_count", TermIdKind::None),
+    ("deck_requests", "id", TermIdKind::None),
+    ("deck_requests", "revision", TermIdKind::None),
+    ("deck_requests", "data", TermIdKind::None),
+    ("deck_challenges", "nonce", TermIdKind::None),
+    ("deck_challenges", "data", TermIdKind::None),
+    ("deck_challenges", "consumed", TermIdKind::None),
+    ("deck_receipts", "nonce", TermIdKind::None),
+    ("deck_receipts", "request", TermIdKind::None),
+    ("deck_receipts", "revision", TermIdKind::None),
+    ("deck_receipts", "data", TermIdKind::None),
+    ("deck_receipts", "tx", TermIdKind::None),
     // -- session attestation registry (aegis-c9c44) --
     // Server-protected identity state, deliberately outside the interned term
     // space: a session id, an agent URN, hex key material, an introducer name
