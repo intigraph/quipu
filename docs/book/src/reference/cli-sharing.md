@@ -289,7 +289,7 @@ from "went wrong".
 ### Resolving conflicts: emit, propose, decide, apply
 
 ```text
-quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]
 quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
 ```
 
@@ -304,8 +304,17 @@ person, with the evidence in front of them.
    and whether they are attested. For a person reading it, each row also has a
    `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
    ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
-   file carries `labels`: one `rdfs:label` per IRI it mentions. The file is bound
-   to ROOT's graph hash and the incoming share id.
+   file carries `labels`: one `rdfs:label` per IRI it mentions. Default emission
+   stays v1, strictly bound to all ROOT changes. Explicit `--slot-scoped`
+   (REST/MCP: `slot_scoped: true`) emits v2. These files bind
+   each reviewed slot's current values, local provenance and last-modifying
+   ROOT transaction (including retractions) through
+   `local_slot_hash`, plus the incoming share and base identities. Unrelated ROOT
+   writes can survive an apply; the clean merge is recomputed against current ROOT.
+   A slot changed and restored is stale, including empty -> value -> empty.
+   Legacy v1 files and files with blank-node conflict subjects retain the
+   conservative whole-ROOT binding. Older clients refuse v2 files; re-emit with
+   the client that will apply the decisions.
 2. **Propose (agent).** `--propose` also fills each row's `proposal` (`choose`
    plus `evidence`) from mechanical evidence: a side unchanged from base, the
    newer side, an attested share. It never sets `decision`.
@@ -325,11 +334,13 @@ Apply refuses, and writes nothing, when:
 | Refusal | Why |
 |---|---|
 | a row has no `decision` | nothing is guessed |
-| ROOT or the incoming share changed since the emit | the decisions were made against other data; emit again |
+| a reviewed slot's values or provenance changed, or its hash is missing | the decisions were made against other evidence; emit again |
+| the incoming share, its graph hash, or base identity changed | the decisions target another merge; emit again |
+| ROOT changed for a legacy v1 file | v1 retains its whole-ROOT binding; emit again |
 | the conflicts differ from the file's rows | same reason |
 | a decision has more values than the slot's `sh:maxCount` | it would re-create the conflict |
 | a value is not an RDF term | it cannot be stored |
-| the file has a field merge-decisions/v1 does not define | apply would drop it while the file's hash still covered it |
+| the file has a field its merge-decisions schema does not define | apply would drop it while the file's hash still covered it |
 
 `--dry-run` runs every check above and reports the counts that apply would
 assert and retract, without writing anything. A CI check uses it to validate a

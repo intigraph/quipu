@@ -260,6 +260,8 @@ impl Store {
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_decision_nonces(&conn)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        Self::migrate_decision_deck(&conn)?;
         Self::migrate_registry_amendment_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;

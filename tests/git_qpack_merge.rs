@@ -351,6 +351,16 @@ fn ci_entrypoint_replays_historical_merges_and_has_a_positive_control() {
         } else {
             assert!(f.merge().status.success());
         }
+        // A non-pack fixture must neither poison a valid historical pack nor
+        // mask an invalid one in the same merge.
+        std::fs::create_dir(f.path().join("fixture")).unwrap();
+        std::fs::write(
+            f.path().join("fixture/export.nt"),
+            "<urn:a> <urn:b> <urn:c> .\n",
+        )
+        .unwrap();
+        f.commit();
+        g(f.path(), &["mv", "fixture/export.nt", "fixture/payload.nq"]);
         f.commit();
         let event = f.temp.path().join("event.json");
         std::fs::write(
@@ -439,4 +449,46 @@ fn repository_qpack_is_a_positive_control() {
         quipu::git_merge::check(repo, "HEAD", "HEAD", "HEAD", "HEAD").unwrap(),
         1
     );
+}
+
+#[test]
+fn historical_base_manifest_cannot_be_hidden_by_deleting_both_side_manifests() {
+    let f = Fixture::new("disjoint");
+    let mut parents = Vec::new();
+    for side in [&f.ours, &f.theirs] {
+        g(f.path(), &["checkout", "--detach", side]);
+        g(f.path(), &["rm", "qpack/manifest.json"]);
+        g(f.path(), &["commit", "-m", "delete declared pack manifest"]);
+        parents.push(g(f.path(), &["rev-parse", "HEAD"]));
+    }
+    let tree = g(
+        f.path(),
+        &["rev-parse", &format!("{}^{{tree}}", parents[0])],
+    );
+    let result = g(
+        f.path(),
+        &[
+            "commit-tree",
+            &tree,
+            "-p",
+            &parents[0],
+            "-p",
+            &parents[1],
+            "-m",
+            "unsafe historical merge",
+        ],
+    );
+    let output = cli(
+        f.path(),
+        &[
+            "pendant-check",
+            "--history",
+            &f.base,
+            &parents[0],
+            &parents[1],
+            &result,
+        ],
+    );
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("missing manifest"));
 }
