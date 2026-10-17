@@ -30,7 +30,12 @@
 //! - **The log is permanent.** Unlike Spanner's 1–30 day retention, the fact
 //!   log never garbage-collects, so a cursor never expires.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
+
+#[cfg(test)]
+std::thread_local! {
+    static BEFORE_TX_SELECTION: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+}
 use serde_json::{Value as Json, json};
 
 use crate::error::Result;
@@ -111,7 +116,10 @@ impl Store {
     ) -> Result<ChangePage> {
         // The page's transactions: those that wrote a row in scope. Retracts
         // insert an op=0 row at their own tx, so `tx > since` alone sees them.
-        let (watermark_tx, watermark_timestamp) = self.latest_transaction()?;
+        #[cfg(test)]
+        if let Some(hook) = BEFORE_TX_SELECTION.with(|slot| slot.borrow_mut().take()) {
+            hook();
+        }
         let mut sql = String::from("SELECT DISTINCT tx FROM facts WHERE tx > ?1");
         if graph.is_some() {
             sql.push_str(" AND g = ?3");
@@ -131,6 +139,10 @@ impl Store {
         for tx in &tx_ids {
             self.records_for_tx(*tx, capture, graph, &mut records)?;
         }
+        // Read LAST: autocommit pooled statements may see later commits.
+        // This observation must cover every transaction already returned.
+        // Inside a caller-owned transaction it remains on that same snapshot.
+        let (watermark_tx, watermark_timestamp) = self.latest_transaction()?;
         Ok(ChangePage {
             records,
             next_tx: tx_ids.last().copied().unwrap_or(since_tx),
@@ -148,7 +160,8 @@ impl Store {
                 [],
                 |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?)),
             )
-            .or_else(|_| Ok::<_, rusqlite::Error>((0, None)))?;
+            .optional()?
+            .unwrap_or((0, None));
         Ok(row)
     }
 
@@ -172,6 +185,7 @@ impl Store {
                     ))
                 },
             )
+            .optional()?
             .unwrap_or((None, None, None));
 
         let mut sql = String::from("SELECT e, a, v, g, op FROM facts WHERE tx = ?1");

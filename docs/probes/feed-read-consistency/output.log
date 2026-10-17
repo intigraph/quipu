@@ -1,0 +1,19 @@
+Script started on 2026-10-16 22:07:06-04:00 [COMMAND="bash docs/probes/feed-read-consistency/run-demo.sh" <not executed on terminal>]
+Private SQLite fixtures: deterministic committed write between page statements; missing/decode metadata errors.
+Also verify real uncommitted writer-savepoint isolation and caller-owned read transaction preservation.
+$FEED_TEST_BIN feed_followup_ --nocapture
+
+running 5 tests
+FEED_METADATA_ERROR propagated=true
+test store::changes::tests::feed_followup_transaction_metadata_error_is_not_none ... ok
+FEED_WATERMARK_ERROR propagated=true
+test store::changes::tests::feed_followup_watermark_query_error_is_not_zero ... ok
+FEED_INTERLEAVE next_tx=2 watermark_tx=2
+test store::changes::tests::feed_followup_watermark_covers_interleaved_commit ... ok
+test store::changes::tests::feed_followup_preserves_caller_owned_read_snapshot ... ok
+test store::changes::tests::feed_followup_pool_readers_exclude_inflight_writer_savepoint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 2397 filtered out; finished in 0.60s
+
+
+Script done on 2026-10-16 22:07:07-04:00 [COMMAND_EXIT_CODE="0"]

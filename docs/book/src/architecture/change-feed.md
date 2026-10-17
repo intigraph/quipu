@@ -87,3 +87,17 @@ The intended first consumer is incremental index/embedding maintenance
 rescanning, using per-entity ordering to apply changes safely. The event-push
 delivery worker's semantic events remain the right surface for workflow
 triggers; the change feed is for mirrors.
+
+## Pooled reads and watermark observations
+
+An autocommit WAL reader may observe a newer commit between page statements.
+The feed reads its watermark **after** selecting and constructing the page, so
+that observation covers every returned transaction. It may also include newer
+transactions or transactions outside the selected graph. Advance a consumer from
+`next_tx`, not from `watermark_tx`.
+
+The feed does not start or end a caller's transaction. A caller that already
+holds a read transaction keeps its existing snapshot; an autocommit reader keeps
+its ordinary statement snapshots. Missing transaction rows retain their empty
+metadata representation, while SQL and metadata-decoding errors propagate to the
+caller instead of becoming an empty log or a zero watermark.

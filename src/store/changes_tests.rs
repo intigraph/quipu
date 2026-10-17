@@ -216,3 +216,212 @@ fn unknown_capture_names_are_refused_not_defaulted() {
     assert!(Capture::parse("NEW_VALUES").is_none());
     assert!(Capture::parse("everything").is_none());
 }
+
+#[test]
+fn feed_followup_watermark_covers_interleaved_commit() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("feed.db");
+    let path = path.to_str().unwrap();
+    let mut writer = Store::open(path).unwrap();
+    let entity = writer.intern("urn:feed:interleaved").unwrap();
+    let attribute = writer.intern("urn:feed:value").unwrap();
+    let before = writer
+        .transact(
+            &[assert_datum(entity, attribute, Value::Int(1))],
+            "1",
+            None,
+            None,
+        )
+        .unwrap();
+    let reader = Store::open_read_only(path).unwrap();
+    assert!(reader.conn.is_autocommit());
+    BEFORE_TX_SELECTION.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(move || {
+            writer
+                .transact(
+                    &[assert_datum(entity, attribute, Value::Int(2))],
+                    "2",
+                    None,
+                    None,
+                )
+                .unwrap();
+        }));
+    });
+    let page = reader
+        .changes_after(0, 10, Capture::NewValues, None)
+        .unwrap();
+    assert!(
+        page.next_tx > before,
+        "interleaving positive control must return newly committed transaction"
+    );
+    println!(
+        "FEED_INTERLEAVE next_tx={} watermark_tx={}",
+        page.next_tx, page.watermark_tx
+    );
+    assert!(
+        page.records
+            .iter()
+            .all(|r| r["tx"].as_i64().unwrap() <= page.watermark_tx),
+        "returned transaction exceeds watermark"
+    );
+    assert!(reader.conn.is_autocommit());
+}
+
+#[test]
+fn feed_followup_watermark_query_error_is_not_zero() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(
+        store.latest_transaction().unwrap(),
+        (0, None),
+        "NoRows positive control"
+    );
+    store.conn.execute_batch("DROP TABLE transactions").unwrap();
+    let result = store.latest_transaction();
+    println!("FEED_WATERMARK_ERROR propagated={}", result.is_err());
+    assert!(
+        result.is_err(),
+        "schema/query error must not become watermark0"
+    );
+}
+
+#[test]
+fn feed_followup_transaction_metadata_error_is_not_none() {
+    let mut store = Store::open_in_memory().unwrap();
+    let entity = store.intern("urn:feed:metadata").unwrap();
+    let attribute = store.intern("urn:feed:value").unwrap();
+    let tx = store
+        .transact(
+            &[assert_datum(entity, attribute, Value::Int(1))],
+            "1",
+            None,
+            None,
+        )
+        .unwrap();
+    let mut valid = vec![];
+    store
+        .records_for_tx(tx, Capture::NewValues, None, &mut valid)
+        .unwrap();
+    assert_eq!(valid.len(), 1, "valid metadata positive control");
+    let mut absent = vec![];
+    store
+        .records_for_tx(i64::MAX, Capture::NewValues, None, &mut absent)
+        .unwrap();
+    assert!(
+        absent.is_empty(),
+        "NoRows is still an empty metadata result"
+    );
+    store
+        .conn
+        .execute("UPDATE transactions SET timestamp=X'80' WHERE id=?1", [tx])
+        .unwrap();
+    let result = store.records_for_tx(tx, Capture::NewValues, None, &mut vec![]);
+    println!("FEED_METADATA_ERROR propagated={}", result.is_err());
+    assert!(
+        result.is_err(),
+        "metadata decode error must not become missing metadata"
+    );
+}
+
+/// Use the exact read-only connection constructor used by the server WAL pool.
+/// Existing HTTP tests separately prove handlers choose that pool, not the writer.
+#[test]
+fn feed_followup_pool_readers_exclude_inflight_writer_savepoint() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("inflight.db");
+    let path = path.to_str().unwrap();
+    let mut writer = Store::open(path).unwrap();
+    let entity = writer.intern("urn:feed:inflight").unwrap();
+    let attribute = writer.intern("urn:feed:value").unwrap();
+    let committed = writer
+        .transact(
+            &[assert_datum(entity, attribute, Value::Int(1))],
+            "1",
+            None,
+            None,
+        )
+        .unwrap();
+    let readers = [
+        Store::open_read_only(path).unwrap(),
+        Store::open_read_only(path).unwrap(),
+    ];
+    writer
+        .conn
+        .execute_batch("SAVEPOINT feed_inflight; INSERT INTO transactions(timestamp) VALUES('2');")
+        .unwrap();
+    let pending = writer.conn.last_insert_rowid();
+    writer.conn.execute("INSERT INTO facts(e,a,v,g,tx,valid_from,valid_to,op) SELECT e,a,?1,g,?2,'2',NULL,1 FROM facts WHERE tx=?3 LIMIT 1",params![Value::Int(2).to_bytes(),pending,committed]).unwrap();
+    assert!(!writer.conn.is_autocommit());
+    let own = writer
+        .changes_after(0, 10, Capture::NewValues, None)
+        .unwrap();
+    assert_eq!(
+        own.next_tx, pending,
+        "positive control: actual writer sees its in-flight row"
+    );
+    for reader in &readers {
+        assert!(reader.conn.is_autocommit());
+        let visible = reader
+            .changes_after(0, 10, Capture::NewValues, None)
+            .unwrap();
+        assert_eq!(visible.next_tx, committed);
+        assert_eq!(visible.watermark_tx, committed);
+        assert_eq!(visible.records.len(), 1);
+    }
+    writer.conn.execute_batch("RELEASE feed_inflight").unwrap();
+    assert!(writer.conn.is_autocommit());
+    for reader in &readers {
+        let visible = reader
+            .changes_after(0, 10, Capture::NewValues, None)
+            .unwrap();
+        assert_eq!(visible.next_tx, pending, "postcommit positive control");
+        assert_eq!(visible.records.len(), 2);
+    }
+}
+
+#[test]
+fn feed_followup_preserves_caller_owned_read_snapshot() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("outer-transaction.db");
+    let path = path.to_str().unwrap();
+    let mut writer = Store::open(path).unwrap();
+    let entity = writer.intern("urn:feed:outer").unwrap();
+    let attribute = writer.intern("urn:feed:value").unwrap();
+    let committed = writer
+        .transact(
+            &[assert_datum(entity, attribute, Value::Int(1))],
+            "1",
+            None,
+            None,
+        )
+        .unwrap();
+    let reader = Store::open_read_only(path).unwrap();
+    reader.conn.execute_batch("BEGIN DEFERRED").unwrap();
+    assert_eq!(reader.latest_transaction().unwrap().0, committed);
+    BEFORE_TX_SELECTION.with(|slot| {
+        *slot.borrow_mut() = Some(Box::new(move || {
+            writer
+                .transact(
+                    &[assert_datum(entity, attribute, Value::Int(2))],
+                    "2",
+                    None,
+                    None,
+                )
+                .unwrap();
+        }));
+    });
+    let old = reader
+        .changes_after(0, 10, Capture::NewValues, None)
+        .unwrap();
+    assert_eq!(old.next_tx, committed);
+    assert_eq!(old.watermark_tx, committed);
+    assert!(
+        !reader.conn.is_autocommit(),
+        "feed must not end caller-owned transaction"
+    );
+    reader.conn.execute_batch("ROLLBACK").unwrap();
+    let fresh = reader
+        .changes_after(0, 10, Capture::NewValues, None)
+        .unwrap();
+    assert!(fresh.next_tx > committed, "new snapshot positive control");
+    assert_eq!(fresh.next_tx, fresh.watermark_tx);
+}
