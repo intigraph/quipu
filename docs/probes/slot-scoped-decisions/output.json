@@ -1,0 +1,90 @@
+{
+  "baseline": {
+    "binary_sha256": "6d8c2ed18cf9f20132f7406e789dce06dac0d700b878c2f916efc99912c2e585",
+    "schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
+    "arms": [
+      {
+        "unrelated_writes": 0,
+        "synthetic_elapsed_s": 0,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 1,
+        "synthetic_elapsed_s": 120,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 2,
+        "synthetic_elapsed_s": 240,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 3,
+        "synthetic_elapsed_s": 360,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 4,
+        "synthetic_elapsed_s": 480,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 5,
+        "synthetic_elapsed_s": 600,
+        "accepted": false,
+        "refused_without_graph_change": true
+      }
+    ],
+    "changed_slot_refused_without_graph_change": true,
+    "changed_incoming_refused_without_graph_change": true
+  },
+  "candidate": {
+    "binary_sha256": "77434fc852822bec9fad65bf1faab706e61c10da0e8a32d1f8c19efad40280f1",
+    "schema": "https://github.com/scbrown/quipu/merge-decisions/v2",
+    "arms": [
+      {
+        "unrelated_writes": 0,
+        "synthetic_elapsed_s": 0,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 1,
+        "synthetic_elapsed_s": 120,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 2,
+        "synthetic_elapsed_s": 240,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 3,
+        "synthetic_elapsed_s": 360,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 4,
+        "synthetic_elapsed_s": 480,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 5,
+        "synthetic_elapsed_s": 600,
+        "accepted": true,
+        "refused_without_graph_change": false
+      }
+    ],
+    "changed_slot_refused_without_graph_change": true,
+    "changed_incoming_refused_without_graph_change": true
+  }
+}
