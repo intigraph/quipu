@@ -32,6 +32,7 @@ pub mod namespace;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod replica_provider;
 mod search_graph_scope;
 pub mod search_trace;
 pub mod substring;
