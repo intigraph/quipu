@@ -34,6 +34,7 @@ const OPTIONS: &[&str] = &[
 
 pub(super) struct Capture {
     config: QueryCaptureConfig,
+    starts: Instant,
     expires: Instant,
     consumed: AtomicBool,
     sender: mpsc::SyncSender<(Vec<u8>, &'static str)>,
@@ -88,7 +89,9 @@ pub(super) fn start(config: Option<&QueryCaptureConfig>, db_path: &str) -> Optio
         event(&config.window_id, "claim_refused");
         return None;
     };
-    let expires = Instant::now() + Duration::from_secs(config.end_epoch_secs - now);
+    let initialized = Instant::now();
+    let starts = initialized + Duration::from_secs(config.start_epoch_secs.saturating_sub(now));
+    let expires = initialized + Duration::from_secs(config.end_epoch_secs - now);
     let (sender, receiver) = mpsc::sync_channel::<(Vec<u8>, &'static str)>(1);
     let window = config.window_id.clone();
     let worker = std::thread::Builder::new()
@@ -121,6 +124,7 @@ pub(super) fn start(config: Option<&QueryCaptureConfig>, db_path: &str) -> Optio
     event(&config.window_id, "armed");
     Some(Arc::new(Capture {
         config: config.clone(),
+        starts,
         expires,
         consumed: AtomicBool::new(false),
         sender,
@@ -157,11 +161,13 @@ struct Record<'a> {
 impl Capture {
     pub(super) fn observe(&self, input: &Value, identity: &Value, client: &str, is_post: bool) {
         let now = quipu::time::epoch_secs();
+        let monotonic = Instant::now();
         if !is_post
             || client != "seeds"
             || now < self.config.start_epoch_secs
             || now >= self.config.end_epoch_secs
-            || Instant::now() >= self.expires
+            || monotonic < self.starts
+            || monotonic >= self.expires
             || identity.get("query_sha256").and_then(Value::as_str)
                 != Some(self.config.query_sha256.as_str())
         {

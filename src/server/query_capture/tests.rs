@@ -134,6 +134,7 @@ fn capture_future_and_monotonic_expiry_do_not_consume() {
     config.end_epoch_secs = now + 90;
     let mut capture = Capture {
         config,
+        starts: Instant::now(),
         expires: Instant::now() + Duration::from_secs(90),
         consumed: AtomicBool::new(false),
         sender,
@@ -141,6 +142,13 @@ fn capture_future_and_monotonic_expiry_do_not_consume() {
     capture.observe(&input, &identity, "seeds", true);
     assert!(!capture.consumed.load(Ordering::Acquire));
     capture.config.start_epoch_secs = now;
+    capture.starts = Instant::now() + Duration::from_secs(60);
+    capture.observe(&input, &identity, "seeds", true);
+    assert!(
+        !capture.consumed.load(Ordering::Acquire),
+        "wall-clock advance cannot start the monotonic window early"
+    );
+    capture.starts = Instant::now();
     capture.expires = Instant::now() - Duration::from_secs(1);
     capture.observe(&input, &identity, "seeds", true);
     assert!(!capture.consumed.load(Ordering::Acquire));

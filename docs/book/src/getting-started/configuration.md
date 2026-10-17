@@ -291,7 +291,8 @@ changing normal query results; malformed configuration still follows normal
 strict configuration-loading errors. There is no HTTP endpoint to arm it.
 
 Only the first matching Seeds-category POST `/query` request can consume the
-claim. A monotonic deadline also bounds the absolute window. At startup the
+claim. Eligibility is the intersection of the absolute UTC window and its
+startup-pinned monotonic start/end, so clock jumps cannot extend or start it early. At startup the
 server exclusively claims `query-captures/<window_id>.json` beside the canonical
 store file, using a same-owner private directory and descriptor-relative,
 no-follow exclusive creation. Existing claims are never overwritten, including
