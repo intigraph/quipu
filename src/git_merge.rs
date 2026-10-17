@@ -1,7 +1,7 @@
 //! Store-free pendant merging. Git supplies the base; the store merge supplies the operator.
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
-pub use crate::git_merge_repo::{check, driver, merge, resolve};
+pub use crate::git_merge_repo::{check, check_history, driver, merge, resolve};
 use crate::share::{ShareManifest, canonicalize_ntriples, manifest_bytes, sha256};
 use crate::share_merge::{DecisionRecord, Graph, merge_graphs, parse_graph};
 use serde::{Deserialize, Serialize};
