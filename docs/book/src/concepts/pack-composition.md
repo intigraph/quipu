@@ -155,3 +155,39 @@ quipu compose --repo scbrown/demo --rollback --db store.db
 This swaps CURRENT and previous, and first applies any tombstone recorded since
 previous was current. The whole operation is one transaction: a failure at any
 step leaves both pointers, the graphs and the caches as they were.
+
+### Undo a local retraction
+
+Revoke one carried-forward suppression explicitly, without editing SQLite:
+
+```bash
+quipu compose --repo scbrown/demo --pack-key packs/main \
+  --revoke-tombstone '<https://example.org/alice> <https://example.org/name> "Alice" .' \
+  --reason 'Undo an accidental local retraction' --db store.db
+```
+
+The statement must be exactly one N-Triples triple, with no blank nodes. A
+nonblank reason is required. This operation takes no packs and cannot be combined
+with rollback. It restores only matching, previously asserted composition facts
+that are retracted in this repository's owned graphs for the exact pack key,
+then removes their carried-forward tombstone in the same transaction. The
+receipt reports `revoked` and `graphs_restored`. Repeating a successful reversal
+returns `revoked: false`; a missing statement never invents a fact.
+
+**Replaying or rolling back an already-stripped graph stays stripped.** A
+tombstone may have removed the statement before that graph was first stored, so
+there is no historical assertion there to restore. Recovery is a fresh
+composition from a newly published source-pendant snapshot containing the fact
+(a distinct share ID), after revocation. Replaying the same stripped snapshot
+does not refill its graph. The operation never fabricates omitted facts from the
+requested statement alone.
+
+CURRENT and PREVIOUS do not move, but restored facts become visible immediately
+in their graphs, including retained older graphs. Any other dataset referencing
+those same graphs sees the restoration too. Other repositories, other pack keys,
+unrelated statements and ROOT are unchanged. Recomposition and rollback do not
+recreate the revoked suppression; a later explicit local retraction can create
+it again. A failed operation rolls back both restoration and the ledger update.
+
+Deleting a tombstone row by hand does not have these semantics: retracted facts
+in a retained graph would be harvested again on the next composition.
