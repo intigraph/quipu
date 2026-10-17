@@ -44,7 +44,7 @@
     "changed_incoming_refused_without_graph_change": true
   },
   "candidate": {
-    "binary_sha256": "77434fc852822bec9fad65bf1faab706e61c10da0e8a32d1f8c19efad40280f1",
+    "binary_sha256": "faaf0f7d6643973d3c18eaec9ff810a47c911f1c96bccbbf70d3ea2fcb99dba7",
     "schema": "https://github.com/scbrown/quipu/merge-decisions/v2",
     "arms": [
       {
