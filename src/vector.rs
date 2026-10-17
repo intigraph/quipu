@@ -408,6 +408,7 @@ impl Store {
         limit: usize,
         valid_at: Option<&str>,
     ) -> Result<Vec<Vec<VectorMatch>>> {
+        crate::time::check_request_deadline()?;
         if queries.is_empty() {
             return Ok(Vec::new());
         }
@@ -432,7 +433,7 @@ impl Store {
         while let Some(row) = rows.next()? {
             // The scan is the long phase of a write's resolution pass; honour the
             // request deadline inside it, not only around it (aegis-xi0).
-            if seq.is_multiple_of(4096) {
+            if seq.is_multiple_of(64) {
                 crate::time::check_request_deadline()?;
             }
             let entity_id: i64 = row.get(0)?;
@@ -440,9 +441,15 @@ impl Store {
             let stored = bytes_to_f32_slice(&blob);
             // The stored vector's squared norm once per row, not once per query.
             let stored_norm = squared_norm(&stored);
-            for ((query, top), query_norm) in
-                queries.iter().zip(tops.iter_mut()).zip(query_norms.iter())
+            for (query_index, ((query, top), query_norm)) in queries
+                .iter()
+                .zip(tops.iter_mut())
+                .zip(query_norms.iter())
+                .enumerate()
             {
+                if query_index.is_multiple_of(16) {
+                    crate::time::check_request_deadline()?;
+                }
                 if !stored.is_empty() && stored.len() != query.len() {
                     return Err(crate::Error::Store(format!(
                         "embedding dimension mismatch: query has {} dims but the stored \
@@ -465,7 +472,12 @@ impl Store {
 
         let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);
         tops.into_iter()
-            .map(|top| self.fetch_vector_matches(top.into_sorted(), valid_at))
+            .map(|top| {
+                crate::time::check_request_deadline()?;
+                let matches = self.fetch_vector_matches(top.into_sorted(), valid_at)?;
+                crate::time::check_request_deadline()?;
+                Ok(matches)
+            })
             .collect()
     }
 
