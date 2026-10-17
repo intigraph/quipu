@@ -25,6 +25,7 @@ pub struct ComposedPack {
     pub created_at: String,
     pub source: String,
     pub manifest: crate::share::ShareManifest,
+    #[cfg(not(target_arch = "wasm32"))]
     pub attestation: crate::share_attestation::AttestationStatus,
 }
 
@@ -243,6 +244,7 @@ pub(crate) fn compose_scoped(
     let chosen = requests
         .get(selected)
         .ok_or_else(|| Error::InvalidValue("shape authority is not an input pack".into()))?;
+    #[cfg(not(target_arch = "wasm32"))]
     let mut attestations = Vec::new();
     for request in requests {
         crate::share_import::verify_share(request)?;
@@ -275,6 +277,7 @@ pub(crate) fn compose_scoped(
             )?;
         }
         // Integrity is not authorship; retain the ordinary import verification.
+        #[cfg(not(target_arch = "wasm32"))]
         attestations.push(crate::share_attestation::verify_attestation(
             store, request, timestamp,
         )?);
@@ -362,9 +365,8 @@ pub(crate) fn compose_scoped(
     let dataset = scope.dataset(&digest);
     let packs: Vec<_> = requests
         .iter()
-        .zip(attestations)
         .enumerate()
-        .map(|(index, (r, attestation))| ComposedPack {
+        .map(|(index, r)| ComposedPack {
             share_id: r.manifest.share_id.clone(),
             graph: scope.pack_graph(index, &r.manifest.share_id),
             store_id: r.manifest.store_id.clone(),
@@ -372,7 +374,8 @@ pub(crate) fn compose_scoped(
             created_at: r.manifest.created_at.clone(),
             source: r.source.clone(),
             manifest: r.manifest.clone(),
-            attestation,
+            #[cfg(not(target_arch = "wasm32"))]
+            attestation: attestations[index].clone(),
         })
         .collect();
     let result = Composition {

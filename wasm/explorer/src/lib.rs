@@ -19,6 +19,7 @@ use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
 mod features;
+mod pointers;
 
 #[wasm_bindgen]
 extern "C" {

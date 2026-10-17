@@ -191,5 +191,9 @@ fn the_message_carries_no_deployment_specifics_beyond_its_settings() {
         assert!(!msg.contains(needle), "message leaks {needle}");
     }
     assert!(msg.contains("QUIPU_AUTH_TOKEN"));
+    assert!(msg.contains("QUIPU_AUTH_TOKEN_FILE"));
+    assert!(msg.contains("before HTTP"));
+    assert!(msg.contains("/shapes vocabulary reads"));
+    assert!(msg.contains("authenticated Quipu MCP"));
     assert!(msg.contains("never print"));
 }
