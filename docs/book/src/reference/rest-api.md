@@ -1612,6 +1612,21 @@ also add `query_shape` and `result_size`. Logs contain normalized attribution
 and bounded metadata, never the Authorization header or response body. Slow or
 failed query text retains its existing separate diagnostic line.
 
+Requests may declare a finite command source with `X-Quipu-Source` and an
+underlying SDK operation with `X-Quipu-Operation`. Start and terminal logs retain
+these separately as `declared_source` and `declared_operation`; missing,
+unsupported, or duplicate values are `null` (UNKNOWN). Supported command sources
+use `st-` or `sd-` plus `anchor`, `plate`, `inbox`, `stop_policy`, `stop_event`,
+`haul`, `tend`, `work`, `other`, `show`, `list`, `ready`, `where`, `search`,
+`count`, `info`, `stats`, `create`, `update`, `close`, or `comments`.
+The component sources `seeds` and `shantytown` remain distinguishable from
+command attribution. Operations are `query`, `health`, `graphs`, `show`, `list`, `ready`, `where`,
+`search`, `count`, `info`, `stats`, `tend`, `ready-count`, `create`, `update`,
+`close`, or `comments`. These declarations contain no arguments, paths, message
+text, or credentials. They do not authenticate a caller or add metric labels.
+An attributed census additionally requires a reader that retains these fields
+and proves log coverage; an endpoint alone does not identify a command.
+
 Dropping a polled request future also emits one `request_complete` with
 `completion_outcome: "cancelled"`, synthetic `status: 499` and elapsed time.
 No HTTP 499 response is delivered. Authorization remains `pending` and result

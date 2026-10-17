@@ -235,7 +235,7 @@ pub fn read_reference(reference: &str) -> Result<ShareImportRequest> {
 }
 
 #[cfg(feature = "remote")]
-fn fetch(url: &str) -> Result<Vec<u8>> {
+pub(crate) fn fetch(url: &str) -> Result<Vec<u8>> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err(Error::InvalidValue(
             "share URL must use http or https".into(),
