@@ -25,6 +25,7 @@ pub mod lattice_kind;
 pub mod lexical;
 mod literal_identity;
 pub mod mcp;
+pub mod memory_budget;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
