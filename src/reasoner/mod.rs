@@ -27,8 +27,12 @@
 
 pub mod ast;
 mod compile;
+pub mod editions;
 pub mod evaluate;
+pub mod historical;
+pub mod history_attestation;
 pub mod parse;
+pub mod provenance;
 #[cfg(feature = "reactive-reasoner")]
 pub mod reactive;
 pub mod stratify;
