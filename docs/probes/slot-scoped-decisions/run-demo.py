@@ -60,6 +60,9 @@ def measure(executable, directory):
     replace(local, 'blocked')
     decisions = root / 'decisions.json'
     run('merge', incoming, '--emit-decisions', decisions, '--db', local)
+    default_schema = json.loads(decisions.read_text())['schema']
+    assert default_schema.endswith('/v1')
+    run('merge', incoming, '--emit-decisions', decisions, '--slot-scoped', '--db', local)
     file = json.loads(decisions.read_text())
     assert len(file['rows']) == 1
     for row in file['rows']:
@@ -103,7 +106,7 @@ def measure(executable, directory):
                            '--reviewer', 'fixture-reviewer', '--db', db, required=False)
     assert changed_incoming.returncode and before == snapshot(db)
     return {'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
-            'schema': file['schema'], 'arms': rows,
+            'default_schema': default_schema, 'schema': file['schema'], 'arms': rows,
             'changed_slot_refused_without_graph_change': True,
             'changed_incoming_refused_without_graph_change': True}
 

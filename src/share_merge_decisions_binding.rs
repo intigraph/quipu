@@ -38,11 +38,33 @@ pub(super) fn local_facts(store: &Store, record: &DecisionRecord) -> Result<Vec<
 
 /// Bind the reviewed values and their local provenance, not unrelated ROOT facts.
 pub(super) fn slot_hash(store: &Store, record: &DecisionRecord) -> Result<String> {
+    // Current facts alone lose a deletion's transaction, and cannot detect
+    // empty -> value -> empty. Include the latest ROOT slot mutation, even
+    // when there are no active facts left.
+    let last_tx = match (
+        record
+            .subject
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>')),
+        store.lookup(&record.predicate)?,
+    ) {
+        (Some(subject), Some(attribute)) => match store.lookup(subject)? {
+            Some(entity) => store
+                .attribute_history(entity, attribute)?
+                .iter()
+                .map(|f| f.tx)
+                .max(),
+            None => None,
+        },
+        _ => None,
+    };
     let bytes = serde_json::to_vec(&(
+        "quipu-merge-slot/v2",
         &record.subject,
         &record.predicate,
         &record.ours,
         local_facts(store, record)?,
+        last_tx,
     ))
     .map_err(|e| Error::Serialization(e.to_string()))?;
     Ok(sha256(&bytes))

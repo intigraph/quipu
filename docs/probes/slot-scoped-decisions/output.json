@@ -1,6 +1,7 @@
 {
   "baseline": {
-    "binary_sha256": "6d8c2ed18cf9f20132f7406e789dce06dac0d700b878c2f916efc99912c2e585",
+    "binary_sha256": "56e44135dc011e1c21aa97cad624593ae3ae70b6f14189957b07e0443b694ce6",
+    "default_schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
     "schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
     "arms": [
       {
@@ -44,7 +45,8 @@
     "changed_incoming_refused_without_graph_change": true
   },
   "candidate": {
-    "binary_sha256": "faaf0f7d6643973d3c18eaec9ff810a47c911f1c96bccbbf70d3ea2fcb99dba7",
+    "binary_sha256": "dc23fd16794ea3b2e55964b9b622f3698d6830964e030865f10366a5fb6b4970",
+    "default_schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
     "schema": "https://github.com/scbrown/quipu/merge-decisions/v2",
     "arms": [
       {

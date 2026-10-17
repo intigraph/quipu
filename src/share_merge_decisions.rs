@@ -5,8 +5,9 @@
 //! propose / decide / apply split as `quipu align`:
 //!
 //! 1. [`emit`] writes a decisions file: one row per [`DecisionRecord`], with the
-//!    provenance of each side, bound to each reviewed slot and incoming share it
-//!    was computed from. Nothing is written to the store.
+//!    provenance of each side, strictly bound to ROOT and the incoming share.
+//!    [`emit_scoped`] explicitly opts in to v2 reviewed-slot binding instead.
+//!    Nothing is written to the store.
 //! 2. [`propose`] fills each row's `proposal` from mechanical evidence. It never
 //!    fills `decision` and never writes the store: an agent proposes, the
 //!    operator decides.
@@ -255,6 +256,26 @@ pub fn emit(store: &Store, incoming_dir: &Path) -> Result<DecisionFile> {
 /// # Errors
 /// Store read failures.
 pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
+    emit_with_scope(store, pair, false)
+}
+
+/// Emit v2 slot-scoped decisions explicitly; blank-node slots retain v1.
+///
+/// # Errors
+/// Share read, base lookup, or store read failures.
+pub fn emit_scoped(store: &Store, incoming_dir: &Path) -> Result<DecisionFile> {
+    emit_pair_scoped(store, SharePair::from_dir(incoming_dir)?)
+}
+
+/// Explicit slot-scoped emission for an already-loaded share pair.
+///
+/// # Errors
+/// Store read failures.
+pub fn emit_pair_scoped(store: &Store, pair: SharePair) -> Result<DecisionFile> {
+    emit_with_scope(store, pair, true)
+}
+
+fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<DecisionFile> {
     let i = inputs(store, pair)?;
     let (_, conflicts) = merge_graphs(
         &i.base.graph,
@@ -268,7 +289,7 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
     );
     // Blank-node provenance is not available through local_facts. Keep the
     // conservative legacy binding for such files rather than claim slot custody.
-    let scoped = conflicts.iter().all(|r| r.subject.starts_with('<'));
+    let scoped = requested && conflicts.iter().all(|r| r.subject.starts_with('<'));
     let mut rows = Vec::new();
     for (n, record) in conflicts.into_iter().enumerate() {
         rows.push(DecisionRow {

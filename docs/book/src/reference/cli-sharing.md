@@ -289,7 +289,7 @@ from "went wrong".
 ### Resolving conflicts: emit, propose, decide, apply
 
 ```text
-quipu merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]
 quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
 ```
 
@@ -304,10 +304,14 @@ person, with the evidence in front of them.
    and whether they are attested. For a person reading it, each row also has a
    `kind` (`max_count_exceeded` or `delete_replace`) and a `rule` in words
    ("sh:maxCount 1 on status: ours and theirs together hold 2 values"), and the
-   file carries `labels`: one `rdfs:label` per IRI it mentions. New v2 files bind
-   each reviewed slot's current values and local provenance through
+   file carries `labels`: one `rdfs:label` per IRI it mentions. Default emission
+   stays v1, strictly bound to all ROOT changes. Explicit `--slot-scoped`
+   (REST/MCP: `slot_scoped: true`) emits v2. These files bind
+   each reviewed slot's current values, local provenance and last-modifying
+   ROOT transaction (including retractions) through
    `local_slot_hash`, plus the incoming share and base identities. Unrelated ROOT
    writes can survive an apply; the clean merge is recomputed against current ROOT.
+   A slot changed and restored is stale, including empty -> value -> empty.
    Legacy v1 files and files with blank-node conflict subjects retain the
    conservative whole-ROOT binding. Older clients refuse v2 files; re-emit with
    the client that will apply the decisions.
