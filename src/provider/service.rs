@@ -66,25 +66,39 @@ pub fn query_configured_service(
     sparql: &str,
     deadline_ms: Option<u64>,
 ) -> Result<(QueryResult, String, super::DeclaredLabel)> {
-    let requested = endpoint.trim_end_matches('/');
-    let remote = federation
-        .remotes
-        .iter()
-        .find(|r| {
-            let base = r.url.trim_end_matches('/');
-            requested == base || requested == format!("{base}/query")
-        })
-        .ok_or_else(|| {
+    let trimmed = endpoint.trim_end_matches('/');
+    let configured = federation.remotes.iter().find(|r| {
+        let base = r.url.trim_end_matches('/');
+        trimmed == base || trimmed == format!("{base}/query")
+    });
+    let (remote, pointer) = if let Some(remote) = configured {
+        (remote.clone(), false)
+    } else {
+        #[cfg(not(target_arch = "wasm32"))]
+        let admitted = federation.pointer_endpoint(endpoint)?;
+        #[cfg(target_arch = "wasm32")]
+        let admitted: Option<crate::config::RemoteEndpoint> = None;
+        let remote = admitted.ok_or_else(|| {
             Error::InvalidValue(format!(
-                "SERVICE endpoint '{endpoint}' is not in [[quipu.federation.remotes]]"
+                "SERVICE endpoint '{endpoint}' is not in [[quipu.federation.remotes]] or trusted pendant declarations"
             ))
         })?;
+        (remote, true)
+    };
+    // A pointer's consent names one exact URL, not its neighbours or redirects.
+    let requested = if pointer { endpoint } else { trimmed };
     let label = remote.declared_label()?;
     let configured_timeout = remote.timeout_ms.unwrap_or(5000);
     let effective_timeout = deadline_ms.map_or(configured_timeout, |remaining| {
         configured_timeout.min(remaining.max(1))
     });
-    let mut request = ureq::post(requested)
+    let mut agent = ureq::AgentBuilder::new();
+    if pointer {
+        agent = agent.redirects(0);
+    }
+    let mut request = agent
+        .build()
+        .post(requested)
         .set("Content-Type", "application/sparql-query")
         .set("Accept", "application/sparql-results+json")
         .timeout(std::time::Duration::from_millis(effective_timeout));
@@ -215,6 +229,7 @@ mod tests {
                 freshness: Some("fresh".into()),
                 ..crate::config::RemoteEndpoint::new("partner", &url)
             }],
+            ..Default::default()
         };
         let (result, truncated) = crate::mcp::query_result_with_federation(
             &store,
@@ -346,6 +361,7 @@ mod tests {
                 timeout_ms: Some(5000),
                 ..crate::config::RemoteEndpoint::new("slow", &url)
             }],
+            ..Default::default()
         };
         let started = std::time::Instant::now();
         let mut store = Store::open_in_memory().unwrap();
@@ -370,6 +386,7 @@ mod tests {
         store.search_config_mut().max_sparql_rows = 1;
         let cfg = crate::config::FederationConfig {
             remotes: vec![crate::config::RemoteEndpoint::new("bounded", &url)],
+            ..Default::default()
         };
         let (result, truncated) = crate::mcp::query_result_with_federation(
             &store,
@@ -397,6 +414,7 @@ mod tests {
             &input,
             Some(std::sync::Arc::new(crate::config::FederationConfig {
                 remotes: vec![crate::config::RemoteEndpoint::new("dead", DEAD)],
+                ..Default::default()
             })),
         )
         .unwrap()
