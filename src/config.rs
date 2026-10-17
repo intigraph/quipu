@@ -391,6 +391,9 @@ pub enum VectorBackend {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ResolutionConfig {
+    /// Reuse shared writer-maintained labels in unattached stores; false restores scans.
+    /// Composed stores always scan: read-only mounting does not certify immutability.
+    pub cache_labels: bool,
     /// Whether entity resolution is enabled (default: false).
     pub enabled: bool,
 
@@ -408,6 +411,7 @@ pub struct ResolutionConfig {
 impl Default for ResolutionConfig {
     fn default() -> Self {
         Self {
+            cache_labels: true,
             enabled: false,
             threshold: 0.85,
             top_k: 3,

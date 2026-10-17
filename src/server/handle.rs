@@ -4,6 +4,8 @@
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
+#[path = "resolution_cache.rs"]
+mod resolution_cache;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
@@ -141,6 +143,9 @@ impl StoreHandle {
         db_path: &str,
         federation: quipu::config::FederationConfig,
     ) -> Self {
+        if let Err(error) = store.prepare_resolution_index() {
+            eprintln!("resolution label warm failed; using exact scans: {error}");
+        }
         let commit_wake = Self::commit_wake_for(&store);
         Self {
             commit_wake,
@@ -156,6 +161,14 @@ impl StoreHandle {
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
         }
+    }
+
+    /// Enter the serving lifecycle after startup warming, with one coalesced
+    /// background worker. Requires the server's Tokio runtime.
+    pub(crate) fn into_shared(self) -> SharedStore {
+        let state = Arc::new(self);
+        resolution_cache::start(&state);
+        state
     }
 
     /// Attach the registered reactive reasoner (see the `reasoner` field).
