@@ -77,17 +77,21 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     ready_rx.recv().unwrap();
     let mut results = Vec::new();
     for (input, count) in [
-        (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (json!({"mode":"keyword","query":"walneedle"}), 2),
         (
-            json!({"mode":"keyword","query":"walneedle","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
+            json!({"mode":"keyword","query":"walneedle","graph":"urn:quipu:graph:root"}),
             1,
         ),
         (
-            json!({"mode":"hybrid","alpha":0,"query":"walneedle","anchor":"https://example.org/device"}),
+            json!({"mode":"keyword","query":"walneedle","graph":"urn:quipu:graph:root","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
             1,
         ),
-        (json!({"query":"walneedle"}), 1),
-        (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 1),
+        (
+            json!({"mode":"hybrid","alpha":0,"query":"walneedle","graph":"urn:quipu:graph:root","anchor":"https://example.org/device"}),
+            1,
+        ),
+        (json!({"query":"walneedle"}), 2),
+        (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 2),
         (
             json!({"mode":"keyword","query":"walneedle","graph":"urn:test:keyword:graph"}),
             1,
