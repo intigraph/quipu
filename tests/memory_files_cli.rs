@@ -1,4 +1,6 @@
 //! Real CLI subprocesses with explicit synthetic repositories; no server calls.
+#![cfg(feature = "shacl")]
+
 use serde_json::{Value, json};
 use std::{
     path::Path,
