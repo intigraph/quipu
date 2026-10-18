@@ -91,6 +91,7 @@ pub struct Store {
     /// disabled; the server sets it from `[quipu.resolution]` at startup so
     /// dedup actually fires on ingest (hq-uye).
     pub(crate) resolution_config: ResolutionConfig,
+    pub(crate) resolution_cache: crate::resolution::cache::SharedCache,
     /// Search/limit guardrails. Defaults are conservative; the server sets
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).

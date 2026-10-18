@@ -54,6 +54,8 @@ mod owl_materialize;
 mod parse_guard_tests;
 #[path = "server/point_reads.rs"]
 mod point_reads;
+#[path = "server/process_pool.rs"]
+mod process_pool;
 #[path = "server/publication.rs"]
 mod publication;
 mod query_endpoint;
@@ -110,6 +112,7 @@ async fn main() {
     }
 
     let config = base::load_config(&args);
+    let memory_allocation = process_pool::startup_allocation(&config, &args);
 
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
@@ -125,6 +128,14 @@ async fn main() {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
     });
+    if let Some(allocation) = memory_allocation {
+        store
+            .apply_memory_allocation(allocation)
+            .unwrap_or_else(|error| {
+                eprintln!("cannot apply memory allocation: {error}");
+                std::process::exit(1)
+            });
+    }
 
     // quipu-lv7: `vector.backend` selects the store's vector backend in-binary.
     // It refuses when this build cannot construct the configured one rather
@@ -346,11 +357,15 @@ async fn main() {
         .map(|_| Arc::new(replica::ReplicaStatus::default()));
     #[cfg(feature = "reactive-reasoner")]
     let handle = handle.with_reasoner(reactive_reasoner);
-    let state: SharedStore = Arc::new(handle);
+    let state: SharedStore = handle.into_shared();
     let push_store_outer = state.clone();
 
     // Access-control policy for write endpoints (hq-azs). Decision logic lives
     // in quipu::http_auth (unit-tested); this only wires it into axum.
+    let workers = process_pool::start(&config, &args).unwrap_or_else(|error| {
+        eprintln!("cannot start read process pool: {error}");
+        std::process::exit(1)
+    });
     let auth_policy = auth::bearer_policy(&config.server);
     let read_only = config.server.read_only || is_replica;
     let replica_config = config.server.replica.clone();
@@ -390,7 +405,10 @@ async fn main() {
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
-        .route("/.well-known/void", get(service_description::service_description))
+        .route(
+            "/.well-known/void",
+            get(service_description::service_description),
+        )
         .route("/metrics", get(metrics_handler))
         .route("/query", get(query_get).post(query_post_http))
         .route("/update", post(update::update_post))
@@ -459,7 +477,10 @@ async fn main() {
         .route("/report", get(report_get).post(report))
         .route("/context", post(context))
         .route("/embed_backfill", post(embed_backfill))
-        .route("/embed_backfill_graph", post(graph_backfill::embed_backfill_graph))
+        .route(
+            "/embed_backfill_graph",
+            post(graph_backfill::embed_backfill_graph),
+        )
         // Entity + history
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
@@ -479,7 +500,8 @@ async fn main() {
         .route("/spotlight", post(spotlight_handler))
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
-        .route("/preview/{iri}", get(preview_handler))
+        .route("/preview/{iri}", get(preview_handler));
+    let app = process_pool::route(app, &workers)
         // Auth / read-only guard on write endpoints (hq-azs). Added before the
         // CORS layer so CORS stays outermost and answers OPTIONS preflight
         // before the guard runs.
@@ -629,6 +651,8 @@ async fn main() {
         .layer(axum::middleware::from_fn_with_state(state.clone(), replica::headers))
         .with_state(state);
 
+    let app = process_pool::protect_worker(app);
+
     if let Some(replica) = config.server.replica {
         replica::start_metadata_reader(push_store_outer, replica);
     } else {
@@ -639,4 +663,5 @@ async fn main() {
     // (aegis-gwkd76): the work every restart repeats.
     quipu::write_kind::set_serving();
     quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    drop(workers);
 }

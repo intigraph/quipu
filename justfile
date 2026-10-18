@@ -350,3 +350,7 @@ search-eval cmd="test" *args="":
 # Scratch follower: actual start, 100 reads, write refusals, lag and no DB writes.
 replica-test server cli:
     python3 scripts/test-replica-server.py {{quote(server)}} {{quote(cli)}}
+
+# Scratch-only process isolation and failure controls using owned binary copies.
+read-process-test server cli:
+    python3 scripts/test-read-process-pool.py {{quote(server)}} {{quote(cli)}}
