@@ -307,12 +307,15 @@ pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &st
         serve_stdio(app, args).await;
     } else {
         let native = http_router(app.clone(), origins);
-        let listener = tokio::net::TcpListener::bind(bind)
-            .await
-            .unwrap_or_else(|error| {
-                eprintln!("error binding {bind}: {error}");
-                std::process::exit(1);
-            });
+        let listener = if std::env::var("QUIPU_READ_WORKER_LISTENER_FD").as_deref() == Ok("0") {
+            inherited_reader_listener(bind)
+        } else {
+            tokio::net::TcpListener::bind(bind).await
+        }
+        .unwrap_or_else(|error| {
+            eprintln!("error binding {bind}: {error}");
+            std::process::exit(1);
+        });
         // A failed bind must never record the process as serving.
         crate::metrics::init_start_time();
         eprintln!("quipu-server listening on {bind} (db: {db}); MCP at /mcp");
@@ -323,6 +326,29 @@ pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &st
         )
         .await
         .unwrap();
+    }
+}
+
+fn inherited_reader_listener(bind: &str) -> std::io::Result<tokio::net::TcpListener> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsFd;
+        // The supervisor supplies a bound nonblocking socket as HTTP-only
+        // stdin. Clone its descriptor through the safe ownership API, leaving
+        // standard-descriptor ownership alone; Tokio owns the clone until exit.
+        let input = std::io::stdin();
+        let listener = std::net::TcpListener::from(input.as_fd().try_clone_to_owned()?);
+        if listener.local_addr()?.to_string() != bind {
+            return Err(std::io::Error::other(
+                "inherited reader listener address mismatch",
+            ));
+        }
+        tokio::net::TcpListener::from_std(listener)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = bind;
+        Err(std::io::Error::other("reader listeners require Linux"))
     }
 }
 
