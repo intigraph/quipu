@@ -1,0 +1,7 @@
+Script started on 2026-10-18 18:50:30-04:00 [COMMAND="python3 docs/probes/pr-demos/file-memory/demo.py "$DEMO_BASE" "$DEMO_HEAD"" <not executed on terminal>]
+BASE same commit request: exit=1
+HEAD commit and replay: identical receipt=True
+HEAD actual export: {"coverage": "this_repository_owner_records", "files": [{"account": "selected", "committed_at": "2026-10-18T22:50:30Z", "harness": "fixture", "owner": {"crew": "urn:example:alpha", "deployment": "urn:example:deployment", "project": "urn:example:project"}, "parent": null, "path": "MEMORY.md", "revision": "urn:quipu:memory:revision:7b7f2ffd7d95165b642a0858bfea255ec74da8c2ceef7a0668cda982517270d0", "text": "# Memory\r\nExact bytes: λ\r\n"}], "format": "quipu.memory-files/v1", "snapshot": {"committed_at": "2026-10-18T22:50:30Z", "files": {"MEMORY.md": {"bytes": 27, "revision": "urn:quipu:memory:revision:7b7f2ffd7d95165b642a0858bfea255ec74da8c2ceef7a0668cda982517270d0", "sha256": "283564f40e4892fd0eef1688cdc0ba5e87af9ba0a785c6e86bd289b214d58ac0", "tombstone": false}}, "owner": {"crew": "urn:example:alpha", "deployment": "urn:example:deployment", "project": "urn:example:project"}, "parent": null, "revision": "urn:quipu:memory:snapshot:7b7f2ffd7d95165b642a0858bfea255ec74da8c2ceef7a0668cda982517270d0"}}
+Target: synthetic local database; explicit filesystem authority. Native harness and remote identity NOT tested.
+
+Script done on 2026-10-18 18:50:30-04:00 [COMMAND_EXIT_CODE="0"]
