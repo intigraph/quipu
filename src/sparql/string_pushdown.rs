@@ -90,7 +90,7 @@ impl StringNarrow {
             .then(|| format!("\"{}\"", self.needle.replace('"', "\"\"")))
     }
     /// Could the filter accept a value whose string form is `s`?
-    fn keeps_text(&self, s: &str) -> bool {
+    pub(super) fn keeps_text(&self, s: &str) -> bool {
         let folded;
         let s = match self.fold {
             Fold::None => s,
@@ -178,6 +178,15 @@ pub fn narrowed(
         string_narrows: Some(Arc::new(narrows)),
         ..ctx.clone()
     })
+}
+
+/// Only a single recognized graph-name test; OR/NOT/AND remain unoptimized.
+pub(super) fn graph_narrow(expr: &Expression, var: &str) -> Option<StringNarrow> {
+    let Expression::FunctionCall(function, args) = expr else {
+        return None;
+    };
+    let n = narrow(function, args)?;
+    (n.var == var).then_some(n)
 }
 
 fn conjuncts(expr: &Expression, out: &mut Vec<StringNarrow>) {
