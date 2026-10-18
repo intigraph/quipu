@@ -101,6 +101,12 @@ and the fact that index completeness is not certified. Result graph provenance
 does not promote a fact or make its source authoritative. Similarity and context
 admission still apply; an empty search does not prove a graph contains no facts.
 
+Semantic retrieval uses one vector per entity. An entity with ROOT text keeps
+that representation; a named-only entity combines its named-graph facts.
+Selecting a graph filters membership, not the vector's text provenance. For
+assertion-level literal matching within one graph, use keyword search. This
+distinction is why listing selected graphs does not certify complete indexing.
+
 Semantic search across named graphs still requires `named_graphs = true`.
 Prepare existing named-only vectors using bounded `/embed_backfill_graph` calls
 before enabling it; an unprepared default all-graph request refuses instead of

@@ -999,10 +999,10 @@ are mutually exclusive and unknown IRIs are refused. Explicit results carry
 selected membership. The graph
 metadata plane is excluded from all-graphs scope. Named-graph semantic text
 uses one vector per entity; entities with ROOT text keep it, otherwise text
-combines their named-graph facts. Explicit graph scope refuses ROOT content
-and anchor reranking.
+combines their named-graph facts. Scopes containing named graphs refuse ROOT
+content and anchor reranking; an explicit ROOT selection supports both.
 
-Explicit graph selection for semantic and hybrid search, and automatic
+Named-graph retrieval for semantic and hybrid search, and automatic
 named-only embedding text, are disabled by default (`[quipu.search]
 named_graphs = false`). Keyword mode (`mode: "keyword"`) accepts an explicit
 scope without the flag, because the lexical index records each assertion's
