@@ -5,6 +5,7 @@ use serde_json::Value;
 pub(crate) struct GraphScope {
     pub ids: Vec<i64>,
     pub explicit: bool,
+    pub all: bool,
 }
 
 #[cfg(test)]
@@ -57,7 +58,8 @@ impl GraphScope {
             }
         };
         let explicit = selected;
-        if all || default_all || graph.and_then(Value::as_str) == Some("all") {
+        let all = all || default_all || graph.and_then(Value::as_str) == Some("all");
+        if all {
             ids.extend(store.all_named_graph_ids()?);
         } else if explicit {
             let iris = match (graph, graphs) {
@@ -105,7 +107,8 @@ impl GraphScope {
             ));
         }
         let explicit = explicit || (default_all && ids.as_slice() != [0]);
-        Ok(Self { ids, explicit })
+        let all = all && ids.as_slice() != [0];
+        Ok(Self { ids, explicit, all })
     }
 
     pub fn coverage(&self, store: &Store, input: &Value) -> Value {
@@ -126,14 +129,29 @@ impl GraphScope {
     pub fn matching(&self, store: &Store, entity: i64, at: Option<&str>) -> Result<Vec<i64>> {
         let mut out = Vec::new();
         for id in &self.ids {
-            let found: bool = store.conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM facts WHERE e=?1 AND g=?2 AND op=1 AND ((?3 IS NULL AND valid_to IS NULL) OR (?3 IS NOT NULL AND valid_from<=?3 AND (valid_to IS NULL OR valid_to>?3))))",
-                rusqlite::params![entity,id,at], |r| r.get(0))?;
-            if found {
+            if Self::has_fact(store, entity, *id, at)? {
                 out.push(*id);
             }
         }
         Ok(out)
+    }
+
+    /// Check candidates lazily for broad unions rather than materializing all
+    /// subjects in the store on every ordinary search. Exclusions and temporal
+    /// membership still apply, including when only historical vectors remain.
+    pub fn contains(&self, store: &Store, entity: i64, at: Option<&str>) -> Result<bool> {
+        for id in &self.ids {
+            if Self::has_fact(store, entity, *id, at)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn has_fact(store: &Store, entity: i64, graph: i64, at: Option<&str>) -> Result<bool> {
+        Ok(store.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM facts WHERE e=?1 AND g=?2 AND op=1 AND ((?3 IS NULL AND valid_to IS NULL) OR (?3 IS NOT NULL AND valid_from<=?3 AND (valid_to IS NULL OR valid_to>?3))))",
+            rusqlite::params![entity, graph, at], |r| r.get(0))?)
     }
 
     pub fn entities(

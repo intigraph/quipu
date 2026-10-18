@@ -2,6 +2,68 @@ use super::{tests::fixture, *};
 use serde_json::json;
 
 #[test]
+fn default_all_search_does_not_enumerate_every_unembedded_subject() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let mut s = fixture();
+    let label = s
+        .lookup("http://www.w3.org/2000/01/rdf-schema#label")
+        .unwrap()
+        .unwrap();
+    let mut data = Vec::new();
+    for n in 0..2000 {
+        data.push(crate::Datum {
+            entity: s.intern(&format!("urn:unembedded:{n}")).unwrap(),
+            attribute: label,
+            value: crate::Value::Str("unembedded".into()),
+            valid_from: tests::AT.into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        });
+    }
+    s.transact(&data, tests::AT, None, None).unwrap();
+    s.vector_store()
+        .embed_entity(
+            s.lookup("urn:alpha").unwrap().unwrap(),
+            "positive",
+            &[1.0, 0.0],
+            tests::AT,
+        )
+        .unwrap();
+    let steps = Arc::new(AtomicUsize::new(0));
+    let observed = steps.clone();
+    s.conn
+        .progress_handler(
+            100,
+            Some(move || {
+                observed.fetch_add(1, Ordering::SeqCst);
+                false
+            }),
+        )
+        .unwrap();
+    let out =
+        crate::tool_search(&s, &json!({"embedding":[1.0,0.0],"limit":1,"verbose":true})).unwrap();
+    assert_eq!(out["results"][0]["entity"], "urn:alpha");
+    let calls = steps.load(Ordering::SeqCst);
+    let _: i64 = s
+        .conn
+        .query_row("SELECT sum(e) FROM facts", [], |r| r.get(0))
+        .unwrap();
+    let control = steps.load(Ordering::SeqCst) - calls;
+    s.conn.progress_handler(0, None::<fn() -> bool>).unwrap();
+    assert!(control > 0, "the instrument must see an actual facts scan");
+    println!(
+        "SQLite progress callbacks (100-step intervals): search={calls}, full-scan positive control={control}"
+    );
+    assert!(
+        calls < 40,
+        "ordinary all-graph search enumerated unrelated subjects: {calls}"
+    );
+}
+
+#[test]
 fn omitted_keyword_scope_covers_root_and_named_graphs_with_visible_coverage() {
     let s = fixture();
     let out = crate::tool_search(&s, &json!({"mode":"keyword","query":"shared"})).unwrap();
