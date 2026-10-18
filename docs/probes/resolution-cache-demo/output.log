@@ -1,0 +1,15 @@
+Script started on 2026-10-16 18:26:49-04:00 [COMMAND="bash docs/probes/resolution-cache-demo/run.sh" <not executed on terminal>]
+Private synthetic fixture: 268000 labels, no embedding provider or attachments.
+Same resolve input and one-node episode body; cache_labels=false then true.
+Cold/stale requests retain exact scans. This is not a production measurement.
+$ cargo test --offline --release --features shacl --lib resolution::perf_tests::large_label_fixture -- --ignored --exact --nocapture
+QYTJUG_PERF {"cache":false,"fixture_labels":268000,"mean_ms":109.66100745454546,"p50_ms":109.220018,"p95_nearest_rank_ms":130.218407,"provider":"none","response":{"candidates":[],"count":0,"has_matches":false,"vector_scope":{"kind":"whole_store"}},"rss_after_calls_kib":179276,"rss_after_warm_kib":11544,"rss_before_kib":11492,"synthetic":true,"warm_ms":0.000038}
+QYTJUG_EPISODE {"cache":false,"elapsed_ms":133.697137,"hints":0,"outcome":"Created","same_body":true,"synthetic":true}
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 1.40s
+QYTJUG_PERF {"cache":true,"fixture_labels":268000,"mean_ms":6.076057363636363,"p50_ms":6.093718,"p95_nearest_rank_ms":6.133592,"provider":"none","response":{"candidates":[],"count":0,"has_matches":false,"vector_scope":{"kind":"whole_store"}},"rss_after_calls_kib":174760,"rss_after_warm_kib":173896,"rss_before_kib":11088,"synthetic":true,"warm_ms":83.630565}
+QYTJUG_EPISODE {"cache":true,"elapsed_ms":67.480281,"hints":0,"outcome":"Created","same_body":true,"synthetic":true}
+QYTJUG_RETAINED {"held_generations":8,"rss_after_release_kib":70368,"rss_before_updates_kib":179360,"rss_held_kib":87136,"writes_ms":[19.638394,13.755735999999999,12.56214,12.624651,17.81826,11.199828,15.035758,18.706114]}
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 0.43s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2400 filtered out; finished in 15.62s
+
+Script done on 2026-10-16 18:28:03-04:00 [COMMAND_EXIT_CODE="0"]
