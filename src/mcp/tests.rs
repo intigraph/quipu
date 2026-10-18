@@ -1317,6 +1317,7 @@ fn test_tool_episode_surfaces_resolution_hints() {
     // surface dedup hints in its response (the engine was previously inert).
     let mut store = Store::open_in_memory().unwrap();
     *store.resolution_config_mut() = crate::config::ResolutionConfig {
+        cache_labels: true,
         enabled: true,
         threshold: 0.85,
         top_k: 3,
