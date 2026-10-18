@@ -8,16 +8,18 @@ pub(crate) struct GraphScope {
 }
 
 #[cfg(test)]
+mod default_tests;
+#[cfg(test)]
 mod tests;
 
 impl GraphScope {
-    /// Scope for semantic, hybrid and anchored search: an explicit graph needs
+    /// Scope for semantic, hybrid and anchored search: a named graph needs
     /// `[quipu.search] named_graphs`, because their named-only vectors must be
     /// prepared by bounded backfill first.
     pub fn parse(store: &Store, input: &Value) -> Result<Self> {
         let scope = Self::parse_any(store, input)?;
-        if scope.explicit && !store.search_config().named_graphs {
-            return Err(Error::InvalidValue("explicit graph search is disabled ([quipu.search] named_graphs = false); prepare bounded backfill before enabling".into()));
+        if scope.ids.iter().any(|id| *id != 0) && !store.search_config().named_graphs {
+            return Err(Error::InvalidValue("named graph semantic search is disabled ([quipu.search] named_graphs = false); selected scope includes named graphs; prepare bounded backfill before enabling, or explicitly select graph urn:quipu:graph:root for ROOT-only coverage".into()));
         }
         Ok(scope)
     }
@@ -44,8 +46,18 @@ impl GraphScope {
             ));
         }
         let mut ids = vec![0];
-        let explicit = graph.is_some() || graphs.is_some() || all;
-        if all || graph.and_then(Value::as_str) == Some("all") {
+        let selected = graph.is_some() || graphs.is_some() || all;
+        let default_all = match store.search_config().default_graph_scope.as_str() {
+            "all" => !selected,
+            "root" => false,
+            _ => {
+                return Err(Error::InvalidValue(
+                    "search.default_graph_scope must be all or root".into(),
+                ));
+            }
+        };
+        let explicit = selected;
+        if all || default_all || graph.and_then(Value::as_str) == Some("all") {
             ids.extend(store.all_named_graph_ids()?);
         } else if explicit {
             let iris = match (graph, graphs) {
@@ -82,7 +94,33 @@ impl GraphScope {
         }
         ids.sort_unstable();
         ids.dedup();
+        for iri in &store.search_config().exclude_graphs {
+            oxrdf::NamedNode::new(iri)
+                .map_err(|e| Error::InvalidValue(format!("invalid excluded graph IRI: {e}")))?;
+            ids.retain(|id| store.graph_display_name(*id) != *iri);
+        }
+        if ids.is_empty() {
+            return Err(Error::InvalidValue(
+                "search graph scope is empty after configured exclusions".into(),
+            ));
+        }
+        let explicit = explicit || (default_all && ids.as_slice() != [0]);
         Ok(Self { ids, explicit })
+    }
+
+    pub fn coverage(&self, store: &Store, input: &Value) -> Value {
+        let selected = input.get("graph").is_some_and(|v| !v.is_null())
+            || input.get("graphs").is_some()
+            || input.get("all_graphs") == Some(&Value::Bool(true));
+        serde_json::json!({
+            "selection": if selected { "explicit" } else { "default" },
+            "default": store.search_config().default_graph_scope,
+            "graphs": self.ids.iter().map(|id| store.graph_display_name(*id)).collect::<Vec<_>>(),
+            "excluded_graphs": store.search_config().exclude_graphs,
+            "named_vectors_enabled": store.search_config().named_graphs,
+            "index_completeness": "not_certified",
+            "remote_endpoints": "not_searched"
+        })
     }
 
     pub fn matching(&self, store: &Store, entity: i64, at: Option<&str>) -> Result<Vec<i64>> {

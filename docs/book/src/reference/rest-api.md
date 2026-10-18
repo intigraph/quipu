@@ -990,7 +990,9 @@ omitted mode or `mode: "semantic"` preserves vector search.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
-`all_graphs: true` (also `graph: "all"`). Omitted scope remains ROOT. Selectors
+`all_graphs: true` (also `graph: "all"`). Omitted scope defaults to ROOT plus all registered named graphs, minus
+`[quipu.search] exclude_graphs`. Set `default_graph_scope = "root"` to retain
+the old default, or pass `graph: "urn:quipu:graph:root"` for one ROOT search. Selectors
 are mutually exclusive and unknown IRIs are refused. Explicit results carry
 `graph` and selected entity memberships in `graphs`. For keyword mode,
 `graph` identifies the matching assertion; for semantic mode it is the first
@@ -1008,7 +1010,7 @@ graph; it still refuses until that index is complete. Prepare existing named-onl
 vectors through bounded `POST /embed_backfill_graph` calls, then enable the
 flag. This avoids turning the next producer snapshot into an unpaced initial
 embedding drain. Graph backfill leaves entities with any ROOT history alone,
-including ROOT entities without vectors. Roll back exposure by disabling
+including ROOT entities without vectors. Roll back exposure by setting `default_graph_scope = "root"` and disabling
 `named_graphs`; retain this binary's ROOT exclusion while named vectors exist.
 Reverting to a pre-scope binary after backfill can expose those vectors in
 unscoped search.

@@ -15,6 +15,12 @@ use crate::types::Value;
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let confidence = super::search_confidence::Policy::parse(input)?;
+    let graph_scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
+    if (input.get("structured_query").is_some() || input.get("filters").is_some())
+        && graph_scope.ids.as_slice() != [0]
+    {
+        return Err(Error::InvalidValue("structured search currently supports ROOT only; configure search.default_graph_scope = root to use it".into()));
+    }
     let mut response = if input.get("structured_query").is_some() || input.get("filters").is_some()
     {
         super::structured_search::search(store, input)?
@@ -22,6 +28,7 @@ pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         super::search_fusion::dispatch_search_fusion(store, input)?
     };
     confidence.annotate(input, &mut response)?;
+    response["search_scope"] = graph_scope.coverage(store, input);
     Ok(response)
 }
 
@@ -36,7 +43,7 @@ pub(super) fn semantic_response_in(
 ) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     let content_ranking = super::search_ranking::ranking_mode(input)?;
-    if graph_scope.explicit && content_ranking {
+    if graph_scope.ids.as_slice() != [0] && content_ranking {
         return Err(Error::InvalidValue("explicit graph scope currently supports semantic or keyword ranking, not ROOT content/anchor ranking".into()));
     }
     let explicit_embedding: Option<Vec<f32>> = input

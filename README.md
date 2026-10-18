@@ -168,6 +168,11 @@ single transaction, and one fork rollback undoes it. Walkthrough:
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
 
+Search defaults to all registered graphs minus configured `search.exclude_graphs`;
+SPARQL keeps its explicit dataset rules and ROOT default. Search responses report
+graph coverage. Existing named-only semantic vectors need bounded preparation
+before enabling them. See [named graphs, search, and promotion](docs/book/src/concepts/named-graphs.md#search-has-a-broader-default-than-sparql).
+
 ## Wire it into your agent
 
 Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, and
