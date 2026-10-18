@@ -408,6 +408,7 @@ async fn main() {
         .route("/memory/export", post(memory_files::export))
         .route("/memory/projection", post(memory_files::projection))
         .route("/memory/commit", post(memory_files::commit))
+        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         .layer(axum::Extension(config.memory_files.clone()))
         .merge(assets::routes())
         // Core API

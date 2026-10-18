@@ -42,6 +42,7 @@ fn fixture() -> (Router, crate::SharedStore) {
         .route("/memory/read", post(super::read))
         .route("/memory/export", post(super::export))
         .route("/memory/projection", post(super::projection))
+        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         .layer(axum::Extension(config))
         .layer(middleware::from_fn(
             move |mut req: axum::extract::Request, next| {
@@ -184,4 +185,20 @@ async fn own_writer_binding_replay_conflict_and_cross_crew_read() {
     let auth = store.transaction_auth(tx).unwrap().unwrap();
     assert_eq!(auth.principal, "urn:example:alpha");
     assert_eq!(auth.auth_class, "named_bearer");
+}
+
+#[tokio::test]
+async fn oversized_body_refuses_before_file_parsing_or_storage() {
+    let (app, state) = fixture();
+    let app = app.layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024));
+    let request = Request::builder()
+        .uri("/memory/commit")
+        .method("POST")
+        .header("content-type", "application/json")
+        .header("authorization", "Bearer alpha")
+        .body(Body::from("x".repeat(1024 * 1024 + 1)))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(state.lock().list_transactions().unwrap().is_empty());
 }
