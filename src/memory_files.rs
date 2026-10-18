@@ -17,6 +17,7 @@ pub const MAX_FILES: usize = 128;
 pub const MAX_OWNER_BYTES: usize = 4 * 1024 * 1024;
 
 mod model;
+pub(crate) mod write_scope;
 pub use model::*;
 
 fn invalid(message: &str) -> Error {
@@ -219,6 +220,22 @@ pub fn commit(
     commit_locked(store, graph, input, &owner, &intent, &receipt_id, timestamp)
 }
 
+/// Read an exact intent's receipt without retrying a possibly committed write.
+pub fn receipt(
+    store: &Store,
+    graph: i64,
+    input: &Commit,
+    authority: Authority<'_>,
+) -> Result<Option<Receipt>> {
+    validate(input, &authority)?;
+    let intent = digest(json(input)?.as_bytes());
+    let id = format!(
+        "urn:quipu:memory:receipt:{}",
+        digest(json(&(&input.owner, &input.idempotency_key))?.as_bytes())
+    );
+    replay(store, graph, input, &intent, &id)
+}
+
 fn replay(
     store: &Store,
     graph: i64,
@@ -395,14 +412,17 @@ fn commit_locked(
             value: None,
         },
     ];
-    if let Err(error) = store.transact_to_graph_if(
-        &datums,
-        timestamp,
-        Some(actor),
-        Some("memory-file"),
-        graph,
-        &expected,
-    ) {
+    let result = write_scope::protocol(graph, &datums, || {
+        store.transact_to_graph_if(
+            &datums,
+            timestamp,
+            Some(actor),
+            Some("memory-file"),
+            graph,
+            &expected,
+        )
+    });
+    if let Err(error) = result {
         if matches!(&error, Error::ConditionalWriteConflict)
             && let Some(receipt) = replay(store, graph, input, intent, receipt_id)?
         {

@@ -234,6 +234,8 @@ impl Store {
         };
         #[cfg(not(feature = "owl"))]
         let staged_datums = datums.to_vec();
+        crate::memory_files::write_scope::check(self, graph, &staged_datums)
+            .map_err(|e| self.stash_refusal("memory-files", e, staged_datums.len()))?;
         // Whether anything beyond the caller's datums entered this write.
         let inferred = staged_datums.len() != datums.len();
 

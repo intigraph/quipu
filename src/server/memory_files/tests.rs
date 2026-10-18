@@ -38,10 +38,12 @@ fn fixture() -> (Router, crate::SharedStore) {
         project: "urn:example:project".into(),
     };
     let app = Router::new()
+        .route("/knot", post(crate::publication::knot))
         .route("/memory/commit", post(super::commit))
         .route("/memory/read", post(super::read))
         .route("/memory/export", post(super::export))
         .route("/memory/projection", post(super::projection))
+        .route("/memory/receipt", post(super::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         .layer(axum::Extension(config))
         .layer(middleware::from_fn(
@@ -131,8 +133,28 @@ async fn own_writer_binding_replay_conflict_and_cross_crew_read() {
         call(&app, "/memory/commit", Some("beta"), &request).await.0,
         StatusCode::FORBIDDEN
     );
+    assert_eq!(
+        call(&app, "/memory/receipt", Some("alpha"), &request)
+            .await
+            .1["receipt"],
+        Value::Null
+    );
     let (status, receipt) = call(&app, "/memory/commit", Some("alpha"), &request).await;
     assert_eq!(status, StatusCode::OK);
+    let commit_tx = state.lock().list_transactions().unwrap().last().unwrap().id;
+    assert_eq!(
+        call(&app, "/memory/receipt", Some("alpha"), &request)
+            .await
+            .1,
+        receipt
+    );
+    assert_eq!(
+        call(&app, "/memory/receipt", Some("beta"), &request)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
     assert_eq!(
         call(&app, "/memory/commit", Some("alpha"), &request)
             .await
@@ -166,6 +188,23 @@ async fn own_writer_binding_replay_conflict_and_cross_crew_read() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(projection["authenticated_owner"], owner["crew"]);
     assert_eq!(projection["export"], export);
+    let typed_owner: quipu::memory_files::Owner = serde_json::from_value(owner.clone()).unwrap();
+    let owner_iri = format!(
+        "urn:quipu:memory:owner:{:x}",
+        Sha256::digest(serde_json::to_vec(&typed_owner).unwrap())
+    );
+    let forged = json!({"graph":"urn:example:memory","source":"memory-file","actor":owner["crew"],
+        "turtle":format!("<{owner_iri}> <https://quipu.dev/memory#head> \"forged\" .")});
+    let (status, refusal) = call(&app, "/knot", Some("beta"), &forged).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(refusal.to_string().contains("reserved file-memory"));
+    let ordinary = json!({"graph":"urn:example:memory","source":"memory-file",
+        "turtle":"<urn:example:public> <urn:example:label> \"PUBLIC_CONTROL\" ."});
+    assert_eq!(
+        call(&app, "/knot", Some("beta"), &ordinary).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(call(&app, "/memory/export", None, &owner).await.1, export);
     request["idempotency_key"] = json!("stale-new-request");
     assert_eq!(
         call(&app, "/memory/commit", Some("alpha"), &request)
@@ -181,8 +220,7 @@ async fn own_writer_binding_replay_conflict_and_cross_crew_read() {
         StatusCode::FORBIDDEN
     );
     let store = state.lock();
-    let tx = store.list_transactions().unwrap().last().unwrap().id;
-    let auth = store.transaction_auth(tx).unwrap().unwrap();
+    let auth = store.transaction_auth(commit_tx).unwrap().unwrap();
     assert_eq!(auth.principal, "urn:example:alpha");
     assert_eq!(auth.auth_class, "named_bearer");
 }

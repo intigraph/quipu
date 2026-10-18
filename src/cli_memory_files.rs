@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use std::{fs::File, io::Read};
 
 const HELP: &str = "qp memory read|export <owner.json> --graph IRI --db PATH\n\
+qp memory receipt <request.json> --graph IRI --db PATH\n\
 qp memory commit <request.json> --graph IRI --db PATH --local-authority\n\
 Explicit local filesystem authority; actor fields are not remote authentication.\n\
 export prints a bounded JSON file-data envelope, not a native-file projection.\n";
@@ -30,7 +31,7 @@ fn input<T: DeserializeOwned>(path: &str) -> Result<T> {
 
 fn execute(args: &[String]) -> Result<Value> {
     let action = args.get(2).ok_or_else(|| bad("memory action required"))?;
-    if !["read", "export", "commit"].contains(&action.as_str()) {
+    if !["read", "export", "receipt", "commit"].contains(&action.as_str()) {
         return Err(bad("unknown memory action"));
     }
     let path = args
@@ -72,7 +73,7 @@ fn execute(args: &[String]) -> Result<Value> {
         return Err(bad("local memory commit requires --local-authority"));
     }
     // Validate input before opening or creating a repository.
-    let (owner, request) = if action == "commit" {
+    let (owner, request) = if action == "commit" || action == "receipt" {
         let request: memory::Commit = input(path)?;
         (request.owner.clone(), Some(request))
     } else {
@@ -87,6 +88,15 @@ fn execute(args: &[String]) -> Result<Value> {
             .registered_graph_id(graph)?
             .ok_or_else(|| bad("memory graph is not registered"))?
     };
+    if action == "receipt" {
+        let receipt = memory::receipt(
+            &store,
+            graph_id,
+            request.as_ref().expect("parsed request"),
+            memory::Authority::Local,
+        )?;
+        return Ok(json!({"authority":"local_filesystem", "receipt":receipt}));
+    }
     if let Some(request) = request {
         let receipt = memory::commit(
             &mut store,

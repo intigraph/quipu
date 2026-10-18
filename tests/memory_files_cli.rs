@@ -54,6 +54,20 @@ fn cli_commit_export_and_cross_owner_read_share_the_core_contract() {
     let committed = ok(root, &args);
     assert_eq!(committed["authority"], "local_filesystem");
     assert_eq!(ok(root, &args), committed); // replay, not a second revision
+    let read_receipt = ok(
+        root,
+        &[
+            "memory",
+            "receipt",
+            "commit.json",
+            "--graph",
+            graph,
+            "--db",
+            "fixture.db",
+        ],
+    );
+    assert_eq!(read_receipt, committed);
+
     let export = ok(
         root,
         &[

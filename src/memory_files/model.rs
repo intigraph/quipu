@@ -3,6 +3,13 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+// Missing is not an explicit null: in particular it must never mean delete.
+fn explicit_nullable<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Option::<String>::deserialize(deserializer)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Owner {
@@ -25,8 +32,11 @@ pub enum Authority<'a> {
 pub struct Commit {
     pub owner: Owner,
     pub path: String,
+    #[serde(deserialize_with = "explicit_nullable")]
     pub text: Option<String>, // None is an explicit tombstone, never a scan omission.
+    #[serde(deserialize_with = "explicit_nullable")]
     pub expected_snapshot: Option<String>,
+    #[serde(deserialize_with = "explicit_nullable")]
     pub expected_file: Option<String>,
     pub idempotency_key: String,
     pub harness: String,

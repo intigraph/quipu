@@ -73,6 +73,34 @@ pub(crate) async fn projection(
     .await
 }
 
+pub(crate) async fn receipt(
+    State(store): State<SharedStore>,
+    Extension(config): Extension<MemoryFilesConfig>,
+    principal: Option<Extension<CrewPrincipal>>,
+    Json(input): Json<memory::Commit>,
+) -> Result<Json<Value>, AppError> {
+    config.check(&input.owner)?;
+    let principal = principal
+        .ok_or_else(|| quipu::Error::PolicyDenied("named file receipt identity required".into()))?
+        .0;
+    if principal.iri != input.owner.crew {
+        return Err(
+            quipu::Error::PolicyDenied("receipt identity differs from owner".into()).into(),
+        );
+    }
+    blocking(move || {
+        let store = store.read();
+        let receipt = memory::receipt(
+            &store,
+            graph(&store, &config)?,
+            &input,
+            memory::Authority::Named(&principal),
+        )?;
+        Ok(Json(json!({"receipt":receipt})))
+    })
+    .await
+}
+
 pub(crate) async fn commit(
     State(store): State<SharedStore>,
     Extension(config): Extension<MemoryFilesConfig>,

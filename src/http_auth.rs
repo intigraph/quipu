@@ -101,6 +101,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/read",
     "/memory/export",
     "/memory/projection",
+    "/memory/receipt",
     "/watermark",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
     // (lookup + a prepared SELECT); `decide` touches no store at all. The
@@ -192,7 +193,7 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    path == "/memory/projection"
+    matches!(path, "/memory/projection" | "/memory/receipt")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.

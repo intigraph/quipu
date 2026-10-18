@@ -22,6 +22,8 @@ All operations accept JSON and return bounded JSON envelopes:
   `authenticated_owner`. Requires an existing verified named credential whose
   principal exactly matches the owner. A shared bearer cannot prove this.
   This endpoint reads data; it does not write native files.
+- `POST /memory/receipt`: the exact original intent; returns its verified receipt
+  or null without retrying the write. Requires the matching named principal.
 - `POST /memory/commit`: one file intent with owner, relative path, UTF-8 `text`,
   expected snapshot and file revision, idempotency key, harness and opaque account
   label. A null text is an explicit tombstone. Requires the matching named
@@ -38,6 +40,13 @@ An owner snapshot contains at most 128 file entries and 4 MiB of live text; each
 file is at most 256 KiB. Tombstones remain in the manifest. Invalid UTF-8,
 traversal paths and ambiguous stored records refuse. The complete manifest is
 conditional on the owner head inside the ordinary transaction savepoint.
+
+Generic RDF mutations cannot edit reserved file-memory subjects or predicates,
+even when caller-supplied actor/source fields resemble a memory writer. The
+shared transaction pipeline requires a private capability for the validated
+protocol's exact rows. This also protects retractions and duplicate source
+claims. Current memory records must be changed through the memory protocol;
+privileged offline database restore remains filesystem authority.
 
 Records use the existing base `Artifact` class with a memory profile, rather
 than minting new ontology classes. Owner, revision, snapshot and receipt records
@@ -56,6 +65,7 @@ that database. Every invocation requires an explicit database and graph:
 ```sh
 qp memory read owner.json --db fixture.db --graph urn:example:memory
 qp memory commit request.json --db fixture.db --graph urn:example:memory --local-authority
+qp memory receipt request.json --db fixture.db --graph urn:example:memory
 qp memory export owner.json --db fixture.db --graph urn:example:memory
 ```
 

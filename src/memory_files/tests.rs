@@ -45,6 +45,11 @@ fn exact_text_and_owner_readback_are_not_a_summary() {
 fn lost_response_replay_precedes_now_stale_snapshot_and_file_heads() {
     let mut store = Store::open_in_memory().unwrap();
     let request = input();
+    assert!(
+        receipt(&store, 0, &request, Authority::Local)
+            .unwrap()
+            .is_none()
+    );
     let first = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
     let mut second = request.clone();
     second.idempotency_key = "two".into();
@@ -52,6 +57,12 @@ fn lost_response_replay_precedes_now_stale_snapshot_and_file_heads() {
     second.expected_snapshot = Some(first.snapshot.clone());
     commit(&mut store, 0, &second, Authority::Local, TS).unwrap();
     let txs = store.list_transactions().unwrap().len();
+    assert_eq!(
+        receipt(&store, 0, &request, Authority::Local).unwrap(),
+        Some(first.clone())
+    );
+    assert_eq!(store.list_transactions().unwrap().len(), txs);
+
     assert_eq!(
         commit(&mut store, 0, &request, Authority::Local, TS).unwrap(),
         first
@@ -252,7 +263,9 @@ fn public_repository_selector_excludes_memory_even_on_public_subjects() {
         )
         .unwrap(),
     ];
-    store.transact(&facts, TS, None, None).unwrap();
+    // Seed legacy/offline contaminated rows through the private fixture scope;
+    // generic public writes cannot mint this capability.
+    write_scope::protocol(0, &facts, || store.transact(&facts, TS, None, None)).unwrap();
     let query = include_str!("../../queries/repository-share-quipu.rq");
     let (bytes, count) =
         crate::export_rdf_construct(&store, oxrdfio::RdfFormat::NTriples, query).unwrap();
@@ -260,4 +273,158 @@ fn public_repository_selector_excludes_memory_even_on_public_subjects() {
     assert!(count > 0 && output.contains("PUBLIC_CONTROL"));
     assert!(!output.contains("PRIVATE_MEMORY_SENTINEL"));
     assert!(!output.contains("urn:quipu:memory:"));
+}
+
+#[test]
+fn omitted_nullable_intent_fields_are_not_an_implicit_delete_or_parent() {
+    let value = serde_json::to_value(input()).unwrap();
+    for field in ["text", "expected_snapshot", "expected_file"] {
+        let mut missing = value.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        assert!(
+            serde_json::from_value::<Commit>(missing).is_err(),
+            "{field}"
+        );
+    }
+    let mut explicit = value;
+    explicit["text"] = serde_json::Value::Null;
+    let request: Commit = serde_json::from_value(explicit).unwrap();
+    assert!(request.text.is_none());
+}
+
+#[test]
+fn generic_write_cannot_bypass_memory_protocol_with_a_forged_source() {
+    let mut store = Store::open_in_memory().unwrap();
+    let request = input();
+    let accepted = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
+    let owner = owner_id(&request.owner).unwrap();
+    let forged = datum(
+        &store,
+        &owner,
+        HEAD,
+        Value::Str("urn:example:forged-head".into()),
+        TS,
+        Op::Assert,
+    )
+    .unwrap();
+    let identity = crate::transaction_auth::Identity {
+        principal: "urn:example:beta".into(),
+        credential_id: Some("beta".into()),
+        auth_class: "named_bearer".into(),
+        attestation: Default::default(),
+    };
+    let result = crate::transaction_auth::with_identity(Some(identity), || {
+        store.transact_to_graph(
+            &[forged],
+            TS,
+            Some(&request.owner.crew),
+            Some("memory-file"),
+            0,
+        )
+    });
+    assert!(
+        result.is_err(),
+        "generic mutation bypassed file owner/CAS protocol"
+    );
+    assert_eq!(
+        read(&store, 0, &request.owner).unwrap().unwrap().revision,
+        accepted.snapshot
+    );
+}
+
+#[test]
+fn generic_set_retract_duplicate_claim_and_forged_source_cannot_mutate_records() {
+    let mut store = Store::open_in_memory().unwrap();
+    let request = input();
+    let accepted = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
+    let owner = store
+        .lookup(&owner_id(&request.owner).unwrap())
+        .unwrap()
+        .unwrap();
+    let head = store.lookup(HEAD).unwrap().unwrap();
+    assert!(
+        store
+            .set_triple(
+                owner,
+                head,
+                Value::Str("forged".into()),
+                TS,
+                Some(&request.owner.crew),
+                true,
+                Some("memory-file")
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .retract_triples(
+                owner,
+                Some(head),
+                None,
+                TS,
+                None,
+                false,
+                Some("memory-file")
+            )
+            .is_err()
+    );
+    let duplicate = datum(
+        &store,
+        &owner_id(&request.owner).unwrap(),
+        HEAD,
+        Value::Str(accepted.snapshot.clone()),
+        TS,
+        Op::Assert,
+    )
+    .unwrap();
+    assert!(
+        store
+            .transact(&[duplicate], TS, None, Some("unrelated-source"))
+            .is_err()
+    );
+    let ordinary = datum(
+        &store,
+        "urn:example:ordinary",
+        "urn:example:label",
+        Value::Str("POSITIVE_CONTROL".into()),
+        TS,
+        Op::Assert,
+    )
+    .unwrap();
+    store
+        .transact(&[ordinary], TS, None, Some("memory-file"))
+        .unwrap();
+    assert_eq!(
+        read(&store, 0, &request.owner).unwrap().unwrap().revision,
+        accepted.snapshot
+    );
+    assert!(
+        store
+            .refusals_by_gate()
+            .unwrap()
+            .iter()
+            .any(|(gate, n)| gate == "memory-files" && *n >= 3)
+    );
+}
+
+#[test]
+fn protocol_scope_restores_on_panic_and_cannot_authorize_another_graph() {
+    let store = Store::open_in_memory().unwrap();
+    let row = datum(
+        &store,
+        "urn:quipu:memory:owner:fixture",
+        HEAD,
+        Value::Str("fixture".into()),
+        TS,
+        Op::Assert,
+    )
+    .unwrap();
+    let rows = [row];
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        write_scope::protocol(0, &rows, || {
+            assert!(write_scope::check(&store, 1, &rows).is_err());
+            panic!("bounded fixture unwind");
+        })
+    }));
+    assert!(write_scope::check(&store, 0, &rows).is_err());
 }

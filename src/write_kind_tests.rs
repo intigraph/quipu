@@ -5,7 +5,8 @@ fn the_label_set_is_closed_and_distinct() {
     // An exhaustive match: a new variant missing here is a compile error, and
     // missing from ALL is the length assertion below.
     let listed = |k: WriteKind| match k {
-        WriteKind::Episode
+        WriteKind::MemoryFiles
+        | WriteKind::Episode
         | WriteKind::Knot
         | WriteKind::Promote
         | WriteKind::Import
@@ -44,6 +45,11 @@ fn every_write_endpoint_has_a_named_kind() {
     assert!(missing.is_empty(), "unclassified write routes: {missing:?}");
     // Control: a read route is not a write kind.
     assert_eq!(WriteKind::for_route("/query"), None);
+    assert_eq!(WriteKind::for_route("/memory/projection"), None);
+    assert_eq!(
+        WriteKind::for_route("/memory/commit"),
+        Some(WriteKind::MemoryFiles)
+    );
     // malcolm: promote is its own kind, for both promotion paths.
     assert_eq!(
         WriteKind::for_route("/knot/promote"),
