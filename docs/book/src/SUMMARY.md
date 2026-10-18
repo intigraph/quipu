@@ -41,6 +41,7 @@
 - [CLI Commands](reference/cli.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [REST API](reference/rest-api.md)
+  - [Versioned file memory](reference/memory-files.md)
 - [Atomic source acquisition](reference/acquisition.md)
 - [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)

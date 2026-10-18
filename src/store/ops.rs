@@ -88,28 +88,8 @@ impl Store {
         self.transact_to_graph(datums, timestamp, actor, source, 0)
     }
 
-    /// Write a batch to a specific named graph. g=0 is ROOT. Idempotency and
-    /// retraction are SCOPED to `graph`: writing to an overlay never skips a
-    /// triple because ROOT has it, and never closes a ROOT fact's `valid_to`. The
-    /// same (e,a,v) coexists across graphs, and an overlay's retract closes only
-    /// its OWN assertions — the base stays un-mutated (Stiwi's #36 requirement,
-    /// enforced in SQL, not convention). Cross-graph SHADOWING (an overlay
-    /// hiding a ROOT fact in the composed view) is a read-time resolution over
-    /// the ordered dataset stack, handled by the query path — not a base write.
-    pub fn transact_to_graph(
-        &mut self,
-        datums: &[Datum],
-        timestamp: &str,
-        actor: Option<&str>,
-        source: Option<&str>,
-        graph: i64,
-    ) -> Result<i64> {
-        self.transact_to_graph_scoped(datums, timestamp, actor, source, graph, None)
-    }
-
-    /// Source cleanup must preserve assertions belonging to other producers.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn transact_to_graph_scoped(
+    pub(crate) fn transact_to_graph_scoped_checked(
         &mut self,
         datums: &[Datum],
         timestamp: &str,
@@ -117,25 +97,12 @@ impl Store {
         source: Option<&str>,
         graph: i64,
         retract_source: Option<&str>,
+        expected: &[super::conditional::ExpectedValue],
     ) -> Result<i64> {
-        // Manual savepoint commands (not the RAII `Savepoint`) so `&self` stays
-        // usable for the write-time policy guard AFTER the datums are staged but
-        // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
-        // `Savepoint` holds a mutable borrow of the connection. Nests inside
-        // speculate()'s outer savepoint exactly as the RAII form did.
-        // Attachment first, ahead even of authority: a write to an attached
-        // graph is not a permission question, it is a category error — that
-        // graph's facts live in a file this store does not own (quipu #75).
-        // The inferred suffix is RESERVED (quipu-0b6): a companion graph holds
-        // engine-derived entailments only, so an external write there could
-        // forge reachability the reasoner never derived. Refused by SOURCE,
-        // not by caller: only reasoner/materializer output, the plane's own
-        // bookkeeping, and the one-time migration pass.
+        // Normal graph/authority gates precede the savepoint. Conditional
+        // callers share this exact pipeline and its post-rollback evidence.
         self.assert_write_target_allowed(graph, source)?;
-        // Authority first, before anything is staged: a write the chain may not
-        // make should not reach the policy gate, the placement check, or the
-        // fact table. SARC I5. This gate runs BEFORE the savepoint opens, so
-        // its refusal is recorded directly — there is no rollback to outlive.
+        // Authority precedes the savepoint: its refusal survives rollback.
         if let Err(e) = self.enforce_graph_authority(graph) {
             let refusal = super::events::PendingRefusal {
                 gate: "authority",
@@ -151,18 +118,12 @@ impl Store {
             );
             return Err(e);
         }
-        // SUSPEND read-model consultation for the duration of this write rather
-        // than dropping the model. The write-time policy guard runs INSIDE the
-        // savepoint and queries the pending post-state, so it must see staged
-        // rows — the model holds the pre-write state and would answer without
-        // them, denying a write it had just satisfied
-        // (deny_blocks_noncompliant_write). Suspending rather than dropping is
-        // what lets the commit below MAINTAIN the model instead of forcing a
-        // rebuild, and it means a rolled-back write cannot poison it either:
-        // the model never observed the staged rows at all.
+        // Suspended models cannot answer policy checks from stale pre-state.
         self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
-        match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
+        match self.check_expected(graph, expected, datums).and_then(|()| {
+            self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source)
+        }) {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
                 let counts = staged.counts;
@@ -212,11 +173,7 @@ impl Store {
                 let _ = self
                     .conn
                     .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
-                // Nothing to invalidate: the model was suspended for the whole
-                // write, so it never observed the rows this rollback discarded.
-                // That is the structural version of the fix — the earlier one
-                // dropped the model here to undo poisoning that could no longer
-                // happen.
+                // The suspended model never observed rolled-back rows.
                 self.set_write_in_progress(false);
                 // Take the staged refusal BEFORE flushing verdicts: the flush
                 // runs a nested transact whose own error path would otherwise
