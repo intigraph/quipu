@@ -53,6 +53,9 @@ pub(crate) mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
+mod graph_filter;
+#[cfg(test)]
+mod graph_filter_tests;
 mod graph_membership;
 mod group;
 mod join;
@@ -213,6 +216,10 @@ pub struct TemporalContext {
     /// `GRAPH` clause may range over every named graph; `Some(set)` limits which
     /// named graphs a `GRAPH ?g` / `GRAPH <iri>` can see.
     pub named_dataset: Option<Vec<i64>>,
+    /// Optimizer-only candidates for a direct GRAPH-variable/plain-BGP scan.
+    /// This narrows work without changing whether FROM NAMED was explicit.
+    /// It is intersected with the dataset and cleared before evaluating the BGP.
+    pub graph_candidates: Option<std::sync::Arc<Vec<i64>>>,
     /// Abort evaluation once this instant passes (None = derive from the
     /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
     /// operators in the pattern evaluator, INSIDE the pure-Rust join/merge

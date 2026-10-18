@@ -194,6 +194,7 @@ jobs:
           timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
           timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
           timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
+          timeout 120 python3 scripts/test-read-process-pool.py target/debug/quipu-server target/debug/quipu
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the
@@ -422,6 +423,8 @@ jobs:
         run: |
           python3 scripts/test_release_ci_gate.py
           python3 scripts/test_release_ci_gate_controls.py
+          python3 scripts/test_semver_policy.py
+          python3 scripts/check-semver-policy.py
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
