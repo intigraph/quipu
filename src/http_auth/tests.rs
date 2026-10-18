@@ -357,6 +357,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/query_usage.rs",
         // Bounded point-query scheduling recognizer; no HTTP routes.
         "server/point_reads.rs",
+        "server/process_pool.rs", // middleware only; no route registration
         "server/reason.rs",
         "server/request_middleware.rs",
         "server/service_description.rs",

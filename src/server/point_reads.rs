@@ -10,7 +10,22 @@ pub(crate) fn open_pool(
     config: &quipu::config::ServerConfig,
 ) -> super::handle::ReadPool {
     use super::handle::ReadPool;
-    let mut read_pool = ReadPool::open(db_path, store, config.read_pool_size);
+    let count = if config.read_processes > 0 {
+        0
+    } else {
+        config.read_pool_size
+    };
+    let mut read_pool = ReadPool::open(db_path, store, count);
+    if let Some(allocation) = quipu::memory_budget::MemoryAllocation::for_server(config)
+        .expect("memory budget validated before opening the store")
+    {
+        for connection in &read_pool.conns {
+            connection
+                .lock()
+                .apply_memory_allocation(allocation)
+                .expect("applying validated reader memory allocation");
+        }
+    }
     if config.replica.is_some() {
         for connection in &read_pool.conns {
             connection
