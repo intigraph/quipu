@@ -87,6 +87,12 @@ onmessage = async (e) => {
         });
       case "episode":
         return postMessage({ id, ok: true, result: JSON.parse(need().episode(episode)) });
+      case "knot":
+        return postMessage({ id, ok: true, result: JSON.parse(need().knot(e.data.input)) });
+      case "shapes":
+        return postMessage({ id, ok: true, result: JSON.parse(need().shapes(e.data.input)) });
+      case "entityHistory":
+        return postMessage({ id, ok: true, result: JSON.parse(need().entityHistory(e.data.iri)) });
       case "editLog":
         return postMessage({ id, ok: true, result: JSON.parse(need().editLog()) });
 

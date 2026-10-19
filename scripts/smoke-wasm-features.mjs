@@ -87,6 +87,7 @@ try {
     if (message.cmd === "semantic") message.cmd = "search";
     if (message.cmd === "episode") { message.episode = JSON.stringify(message.input); delete message.input; }
     if (message.cmd === "ontology") message.input = JSON.stringify(message.input);
+    if (["knot", "shapes"].includes(message.cmd)) message.input = JSON.stringify(message.input);
     if (["set", "retract"].includes(message.cmd)) message.value = JSON.stringify(message.value);
     return page.evaluate((m) => window.ask(m), message);
   };
@@ -110,6 +111,27 @@ try {
     data: "<http://example.org/bad> a <http://example.org/Widget> ." });
   assert.equal(validation.conforms, false); assert.ok(validation.results.length > 0);
   console.log("PASS violating write refused with real feedback; existing two widgets preserved");
+
+  const extraShape = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:binding:RecordShape> a sh:NodeShape; sh:targetClass <urn:binding:Record>;
+ sh:property [sh:path <urn:binding:title>; sh:minCount 1] .`;
+  await ok({ cmd: "shapes", input: { action: "load", name: "browser-store-ops", turtle: extraShape } });
+  assert.equal((await ok({ cmd: "shapes", input: { action: "get", name: "browser-store-ops" } })).turtle, extraShape);
+  const goodKnot = await ok({ cmd: "knot", input: {
+    turtle: '<urn:binding:good> a <urn:binding:Record>; <urn:binding:title> "Before" .',
+  } });
+  assert.ok(goodKnot.tx_id > 0);
+  const editsBeforeBadKnot = (await ok({ cmd: "editLog" })).length;
+  const badKnot = await ask({ cmd: "knot", input: { turtle: '<urn:binding:bad> a <urn:binding:Record> .' } });
+  assert.ok(badKnot.ok === false || badKnot.value?.conforms === false);
+  assert.equal((await ok({ cmd: "query", sparql: 'SELECT ?p WHERE { <urn:binding:bad> ?p ?v }' })).rows.length, 0);
+  assert.equal((await ok({ cmd: "editLog" })).length, editsBeforeBadKnot);
+  await ok({ cmd: "set", entity: "urn:binding:good", predicate: "urn:binding:title", value: { str: "After" } });
+  const history = await ok({ cmd: "entityHistory", iri: "urn:binding:good" });
+  assert.ok(history.history.some((fact) => fact.value === "Before"));
+  assert.ok(history.history.some((fact) => fact.value === "After"));
+  assert.equal((await ask({ cmd: "entityHistory", iri: "urn:binding:absent" })).ok, false);
+  console.log("PASS shipped worker shape adoption, knot admission/refusal/no-leak and native entity history");
 
   const edge = (predicate, subject = "car", object = "cat") =>
     `SELECT ?s FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> WHERE { <http://example.org/${subject}> <http://example.org/${predicate}> ?s . FILTER(?s=<http://example.org/${object}>) }`;

@@ -191,6 +191,7 @@ pub use mcp::align::{tool_align_apply, tool_align_decide, tool_align_propose};
 #[cfg(feature = "owl")]
 pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
+pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
