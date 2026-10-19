@@ -65,6 +65,11 @@ const server = http.createServer((req,res) => {
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await page.screenshot({path:path.join(out,"relation-mobile.png"),fullPage:true});
     await page.click("#graph-fit");
+    const targets=await page.locator("#graph-targets .cluster-target").evaluateAll(bs=>bs
+      .map(b=>{const r=b.getBoundingClientRect();return {left:r.left,right:r.right,width:r.width,height:r.height}})
+      .sort((a,b)=>a.left-b.left));
+    assert(targets.every((r,i)=>r.width>=44&&r.height>=44&&(!i||targets[i-1].right<=r.left)),
+      "375px cord targets retain separate 44px touch areas");
     await page.screenshot({path:path.join(out,"cord-overview.png")});
     assert(await page.locator("#graph [data-cord=main]").count());
     // Missing term and injection-shaped strings never create terms or leak all history.

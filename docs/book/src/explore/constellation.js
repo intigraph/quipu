@@ -61,7 +61,7 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
     svg.replaceChildren(); layer.replaceChildren();
     if (overview) {
       const visible = groups.filter((g) => g.count);
-      const points = visible.map((g, i) => ({g, x: 45 + i * (width - 90) / Math.max(1, visible.length - 1), y: 75}));
+      const points = visible.map((g, i) => ({g, x: 26 + i * (width - 52) / Math.max(1, visible.length - 1), y: 75}));
       shape("line", { x1: 24, y1: 40, x2: width - 24, y2: 40,
         stroke: "var(--text)", "stroke-width": 4, "data-cord": "main" });
       for (const {g, x} of points) {
