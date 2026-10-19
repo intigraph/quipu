@@ -19,8 +19,10 @@ mod vector_backend;
 pub use attachments::{
     AttachmentConfig, describe_attachments, open_with_configured_attachments, resolve_attachments,
 };
-pub use federation::{FederationConfig, RemoteEndpoint};
+pub use federation::{EndpointPendant, FederationConfig, RemoteEndpoint};
 pub use query_capture::QueryCaptureConfig;
+#[cfg(all(feature = "remote", not(target_arch = "wasm32")))]
+mod endpoint_pointers;
 pub use vector_backend::install_vector_backend;
 
 use crate::namespace;

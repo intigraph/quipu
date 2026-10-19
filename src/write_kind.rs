@@ -95,7 +95,7 @@ impl WriteKind {
             "/memory/commit" => Self::MemoryFiles,
             "/episode" | "/episodes/complete" | "/episode/retract" => Self::Episode,
             "/knot" | "/knot/stage" => Self::Knot,
-            "/knot/promote" | "/import/promote" => Self::Promote,
+            "/knot/promote" | "/knot/cancel" | "/import/promote" => Self::Promote,
             "/import" | "/merge/apply" => Self::Import,
             "/update" => Self::Update,
             "/set" => Self::Set,

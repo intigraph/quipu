@@ -175,3 +175,121 @@ impl Store {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::promotion_control::{PromotionControl, scoped};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::time::Duration;
+
+    #[test]
+    fn conditional_conflict_and_staged_cancellation_preserve_commit_boundary() {
+        let mut store = Store::open_in_memory().unwrap();
+        let entity = store.intern("http://ex/conditional-cancel").unwrap();
+        let attribute = store
+            .intern("http://www.w3.org/2000/01/rdf-schema#label")
+            .unwrap();
+        let datums = [Datum {
+            entity,
+            attribute,
+            value: Value::Str("accepted".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        }];
+        let expected = [ExpectedValue {
+            entity,
+            attribute,
+            value: None,
+        }];
+        let stale = [ExpectedValue {
+            value: Some(Value::Str("not-current".into())),
+            ..expected[0].clone()
+        }];
+        let rejected = PromotionControl::new(Duration::from_secs(30));
+        let error = scoped(rejected.clone(), || {
+            store.transact_to_graph_if(
+                &datums,
+                "2026-01-01T00:00:00Z",
+                None,
+                Some("snapshot:conditional-cancel"),
+                0,
+                &stale,
+            )
+        })
+        .unwrap_err();
+        assert!(matches!(error, Error::ConditionalWriteConflict));
+        assert!(rejected.cancel(), "stale CAS must not claim commit");
+        let before = store.current_fact_count(0).unwrap();
+        let tx_before = store.latest_tx_id().unwrap();
+
+        let control = PromotionControl::new(Duration::from_secs(30));
+        let cancelled = control.clone();
+        let writes = Arc::new(AtomicUsize::new(0));
+        let observed = writes.clone();
+        store
+            .conn
+            .create_scalar_function(
+                "test_cancel_conditional",
+                0,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                move |_| {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    cancelled.cancel();
+                    Ok(0i64)
+                },
+            )
+            .unwrap();
+        store
+            .conn
+            .execute_batch(
+                "CREATE TEMP TRIGGER test_cancel_conditional AFTER INSERT ON facts
+             BEGIN SELECT test_cancel_conditional(); END;",
+            )
+            .unwrap();
+        let error = scoped(control, || {
+            store.transact_to_graph_if(
+                &datums,
+                "2026-01-01T00:00:00Z",
+                None,
+                Some("snapshot:conditional-cancel"),
+                0,
+                &expected,
+            )
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("cancelled"), "{error}");
+        assert!(
+            writes.load(Ordering::SeqCst) > 0,
+            "actual SQL staging required"
+        );
+        assert_eq!(store.current_fact_count(0).unwrap(), before);
+        assert_eq!(store.latest_tx_id().unwrap(), tx_before);
+        store
+            .conn
+            .execute_batch("DROP TRIGGER test_cancel_conditional")
+            .unwrap();
+
+        let fresh = PromotionControl::new(Duration::from_secs(30));
+        scoped(fresh.clone(), || {
+            store.transact_to_graph_if(
+                &datums,
+                "2026-01-01T00:00:00Z",
+                None,
+                Some("snapshot:conditional-cancel"),
+                0,
+                &expected,
+            )
+        })
+        .unwrap();
+        assert_eq!(store.current_fact_count(0).unwrap(), before + 1);
+        assert!(
+            !fresh.cancel(),
+            "successful conditional write must claim commit"
+        );
+    }
+}
