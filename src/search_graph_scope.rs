@@ -10,6 +10,8 @@ pub(crate) struct GraphScope {
 
 #[cfg(test)]
 mod default_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod migration_tests;
 #[cfg(test)]
 mod tests;
 
@@ -48,7 +50,7 @@ impl GraphScope {
         }
         let mut ids = vec![0];
         let selected = graph.is_some() || graphs.is_some() || all;
-        let default_all = match store.search_config().default_graph_scope.as_str() {
+        let default_all = match store.default_search_graph_scope()?.0 {
             "all" => !selected,
             "root" => false,
             _ => {
@@ -112,12 +114,16 @@ impl GraphScope {
     }
 
     pub fn coverage(&self, store: &Store, input: &Value) -> Value {
+        let (default, default_source) = store
+            .default_search_graph_scope()
+            .unwrap_or(("unavailable", "unavailable"));
         let selected = input.get("graph").is_some_and(|v| !v.is_null())
             || input.get("graphs").is_some()
             || input.get("all_graphs") == Some(&Value::Bool(true));
         serde_json::json!({
             "selection": if selected { "explicit" } else { "default" },
-            "default": store.search_config().default_graph_scope,
+            "default": default,
+            "default_source": default_source,
             "graphs": self.ids.iter().map(|id| store.graph_display_name(*id)).collect::<Vec<_>>(),
             "excluded_graphs": store.search_config().exclude_graphs,
             "named_vectors_enabled": store.search_config().named_graphs,

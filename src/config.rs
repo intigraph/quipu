@@ -167,8 +167,9 @@ pub struct SearchConfig {
     /// Explicit graph search and automatic named-only embedding fallback.
     /// Default off: prepare vectors through bounded maintenance before enabling.
     pub named_graphs: bool,
-    /// Omitted search scope: "all" (ROOT plus registered graphs) or "root".
-    pub default_graph_scope: String,
+    /// Explicit omitted-search scope: "all" or "root". Unset uses the store's
+    /// persisted default: ALL for new stores, ROOT compatibility for old ones.
+    pub default_graph_scope: Option<String>,
     /// Graph IRIs excluded from search, including explicit selections.
     /// This is retrieval policy, not a read authorization boundary.
     pub exclude_graphs: Vec<String>,
@@ -194,7 +195,7 @@ impl Default for SearchConfig {
             fusion: "rrf".into(),
             rrf_k: 60.0,
             named_graphs: false,
-            default_graph_scope: "all".into(),
+            default_graph_scope: None,
             exclude_graphs: Vec::new(),
         }
     }

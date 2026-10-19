@@ -74,7 +74,13 @@ exports one named graph's facts instead of ROOT.
 
 ### Search has a broader default than SPARQL
 
-`POST /search` and `quipu_search` default to ROOT plus registered named graphs.
+On a new store, `POST /search` and `quipu_search` default to ROOT plus registered
+named graphs. Existing stores retain ROOT until explicitly broadened with
+`[quipu.search] default_graph_scope = "all"`. When that setting is omitted, the
+store persists its default; read-only legacy stores use ROOT without migration.
+Coverage reports the effective default and its source. This policy is local to
+the receiving store: importing a share does not replace it with the sender's
+choice. A whole-file backup retains the store's policy.
 For example, a work tracker can keep its records in its own project graph:
 those records need not be copied into ROOT to be discoverable. This covers
 graphs registered in the local store, including attached layers registered

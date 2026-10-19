@@ -44,6 +44,7 @@ pub mod respace;
 mod respace_map;
 mod retract_triples;
 mod retraction;
+mod search_scope_policy;
 mod serialize;
 mod set;
 mod settings;

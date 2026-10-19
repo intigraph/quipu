@@ -111,7 +111,7 @@ fn omitted_semantic_scope_finds_named_only_entity_and_exclusion_precedes_limit()
 #[test]
 fn legacy_root_default_is_configurable_and_bad_configuration_refuses() {
     let mut s = fixture();
-    s.search_config_mut().default_graph_scope = "root".into();
+    s.search_config_mut().default_graph_scope = Some("root".into());
     let input = json!({"mode":"keyword","query":"shared"});
     let legacy = crate::tool_search(&s, &input).unwrap();
     assert_eq!(legacy["count"], 1);
@@ -120,7 +120,7 @@ fn legacy_root_default_is_configurable_and_bad_configuration_refuses() {
         "ROOT compatibility: count={}, scope={}",
         legacy["count"], legacy["search_scope"]
     );
-    s.search_config_mut().default_graph_scope = "all".into();
+    s.search_config_mut().default_graph_scope = Some("all".into());
     let broad = crate::tool_search(&s, &input).unwrap();
     assert_eq!(broad["count"], 3);
     println!(
@@ -135,9 +135,9 @@ fn legacy_root_default_is_configurable_and_bad_configuration_refuses() {
         .unwrap()["count"],
         3
     );
-    s.search_config_mut().default_graph_scope = "typo".into();
+    s.search_config_mut().default_graph_scope = Some("typo".into());
     assert!(crate::tool_search(&s, &input).is_err());
-    s.search_config_mut().default_graph_scope = "all".into();
+    s.search_config_mut().default_graph_scope = Some("all".into());
     s.search_config_mut().exclude_graphs = vec!["not an iri".into()];
     assert!(crate::tool_search(&s, &input).is_err());
 }

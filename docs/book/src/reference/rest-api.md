@@ -990,9 +990,14 @@ omitted mode or `mode: "semantic"` preserves vector search.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
-`all_graphs: true` (also `graph: "all"`). Omitted scope defaults to ROOT plus all registered named graphs, minus
-`[quipu.search] exclude_graphs`. Set `default_graph_scope = "root"` to retain
-the old default, or pass `graph: "urn:quipu:graph:root"` for one ROOT search. Selectors
+`all_graphs: true` (also `graph: "all"`). New stores default to ROOT plus all
+registered named graphs, minus `[quipu.search] exclude_graphs`. Existing stores
+retain ROOT until explicitly broadened with `default_graph_scope = "all"`.
+An unset configuration uses the persisted store default; read-only legacy
+stores resolve to ROOT without a schema write. The response coverage reports
+the resolved `default` and its `default_source`. An explicit configuration
+overrides the stored choice. Set `default_graph_scope = "root"`, or pass
+`graph: "urn:quipu:graph:root"` for one ROOT search. Selectors
 are mutually exclusive and unknown IRIs are refused. Explicit results carry
 `graph` and selected entity memberships in `graphs`. For keyword mode,
 `graph` identifies the matching assertion; for semantic mode it is the first
