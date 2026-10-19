@@ -102,6 +102,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/export",
     "/memory/projection",
     "/memory/receipt",
+    "/rule_query",
     "/watermark",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
     // (lookup + a prepared SELECT); `decide` touches no store at all. The
