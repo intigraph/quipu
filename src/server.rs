@@ -46,6 +46,8 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/memory_files.rs"]
+mod memory_files;
 #[cfg(feature = "owl")]
 #[path = "server/owl_materialize.rs"]
 mod owl_materialize;
@@ -404,6 +406,13 @@ async fn main() {
 
     let attest_store = state.clone();
     let app = Router::new()
+        .route("/memory/read", post(memory_files::read))
+        .route("/memory/export", post(memory_files::export))
+        .route("/memory/projection", post(memory_files::projection))
+        .route("/memory/commit", post(memory_files::commit))
+        .route("/memory/receipt", post(memory_files::receipt))
+        .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
+        .layer(axum::Extension(config.memory_files.clone()))
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
@@ -529,8 +538,8 @@ async fn main() {
                         .and_then(|v| v.to_str().ok())
                         .map(str::to_string);
                     let authorization = quipu::http_auth::authorize_bearers(
-                        is_write,
-                        read_only,
+                        is_write || quipu::http_auth::requires_read_identity(&path),
+                        read_only && is_write,
                         &auth_policy,
                         auth_header.as_deref(),
                         quipu::time::epoch_secs(),

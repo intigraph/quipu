@@ -36,6 +36,7 @@
 /// or the test fails. That forced decision is the whole point — write-ness cannot
 /// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
+    "/memory/commit",
     "/knot",
     "/knot/stage",
     "/knot/promote",
@@ -98,6 +99,10 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    "/memory/read",
+    "/memory/export",
+    "/memory/projection",
+    "/memory/receipt",
     "/rule_query",
     "/watermark",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
@@ -186,6 +191,11 @@ pub const READ_ENDPOINTS: &[&str] = &[
 /// Whether `path` is a write endpoint subject to auth / read-only policy.
 pub fn is_write_endpoint(path: &str) -> bool {
     WRITE_ENDPOINTS.contains(&path)
+}
+
+/// Own-file projection needs verified identity without making shared reads private.
+pub fn requires_read_identity(path: &str) -> bool {
+    matches!(path, "/memory/projection" | "/memory/receipt")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.
