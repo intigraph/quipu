@@ -159,13 +159,16 @@ pub fn evaluate_temporal_view(
             object: source.resolve(*o)?,
         });
     }
-    let configured_work = context
-        .row_cap
-        .unwrap_or(source.search_config().max_join_rows);
-    let work_cap = if configured_work == 0 {
-        1_000_000
-    } else {
-        configured_work.min(1_000_000)
-    };
+    // Zero disables only that individual limit. A caller can tighten, but never
+    // replace or disable, the configured limit or the historical profile bound.
+    let work_cap = [
+        source.search_config().max_join_rows,
+        context.row_cap.unwrap_or(0),
+        1_000_000,
+    ]
+    .into_iter()
+    .filter(|cap| *cap > 0)
+    .min()
+    .unwrap_or(1_000_000);
     super::historical_bounded::evaluate(rules, premises, sentinel, work_cap, ctx.deadline)
 }
