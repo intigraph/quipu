@@ -3,7 +3,7 @@
 //!
 //! It is a thin shell on purpose. Loading a pack goes through the SAME
 //! `share_transport` -> `share_import` -> `promote_import` path the `quipu
-//! import` CLI takes, and every read goes through `quipu::tool_query`, the
+//! import` CLI takes, and current-state queries use `quipu::tool_query`, the
 //! same entry point the REST API and the MCP server use. A reader watching the
 //! page is therefore watching the real import and the real query engine, not a
 //! browser-shaped reimplementation of them — which is the whole point of

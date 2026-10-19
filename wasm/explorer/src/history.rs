@@ -34,8 +34,17 @@ fn read_history(store: &Store, entity: &str) -> quipu::Result<Json> {
         let tx = transactions.get(&f.tx).and_then(Option::as_ref);
         let object = match &f.value {
             Value::Ref(id) => json!({"kind":"iri", "value":store.resolve(*id)?}),
-            value => json!({"kind":"literal", "value":value.as_lexical().map_or_else(
-                || format!("{value:?}"), str::to_owned), "datatype":value.datatype(), "language":value.language()}),
+            Value::Bytes(bytes) => json!({"kind":"bytes", "value":bytes}),
+            value => {
+                let lexical = match value {
+                    Value::Int(n) => n.to_string(),
+                    Value::Float(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    _ => value.as_lexical().unwrap_or_default().to_owned(),
+                };
+                json!({"kind":"literal", "value":lexical,
+                    "datatype":value.datatype(), "language":value.language()})
+            }
         };
         rows.push(json!({"predicate":store.resolve(f.attribute)?, "object":object,
             "tx":f.tx, "valid_from":f.valid_from, "valid_to":f.valid_to,
@@ -89,5 +98,51 @@ mod tests {
             read_history(&store, "urn:test:missing").unwrap()["facts"],
             json!([])
         );
+    }
+
+    #[test]
+    fn history_preserves_literal_spelling_language_and_datatype() {
+        let mut store = Store::open_in_memory().unwrap();
+        let e = store.intern("urn:test:literals").unwrap();
+        let a = store.intern("urn:test:value").unwrap();
+        let values = [
+            Value::Int(30),
+            Value::Bool(true),
+            Value::Float(1.5),
+            Value::Typed {
+                lexical: "001".into(),
+                datatype: quipu::namespace::XSD_INTEGER.into(),
+            },
+            Value::Lang {
+                lexical: "hello@home".into(),
+                lang: "en".into(),
+            },
+        ];
+        for value in values {
+            store
+                .transact(
+                    &[Datum {
+                        entity: e,
+                        attribute: a,
+                        value,
+                        valid_from: "2026-10-01".into(),
+                        valid_to: None,
+                        op: Op::Assert,
+                    }],
+                    "2026-10-19T00:00:00Z",
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let out = read_history(&store, "urn:test:literals").unwrap();
+        let rows = out["facts"].as_array().unwrap();
+        assert_eq!(rows[0]["object"]["value"], "30");
+        assert_eq!(rows[1]["object"]["value"], "true");
+        assert_eq!(rows[2]["object"]["value"], "1.5");
+        assert_eq!(rows[3]["object"]["value"], "001");
+        assert_eq!(rows[3]["object"]["datatype"], quipu::namespace::XSD_INTEGER);
+        assert_eq!(rows[4]["object"]["value"], "hello@home");
+        assert_eq!(rows[4]["object"]["language"], "en");
     }
 }

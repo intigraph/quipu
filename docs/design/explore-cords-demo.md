@@ -1,6 +1,6 @@
 # Cord explorer demonstration
 
-[Watch or download the 20-second WebM recording](../../assets/explore-cords.webm).
+[Watch or download the 18-second WebM recording](../../assets/explore-cords.webm).
 GitHub may require downloading the file instead of playing it inline.
 
 Select the vision’s **guides** relation with Enter, expand its history, then
@@ -18,9 +18,10 @@ It is a source-candidate demonstration, not installed acceptance.
 The public before probe ran against the published explorer on October 19, 2026:
 engine `0.14.1`, build `e22dd51bfc2631bf141ed4e7eaa76803147eae7e`.
 The source baseline is `a7510ca8ea23605b395f164b8bd56dd3de7c26ac`; the candidate
-code is `6c684df2911beb2ffe598152634b6c123ffe98f9`. The recording and screenshots
-use that candidate’s code before its commit; the accompanying evidence commit
-changes media and this caption. The graph is the ordinary released repository
+layout code is `952a3005fdb7f6586b5166e592e5520861f3c8a1`. The recording and
+screenshots use that layout before its commit. The follow-up preserves literal
+spelling, language and datatype in history; the demonstrated IRI-relation flow
+is unchanged. Literal fidelity is covered by the native history tests. The graph is the ordinary released repository
 pendant, verified and imported by the real browser engine.
 
 Run `just explorer release` to stage the released repository pendant, then

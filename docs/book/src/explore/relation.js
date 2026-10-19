@@ -22,11 +22,14 @@ export async function showHistory(card, subject, { factHistory, short, current }
     for (const f of facts) {
       const item = document.createElement("dl");
       for (const [key, value] of [
-        ["Predicate", f.predicate], ["Object", f.object.value], ["Operation", f.operation],
+        ["Predicate", f.predicate], ["Object", f.object.kind === "bytes" ? JSON.stringify(f.object.value) : f.object.value],
+        ["Operation", f.operation],
         ["Valid from", f.valid_from], ["Valid to", f.valid_to ?? "Open interval"],
         ["Transaction", f.tx], ["Transaction time", f.transaction_time ?? "Not recorded"],
         ["Source", f.source ?? "Not recorded"], ["Actor", f.actor ?? "Not recorded"],
       ]) { add(item, "dt", key); add(item, "dd", String(value)); }
+      if (f.object.datatype) { add(item, "dt", "Datatype"); add(item, "dd", f.object.datatype); }
+      if (f.object.language) { add(item, "dt", "Language"); add(item, "dd", f.object.language); }
       section.append(item);
     }
     if (result.truncated) add(section, "p", "History truncated at 2,000 facts; this view is incomplete.", "bad");
