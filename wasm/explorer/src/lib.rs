@@ -9,9 +9,8 @@
 //! browser-shaped reimplementation of them — which is the whole point of
 //! putting it in front of them.
 //!
-//! Everything the page displays derives from a SPARQL query it could have
-//! typed itself, so there is no privileged view here that a reader cannot
-//! reproduce in the query box.
+//! Current facts derive from SPARQL. The read-only factHistory API additionally
+//! exposes receiver-local transaction history, never invented producer history.
 
 use quipu::share::{ShareOptions, ShareScope};
 use quipu::share_import::{PromoteImportRequest, promote_import};
@@ -19,6 +18,7 @@ use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
 mod features;
+mod history;
 mod pointers;
 
 #[wasm_bindgen]

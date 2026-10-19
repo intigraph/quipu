@@ -698,7 +698,8 @@ async function downloadNtriples() {
 
 // ------------------------------------------------------------ graph panel
 
-const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile });
+const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile,
+  factHistory: (entity) => ask({ cmd: "factHistory", entity }) });
 function drawNeighbourhood(item) { constellation.focus(item); }
 
 // ------------------------------------------------------------- query panel

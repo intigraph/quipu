@@ -119,6 +119,7 @@ onmessage = async (e) => {
       ex = Explorer.loadPendant(new Uint8Array(bytes), "smoke", new Date().toISOString());
       value = JSON.parse(ex.loadReport());
     } else if (cmd === "query") value = JSON.parse(ex.query(sparql));
+    else if (cmd === "factHistory") value = JSON.parse(ex.factHistory(entity));
     else if (cmd === "set") value = JSON.parse(ex.set(entity, predicate, v));
     else if (cmd === "retract") value = JSON.parse(ex.retract(entity, predicate ?? "", v ?? ""));
     else if (cmd === "episode") value = JSON.parse(ex.episode(episode));
@@ -254,6 +255,21 @@ try {
   check("a second /set REPLACES rather than appends",
     Number(afterSecond.rows?.[0]?.n) === 1 && setAgain.retracted >= 1,
     `count=${afterSecond.rows?.[0]?.n} retracted=${setAgain.retracted}`);
+
+  const factHistory = await page.evaluate(() => window.ask({
+    cmd: "factHistory", entity: "http://example.org/alpha",
+  }));
+  const comments = factHistory.facts.filter((f) =>
+    f.predicate === "http://www.w3.org/2000/01/rdf-schema#comment");
+  check("receiver history retains asserts, retracts and transaction provenance",
+    comments.some((f) => f.operation === "Retract" && f.object.value === "edited in a browser tab")
+      && comments.some((f) => f.operation === "Assert" && f.object.value === "edited twice")
+      && comments.every((f) => f.valid_from && f.transaction_time && f.tx > 0)
+      && factHistory.scope === "receiver-root", JSON.stringify(comments));
+  const absentHistory = await page.evaluate(() => window.ask({
+    cmd: "factHistory", entity: "http://example.org/no-such-entity",
+  }));
+  check("unknown entity history is empty with a populated control", absentHistory.facts.length === 0);
 
   // The closed-vocabulary gate is a FEATURE of the edit surface, not an
   // obstacle to it: the sender's shapes bound what a receiver may add.
