@@ -17,6 +17,36 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Versioned file-memory RPCs
+
+These JSON operations are disabled by default. To use them, a deployment must
+register the graph and configure `quipu.memory_files.enabled`, `graph`,
+`deployment` and `project`. They create neither graphs nor credentials. An
+owner is the exact deployment, project and crew IRI tuple; labels and caller
+actor fields do not authenticate it.
+
+| Endpoint | Request and response | Identity |
+|----------|----------------------|----------|
+| `POST /memory/read` | Owner tuple; current manifest or null, with explicit repository-owner coverage | Inherited deployment read boundary, including cross-crew reads |
+| `POST /memory/export` | Owner tuple; complete manifest and identified source revisions | Same inherited read boundary |
+| `POST /memory/projection` | Owner tuple; export plus `authenticated_owner` | Existing verified named principal must equal the owner |
+| `POST /memory/receipt` | Exact original commit intent; original receipt or null | Matching named principal |
+| `POST /memory/commit` | One file intent; verified receipt with file and snapshot revisions | Matching named principal and normal writable-server policy |
+
+Commit intents include owner, relative path, UTF-8 text, expected snapshot and
+file revisions, idempotency key, harness and opaque account label. Null text is
+an explicit tombstone. Receipt lookup precedes stale-parent rejection: replay
+the exact intent and key after an indeterminate result, rather than generating
+a new write. Stale new intents return HTTP 409; denied ownership returns 403.
+Disabled or invalid configuration refuses instead of accepting memory writes.
+
+Requests are bounded to 1 MiB; a file is at most 256 KiB and an owner snapshot
+contains at most 128 entries and 4 MiB of live text. Existing graph, vocabulary,
+SHACL and write-policy checks remain in force. Projection reads data; it does
+not select or overwrite a native memory directory. See [versioned file
+memory](memory-files.md) for the lossless envelope, local CLI workflow, public
+export boundary and filesystem/harness guarantees.
+
 ## Queued write timeouts
 
 When a request budget expires before a tool write starts, the server returns
