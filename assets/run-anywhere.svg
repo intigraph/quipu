@@ -110,7 +110,7 @@
       </g>
       <text x="60" y="34" fill="#ecebf5" font-size="16" font-weight="600">Offline</text>
       <text x="60" y="54" fill="#a7a6c2" font-size="12.5">One SQLite file, no server</text>
-      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">back up with cp</text>
+      <text class="m" x="60" y="74" fill="#ff4fa0" font-size="12">SQLite .backup</text>
     </g>
     <g transform="translate(650,384)">
       <rect class="card" width="240" height="88" rx="12"/>

@@ -66,21 +66,29 @@ One store file, one engine. The same rules, provenance and history hold however 
 | Command line | `quipu knot`, `quipu read`, `quipu share`, `quipu merge` ([CLI reference](docs/book/src/reference/cli.md)) |
 | HTTP | `quipu-server`: REST, MCP at `/mcp`, and a web UI ([REST API](docs/book/src/reference/rest-api.md)) |
 | Inside your app | the `quipu-ai` Rust crate ([library tour](docs/book/src/why-quipu.md#as-a-rust-library)) |
-| Offline | a single SQLite file: no server, inspect with `sqlite3`, back up with `cp` |
+| Offline | a single SQLite file: no server, inspect with `sqlite3`, back up consistently with `sqlite3 store.db ".backup backup.db"` (including active WAL data) |
 | In the browser | WebAssembly, queries stay in the tab: [explore this repository's graph](https://scbrown.github.io/quipu/explore/) |
 
 ## Share knowledge between stores
 
 <p align="center">
-  <img src="assets/sharing-flow.svg" width="900" alt="Sharing between Quipu stores: quipu share writes a git-diffable bundle of export.nt, shapes.ttl and manifest.json with stable hashes; quipu import verifies hashes and checks shapes into quarantine; quipu import promote is an explicit step into the main graph; diverged copies merge three ways by the shapes, and a conflict exits 2 instead of guessing."/>
+  <img src="assets/sharing-flow.svg" width="900" alt="Sharing between Quipu stores: quipu share writes a git-diffable bundle of export.nt, shapes.ttl and manifest.json with stable hashes; quipu import verifies hashes and checks shapes into quarantine; quipu import promote is an explicit step into the main graph; copies with a retained common base merge three ways by the shapes, and a conflict exits 2 instead of guessing."/>
 </p>
 
 ```bash
 quipu share --output ./share                   # a git-native bundle: facts + shapes + lineage
 quipu import ./their-share                     # verifies hashes, lands in QUARANTINE, not ROOT
 quipu import promote <share-id>                # a named operator's explicit act
-quipu status ./share && quipu merge ./share    # diverged? three-way; conflict exits 2
 ```
+
+To reconnect diverged copies, produce the incoming share with
+`--parent-share <base-share-id>` naming their common base. Keep exactly one copy
+of that base beneath the incoming share's parent directory; `quipu status` and
+`quipu merge` refuse missing or ambiguous lineage. An initial share without a
+parent is for import, not three-way merge. The
+[end-to-end sharing recipe](examples/sharing-demo/run.sh) creates the base,
+diverges two stores, and produces a parent-bound child before reconnecting them
+([command reference](docs/book/src/reference/cli.md#quipu-status-and-quipu-merge)).
 
 A share is plain files with stable hashes, so it diffs cleanly in git. The producer
 refuses to publish identifiers your rules mark as internal, and nothing reaches
