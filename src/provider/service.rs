@@ -391,16 +391,24 @@ mod tests {
             }],
             ..Default::default()
         };
-        let started = std::time::Instant::now();
+        let setup_started = std::time::Instant::now();
         let mut store = Store::open_in_memory().unwrap();
         store.search_config_mut().query_timeout_ms = 20;
+        let setup_elapsed = setup_started.elapsed();
+        // Store construction is fixture setup, not part of the SERVICE request.
+        let started = std::time::Instant::now();
         let err = crate::mcp::query_result_with_federation(
             &store,
             &service_input(&url),
             Some(std::sync::Arc::new(cfg)),
         )
         .unwrap_err();
-        assert!(started.elapsed() < std::time::Duration::from_millis(120));
+        let request_elapsed = started.elapsed();
+        eprintln!("SERVICE fixture setup: {setup_elapsed:?}; request: {request_elapsed:?}");
+        assert!(
+            request_elapsed < std::time::Duration::from_millis(120),
+            "SERVICE request exceeded its wall bound: {request_elapsed:?}"
+        );
         assert!(err.to_string().contains("query timeout"), "{err}");
         server.join().unwrap();
     }
