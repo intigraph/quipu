@@ -357,6 +357,7 @@ impl IntoResponse for AppError {
         // A governance denial is an authorization outcome, not a malformed
         // request — surface it as 403 so callers can distinguish it.
         let status = match &self.0 {
+            quipu::Error::ConditionalWriteConflict => StatusCode::CONFLICT,
             quipu::Error::PolicyDenied(_) => StatusCode::FORBIDDEN,
             // A query that ran out of budget is neither malformed nor a server
             // fault — 408 lets a caller distinguish "narrow your query" from

@@ -58,6 +58,7 @@ mod cli_hooks;
 mod cli_ingest;
 mod cli_knot;
 mod cli_mcp;
+mod cli_memory_files;
 mod cli_merge;
 mod cli_open;
 mod cli_pack;
@@ -181,6 +182,7 @@ fn main() {
         "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
+        "memory" => cli_memory_files::command(&args),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
@@ -376,6 +378,7 @@ COMMANDS:
     qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
     qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]

@@ -3,6 +3,8 @@ use thiserror::Error;
 /// All errors produced by Quipu.
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("conditional write revision conflict")]
+    ConditionalWriteConflict,
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 

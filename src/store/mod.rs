@@ -8,6 +8,7 @@ pub mod attach;
 pub mod attestation;
 mod batches;
 pub mod changes;
+pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
