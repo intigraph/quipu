@@ -1069,17 +1069,24 @@ omitted mode or `mode: "semantic"` preserves vector search.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
-`all_graphs: true` (also `graph: "all"`). Omitted scope remains ROOT. Selectors
+`all_graphs: true` (also `graph: "all"`). New stores default to ROOT plus all
+registered named graphs, minus `[quipu.search] exclude_graphs`. Existing stores
+retain ROOT until explicitly broadened with `default_graph_scope = "all"`.
+An unset configuration uses the persisted store default; read-only legacy
+stores resolve to ROOT without a schema write. The response coverage reports
+the resolved `default` and its `default_source`. An explicit configuration
+overrides the stored choice. Set `default_graph_scope = "root"`, or pass
+`graph: "urn:quipu:graph:root"` for one ROOT search. Selectors
 are mutually exclusive and unknown IRIs are refused. Explicit results carry
 `graph` and selected entity memberships in `graphs`. For keyword mode,
 `graph` identifies the matching assertion; for semantic mode it is the first
 selected membership. The graph
 metadata plane is excluded from all-graphs scope. Named-graph semantic text
 uses one vector per entity; entities with ROOT text keep it, otherwise text
-combines their named-graph facts. Explicit graph scope refuses ROOT content
-and anchor reranking.
+combines their named-graph facts. Scopes containing named graphs refuse ROOT
+content and anchor reranking; an explicit ROOT selection supports both.
 
-Explicit graph selection for semantic and hybrid search, and automatic
+Named-graph retrieval for semantic and hybrid search, and automatic
 named-only embedding text, are disabled by default (`[quipu.search]
 named_graphs = false`). Keyword mode (`mode: "keyword"`) accepts an explicit
 scope without the flag, because the lexical index records each assertion's
@@ -1087,7 +1094,7 @@ graph; it still refuses until that index is complete. Prepare existing named-onl
 vectors through bounded `POST /embed_backfill_graph` calls, then enable the
 flag. This avoids turning the next producer snapshot into an unpaced initial
 embedding drain. Graph backfill leaves entities with any ROOT history alone,
-including ROOT entities without vectors. Roll back exposure by disabling
+including ROOT entities without vectors. Roll back exposure by setting `default_graph_scope = "root"` and disabling
 `named_graphs`; retain this binary's ROOT exclusion while named vectors exist.
 Reverting to a pre-scope binary after backfill can expose those vectors in
 unscoped search.

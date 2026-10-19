@@ -12,7 +12,6 @@ use crate::config::{
     EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
 };
 use crate::error::{Error, Result};
-use crate::schema::INIT_SQL;
 use crate::vector::VECTORS_SQL;
 
 impl Store {
@@ -237,7 +236,7 @@ impl Store {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;",
         )?;
-        conn.execute_batch(INIT_SQL)?;
+        super::search_scope_policy::initialize_schema(&conn)?;
         Self::ensure_store_identity(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
         // Frozen packs re-attach on every open (deep freeze): read the

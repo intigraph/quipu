@@ -41,7 +41,7 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
     };
     let mut view = json!({"context":context,"insufficient_context":response["insufficient_context"],
         "results":rows,"count":rows.len(),"context_results":rows});
-    for key in ["scoped", "ranking"] {
+    for key in ["scoped", "ranking", "search_scope"] {
         if let Some(value) = response.get(key) {
             view[key] = value.clone();
         }
@@ -52,6 +52,17 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coverage_survives_context_projection_even_for_an_empty_result() {
+        let body = json!({"insufficient_context":true,"context_results":[],
+            "results":[{"entity":"urn:diagnostic-only"}],
+            "search_scope":{"graphs":["urn:example:project"],"selection":"default"},
+            "context":{"contract":"quipu-context/v1","outcome":"NO CONTEXT","similarity_floor":0.52}});
+        let view: Value = serde_json::from_str(&render(&body.to_string()).unwrap()).unwrap();
+        assert_eq!(view["search_scope"], body["search_scope"]);
+        assert_eq!(view["results"], json!([]));
+    }
 
     #[test]
     fn negative_outcome_requires_explicit_empty_context_rows() {

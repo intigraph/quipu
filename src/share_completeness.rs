@@ -74,6 +74,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
+    // Whole-store reconstruction retains its explicit search-default intent.
+    // RDF share imports carry facts, not this local policy, and preserve the
+    // receiver's choice. This is retrieval configuration, not authorization.
+    ("search_default_policy", Disposition::Content),
     // Digests of refused attempts, keyed by the verdicts they back (GS6). Hashes
     // and ids only — no refused content — and they are what lets a restored
     // copy still re-derive a denial from a presented delta, so they travel with

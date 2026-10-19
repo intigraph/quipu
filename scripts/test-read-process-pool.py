@@ -78,11 +78,32 @@ def live(pid):
     try:
         # A reaped child may be a zombie briefly; it is no longer executing.
         return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] != 'Z'
-    except FileNotFoundError:
+    except (FileNotFoundError, ProcessLookupError):
+        # A process can exit after opening /proc/PID/stat but before read();
+        # Linux then reports ESRCH rather than an absent pathname (ENOENT).
         return False
 
 
+def liveness_controls():
+    from unittest.mock import patch
+    for state, expected in [('S', True), ('Z', False)]:
+        with patch.object(Path, 'read_text', return_value=f'123 (worker) {state} 1'):
+            assert live(123) is expected
+    for absent in [FileNotFoundError(2, 'gone'), ProcessLookupError(3, 'gone')]:
+        with patch.object(Path, 'read_text', side_effect=absent):
+            assert live(123) is False
+    with patch.object(Path, 'read_text', side_effect=PermissionError(13, 'denied')):
+        try:
+            live(123)
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError('permission failure must not certify an exited worker')
+    print('PASS liveness: live/zombie, ENOENT/ESRCH exit races, permission failure')
+
+
 def run(server, cli):
+    liveness_controls()
     with tempfile.TemporaryDirectory(prefix='quipu-read-process-') as directory:
         root = Path(directory)
         env = {k: v for k, v in os.environ.items() if not k.startswith(('QUIPU_', 'BOBBIN_'))}
@@ -229,4 +250,7 @@ def run(server, cli):
 
 
 if __name__ == '__main__':
-    run(str(Path(sys.argv[1]).resolve()), str(Path(sys.argv[2]).resolve()))
+    if sys.argv[1:] == ['--self-test']:
+        liveness_controls()
+    else:
+        run(str(Path(sys.argv[1]).resolve()), str(Path(sys.argv[2]).resolve()))
