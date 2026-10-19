@@ -9,7 +9,7 @@ use axum::{
     http::HeaderMap,
     response::{Html, IntoResponse},
 };
-use serde_json::{Value as JsonValue, json};
+use serde_json::Value as JsonValue;
 
 use quipu::semweb;
 
