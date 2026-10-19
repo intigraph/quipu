@@ -37,6 +37,7 @@ pub(crate) struct StoreHandle {
     pub(crate) readers: ReadPool,
     /// Opt-in log-only admission timing; immutable after startup.
     pub(crate) log_query_admission: bool,
+    pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
     /// clone boxed external/LanceDB backends. Keep those searches on the writer
@@ -156,6 +157,7 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers,
             log_query_admission: false,
+            query_capture: None,
             replica: None,
             federation,
             #[cfg(feature = "reactive-reasoner")]
@@ -194,6 +196,7 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             log_query_admission: false,
+            query_capture: None,
             replica: None,
             federation: quipu::config::FederationConfig::default(),
             #[cfg(feature = "reactive-reasoner")]
