@@ -197,20 +197,36 @@ fn bounded_work_refuses_duplicate_amplification_and_expired_deadline() {
         evaluate_temporal_view(&source, &rules, &ctx).unwrap().len(),
         1
     );
+    for (configured_cap, caller_cap) in [
+        (0, None),
+        (0, Some(0)),
+        (100_000, None),
+        (100_000, Some(100_000)),
+    ] {
+        source.search_config_mut().max_join_rows = configured_cap;
+        ctx.row_cap = caller_cap;
+        assert_eq!(
+            evaluate_temporal_view(&source, &rules, &ctx).unwrap().len(),
+            1
+        );
+    }
+    ctx.row_cap = None;
     source.search_config_mut().max_join_rows = 100;
     assert!(matches!(
         evaluate_temporal_view(&source, &rules, &ctx),
         Err(HistoricalError::Capacity)
     ));
     // A caller may tighten the configured work budget, never widen or disable it.
-    for caller_cap in [Some(100_000), Some(0)] {
+    for (configured_cap, caller_cap) in [(100, Some(100_000)), (100, Some(0)), (100_000, Some(100))]
+    {
+        source.search_config_mut().max_join_rows = configured_cap;
         ctx.row_cap = caller_cap;
         assert!(
             matches!(
                 evaluate_temporal_view(&source, &rules, &ctx),
                 Err(HistoricalError::Capacity)
             ),
-            "caller cap {caller_cap:?} bypassed configured work cap 100"
+            "caller cap {caller_cap:?}/configured cap {configured_cap} bypassed work budget"
         );
     }
     source.search_config_mut().max_join_rows = 0;
