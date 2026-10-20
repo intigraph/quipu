@@ -1,0 +1,36 @@
+=== baseline: actual compiled parser tests ===
+running 5 tests
+
+thread 'request_middleware::request_command::tests::native_projection_operations_are_retained' (4053862) panicked at src/server/request_command.rs:187:13:
+assertion `left == right` failed: uses-native-schema
+  left: Null
+ right: "uses-native-schema"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test request_middleware::request_command::tests::unknown_and_repeated_native_operations_remain_unknown ... ok
+test request_middleware::request_command::tests::only_known_single_values_reach_the_log ... ok
+test request_middleware::request_command::tests::native_projection_operations_are_retained ... FAILED
+before: {"auth_outcome":"not_required","client":"seeds","duration_ms":1,"endpoint":"/query","event":"request_complete","method":"POST","path":"/query","request_id":7,"status":200,"task":"unattributed","timestamp":"2026-10-20T17:39:45Z"}
+after: {"auth_outcome":"not_required","client":"seeds","declared_operation":"list","declared_source":"st-anchor","duration_ms":1,"endpoint":"/query","event":"request_complete","method":"POST","path":"/query","request_id":7,"status":200,"task":"unattributed","timestamp":"2026-10-20T17:39:45Z"}
+test request_middleware::request_command::tests::demo_command_attribution_before_and_after ... ok
+test request_middleware::request_command::tests::unknown_or_missing_declarations_are_explicit_without_inference ... ok
+
+failures:
+
+failures:
+    request_middleware::request_command::tests::native_projection_operations_are_retained
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 196 filtered out; finished in 0.00s
+
+
+=== fixed: actual compiled parser tests ===
+running 5 tests
+before: {"auth_outcome":"not_required","client":"seeds","duration_ms":1,"endpoint":"/query","event":"request_complete","method":"POST","path":"/query","request_id":7,"status":200,"task":"unattributed","timestamp":"2026-10-20T17:40:50Z"}
+after: {"auth_outcome":"not_required","client":"seeds","declared_operation":"list","declared_source":"st-anchor","duration_ms":1,"endpoint":"/query","event":"request_complete","method":"POST","path":"/query","request_id":7,"status":200,"task":"unattributed","timestamp":"2026-10-20T17:40:50Z"}
+test request_middleware::request_command::tests::only_known_single_values_reach_the_log ... ok
+test request_middleware::request_command::tests::unknown_and_repeated_native_operations_remain_unknown ... ok
+test request_middleware::request_command::tests::unknown_or_missing_declarations_are_explicit_without_inference ... ok
+test request_middleware::request_command::tests::demo_command_attribution_before_and_after ... ok
+test request_middleware::request_command::tests::native_projection_operations_are_retained ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 196 filtered out; finished in 0.00s
+
