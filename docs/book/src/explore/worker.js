@@ -73,6 +73,9 @@ onmessage = async (e) => {
         const result = await new BrowserFederatedProvider(need(), remotes, e.data.floor ?? {}).query(sparql);
         return postMessage({ id, ok: true, result });
       }
+      case "factHistory":
+        if (typeof need().factHistory !== "function") throw new Error("This browser engine does not expose fact history; use a newer bundle. No history was inferred.");
+        return postMessage({ id, ok: true, result: JSON.parse(need().factHistory(entity)) });
       case "query":
         return postMessage({ id, ok: true, result: JSON.parse(need().query(sparql)) });
       case "stats":
