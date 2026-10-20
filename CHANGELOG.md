@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - *(embedding)* Enable provider-backed automatic indexing by default([8d75eb0](https://github.com/scbrown/quipu/commit/8d75eb0980f08c23744acc73c835953a25a752d5))
+- Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
 
 ### Changed
 
