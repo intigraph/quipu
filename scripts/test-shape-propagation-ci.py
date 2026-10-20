@@ -83,5 +83,63 @@ class ExistingTarget(unittest.TestCase):
                  patch.object(m.subprocess, 'run', side_effect=OSError('fetch refused')):
                 with self.assertRaises(OSError): m.revision_range(Path('.'), env)
 
+    def test_real_shallow_event_ranges_fetch_before_resolving_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root/'source'; source.mkdir()
+            def git(repo, *args):
+                return subprocess.check_output(['git', '-C', str(repo), *args],
+                                               stderr=subprocess.DEVNULL).decode().strip()
+            git(source, 'init')
+            git(source, 'config', 'user.name', 'Fixture')
+            git(source, 'config', 'user.email', 'fixture@example.org')
+            for content in ('base', 'parent', 'head'):
+                (source/'fixture').write_text(content)
+                git(source, 'add', '.'); git(source, 'commit', '-m', content)
+            head = git(source, 'rev-parse', 'HEAD')
+            parent = git(source, 'rev-parse', 'HEAD^')
+            base = git(source, 'rev-parse', 'HEAD^^')
+            cases = [('schedule', {}, parent), ('workflow_dispatch', {}, parent),
+                     ('push-zero', {'before': '0'*40}, parent),
+                     ('push', {'before': base}, base),
+                     ('pull_request', {'pull_request': {'base': {'sha': base}}}, base),
+                     ('missing-base', {'before': 'f'*40}, None)]
+            for name, event, expected in cases:
+                with self.subTest(event=name):
+                    checkout = root/name
+                    subprocess.run(['git', 'clone', '--quiet', '--depth', '1',
+                                    source.as_uri(), str(checkout)], check=True)
+                    self.assertEqual(git(checkout, 'rev-parse', '--is-shallow-repository'), 'true')
+                    event_path = root/'event.json'; event_path.write_text(json.dumps(event))
+                    env = {'GITHUB_ACTIONS': 'true', 'GITHUB_SHA': head,
+                           'GITHUB_EVENT_NAME': name, 'GITHUB_EVENT_PATH': str(event_path)}
+                    if expected is None:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            m.revision_range(checkout, env)
+                    else:
+                        self.assertEqual(m.revision_range(checkout, env), (expected, head))
+                    self.assertEqual(git(checkout, 'rev-parse', '--is-shallow-repository'), 'false')
+
+    def test_shallow_no_base_fetch_refusal_remains_fatal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory)/'event.json'; event.write_text('{}')
+            env = {'GITHUB_ACTIONS': 'true', 'GITHUB_SHA': 'a'*40,
+                   'GITHUB_EVENT_PATH': str(event)}
+            with patch.object(m.audit, 'git', side_effect=[b'a'*40, b'true']) as read, \
+                 patch.object(m.subprocess, 'run', side_effect=OSError('fetch refused')):
+                with self.assertRaisesRegex(OSError, 'fetch refused'):
+                    m.revision_range(Path('.'), env)
+                self.assertEqual(read.call_count, 2)  # no fallback parent after a failed fetch
+
+    def test_shallow_invalid_base_refuses_before_fetch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory)/'event.json'; event.write_text('{"before":"invalid"}')
+            env = {'GITHUB_ACTIONS': 'true', 'GITHUB_SHA': 'a'*40,
+                   'GITHUB_EVENT_PATH': str(event)}
+            with patch.object(m.audit, 'git', return_value=b'a'*40), \
+                 patch.object(m.subprocess, 'run', side_effect=AssertionError('unexpected fetch')):
+                with self.assertRaisesRegex(ValueError, 'invalid event base'):
+                    m.revision_range(Path('.'), env)
+
 
 if __name__ == '__main__': unittest.main()
