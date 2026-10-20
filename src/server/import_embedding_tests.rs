@@ -42,7 +42,7 @@ async fn actual_onnx_http_import_reports_indexing_and_preserves_staging() {
     let request: quipu::share_import::ShareImportRequest =
         serde_json::from_value(serde_json::json!({
             "manifest":payload.manifest, "export_ntriples":payload.files["export.nt"],
-            "shapes_turtle":payload.files["shapes.ttl"]
+            "shapes_turtle":payload.files["shapes.ttl"], "source":"private server import acceptance"
         }))
         .unwrap();
     let config = quipu::EmbeddingConfig {
