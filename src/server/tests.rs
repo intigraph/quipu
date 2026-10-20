@@ -861,6 +861,9 @@ fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
     });
 
     let mut store = Store::open_in_memory().unwrap();
+    // This control measures explicit backfill, including a stale snapshot;
+    // automatic write indexing would consume the blocking provider in setup.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(provider.clone());
     store.embedding_config_mut().dimension = 8;
     quipu::ingest_rdf(
