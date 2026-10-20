@@ -23,6 +23,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import vm from "node:vm";
 
 const bundleDir = process.argv[2];
 if (!bundleDir) {
@@ -118,6 +119,76 @@ check("it reports a quipu version", Boolean(version.version), JSON.stringify(ver
 const bytes = readFileSync(join(work, "smoke.pendant.tar.gz"));
 const ex = mod.Explorer.loadPendant(new Uint8Array(bytes), "node-smoke", new Date().toISOString());
 const report = JSON.parse(ex.loadReport());
+
+// An independent receiver keeps the existing export/delta fixture unchanged.
+// A declared method alone is not parity: adopt shapes, write real RDF, reject
+// invalid RDF, and verify both state and history through the compiled engine.
+const ops = mod.Explorer.loadPendant(new Uint8Array(bytes), "node-store-ops", new Date().toISOString());
+const opsShapes = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:binding:RecordShape> a sh:NodeShape; sh:targetClass <urn:binding:Record>;
+ sh:property [sh:path <urn:binding:title>; sh:minCount 1] .`;
+check("shapes adoption uses the native catalogue", JSON.parse(ops.shapes(JSON.stringify({
+  action: "load", name: "store-ops", turtle: opsShapes,
+}))).action === "loaded");
+const editsBeforeRead = JSON.parse(ops.editLog()).length;
+check("shape readback returns the adopted bytes", JSON.parse(ops.shapes(JSON.stringify({
+  action: "get", name: "store-ops",
+}))).turtle === opsShapes);
+check("catalogue reads are not edits", JSON.parse(ops.editLog()).length === editsBeforeRead);
+const knot = JSON.parse(ops.knot(JSON.stringify({
+  turtle: '<urn:binding:good> a <urn:binding:Record>; <urn:binding:title> "Before" .',
+})));
+check("knot commits real governed RDF", knot.tx_id > 0 && knot.count > 0);
+const editsBeforeRefusal = JSON.parse(ops.editLog()).length;
+let refused = false;
+try {
+  refused = JSON.parse(ops.knot(JSON.stringify({
+    turtle: '<urn:binding:bad> a <urn:binding:Record> .',
+  }))).conforms === false;
+} catch (error) { refused = /SHACL|validation/i.test(String(error)); }
+check("knot refuses a missing required property", refused);
+check("a refused knot did not commit", JSON.parse(ops.query(
+  'SELECT ?p WHERE { <urn:binding:bad> ?p ?v }',
+)).rows.length === 0);
+check("a refused knot is not logged as an edit", JSON.parse(ops.editLog()).length === editsBeforeRefusal);
+ops.set("urn:binding:good", "urn:binding:title", JSON.stringify({ str: "After" }));
+const history = JSON.parse(ops.entityHistory("urn:binding:good"));
+check("native history retains the replaced value", history.history.some((fact) => fact.value === "Before"));
+check("native history includes the current value", history.history.some((fact) => fact.value === "After"));
+let absentRefused = false;
+try { ops.entityHistory("urn:binding:absent"); } catch { absentRefused = true; }
+check("missing history refuses instead of minting an entity", absentRefused);
+
+// Execute the shipped relay against the real compiled receiver, including the
+// explicit refusal on engines without JSON reviver source text.
+ops.knot(JSON.stringify({ turtle: `<urn:binding:precision> a <urn:binding:Record>;
+  <urn:binding:title> "precision"; <urn:binding:large> 9007199254740993 .
+  <urn:binding:small-only> a <urn:binding:Record>;
+  <urn:binding:title> "small"; <urn:binding:value> 7 .` }));
+const workerSource = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8")
+  .replace(/^import .* from .*;$/gm, "")
+  .replaceAll("import.meta.url", JSON.stringify("https://fixture.invalid/worker.js"));
+const relayHistory = async (iri, parse = JSON.parse) => {
+  let reply;
+  const context = vm.createContext({ init: () => Promise.resolve(), __receiver: ops,
+    JSON: { parse, stringify: JSON.stringify },
+    postMessage: (message) => { reply = structuredClone(message); } });
+  vm.runInContext(`${workerSource}\nexplorer=__receiver;`, context);
+  await context.onmessage({ data: { id: 1, cmd: "entityHistory", iri } });
+  return reply;
+};
+const preciseReply = await relayHistory("urn:binding:precision");
+check("shipped relay keeps a native unsafe integer exact", preciseReply.ok
+  && preciseReply.result.history.some((fact) => fact.value === 9007199254740993n));
+const withoutSource = (text, reviver) => JSON.parse(text, reviver && function (key, value) {
+  return reviver.call(this, key, value);
+});
+const safeReply = await relayHistory("urn:binding:small-only", withoutSource);
+check("legacy JSON parser still returns safe integer history", safeReply.ok
+  && safeReply.result.history.some((fact) => fact.value === 7));
+const unsafeReply = await relayHistory("urn:binding:precision", withoutSource);
+check("legacy JSON parser refuses instead of rounding history", unsafeReply.ok === false
+  && /requires JSON parse source support/.test(unsafeReply.error) && !unsafeReply.result);
 
 check("the pack it loaded is the pack the CLI wrote",
   report.manifest.share_id === producerManifest.share_id, report.manifest.share_id);
