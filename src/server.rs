@@ -371,11 +371,7 @@ async fn main() {
         std::process::exit(1)
     });
     let auth_policy = auth::bearer_policy(&config.server);
-    let session_keys = config.server.session_keys.clone();
-    if let Err(reason) = session_keys.validate() {
-        eprintln!("invalid session key policy: {reason}");
-        std::process::exit(2);
-    }
+    let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required;
     let read_only = config.server.read_only || is_replica;
     let replica_config = config.server.replica.clone();
@@ -540,28 +536,13 @@ async fn main() {
                     if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
                         return auth::write_attest::handle(attest_store, req, next).await;
                     }
-                    if !(is_write && read_only)
-                        && !session_keys.allows_unsigned(&path, req.method().as_str()) {
-                        let mut response = (axum::http::StatusCode::UNAUTHORIZED,
-                            axum::Json(serde_json::json!({
-                                "error": "an enrolled session key is required",
-                                "reason": "session_key_required",
-                                "credential_type": "attested_signature"
-                            }))).into_response();
-                        response.extensions_mut().insert(quipu::request_usage::AuthOutcome::Unauthorized);
+                    if let Some(response) = auth::session_key_refusal(
+                        &session_keys, &req, is_write && read_only,
+                    ) {
                         return response;
                     }
-                    let auth_header = req
-                        .headers()
-                        .get(axum::http::header::AUTHORIZATION)
-                        .and_then(|v| v.to_str().ok())
-                        .map(str::to_string);
-                    let authorization = quipu::http_auth::authorize_bearers(
-                        is_write || quipu::http_auth::requires_read_identity(&path),
-                        read_only && is_write,
-                        &auth_policy,
-                        auth_header.as_deref(),
-                        quipu::time::epoch_secs(),
+                    let (auth_header, authorization) = auth::authorize_request(
+                        &req, &auth_policy, is_write, read_only,
                     );
                     match authorization.decision {
                         quipu::http_auth::AccessDecision::Allow => {

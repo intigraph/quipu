@@ -19,6 +19,65 @@ pub(super) fn request_identity() -> Option<quipu::transaction_auth::Identity> {
     REQUEST_IDENTITY.try_with(Clone::clone).ok().flatten()
 }
 
+/// Validate the strict session policy before constructing the request router.
+pub(super) fn session_key_policy(
+    config: &quipu::config::ServerConfig,
+) -> quipu::http_auth::SessionKeyPolicy {
+    let policy = config.session_keys.clone();
+    if let Err(reason) = policy.validate() {
+        eprintln!("invalid session key policy: {reason}");
+        std::process::exit(2);
+    }
+    policy
+}
+
+/// Keep the read-only write refusal ahead of strict-key authentication.
+pub(super) fn session_key_refusal(
+    policy: &quipu::http_auth::SessionKeyPolicy,
+    req: &axum::extract::Request,
+    read_only_write: bool,
+) -> Option<axum::response::Response> {
+    use axum::response::IntoResponse;
+    if read_only_write || policy.allows_unsigned(req.uri().path(), req.method().as_str()) {
+        return None;
+    }
+    let mut response = (
+        axum::http::StatusCode::UNAUTHORIZED,
+        axum::Json(serde_json::json!({
+            "error": "an enrolled session key is required",
+            "reason": "session_key_required",
+            "credential_type": "attested_signature"
+        })),
+    )
+        .into_response();
+    response
+        .extensions_mut()
+        .insert(quipu::request_usage::AuthOutcome::Unauthorized);
+    Some(response)
+}
+
+/// Classify the existing bearer fallback without changing the request body.
+pub(super) fn authorize_request(
+    req: &axum::extract::Request,
+    policy: &quipu::http_auth::BearerPolicy,
+    is_write: bool,
+    read_only: bool,
+) -> (Option<String>, quipu::http_auth::Authorization) {
+    let header = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let authorization = quipu::http_auth::authorize_bearers(
+        is_write || quipu::http_auth::requires_read_identity(req.uri().path()),
+        read_only && is_write,
+        policy,
+        header.as_deref(),
+        quipu::time::epoch_secs(),
+    );
+    (header, authorization)
+}
+
 pub(super) fn bearer_policy(
     config: &quipu::config::ServerConfig,
 ) -> quipu::http_auth::BearerPolicy {
