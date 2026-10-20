@@ -60,6 +60,12 @@ The source CI compares immutable RDF snapshots, including anonymous constraints,
 against a revision-scoped term/CQ catalogue. It retains a JSON report and warns
 about unresolved entries. Read and parse failures remain failures. Gaps become
 blocking only after the October backfill and a separate enforcement decision.
+Anonymous node shapes, including the four standard target forms, are compared
+as a multiset of canonical constraint components. Their report-local key
+`_:anonymous-NodeShapes` identifies that collection, not a production IRI.
+Evidence for it must match the complete collection digest. Blank-node spelling
+and declaration order do not change it; changed constraints and duplicate
+components do. Typed node shapes without targets are included as well.
 An event receiver must deduplicate by exact merge identity and retain uncertain
 writes for native readback; source CI alone does not create a task or change a pin.
 

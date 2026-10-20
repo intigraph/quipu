@@ -44,6 +44,47 @@ class Shapes(unittest.TestCase):
         self.assertTrue(all(r['change'] == 'removed' for r in removed))
         self.assertEqual(m.changes(graph(), graph()), [])
 
+    def test_all_target_forms_detect_anonymous_and_named_constraint_drift(self):
+        for target in ('targetClass', 'targetNode', 'targetSubjectsOf', 'targetObjectsOf'):
+            for typed in ('a sh:NodeShape; ', ''):
+                for subject in ('[]', 'x:S'):
+                    with self.subTest(target=target, typed=typed, subject=subject):
+                        before = f'{subject} {typed}sh:{target} x:record; sh:nodeKind sh:IRI .'
+                        rows = m.changes(graph(before), graph(before.replace('sh:IRI', 'sh:BlankNode')))
+                        self.assertTrue(rows)
+                        self.assertIn('_:anonymous-NodeShapes' if subject == '[]' else
+                                      'https://example.org/S', {r['iri'] for r in rows})
+
+    def test_anonymous_collection_ignores_labels_but_preserves_multiplicity(self):
+        first = '_:one a sh:NodeShape; sh:targetNode x:record; sh:property _:p . '
+        prop = '_:p sh:nodeKind sh:IRI .'
+        other = '_:different sh:property _:q; sh:targetNode x:record; a sh:NodeShape . '
+        self.assertEqual(m.changes(graph(first + prop), graph('_:q sh:nodeKind sh:IRI . ' + other)), [])
+        shape = '[] a sh:NodeShape; sh:targetNode x:record; sh:nodeKind sh:IRI . '
+        rows = m.changes(graph(shape), graph(shape + shape))
+        self.assertEqual([r['iri'] for r in rows], ['_:anonymous-NodeShapes'])
+        self.assertEqual(rows[0]['change'], 'modified')
+        untargeted = '[] a sh:NodeShape; sh:nodeKind sh:IRI .'
+        self.assertTrue(m.changes(graph(untargeted), graph(untargeted.replace('sh:IRI', 'sh:BlankNode'))))
+
+    def test_anonymous_collection_requires_exact_current_evidence(self):
+        shape = '[] a sh:NodeShape; sh:targetNode x:record; sh:nodeKind sh:IRI .'
+        delta = m.changes(graph(shape), graph(shape.replace('sh:IRI', 'sh:BlankNode')))
+        self.assertEqual(len(delta), 1)
+        row = {'iri': delta[0]['iri'], 'definition_sha256': delta[0]['after']['sha256'],
+               'disposition': 'quipu-local', 'reason': 'fixture-only collection',
+               'waiver': {'receipt': 'fixture-review', 'reviewer': 'independent', 'reason': 'fixture'}}
+        self.assertEqual(m.audit(delta, {'entries': [row]}, graph(), Path('.'))[0]['gaps'], [])
+        row['definition_sha256'] = delta[0]['before']['sha256']
+        self.assertIn('missing-or-stale-definition-evidence',
+                      m.audit(delta, {'entries': [row]}, graph(), Path('.'))[0]['gaps'])
+
+    def test_targeted_property_shape_keeps_property_classification(self):
+        shape = '[] a sh:PropertyShape; sh:targetNode x:record; sh:path x:p; sh:minCount 1 .'
+        rows = m.changes(graph(shape), graph(shape.replace('minCount 1', 'minCount 2')))
+        self.assertEqual([r['iri'] for r in rows], ['https://example.org/p'])
+        self.assertEqual(rows[0]['after']['kinds'], ['property'])
+
 
     def test_exact_term_cq_and_reviewed_waiver(self):
         delta = m.changes(graph(), graph(SHAPE))

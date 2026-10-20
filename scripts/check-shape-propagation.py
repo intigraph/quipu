@@ -30,6 +30,24 @@ def snapshot(repo, ref, prefix="shapes/"):
     return sha, graph
 
 
+def component_digest(graph, seed):
+    sub = Graph()
+    pending, seen = [seed], set()
+    while pending:
+        node = pending.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if len(seen) > 10000:
+            raise ValueError("constraint component exceeds audit budget")
+        for triple in graph.triples((node, None, None)):
+            sub.add(triple)
+            if isinstance(triple[2], BNode):
+                pending.append(triple[2])
+    lines = sorted(" ".join(x.n3() for x in triple) + " ." for triple in to_canonical_graph(sub))
+    return hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest()
+
+
 def definitions(graph):
     kinds = {}
     for kind, types in {"class": (RDFS.Class, OWL.Class),
@@ -39,6 +57,15 @@ def definitions(graph):
             for subject in graph.subjects(RDF.type, typ):
                 if isinstance(subject, URIRef):
                     kinds.setdefault(subject, set()).add(kind)
+    shape_roots = set(graph.subjects(RDF.type, SH.NodeShape))
+    for predicate in (SH.targetClass, SH.targetNode, SH.targetSubjectsOf, SH.targetObjectsOf):
+        # A targeted property shape is not implicitly a node shape.
+        shape_roots.update(subject for subject in graph.subjects(predicate, None)
+                           if (subject, RDF.type, SH.PropertyShape) not in graph
+                           and not any(graph.objects(subject, SH.path)))
+    for subject in shape_roots:
+        if isinstance(subject, URIRef):
+            kinds.setdefault(subject, set()).add("NodeShape")
     # Shapes often declare their governed vocabulary only through targets/paths.
     for predicate, kind in ((SH.targetClass, "class"), (SH.path, "property")):
         for subject in graph.objects(None, predicate):
@@ -51,23 +78,17 @@ def definitions(graph):
         # hundreds of symmetric anonymous properties makes RDF canonicalization
         # needlessly exponential. Preserve multiplicity in the sorted digest list.
         for seed in [subject, *graph.subjects(SH.targetClass, subject), *graph.subjects(SH.path, subject)]:
-            sub = Graph()
-            pending, seen = [seed], set()
-            while pending:
-                node = pending.pop()
-                if node in seen:
-                    continue
-                seen.add(node)
-                if len(seen) > 10000:
-                    raise ValueError("constraint component exceeds audit budget")
-                for triple in graph.triples((node, None, None)):
-                    sub.add(triple)
-                    if isinstance(triple[2], BNode):
-                        pending.append(triple[2])
-            lines = sorted(" ".join(x.n3() for x in triple) + " ." for triple in to_canonical_graph(sub))
-            components.append(hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest())
+            components.append(component_digest(graph, seed))
         result[str(subject)] = {"kinds": sorted(kind), "sha256": hashlib.sha256(
             ("\n".join(sorted(components)) + "\n").encode()).hexdigest()}
+    # Anonymous roots have no stable production IRI to correlate across snapshots.
+    # Compare their canonical components as a multiset under one report-local key.
+    # This key is never written to RDF, and evidence covers the exact collection.
+    anonymous = sorted(component_digest(graph, subject) for subject in shape_roots
+                       if isinstance(subject, BNode))
+    if anonymous:
+        result["_:anonymous-NodeShapes"] = {"kinds": ["NodeShape"],
+            "sha256": hashlib.sha256(("\n".join(anonymous) + "\n").encode()).hexdigest()}
     return result
 
 
