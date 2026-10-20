@@ -1341,6 +1341,36 @@ cache (freshness / durability / trust / policy / kind). Query params: `kind`
 **capability probe** for the graph-kinds surface: a 404 means the store
 predates it — treat that as "cannot tell", never as "no graphs".
 
+The optional `graph=<absolute-IRI>` selects one exact registered identity. It
+cannot be combined with `kind` or `lifecycle`. The response retains
+`{ "count": 0|1, "graphs": [...] }`, including `creation.timestamp` and
+`creation.actor` (null for a legacy/imported source without a declaration).
+Point mode never enumerates the registry or computes `materialization`.
+Missing, interned-only and removed registry entries return count zero; malformed
+selectors, storage failures and ambiguous registered source identities are errors.
+No missing IRI is interned by this read.
+
+For attached/frozen graphs, creation metadata comes from the selected source,
+not mutable local events. A frozen pack's timestamp describes that pack's
+registry identity, not an invented original creation time; existing pack formats
+may have no creator declaration. Each source needs creator index v1
+`events(type, subject, offset)`. An older immutable source is refused explicitly,
+never migrated or scanned by this read. The CLI equivalent is
+`quipu graph list --graph <IRI> --json --db <existing-db>`; its metadata reader
+opens read-only without schema migration, registration or lexical initialization.
+Existing list mode and its enrichment remain unchanged.
+
+Index migration v1 follows the store's ordered additive migration seam on a
+writable open; it is idempotent and changes no facts or events. Its private
+fixture build measurements do not establish production build cost or admission.
+Operational rollback requires the prior binary and dropping only
+`main.idx_events_type_subject_offset` and `main.idx_frozen_packs_graph_thawed`;
+no database rewind or event deletion. The latter bounds the lookup of a frozen
+graph's recorded active source alias. Retained local frozen IDs resolve through
+that alias; unrelated duplicate registered identities are errors.
+Do not drop the index while a point consumer depends on it. Live migration,
+resource admission and rollout remain separate operational decisions.
+
 A graph whose latest RML materialization is on record additionally serves a
 `materialization` object (quipu-212): the mapping IRI, mapping-closure hash,
 external-truth subject, **verified source hash**, transaction, and timestamp

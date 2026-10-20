@@ -23,7 +23,7 @@ pub fn cmd_graph(args: &[String], db_path: &str) {
                  quipu graph import <db> --as <iri> [--db <path>]\n       \
                  quipu graph freeze <iri> [--out <dir>] [--actor <who>] [--db <path>]\n       \
                  quipu graph thaw <iri> [--actor <who>] [--db <path>]\n       \
-                 quipu graph list [--kind <token>] [--frozen] [--json] [--db <path>]"
+                 quipu graph list [--graph <iri>] [--kind <token>] [--frozen] [--json] [--db <path>]"
             );
             std::process::exit(1);
         }
@@ -182,10 +182,26 @@ fn cmd_thaw(args: &[String], db_path: &str) {
 }
 
 fn cmd_list(args: &[String], db_path: &str) {
-    let store = open_store(db_path);
+    let store = if args.iter().any(|a| a == "--graph") {
+        quipu::config::resolve_attachments(&crate::cli_open::config().attachments)
+            .and_then(|attachments| quipu::Store::open_graph_metadata_reader(db_path, &attachments))
+            .unwrap_or_else(|error| {
+                eprintln!("graph metadata reader: {error}");
+                std::process::exit(1)
+            })
+    } else {
+        open_store(db_path)
+    };
     let lifecycle = args.iter().any(|a| a == "--frozen").then_some("frozen");
-    if args.iter().any(|a| a == "--json") {
+    if args.iter().any(|a| a == "--json" || a == "--graph") {
         let mut input = serde_json::json!({});
+        if args.iter().any(|a| a == "--graph") {
+            let Some(graph) = flag_value(args, "--graph") else {
+                eprintln!("graph list requires a value for --graph");
+                std::process::exit(1);
+            };
+            input["graph"] = serde_json::json!(graph);
+        }
         if let Some(kind) = flag_value(args, "--kind") {
             input["kind"] = serde_json::json!(kind);
         }
