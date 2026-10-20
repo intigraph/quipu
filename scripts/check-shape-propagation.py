@@ -102,6 +102,9 @@ def audit(delta, catalogue, terms, cq_root):
                     (URIRef(target), RDF.type, typ) in terms for typ in
                     (RDF.Property, OWL.ObjectProperty, OWL.DatatypeProperty)):
                 problems.append("mapped-term-wrong-kind")
+            elif 'class' in (change['after'] or change['before'])['kinds'] and not any(
+                    (URIRef(target), RDF.type, typ) in terms for typ in (RDFS.Class, OWL.Class)):
+                problems.append("mapped-term-wrong-kind")
         elif disposition != "quipu-local" or not row.get("reason"):
             problems.append("missing-term-or-explicit-local-reason")
         cq = row.get("cq")

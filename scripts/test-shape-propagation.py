@@ -72,5 +72,18 @@ class Shapes(unittest.TestCase):
         with self.assertRaises(ValueError):
             m.audit(delta, {'entries': [row, row]}, graph(), Path('.'))
 
+    def test_class_cannot_borrow_property_only_term(self):
+        delta = m.changes(graph(), graph('x:Class a rdfs:Class .'))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            query = root/'query.json'; query.write_text('{"query":"ASK { ?s ?p ?o }"}')
+            row = {'iri': delta[0]['iri'], 'definition_sha256': delta[0]['after']['sha256'],
+                   'disposition': 'mapped', 'term': 'https://example.org/Term',
+                   'cq': {'path': 'query.json', 'sha256': hashlib.sha256(query.read_bytes()).hexdigest()}}
+            wrong = graph('x:Term a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Property> .')
+            self.assertIn('mapped-term-wrong-kind', m.audit(delta, {'entries': [row]}, wrong, root)[0]['gaps'])
+            right = graph('x:Term a rdfs:Class .')
+            self.assertEqual(m.audit(delta, {'entries': [row]}, right, root)[0]['gaps'], [])
+
 
 if __name__ == '__main__': unittest.main()
