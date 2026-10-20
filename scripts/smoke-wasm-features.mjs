@@ -133,6 +133,30 @@ try {
   assert.equal((await ask({ cmd: "entityHistory", iri: "urn:binding:absent" })).ok, false);
   console.log("PASS shipped worker shape adoption, knot admission/refusal/no-leak and native entity history");
 
+  await ok({ cmd: "knot", input: { turtle: `<urn:binding:precision> a <urn:binding:Record>;
+    <urn:binding:title> "precision";
+    <urn:binding:small> 7;
+    <urn:binding:safe> 9007199254740991;
+    <urn:binding:large> 9007199254740993;
+    <urn:binding:negative> -9007199254740993;
+    <urn:binding:max> 9223372036854775807;
+    <urn:binding:min> -9223372036854775808;
+    <urn:binding:text> "9007199254740993";
+    <urn:binding:decimal> 1.25 .` } });
+  const precise = await ok({ cmd: "entityHistory", iri: "urn:binding:precision" });
+  const historyValue = (name) => precise.history.find((fact) => fact.predicate === `urn:binding:${name}`).value;
+  assert.equal(historyValue("small"), 7);
+  assert.equal(historyValue("safe"), Number.MAX_SAFE_INTEGER);
+  assert.equal(historyValue("large"), 9007199254740993n);
+  assert.equal(historyValue("negative"), -9007199254740993n);
+  assert.equal(historyValue("max"), 9223372036854775807n);
+  assert.equal(historyValue("min"), -9223372036854775808n);
+  assert.equal(historyValue("text"), "9007199254740993");
+  assert.deepEqual(historyValue("decimal"), {
+    datatype: "http://www.w3.org/2001/XMLSchema#decimal", value: "1.25",
+  });
+  console.log("PASS shipped worker preserves i64 values through structured clone; safe numbers/text/typed decimal unchanged");
+
   const edge = (predicate, subject = "car", object = "cat") =>
     `SELECT ?s FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> WHERE { <http://example.org/${subject}> <http://example.org/${predicate}> ?s . FILTER(?s=<http://example.org/${object}>) }`;
   assert.equal((await ok({ cmd: "query", sparql: edge("derivedBack") })).rows.length, 0);

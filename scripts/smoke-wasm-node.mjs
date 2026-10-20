@@ -23,6 +23,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import vm from "node:vm";
 
 const bundleDir = process.argv[2];
 if (!bundleDir) {
@@ -157,6 +158,37 @@ check("native history includes the current value", history.history.some((fact) =
 let absentRefused = false;
 try { ops.entityHistory("urn:binding:absent"); } catch { absentRefused = true; }
 check("missing history refuses instead of minting an entity", absentRefused);
+
+// Execute the shipped relay against the real compiled receiver, including the
+// explicit refusal on engines without JSON reviver source text.
+ops.knot(JSON.stringify({ turtle: `<urn:binding:precision> a <urn:binding:Record>;
+  <urn:binding:title> "precision"; <urn:binding:large> 9007199254740993 .
+  <urn:binding:small-only> a <urn:binding:Record>;
+  <urn:binding:title> "small"; <urn:binding:value> 7 .` }));
+const workerSource = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8")
+  .replace(/^import .* from .*;$/gm, "")
+  .replaceAll("import.meta.url", JSON.stringify("https://fixture.invalid/worker.js"));
+const relayHistory = async (iri, parse = JSON.parse) => {
+  let reply;
+  const context = vm.createContext({ init: () => Promise.resolve(), __receiver: ops,
+    JSON: { parse, stringify: JSON.stringify },
+    postMessage: (message) => { reply = structuredClone(message); } });
+  vm.runInContext(`${workerSource}\nexplorer=__receiver;`, context);
+  await context.onmessage({ data: { id: 1, cmd: "entityHistory", iri } });
+  return reply;
+};
+const preciseReply = await relayHistory("urn:binding:precision");
+check("shipped relay keeps a native unsafe integer exact", preciseReply.ok
+  && preciseReply.result.history.some((fact) => fact.value === 9007199254740993n));
+const withoutSource = (text, reviver) => JSON.parse(text, reviver && function (key, value) {
+  return reviver.call(this, key, value);
+});
+const safeReply = await relayHistory("urn:binding:small-only", withoutSource);
+check("legacy JSON parser still returns safe integer history", safeReply.ok
+  && safeReply.result.history.some((fact) => fact.value === 7));
+const unsafeReply = await relayHistory("urn:binding:precision", withoutSource);
+check("legacy JSON parser refuses instead of rounding history", unsafeReply.ok === false
+  && /requires JSON parse source support/.test(unsafeReply.error) && !unsafeReply.result);
 
 check("the pack it loaded is the pack the CLI wrote",
   report.manifest.share_id === producerManifest.share_id, report.manifest.share_id);

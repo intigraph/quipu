@@ -65,6 +65,12 @@ conformance adapters small, while Python convenience methods expose Python
 objects. JSON text preserves native number lexemes; convenience JS objects must
 use lossless ID/transaction/timestamp handling (BigInt or decimal strings with
 explicit conversion), not round-trip arbitrary 64-bit IDs through Number.
+The `entityHistory` worker relay returns safe integers as `Number` and unsafe
+integer tokens as `BigInt`, preserved through worker structured cloning. It uses
+the [JSON reviver's original source text](https://tc39.es/ecma262/multipage/structured-data.html#sec-json.parse)
+and refuses unsafe integers when that parser capability is unavailable. Strings
+and floating-point values retain their native JSON types. Callers serializing a
+returned `BigInt` to JSON must choose an explicit lossless representation.
 Preserve IRI/literal/datatype/language/blank-node identity and native error data.
 Errors carry stable code, operation, commit-state (`not_started`, `committed`, or
 `unknown`), validation/governance details and retryability. A thrown exception or
