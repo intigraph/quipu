@@ -98,6 +98,26 @@ fn index_shape_collision_is_refused() {
 }
 
 #[test]
+fn frozen_index_collision_and_multiple_active_sources_are_errors() {
+    let s = Store::open_in_memory().unwrap();
+    s.conn.execute_batch("DROP INDEX idx_frozen_packs_graph_thawed; CREATE INDEX idx_frozen_packs_graph_thawed ON frozen_packs(thawed_at)").unwrap();
+    assert!(Store::migrate_graph_metadata_v1(&s.conn).is_err());
+    s.conn
+        .execute_batch("DROP INDEX idx_frozen_packs_graph_thawed")
+        .unwrap();
+    Store::migrate_graph_metadata_v1(&s.conn).unwrap();
+    for alias in ["one", "two"] {
+        s.conn.execute("INSERT INTO frozen_packs(graph_iri,alias,path,space,content_hash,frozen_at) VALUES(?1,?2,'fixture-only',13,'fixture-hash',?3)",rusqlite::params![GRAPH,alias,TIME]).unwrap();
+    }
+    assert!(frozen_source(&s.conn, GRAPH).is_err());
+    assert!(
+        frozen_source(&s.conn, "urn:fixture:absent")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
 fn attached_identity_uses_source_creation_never_local_event_and_refuses_missing_index() {
     let dir = tempfile::tempdir().unwrap();
     let original = dir.path().join("original.db");
@@ -130,6 +150,7 @@ fn attached_identity_uses_source_creation_never_local_event_and_refuses_missing_
             "fixture",
             layer.to_str().unwrap(),
         )],
+        GRAPH,
     )
     .unwrap();
     assert_eq!(

@@ -1358,6 +1358,8 @@ may have no creator declaration. Each source needs creator index v1
 never migrated or scanned by this read. The CLI equivalent is
 `quipu graph list --graph <IRI> --json --db <existing-db>`; its metadata reader
 opens read-only without schema migration, registration or lexical initialization.
+It selects an active frozen source by the requested IRI with a bounded indexed
+lookup; an unrelated broken frozen pack does not block that point read.
 Existing list mode and its enrichment remain unchanged.
 
 Index migration v1 follows the store's ordered additive migration seam on a

@@ -5,6 +5,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 
 const INDEX: &str = "idx_events_type_subject_offset";
+const FROZEN_INDEX: &str = "idx_frozen_packs_graph_thawed";
 
 impl Store {
     /// Source-ordered v1 migration. No facts/events change; rollback drops only
@@ -14,7 +15,8 @@ impl Store {
             "CREATE INDEX IF NOT EXISTS main.idx_events_type_subject_offset ON events(type,subject,offset);\
              CREATE INDEX IF NOT EXISTS main.idx_frozen_packs_graph_thawed ON frozen_packs(graph_iri,thawed_at);",
         )?;
-        require_creator_index(conn, "main")
+        require_creator_index(conn, "main")?;
+        require_index(conn, "main", FROZEN_INDEX, &["graph_iri", "thawed_at"])
     }
 
     /// Open a metadata-only reader without migration, graph registration or
@@ -23,10 +25,20 @@ impl Store {
     pub fn open_graph_metadata_reader(
         path: &str,
         declared: &[super::attach::Attachment],
+        graph: &str,
     ) -> Result<Self> {
         let mut store = Self::open_read_only(path)?;
         let mut attachments = declared.to_vec();
-        attachments.extend(super::freeze::frozen_attachments(&store.conn)?);
+        oxrdf::NamedNode::new(graph)
+            .map_err(|e| Error::InvalidValue(format!("invalid graph IRI: {e}")))?;
+        if let Some((alias, path)) = frozen_source(&store.conn, graph)? {
+            if !std::path::Path::new(&path).is_file() {
+                return Err(Error::Store(
+                    "selected frozen metadata source is unavailable".into(),
+                ));
+            }
+            attachments.push(super::attach::Attachment::read_only(&alias, &path));
+        }
         super::attach::attach_all(&store.conn, &attachments)?;
         if !attachments.is_empty() {
             super::attach::verify_attached_schema(
@@ -57,13 +69,9 @@ impl Store {
         // A frozen graph has a retained local lifecycle row AND a respaced
         // source row. The recorded active freeze, not a mutable actor event,
         // names which attached identity is authoritative for this read.
-        let mut q=self.conn.prepare("SELECT alias FROM main.frozen_packs INDEXED BY idx_frozen_packs_graph_thawed WHERE graph_iri=?1 AND thawed_at IS NULL")?;
-        let aliases = q
-            .query_map([graph], |r| r.get::<_, String>(0))?
-            .collect::<std::result::Result<Vec<_>, _>>()?;
-        let [alias] = aliases.as_slice() else {
+        let Some((alias, _)) = frozen_source(&self.conn, graph)? else {
             return Err(Error::Store(
-                "frozen metadata requires exactly one active source identity".into(),
+                "frozen metadata requires an active source identity".into(),
             ));
         };
         let mut selected = Vec::new();
@@ -76,7 +84,7 @@ impl Store {
                     .query_row("SELECT source FROM main.graphs WHERE g=?1", [g], |r| {
                         r.get(0)
                     })?;
-            if source.as_ref() != Some(alias) {
+            if source.as_ref() != Some(&alias) {
                 return Err(Error::Store("ambiguous frozen metadata sources".into()));
             }
             selected.push(g);
@@ -179,14 +187,37 @@ impl Store {
 }
 
 fn require_creator_index(conn: &Connection, schema: &str) -> Result<()> {
-    let mut stmt = conn.prepare(&format!("PRAGMA {schema}.index_info('{INDEX}')"))?;
+    require_index(conn, schema, INDEX, &["type", "subject", "offset"])
+}
+
+fn require_index(conn: &Connection, schema: &str, index: &str, expected: &[&str]) -> Result<()> {
+    let mut stmt = conn.prepare(&format!("PRAGMA {schema}.index_info('{index}')"))?;
     let cols = stmt
         .query_map([], |r| r.get::<_, String>(2))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    if cols != ["type", "subject", "offset"] {
-        return Err(Error::Store("graph metadata requires creator index v1 in its source; source is not migrated by this read".into()));
+    if cols != expected {
+        return Err(Error::Store(format!(
+            "graph metadata requires source index v1 {index}; source is not migrated by this read"
+        )));
     }
     Ok(())
+}
+
+fn frozen_source(conn: &Connection, graph: &str) -> Result<Option<(String, String)>> {
+    require_index(conn, "main", FROZEN_INDEX, &["graph_iri", "thawed_at"])?;
+    let mut stmt=conn.prepare("SELECT alias,path FROM main.frozen_packs INDEXED BY idx_frozen_packs_graph_thawed WHERE graph_iri=?1 AND thawed_at IS NULL LIMIT 2")?;
+    let rows = stmt
+        .query_map([graph], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    match rows.len() {
+        0 => Ok(None),
+        1 => Ok(rows.into_iter().next()),
+        _ => Err(Error::Store(
+            "frozen metadata has multiple active source identities".into(),
+        )),
+    }
 }
 
 fn creator(conn: &Connection, schema: &str, graph: &str) -> Result<Value> {

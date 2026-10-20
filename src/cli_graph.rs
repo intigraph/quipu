@@ -184,7 +184,13 @@ fn cmd_thaw(args: &[String], db_path: &str) {
 fn cmd_list(args: &[String], db_path: &str) {
     let store = if args.iter().any(|a| a == "--graph") {
         quipu::config::resolve_attachments(&crate::cli_open::config().attachments)
-            .and_then(|attachments| quipu::Store::open_graph_metadata_reader(db_path, &attachments))
+            .and_then(|attachments| {
+                quipu::Store::open_graph_metadata_reader(
+                    db_path,
+                    &attachments,
+                    flag_value(args, "--graph").unwrap_or(""),
+                )
+            })
             .unwrap_or_else(|error| {
                 eprintln!("graph metadata reader: {error}");
                 std::process::exit(1)
