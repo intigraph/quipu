@@ -294,11 +294,11 @@ feature/API support, not an assumption that removes interpreter coverage.
 
 The requested `pip install quipu` currently names an unrelated expression
 Evaluator on PyPI (version 0.1, released 2012). Do not claim ownership or overwrite
-it. Recommend a distinct owner-approved distribution name (for example
-`quipu-ai`, availability/ownership still unverified) while retaining the Python
-import name if approved. Build/test local wheels now; actual public naming and
-first publication need the existing exact owner/one-way release decision.
-This naming issue does not block implementing native bindings.
+it. The approved Python distribution name is `quipu-kg` (`pip install quipu-kg`);
+the import name remains `quipu`. This supersedes the earlier illustrative
+`quipu-ai` suggestion. Registry ownership and the exact publisher identity
+remain unverified; first publication needs the existing one-way release gate.
+Local wheel testing follows the WASM acceptance milestone.
 
 ## Packaging and release
 
