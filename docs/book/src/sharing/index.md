@@ -243,6 +243,84 @@ deterministic tar archive named `*.pendant.tar.gz`.
 > warning; release pages publish the repository pendant under both asset names.
 > New artifacts are written only as `.pendant`.
 
+### How repository pendants connect
+
+A repository pendant describes that repository and points back to its source.
+Load Quipu, Bobbin, Yupana and Camayoc pendants into the same receiving store to
+query their relationships together. Each import still passes verification and
+quarantine; **composition follows explicit promotion**, not merely downloading
+or opening an archive. The cords below illustrate that composition, not a claim
+that every repository already publishes a complete pendant.
+
+{{#include cross-repo-pendants.svg}}
+
+An idea, interface or symbol can carry a repository-qualified entity IRI and a
+file pointer. The pointer identifies where to read the definition; it does not
+copy the file's text into Quipu. For example:
+
+| Repository | Source pointer to inspect |
+|---|---|
+| Quipu | [Import verification and resolution](https://github.com/scbrown/quipu/blob/main/src/share_import.rs) |
+| Bobbin | [The knowledge import MCP handler](https://github.com/scbrown/bobbin/blob/main/src/mcp/knowledge_tools/handlers.rs) |
+| Yupana | [CLI entry point](https://github.com/scbrown/yupana/blob/main/src/main.rs) |
+| Camayoc | [Native WorkItem backfill adapter](https://github.com/scbrown/camayoc/blob/main/scripts/seed_work_item_backfill.py) |
+
+These are navigable source references, not embedded copies or four equivalent
+interfaces. A released pendant's source revision and provenance receipt identify
+the version to inspect; the links above follow each repository's main branch.
+Bobbin's `knowledge_import` handler calls Quipu's `/import` endpoint, so a
+cross-repository **depends-on** edge can describe that interface dependency.
+It does not say that the two interfaces are the same entity.
+
+The repository content contract requires the following alongside code and
+documentation pointers. This table specifies what a producer must represent;
+it does **not** certify those contents in every currently released artifact.
+
+| Required knowledge | What to connect |
+|---|---|
+| High-level ideas | Repository concepts to the interfaces, symbols and source files that implement them |
+| Public interfaces | CLI commands, MCP tools, REST routes, configuration keys and file formats to defining files; cross-repository dependencies to their target interfaces |
+| Stored queries | Queries the repository answers, with their definitions in `queries.ttl` |
+| Decisions | Decision status and supersession, with links to the evidence and affected source |
+| Freshness | `reviewAfter` / `maxAge` information on knowledge facts, so missing or expired review remains visible |
+| Start-here knowledge | A glossary linked to Quechua terms, plus source files to read first |
+| Shapes | Validation of ideas, interfaces and mappings; a prose claim is not a shape |
+| Cross-repository mappings | The existing shareable alignment record, identifying the two IRIs and the reviewed relationship |
+
+Chunk nodes, where retained for navigation, carry pointer metadata and
+relationships. Chunking and source-text retrieval belong to Bobbin; this
+contract does not ask Quipu to duplicate chunk bodies or line spans. Missing
+producer coverage is unknown, not evidence that a relationship does not exist.
+Embedding model metadata and vector rebuilding are separate load capabilities;
+composing two graphs does not itself prove either one.
+
+#### Composition is not an identity decision
+
+* **The same exact IRI** names the same RDF subject in the composed data.
+  Repository-qualified identifiers prevent unrelated local names such as
+  `config` from colliding. The diagram deliberately uses a generic repository
+  namespace rather than declaring a new permanent namespace.
+* **Different IRIs remain different by default**, even when their labels match.
+  The current import resolver reports exact canonical-name matches as proposals;
+  it preserves the foreign IRI unless the caller explicitly enables
+  `accept_exact`. That compatibility option rewrites IRIs and does not create a
+  retractable alignment record.
+* **A dependency is not identity.** Bobbin calling Quipu is a relationship
+  between interfaces, not permission to merge their names.
+* **A proposed mapping is not accepted alignment.** Use the existing
+  [propose → decide → apply workflow](align.md). Its SSSOM record carries
+  `subject_id`, `object_id`, `predicate_id` and `mapping_justification`;
+  the decision records the reviewer. Applying the decided version can derive
+  accepted identity into a separate alignment graph, leaving both source
+  graphs recoverable. A close match, undecided row or rejected identity does
+  not authorize `owl:sameAs`.
+
+The two differently named ideas in the diagram are an illustrative mapping
+candidate, not a published cross-stack alignment dataset. Share a reviewed
+alignment record with the pendants when one exists; do not manufacture mappings
+from a picture or a common label. See [Aligning concepts across graphs](align.md)
+for the expected-version guard and rejection history.
+
 ## Receiving: verify, quarantine, promote
 
 Import is **two verbs**, and the split is the point.
