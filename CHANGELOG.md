@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 - *(embedding)* Provide import provenance in server acceptance fixture([ca1d5e6](https://github.com/scbrown/quipu/commit/ca1d5e60f7cda9c01e17cb2fba2de2e0c7779fff))
 - *(import)* Distinguish resolution failure from indexing failure([9628bd0](https://github.com/scbrown/quipu/commit/9628bd07df2f77496e3b33cc87c4d63ab370109b))
 - *(server)* Isolate explicit backfill from default write indexing([7a484dd](https://github.com/scbrown/quipu/commit/7a484dde8bb9034d6344dcea87be2f57493d75f1))
+- *(server)* Make unindexed and keyword fixture policies explicit([263b0e2](https://github.com/scbrown/quipu/commit/263b0e2355a7efff8de11026388318896e839096))
 
 ### Style
 
