@@ -225,3 +225,93 @@ mod registry_tests {
 #[cfg(test)]
 #[path = "transaction_auth_tests.rs"]
 mod transaction_auth_tests;
+
+/// Public identity data only, selected by the verified request context.
+/// A shared/named bearer or caller headers cannot manufacture a key identity.
+pub(super) async fn session_identity() -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match request_identity() {
+        Some(identity) if identity.auth_class == "attested_session" => {
+            let session = identity.attestation.0.as_ref().map(|p| p.session.clone());
+            axum::Json(serde_json::json!({
+                "authenticated": true, "principal": identity.principal,
+                "key_id": identity.credential_id, "session": session,
+                "auth_class": identity.auth_class
+            }))
+            .into_response()
+        }
+        _ => (
+            axum::http::StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({
+                "error": "identity requires an enrolled session key", "authenticated": false
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// Runs outside CORS so its automatic OPTIONS response cannot bypass strict auth.
+pub(super) async fn strict_preflight(
+    required: bool,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if required && req.method() == axum::http::Method::OPTIONS {
+        let mut response = (
+            axum::http::StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({"reason": "session_key_required"})),
+        )
+            .into_response();
+        response
+            .extensions_mut()
+            .insert(quipu::request_usage::AuthOutcome::Unauthorized);
+        return response;
+    }
+    next.run(req).await
+}
+
+#[cfg(test)]
+mod preflight_tests {
+    use axum::{Router, middleware, routing::get};
+    use tower_http::cors::{Any, CorsLayer};
+
+    #[tokio::test]
+    async fn strict_profile_refuses_cors_shortcut_and_legacy_retains_preflight() {
+        for required in [false, true] {
+            let app = Router::new()
+                .route("/health", get(|| async { "ok" }))
+                .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any))
+                .layer(middleware::from_fn(move |req, next| {
+                    super::strict_preflight(required, req, next)
+                }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                axum::serve(listener, app).await.unwrap();
+            });
+            let status = tokio::task::spawn_blocking(move || {
+                let response = ureq::request("OPTIONS", &format!("http://{address}/health"))
+                    .set("Origin", "https://example.test")
+                    .set("Access-Control-Request-Method", "GET")
+                    .call();
+                let status = match response {
+                    Ok(r) | Err(ureq::Error::Status(_, r)) => r.status(),
+                    Err(e) => panic!("{e}"),
+                };
+                assert_eq!(
+                    ureq::get(&format!("http://{address}/health"))
+                        .call()
+                        .unwrap()
+                        .status(),
+                    200
+                );
+                status
+            })
+            .await
+            .unwrap();
+            server.abort();
+            assert_eq!(status, if required { 401 } else { 200 });
+        }
+    }
+}

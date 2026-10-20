@@ -106,7 +106,13 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
     if req.uri().query().is_some() {
         return Err(invalid("a signed write must not carry a query string"));
     }
-    if !ATTESTED_PATHS.contains(&path.as_str()) {
+    let matched = req
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or(path.as_str(), axum::extract::MatchedPath::as_str);
+    let read_route = !quipu::http_auth::is_write_request(&path, req.method().as_str())
+        && quipu::http_auth::READ_ENDPOINTS.contains(&matched);
+    if !ATTESTED_PATHS.contains(&path.as_str()) && !read_route {
         return Err(invalid(&format!(
             "signed writes are accepted on {} only",
             ATTESTED_PATHS.join(", ")
@@ -118,6 +124,18 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
             .and_then(|v| v.to_str().ok())
             .unwrap_or_default(),
     )?;
+    let claimed_agent = req
+        .headers()
+        .get("X-Quipu-Agent")
+        .map(|v| v.to_str().map(str::to_owned))
+        .transpose()
+        .map_err(|_| invalid("invalid declared agent header"))?;
+    let claimed_session = req
+        .headers()
+        .get("X-Quipu-Session")
+        .map(|v| v.to_str().map(str::to_owned))
+        .transpose()
+        .map_err(|_| invalid("invalid declared session header"))?;
     let method = req.method().as_str().to_owned();
     let content_type = req
         .headers()
@@ -180,6 +198,15 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
         })??
     };
 
+    if claimed_agent.as_ref().is_some_and(|v| v != &checked.agent)
+        || claimed_session
+            .as_ref()
+            .is_some_and(|v| v != &checked.session)
+    {
+        return Err(invalid(
+            "declared identity differs from the authenticated session",
+        ));
+    }
     let pending = PendingAttestation::new(
         checked.session.clone(),
         envelope.nonce.clone(),

@@ -371,6 +371,12 @@ async fn main() {
         std::process::exit(1)
     });
     let auth_policy = auth::bearer_policy(&config.server);
+    let session_keys = config.server.session_keys.clone();
+    if let Err(reason) = session_keys.validate() {
+        eprintln!("invalid session key policy: {reason}");
+        std::process::exit(2);
+    }
+    let preflight_keys_required = session_keys.required;
     let read_only = config.server.read_only || is_replica;
     let replica_config = config.server.replica.clone();
     if read_only {
@@ -493,6 +499,7 @@ async fn main() {
             post(graph_backfill::embed_backfill_graph),
         )
         // Entity + history
+        .route("/identity", post(auth::session_identity))
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
         .route("/entity/{iri}/json", get(entity_json))
@@ -519,6 +526,7 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let session_keys = session_keys.clone();
                 let attest_store = attest_store.clone();
                 let replica_config = replica_config.clone();
                 async move {
@@ -529,8 +537,17 @@ async fn main() {
                     }
                     // A signed write authenticates by attestation, never by a
                     // bearer on the same request (aegis-bys8d1).
-                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                    if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
                         return auth::write_attest::handle(attest_store, req, next).await;
+                    }
+                    if !(is_write && read_only)
+                        && !session_keys.allows_unsigned(&path, req.method().as_str()) {
+                        return (axum::http::StatusCode::UNAUTHORIZED,
+                            axum::Json(serde_json::json!({
+                                "error": "an enrolled session key is required",
+                                "reason": "session_key_required",
+                                "credential_type": "attested_signature"
+                            }))).into_response();
                     }
                     let auth_header = req
                         .headers()
@@ -647,6 +664,11 @@ async fn main() {
         // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
         // preflight (GH#5). Built above from the configured allowlist.
         .layer(cors)
+        // Strict profiles cannot admit an unsigned CORS preflight before the
+        // signature verifier. Use a same-origin client or authenticated broker.
+        .layer(axum::middleware::from_fn(move |req, next| {
+            auth::strict_preflight(preflight_keys_required, req, next)
+        }))
         // Body limit: axum's 2MB default silently caps /knot at small graphs —
         // a code-graph promotion of one real repository is ~9MB of Turtle and
         // was refused 413. 64MB bounds a whole-repo promotion with headroom

@@ -565,6 +565,9 @@ pub struct ServerConfig {
     /// writes, preserving today's LAN-trusted behaviour.
     pub auth_token: Option<String>,
 
+    /// Explicitly require an enrolled session key for HTTP requests.
+    pub session_keys: crate::http_auth::SessionKeyPolicy,
+
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
@@ -639,6 +642,7 @@ impl Default for ServerConfig {
             enabled: false,
             bind: "127.0.0.1:3030".to_string(),
             auth_token: None,
+            session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,

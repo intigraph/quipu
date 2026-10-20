@@ -115,3 +115,135 @@ fn expired_first_writer_lock_does_not_spend_signed_nonce() {
     });
     assert!(!graph_exists(&store));
 }
+
+fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
+    let store = quipu::Store::open_in_memory().unwrap();
+    let key = Ed25519KeyPair::from_seed_unchecked(&[51; 32]).unwrap();
+    let now = quipu::time::epoch_secs();
+    let mut binding = SessionBinding::new(
+        "synthetic-owner",
+        "identity-control",
+        hex::encode(key.public_key().as_ref()),
+        "synthetic-introducer",
+        now - 10,
+        now + 3600,
+    )
+    .unwrap();
+    binding.allow_write = true;
+    store.attestation_register(&binding).unwrap();
+    let store = Arc::new(StoreHandle::writer_only(store));
+    let app = axum::Router::new()
+        .route(
+            "/identity",
+            axum::routing::post(super::super::session_identity),
+        )
+        .layer(axum::middleware::from_fn(move |req, next| {
+            super::handle(store.clone(), req, next)
+        }));
+    (app, key, binding)
+}
+
+fn identity_request(
+    key: &Ed25519KeyPair,
+    binding: &SessionBinding,
+    nonce: &str,
+    claim: Option<&str>,
+) -> axum::extract::Request {
+    use base64::Engine as _;
+    use quipu::session_attestation::{
+        AttestationEnvelope, SignedBinding, WRITE_V1, WriteBinding, canonical_message,
+    };
+    let mut envelope = AttestationEnvelope {
+        version: WRITE_V1.into(),
+        key_id: binding.key_id.clone(),
+        session: binding.session.clone(),
+        introducer: binding.introducer.clone(),
+        issued_at_epoch: quipu::time::epoch_secs(),
+        nonce: nonce.into(),
+        signature: String::new(),
+        audience: None,
+    };
+    let hash = quipu::session_attestation::body_sha256(b"{}");
+    let message = canonical_message(
+        &envelope,
+        &SignedBinding::Write(WriteBinding {
+            method: "POST",
+            path: "/identity",
+            content_type: "application/json",
+            body_sha256: &hash,
+            audience: None,
+        }),
+    );
+    envelope.signature = hex::encode(key.sign(&message).as_ref());
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&envelope).unwrap());
+    let mut request = axum::http::Request::post("/identity")
+        .header("content-type", "application/json")
+        .header(super::HEADER, header);
+    if let Some(claim) = claim {
+        request = request.header("X-Quipu-Agent", claim);
+    }
+    request.body(axum::body::Body::from("{}")).unwrap()
+}
+
+#[tokio::test]
+async fn identity_is_key_derived_and_replay_wrong_key_and_actor_override_refuse() {
+    use axum::http::StatusCode;
+    use tower::ServiceExt;
+    let (app, key, binding) = identity_router();
+    let nonce = "00000000000000000000000000000001";
+    let response = app
+        .clone()
+        .oneshot(identity_request(&key, &binding, nonce, None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let value: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["principal"], "synthetic-owner");
+    assert_eq!(value["key_id"], binding.key_id);
+    assert_eq!(value["session"], binding.session);
+    assert_eq!(value["authenticated"], true);
+    let replay = app
+        .clone()
+        .oneshot(identity_request(&key, &binding, nonce, None))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+    let wrong = Ed25519KeyPair::from_seed_unchecked(&[52; 32]).unwrap();
+    let response = app
+        .clone()
+        .oneshot(identity_request(
+            &wrong,
+            &binding,
+            "00000000000000000000000000000002",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = app
+        .clone()
+        .oneshot(identity_request(
+            &key,
+            &binding,
+            "00000000000000000000000000000003",
+            Some("synthetic-other"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = app
+        .oneshot(
+            axum::http::Request::post("/identity")
+                .body(axum::body::Body::from("{}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
