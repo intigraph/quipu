@@ -1703,6 +1703,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
     let batches = Arc::new(parking_lot::Mutex::new(vec![]));
     let mut store = Store::open_in_memory().unwrap();
+    // This fixture starts deliberately unindexed to measure explicit backfill.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(RecordingProvider {
         batches: batches.clone(),
     }));
