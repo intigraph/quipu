@@ -20,6 +20,7 @@ use wasm_bindgen::prelude::*;
 mod features;
 mod history;
 mod pointers;
+mod store_ops;
 
 #[wasm_bindgen]
 extern "C" {
