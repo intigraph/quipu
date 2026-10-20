@@ -33,4 +33,3 @@ test request_middleware::request_command::tests::demo_command_attribution_before
 test request_middleware::request_command::tests::native_projection_operations_are_retained ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 196 filtered out; finished in 0.00s
-
