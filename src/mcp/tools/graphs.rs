@@ -61,6 +61,18 @@ pub fn tool_graph_create(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 /// Output: `{ "graphs": [{iri, g, class, source, lifecycle, labels: {…}}, …],
 /// "count": N }`.
 pub fn tool_graph_list(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    if let Some(graph) = input.get("graph") {
+        if input.get("kind").is_some() || input.get("lifecycle").is_some() {
+            return Err(Error::InvalidValue(
+                "graph cannot be combined with kind or lifecycle".into(),
+            ));
+        }
+        let graph = graph
+            .as_str()
+            .ok_or_else(|| Error::InvalidValue("graph must be an absolute IRI string".into()))?;
+        let rows: Vec<JsonValue> = store.graph_metadata(graph)?.into_iter().collect();
+        return Ok(serde_json::json!({"count": rows.len(), "graphs": rows}));
+    }
     let kind = match input.get("kind").and_then(JsonValue::as_str) {
         // Strict parse, matching quipu_graph_label: an unrecognised shape is
         // an error, never a filter that silently matches nothing.
