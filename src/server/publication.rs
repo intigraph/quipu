@@ -138,12 +138,11 @@ pub(crate) async fn import_share(
             )?;
             (result, st.take_deferred_embed())
         };
-        if let Some(work) = work {
-            if let Err(error) = finish_deferred_embed(&store, &work) {
-                result.embedding.state = "failed".into();
-                result.embedding.message =
-                    Some(format!("Graph staged, embedding failed: {error:?}"));
-            }
+        if let Some(work) = work
+            && let Err(error) = finish_deferred_embed(&store, &work)
+        {
+            result.embedding.state = "failed".into();
+            result.embedding.message = Some(format!("Graph staged, embedding failed: {error:?}"));
         }
         quipu::import_embedding::refresh(&store.lock(), &mut result)?;
         Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
