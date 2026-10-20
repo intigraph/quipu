@@ -17,6 +17,7 @@ use quipu::share_import::{PromoteImportRequest, promote_import};
 use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
+mod engine;
 mod features;
 mod history;
 mod pointers;

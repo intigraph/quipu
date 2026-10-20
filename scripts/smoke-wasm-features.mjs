@@ -82,6 +82,33 @@ try {
   const errors = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
   await page.waitForFunction(() => window.quipu && window.ask);
+  const memoryDatabase = await page.evaluate(async () => {
+    const wasm = await import("/pkg/quipu_wasm_explorer.js");
+    await wasm.default();
+    const db = new wasm.Database();
+    try {
+      const invoke = (operation, input) => db.invoke(operation, JSON.stringify(input));
+      const caps = JSON.parse(db.capabilities());
+      invoke("quipu_shapes", {action: "load", name: "browser-memory",
+        turtle: "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] ."});
+      const write = JSON.parse(invoke("quipu_knot", {
+        turtle: '<urn:good> a <urn:Record>; <urn:title> "Before"; <urn:n> 9007199254740993 .'}));
+      let refused = false;
+      try { refused = JSON.parse(invoke("quipu_knot", {turtle: "<urn:bad> a <urn:Record> ."})).conforms === false; }
+      catch (error) { const detail = JSON.parse(String(error)); refused = detail.details?.kind === "validation_failed"; }
+      const result = JSON.parse(invoke("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
+      const raw = invoke("quipu_entity_history", {iri: "urn:good"});
+      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw};
+    } finally { db.free(); }
+  });
+  assert.equal(memoryDatabase.caps.storage, "memory");
+  assert.equal(memoryDatabase.caps.full_parity, false);
+  assert.equal(memoryDatabase.committed, true);
+  assert.equal(memoryDatabase.refused, true);
+  assert.equal(memoryDatabase.count, 1);
+  assert.match(memoryDatabase.raw, /9007199254740993/);
+  assert.doesNotMatch(memoryDatabase.raw, /9007199254740992/);
+  console.log("PASS fresh shared Database governed write/refusal/no-leak/lossless browser history");
   const ask = (input) => {
     const message = { ...input };
     if (message.cmd === "semantic") message.cmd = "search";
