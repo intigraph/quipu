@@ -125,6 +125,8 @@ pub struct PromotionStatus {
 /// Completed import decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareImportResult {
+    #[serde(default)]
+    pub embedding: crate::import_embedding::ImportEmbeddingStatus,
     pub outcome: String,
     pub import_id: String,
     pub share_id: String,
@@ -404,6 +406,7 @@ pub(crate) fn import_inner(
     request: &ShareImportRequest,
     timestamp: &str,
     authenticated_actor: Option<&str>,
+    automatic_embedding: bool,
 ) -> Result<ShareImportResult> {
     let mut observation = crate::metrics::attestation::ImportObservation::new();
     // MANIFEST IDENTITY FIRST, THEN AUTHORSHIP, and the order is the scope's
@@ -411,6 +414,11 @@ pub(crate) fn import_inner(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    crate::import_embedding::verify_recipe(
+        store,
+        request.manifest.embedding.as_ref(),
+        automatic_embedding,
+    )?;
     // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
     // staged (aegis-auw0o7). A share stamped `internal` was produced with the
     // outward scrub skipped, so importing it here is the moment that exemption
@@ -524,6 +532,7 @@ pub(crate) fn import_inner(
     )?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
+        embedding: crate::import_embedding::ImportEmbeddingStatus::default(),
         outcome: outcome.into(),
         import_id: import_id(&request.manifest.share_id)?,
         share_id: request.manifest.share_id.clone(),

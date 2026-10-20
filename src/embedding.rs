@@ -23,6 +23,11 @@ use super::store::Datum;
 /// Implementations must be `Send + Sync` so the provider can be shared
 /// via `Arc<dyn EmbeddingProvider>` across threads and subsystems.
 pub trait EmbeddingProvider: Send + Sync {
+    /// A provider may declare its actual loaded bytes. Legacy providers remain valid.
+    fn recipe(&self) -> Option<crate::embedding_runtime::EmbeddingRecipe> {
+        None
+    }
+
     /// Embed a single text string.
     fn embed_text(&self, text: &str) -> Result<Vec<f32>>;
 
@@ -98,6 +103,14 @@ fn build_entity_text_with_named(store: &Store, entity_id: i64, named: bool) -> R
     if facts.is_empty() && named && store.entity_is_named_graph_only(entity_id)? {
         facts = store.entity_facts_in_named_graphs(entity_id)?;
     }
+    text_from_facts(store, facts)
+}
+
+pub(crate) fn build_entity_text_in_graph(store: &Store, entity: i64, graph: i64) -> Result<String> {
+    text_from_facts(store, store.entity_facts_in_graph(entity, graph)?)
+}
+
+fn text_from_facts(store: &Store, facts: Vec<crate::types::Fact>) -> Result<String> {
     if facts.is_empty() {
         return Ok(String::new());
     }
@@ -196,19 +209,29 @@ pub(crate) fn touched_entity_ids(datums: &[Datum]) -> Vec<i64> {
 #[derive(Debug)]
 pub struct DeferredEmbed {
     /// `(entity_id, text-as-of-collect)` for each entity needing a vector.
-    items: Vec<(i64, String)>,
+    items: Vec<(i64, String, Option<i64>)>,
     /// The originating transaction's timestamp; vectors carry it so the
     /// deferred path stamps embeddings exactly as the inline path would.
     timestamp: String,
 }
 
 impl DeferredEmbed {
+    pub(crate) fn for_graph(items: Vec<(i64, String)>, graph: i64, timestamp: &str) -> Self {
+        Self {
+            items: items
+                .into_iter()
+                .map(|(e, t)| (e, t, Some(graph)))
+                .collect(),
+            timestamp: timestamp.into(),
+        }
+    }
+
     /// The texts to embed, in item order — feed to
     /// [`EmbeddingProvider::embed_batch`] outside the lock, then hand the
     /// vectors to [`Store::apply_deferred_embed`](crate::Store::apply_deferred_embed).
     #[must_use]
     pub fn texts(&self) -> Vec<&str> {
-        self.items.iter().map(|(_, t)| t.as_str()).collect()
+        self.items.iter().map(|(_, t, _)| t.as_str()).collect()
     }
 
     /// True when there is nothing to embed.
@@ -253,7 +276,7 @@ pub(crate) fn collect_embed_work(
     // vector is already right, and re-embedding it cost a full-repository ONNX
     // drain on every republication (aegis-tvlxr4). An entity with no current
     // vector is still embedded, which heals one left bare by a restart.
-    let mut items: Vec<(i64, String)> = Vec::new();
+    let mut items: Vec<(i64, String, Option<i64>)> = Vec::new();
     let mut seen = BTreeSet::new();
     for &eid in entity_ids {
         seen.insert(eid);
@@ -269,7 +292,7 @@ pub(crate) fn collect_embed_work(
         }
         // Close the old embedding before creating a new one.
         vs.close_embedding(eid, timestamp)?;
-        items.push((eid, text));
+        items.push((eid, text, None));
     }
 
     // Close embeddings for retracted entities the caller did not list.
@@ -299,8 +322,31 @@ pub(crate) fn apply_deferred_embed(
 ) -> Result<usize> {
     let vs = store.vector_store();
     let mut written = 0;
-    for ((eid, text), emb) in work.items.iter().zip(embeddings.iter()) {
-        let current = build_entity_text(store, *eid)?;
+    let dimension = store.embedding_provider().map(|p| p.dimension());
+    if embeddings.len() != work.items.len()
+        || embeddings
+            .iter()
+            .any(|v| v.iter().any(|f| !f.is_finite()) || dimension.is_some_and(|d| v.len() != d))
+    {
+        return Err(crate::Error::InvalidValue(
+            "embedding provider returned incomplete, non-finite or wrong-dimensional vectors"
+                .into(),
+        ));
+    }
+    for ((eid, text, graph), emb) in work.items.iter().zip(embeddings.iter()) {
+        if let Some(graph) = graph {
+            let elsewhere: bool = store.conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM facts WHERE e=?1 AND g!=?2 AND op=1 AND valid_to IS NULL)",
+                rusqlite::params![eid, graph], |r| r.get(0),
+            )?;
+            if elsewhere {
+                continue; // an adopted or other graph now owns this entity
+            }
+        }
+        let current = match graph {
+            Some(g) => build_entity_text_in_graph(store, *eid, *g)?,
+            None => build_entity_text(store, *eid)?,
+        };
         if current != *text {
             continue; // stale — a newer writer owns this entity's embedding
         }
@@ -336,10 +382,10 @@ pub(crate) fn auto_embed_entities(
     let mut embedded = 0;
 
     for chunk in work.items.chunks(batch_sz) {
-        let texts: Vec<&str> = chunk.iter().map(|(_, t)| t.as_str()).collect();
+        let texts: Vec<&str> = chunk.iter().map(|(_, t, _)| t.as_str()).collect();
         let embeddings = provider.embed_batch(&texts)?;
 
-        for ((eid, text), emb) in chunk.iter().zip(embeddings.iter()) {
+        for ((eid, text, _), emb) in chunk.iter().zip(embeddings.iter()) {
             store.mark_named_search_embedding(*eid)?;
             vs.embed_entity(*eid, text, emb, timestamp)?;
             embedded += 1;

@@ -246,6 +246,9 @@ pub use pointers::{PointerTarget, SharePointer};
 /// Versioned, hash-checked share envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
+    /// Optional exact model identity; covered by share_id. Legacy shares omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
     /// Manifest schema identifier.
     pub schema: String,
     /// Hash of this manifest with `share_id` omitted.
@@ -484,7 +487,12 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             .ok_or_else(|| Error::Store(format!("share: missing anchor tx {tx_anchor}")))?
             .timestamp
     };
+    let embedding = store.embedding_provider().and_then(|p| p.recipe());
+    if let Some(recipe) = &embedding {
+        recipe.validate()?;
+    }
     let mut manifest = ShareManifest {
+        embedding,
         schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
         share_id: String::new(),
         store_id: store.store_id()?,

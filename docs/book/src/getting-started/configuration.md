@@ -96,7 +96,7 @@ stops being read.
 | `governance.quarantine.retain_full` | `[]` | Graph IRIs (or `"*"`) whose refused attempts are also kept in full, sealed; purge with `quipu audit quarantine purge` |
 | `resolution.enabled` | `false` | Entity resolution (dedup) on the episode write path |
 | `resolution.threshold` / `top_k` / `strict_mode` | `0.85` / `3` / `false` | Match threshold, candidate count, refuse-on-ambiguity |
-| `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |
+| `embedding.auto_embed` | `true` | Auto-embed entities on write (needs model/tokenizer paths) |
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |

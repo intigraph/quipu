@@ -5,31 +5,36 @@ Quipu answers two different kinds of question. **Lexical** retrieval (SPARQL,
 (`/context`, `quipu_hybrid_search`, `/search`) needs vectors, and vectors need
 an embedding provider you configure yourself.
 
-Nothing about semantic retrieval is on by default. This page is the checklist
-for turning it on, and — just as important — for telling whether it is on.
+Automatic embedding is enabled by default when a provider is configured.
+No model is downloaded automatically. Without model and tokenizer paths,
+lexical graph operations still work and the loader reports that semantic
+indexing is unavailable. Set `auto_embed = false` to opt out explicitly.
 
-## What `knot` does and does not do
+## Writes and staged imports
 
-This asymmetry surprises people, so it is worth stating plainly:
+Native CLI writes (`knot`, `ingest`, episodes) and server writes use the configured
+provider. A share import indexes eligible, uniquely owned entities in its
+**staging graph**. It does not adopt the graph into ROOT or turn on named-graph
+semantic search. Explicit search scope and search policy still apply.
 
-| Write path | Auto-embeds? |
-|------------|--------------|
-| `POST /episode` / `quipu_episode` | Yes, when `auto_embed = true` |
-| `quipu knot` / `POST /knot` (Turtle ingest) | **No** |
-| `quipu-server --embed-backfill` | Yes, all entities, once at startup |
-| `POST /embed_backfill` | Yes, all entities, on demand |
-| `POST /embed_backfill_graph` | One named graph, bounded per call |
+Import responses include `embedding.state`, candidate/indexed counts, the local
+provider recipe when available, and an explanatory message. `ready` certifies
+indexing for eligible staged entities; `partial` preserves entities already
+owned by ROOT or another graph. `pending`, `unavailable`, `failed`, `disabled`,
+`external`, and `quarantined` must not be described as searchable completion.
+Server inference uses bounded batches outside the global writer lock.
 
-A graph loaded from Turtle therefore holds **no** embeddings. Semantic
-retrieval over it returns nothing at all — successfully, with a `200` and an
-empty result — until you backfill.
+A share may declare `manifest.embedding` with an ONNX basename,
+`model_sha256`, `tokenizer_sha256` (lowercase SHA-256), and `dimension`. These
+fields participate in the share identity. The native provider hashes its actual
+files and validates the model output dimension. Automatic import with an
+available mismatched provider refuses **before staging**. Legacy shares without
+this recipe remain importable; local indexing does not attest which model the
+publisher intended. Re-importing with a real provider recomputes eligible
+vectors instead of treating matching text as proof of model identity.
 
-```console
-$ quipu knot alphax.ttl --db na.db
-knotted 2579 facts from alphax.ttl (tx 1)
-
-$ quipu-server --db na.db --embed-backfill   # <- the missing step
-```
+Existing graph data can still use the explicit startup `--embed-backfill` or
+bounded `POST /embed_backfill_graph` operations when needed.
 
 ## Configuring a provider
 
@@ -55,8 +60,9 @@ environments may not have network access to a model host, in which case the
 files have to be provisioned into the image or volume ahead of time.
 
 `dimension` must match the model. Both `model_path` and `tokenizer_path` must
-be set — with either missing, the server skips provider construction entirely
-and starts without embeddings.
+be set. A partial or invalid configuration is an error; omitting both produces
+a visible unavailable status. The same setup is used by native CLI loaders and
+the server.
 
 ## Telling whether it worked
 
@@ -65,7 +71,7 @@ Three signals, in the order you will meet them.
 **At startup**, a loaded provider announces itself:
 
 ```text
-ONNX embedding provider loaded (dim=384, auto_embed=true, deferred)
+embedding provider ready (dim=384, auto_embed=true)
 ```
 
 **`--embed-backfill` is fatal when it cannot run.** The flag is an explicit

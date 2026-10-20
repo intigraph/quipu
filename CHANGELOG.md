@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Automatic embedding defaults to enabled. Native CLI writes and staged share
+  imports use the configured ONNX model; `auto_embed = false` remains an explicit
+  opt-out. Missing providers report unavailable indexing.
+- Share manifests can bind the exact model/tokenizer hashes and output dimension.
+  Automatic import rejects a mismatched available provider before staging and
+  reports index readiness separately from graph admission.
+
 ## [0.15.0] - 2026-10-20
 
 ### Added

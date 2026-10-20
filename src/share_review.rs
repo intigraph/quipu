@@ -98,10 +98,16 @@ pub fn import_share(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<ShareImportResult> {
-    atomic(store, |store| {
+    let mut result = atomic(store, |store| {
         open(store, &request.manifest.share_id)?;
         let old = state(store, &request.manifest.share_id)?;
-        let result = crate::share_import::import_inner(store, request, timestamp, actor)?;
+        // Staging is not a ROOT write or permission to index quarantined data.
+        // Collect selected-graph work only after admission has completed.
+        let automatic = store.embedding_config().auto_embed;
+        store.embedding_config_mut().auto_embed = false;
+        let result = crate::share_import::import_inner(store, request, timestamp, actor, automatic);
+        store.embedding_config_mut().auto_embed = automatic;
+        let result = result?;
         let next = if result.promotion.eligible {
             "staged"
         } else {
@@ -120,7 +126,15 @@ pub fn import_share(
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
         Ok(result)
-    })
+    })?;
+    // The graph admission commits atomically. Inference is a separate result:
+    // never roll back its named-origin marker around an external vector write.
+    if let Err(error) = crate::import_embedding::prepare(store, &mut result, timestamp) {
+        result.embedding.state = "failed".into();
+        result.embedding.message = Some(format!("Graph staged, embedding failed: {error}"));
+        crate::import_embedding::refresh(store, &mut result)?;
+    }
+    Ok(result)
 }
 /// Explicit promotion; success and resolution event commit atomically.
 pub fn promote_import(

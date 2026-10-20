@@ -1,5 +1,9 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[cfg(feature = "onnx")]
+#[path = "import_embedding_tests.rs"]
+mod import_embedding_tests;
+
 #[path = "acquisition_tests.rs"]
 mod acquisition_tests;
 
