@@ -1,0 +1,116 @@
+{
+  "source_revision": "ccbf48b4ef4ec8558305fdee4932d63c14258b8e",
+  "reviewed_at": "2026-10-20T23:46:33.378576Z",
+  "max_age_seconds": 2592000,
+  "records": [
+    {
+      "kind": "idea",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#why-you-would-want-it",
+      "summary": "Quipu stores governed RDF knowledge locally and exposes the same knowledge engine to applications, command-line clients and agent tools.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "type": "Concept"
+    },
+    {
+      "kind": "idea",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#share-knowledge-between-stores",
+      "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "type": "Concept"
+    },
+    {
+      "kind": "interface",
+      "source": "src/main.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
+      "summary": "The native command-line entrypoint parses local query, share, import, validation and server operations; command discovery does not authorize a live mutation.",
+      "source_sha256": "670d10e707174021542dba13b1e02b27825fc829c2147c061ea75a1dc6a5d6de",
+      "properties": {
+        "interfaceKind": "CLI",
+        "publicName": "quipu"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/lib.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+      "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
+      "source_sha256": "45c2df4319d0c284787e00defc5640d57c6301ac04685e3bb56b699c0a09084d",
+      "properties": {
+        "interfaceKind": "library",
+        "publicName": "quipu_ai"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#wire-it-into-your-agent",
+      "summary": "The documented agent integration uses the native MCP entrypoint or an explicitly configured HTTP service; credentials remain deployment-owned.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "properties": {
+        "interfaceKind": "MCP",
+        "publicName": "quipu mcp"
+      }
+    },
+    {
+      "kind": "decision",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#share-knowledge-between-stores",
+      "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "type": "DecisionRecord",
+      "properties": {
+        "status": "active",
+        "supersessionStatus": "not-recorded-in-source"
+      },
+      "see_also": [
+        "https://scbrown.github.io/quechua/ns#Decision"
+      ]
+    },
+    {
+      "kind": "start-here",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#first-success-in-three-commands",
+      "summary": "Start with the documented local first-success commands, then validate behavior on your own source data.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "properties": {
+        "startHereOrder": 1,
+        "glossaryTerm": "https://scbrown.github.io/quechua/ns#Decision"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#before-you-start",
+      "summary": "Read the feature, model and operating constraints before selecting a deployment or graph mutation path.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "properties": {
+        "startHereOrder": 2
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "scripts/build-repository-share.sh",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/scripts%2Fbuild-repository-share.sh",
+      "summary": "The legacy trusted-host repository builder invokes the Bobbin indexer and Quipu share and quarantine checks. Private publication policy remains outside the public artifact.",
+      "source_sha256": "daca2ea4e1f7f31df591d039b3344686cff4445a0ea2dd3bbae3fbca2beee9da",
+      "properties": {
+        "interfaceKind": "file-format",
+        "publicName": "Trusted repository pendant builder"
+      },
+      "depends_on": [
+        "http://aegis.gastown.local/ontology/repo_bobbin"
+      ]
+    },
+    {
+      "kind": "start-here",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#on-your-own-data",
+      "summary": "After a local first success, follow the documented source-data import path; public examples are not production admission.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "properties": {
+        "startHereOrder": 3
+      }
+    }
+  ]
+}
