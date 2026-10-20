@@ -3,15 +3,14 @@
 //!
 //! It is a thin shell on purpose. Loading a pack goes through the SAME
 //! `share_transport` -> `share_import` -> `promote_import` path the `quipu
-//! import` CLI takes, and every read goes through `quipu::tool_query`, the
+//! import` CLI takes, and current-state queries use `quipu::tool_query`, the
 //! same entry point the REST API and the MCP server use. A reader watching the
 //! page is therefore watching the real import and the real query engine, not a
 //! browser-shaped reimplementation of them — which is the whole point of
 //! putting it in front of them.
 //!
-//! Everything the page displays derives from a SPARQL query it could have
-//! typed itself, so there is no privileged view here that a reader cannot
-//! reproduce in the query box.
+//! Current facts derive from SPARQL. The read-only factHistory API additionally
+//! exposes receiver-local transaction history, never invented producer history.
 
 use quipu::share::{ShareOptions, ShareScope};
 use quipu::share_import::{PromoteImportRequest, promote_import};
@@ -19,6 +18,7 @@ use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
 mod features;
+mod history;
 mod pointers;
 
 #[wasm_bindgen]

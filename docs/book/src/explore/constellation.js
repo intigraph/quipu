@@ -1,8 +1,9 @@
 import { entityIri, readEntity, renderEntity } from "./entity.js";
+import { showRelation, showHistory } from "./relation.js";
 
 // Stable, topic-clustered graph. Geometry is computed once per graph load;
 // interaction moves a camera, never a running force simulation.
-export function createConstellation({ query, prefixes, short, inspect }) {
+export function createConstellation({ query, prefixes, short, inspect, factHistory }) {
   const K = "https://quipu.dev/knowledge/";
   const $ = (id) => document.getElementById(id);
   const svg = $("graph"), layer = $("graph-targets");
@@ -38,13 +39,21 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     groups.forEach((g, index) => {
       const members = [...nodes.values()].filter((n) => n.group === index)
         .sort((a, b) => a.id.localeCompare(b.id));
-      g.x = (index % 3) * 510; g.y = Math.floor(index / 3) * 680;
-      g.w = 460; g.h = Math.max(170, Math.ceil(members.length / 3) * 100 + 80);
-      members.forEach((n, i) => {
-        n.x = g.x + 80 + (i % 3) * 150; n.y = g.y + 90 + Math.floor(i / 3) * 100;
-      });
+      g.x = index * 270; g.y = 0; g.w = 250;
+      g.h = Math.max(170, members.length * 90 + 90);
+      members.forEach((n, i) => { n.x = g.x + 125; n.y = 100 + i * 90; });
       g.count = members.length;
     });
+  };
+  const degree = (id) => new Set(edges.filter((e) => e.from === id || e.to === id)
+    .map((e) => JSON.stringify([e.from, e.rel, e.to]))).size;
+  const radius = (id) => 5 + Math.min(13, 3 * Math.sqrt(degree(id)));
+  const relation = async (edge) => {
+    if (!ready) { $("node-card").textContent = "Saved map preview. Relation details await verification."; return; }
+    const ticket = ++selection;
+    const card = $("node-card"); card.dataset.entity = "";
+    await showRelation(card, edge, { query, short, navigate: open, factHistory,
+      current: () => ticket === selection });
   };
   const draw = () => {
     width = svg.clientWidth; height = svg.clientHeight;
@@ -52,24 +61,39 @@ export function createConstellation({ query, prefixes, short, inspect }) {
     svg.replaceChildren(); layer.replaceChildren();
     if (overview) {
       const visible = groups.filter((g) => g.count);
-      const points = visible.map((g, i) => ({g, x: width * (i % 2 ? .65 : .35), y: 34 + i * (height - 90) / Math.max(1, visible.length - 1)}));
-      points.slice(1).forEach((p, i) => shape("line", {x1:points[i].x, y1:points[i].y, x2:p.x, y2:p.y, stroke:"#7186af", "stroke-opacity":.45}));
+      const points = visible.map((g, i) => ({g, x: 26 + i * (width - 52) / Math.max(1, visible.length - 1), y: 75}));
+      shape("line", { x1: 24, y1: 40, x2: width - 24, y2: 40,
+        stroke: "var(--text)", "stroke-width": 4, "data-cord": "main" });
+      for (const {g, x} of points) {
+        const length = 90 + Math.min(height - 180, g.count * 8);
+        shape("line", { x1: x, y1: 40, x2: x, y2: length, stroke: g.color,
+          "stroke-width": 3, "data-cord": "pendant" });
+        const sample = [...nodes.values()].filter((n) => groups[n.group] === g)
+          .sort((a, b) => a.id.localeCompare(b.id)).slice(0, 8);
+        sample.forEach((n, i) => shape("circle", { cx:x,
+          cy:65+i*(length-75)/Math.max(1,sample.length-1), r:radius(n.id)*.4, fill:g.color }));
+      }
       for (const {g, x, y} of points) {
-        shape("ellipse", {cx:x, cy:y, rx:48, ry:24, fill:g.color, "fill-opacity":.1, stroke:g.color, "stroke-opacity":.4});
-        shape("circle", {cx:x, cy:y, r:7, fill:g.color});
         const b = button(g.name + " · " + g.count, () => {
           overview = false; camera = {x:g.x + g.w / 2, y:g.y + 150, z:.7}; draw();
         });
         b.className="cluster-target"; b.style.left=Math.max(0, Math.min(width - 185, x - 85)) + "px";
-        b.style.top=y + 14 + "px"; b.style.color=g.color; layer.append(b);
+        const slot = Math.max(44, Math.min(180, width / visible.length - 6));
+        b.style.width = slot + "px"; b.style.whiteSpace = "normal";
+        b.style.left = Math.max(0, Math.min(width - slot, x - slot / 2)) + "px";
+        b.style.top = "135px"; b.style.color=g.color; layer.append(b);
       }
       $("graph-zoom-level").textContent="Map";
       return;
     }
+    const left = pos({x:0,y:40}), right = pos({x:groups.length*270,y:40});
+    shape("line", {x1:left.x,y1:left.y,x2:right.x,y2:right.y,stroke:"var(--text)",
+      "stroke-width":4,"data-cord":"main"});
     for (const g of groups.filter((g) => g.count)) {
       const p = pos(g);
-      shape("rect", { x: p.x, y: p.y, width: g.w * camera.z, height: g.h * camera.z,
-        rx: 22, fill: g.color, "fill-opacity": .045, stroke: g.color, "stroke-opacity": .3 });
+      const top = pos({x:g.x+125,y:40}), bottom = pos({x:g.x+125,y:g.h});
+      shape("line", {x1:top.x,y1:top.y,x2:bottom.x,y2:bottom.y,stroke:g.color,
+        "stroke-width":3,"stroke-opacity":.65,"data-cord":"pendant"});
       const b = button(`${g.name} · ${g.count}`, () => {
         camera = { x: g.x + g.w / 2, y: g.y + 170, z: Math.max(.65, Math.min(1, width / 490)) }; draw();
       });
@@ -82,21 +106,32 @@ export function createConstellation({ query, prefixes, short, inspect }) {
       const a = nodes.get(e.from), b = nodes.get(e.to);
       if (!a || !b) continue;
       const p = pos(a), q = pos(b), selected = e.from === active || e.to === active;
-      shape("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y,
+      const line = shape("line", { x1: p.x, y1: p.y, x2: q.x, y2: q.y,
         stroke: selected ? "#d7deef" : "#8a9cbd", "stroke-opacity": selected ? .7 : .13,
-        "stroke-width": selected ? 1.5 : 1 });
+        "stroke-width": selected ? 2 : 1 });
+      line.dataset.edge = JSON.stringify(e);
+      line.setAttribute("tabindex", "0"); line.setAttribute("role", "button");
+      line.setAttribute("aria-label", `${a.label} → ${short(e.rel)} → ${b.label}`);
+      line.addEventListener("click", () => relation(e));
+      line.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); relation(e); }
+      });
+      // A wider transparent stroke makes the relation usable with touch and mouse.
+      const hit = shape("line", {x1:p.x,y1:p.y,x2:q.x,y2:q.y,stroke:"transparent","stroke-width":18});
+      hit.setAttribute("aria-hidden","true"); hit.style.cursor="pointer";
+      hit.addEventListener("click", () => relation(e));
     }
     for (const n of nodes.values()) {
       const p = pos(n), color = groups[n.group].color;
       const lit = n.id === active || adjacent.has(n.id);
-      shape("circle", { cx: p.x, cy: p.y, r: n.id === active ? 9 : 5, fill: color,
+      shape("circle", { cx: p.x, cy: p.y, r: radius(n.id), fill: color,
         opacity: !active || lit ? 1 : .5 });
       // At overview scale the cluster controls are the targets. Zooming into a
       // cluster reveals non-overlapping 44px node buttons, independent of zoom.
       if (camera.z < .5 || p.x < 22 || p.x > width - 22 || p.y < 44 || p.y > height - 40) continue;
       const b = button("", () => open(n.id));
       b.className = "node-target"; b.setAttribute("aria-label", n.label);
-      b.title = n.label; b.dataset.node = n.id;
+      b.title = `${n.label} · degree ${degree(n.id)}`; b.dataset.node = n.id; b.dataset.degree = degree(n.id);
       b.style.left = `${p.x - 22}px`; b.style.top = `${p.y - 22}px`;
       b.style.setProperty("--node-color", color);
       layer.append(b);
@@ -147,7 +182,8 @@ export function createConstellation({ query, prefixes, short, inspect }) {
         if (!edges.some((e) => e.from === edge.from && e.to === edge.to && e.rel === edge.rel)) edges.push(edge);
       }
       arrange(); camera = { x: n.x, y: n.y, z: Math.max(.7, camera.z) };
-      renderEntity(card, id, entity, { short, navigate: open, inspect });
+      renderEntity(card, id, entity, { short, navigate: open, inspect, relation });
+      showHistory(card, id, { factHistory, short, current: () => ticket === selection });
       card.setAttribute("aria-busy", "false"); draw();
     } catch (error) {
       if (ticket !== selection) return;
@@ -215,6 +251,7 @@ export function createConstellation({ query, prefixes, short, inspect }) {
   for (const g of groups) {
     const item = addText($("graph-legend"), "span", "● " + g.name); item.style.color = g.color;
   }
+  addText($("graph-legend"), "span", "Knot size: degree (distinct links in this loaded view). Cords: topic/type groups.");
   return {
     async load(preview = null, onSnapshot = null) {
       const ticket = ++generation; ready = false; ++selection;
@@ -259,7 +296,7 @@ SELECT ?subject ?predicate ?object WHERE {
       arrange();
       $("graph-search").value = ""; $("graph-results").replaceChildren();
       $("node-card").textContent = fallback
-        ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a star to follow its story.";
+        ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a knot or relation to inspect its facts.";
       ready = !preview;
       const requested = new URL(location.href).searchParams.get("entity");
       const first = nodes.get(K + "vision") ?? nodes.values().next().value;

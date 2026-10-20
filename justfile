@@ -267,6 +267,7 @@ docs-demo-test:
 # Map acceptance against the staged real browser engine and repository pack.
 explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
+    node scripts/test-explore-cords.cjs {{args}}
 
 # Presentation acceptance against the same staged browser engine.
 explorer-presentation *args:
