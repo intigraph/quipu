@@ -4,14 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed
+### Added
 
-- Automatic embedding defaults to enabled. Native CLI writes and staged share
-  imports use the configured ONNX model; `auto_embed = false` remains an explicit
-  opt-out. Missing providers report unavailable indexing.
-- Share manifests can bind the exact model/tokenizer hashes and output dimension.
-  Import rejects a mismatched available provider before staging and
-  reports index readiness separately from graph admission.
+- *(embedding)* Enable provider-backed automatic indexing by default([8d75eb0](https://github.com/scbrown/quipu/commit/8d75eb0980f08c23744acc73c835953a25a752d5))
+
+### Fixed
+
+- *(import)* Separate review admission from automatic vector hooks([58b0371](https://github.com/scbrown/quipu/commit/58b03716a9a95675279c77534234fa8a77d43f8e))
+- *(embedding)* Update provider guidance and satisfy lint contracts([4dbbe58](https://github.com/scbrown/quipu/commit/4dbbe5867845869f9cdbf87c84634d9f6f9ebdd6))
+- *(import)* Require matching provider recipe before all staging([513650e](https://github.com/scbrown/quipu/commit/513650edf6468ad73faff031137cd1510bb74d48))
+
+### Testing
+
+- *(embedding)* Provide import provenance in server acceptance fixture([ca1d5e6](https://github.com/scbrown/quipu/commit/ca1d5e60f7cda9c01e17cb2fba2de2e0c7779fff))
+- *(import)* Distinguish resolution failure from indexing failure([9628bd0](https://github.com/scbrown/quipu/commit/9628bd07df2f77496e3b33cc87c4d63ab370109b))
+
+### Style
+
+- *(import)* Collapse deferred failure branch([5ff6290](https://github.com/scbrown/quipu/commit/5ff62901ad85418856442ab5cea5eb943fe47b79))
 
 ## [0.15.0] - 2026-10-20
 
@@ -49,8 +59,6 @@ All notable changes to this project will be documented in this file.
 - *(wasm)* Expose governed writes and entity history (#680)([533c969](https://github.com/scbrown/quipu/commit/533c96938232987f5706cc54af99a8ae0c821f29))
 - *(bindings)* Add a shared governed memory engine (#682)([de6b675](https://github.com/scbrown/quipu/commit/de6b675a1aa33f499de943c8d317020f20324723))
 - *(shapes)* Audit propagation through existing CI entrypoint (#681)([b02bef0](https://github.com/scbrown/quipu/commit/b02bef04aed7f100ab8a27b049eb8ec009e2a750))
-
-
 
 ### Documentation
 
@@ -175,15 +183,9 @@ All notable changes to this project will be documented in this file.
 - *(share)* Add fail-closed pack review reports and workflow (#502)([ee174b2](https://github.com/scbrown/quipu/commit/ee174b23476be30015e23a1f35c1c5c681dc3aff))
 - *(import)* Record quarantine review lifecycle events (#480)([106a50d](https://github.com/scbrown/quipu/commit/106a50d714a3ccd354685dc459c8c69d3aa47078))
 
-
-
 ### Changed
 
 - *(share)* Use pendant names and retain legacy pack reads (#503)([1ffd453](https://github.com/scbrown/quipu/commit/1ffd453b57e2657b83e9d88572063fa76e1243a7))
-
-
-
-
 
 ### Miscellaneous
 
@@ -290,8 +292,6 @@ All notable changes to this project will be documented in this file.
 - *(update)* Record the caller's declared actor and source on /update writes (#413)([674f370](https://github.com/scbrown/quipu/commit/674f3700aa476c36f276ffcd8a686618e7bb5b56))
 - *(episode)* Let a node type name a class in the public Quechua namespace (#412)([c9d9ca2](https://github.com/scbrown/quipu/commit/c9d9ca2fa27f7f8f9e5c53ce8ad524aefdfc45f5))
 - *(shapes)* Govern legacy Bead as a deprecated subclass of WorkItem (#423)([9e12ee1](https://github.com/scbrown/quipu/commit/9e12ee1a43979c2ef7bb9d19028f5f84eb258646))
-
-
 
 ### Fixed
 
@@ -450,8 +450,6 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Record source ownership regression ledgers([fd1d255](https://github.com/scbrown/quipu/commit/fd1d25576a1cdb4df5c14b0dfc63a2137114f5ee))
 - *(shapes)* Credential inventory fields are optional and constrained when present([05a2a95](https://github.com/scbrown/quipu/commit/05a2a95ad68838d5ae1eb86d97bbae09fb2b8739))
 - *(search)* Add isolated judged retrieval evaluation runner (#326)([abd356c](https://github.com/scbrown/quipu/commit/abd356ce5a82fd3d338834aa7da8ecde267856a5))
-
-
 
 ### Perf
 
@@ -665,8 +663,6 @@ All notable changes to this project will be documented in this file.
 - *(cli)* Report what the process said when an exit-code assertion fails([f603e74](https://github.com/scbrown/quipu/commit/f603e7437443daba243e9aa91770785f05982770))
 - Refuse a test that spawns a binary it may not have built([6aad0f7](https://github.com/scbrown/quipu/commit/6aad0f7aafa8dfe7d7955e48fd9b8c9caee7f6da))
 
-
-
 ### Perf
 
 - *(store)* Index current facts by attribute — halves an episode write (#229)([4e60844](https://github.com/scbrown/quipu/commit/4e6084480ffe08562ee061dccf2f3814475fcc33))
@@ -685,8 +681,6 @@ All notable changes to this project will be documented in this file.
 
 - *(pack)* Record the destination in the manifest, and audit every producer([e6307f7](https://github.com/scbrown/quipu/commit/e6307f7a8461db36fc561ba211c7b81393711bd2))
 - *(pack)* --full, a LOSSLESS whole-store pack (9f899e contract 1)([2e94ead](https://github.com/scbrown/quipu/commit/2e94eadf8e932f63ae762f8ef17a5f7420b47ced))
-
-
 
 ### Fixed
 
@@ -774,8 +768,6 @@ All notable changes to this project will be documented in this file.
 - *(owl)* Implement owl:sameAs — asserted identities stop being inert([787b0b6](https://github.com/scbrown/quipu/commit/787b0b6747231bfdf8f383c29c83a377a5647ff7))
 - *(share)* The declared set in code, with the audit a round-trip cannot do([ef3df57](https://github.com/scbrown/quipu/commit/ef3df5778baac75035379788882302dd5fbd0b12))
 
-
-
 ### Fixed
 
 - *(owl)* Backtick ABox so clippy doc_markdown is green([0e31c7d](https://github.com/scbrown/quipu/commit/0e31c7d6e96c0415bfa7137a73aa7c5a16086796))
@@ -800,8 +792,6 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - *(share)* --destination internal, stamped into share_id([d03bc04](https://github.com/scbrown/quipu/commit/d03bc04922944909880104895cf8720c6349683d))
-
-
 
 ### Miscellaneous
 
@@ -880,10 +870,6 @@ All notable changes to this project will be documented in this file.
 - *(share)* Wire the attestation verifier into import — it had ZERO callers([9ca7d54](https://github.com/scbrown/quipu/commit/9ca7d5403137f2ebbf80c5eee1061b5d0d366beb))
 - *(cli)* `quipu ingest` — a streaming bulk load that refuses a short one([21f8ed9](https://github.com/scbrown/quipu/commit/21f8ed94e018f7e2396e708ce2816554c66a1a75))
 
-
-
-
-
 ### Fixed
 
 - *(wasm)* Gate the attestation seam off wasm32 — the verifier is not there([16c8d08](https://github.com/scbrown/quipu/commit/16c8d086ca052e9f9a347640c9a9728c03bc0c1f))
@@ -912,10 +898,6 @@ All notable changes to this project will be documented in this file.
 - Cargo fmt the rdfs2 literal-premise tests([df044b3](https://github.com/scbrown/quipu/commit/df044b3b8c557948fcfd5c191ca1ec6aa043ec86))
 
 ## [0.3.38] - 2026-09-05
-
-
-
-
 
 ### Miscellaneous
 
@@ -968,8 +950,6 @@ All notable changes to this project will be documented in this file.
 - *(conformance)* Ledgers record WHO produced them, and the page prints it([f2a174b](https://github.com/scbrown/quipu/commit/f2a174bc6e8a483d00aff499fffd82aa377748dc))
 - *(conformance)* Answer RDFS-regime cases under the closure([9a3fbd5](https://github.com/scbrown/quipu/commit/9a3fbd576fbfc797a1e4ab4ccfc2dc9a8810b2a9))
 - *(conformance)* --check now asks whether a ledger matches the code it ships with([4aa67ad](https://github.com/scbrown/quipu/commit/4aa67ad54dd76fc83dd4e8967d1596ba4d6004c3))
-
-
 
 ### Fixed
 
