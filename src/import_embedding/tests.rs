@@ -249,7 +249,21 @@ fn provider_failure_is_reported_separately_from_durable_staging() {
     }
     let mut receiver = Store::open_in_memory().unwrap();
     receiver.set_embedding_provider(std::sync::Arc::new(Broken));
-    let result = import_share(&mut receiver, &request(&source()), TS, None).unwrap();
+    // Existing label resolution also uses the provider. Its failure is a
+    // pre-admission error, distinct from the later indexing outcome.
+    assert!(import_share(&mut receiver, &request(&source()), TS, None).is_err());
+    assert_eq!(receiver.latest_tx_id().unwrap(), 0);
+    assert!(receiver.embedding_config().auto_embed);
+
+    // A comment-only metadata entity needs no label resolution, so this
+    // fixture reaches the actual post-admission inference boundary.
+    let mut producer = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut producer);
+    let graph = producer.graph_create("urn:fixture:repository").unwrap();
+    crate::rdf::ingest_rdf_to_graph(&mut producer,
+        b"<urn:fixture:cat> <http://www.w3.org/2000/01/rdf-schema#comment> \"Repository architecture note about a feline shelter\" .".as_slice(),
+        oxrdfio::RdfFormat::NTriples, None, TS, None, None, graph).unwrap();
+    let result = import_share(&mut receiver, &request(&producer), TS, None).unwrap();
     assert_eq!(result.embedding.state, "failed");
     assert_eq!(result.embedding.indexed, 0);
     assert!(
@@ -259,7 +273,7 @@ fn provider_failure_is_reported_separately_from_durable_staging() {
             .unwrap()
             .contains("synthetic inference failure")
     );
-    assert_eq!(result.triples.accepted, 6);
+    assert_eq!(result.triples.accepted, 1);
     assert_eq!(receiver.vector_count().unwrap(), 0);
     assert!(receiver.latest_tx_id().unwrap() > 0);
 }
