@@ -98,16 +98,17 @@ pub fn import_share(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<ShareImportResult> {
-    let mut result = atomic(store, |store| {
+    // Review metadata and graph admission must not trigger the generic
+    // write hook. Only eligible staged documents are indexed after commit.
+    let automatic = store.embedding_config().auto_embed;
+    store.embedding_config_mut().auto_embed = false;
+    let admitted = atomic(store, |store| {
         open(store, &request.manifest.share_id)?;
         let old = state(store, &request.manifest.share_id)?;
         // Staging is not a ROOT write or permission to index quarantined data.
         // Collect selected-graph work only after admission has completed.
-        let automatic = store.embedding_config().auto_embed;
-        store.embedding_config_mut().auto_embed = false;
-        let result = crate::share_import::import_inner(store, request, timestamp, actor, automatic);
-        store.embedding_config_mut().auto_embed = automatic;
-        let result = result?;
+        let result =
+            crate::share_import::import_inner(store, request, timestamp, actor, automatic)?;
         let next = if result.promotion.eligible {
             "staged"
         } else {
@@ -126,7 +127,9 @@ pub fn import_share(
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
         Ok(result)
-    })?;
+    });
+    store.embedding_config_mut().auto_embed = automatic;
+    let mut result = admitted?;
     // The graph admission commits atomically. Inference is a separate result:
     // never roll back its named-origin marker around an external vector write.
     if let Err(error) = crate::import_embedding::prepare(store, &mut result, timestamp) {
