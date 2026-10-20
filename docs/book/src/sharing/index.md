@@ -296,18 +296,18 @@ composing two graphs does not itself prove either one.
 
 #### Composition is not an identity decision
 
-* **The same exact IRI** names the same RDF subject in the composed data.
+- **The same exact IRI** names the same RDF subject in the composed data.
   Repository-qualified identifiers prevent unrelated local names such as
   `config` from colliding. The diagram deliberately uses a generic repository
   namespace rather than declaring a new permanent namespace.
-* **Different IRIs remain different by default**, even when their labels match.
+- **Different IRIs remain different by default**, even when their labels match.
   The current import resolver reports exact canonical-name matches as proposals;
   it preserves the foreign IRI unless the caller explicitly enables
   `accept_exact`. That compatibility option rewrites IRIs and does not create a
   retractable alignment record.
-* **A dependency is not identity.** Bobbin calling Quipu is a relationship
+- **A dependency is not identity.** Bobbin calling Quipu is a relationship
   between interfaces, not permission to merge their names.
-* **A proposed mapping is not accepted alignment.** Use the existing
+- **A proposed mapping is not accepted alignment.** Use the existing
   [propose → decide → apply workflow](align.md). Its SSSOM record carries
   `subject_id`, `object_id`, `predicate_id` and `mapping_justification`;
   the decision records the reviewer. Applying the decided version can derive
