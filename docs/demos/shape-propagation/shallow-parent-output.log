@@ -1,0 +1,10 @@
+Script started on 2026-10-20 07:22:17-04:00 [COMMAND="stty -onlcr; bash -o pipefail -c "python docs/demos/shape-propagation/shallow-parent.py 2>&1 | cat"" <not executed on terminal>]
+fatal: ambiguous argument 'd85efb69716e24c5305d1e5c33b08667700863ba^': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+BEFORE source commit: 587451b5d63891bccb66edca6d1b36bbfd97f77d
+{"depth-one": {"exact_range": false, "exit": 128}, "full": {"exact_range": true, "shallow_after": "false"}}
+AFTER script SHA256: fa7e4bae75600ce7d422cb7786bc1a9d13663d8da36b2c8efd35d8462e3b916d
+{"depth-one": {"exact_range": true, "shallow_after": "false"}, "full": {"exact_range": true, "shallow_after": "false"}}
+
+Script done on 2026-10-20 07:22:17-04:00 [COMMAND_EXIT_CODE="0"]

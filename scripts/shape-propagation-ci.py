@@ -28,15 +28,19 @@ def revision_range(repo, env):
             raise ValueError('CI checkout differs from exact event SHA')
         event = json.loads(Path(env['GITHUB_EVENT_PATH']).read_text())
         base = event.get('pull_request', {}).get('base', {}).get('sha') or event.get('before')
+        if base and base != '0'*40 and not re.fullmatch('[0-9a-f]{40}', base):
+            raise ValueError('invalid event base')
+        # actions/checkout uses depth=1. This is an explicit source-history
+        # fetch in the existing CI checkout, never a production operation.
+        # Scheduled/manual events have no base: their parent is unavailable
+        # until this fetch completes. Keep fetch errors fatal, not warning-only.
+        if audit.git(repo, 'rev-parse', '--is-shallow-repository').strip() == b'true':
+            subprocess.run(['git', '-C', str(repo), 'fetch', '--unshallow', '--no-tags', 'origin'],
+                           check=True, timeout=120)
         if not base or base == '0'*40:
             base = audit.git(repo, 'rev-parse', head+'^').decode().strip()
         if not re.fullmatch('[0-9a-f]{40}', base):
             raise ValueError('invalid event base')
-        # actions/checkout uses depth=1. This is an explicit source-history
-        # fetch in the existing CI checkout, never a production operation.
-        if audit.git(repo, 'rev-parse', '--is-shallow-repository').strip() == b'true':
-            subprocess.run(['git', '-C', str(repo), 'fetch', '--unshallow', '--no-tags', 'origin'],
-                           check=True, timeout=120)
     else:
         base = audit.git(repo, 'rev-parse', head+'^').decode().strip()
     audit.git(repo, 'cat-file', '-e', base+'^{commit}')
