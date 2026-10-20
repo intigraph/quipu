@@ -16,6 +16,8 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/select-explorer-release.py'
+      - 'scripts/test-select-explorer-release.py'
   push:
     branches: [main]
     paths:
@@ -26,6 +28,8 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/select-explorer-release.py'
+      - 'scripts/test-select-explorer-release.py'
   workflow_dispatch:
 
 # Superseded PR runs share a group; every non-PR run keeps its own group.
@@ -49,6 +53,9 @@ jobs:
           tool: mdbook,mdbook-mermaid
 
       # Package the committed text share and copy the renderer. No Rust.
+      - name: Test explorer release selection
+        run: python3 scripts/test-select-explorer-release.py
+
       - name: Stage Datalinks demo assets
         run: scripts/stage-datalinks.sh
 
@@ -67,48 +74,38 @@ jobs:
       # pointing the page at a release URL; it will fail silently for readers and
       # work for whoever tests it with curl.
       #
-      # Deliberately NON-FATAL. Until a release ships carrying the wasm asset
-      # there is nothing to stage, and the docs must keep building; the page says
-      # so itself and still accepts a pack from a file picker. `mdbook build`
-      # copies whatever is in src/, so a missing bundle simply is not published.
-      - name: Stage the explorer bundle and repository pack from the newest release
+      # A release may publish before its trusted pack arrives. Select the newest
+      # complete public release instead; never deploy a packless explorer.
+      - name: Stage explorer assets from the newest release with a complete pack
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           DEST=docs/book/src/explore
           TMP="$(mktemp -d)"
-          TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
-          if [ -z "${TAG}" ]; then
-            echo "::warning::no GitHub release found — the explorer page will ship unstaged"
-            exit 0
-          fi
-          echo "Staging explorer assets from release ${TAG}"
-          PUBLISHED=$(gh release view "${TAG}" --json publishedAt --jq .publishedAt)
-          echo "EXPLORER_RELEASE_PUBLISHED_AT=${PUBLISHED}" >> "$GITHUB_ENV"
-
-          if gh release download "${TAG}" --pattern '*-wasm.tar.gz' --dir "${TMP}"; then
-            mkdir -p "${DEST}/pkg"
-            tar -C "${TMP}" -xzf "${TMP}"/*-wasm.tar.gz
-            find "${TMP}" -name 'quipu_wasm_explorer*' -exec cp {} "${DEST}/pkg/" \;
-            for RUNTIME in "${TMP}"/*-wasm/runtime; do
-              if [ -d "$RUNTIME" ]; then cp -R "$RUNTIME" "${DEST}/pkg/"; fi
-            done
-          else
-            echo "::warning::release ${TAG} has no wasm bundle yet (first one lands with the next release)"
-          fi
-
-          # Releases cut before the pendant rename named this asset *-repository.qpack.tar.gz
-          # (aegis-fxpbys.3); fall back to that name so the page still stages
-          # from a release cut before the rename. Same bytes, older name.
-          if gh release download "${TAG}" --pattern '*-repository.pendant.tar.gz' --dir "${TMP}"; then
-            cp "${TMP}"/*-repository.pendant.tar.gz "${DEST}/repository.pendant.tar.gz"
-          elif gh release download "${TAG}" --pattern '*-repository.qpack.tar.gz' --dir "${TMP}"; then
-            cp "${TMP}"/*-repository.qpack.tar.gz "${DEST}/repository.pendant.tar.gz"
-          else
-            echo "::warning::release ${TAG} has no repository pendant"
-          fi
-          ls -la "${DEST}" "${DEST}/pkg" 2>/dev/null || true
+          trap 'rm -rf "$TMP"' EXIT
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" | jq -s . > "$TMP/releases.json"
+          python3 scripts/select-explorer-release.py < "$TMP/releases.json" > "$TMP/selected.json"
+          TAG=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag"])' "$TMP/selected.json")
+          PACK=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pack"])' "$TMP/selected.json")
+          WASM=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["wasm"])' "$TMP/selected.json")
+          PUBLISHED=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["published"])' "$TMP/selected.json")
+          echo "Staging complete explorer release $TAG"
+          echo "EXPLORER_RELEASE_PUBLISHED_AT=$PUBLISHED" >> "$GITHUB_ENV"
+          for ASSET in "$PACK" "$WASM"; do
+            gh release download "$TAG" --pattern "$ASSET" --pattern "$ASSET.sha256" --dir "$TMP"
+            (cd "$TMP" && sha256sum --check "$ASSET.sha256")
+          done
+          mkdir -p "$DEST/pkg"
+          tar -C "$TMP" -xzf "$TMP/$WASM"
+          find "$TMP" -name 'quipu_wasm_explorer*' -exec cp {} "$DEST/pkg/" \;
+          for RUNTIME in "$TMP"/*-wasm/runtime; do
+            if [ -d "$RUNTIME" ]; then cp -R "$RUNTIME" "$DEST/pkg/"; fi
+          done
+          cp "$TMP/$PACK" "$DEST/repository.pendant.tar.gz"
+          for FILE in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm repository.pendant.tar.gz; do
+            test -s "$DEST/$FILE" || { echo "missing staged explorer asset: $FILE"; exit 1; }
+          done
 
       - name: Build book
         run: mdbook build docs/book
