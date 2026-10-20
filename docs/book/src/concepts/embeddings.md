@@ -36,6 +36,16 @@ vectors instead of treating matching text as proof of model identity.
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.
 
+## Browser explorer boundary
+
+The explorer uses its separate JavaScript ONNX adapter and self-hosted model
+assets. It loads the runtime on the first semantic query and rebuilds its
+in-memory vectors when the ROOT label/comment snapshot changes. It does not
+copy staged named graphs into that index. Native import readiness does not
+certify browser indexing or browser model-byte identity; the current browser
+adapter does not validate `manifest.embedding` against its JavaScript model.
+A loaded pendant alone must not be presented as browser semantic readiness.
+
 ## Configuring a provider
 
 Two things are required, and having one without the other is the common
