@@ -290,7 +290,7 @@ impl Materialization {
 }
 
 /// Decode the `fresh_rank` cache column to its declared string.
-fn rank_to_freshness(rank: i64) -> String {
+pub(super) fn rank_to_freshness(rank: i64) -> String {
     match rank {
         0 => "stale".into(),
         1 => "recomputing".into(),
@@ -300,7 +300,7 @@ fn rank_to_freshness(rank: i64) -> String {
 }
 
 /// Decode the `durability_rank` cache column to its declared string.
-fn rank_to_durability(rank: i64) -> String {
+pub(super) fn rank_to_durability(rank: i64) -> String {
     match rank {
         0 => "soleRecord".into(),
         1 => "reproducible".into(),

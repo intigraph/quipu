@@ -301,10 +301,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_graph_list",
-            "description": "List registered named graphs with class, source, lifecycle and labels (freshness/durability/trust/policy/kind). Filter with `kind` (a dataKind token, e.g. operational | archive) and/or `lifecycle` (frozen). Also the capability probe for the graph-kinds surface: a store without this tool predates it.",
+            "description": "List registered named graphs; optional graph selects one exact registered IRI without materialization enrichment (cannot combine with kind/lifecycle). Includes class, source, lifecycle and labels (freshness/durability/trust/policy/kind). Filter with `kind` (a dataKind token, e.g. operational | archive) and/or `lifecycle` (frozen). Also the capability probe for the graph-kinds surface: a store without this tool predates it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": { "type": "string", "description": "Exact registered graph IRI; no kind/lifecycle combination or materialization enrichment" },
                     "kind": { "type": "string", "description": "Only graphs declaring this dataKind token" },
                     "lifecycle": { "type": "string", "enum": ["frozen"], "description": "Only graphs in this storage lifecycle state" }
                 }
