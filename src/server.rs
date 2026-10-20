@@ -542,12 +542,14 @@ async fn main() {
                     }
                     if !(is_write && read_only)
                         && !session_keys.allows_unsigned(&path, req.method().as_str()) {
-                        return (axum::http::StatusCode::UNAUTHORIZED,
+                        let mut response = (axum::http::StatusCode::UNAUTHORIZED,
                             axum::Json(serde_json::json!({
                                 "error": "an enrolled session key is required",
                                 "reason": "session_key_required",
                                 "credential_type": "attested_signature"
                             }))).into_response();
+                        response.extensions_mut().insert(quipu::request_usage::AuthOutcome::Unauthorized);
+                        return response;
                     }
                     let auth_header = req
                         .headers()
