@@ -5,12 +5,25 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **77 tools** in a default build, or
-**79** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **79 tools** in a default build, or
+**81** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
 ## Connect directly
+
+### `quipu_namespaces`
+
+List the effective owner namespace registry without writing or minting. Optional
+`action` is `list`. Namespace policy is configured locally, not through MCP.
+
+### `quipu_entity_ref`
+
+Mint a typed stable identity in an explicitly applied namespace, or describe an
+exact registered IRI with optional source and `asOf`. This authenticated writer
+tool accepts `action: mint|resolve`; resolution makes no network request.
+An uncertain mint response must be reconciled before another mint. See
+[namespaces](namespaces.md) for selectors, audience policy and examples.
 
 The server includes the native `mcp` feature. Build the CLI and its companion:
 

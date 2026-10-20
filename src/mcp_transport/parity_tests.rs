@@ -19,6 +19,59 @@ fn payload(result: CallToolResult) -> Value {
 }
 
 #[tokio::test]
+async fn namespace_tools_preserve_routes_strict_inputs_and_write_annotations() {
+    let server = McpServer::new(
+        Router::new()
+            .route("/namespaces", post(echo))
+            .route("/entity_ref", post(echo)),
+    );
+    for (name, input, read_only, route) in [
+        ("quipu_namespaces", json!({}), true, "/namespaces"),
+        (
+            "quipu_entity_ref",
+            json!({"action":"mint","namespace":"p","type":"urn:example:Host"}),
+            false,
+            "/entity_ref",
+        ),
+    ] {
+        let definition =
+            serde_json::to_value(server.tools.iter().find(|t| t.name == name).unwrap()).unwrap();
+        assert_eq!(definition["annotations"]["readOnlyHint"], read_only);
+        let actual = payload(
+            server
+                .dispatch(name, input.clone(), &HeaderMap::new())
+                .await
+                .unwrap(),
+        );
+        assert_eq!(actual["uri"], route);
+        assert_eq!(
+            serde_json::from_str::<Value>(actual["body"].as_str().unwrap()).unwrap(),
+            input
+        );
+    }
+    assert!(
+        server
+            .dispatch(
+                "quipu_namespaces",
+                json!({"action":"apply"}),
+                &HeaderMap::new()
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        server
+            .dispatch(
+                "quipu_entity_ref",
+                json!({"action":"mint","audience":"org:forged"}),
+                &HeaderMap::new()
+            )
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn rule_answer_states_native_mcp_dispatch_preserves_typed_answers_and_read_annotation() {
     use axum::extract::State;
     let mut store = crate::Store::open_in_memory().unwrap();

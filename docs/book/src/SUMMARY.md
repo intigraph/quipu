@@ -8,6 +8,7 @@
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Configuration](getting-started/configuration.md)
+- [Stable Entity References](reference/namespaces.md)
 
 # Concepts
 

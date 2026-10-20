@@ -77,7 +77,10 @@ pub fn pack_full_text(
     opts: &PackOptions,
     timestamp: &str,
 ) -> Result<Manifest> {
-    if !opts.destination.is_internal() {
+    if !matches!(
+        opts.destination,
+        crate::share_scrub::ShareDestination::Internal
+    ) {
         return Err(Error::PolicyDenied(format!(
             "pack --full --format text is INTERNAL ONLY and this pack is bound \
              outward. A full pack is lossless: it carries the event log and \

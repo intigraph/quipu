@@ -17,6 +17,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
     #[allow(unused_mut)]
     let mut defs = core::defs();
     defs.extend(episodes::defs());
+    defs.extend(crate::entity_reference::definitions());
     defs.extend(parity::defs());
     defs.extend(search::defs());
     defs.extend(schema::defs());

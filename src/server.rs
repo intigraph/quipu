@@ -48,6 +48,9 @@ mod handle;
 mod input_fields;
 #[path = "server/memory_files.rs"]
 mod memory_files;
+#[cfg(test)]
+#[path = "server/namespace_tests.rs"]
+mod namespace_tests;
 #[cfg(feature = "owl")]
 #[path = "server/owl_materialize.rs"]
 mod owl_materialize;
@@ -463,6 +466,8 @@ async fn main() {
         .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/datasets", post(datasets))
+        .route("/namespaces", get(namespaces_get).post(namespaces))
+        .route("/entity_ref", post(entity_ref))
         .route("/queries", post(queries))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))

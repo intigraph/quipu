@@ -129,7 +129,7 @@ impl LazyPacks {
             crate::share_import::verify_share(&request)?;
             // Destination is receiver policy. Never inherit an exemption from
             // a downloaded manifest; preserve the declaring receiver's choice.
-            request.destination = self.declaration.destination;
+            request.destination = self.declaration.destination.clone();
             if miss {
                 cache.put(&digest, &bytes)?;
             }

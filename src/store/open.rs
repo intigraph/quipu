@@ -150,6 +150,8 @@ impl Store {
     /// the server for which handlers are pooled.
     pub fn adopt_read_config_from(&mut self, other: &Self) {
         self.base_ns.clone_from(&other.base_ns);
+        self.namespace_settings
+            .clone_from(&other.namespace_settings);
         self.search_config.clone_from(&other.search_config);
         self.labels_config.clone_from(&other.labels_config);
         self.owl_config.clone_from(&other.owl_config);
@@ -512,6 +514,7 @@ impl Store {
             recording_verdicts: false,
             trust_root_bootstrap: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
+            namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,
             local_vector_backend: None,
             defer_auto_embed: false,

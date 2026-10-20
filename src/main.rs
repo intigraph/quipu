@@ -60,6 +60,7 @@ mod cli_knot;
 mod cli_mcp;
 mod cli_memory_files;
 mod cli_merge;
+mod cli_namespaces;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
@@ -182,6 +183,7 @@ fn main() {
         "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
+        "namespaces" | "entity-ref" => cli_namespaces::run(&args, db_path),
         "memory" => cli_memory_files::command(&args),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),

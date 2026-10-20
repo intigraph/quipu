@@ -411,6 +411,7 @@ pub(crate) fn import_inner(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    crate::namespace_publication::receive(store, request)?;
     // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
     // staged (aegis-auw0o7). A share stamped `internal` was produced with the
     // outward scrub skipped, so importing it here is the moment that exemption
@@ -430,6 +431,7 @@ pub(crate) fn import_inner(
     if request
         .manifest
         .destination
+        .as_ref()
         .is_some_and(ShareDestination::is_internal)
         && !request.destination.is_internal()
     {

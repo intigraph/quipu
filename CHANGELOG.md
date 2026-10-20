@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Registered stable entity namespaces, opaque base32 minting and CLI/REST/MCP
+  namespace listing; existing identities retain compatibility.
+- Owner-bound org/personal pendant destinations and fail-closed namespace
+  audience checks through the existing publication-policy seam.
+
 ## [0.15.0] - 2026-10-20
 
 ### Added

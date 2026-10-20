@@ -30,6 +30,10 @@ pub struct UnpackReport {
 /// Expectations and checkout state supplied while loading a repository pack.
 #[derive(Debug, Clone, Default)]
 pub struct LoadOptions<'a> {
+    /// Protected receiver configuration for audience-bound packs.
+    pub namespace_policy: Option<&'a crate::QuipuConfig>,
+    /// Receiver-selected transfer audience, never inferred from the artifact.
+    pub destination: crate::share_scrub::ShareDestination,
     /// Optional destination graph override.
     pub into: Option<&'a str>,
     /// Repository identity the caller expects the manifest to carry.
@@ -92,7 +96,25 @@ pub fn unpack_verified(
         )));
     }
     let graph = opts.into.unwrap_or(&manifest.source_graph).to_string();
-    let dest = Store::open(destination)?;
+    let mut dest = Store::open(destination)?;
+    if let Some(config) = opts.namespace_policy {
+        crate::entity_namespaces::configure(&mut dest, config)?;
+    }
+    let source_policy = Store::open_immutable(pack_path)?;
+    let shapes = source_policy
+        .list_shapes()?
+        .into_iter()
+        .map(|(name, _, _)| name)
+        .collect::<Vec<_>>();
+    let queries = source_policy
+        .query_list()?
+        .into_iter()
+        .map(|query| query.name)
+        .collect::<Vec<_>>();
+    let canonical =
+        crate::pack::canonical_content(&source_policy, &manifest.source_graph, &shapes, &queries)?;
+    crate::namespace_publication::receive_pack(&dest, &manifest, &opts.destination, &canonical)?;
+    drop(source_policy);
     dest.conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS pack_loads (
         content_hash TEXT PRIMARY KEY, repository TEXT, repository_sha TEXT, loaded_at TEXT NOT NULL

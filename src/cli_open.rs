@@ -18,7 +18,12 @@ use quipu::{QuipuConfig, Store};
 /// The process's config, loaded on first open.
 pub fn config() -> &'static QuipuConfig {
     static CONFIG: OnceLock<QuipuConfig> = OnceLock::new();
-    CONFIG.get_or_init(|| QuipuConfig::load(std::path::Path::new(".")))
+    CONFIG.get_or_init(|| {
+        QuipuConfig::load_strict(std::path::Path::new(".")).unwrap_or_else(|error| {
+            eprintln!("error loading owner configuration: {error}");
+            std::process::exit(1);
+        })
+    })
 }
 
 /// Open the store at `db_path` with the configured attachments mounted, or

@@ -56,7 +56,7 @@ pub fn pack_turtle(
 
     // Before `create_dir_all`, so a refused bundle leaves no directory behind —
     // the same ordering `share()` keeps, and asserted by its own test.
-    super::pack::enforce_pack_destination(store, &canonical, opts.destination)?;
+    super::pack::enforce_pack_destination(store, &canonical, opts, graph_iri)?;
 
     let hash = content_hash(&canonical);
 
@@ -125,7 +125,7 @@ pub fn pack_turtle(
             "embedding_dimension": store.embedding_config().dimension,
         })
         .to_string(),
-        destination: Some(opts.destination),
+        destination: Some(opts.destination.clone()),
     };
     write(
         "manifest.json",
@@ -136,6 +136,7 @@ pub fn pack_turtle(
             "term_space": manifest.term_space,
             "content_hash": manifest.content_hash,
             "created_at": manifest.created_at,
+            "destination": manifest.destination,
             "source_graph": manifest.source_graph,
             "producer": serde_json::from_str::<serde_json::Value>(&manifest.producer)
                 .unwrap_or(serde_json::Value::Null),

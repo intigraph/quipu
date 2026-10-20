@@ -17,7 +17,7 @@ use crate::store::Store;
 /// The default is [`ShareDestination::Outward`] and it is load-bearing: every
 /// caller that does not name a destination — including every existing one, and
 /// every HTTP request — gets the scrub. `Internal` has to be asked for by name.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShareDestination {
     /// Anywhere, including a public remote. The outward scrub applies.
@@ -26,13 +26,16 @@ pub enum ShareDestination {
     /// A LAN-internal destination only. The outward scrub is skipped, and the
     /// manifest is stamped so the exemption travels with the payload.
     Internal,
+    /// Audience-bound owner-authorized transfer to an exact receiver.
+    #[serde(untagged)]
+    Audience(crate::entity_namespaces::DestinationBinding),
 }
 
 impl ShareDestination {
     /// Whether this destination skips the outward scrub.
     #[must_use]
-    pub fn is_internal(self) -> bool {
-        matches!(self, Self::Internal)
+    pub fn is_internal(&self) -> bool {
+        matches!(self, Self::Internal | Self::Audience(_))
     }
 }
 
@@ -137,10 +140,16 @@ pub(crate) fn enforce_destination(
     destination: ShareDestination,
     context: &str,
 ) -> Result<()> {
-    if destination.is_internal() {
-        return Ok(());
+    crate::namespace_publication::enforce(store, files, &destination)?;
+    match destination {
+        ShareDestination::Audience(binding) => crate::namespace_publication::scrub_audience(
+            store,
+            files,
+            &ShareDestination::Audience(binding),
+        ),
+        ShareDestination::Internal => Ok(()),
+        ShareDestination::Outward => scrub_outward_payload(store, files, context),
     }
-    scrub_outward_payload(store, files, context)
 }
 
 #[cfg(test)]

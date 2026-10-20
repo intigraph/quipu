@@ -97,7 +97,9 @@ pub fn open_with_configured_attachments(
     config: &crate::config::QuipuConfig,
 ) -> Result<crate::store::Store> {
     let mounts = resolve_attachments(&config.attachments)?;
-    crate::store::Store::open_with_attachments(db_path, &mounts)
+    let mut store = crate::store::Store::open_with_attachments(db_path, &mounts)?;
+    crate::entity_namespaces::configure(&mut store, config)?;
+    Ok(store)
 }
 
 /// One line per mounted attachment, for `quipu db attach --list`.
