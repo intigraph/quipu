@@ -10,7 +10,7 @@ All notable changes to this project will be documented in this file.
   imports use the configured ONNX model; `auto_embed = false` remains an explicit
   opt-out. Missing providers report unavailable indexing.
 - Share manifests can bind the exact model/tokenizer hashes and output dimension.
-  Automatic import rejects a mismatched available provider before staging and
+  Import rejects a mismatched available provider before staging and
   reports index readiness separately from graph admission.
 
 ## [0.15.0] - 2026-10-20

@@ -219,6 +219,21 @@ fn actual_onnx_import_replay_deferred_optout_mismatch_and_scoped_search() {
     );
     assert_eq!(untouched.latest_tx_id().unwrap(), 0);
     assert!(untouched.lookup("urn:fixture:cat").unwrap().is_none());
+    assert!(
+        untouched.embedding_config().auto_embed,
+        "error must restore the configured default"
+    );
+    untouched.embedding_config_mut().auto_embed = false;
+    assert!(
+        import_share(&mut untouched, &wrong, TS, None).is_err(),
+        "opt-out does not attest mismatched provider bytes"
+    );
+    assert!(!untouched.embedding_config().auto_embed);
+    assert_eq!(untouched.latest_tx_id().unwrap(), 0);
+    assert!(
+        crate::OnnxEmbeddingProvider::load(&model, &tokenizer, 128, 256).is_err(),
+        "wrong configured dimension must fail at provider setup"
+    );
 }
 
 #[test]

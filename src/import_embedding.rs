@@ -33,14 +33,10 @@ impl Default for ImportEmbeddingStatus {
     }
 }
 
-pub(crate) fn verify_recipe(
-    store: &Store,
-    recipe: Option<&EmbeddingRecipe>,
-    automatic: bool,
-) -> Result<()> {
+pub(crate) fn verify_recipe(store: &Store, recipe: Option<&EmbeddingRecipe>) -> Result<()> {
     if let Some(recipe) = recipe {
         recipe.validate()?;
-        if automatic && let Some(provider) = store.embedding_provider() {
+        if let Some(provider) = store.embedding_provider() {
             match provider.recipe() {
                 Some(actual) if actual == *recipe => {},
                 _ => return Err(crate::Error::InvalidValue("pendant embedding model/tokenizer digest or dimension does not match the available provider; nothing was staged".into())),

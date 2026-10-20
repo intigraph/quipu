@@ -107,8 +107,7 @@ pub fn import_share(
         let old = state(store, &request.manifest.share_id)?;
         // Staging is not a ROOT write or permission to index quarantined data.
         // Collect selected-graph work only after admission has completed.
-        let result =
-            crate::share_import::import_inner(store, request, timestamp, actor, automatic)?;
+        let result = crate::share_import::import_inner(store, request, timestamp, actor)?;
         let next = if result.promotion.eligible {
             "staged"
         } else {

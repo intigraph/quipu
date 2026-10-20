@@ -27,7 +27,7 @@ Server inference uses bounded batches outside the global writer lock.
 A share may declare `manifest.embedding` with an ONNX basename,
 `model_sha256`, `tokenizer_sha256` (lowercase SHA-256), and `dimension`. These
 fields participate in the share identity. The native provider hashes its actual
-files and validates the model output dimension. Automatic import with an
+files and validates the model output dimension. Import with an
 available mismatched provider refuses **before staging**. Legacy shares without
 this recipe remain importable; local indexing does not attest which model the
 publisher intended. Re-importing with a real provider recomputes eligible
