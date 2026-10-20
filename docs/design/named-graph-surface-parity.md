@@ -12,6 +12,7 @@ graph path through the actual native MCP transport.
 | --- | --- | --- | --- |
 | Register committed graph | `graph create` | `POST /graph/create` | `quipu_graph_create` |
 | Declare labels | `graph label --label JSON` | `POST /graph/label` | `quipu_graph_label` |
+| Exact registered metadata | `graph list --graph <IRI> --json` (read-only) | `GET /graphs?graph=<IRI>` | `quipu_graph_list` with `graph` |
 | List registry and creation provenance | `graph list --json` | `GET /graphs` | `quipu_graph_list` |
 | Freeze / thaw | `graph freeze` / `graph thaw` | `POST /graph/freeze` / `/graph/thaw` | `quipu_graph_freeze` / `quipu_graph_thaw` |
 | Create / write / compose overlay | `graph overlay-create` / `overlay-write` / `overlay-compose --input JSON` | `/overlay/create` / `/overlay/write` / `/overlay/compose` | `quipu_overlay_create` / `quipu_overlay_write` / `quipu_overlay_compose` |

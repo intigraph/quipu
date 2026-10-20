@@ -262,8 +262,7 @@ impl Store {
         // Attribute-scoped current-fact index (aegis-svtdyn). Additive; no
         // ordering constraint beyond the `facts` table existing.
         Self::migrate_current_fact_index(&conn)?;
-        // Source-scoped retraction index (aegis-m6agjy). Additive; `transactions`
-        // exists from INIT_SQL.
+        // Source-scoped retraction index (aegis-m6agjy); INIT_SQL owns the table.
         Self::migrate_transaction_source_index(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
         // intern must know the store's space, or on a non-zero-space store it
@@ -285,6 +284,7 @@ impl Store {
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
         Self::migrate_frozen_packs(&conn)?;
+        Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because

@@ -879,6 +879,7 @@ consumer must treat as "cannot tell" — never as "no graphs".
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
+| `graph` | No | Exact registered absolute IRI; excludes kind/lifecycle; no materialization enrichment. Same count/graphs envelope, absent count zero, failures are errors. Attached source must support creator index v1. |
 | `kind` | No | Only graphs declaring this `dataKind` token (e.g. `operational`, `archive`) |
 | `lifecycle` | No | Only graphs in this storage lifecycle state (`frozen`) |
 
