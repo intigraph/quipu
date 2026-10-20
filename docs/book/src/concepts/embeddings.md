@@ -8,7 +8,9 @@ an embedding provider you configure yourself.
 Automatic embedding is enabled by default when a provider is configured.
 No model is downloaded automatically. Without model and tokenizer paths,
 lexical graph operations still work and the loader reports that semantic
-indexing is unavailable. Set `auto_embed = false` to opt out explicitly.
+indexing is unavailable. Set `auto_embed = false` to disable automatic vector
+writes. This does not disable model initialization, explicit semantic queries,
+or existing import identity resolution, which may also use the provider.
 
 ## Writes and staged imports
 
@@ -22,7 +24,9 @@ provider recipe when available, and an explanatory message. `ready` certifies
 indexing for eligible staged entities; `partial` preserves entities already
 owned by ROOT or another graph. `pending`, `unavailable`, `failed`, `disabled`,
 `external`, and `quarantined` must not be described as searchable completion.
-Server inference uses bounded batches outside the global writer lock.
+Vector-index inference uses bounded batches outside the server's global writer
+lock. Existing import identity resolution remains a separate admission step;
+this indexing status does not certify that step's lock latency.
 
 A share may declare `manifest.embedding` with an ONNX basename,
 `model_sha256`, `tokenizer_sha256` (lowercase SHA-256), and `dimension`. These
