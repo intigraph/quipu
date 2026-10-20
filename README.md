@@ -36,6 +36,10 @@ a refused write, corrected provenance, and a valid-time read.
 
 Quipu answers standard SPARQL 1.1 as a CLI, REST server and Rust library, with its own MCP server (`quipu mcp` or `quipu-server` over HTTP).
 
+[Domain shapes in practice](docs/book/src/concepts/domain-shapes.md) describes
+producer-owned Camayoc profiles, the Seeds work profile and the staged
+load-before-remove transition from bundled domain examples.
+
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
 
 ## Why you would want it

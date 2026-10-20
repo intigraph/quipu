@@ -1,0 +1,4 @@
+Script started on 2026-10-19 23:42:47-04:00 [COMMAND="stty -onlcr; uv run --no-project --with rdflib==7.6.0 python docs/demos/shape-propagation/reproduce.py" <not executed on terminal>]
+{"after_unresolved": 0, "before_unresolved": 3, "enforcement_enabled": false, "mode": "WARN", "writes": 0}
+
+Script done on 2026-10-19 23:42:47-04:00 [COMMAND_EXIT_CODE="0"]

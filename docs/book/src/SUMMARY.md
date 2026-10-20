@@ -22,6 +22,7 @@
 - [Knowledge Packs](concepts/knowledge-packs.md)
 - [Contributor Constellation](concepts/contributor-constellation.md)
 - [SHACL Validation](concepts/shacl-validation.md)
+- [Domain shapes in practice](concepts/domain-shapes.md)
 - [Schema Evolution](concepts/schema-evolution.md)
 - [OWL Ontology Layer](concepts/owl.md)
 - [The Reasoner](concepts/reasoning.md)
