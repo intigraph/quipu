@@ -61,18 +61,11 @@ them in `.bobbin/config.toml`:
     tokenizer_path = \"models/all-MiniLM-L6-v2/tokenizer.json\"
     dimension = 384
 
-⚠️ THE SERVER'S /knot DOES EMBED. This text said it did not, which was wrong
-in the direction that hides work: `POST /knot` collects deferred embed work in
-`Store::transact` and `server/publication.rs` drains it through
-`finish_deferred_embed` on every write handler. On a host with
-`auto_embed = true` a bulk publish therefore runs ONNX inference, and the
-`promote` step reports Complete only after that finishes (observed by gennaro
-during the aegis-2s6xpb soak, 2026-09-07 — which is how this was found).
-
-Only the CLI `quipu knot` skips embedding, because it does not run the server's
-drain. `quipu-server --embed-backfill` is for a store loaded that way, not for
-anything published through the HTTP surface. Running it after a server publish
-costs a full-store ONNX pass and changes nothing.
+Native CLI writes, including `quipu knot`, and server writes automatically
+embed when a provider is configured, unless `auto_embed = false` is explicit.
+Server inference drains outside the writer lock. Staged imports report their
+own embedding readiness; loading a graph is not evidence that an index exists.
+Existing unindexed data may need an explicit bounded backfill.
 See docs/book/src/concepts/embeddings.md.";
 
 /// Build embeddable text for an entity from its current facts.
@@ -103,14 +96,14 @@ fn build_entity_text_with_named(store: &Store, entity_id: i64, named: bool) -> R
     if facts.is_empty() && named && store.entity_is_named_graph_only(entity_id)? {
         facts = store.entity_facts_in_named_graphs(entity_id)?;
     }
-    text_from_facts(store, facts)
+    text_from_facts(store, &facts)
 }
 
 pub(crate) fn build_entity_text_in_graph(store: &Store, entity: i64, graph: i64) -> Result<String> {
-    text_from_facts(store, store.entity_facts_in_graph(entity, graph)?)
+    text_from_facts(store, &store.entity_facts_in_graph(entity, graph)?)
 }
 
-fn text_from_facts(store: &Store, facts: Vec<crate::types::Fact>) -> Result<String> {
+fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String> {
     if facts.is_empty() {
         return Ok(String::new());
     }
@@ -131,7 +124,7 @@ fn text_from_facts(store: &Store, facts: Vec<crate::types::Fact>) -> Result<Stri
     let rdfs_comment = store.lookup(&format!("{}comment", namespace::RDFS))?;
     let rdf_type = store.lookup(namespace::RDF_TYPE)?;
 
-    for fact in &facts {
+    for fact in facts {
         if Some(fact.attribute) == rdfs_label {
             if let Value::Str(s) = &fact.value
                 && label.as_ref().is_none_or(|(t, _)| fact.tx >= *t)

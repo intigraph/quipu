@@ -246,7 +246,7 @@ pub use pointers::{PointerTarget, SharePointer};
 /// Versioned, hash-checked share envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
-    /// Optional exact model identity; covered by share_id. Legacy shares omit it.
+    /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
     /// Manifest schema identifier.
