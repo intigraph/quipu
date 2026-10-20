@@ -79,6 +79,47 @@ Raw low-level store mutation APIs do not become a second public bypass API.
 
 ## Native API / WASM parity matrix
 
+### Incremental shared engine facade
+
+`quipu::bindings::Engine::open_in_memory()` creates a transport-free local
+store. `invoke(operation, &serde_json::Value)` and `invoke_json(operation,
+json_text)` dispatch through one Rust registry. Its initial eight operations
+are query, export, entity history, knot, episode, set, retract and shapes, using
+their exact `quipu_*` names and existing native handlers. Inspect
+`capabilities()` for this build's availability and current shape catalogue.
+Writes require a SHACL-enabled build and explicitly adopted shapes. No reasoner
+is registered by this constructor, and it reports that limitation.
+`schema_state` and each operation's `available` field reflect the current
+catalogue. Empty or prefix-only catalogues refuse data writes before dispatch;
+removing the last class vocabulary disables data writes again. This is an
+explicit binding precondition; native library bootstrap behavior is unchanged.
+
+The WASM bundle additionally exports `Database`, an empty memory-store
+constructor backed by that same facade. This is separate from the compatible
+pack-based `Explorer`. For example:
+
+```javascript
+const db = new Database();
+const caps = JSON.parse(db.capabilities());
+// Adopt application shapes explicitly with quipu_shapes before writing.
+const raw = db.invoke("quipu_query", JSON.stringify({query: "SELECT ?s WHERE { ?s ?p ?o }"}));
+db.free();
+```
+
+`invoke` returns JSON **text**. Keep it as text or apply a lossless parser when
+the result can contain native integers beyond JavaScript's safe range. A thrown
+error is JSON text with `code`, `operation`, `commit_state`, `retryable`,
+`message` and native `details` where available. Binding refusals report
+`not_started`; errors after native dispatch conservatively report `unknown`.
+Neither error nor timeout authorizes an automatic write retry. Rust callers
+can also inspect the original native error through `Error::source`.
+
+This facade is incremental: it reports `full_parity: false`. It does not yet
+provide OPFS lifecycle, all native operations, a Creel migration, or Python.
+The matrix below retains the original pinned baseline rather than promoting
+these initial delegates to full acceptance. Build the additive bundle without
+fetching models or regenerating the book pack with `just wasm explorer-build`.
+
 In the following per-tool rows, “present” means source routing is present, not
 behavioral acceptance. All rows need the shared conformance suite at the exact
 built revision. Python native bindings are missing for every row today.
@@ -253,11 +294,11 @@ feature/API support, not an assumption that removes interpreter coverage.
 
 The requested `pip install quipu` currently names an unrelated expression
 Evaluator on PyPI (version 0.1, released 2012). Do not claim ownership or overwrite
-it. Recommend a distinct owner-approved distribution name (for example
-`quipu-ai`, availability/ownership still unverified) while retaining the Python
-import name if approved. Build/test local wheels now; actual public naming and
-first publication need the existing exact owner/one-way release decision.
-This naming issue does not block implementing native bindings.
+it. The approved Python distribution name is `quipu-kg` (`pip install quipu-kg`);
+the import name remains `quipu`. This supersedes the earlier illustrative
+`quipu-ai` suggestion. Registry ownership and the exact publisher identity
+remain unverified; first publication needs the existing one-way release gate.
+Local wheel testing follows the WASM acceptance milestone.
 
 ## Packaging and release
 

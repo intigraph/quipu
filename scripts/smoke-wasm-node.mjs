@@ -106,6 +106,36 @@ if (!existsSync(entry)) {
 const mod = require(entry);
 
 check("the bundle exports Explorer", typeof mod.Explorer === "function", typeof mod.Explorer);
+check("the bundle exports a general Database", typeof mod.Database === "function", typeof mod.Database);
+const database = new mod.Database();
+const databaseCaps = JSON.parse(database.capabilities());
+check("general Database reports memory and incomplete parity", databaseCaps.storage === "memory"
+  && databaseCaps.full_parity === false && databaseCaps.features.shacl === true);
+let unsupportedDatabase;
+try { database.invoke("quipu_update", "{}"); } catch (error) { unsupportedDatabase = JSON.parse(String(error)); }
+check("unsupported binding refuses before dispatch", unsupportedDatabase?.code === "unsupported_capability"
+  && unsupportedDatabase.commit_state === "not_started" && unsupportedDatabase.retryable === false);
+const invokeDatabase = (operation, input) => database.invoke(operation, JSON.stringify(input));
+invokeDatabase("quipu_shapes", {action: "load", name: "general-database",
+  turtle: "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] ."});
+const databaseWrite = JSON.parse(invokeDatabase("quipu_knot", {
+  turtle: '<urn:good> a <urn:Record>; <urn:title> "Before"; <urn:n> 9007199254740993 .'}));
+check("fresh Database admits a governed write", databaseWrite.tx_id > 0);
+let databaseRefusal = false;
+try {
+  databaseRefusal = JSON.parse(invokeDatabase("quipu_knot", {turtle: "<urn:bad> a <urn:Record> ."})).conforms === false;
+} catch (error) {
+  const detail = JSON.parse(String(error));
+  databaseRefusal = detail.code === "engine_error" && detail.commit_state === "unknown"
+    && detail.details?.kind === "validation_failed" && detail.details.violations > 0;
+}
+check("fresh Database enforces adopted shapes", databaseRefusal);
+const databaseRows = JSON.parse(invokeDatabase("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
+check("fresh Database refuses without leaking facts and retains positive control", databaseRows.count === 1);
+const databaseHistory = invokeDatabase("quipu_entity_history", {iri: "urn:good"});
+check("general Database JSON text preserves unsafe integer tokens", databaseHistory.includes("9007199254740993")
+  && !databaseHistory.includes("9007199254740992"));
+database.free();
 check("the bundle exports explorerVersion", typeof mod.explorerVersion === "function");
 if (failures.length) {
   console.error("\nthe module did not load; no further check would mean anything");
