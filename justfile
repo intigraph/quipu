@@ -91,13 +91,14 @@ wasm cmd="check" n="1000":
     case "{{cmd}}" in
         check) RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
                cargo check --target wasm32-unknown-unknown --no-default-features --lib ;;
+        explorer-build) cd wasm/explorer && cargo build --locked --release ;;
         build) cd wasm/harness && cargo build --release && \
                wasm-bindgen --target web --out-dir www/pkg \
                    target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm ;;
         test)  just wasm build && cd wasm/harness && node run.mjs ;;
         bench) just wasm build && cd wasm/harness && node bench.mjs {{n}} ;;
         roundtrip) just wasm build && cd wasm/harness && node roundtrip.mjs ;;
-        *)     echo "unknown wasm command: {{cmd}} (check|build|test|bench|roundtrip)"; exit 1 ;;
+        *)     echo "unknown wasm command: {{cmd}} (check|explorer-build|build|test|bench|roundtrip)"; exit 1 ;;
     esac
 
 # === Fixtures ===
