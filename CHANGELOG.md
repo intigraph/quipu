@@ -41,6 +41,8 @@ All notable changes to this project will be documented in this file.
 - *(bindings)* Add a shared governed memory engine (#682)([de6b675](https://github.com/scbrown/quipu/commit/de6b675a1aa33f499de943c8d317020f20324723))
 - *(shapes)* Audit propagation through existing CI entrypoint (#681)([b02bef0](https://github.com/scbrown/quipu/commit/b02bef04aed7f100ab8a27b049eb8ec009e2a750))
 
+
+
 ### Documentation
 
 - Replace the README cast with an agent + live graph demo (#558)([69f13ef](https://github.com/scbrown/quipu/commit/69f13ef3ad0834f72b5c66b6bb4568574190d6e3))
