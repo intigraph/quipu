@@ -5,7 +5,9 @@
 //! method, path, content type and body hash with a key registered once, out of
 //! band, through `quipu attest`. Nothing secret crosses the wire.
 //!
-//! Three stages, each for a reason stated where it happens:
+//! Signed reads settle under the writer lock BEFORE handler dispatch, so only
+//! one concurrent copy can observe the read result. Signed writes have three
+//! stages, each for a reason stated where it happens:
 //! 1. HERE, before the handler: decode the envelope, hash the body, and run every
 //!    check except the nonce spend against a READ connection, plus a read of
 //!    whether the nonce is already spent. A cheap, early refusal.
@@ -213,6 +215,27 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
         checked.key_id.clone(),
         checked.introducer.clone(),
     );
+    if read_route {
+        // Reads never enter the writer barrier in their handler. Settle before
+        // dispatch, using the existing atomic binding re-check and nonce spend.
+        // A post-handler INSERT OR IGNORE cannot exclude concurrent readers.
+        let (store, pending) = (store.clone(), pending.clone());
+        tokio::task::spawn_blocking(move || {
+            let result = store.lock().settle_attestation(&pending);
+            match pending.state() {
+                AttestState::Refused { verdict, message } => Err(Refusal { verdict, message }),
+                _ => result.map_err(|e| Refusal {
+                    verdict: "error",
+                    message: e.to_string(),
+                }),
+            }
+        })
+        .await
+        .map_err(|e| Refusal {
+            verdict: "error",
+            message: format!("signed read admission failed: {e}"),
+        })??;
+    }
     let identity = Identity {
         principal: checked.agent.clone(),
         credential_id: Some(checked.key_id.clone()),

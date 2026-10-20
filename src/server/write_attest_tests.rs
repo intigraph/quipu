@@ -116,7 +116,7 @@ fn expired_first_writer_lock_does_not_spend_signed_nonce() {
     assert!(!graph_exists(&store));
 }
 
-fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
+fn identity_fixture() -> (SharedStore, Ed25519KeyPair, SessionBinding) {
     let store = quipu::Store::open_in_memory().unwrap();
     let key = Ed25519KeyPair::from_seed_unchecked(&[51; 32]).unwrap();
     let now = quipu::time::epoch_secs();
@@ -131,7 +131,11 @@ fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
     .unwrap();
     binding.allow_write = true;
     store.attestation_register(&binding).unwrap();
-    let store = Arc::new(StoreHandle::writer_only(store));
+    (Arc::new(StoreHandle::writer_only(store)), key, binding)
+}
+
+fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
+    let (store, key, binding) = identity_fixture();
     let app = axum::Router::new()
         .route(
             "/identity",
@@ -246,4 +250,47 @@ async fn identity_is_key_derived_and_replay_wrong_key_and_actor_override_refuse(
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_signed_reads_admit_exactly_one_before_handler_dispatch() {
+    let (store, key, binding) = identity_fixture();
+    let request = identity_request(&key, &binding, "00000000000000000000000000000004", None);
+    let headers = request.headers().clone();
+    let gate = Arc::new(tokio::sync::Barrier::new(16));
+    let mut tasks = Vec::new();
+    for _ in 0..16 {
+        let (store, headers, gate) = (store.clone(), headers.clone(), gate.clone());
+        tasks.push(tokio::spawn(async move {
+            let mut req = axum::http::Request::post("/identity")
+                .body(axum::body::Body::from("{}"))
+                .unwrap();
+            *req.headers_mut() = headers;
+            gate.wait().await;
+            // Deliberately stop before the handler and post-handler spend:
+            // admission itself must atomically exclude every duplicate.
+            super::verify(&store, req)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.verdict)
+        }));
+    }
+    let (mut admitted, mut replayed) = (0, 0);
+    for task in tasks {
+        match task.await.unwrap() {
+            Ok(()) => admitted += 1,
+            Err("replay") => replayed += 1,
+            Err(other) => panic!("unexpected refusal: {other}"),
+        }
+    }
+    assert_eq!((admitted, replayed), (1, 15));
+    // A fresh nonce is still usable: the gate is not a blanket refusal.
+    assert!(
+        super::verify(
+            &store,
+            identity_request(&key, &binding, "00000000000000000000000000000005", None,)
+        )
+        .await
+        .is_ok()
+    );
 }

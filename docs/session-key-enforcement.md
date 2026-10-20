@@ -23,6 +23,11 @@ checks as the four audited mutations (`/knot`, `/update`, `/episode`,
 `/graph/create`). Other signed mutations and URL query strings currently refuse;
 this is a migration constraint, not full client compatibility.
 
+Signed reads atomically recheck the binding and spend the nonce before handler
+dispatch. Concurrent copies of one envelope admit at most one request; even a
+failed or cancelled read needs a fresh nonce for retry. Mutations retain their
+existing writer-lock and transaction barriers.
+
 Install server and client support before enforcement. Inventory required callers,
 prepare distinct OS users and private homes, enroll public bindings using the
 existing privileged introducer, and prove own-key identity, wrong-key rejection,
