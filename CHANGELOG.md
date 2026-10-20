@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - *(embedding)* Enable provider-backed automatic indexing by default([8d75eb0](https://github.com/scbrown/quipu/commit/8d75eb0980f08c23744acc73c835953a25a752d5))
 
+### Changed
+
+- *(share)* Split the unchanged manifest RDF renderer([5a824a1](https://github.com/scbrown/quipu/commit/5a824a1727dc23dbcb23a63221c631b94c414612))
+
 ### Fixed
 
 - *(import)* Separate review admission from automatic vector hooks([58b0371](https://github.com/scbrown/quipu/commit/58b03716a9a95675279c77534234fa8a77d43f8e))
