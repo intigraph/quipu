@@ -357,3 +357,26 @@ fn a_slow_short_phase_past_the_wall_deadline_refuses_and_names_the_phase() {
             .unwrap();
     }
 }
+
+/// ian's exact #705 probe: a ~60 ms metadata delay against a 1 ms deadline
+/// returned a completed measurement with `vm_steps_used: 0`, because no
+/// statement ran long enough to reach the progress handler. It must refuse.
+#[test]
+fn ians_short_metadata_delay_with_a_one_millisecond_deadline_refuses() {
+    let dir = tempfile::tempdir().unwrap();
+    let (store, _, _) = store(dir.path());
+    slow_table(&store, "graphs", 60);
+    let mut probe = request(&store, &[PROJECT], None);
+    probe.deadline_ms = 1;
+    let error = measure(&store, &probe).unwrap_err().to_string();
+    assert!(error.contains("wall deadline exceeded"), "{error}");
+    assert!(error.contains("completeness UNKNOWN"), "{error}");
+    // Same delay, generous deadline: the measurement completes, and with no
+    // statement over one stride it really did count zero VM steps.
+    let measured = measure(&store, &request(&store, &[PROJECT], None)).unwrap();
+    assert_eq!(rows(&measured, PROJECT), 2);
+    assert_eq!(
+        measured.vm_steps_used, 0,
+        "precondition: the handler never fired"
+    );
+}
