@@ -348,8 +348,12 @@ Response: `{"status": "ok"}`
 Requires an existing session-attestation signature. Returns the principal,
 public key ID and session selected from the protected binding, with
 `authenticated: true` and `auth_class: "attested_session"`. A bearer or unkeyed
-request returns 401. Agent/session declaration headers, if present, must match
-the verified binding. Replay, expired/revoked bindings and wrong keys refuse.
+request returns 401. Agent/session declaration headers (`X-Quipu-Agent`,
+`X-Quipu-Session`) are declared provenance. They must match the verified binding
+only when session keys are required (`[quipu.server.session_keys] required =
+true`); with it off, a differing declaration is admitted and the returned
+principal is still the binding's. Replay, expired/revoked bindings and wrong keys
+refuse.
 No private key is returned. Use `sd identity --json` with an enrolled own key;
 plain curl without a signed envelope cannot produce the authenticated result.
 
