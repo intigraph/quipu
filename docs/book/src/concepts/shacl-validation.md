@@ -279,3 +279,9 @@ remain valid, and multiple retained comments are permitted. This profile does
 not authorize a new write path or change import/promotion checks. A receiver
 must load its reviewed shapes and verify the loaded vocabulary before importing
 activity facts; a source file alone does not establish runtime governance.
+
+Write-time shape pre-parsing uses the batch validator's fallback base IRI for
+relative Turtle identifiers, including relative manifest references in shape
+documents. An explicit Turtle base still takes precedence. This compatibility
+does not relax cross-write constraint checks or the atomic refusal of invalid
+post-state data.

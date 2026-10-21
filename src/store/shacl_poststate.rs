@@ -80,7 +80,10 @@ impl Store {
         const COMPONENT: &str = "http://www.w3.org/ns/shacl#MaxCountConstraintComponent";
         // The caller selects reject shapes using its existing admission policy.
         // CLI --shapes and inline episode shapes remain strict, as before.
+        // Match Validator::from_turtle, including relative manifest IRIs.
         let quads = RdfParser::from_format(RdfFormat::Turtle)
+            .with_base_iri("http://quipu.local/shapes")
+            .map_err(|e| Error::InvalidValue(format!("write shapes base: {e}")))?
             .for_reader(shapes.as_bytes())
             .map(|q| q.map_err(|e| Error::InvalidValue(format!("write shapes: {e}"))))
             .collect::<Result<Vec<_>>>()?;

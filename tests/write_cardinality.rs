@@ -457,3 +457,41 @@ fn inverse_path_also_checks_literal_object_targets() {
         Err(quipu::Error::ValidationFailed { .. })
     ));
 }
+
+#[test]
+fn relative_manifest_iris_in_min_count_and_deactivated_shapes_match_batch() {
+    for (shapes, subject) in [
+        (
+            include_str!("fixtures/write_relative_shapes/minCount-002.ttl"),
+            "http://datashapes.org/sh/tests/core/property/minCount-002.test#ValidResource1",
+        ),
+        (
+            include_str!("fixtures/write_relative_shapes/deactivated-001.ttl"),
+            "http://datashapes.org/sh/tests/core/misc/deactivated-001.test#InvalidResource",
+        ),
+    ] {
+        let resource = "http://www.w3.org/2000/01/rdf-schema#Resource";
+        let data = format!("<{subject}> <{TYPE}> <{resource}> .");
+        assert!(quipu::validate_shapes(shapes, &data).unwrap().conforms);
+        let mut store = Store::open_in_memory().unwrap();
+        let datum = Datum {
+            entity: store.intern(subject).unwrap(),
+            attribute: store.intern(TYPE).unwrap(),
+            value: Value::Ref(store.intern(resource).unwrap()),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: Op::Assert,
+        };
+        store
+            .with_write_shapes(Some(shapes), |store| {
+                store.transact(&[datum], TS, None, None)
+            })
+            .unwrap();
+        assert!(
+            !store
+                .entity_facts(store.lookup(subject).unwrap().unwrap())
+                .unwrap()
+                .is_empty()
+        );
+    }
+}
