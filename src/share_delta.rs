@@ -424,20 +424,27 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
             .map_err(|e| Error::Serialization(format!("delta result UTF-8: {e}")))?,
         shapes_turtle: std::fs::read_to_string(root.join(&manifest.files.shapes))
             .map_err(|e| Error::InvalidValue(format!("delta shapes read: {e}")))?,
-        // Sealed by `result.queries_hash`; the import's `verify_share` checks it.
-        alignments_turtle: match manifest.files.alignments.as_deref() {
-            Some(crate::share_alignments::ALIGNMENTS_FILE) => {
-                Some(crate::share_alignments::read_file(
-                    &root.join(crate::share_alignments::ALIGNMENTS_FILE),
-                )?)
-            }
-            None => None,
-            Some(_) => {
-                return Err(Error::InvalidValue(
-                    "delta misnames alignment member".into(),
-                ));
+        // The fixed member is read whether or not it is declared, so a present but
+        // undeclared file refuses instead of being dropped. `verify_member` then
+        // checks it against `result.alignments_hash`.
+        alignments_turtle: {
+            let physical = crate::share_alignments::read_directory(root)?;
+            match (manifest.files.alignments.as_deref(), physical) {
+                (None, None) => None,
+                (Some(crate::share_alignments::ALIGNMENTS_FILE), Some(text)) => Some(text),
+                (None | Some(crate::share_alignments::ALIGNMENTS_FILE), _) => {
+                    return Err(Error::InvalidValue(
+                        "delta alignments.ttl must be declared and present together".into(),
+                    ));
+                }
+                (Some(_), _) => {
+                    return Err(Error::InvalidValue(
+                        "delta misnames alignment member".into(),
+                    ));
+                }
             }
         },
+        // Sealed by `result.queries_hash`; the import's `verify_share` checks it.
         queries_turtle: match manifest.files.queries.as_deref() {
             Some(crate::share_queries::QUERIES_FILE) => Some(
                 std::fs::read_to_string(root.join(crate::share_queries::QUERIES_FILE))

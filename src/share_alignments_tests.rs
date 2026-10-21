@@ -301,6 +301,61 @@ fn delta_carries_complete_sealed_ancillary_and_detects_tampering() {
     assert!(verify_share(&corrupt).is_err());
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn delta_member_presence_must_match_its_declaration() {
+    let temp = tempfile::tempdir().unwrap();
+    let (parent, legacy, sealed) = (
+        temp.path().join("parent"),
+        temp.path().join("legacy"),
+        temp.path().join("sealed"),
+    );
+    let store = Store::open_in_memory().unwrap();
+    let mut opts = ShareOptions {
+        no_shapes: true,
+        destination: ShareDestination::Internal,
+        ..Default::default()
+    };
+    crate::share::share(&store, parent.to_str().unwrap(), &opts).unwrap();
+    crate::share_delta::write_delta(
+        &store,
+        parent.to_str().unwrap(),
+        legacy.to_str().unwrap(),
+        &opts,
+    )
+    .unwrap();
+    let materialize = |delta: &std::path::Path| {
+        crate::share_delta::materialize(parent.to_str().unwrap(), delta.to_str().unwrap())
+    };
+    // Control: a legacy delta without the member still materializes and verifies.
+    let r = materialize(&legacy).unwrap();
+    assert!(r.alignments_turtle.is_none());
+    verify_share(&r).unwrap();
+    // A present but undeclared member refuses rather than being silently dropped.
+    std::fs::write(legacy.join(ALIGNMENTS_FILE), EMPTY).unwrap();
+    let error = materialize(&legacy).unwrap_err();
+    assert!(
+        error.to_string().contains("declared and present together"),
+        "{error}"
+    );
+    // A declared member that is missing also refuses.
+    opts.alignments_turtle = Some(EMPTY.into());
+    crate::share_delta::write_delta(
+        &store,
+        parent.to_str().unwrap(),
+        sealed.to_str().unwrap(),
+        &opts,
+    )
+    .unwrap();
+    verify_share(&materialize(&sealed).unwrap()).unwrap();
+    std::fs::remove_file(sealed.join(ALIGNMENTS_FILE)).unwrap();
+    let error = materialize(&sealed).unwrap_err();
+    assert!(
+        error.to_string().contains("declared and present together"),
+        "{error}"
+    );
+}
+
 #[test]
 fn alignment_bytes_cannot_bypass_outward_producer_or_receiver_scrub() {
     let text = "<urn:alignment:x> <urn:description> \"FIXTURE_PRIVATE_TOKEN\" .\n";
