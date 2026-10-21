@@ -101,6 +101,12 @@ active dataset:
   An unknown IRI (or one excluded by `FROM NAMED`) matches nothing.
 - **`GRAPH ?g { … }`** — range over the active named graphs, **binding `?g`** to
   each match's graph IRI. The same `?g` across a BGP is enforced by the join.
+  Without `FROM NAMED`, registered companion inferred graphs are excluded,
+  alongside ROOT and the label meta-graph. Registry coverage does not opt a
+  query into derived facts. Use an explicit `GRAPH <g#inferred>` or
+  `FROM NAMED <g#inferred>` to read that companion. Fragment-bearing premise
+  IRIs use the reserved `-inferred` suffix instead. This exclusion must land
+  before companion registration; it does not itself register or relabel graphs.
 - **`FROM` / `FROM NAMED`** — select the active dataset, as in §4.
 - **`graph` query param** (`POST /query` / `quipu_query`) — a convenience that
   scopes the query's *default* graph to one named graph without writing a
