@@ -37,9 +37,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `613c07346c5aa0f3a03cacf14bc41609750384cd` |
-| Quipu revision (syntax) | `613c07346c5aa0f3a03cacf14bc41609750384cd` |
-| Quipu version | `quipu 0.14.1` |
+| Quipu revision (evaluation) | `8fb57af0472af4bb8038247ccb54f9a4b2afe689` |
+| Quipu revision (syntax) | `8fb57af0472af4bb8038247ccb54f9a4b2afe689` |
+| Quipu version | `quipu 0.15.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -73,7 +73,7 @@ shown separately, so a design choice is not presented as a wrong answer.
 
 | System | Version | Query evaluation | Of those failures, same value | Update |
 |---|---|---:|---:|---:|
-| quipu | `quipu 0.14.1` | 167/168 | — | 93/93 |
+| quipu | `quipu 0.15.0` | 167/168 | — | 93/93 |
 | RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
 | Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
 | Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
@@ -438,7 +438,7 @@ Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/ben
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-10-17T12:35:08Z by [CI run](https://github.com/scbrown/quipu/actions/runs/39032653852), from quipu `613c07346c5a`.
+Ledger re-derived 2026-10-21T15:07:06Z by [CI run](https://github.com/scbrown/quipu/actions/runs/39619544090), from quipu `8fb57af0472a`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
