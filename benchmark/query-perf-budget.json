@@ -11,7 +11,10 @@
     "Q6_type_regex_count": "140 / 334, 2.4x",
     "Q7_graph_var_contains": "4406, known slow (aegis-nmouik)",
     "Q8_label_lcase_contains": "29 / 472, 16x",
-    "Q9_subject_strstarts": "9 / 352, 39x"
+    "Q9_subject_strstarts": "9 / 352, 39x",
+    "B1_brief_priorities": "aegis-xacr: 22 / 85, 3.8x (1fdea502 without the probe: 77, ratio 1.0)",
+    "B2_brief_asks_nested": "aegis-xacr: 16 / 446, 27x (1fdea502 without the probe: 451, ratio 1.1)",
+    "B3_brief_asks_flat": "aegis-xacr: 12 / 329, 27x (1fdea502 without the probe: 311, ratio 1.1)"
   },
   "classes": {
     "Q1_status_pred": {"min_ratio": 0, "max_p95_ms": 3000, "max_rel_c0": 60},
@@ -22,6 +25,9 @@
     "Q6_type_regex_count": {"min_ratio": 1.5, "max_p95_ms": 2000, "max_rel_c0": 30},
     "Q7_graph_var_contains": {"min_ratio": 0, "max_p95_ms": 30000, "max_rel_c0": 1000000},
     "Q8_label_lcase_contains": {"min_ratio": 5, "max_p95_ms": 1000, "max_rel_c0": 8},
-    "Q9_subject_strstarts": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 6}
+    "Q9_subject_strstarts": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 6},
+    "B1_brief_priorities": {"min_ratio": 1.5, "max_p95_ms": 1000, "max_rel_c0": 3},
+    "B2_brief_asks_nested": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3},
+    "B3_brief_asks_flat": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3}
   }
 }

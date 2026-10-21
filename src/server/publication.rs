@@ -128,7 +128,7 @@ pub(crate) async fn import_share(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
     blocking(move || {
-        let (result, work) = {
+        let (mut result, work) = {
             let mut st = store.lock();
             let result = quipu::share_import::import_share(
                 &mut st,
@@ -138,9 +138,13 @@ pub(crate) async fn import_share(
             )?;
             (result, st.take_deferred_embed())
         };
-        if let Some(work) = work {
-            finish_deferred_embed(&store, &work)?;
+        if let Some(work) = work
+            && let Err(error) = finish_deferred_embed(&store, &work)
+        {
+            result.embedding.state = "failed".into();
+            result.embedding.message = Some(format!("Graph staged, embedding failed: {error:?}"));
         }
+        quipu::import_embedding::refresh(&store.lock(), &mut result)?;
         Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
             quipu::Error::Serialization(format!("import response: {e}"))
         })?))

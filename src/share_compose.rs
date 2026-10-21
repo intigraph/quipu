@@ -263,16 +263,20 @@ pub(crate) fn compose_scoped(
             .is_some_and(crate::share::ShareDestination::is_internal)
             && !request.destination.is_internal()
         {
+            let mut files = BTreeMap::from([
+                ("export.nt".into(), request.export_ntriples.clone()),
+                ("shapes.ttl".into(), request.shapes_turtle.clone()),
+                (
+                    crate::share::POINTERS_SCRUB_LABEL.into(),
+                    crate::share::pointer_scrub_text(&request.manifest.pointers),
+                ),
+            ]);
+            if let Some(text) = &request.alignments_turtle {
+                files.insert("alignments.ttl".into(), text.clone());
+            }
             crate::share_scrub::scrub_outward_payload(
                 store,
-                &BTreeMap::from([
-                    ("export.nt".into(), request.export_ntriples.clone()),
-                    ("shapes.ttl".into(), request.shapes_turtle.clone()),
-                    (
-                        crate::share::POINTERS_SCRUB_LABEL.into(),
-                        crate::share::pointer_scrub_text(&request.manifest.pointers),
-                    ),
-                ]),
+                &files,
                 "composition of an internal share",
             )?;
         }
@@ -281,6 +285,13 @@ pub(crate) fn compose_scoped(
         attestations.push(crate::share_attestation::verify_attestation(
             store, request, timestamp,
         )?);
+    }
+    for request in requests {
+        crate::share_alignments::retain(
+            store,
+            &request.manifest.share_id,
+            request.alignments_turtle.as_deref(),
+        )?;
     }
     let mut suppressed: Suppressed = Vec::new();
     let graphs = requests

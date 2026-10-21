@@ -22,6 +22,7 @@ pub struct OnnxEmbeddingProvider {
     dim: usize,
     /// Hard cap on input tokens; longer inputs are truncated (hq-7v0).
     max_seq_len: usize,
+    recipe: crate::embedding_runtime::EmbeddingRecipe,
 }
 
 impl OnnxEmbeddingProvider {
@@ -39,6 +40,21 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
     ) -> Result<Self> {
+        // Hash and load the SAME buffers: a path reopened after hashing is
+        // not proof of the bytes consumed by the runtime.
+        let model_bytes = std::fs::read(model_path)
+            .map_err(|e| crate::Error::Store(format!("ONNX model read failed: {e}")))?;
+        let tokenizer_bytes = std::fs::read(tokenizer_path)
+            .map_err(|e| crate::Error::Store(format!("Tokenizer read failed: {e}")))?;
+        let recipe = crate::embedding_runtime::EmbeddingRecipe::from_bytes(
+            model_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default(),
+            &model_bytes,
+            &tokenizer_bytes,
+            dim,
+        )?;
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(1))
             // Request shapes vary with batch size and token length. ORT's CPU
@@ -51,10 +67,22 @@ impl OnnxEmbeddingProvider {
             .and_then(|b| {
                 b.with_execution_providers([CPU::default().with_arena_allocator(false).build()])
             })
-            .and_then(|b| b.commit_from_file(model_path))
+            .and_then(|b| b.commit_from_memory(&model_bytes))
             .map_err(|e| crate::Error::Store(format!("ONNX session init failed: {e}")))?;
 
-        let mut tokenizer = Tokenizer::from_file(tokenizer_path)
+        let output_dimension = session
+            .outputs()
+            .first()
+            .and_then(|output| output.dtype().tensor_shape())
+            .and_then(|shape| shape.last())
+            .copied();
+        if output_dimension != Some(dim as i64) {
+            return Err(crate::Error::InvalidValue(format!(
+                "ONNX output dimension {output_dimension:?} does not match configured dimension {dim}"
+            )));
+        }
+
+        let mut tokenizer = Tokenizer::from_bytes(&tokenizer_bytes)
             .map_err(|e| crate::Error::Store(format!("Tokenizer load failed: {e}")))?;
 
         let max_seq_len = if max_seq_len == 0 { 256 } else { max_seq_len };
@@ -75,6 +103,7 @@ impl OnnxEmbeddingProvider {
             tokenizer,
             dim,
             max_seq_len,
+            recipe,
         })
     }
 
@@ -213,6 +242,10 @@ fn use_batch_longest_padding(tokenizer: &mut Tokenizer) {
 }
 
 impl EmbeddingProvider for OnnxEmbeddingProvider {
+    fn recipe(&self) -> Option<crate::embedding_runtime::EmbeddingRecipe> {
+        Some(self.recipe.clone())
+    }
+
     fn embed_text(&self, text: &str) -> Result<Vec<f32>> {
         let results = self.embed_batch_inner(&[text])?;
         results

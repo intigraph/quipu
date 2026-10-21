@@ -11,6 +11,52 @@ fn store() -> super::super::SharedStore {
 }
 
 #[tokio::test]
+async fn graph_metadata_selector_at_http_handler_preserves_envelope_and_errors() {
+    use axum::extract::Query;
+    use axum::response::IntoResponse;
+    let shared = store();
+    shared
+        .lock()
+        .graph_create_recorded("urn:fixture:point", "2026-10-20T00:00:00Z", Some("fixture"))
+        .unwrap();
+    shared.lock().graph_create("urn:fixture:other").unwrap();
+    let params =
+        std::collections::HashMap::from([("graph".to_string(), "urn:fixture:point".to_string())]);
+    let Json(result) =
+        super::super::tools::graphs_list(State(shared.clone()), Query(params.clone()))
+            .await
+            .unwrap();
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["graphs"][0]["creation"]["actor"], "fixture");
+    assert!(result["graphs"][0].get("materialization").is_none());
+    let mut combined = params;
+    combined.insert("lifecycle".into(), "frozen".into());
+    let error = super::super::tools::graphs_list(State(shared.clone()), Query(combined))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.into_response().status(),
+        axum::http::StatusCode::BAD_REQUEST
+    );
+    let Json(missing) = super::super::tools::graphs_list(
+        State(shared.clone()),
+        Query(std::collections::HashMap::from([(
+            "graph".into(),
+            "urn:fixture:absent".into(),
+        )])),
+    )
+    .await
+    .unwrap();
+    assert_eq!(missing["count"], 0);
+    assert_eq!(shared.read().lookup("urn:fixture:absent").unwrap(), None);
+    let Json(list) =
+        super::super::tools::graphs_list(State(shared), Query(std::collections::HashMap::new()))
+            .await
+            .unwrap();
+    assert_eq!(list["count"], 3); // ROOT and two named graphs; metadata excluded.
+}
+
+#[tokio::test]
 async fn root_mutations_reject_graph_with_http_400_and_preserve_both_graphs() {
     use axum::response::IntoResponse;
     for operation in ["set", "retract"] {
