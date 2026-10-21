@@ -369,9 +369,10 @@ fn empty_file_gives_defaults() {
         cfg.owl.reactive_materialize,
         "formal deployments keep loaded OWL entailments live by default"
     );
-    assert!(
+    assert_eq!(
         cfg.shacl.validate_on_write,
-        "loaded SHACL shapes protect writes by default"
+        cfg!(feature = "shacl"),
+        "loaded SHACL shapes protect writes by default wherever a validator is built in"
     );
 }
 
@@ -381,7 +382,7 @@ fn shacl_write_validation_can_be_explicitly_disabled() {
     assert!(!file.quipu.shacl.validate_on_write);
     // An empty section is not an opt-out: the key itself must say false.
     let file: ConfigFile = toml::from_str("[quipu.shacl]\n").unwrap();
-    assert!(file.quipu.shacl.validate_on_write);
+    assert_eq!(file.quipu.shacl.validate_on_write, cfg!(feature = "shacl"));
 }
 
 #[test]

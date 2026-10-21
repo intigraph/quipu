@@ -226,17 +226,23 @@ pub struct ShaclConfig {
     /// stored via `quipu_shapes`), not just shapes carried inline on an
     /// episode.
     ///
-    /// Default true: loaded shapes are an admission policy, the same posture as
+    /// Default true in builds with the `shacl` feature (the default build):
+    /// loaded shapes are an admission policy, the same posture as
     /// `owl.validate_on_write`. A store with no shapes loaded has nothing to
-    /// enforce. Deployments that must accept non-conformant writes opt out
-    /// explicitly with `validate_on_write = false`.
+    /// enforce. A build without the `shacl` feature has no validator, so it
+    /// defaults false rather than refusing every write it cannot verify.
+    /// Deployments that must accept non-conformant writes opt out explicitly
+    /// with `validate_on_write = false`.
     pub validate_on_write: bool,
 }
 
+// Not derivable in every build: the value follows the `shacl` feature, and
+// only the no-shacl build makes it equal to the derived `false`.
+#[allow(clippy::derivable_impls)]
 impl Default for ShaclConfig {
     fn default() -> Self {
         Self {
-            validate_on_write: true,
+            validate_on_write: cfg!(feature = "shacl"),
         }
     }
 }
