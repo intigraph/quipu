@@ -765,6 +765,25 @@ curl -s localhost:3030/validate -X POST \
   -d '{"shapes": "@prefix sh: ...", "data": "@prefix ex: ..."}'
 ```
 
+### Decision deck: `POST /deck/present`, `POST /deck/attest`, `POST /deck/receipt`
+
+A curated decision request is settled by an enrolled human's `WebAuthn`
+assertion. These routes are **off by default**: they answer `403` unless
+`[quipu.server] deck_http = true`. Even then they settle nothing until an
+operator has configured and enabled the store's deck, which no route can do.
+
+- `/deck/present` (write): `{"request", "revision", "credential", "choice"}`
+  returns `{"challenge", "webauthn_challenge"}`. Sign `webauthn_challenge`
+  (unpadded base64url) exactly as returned. Never rebuild the challenge
+  client-side: the server verifies against the challenge it stored.
+- `/deck/attest` (write): `{"nonce", "client_data_json", "authenticator_data",
+  "signature"}`, each byte field base64url, returns `{"decision", "nonce",
+  "recorded_at"}`. A challenge settles once: a replayed, expired or stale
+  one is refused. After a lost response, look the receipt up; do not resubmit.
+- `/deck/receipt` (read): `{"nonce"}` returns `{"found", "receipt", "tx"}`.
+
+Unknown fields are refused on all three.
+
 ### `POST /retract`
 
 Retract facts for an entity.

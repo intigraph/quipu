@@ -800,3 +800,18 @@ writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
 correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
 and the driver-absent CI refusals using actual Git repositories.
+
+## Carry alignment evidence
+
+`quipu share --alignments FILE --output DIR` carries an optional, hash-sealed
+`alignments.ttl`. Input is bounded UTF-8 Turtle; an explicit empty carrier is
+valid. The manifest seals its exact bytes and fixed filename in the share ID.
+Missing, altered, misnamed or undeclared evidence is refused before import stages
+data. Legacy shares without this member retain their existing identity.
+
+This is evidence transport, not identity adoption. Imported bytes are retained
+separately; neither import nor ROOT promotion applies the mappings or loads their
+shapes. Use the existing alignment propose/decide/apply workflow for curation.
+The browser reader uses the same verification, and Explorer export preserves the
+imported carrier. A release needs a compatible engine and actual asset readback;
+source configuration alone does not establish availability.

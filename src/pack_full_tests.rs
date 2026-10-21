@@ -86,6 +86,8 @@ fn internal() -> PackOptions {
 #[test]
 fn the_full_pack_carries_every_row_of_every_carried_table() {
     let store = store_with_history();
+    let alignment = "# retained evidence, not an applied mapping\n";
+    crate::share_alignments::retain(&store, "urn:test:sealed-share", Some(alignment)).unwrap();
     let before = counts(&store.conn);
 
     // ANTI-VACUITY: the fixture must actually HAVE history, or "nothing was
@@ -115,6 +117,14 @@ fn the_full_pack_carries_every_row_of_every_carried_table() {
     pack_full(&store, &out, &internal(), TS).unwrap();
     let packed = rusqlite::Connection::open(&out).unwrap();
     let after = counts(&packed);
+    let retained: String = packed
+        .query_row(
+            "SELECT member FROM share_alignment_members WHERE share_id=?1",
+            ["urn:test:sealed-share"],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(retained, alignment);
 
     let excluded_set = excluded();
     let mut lost = Vec::new();
