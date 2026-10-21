@@ -338,59 +338,59 @@ pub struct ShapesSplit {
 /// used by every shape set this deployment loads — top-level statements of the
 /// form `<subject> a sh:NodeShape ; … .` with inline `[ … ]` property shapes,
 /// where a statement ends with `.` at bracket depth 0 at end-of-line. It does
-/// not implement a full Turtle parser; a shapes document in a different style
-/// routes conservatively (unrecognised content stays in the REJECT document,
-/// which preserves the default-reject contract — never the other way around).
+/// not implement a full Turtle parser. It does lex literals, IRIs and comments,
+/// so a `#` or bracket inside a string is data; content it cannot close (an
+/// unbalanced bracket, an open literal) stays in the REJECT document, which
+/// preserves the default-reject contract. The emit annotation is read from code
+/// only, never from comments.
 /// Prefix lines are replicated into both documents so each stands alone; the
 /// emit document must declare the `quipu:` prefix itself, exactly as it must
 /// declare `sh:`.
 pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
     let mut prefixes = String::new();
-    let mut blocks: Vec<String> = Vec::new();
+    // (raw block text, the same block with comments removed)
+    let mut blocks: Vec<(String, String)> = Vec::new();
     let mut current = String::new();
-    let mut depth: i32 = 0;
+    let mut current_code = String::new();
+    let mut lexer = TurtleLexer::default();
 
     for line in shapes_turtle.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("@prefix") || trimmed.to_lowercase().starts_with("prefix ") {
+        if !lexer.in_literal()
+            && (trimmed.starts_with("@prefix") || trimmed.to_lowercase().starts_with("prefix "))
+        {
             prefixes.push_str(line);
             prefixes.push('\n');
             continue;
         }
         // Comments and blank lines between blocks belong to no block.
-        if current.is_empty() && (trimmed.is_empty() || trimmed.starts_with('#')) {
+        if current.is_empty()
+            && !lexer.in_literal()
+            && (trimmed.is_empty() || trimmed.starts_with('#'))
+        {
             continue;
         }
         current.push_str(line);
         current.push('\n');
-        // Track bracket depth outside comments (house style has no strings
-        // containing brackets; a `#` starts a comment for the rest of the line).
-        let code = match line.find('#') {
-            Some(i) => &line[..i],
-            None => line,
-        };
-        for ch in code.chars() {
-            match ch {
-                '[' | '(' => depth += 1,
-                ']' | ')' => depth -= 1,
-                _ => {}
-            }
+        let code = lexer.scan_line(line);
+        current_code.push_str(&code);
+        current_code.push('\n');
+        if lexer.depth == 0 && !lexer.in_literal() && code.trim_end().ends_with('.') {
+            blocks.push((
+                std::mem::take(&mut current),
+                std::mem::take(&mut current_code),
+            ));
         }
-        if depth == 0 && code.trim_end().ends_with('.') {
-            blocks.push(std::mem::take(&mut current));
-        }
-    }
-    if !current.trim().is_empty() {
-        // Unterminated trailing content: conservative — reject document.
-        blocks.push(current);
     }
 
     let mut reject = prefixes.clone();
     let mut emit = prefixes;
     let mut has_emit = false;
-    for block in blocks {
-        let is_emit = block.contains("quipu:onViolation")
-            && block
+    for (block, code) in blocks {
+        // Judged on CODE only: a comment that mentions the annotation must not
+        // move a rejecting shape to emit.
+        let is_emit = code.contains("quipu:onViolation")
+            && code
                 .split("quipu:onViolation")
                 .nth(1)
                 .is_some_and(|rest| rest.trim_start().starts_with("\"emit\""));
@@ -403,12 +403,109 @@ pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
             reject.push('\n');
         }
     }
+    // Unterminated trailing content (unbalanced brackets, an open literal, a
+    // missing final '.') ALWAYS rejects, whatever annotation text it contains:
+    // the splitter could not tell where its shapes begin and end (aegis-g51c).
+    if !current.trim().is_empty() {
+        reject.push_str(&current);
+        reject.push('\n');
+    }
     ShapesSplit {
         reject,
         emit,
         has_emit,
     }
 }
+
+/// Just enough Turtle lexing to find statement boundaries: string literals
+/// (short and long, single and double quoted, with escapes), IRIs and comments.
+/// A `#`, bracket or `.` inside a literal or IRI is data, not syntax. Before
+/// aegis-g51c the splitter cut every line at its first `#`, so a `sh:pattern`
+/// containing `#` (camayoc-core) lost its closing brackets and the rest of the
+/// combined document collapsed into one block that routed as a whole.
+#[derive(Default)]
+struct TurtleLexer {
+    depth: i32,
+    /// Open literal: (quote char, long form).
+    literal: Option<(char, bool)>,
+}
+
+impl TurtleLexer {
+    fn in_literal(&self) -> bool {
+        self.literal.is_some()
+    }
+
+    /// Scan one line, updating bracket depth and literal state; return the
+    /// line with any comment removed (literals and IRIs kept verbatim).
+    fn scan_line(&mut self, line: &str) -> String {
+        let chars: Vec<char> = line.chars().collect();
+        let mut code = String::with_capacity(line.len());
+        let mut i = 0;
+        while i < chars.len() {
+            let ch = chars[i];
+            if let Some((quote, long)) = self.literal {
+                code.push(ch);
+                if ch == '\\' {
+                    if let Some(next) = chars.get(i + 1) {
+                        code.push(*next);
+                    }
+                    i += 2;
+                    continue;
+                }
+                if ch == quote {
+                    if !long {
+                        self.literal = None;
+                    } else if chars.get(i + 1) == Some(&quote) && chars.get(i + 2) == Some(&quote) {
+                        code.push(quote);
+                        code.push(quote);
+                        i += 3;
+                        self.literal = None;
+                        continue;
+                    }
+                }
+                i += 1;
+                continue;
+            }
+            match ch {
+                '#' => break,
+                '"' | '\'' => {
+                    let long = chars.get(i + 1) == Some(&ch) && chars.get(i + 2) == Some(&ch);
+                    if long {
+                        code.push(ch);
+                        code.push(ch);
+                        code.push(ch);
+                        i += 3;
+                    } else {
+                        code.push(ch);
+                        i += 1;
+                    }
+                    self.literal = Some((ch, long));
+                    continue;
+                }
+                '<' => {
+                    // An IRI reference: copy through '>' verbatim.
+                    let close = chars[i..].iter().position(|&c| c == '>');
+                    let stop = close.map_or(chars.len(), |p| i + p + 1);
+                    code.extend(&chars[i..stop]);
+                    i = stop;
+                    continue;
+                }
+                '[' | '(' => self.depth += 1,
+                ']' | ')' => self.depth -= 1,
+                _ => {}
+            }
+            code.push(ch);
+            i += 1;
+        }
+        // A short literal cannot span lines; leaving one open would swallow the
+        // rest of the document, so it stays open and the tail fails closed.
+        code
+    }
+}
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_split_tests.rs"]
+mod shacl_split_tests;
 
 #[cfg(test)]
 mod split_tests {
