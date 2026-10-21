@@ -92,6 +92,6 @@ aegis:stiwi a aegis:Overseer ;
 
 # ── Ownership edges ──────────────────────────────────────────
 
-aegis:koror aegis:managed_by aegis:stiwi .
-aegis:kota aegis:managed_by aegis:stiwi .
+aegis:korimako aegis:managed_by aegis:stiwi .
+aegis:kotare aegis:managed_by aegis:stiwi .
 aegis:niue aegis:managed_by aegis:stiwi .

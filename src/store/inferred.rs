@@ -91,6 +91,12 @@ impl Store {
             return Ok(());
         }
         let iri = self.graph_iri_of(graph);
+        #[cfg(not(target_arch = "wasm32"))]
+        if iri == super::decision_deck::GRAPH {
+            return Err(Error::PolicyDenied(
+                "decision deck graph requires its protected writer".into(),
+            ));
+        }
         if is_inferred_graph_iri(&iri) && !source_may_write_inferred(source) {
             return Err(Error::InvalidValue(format!(
                 "graph <{iri}> is a companion inferred graph — the \

@@ -1,13 +1,14 @@
+import { createPackLoader } from "./pack-loader.js";
 import { createEngineApi } from "./engine-api.js";
 import { createConstellation } from "./constellation.js";
-import { setupWorkbench, loadStarted, loaded, setQuery } from "./workbench.js";
+import { setupWorkbench, setQuery } from "./workbench.js";
 
 setupWorkbench();
 
 // UI for the "Explore this repository's graph" page.
 //
-// Everything on screen is derived from a SPARQL query this file sends to the
-// worker — there is no privileged read path. The queries are printed in the
+// Current facts are derived from SPARQL queries sent to the worker. Receiver
+// history additionally uses the read-only factHistory store API. The queries are printed in the
 // query box when you click a panel's "show the query" link, so a reader can
 // take any view apart and re-run it themselves. That is deliberate: a demo you
 // cannot reproduce is a screenshot with extra steps.
@@ -697,7 +698,8 @@ async function downloadNtriples() {
 
 // ------------------------------------------------------------ graph panel
 
-const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile });
+const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile,
+  factHistory: (entity) => ask({ cmd: "factHistory", entity }) });
 function drawNeighbourhood(item) { constellation.focus(item); }
 
 // ------------------------------------------------------------- query panel
@@ -753,26 +755,8 @@ async function runSparql() {
 
 // ------------------------------------------------------------------- boot
 
-async function loadPack(bytes, source) {
-  loadStarted(bytes.byteLength);
-  status(`Verifying and importing ${fmt(bytes.byteLength)} bytes from ${source}…`);
-  const t0 = performance.now();
-  const report = await ask({ cmd: "load", bytes, source });
-  const load = performance.now() - t0;
-  renderProvenance(report, source, { load });
-  loaded(report);
-  status(`Loaded ${fmt(report.import.triples.accepted)} triples — everything below is a live `
-    + `query against this tab's copy.`);
-  $("main").hidden = false;
-  await renderTypes();
-  await constellation.load();
-  await renderBrowser();
-  await refreshExport();
-  setQuery(CANNED[0].sparql, CANNED[0].name);
-  $("#starter-questions button")?.setAttribute("aria-pressed", "true");
-  await runSparql();
-  reportReleaseFreshness(report.manifest.producer.version);
-}
+const loadPack = createPackLoader({ ask, constellation, renderProvenance, status, fmt,
+  renderTypes, renderBrowser, refreshExport, runSparql, reportReleaseFreshness, initialQuestion: CANNED[0] });
 
 async function boot() {
   const bundle = await fetch("./pkg/quipu_wasm_explorer_bg.wasm", { method: "HEAD" })

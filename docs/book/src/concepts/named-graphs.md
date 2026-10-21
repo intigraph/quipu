@@ -27,7 +27,7 @@ within a graph: a retraction in graph A never touches graph B.
 
 ## Querying: `GRAPH`, `FROM`, and the `graph` param
 
-**Committed reads are ROOT-scoped by default.** The default graph is ROOT
+**SPARQL reads are ROOT-scoped by default.** The default graph is ROOT
 alone, not an all-graph union — silence must never expose another tenant's
 overlay. A query widens its dataset only by saying so:
 
@@ -71,6 +71,70 @@ resolves **dataset names**: passing a dataset IRI scopes the query to that
 dataset's members, so `FROM <dataset>` and `"graph": "<dataset>"` mean the
 same thing. The same `graph` param on `quipu_export` / `POST /export`
 exports one named graph's facts instead of ROOT.
+
+### Search has a broader default than SPARQL
+
+On a new store, `POST /search` and `quipu_search` default to ROOT plus registered
+named graphs. Existing stores retain ROOT until explicitly broadened with
+`[quipu.search] default_graph_scope = "all"`. When that setting is omitted, the
+store persists its default; read-only legacy stores use ROOT without migration.
+Coverage reports the effective default and its source. This policy is local to
+the receiving store: importing a share does not replace it with the sender's
+choice. A whole-file backup retains the store's policy.
+For example, a work tracker can keep its records in its own project graph:
+those records need not be copied into ROOT to be discoverable. This covers
+graphs registered in the local store, including attached layers registered
+there; it does not query remote federation endpoints automatically.
+
+Configure retrieval policy under `[quipu.search]`:
+
+```toml
+default_graph_scope = "all"
+exclude_graphs = ["urn:example:quarantine", "urn:example:private-work"]
+```
+
+Use `default_graph_scope = "root"` for the previous implicit scope. Requests
+can select `graph: "urn:quipu:graph:root"`, one named graph IRI, `graphs: [iri,
+iri]`, or `all_graphs: true`. Configured exclusions apply to all selections;
+a selection emptied by exclusions refuses. These controls are retrieval
+policy, **not access control**. Deployments needing tenant isolation must
+enforce authorization separately. Configure exclusions before exposing a
+store containing scratch or quarantine graphs to general search.
+
+Every successful search returns `search_scope`: selected graph IRIs,
+configured exclusions, whether selection was explicit, named-vector enablement,
+and the fact that index completeness is not certified. Result graph provenance
+does not promote a fact or make its source authoritative. Similarity and context
+admission still apply; an empty search does not prove a graph contains no facts.
+
+Semantic retrieval uses one vector per entity. An entity with ROOT text keeps
+that representation; a named-only entity combines its named-graph facts.
+Selecting a graph filters membership, not the vector's text provenance. For
+assertion-level literal matching within one graph, use keyword search. This
+distinction is why listing selected graphs does not certify complete indexing.
+
+Semantic search across named graphs still requires `named_graphs = true`.
+Prepare existing named-only vectors using bounded `/embed_backfill_graph` calls
+before enabling it; an unprepared default all-graph request refuses instead of
+silently reporting ROOT as complete coverage. Keyword search needs its enabled,
+backfilled lexical index, but no embedding provider or named-vector flag.
+ROOT-only content ranking, anchor traversal, and structured search refuse a
+broader scope. See the [search API](../reference/rest-api.md#post-search).
+
+### Querying and promotion are separate operations
+
+To inspect one graph, use `GRAPH <iri>` or the `/query` `graph` parameter above.
+To join graph contents deliberately, use `FROM <a> FROM <b>` or a registered
+dataset. Search scope never changes these SPARQL defaults or writes facts.
+
+Promotion admits reviewed content into ROOT; it is not required merely to find
+or query named-graph data. For bulk material, use the producer's `share`, then
+`import` to stage and validate it, inspect the admission result, and use
+`import promote <share-id>` only when eligible and authorized. Do not replace
+promotion with a loop of episode or update writes. See
+[bulk loads and migrations](../recipes/bulk-loads.md) for exact commands,
+shape admission, and fork rollback. A search hit from a staging graph is still
+staged content until that governed promotion succeeds.
 
 Property paths follow a fixed graph scope without crossing it: a
 `GRAPH <iri>` closure stays inside that graph, a `FROM <a> FROM <b>` path

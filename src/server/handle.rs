@@ -4,6 +4,8 @@
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
+#[path = "resolution_cache.rs"]
+mod resolution_cache;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
@@ -35,6 +37,10 @@ pub(crate) struct StoreHandle {
     pub(crate) readers: ReadPool,
     /// Opt-in log-only admission timing; immutable after startup.
     pub(crate) log_query_admission: bool,
+    /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
+    pub(crate) deck_http: bool,
+    pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
+    pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
     /// clone boxed external/LanceDB backends. Keep those searches on the writer
     /// so moving `SQLite` search to WAL readers never changes backend semantics.
@@ -140,6 +146,9 @@ impl StoreHandle {
         db_path: &str,
         federation: quipu::config::FederationConfig,
     ) -> Self {
+        if let Err(error) = store.prepare_resolution_index() {
+            eprintln!("resolution label warm failed; using exact scans: {error}");
+        }
         let commit_wake = Self::commit_wake_for(&store);
         Self {
             commit_wake,
@@ -150,10 +159,21 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers,
             log_query_admission: false,
+            deck_http: false,
+            query_capture: None,
+            replica: None,
             federation,
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
         }
+    }
+
+    /// Enter the serving lifecycle after startup warming, with one coalesced
+    /// background worker. Requires the server's Tokio runtime.
+    pub(crate) fn into_shared(self) -> SharedStore {
+        let state = Arc::new(self);
+        resolution_cache::start(&state);
+        state
     }
 
     /// Attach the registered reactive reasoner (see the `reasoner` field).
@@ -179,6 +199,9 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             log_query_admission: false,
+            deck_http: false,
+            query_capture: None,
+            replica: None,
             federation: quipu::config::FederationConfig::default(),
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
@@ -199,6 +222,28 @@ impl StoreHandle {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
         }
         guard
+    }
+
+    /// A cancelled promotion must also leave the queue without waiting for an
+    /// unrelated long writer. Settle signed authority only after acquisition.
+    pub(crate) fn promotion_lock(
+        &self,
+        control: &quipu::promotion_control::PromotionControl,
+    ) -> quipu::Result<parking_lot::FairMutexGuard<'_, quipu::Store>> {
+        loop {
+            control.check()?;
+            if let Some(guard) = self
+                .writer
+                .try_lock_for(std::time::Duration::from_millis(50))
+            {
+                control.check()?;
+                if let Some(pending) = quipu::transaction_auth::current_attestation() {
+                    let _ = guard.settle_attestation(&pending);
+                }
+                quipu::transaction_auth::refuse_if_refused()?;
+                return Ok(guard);
+            }
+        }
     }
 
     /// First writer acquisition for tool handlers. Budget rejection precedes

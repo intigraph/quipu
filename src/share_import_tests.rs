@@ -21,6 +21,7 @@ mod tests {
             manifest: serde_json::from_str(&read("manifest.json")).unwrap(),
             export_ntriples: read("export.nt"),
             shapes_turtle: read("shapes.ttl"),
+            alignments_turtle: None,
             queries_turtle: None,
             query_namespace: None,
             replace_queries: false,
@@ -32,6 +33,55 @@ mod tests {
             attestation: None,
         };
         (dir, request)
+    }
+
+    #[test]
+    fn foreign_share_preserves_receivers_implicit_search_policy() {
+        for (sender_policy, receiver_policy, receiver_scope) in [
+            ("all", "legacy-root", "root"),
+            ("legacy-root", "all", "all"),
+        ] {
+            let mut sender = Store::open_in_memory().unwrap();
+            crate::share_scrub::seed_test_catalogue(&mut sender);
+            sender
+                .conn
+                .execute(
+                    "UPDATE search_default_policy SET policy=?1 WHERE id=1",
+                    [sender_policy],
+                )
+                .unwrap();
+            crate::rdf::ingest_rdf(
+                &mut sender,
+                &b"<urn:scope-transfer:positive> <urn:scope-transfer:p> \"carried\" .\n"[..],
+                RdfFormat::NTriples,
+                None,
+                TS,
+                None,
+                None,
+            )
+            .unwrap();
+            let (_dir, incoming) = request(&sender);
+            let mut receiver = Store::open_in_memory().unwrap();
+            crate::share_scrub::seed_test_catalogue(&mut receiver);
+            receiver
+                .conn
+                .execute(
+                    "UPDATE search_default_policy SET policy=?1 WHERE id=1",
+                    [receiver_policy],
+                )
+                .unwrap();
+            import_share(&mut receiver, &incoming, TS, None).unwrap();
+            assert!(
+                receiver
+                    .lookup("urn:scope-transfer:positive")
+                    .unwrap()
+                    .is_some()
+            );
+            assert_eq!(
+                receiver.default_search_graph_scope().unwrap().0,
+                receiver_scope
+            );
+        }
     }
 
     /// aegis-i48b9w: an exact canonical-name match must be PROPOSED, not applied.

@@ -12,10 +12,24 @@ use crate::config::{
     EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
 };
 use crate::error::{Error, Result};
-use crate::schema::INIT_SQL;
 use crate::vector::VECTORS_SQL;
 
 impl Store {
+    /// Apply a validated share of the aggregate service memory budget.
+    /// This changes connection-local SQLite policy, never database facts.
+    pub fn apply_memory_allocation(
+        &self,
+        allocation: crate::memory_budget::MemoryAllocation,
+    ) -> Result<()> {
+        let cache = i64::try_from(allocation.cache_kib)
+            .map_err(|_| Error::InvalidValue("cache allocation overflow".into()))?;
+        let mmap = i64::try_from(allocation.mmap_bytes)
+            .map_err(|_| Error::InvalidValue("mmap allocation overflow".into()))?;
+        self.conn.pragma_update(None, "cache_size", -cache)?;
+        self.conn.pragma_update(None, "mmap_size", mmap)?;
+        Ok(())
+    }
+
     /// Open (or create) a Quipu store at the given path.
     pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -90,6 +104,13 @@ impl Store {
         Ok(Self::with_connection(conn))
     }
 
+    /// Set this connection's bounded wait for transient SQLite apply locks.
+    /// This changes only connection-local policy, never persistent store state.
+    pub fn set_busy_timeout(&self, timeout: std::time::Duration) -> Result<()> {
+        self.conn.busy_timeout(timeout)?;
+        Ok(())
+    }
+
     /// Open a store FILE that must not change, such as a pack being verified
     /// (aegis-s8jra2).
     ///
@@ -137,6 +158,7 @@ impl Store {
         // them (aegis-xi0), and serves `/resolve`; both must use the served
         // `[quipu.resolution]` policy, not the defaults.
         self.resolution_config.clone_from(&other.resolution_config);
+        self.resolution_cache = other.resolution_cache.clone();
         self.embedding_provider
             .clone_from(&other.embedding_provider);
     }
@@ -214,7 +236,7 @@ impl Store {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;",
         )?;
-        conn.execute_batch(INIT_SQL)?;
+        super::search_scope_policy::initialize_schema(&conn)?;
         Self::ensure_store_identity(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
         // Frozen packs re-attach on every open (deep freeze): read the
@@ -240,8 +262,7 @@ impl Store {
         // Attribute-scoped current-fact index (aegis-svtdyn). Additive; no
         // ordering constraint beyond the `facts` table existing.
         Self::migrate_current_fact_index(&conn)?;
-        // Source-scoped retraction index (aegis-m6agjy). Additive; `transactions`
-        // exists from INIT_SQL.
+        // Source-scoped retraction index (aegis-m6agjy); INIT_SQL owns the table.
         Self::migrate_transaction_source_index(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
         // intern must know the store's space, or on a non-zero-space store it
@@ -253,6 +274,8 @@ impl Store {
         // Order-independent: these tables reference nothing else.
         Self::migrate_session_attestation(&conn)?;
         Self::migrate_decision_nonces(&conn)?;
+        #[cfg(not(target_arch = "wasm32"))]
+        Self::migrate_decision_deck(&conn)?;
         Self::migrate_registry_amendment_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
         Self::migrate_query_registry(&conn)?;
@@ -261,6 +284,7 @@ impl Store {
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
         Self::migrate_frozen_packs(&conn)?;
+        Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
@@ -468,6 +492,7 @@ impl Store {
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
             resolution_config: ResolutionConfig::default(),
+            resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),
@@ -536,3 +561,7 @@ pub(crate) fn open_file_immutable(path: &str) -> Result<Connection> {
         flags,
     )?)
 }
+
+#[cfg(test)]
+#[path = "open_memory_tests.rs"]
+mod memory_tests;

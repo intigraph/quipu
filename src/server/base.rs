@@ -23,9 +23,26 @@ pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
             .find(|window| window[0] == name)
             .map(|window| window[1].as_str())
     };
-    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
+    let mut config = quipu::QuipuConfig::load_strict(std::path::Path::new("."))
+        .unwrap_or_else(|error| {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        })
         .with_db_override(flag("--db"))
         .with_bind_override(flag("--bind"));
+    if args.iter().any(|arg| arg == "--read-only") {
+        let primary_url = flag("--primary-url")
+            .map(str::to_owned)
+            .or_else(|| {
+                config
+                    .server
+                    .replica
+                    .as_ref()
+                    .map(|r| r.primary_url.clone())
+            })
+            .unwrap_or_default();
+        config.server.replica = Some(quipu::config::ReplicaConfig { primary_url });
+    }
     super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
     config
 }
@@ -115,6 +132,9 @@ pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
     let mut body = store.graph_metrics.render();
+    if let Some(replica) = &store.replica {
+        body.push_str(&replica.metrics());
+    }
     super::request_middleware::render_request_starts(&mut body);
     super::update::render_update_paths(&mut body);
     Ok((
@@ -308,6 +328,7 @@ impl IntoResponse for AppError {
         // A governance denial is an authorization outcome, not a malformed
         // request — surface it as 403 so callers can distinguish it.
         let status = match &self.0 {
+            quipu::Error::ConditionalWriteConflict => StatusCode::CONFLICT,
             quipu::Error::PolicyDenied(_) => StatusCode::FORBIDDEN,
             // A query that ran out of budget is neither malformed nor a server
             // fault — 408 lets a caller distinguish "narrow your query" from
@@ -349,6 +370,8 @@ USAGE:
 OPTIONS:
     --db <path>       Store file (default: from .bobbin/config.toml)
     --bind <addr>     Listen address (default: from .bobbin/config.toml)
+    --read-only       Serve a SQLite read-only replica (never a writer fallback)
+    --primary-url URL Primary named by replica write refusals and metadata polls
     --embed-backfill  Backfill embeddings for all entities on startup
     --mcp-stdio       Serve MCP on stdin/stdout instead of binding HTTP
     --mcp-token-file <path>  Private bearer file for stdio tool writes

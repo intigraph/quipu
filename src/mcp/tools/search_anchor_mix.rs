@@ -81,7 +81,11 @@ pub(super) fn anchor_mix_response(
             "anchored search is disabled on this server ([quipu.search] anchored = false)".into(),
         ));
     }
-    if crate::search_graph_scope::GraphScope::parse(store, input)?.explicit {
+    if crate::search_graph_scope::GraphScope::parse(store, input)?
+        .ids
+        .as_slice()
+        != [0]
+    {
         return Err(Error::InvalidValue(
             "anchored search currently supports ROOT graph only".into(),
         ));

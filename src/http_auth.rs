@@ -36,13 +36,18 @@
 /// or the test fails. That forced decision is the whole point — write-ness cannot
 /// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
+    "/memory/commit",
     "/knot",
     "/knot/stage",
     "/knot/promote",
+    "/knot/cancel",
     "/episode",
     "/import",
     "/import/promote",
     "/episodes/complete",
+    // aegis-blh.2: present stores a challenge; attest settles a decision.
+    "/deck/present",
+    "/deck/attest",
     "/retract",
     // aegis-rz75m6: retract-only repair path. Writes a retraction transaction
     // stamped repair:<ticket> when `apply` is true.
@@ -97,6 +102,14 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // aegis-blh.2: exact receipt lookup by nonce; no write.
+    "/deck/receipt",
+    "/memory/read",
+    "/memory/export",
+    "/memory/projection",
+    "/memory/receipt",
+    "/rule_query",
+    "/watermark",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
     // (lookup + a prepared SELECT); `decide` touches no store at all. The
     // writer of the three is /align/apply, above.
@@ -183,6 +196,11 @@ pub const READ_ENDPOINTS: &[&str] = &[
 /// Whether `path` is a write endpoint subject to auth / read-only policy.
 pub fn is_write_endpoint(path: &str) -> bool {
     WRITE_ENDPOINTS.contains(&path)
+}
+
+/// Own-file projection needs verified identity without making shared reads private.
+pub fn requires_read_identity(path: &str) -> bool {
+    matches!(path, "/memory/projection" | "/memory/receipt")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.

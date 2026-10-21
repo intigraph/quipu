@@ -872,9 +872,9 @@ fn test_retract_episode_scoped_isolation() {
             "timestamp": "2026-04-01T00:00:00Z",
             "nodes": [
                 {"name": "quipu-server", "type": "WebApplication"},
-                {"name": "kota", "type": "LXCContainer"}
+                {"name": "kotare", "type": "LXCContainer"}
             ],
-            "edges": [{"source": "quipu-server", "target": "kota", "relation": "runs_on"}]
+            "edges": [{"source": "quipu-server", "target": "kotare", "relation": "runs_on"}]
         }),
     )
     .unwrap();
@@ -900,7 +900,7 @@ fn test_retract_episode_scoped_isolation() {
     ));
     assert!(ask(
         &store,
-        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kotare>")
     ));
 
     let out = tool_retract_episode(
@@ -927,7 +927,7 @@ fn test_retract_episode_scoped_isolation() {
     // …but the shared entity and the real episode's facts are intact.
     assert!(ask(
         &store,
-        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kota>")
+        &format!("<{NS}quipu-server> <{NS}runs_on> <{NS}kotare>")
     ));
     assert!(ask(
         &store,
@@ -1317,6 +1317,7 @@ fn test_tool_episode_surfaces_resolution_hints() {
     // surface dedup hints in its response (the engine was previously inert).
     let mut store = Store::open_in_memory().unwrap();
     *store.resolution_config_mut() = crate::config::ResolutionConfig {
+        cache_labels: true,
         enabled: true,
         threshold: 0.85,
         top_k: 3,
@@ -1894,6 +1895,7 @@ fn test_tool_definitions() {
     let defs = tool_definitions();
     let names: Vec<&str> = defs.iter().map(|d| d["name"].as_str().unwrap()).collect();
     assert!(names.contains(&"quipu_query"));
+    assert!(names.contains(&"quipu_rule_query"));
     assert!(names.contains(&"quipu_knot"));
     assert!(names.contains(&"quipu_cord"));
     assert!(names.contains(&"quipu_unravel"));
@@ -1953,13 +1955,13 @@ fn test_tool_definitions() {
     assert!(names.contains(&"quipu_merge_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 78);
+        assert_eq!(defs.len(), 79);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 76);
+        assert_eq!(defs.len(), 77);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }

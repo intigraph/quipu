@@ -28,7 +28,7 @@ Via REST:
 curl -s localhost:3030/knot -X POST \
   -H "Content-Type: application/json" \
   -d '{
-    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host ; hw:hostname \"koror.example\" .",
+    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:korimako a hw:Host ; hw:hostname \"korimako.example\" .",
     "timestamp": "2026-04-01",
     "actor": "bulk-import"
   }'
@@ -52,7 +52,7 @@ curl -s localhost:3030/episode -X POST \
       {"name": "memcached", "type": "Service"}
     ],
     "edges": [
-      {"source": "redis", "target": "koror", "relation": "runsOn"},
+      {"source": "redis", "target": "korimako", "relation": "runsOn"},
       {"source": "memcached", "target": "palau", "relation": "runsOn"}
     ]
   }'
@@ -174,7 +174,7 @@ For agents using MCP tools:
 {
   "tool": "quipu_knot",
   "input": {
-    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:koror a hw:Host .",
+    "turtle": "@prefix hw: <http://example.org/homelab/> .\nhw:korimako a hw:Host .",
     "shapes": "@prefix sh: ... optional validation ..."
   }
 }
@@ -205,7 +205,7 @@ quipu retract "http://example.org/homelab/old-host" --db knowledge.db
 Retract a specific predicate:
 
 ```bash
-quipu retract "http://example.org/homelab/koror" \
+quipu retract "http://example.org/homelab/korimako" \
   --predicate "http://example.org/homelab/cpuCores" --db knowledge.db
 ```
 

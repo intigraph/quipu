@@ -1,0 +1,7 @@
+Script started on 2026-10-16 12:55:59-04:00 [COMMAND="bash docs/probes/revert-rederive/run-demo.sh" <not executed on terminal>]
+Private Git fixture: own file restored; unrelated main file remains changed
+preceding: PR stale=0 strict stale=1 unknown=2
+candidate: PR stale=1 strict stale=1 unknown=2
+candidate: docs-only PR remains fresh; no production calls
+
+Script done on 2026-10-16 12:55:59-04:00 [COMMAND_EXIT_CODE="0"]

@@ -27,6 +27,21 @@ This is the **read** path. Its two siblings:
 The examples use the base IRI `http://aegis.gastown.local/ontology/` (prefix `a:`), the example
 namespace used throughout Quipu's own docs and tests. **Replace it with your graph's base IRI.**
 
+## Search confidence before using context
+
+Ranked `/search` candidates are not proof that an answer exists. With the
+`quipu-context/v1` response contract, render **NO CONTEXT** and the bounded reason
+when `insufficient_context` is true; do not quote or inject the diagnostic
+`results`. When it is false, use only `context_results`, retaining each hit's
+source and `valid_from`. An admitted historical fact is not current state or a
+verified cause. A missing/unknown contract, malformed response or failed request
+is **UNKNOWN**, not zero hits and not permission to use the nearest candidate.
+
+The provisional 0.52 raw-cosine floor has a narrow measured margin. It must pass
+alongside exact subject/identifier and term coverage; neither rank nor a fused
+score alone admits context. See the REST API search contract for the explicit
+reasons and limits. Do not lower a floor or retry queries merely to obtain a hit.
+
 ## Essential Principles
 
 1. **A PREFIX declaration is REQUIRED.** Bare `rdfs:label` or `a:depends_on` is a hard parse error

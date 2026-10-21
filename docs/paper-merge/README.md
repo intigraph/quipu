@@ -10,6 +10,10 @@ occupied — hence this directory and its own recipe. Build with
 
 ## Where the numbers come from
 
+The separate [shipped-path load harness](../../benchmark/merge-load/README.md)
+adds seeded 100/1000/5000-edit-per-replica reconnect and transport measurements.
+It does not replace or retroactively alter the paper's 200-edit Arm A table.
+
 Nothing here is hand-carried. Every figure regenerates:
 
 | section | source | command |

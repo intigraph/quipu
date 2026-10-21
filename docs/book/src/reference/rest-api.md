@@ -17,6 +17,36 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Versioned file-memory RPCs
+
+These JSON operations are disabled by default. To use them, a deployment must
+register the graph and configure `quipu.memory_files.enabled`, `graph`,
+`deployment` and `project`. They create neither graphs nor credentials. An
+owner is the exact deployment, project and crew IRI tuple; labels and caller
+actor fields do not authenticate it.
+
+| Endpoint | Request and response | Identity |
+|----------|----------------------|----------|
+| `POST /memory/read` | Owner tuple; current manifest or null, with explicit repository-owner coverage | Inherited deployment read boundary, including cross-crew reads |
+| `POST /memory/export` | Owner tuple; complete manifest and identified source revisions | Same inherited read boundary |
+| `POST /memory/projection` | Owner tuple; export plus `authenticated_owner` | Existing verified named principal must equal the owner |
+| `POST /memory/receipt` | Exact original commit intent; original receipt or null | Matching named principal |
+| `POST /memory/commit` | One file intent; verified receipt with file and snapshot revisions | Matching named principal and normal writable-server policy |
+
+Commit intents include owner, relative path, UTF-8 text, expected snapshot and
+file revisions, idempotency key, harness and opaque account label. Null text is
+an explicit tombstone. Receipt lookup precedes stale-parent rejection: replay
+the exact intent and key after an indeterminate result, rather than generating
+a new write. Stale new intents return HTTP 409; denied ownership returns 403.
+Disabled or invalid configuration refuses instead of accepting memory writes.
+
+Requests are bounded to 1 MiB; a file is at most 256 KiB and an owner snapshot
+contains at most 128 entries and 4 MiB of live text. Existing graph, vocabulary,
+SHACL and write-policy checks remain in force. Projection reads data; it does
+not select or overwrite a native memory directory. See [versioned file
+memory](memory-files.md) for the lossless envelope, local CLI workflow, public
+export boundary and filesystem/harness guarantees.
+
 ## Queued write timeouts
 
 When a request budget expires before a tool write starts, the server returns
@@ -271,6 +301,23 @@ invalidate the result.
 
 All POST endpoints accept `Content-Type: application/json`.
 
+### `GET /watermark`
+
+A bounded, read-only metadata endpoint for replication observers. Returns
+`{"store_id":"<store lineage>","watermark_tx":123}` using the indexed latest
+transaction ID. It does not enumerate facts, advance a cursor or create a
+transaction. A shared store ID establishes lineage, not proof that two copies
+have identical contents.
+
+Opt-in [read-only followers](../getting-started/configuration.md#read-only-follower-serving)
+poll their configured primary every 15 seconds (two-second HTTP timeout). Their
+responses carry `X-Quipu-Replica-Lag-Tx`: primary minus follower transaction IDs
+from the last fresh observation, or `unknown`. Metrics
+`quipu_replica_lag_transactions` (-1 for unknown) and `quipu_replica_lag_known`
+expose the same bounded observation. Failure, stale metadata or mismatched
+lineage never means zero lag. Replica writes return 503 naming the primary;
+they are not forwarded.
+
 ### `GET /health`
 
 Health check.
@@ -429,6 +476,55 @@ Response: `{"tx_id": 1, "count": 2, "conforms": true,
 "valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
 normalised key the facts were actually stored under.
 
+### Resumable snapshot promotion and cancellation
+
+`POST /knot/stage` stores inert, content-addressed parts. Transport parts are
+limited to 512 KiB; the assembled upload is limited to 128 MiB and 512 parts.
+Those are byte limits, **not a bound on promotion memory**. Promotion still
+validates and replaces the complete producer snapshot atomically.
+
+Start or poll with `POST /knot/promote` and `{"upload_id":"sha256:..."}`.
+A pending response includes `"state":"running"` and `"lease_seconds":30`.
+Poll regularly (for example once per second) using the same authenticated
+identity. Each live poll renews the lease. Bound the heartbeat request timeout
+and retry sequence below the lease (for example a five-second timeout with
+three attempts). A 30-second request timeout can itself exhaust this lease;
+a network partition can therefore cancel a still-running client. If the producer stops polling, its
+lease expires and the worker cooperatively cancels before committing the
+snapshot. A late poll cannot revive an expired lease. Only one promotion per
+store is admitted at a time; another upload receives an admission refusal.
+
+For an explicit stop, send the same upload ID to `POST /knot/cancel`, using the
+identity that started promotion. Caller-declared `actor` is not authority.
+`"cancellation_requested":true` acknowledges the request, **not worker exit**.
+Poll `/knot/promote` until `{"pending":false,"state":"cancelled","cancelled":true}`
+confirms the worker has exited without committing its snapshot replacement.
+The previous snapshot and other producers' facts remain active. Durable policy
+and refusal audit records are preserved; validation advisories from the aborted
+payload are discarded. Inert staged
+bytes and dictionary terms can remain until their normal cleanup; cancellation
+is not deletion of staging or an undo of an earlier successful promotion.
+
+Cancellation competes with a single final commit claim. If commit wins,
+`/knot/cancel` reports `"cancellation_requested":false` and `"state":"committing"`
+or `"complete"`; the client must read the final promotion result. Once committed,
+deferred embedding may still be finishing and cannot be undone by cancellation.
+Checks run between upload parts, RDF rows, retraction comparisons and staged
+fact writes, and before commit. This is cooperative cancellation, not a promise
+that every validation or individual SQLite statement can be interrupted within
+30 seconds. Measure stop latency and peak memory for the intended workload
+before admitting a larger publication; raising memory limits is not a substitute.
+
+Terminal receipts are retained for an hour in a bounded process-local cache.
+Cancelled jobs stay terminal while their receipt is retained; polling does not
+restart them. To deliberately resume after confirmed terminal cancellation, the
+same identity can send `{"upload_id":"sha256:...","retry_cancelled":true}` to
+`/knot/promote`. This flag cannot restart a still-running worker, a failed job
+with an indeterminate commit, or a completed job. A fresh server process does
+not retain these receipts. After a
+restart or an indeterminate response, verify snapshot contents before starting
+another promotion. Staging remains content-addressed and independently expires.
+
 ### `POST /cord`
 
 List entities.
@@ -459,7 +555,7 @@ curl -s localhost:3030/episode -X POST \
   -d '{
     "name": "deploy-v2",
     "nodes": [{"name": "myapp", "type": "WebApplication"}],
-    "edges": [{"source": "myapp", "target": "kota", "relation": "runs_on"}]
+    "edges": [{"source": "myapp", "target": "kotare", "relation": "runs_on"}]
   }'
 ```
 
@@ -661,6 +757,25 @@ curl -s localhost:3030/validate -X POST \
   -H "Content-Type: application/json" \
   -d '{"shapes": "@prefix sh: ...", "data": "@prefix ex: ..."}'
 ```
+
+### Decision deck: `POST /deck/present`, `POST /deck/attest`, `POST /deck/receipt`
+
+A curated decision request is settled by an enrolled human's `WebAuthn`
+assertion. These routes are **off by default**: they answer `403` unless
+`[quipu.server] deck_http = true`. Even then they settle nothing until an
+operator has configured and enabled the store's deck, which no route can do.
+
+- `/deck/present` (write): `{"request", "revision", "credential", "choice"}`
+  returns `{"challenge", "webauthn_challenge"}`. Sign `webauthn_challenge`
+  (unpadded base64url) exactly as returned. Never rebuild the challenge
+  client-side: the server verifies against the challenge it stored.
+- `/deck/attest` (write): `{"nonce", "client_data_json", "authenticator_data",
+  "signature"}`, each byte field base64url, returns `{"decision", "nonce",
+  "recorded_at"}`. A challenge settles once: a replayed, expired or stale
+  one is refused. After a lost response, look the receipt up; do not resubmit.
+- `/deck/receipt` (read): `{"nonce"}` returns `{"found", "receipt", "tx"}`.
+
+Unknown fields are refused on all three.
 
 ### `POST /retract`
 
@@ -900,6 +1015,72 @@ curl -s localhost:3030/explain -X POST \
 
 ### `POST /search`
 
+#### Usable context versus ranked candidates
+
+Every successful response also carries the `quipu-context/v1` contract:
+
+```json
+{
+  "insufficient_context": true,
+  "context_results": [],
+  "context": {
+    "contract": "quipu-context/v1",
+    "outcome": "NO CONTEXT",
+    "reason": "subject_not_covered",
+    "similarity_floor": 0.52,
+    "minimum_term_coverage": 0.5,
+    "subject_term": "unrecordedsubject",
+    "required_identifiers": [],
+    "top_term_coverage": 0.6667,
+    "candidate_count": 3,
+    "admitted_count": 0
+  }
+}
+```
+
+Consumer validation requires a finite declared floor in `[0.52, 1]` before
+accepting either CONTEXT or NO CONTEXT. A lower, missing or malformed floor
+is UNKNOWN in these consumers, even when the server reports no context.
+
+`results`, `count`, ranking scores, ordering, scope and temporal provenance remain
+unchanged diagnostic search output. They are **not** evidence that an answer
+exists. Context consumers must render **NO CONTEXT** when
+`insufficient_context` is true and must not inject diagnostic candidate text.
+When it is false, consume only `context_results`. A missing or unknown contract,
+transport error or malformed response is **UNKNOWN**, never an empty successful
+search. This contract does not change storage, ranking or graph isolation. Native MCP
+renders only this admitted-context view: its `results` and `count` describe the
+admitted rows and omit diagnostic neighbors. Unsupported context responses are
+MCP errors marked UNKNOWN. REST retains the diagnostic candidate view.
+
+Admission requires the top candidate's raw `similarity` to reach the floor,
+the first non-stopword query term to occur as a complete word, every explicit
+identifier to occur exactly, and at least half the distinct non-stopword query
+terms to occur. Matching is case-insensitive. Identifier boundaries preserve
+hostnames, unit names, item IDs, IRIs/paths and hexadecimal identifiers of seven
+or more characters. An uncorroborated top candidate produces NO CONTEXT even
+if a lower candidate appears usable. Admitted rows preserve source and valid-time
+metadata. An admitted historical incident is not a verified cause or current state.
+
+The default raw-cosine floor is **0.52**, provisionally measured on a small set
+with only a 0.023 separation margin. `context_similarity_floor` may explicitly
+select a finite floor in `[0,1]`; it does not change ranking. Coverage and subject
+checks are conservative heuristics, not a calibrated answerability probability.
+The first-subject rule is order-sensitive; an entity-first query is clearest.
+A high score alone is insufficient: a nonsense subject with domain vocabulary
+can exceed the floor. Re-evaluate thresholds against positive and truly absent
+controls before changing policy.
+
+Without query terms, or without a finite raw cosine (for example a keyword-only
+or lexical-only fusion result), context admission refuses with an explicit
+reason. BM25, normalized fusion, content and graph scores never substitute for
+cosine. Empty candidates produce `no_candidates`; all candidates below the floor
+produce `no_result_above_floor`. A below-floor top hit with another above-floor
+candidate produces `top_result_below_floor`. Other reasons include
+`similarity_unavailable`, `query_terms_unavailable`, `query_too_long`,
+`subject_not_covered`, `identifier_not_covered`, and `insufficient_term_coverage`.
+Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
+
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
@@ -907,17 +1088,24 @@ omitted mode or `mode: "semantic"` preserves vector search.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
-`all_graphs: true` (also `graph: "all"`). Omitted scope remains ROOT. Selectors
+`all_graphs: true` (also `graph: "all"`). New stores default to ROOT plus all
+registered named graphs, minus `[quipu.search] exclude_graphs`. Existing stores
+retain ROOT until explicitly broadened with `default_graph_scope = "all"`.
+An unset configuration uses the persisted store default; read-only legacy
+stores resolve to ROOT without a schema write. The response coverage reports
+the resolved `default` and its `default_source`. An explicit configuration
+overrides the stored choice. Set `default_graph_scope = "root"`, or pass
+`graph: "urn:quipu:graph:root"` for one ROOT search. Selectors
 are mutually exclusive and unknown IRIs are refused. Explicit results carry
 `graph` and selected entity memberships in `graphs`. For keyword mode,
 `graph` identifies the matching assertion; for semantic mode it is the first
 selected membership. The graph
 metadata plane is excluded from all-graphs scope. Named-graph semantic text
 uses one vector per entity; entities with ROOT text keep it, otherwise text
-combines their named-graph facts. Explicit graph scope refuses ROOT content
-and anchor reranking.
+combines their named-graph facts. Scopes containing named graphs refuse ROOT
+content and anchor reranking; an explicit ROOT selection supports both.
 
-Explicit graph selection for semantic and hybrid search, and automatic
+Named-graph retrieval for semantic and hybrid search, and automatic
 named-only embedding text, are disabled by default (`[quipu.search]
 named_graphs = false`). Keyword mode (`mode: "keyword"`) accepts an explicit
 scope without the flag, because the lexical index records each assertion's
@@ -925,7 +1113,7 @@ graph; it still refuses until that index is complete. Prepare existing named-onl
 vectors through bounded `POST /embed_backfill_graph` calls, then enable the
 flag. This avoids turning the next producer snapshot into an unpaced initial
 embedding drain. Graph backfill leaves entities with any ROOT history alone,
-including ROOT entities without vectors. Roll back exposure by disabling
+including ROOT entities without vectors. Roll back exposure by setting `default_graph_scope = "root"` and disabling
 `named_graphs`; retain this binary's ROOT exclusion while named vectors exist.
 Reverting to a pre-scope binary after backfill can expose those vectors in
 unscoped search.
@@ -1172,6 +1360,38 @@ cache (freshness / durability / trust / policy / kind). Query params: `kind`
 **capability probe** for the graph-kinds surface: a 404 means the store
 predates it — treat that as "cannot tell", never as "no graphs".
 
+The optional `graph=<absolute-IRI>` selects one exact registered identity. It
+cannot be combined with `kind` or `lifecycle`. The response retains
+`{ "count": 0|1, "graphs": [...] }`, including `creation.timestamp` and
+`creation.actor` (null for a legacy/imported source without a declaration).
+Point mode never enumerates the registry or computes `materialization`.
+Missing, interned-only and removed registry entries return count zero; malformed
+selectors, storage failures and ambiguous registered source identities are errors.
+No missing IRI is interned by this read.
+
+For attached/frozen graphs, creation metadata comes from the selected source,
+not mutable local events. A frozen pack's timestamp describes that pack's
+registry identity, not an invented original creation time; existing pack formats
+may have no creator declaration. Each source needs creator index v1
+`events(type, subject, offset)`. An older immutable source is refused explicitly,
+never migrated or scanned by this read. The CLI equivalent is
+`quipu graph list --graph <IRI> --json --db <existing-db>`; its metadata reader
+opens read-only without schema migration, registration or lexical initialization.
+It selects an active frozen source by the requested IRI with a bounded indexed
+lookup; an unrelated broken frozen pack does not block that point read.
+Existing list mode and its enrichment remain unchanged.
+
+Index migration v1 follows the store's ordered additive migration seam on a
+writable open; it is idempotent and changes no facts or events. Its private
+fixture build measurements do not establish production build cost or admission.
+Operational rollback requires the prior binary and dropping only
+`main.idx_events_type_subject_offset` and `main.idx_frozen_packs_graph_thawed`;
+no database rewind or event deletion. The latter bounds the lookup of a frozen
+graph's recorded active source alias. Retained local frozen IDs resolve through
+that alias; unrelated duplicate registered identities are errors.
+Do not drop the index while a point consumer depends on it. Live migration,
+resource admission and rollout remain separate operational decisions.
+
 A graph whose latest RML materialization is on record additionally serves a
 `materialization` object (quipu-212): the mapping IRI, mapping-closure hash,
 external-truth subject, **verified source hash**, transaction, and timestamp
@@ -1226,7 +1446,7 @@ Body: optional `limit` (nodes, ranked by degree; default 250, max 2000),
 
 ```json
 {
-  "nodes": [{"iri": "…", "label": "kota", "type": "…/ProxmoxNode", "deg": 8}],
+  "nodes": [{"iri": "…", "label": "kotare", "type": "…/ProxmoxNode", "deg": 8}],
   "edges": [[0, 10, "managed_by"]],
   "types": [{"iri": "…", "label": "SystemdService", "count": 15}],
   "truncated": {"shown": 250, "of": 1180},
@@ -1528,6 +1748,21 @@ adds `status`, `duration_ms`, and the actual `auth_outcome`; `/query` responses
 also add `query_shape` and `result_size`. Logs contain normalized attribution
 and bounded metadata, never the Authorization header or response body. Slow or
 failed query text retains its existing separate diagnostic line.
+
+Requests may declare a finite command source with `X-Quipu-Source` and an
+underlying SDK operation with `X-Quipu-Operation`. Start and terminal logs retain
+these separately as `declared_source` and `declared_operation`; missing,
+unsupported, or duplicate values are `null` (UNKNOWN). Supported command sources
+use `st-` or `sd-` plus `anchor`, `plate`, `inbox`, `stop_policy`, `stop_event`,
+`haul`, `tend`, `work`, `other`, `show`, `list`, `ready`, `where`, `search`,
+`count`, `info`, `stats`, `create`, `update`, `close`, or `comments`.
+The component sources `seeds` and `shantytown` remain distinguishable from
+command attribution. Operations are `query`, `health`, `graphs`, `show`, `list`, `ready`, `where`,
+`search`, `count`, `info`, `stats`, `tend`, `ready-count`, `create`, `update`,
+`close`, or `comments`. These declarations contain no arguments, paths, message
+text, or credentials. They do not authenticate a caller or add metric labels.
+An attributed census additionally requires a reader that retains these fields
+and proves log coverage; an endpoint alone does not identify a command.
 
 Dropping a polled request future also emits one `request_complete` with
 `completion_outcome: "cancelled"`, synthetic `status: 499` and elapsed time.

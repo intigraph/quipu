@@ -2,7 +2,6 @@
 
 use rusqlite::params;
 
-use crate::embedding;
 use crate::error::Result;
 use crate::types::{Fact, Op, Value};
 
@@ -10,9 +9,12 @@ use super::{Datum, Store};
 
 pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome};
 
+#[path = "ops_post_commit.rs"]
+mod post_commit;
+
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
-struct Staged {
+pub(super) struct Staged {
     tx_id: i64,
     /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
     /// from values staging computes anyway: no extra store read.
@@ -88,28 +90,8 @@ impl Store {
         self.transact_to_graph(datums, timestamp, actor, source, 0)
     }
 
-    /// Write a batch to a specific named graph. g=0 is ROOT. Idempotency and
-    /// retraction are SCOPED to `graph`: writing to an overlay never skips a
-    /// triple because ROOT has it, and never closes a ROOT fact's `valid_to`. The
-    /// same (e,a,v) coexists across graphs, and an overlay's retract closes only
-    /// its OWN assertions — the base stays un-mutated (Stiwi's #36 requirement,
-    /// enforced in SQL, not convention). Cross-graph SHADOWING (an overlay
-    /// hiding a ROOT fact in the composed view) is a read-time resolution over
-    /// the ordered dataset stack, handled by the query path — not a base write.
-    pub fn transact_to_graph(
-        &mut self,
-        datums: &[Datum],
-        timestamp: &str,
-        actor: Option<&str>,
-        source: Option<&str>,
-        graph: i64,
-    ) -> Result<i64> {
-        self.transact_to_graph_scoped(datums, timestamp, actor, source, graph, None)
-    }
-
-    /// Source cleanup must preserve assertions belonging to other producers.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn transact_to_graph_scoped(
+    pub(crate) fn transact_to_graph_scoped_checked(
         &mut self,
         datums: &[Datum],
         timestamp: &str,
@@ -117,25 +99,12 @@ impl Store {
         source: Option<&str>,
         graph: i64,
         retract_source: Option<&str>,
+        expected: &[super::conditional::ExpectedValue],
     ) -> Result<i64> {
-        // Manual savepoint commands (not the RAII `Savepoint`) so `&self` stays
-        // usable for the write-time policy guard AFTER the datums are staged but
-        // BEFORE commit — the `&Store`-based SPARQL evaluator cannot run while a
-        // `Savepoint` holds a mutable borrow of the connection. Nests inside
-        // speculate()'s outer savepoint exactly as the RAII form did.
-        // Attachment first, ahead even of authority: a write to an attached
-        // graph is not a permission question, it is a category error — that
-        // graph's facts live in a file this store does not own (quipu #75).
-        // The inferred suffix is RESERVED (quipu-0b6): a companion graph holds
-        // engine-derived entailments only, so an external write there could
-        // forge reachability the reasoner never derived. Refused by SOURCE,
-        // not by caller: only reasoner/materializer output, the plane's own
-        // bookkeeping, and the one-time migration pass.
+        // Normal graph/authority gates precede the savepoint. Conditional
+        // callers share this exact pipeline and its post-rollback evidence.
         self.assert_write_target_allowed(graph, source)?;
-        // Authority first, before anything is staged: a write the chain may not
-        // make should not reach the policy gate, the placement check, or the
-        // fact table. SARC I5. This gate runs BEFORE the savepoint opens, so
-        // its refusal is recorded directly — there is no rollback to outlive.
+        // Authority precedes the savepoint: its refusal survives rollback.
         if let Err(e) = self.enforce_graph_authority(graph) {
             let refusal = super::events::PendingRefusal {
                 gate: "authority",
@@ -151,18 +120,19 @@ impl Store {
             );
             return Err(e);
         }
-        // SUSPEND read-model consultation for the duration of this write rather
-        // than dropping the model. The write-time policy guard runs INSIDE the
-        // savepoint and queries the pending post-state, so it must see staged
-        // rows — the model holds the pre-write state and would answer without
-        // them, denying a write it had just satisfied
-        // (deny_blocks_noncompliant_write). Suspending rather than dropping is
-        // what lets the commit below MAINTAIN the model instead of forcing a
-        // rebuild, and it means a rolled-back write cannot poison it either:
-        // the model never observed the staged rows at all.
+        // Suspended models cannot answer policy checks from stale pre-state.
         self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
-        match self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source) {
+        let staged = self
+            .check_expected(graph, expected, datums)
+            .and_then(|()| {
+                self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source)
+            })
+            .and_then(|staged| {
+                crate::promotion_control::claim_commit(source)?;
+                Ok(staged)
+            });
+        match staged {
             Ok(mut staged) => {
                 let tx_id = staged.tx_id;
                 let counts = staged.counts;
@@ -212,16 +182,15 @@ impl Store {
                 let _ = self
                     .conn
                     .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
-                // Nothing to invalidate: the model was suspended for the whole
-                // write, so it never observed the rows this rollback discarded.
-                // That is the structural version of the fix — the earlier one
-                // dropped the model here to undo poisoning that could no longer
-                // happen.
+                // The suspended model never observed rolled-back rows.
                 self.set_write_in_progress(false);
                 // Take the staged refusal BEFORE flushing verdicts: the flush
                 // runs a nested transact whose own error path would otherwise
                 // consume it under the verdict-writer's actor/source.
                 let refusal = self.pending_refusal.take();
+                // Aborted validation advisories must not ride the audit writer
+                // below (or an unrelated later write).
+                self.clear_pending_write_events();
                 // AFTER the rollback, deliberately. The verdict of a denial is
                 // the one worth keeping — an accepted write leaves its own
                 // evidence in the facts it wrote, a refused one leaves nothing.
@@ -245,7 +214,7 @@ impl Store {
     /// success; any `Err` (including a policy denial) leaves the savepoint open
     /// for the caller to roll back.
     #[allow(clippy::too_many_arguments)]
-    fn stage_and_guard(
+    pub(super) fn stage_and_guard(
         &mut self,
         datums: &[Datum],
         timestamp: &str,
@@ -277,6 +246,8 @@ impl Store {
         };
         #[cfg(not(feature = "owl"))]
         let staged_datums = datums.to_vec();
+        crate::memory_files::write_scope::check(self, graph, &staged_datums)
+            .map_err(|e| self.stash_refusal("memory-files", e, staged_datums.len()))?;
         // Whether anything beyond the caller's datums entered this write.
         let inferred = staged_datums.len() != datums.len();
 
@@ -400,81 +371,6 @@ impl Store {
         })
     }
 
-    /// Post-commit side effects: auto-embedding and reactive observers. Runs
-    /// after the savepoint is released (the write is durable relative to the
-    /// parent), preserving the previous ordering.
-    fn after_commit_hooks(
-        &mut self,
-        datums: &[Datum],
-        staged: Staged,
-        timestamp: &str,
-        source: Option<&str>,
-        _graph: i64,
-    ) -> Result<()> {
-        // Post-transact hook: auto-embed touched entities.
-        // Skipped when a vector search delegate is set — embeddings belong in
-        // the external index layer (e.g. Bobbin's LanceDB).
-        if self.embedding_config.auto_embed
-            && self.vector_delegate.is_none()
-            && let Some(provider) = &self.embedding_provider
-        {
-            let entity_ids = embedding::touched_entity_ids(datums);
-            if self.defer_auto_embed {
-                // Deferred path: do only the cheap parts here —
-                // close retired embeddings and build texts — and queue the
-                // multi-second ONNX embed for the caller to run OUTSIDE the
-                // store lock. An episode write's lock hold-time drops from
-                // ~seconds (embed under lock) to the transact itself.
-                let work = embedding::collect_embed_work(self, &entity_ids, timestamp, datums)?;
-                if !work.is_empty() {
-                    match &mut self.pending_embed {
-                        Some(pending) => pending.merge(work),
-                        None => self.pending_embed = Some(work),
-                    }
-                }
-            } else {
-                embedding::auto_embed_entities(
-                    self,
-                    provider,
-                    &entity_ids,
-                    timestamp,
-                    self.embedding_config.embed_batch_size,
-                    datums,
-                )?;
-            }
-        }
-
-        // Notify registered observers. Observers may call store.transact()
-        // directly for per-rule provenance. Cloning the Arc vec first
-        // avoids a borrow conflict with &mut self.
-        #[cfg(feature = "reactive-reasoner")]
-        {
-            use super::Delta;
-
-            if !self.observers.is_empty() {
-                let delta = Delta {
-                    graph: _graph,
-                    tx: staged.tx_id,
-                    asserts: staged.asserts,
-                    retracts: staged.retracts,
-                    source: source.map(String::from),
-                };
-
-                let observers: Vec<_> = self.observers.clone();
-                for obs in &observers {
-                    obs.after_commit(self, &delta)?;
-                }
-            }
-        }
-
-        // `staged` (its tx id / written indices) and `source` are only consumed
-        // by the reactive-reasoner observer dispatch above.
-        #[cfg(not(feature = "reactive-reasoner"))]
-        let _ = (staged, source);
-
-        Ok(())
-    }
-
     /// Execute `f` against a speculative fork of the store with `hypothetical`
     /// datums applied. The fork is discarded after `f` returns — the underlying
     /// store is never mutated. Useful for counterfactual impact analysis
@@ -581,7 +477,7 @@ impl Store {
     /// **Shared-IRI safety.** Idempotent assertion (see `transact`) means each
     /// active `(e, a, v)` belongs to exactly one owning transaction. Retracting
     /// episode X therefore closes only the facts X's transaction actually wrote;
-    /// facts about shared entities (e.g. `quipu-server`, `kota`) asserted by
+    /// facts about shared entities (e.g. `quipu-server`, `kotare`) asserted by
     /// other episodes or write paths stay active. Re-ingests of the same episode
     /// produce multiple transactions that all share the source tag, so every one
     /// of the episode's currently-active contributions is caught.
@@ -853,7 +749,7 @@ impl Store {
 /// Measured on the live graph (aegis-a0ne), counting only what `entity_facts`
 /// actually returns (`op = 1 AND valid_to IS NULL`): 86 duplicate groups over
 /// 29 of 972 entities (3.0%), worst single group 132 rows. The affected set is
-/// the graph's most-referenced nodes — graphiti (+273 redundant rows), kota
+/// the graph's most-referenced nodes — graphiti (+273 redundant rows), kotare
 /// (+123), bobbin, traefik, dolt — i.e. retraction failed precisely on the
 /// entities most likely to need correcting. `luvu` carried 29 rows of one
 /// `rdf:type` value, 2 of another, and 32 `rdfs:label` rows.

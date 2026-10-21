@@ -36,6 +36,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: shape-propagation
+        name: shape propagation warning and counterexamples
+        entry: python scripts/shape-propagation-ci.py
+        language: python
+        additional_dependencies: [rdflib==7.6.0]
+        always_run: true
+        verbose: true
+        pass_filenames: false
       - id: replay-client-credentials
         name: replay client credential contract
         entry: python3 scripts/test_replay_credentials.py

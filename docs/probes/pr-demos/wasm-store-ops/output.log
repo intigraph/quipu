@@ -1,0 +1,20 @@
+Script started on 2026-10-19 13:33:13-04:00 [COMMAND="bash docs/probes/pr-demos/wasm-store-ops/run.sh" <not executed on terminal>]
+$ node demo.mjs "$BASE_BUNDLE" --expect-missing
+Engine: {"compiled_features":{"owl":true,"reactive_reasoner":true,"shacl":true},"git_sha":"0f6f5995e435bf562e8e89f5f9c933c8a56453ac","version":"0.14.1"}
+Positive control: native pack loaded; Widget rows = 2
+shapes: unavailable on the compiled base API
+knot: unavailable on the compiled base API
+entityHistory: unavailable on the compiled base API
+BASE CONTROL COMPLETE
+
+$ node demo.mjs "$CANDIDATE_BUNDLE"
+Engine: {"compiled_features":{"owl":true,"reactive_reasoner":true,"shacl":true},"git_sha":"9a641201dfd51dc5006e23aaf50635ace19774b9","version":"0.14.1"}
+Positive control: native pack loaded; Widget rows = 2
+shapes(load): {"action":"loaded","name":"demo"}
+knot(valid): {"conforms":true,"count":2,"replaced":false,"snapshot":null,"tx_id":3,"valid_from":"2026-10-19T17:33:14Z"}
+knot(missing title): {"conforms":false,"hint":"propose a schema change via quipu_propose_schema_change","issues":[{"component":"http://www.w3.org/ns/shacl#MinCountConstraintComponent","focus_node":"urn:demo:bad","message":"MinCount(1) not satisfied","path":"urn:demo:title","severity":"Violation","source_shape":"_:c174e9aef40ea64d60193fe6bf517e38","value":null}],"violations":1,"warnings":0}
+Rejected write: visible facts = 0; edit log unchanged
+entityHistory: {"count":4,"history":[{"op":"assert","predicate":"http://www.w3.org/1999/02/22-rdf-syntax-ns#type","tx":3,"valid_from":"2026-10-19T17:33:14Z","valid_to":null,"value":"urn:demo:Record"},{"op":"assert","predicate":"urn:demo:title","tx":3,"valid_from":"2026-10-19T17:33:14Z","valid_to":"2026-10-19T17:33:14Z","value":"Before"},{"op":"assert","predicate":"urn:demo:title","tx":4,"valid_from":"2026-10-19T17:33:14Z","valid_to":null,"value":"After"},{"op":"retract","predicate":"urn:demo:title","tx":4,"valid_from":"2026-10-19T17:33:14Z","valid_to":null,"value":"Before"}],"iri":"urn:demo:good"}
+CANDIDATE DEMONSTRATION COMPLETE
+
+Script done on 2026-10-19 13:33:14-04:00 [COMMAND_EXIT_CODE="0"]

@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **76 tools** in a default build, or
-**78** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **77 tools** in a default build, or
+**79** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -77,6 +77,23 @@ Execute a SPARQL SELECT query.
 
 Query results use prefixes declared by the loaded shape sets for compact CURIE
 values by default. IRIs in unknown namespaces remain full IRIs.
+
+### `quipu_rule_query`
+
+Read one grounded claim using independent positive and explicit-negative evidence.
+The result preserves supported, refuted, both and neither, with a separate admitted
+judgment disposition. Failed, capped or incomplete reads return UNKNOWN; answers
+never grant action authority. See [rule answers](../concepts/rule-answers.md) for
+strict request fields, evidence scope and retained judgment requirements.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `subject` | Yes | Absolute subject IRI |
+| `positive_predicate` | Yes | Absolute predicate for explicit positive support |
+| `negative_predicate` | Yes | Distinct absolute predicate for explicit negative support |
+| `object` | Yes | One strict IRI or plain-string value object |
+| `judgment_policy` | Yes | Expected admitted judgment policy |
+| `witness_limit` | No | Evidence row bound per side, 1–256 (default 64) |
 
 ### `quipu_export`
 
@@ -862,6 +879,7 @@ consumer must treat as "cannot tell" — never as "no graphs".
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
+| `graph` | No | Exact registered absolute IRI; excludes kind/lifecycle; no materialization enrichment. Same count/graphs envelope, absent count zero, failures are errors. Attached source must support creator index v1. |
 | `kind` | No | Only graphs declaring this `dataKind` token (e.g. `operational`, `archive`) |
 | `lifecycle` | No | Only graphs in this storage lifecycle state (`frozen`) |
 
@@ -1016,13 +1034,13 @@ workflow tools reject unknown or wrong-typed top-level fields; pass an exact
 
 Produce a bounded portable share payload, including canonical manifest and member bytes. Read-only; no server-local output path. Pass the exact scope. Internal-only export exemptions are not accepted over this transport.
 
-Fields: `scope` (required), `shapes`, `no_shapes`, `queries`, `parent_share`, `turtle_view`, `max_bytes`.
+Fields: `scope` (required), `shapes`, `no_shapes`, `queries`, `alignments_turtle`, `parent_share`, `turtle_view`, `max_bytes`.
 
 ### `quipu_import`
 
 Stage a portable share with hash, vocabulary and attestation gates. Copy member contents from quipu_share; this is not a server file path. Exact-name merges default off; review before promotion.
 
-Fields: `manifest` (required), `export_ntriples` (required), `shapes_turtle` (required), `queries_turtle`, `query_namespace`, `replace_queries`, `source` (required), `actor`, `accept_exact`, `attestation`.
+Fields: `manifest` (required), `export_ntriples` (required), `shapes_turtle` (required), `queries_turtle`, `alignments_turtle`, `query_namespace`, `replace_queries`, `source` (required), `actor`, `accept_exact`, `attestation`.
 
 ### `quipu_import_promote`
 
@@ -1154,8 +1172,9 @@ To move a portable share, call `quipu_share` with
 `{"scope":{"kind":"graph","value":"urn:example:graph"}}`. Its result includes
 `manifest` and `files`. Pass that manifest, `files["export.nt"]` as
 `export_ntriples`, `files["shapes.ttl"]` as `shapes_turtle`, and a provenance
-`source` to `quipu_import` on the destination. Include `queries_turtle` when
-present. Review quarantine/resolution output before `quipu_import_promote`.
+`source` to `quipu_import` on the destination. Include `queries_turtle` and
+`files["alignments.ttl"]` as `alignments_turtle` when present; alignments are
+sealed evidence, never applied mappings. Review quarantine/resolution output before `quipu_import_promote`.
 An import result or `pending` upload result is not promotion acceptance.
 
 For `quipu_update`, provide a SPARQL `update` string, with explicit `GRAPH`

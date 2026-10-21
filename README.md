@@ -36,6 +36,10 @@ a refused write, corrected provenance, and a valid-time read.
 
 Quipu answers standard SPARQL 1.1 as a CLI, REST server and Rust library, with its own MCP server (`quipu mcp` or `quipu-server` over HTTP).
 
+[Domain shapes in practice](docs/book/src/concepts/domain-shapes.md) describes
+producer-owned Camayoc profiles, the Seeds work profile and the staged
+load-before-remove transition from bundled domain examples.
+
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
 
 ## Why you would want it
@@ -52,7 +56,83 @@ A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record
 The long form (sharing between stores, the feature list, the architecture and
 a comparison): [Why Quipu](docs/book/src/why-quipu.md).
 
+## Run it anywhere
+
+<p align="center">
+  <img src="assets/run-anywhere.svg" width="900" alt="Quipu runs anywhere: one store, six ways in. Claude Code and any MCP client through quipu mcp; the quipu command line; quipu-server over HTTP with REST, MCP and a web UI; the quipu-ai Rust library embedded in your app; offline as a single SQLite file; and in the browser through WebAssembly with no server."/>
+</p>
+
+One store file, one engine. The same rules, provenance and history hold however you reach it.
+
+| Where | How |
+|---|---|
+| Claude Code and other MCP clients | `claude mcp add quipu -- /absolute/path/to/quipu mcp --db store.db` ([wire it into your agent](#wire-it-into-your-agent)) |
+| Command line | `quipu knot`, `quipu read`, `quipu share`, `quipu merge` ([CLI reference](docs/book/src/reference/cli.md)) |
+| HTTP | `quipu-server`: REST, MCP at `/mcp`, and a web UI ([REST API](docs/book/src/reference/rest-api.md)) |
+| Inside your app | the `quipu-ai` Rust crate ([library tour](docs/book/src/why-quipu.md#as-a-rust-library)) |
+| Offline | a single SQLite file: no server, inspect with `sqlite3`, back up consistently with `sqlite3 store.db ".backup backup.db"` (including active WAL data) |
+| In the browser | WebAssembly, queries stay in the tab: [explore this repository's graph](https://scbrown.github.io/quipu/explore/) |
+
+## Share knowledge between stores
+
+<p align="center">
+  <img src="assets/sharing-flow.svg" width="900" alt="Sharing between Quipu stores: quipu share writes a git-diffable bundle of export.nt, shapes.ttl and manifest.json with stable hashes; quipu import verifies hashes and checks shapes into quarantine; quipu import promote is an explicit step into the main graph; copies with a retained common base merge three ways by the shapes, and a conflict exits 2 instead of guessing."/>
+</p>
+
+```bash
+quipu share --output ./share                   # a git-native bundle: facts + shapes + lineage
+quipu import ./their-share                     # verifies hashes, lands in QUARANTINE, not ROOT
+quipu import promote <share-id>                # a named operator's explicit act
+```
+
+To reconnect diverged copies, produce the incoming share with
+`--parent-share <base-share-id>` naming their common base. Keep exactly one copy
+of that base beneath the incoming share's parent directory; `quipu status` and
+`quipu merge` refuse missing or ambiguous lineage. An initial share without a
+parent is for import, not three-way merge. The
+[end-to-end sharing recipe](examples/sharing-demo/run.sh) creates the base,
+diverges two stores, and produces a parent-bound child before reconnecting them
+([command reference](docs/book/src/reference/cli.md#quipu-status-and-quipu-merge)).
+
+A share is plain files with stable hashes, so it diffs cleanly in git. The producer
+refuses to publish identifiers your rules mark as internal, and nothing reaches
+your main graph until someone promotes it. More: [Sharing & Federation](https://scbrown.github.io/quipu/sharing/).
+
 ## Install
+
+**Debian and Ubuntu (amd64 and arm64):** install from the signed apt repository, which
+republishes each checksum-verified release. The package puts `quipu` and `quipu-server` in
+`/usr/bin`. Check the signing key's fingerprint before trusting it; the
+commands stop if it does not match:
+
+```bash
+(
+  set -euo pipefail
+  key_file=$(mktemp)
+  trap 'rm -f "$key_file"' EXIT
+  curl -fsSL https://scbrown.github.io/apt/key.gpg -o "$key_file"
+  fingerprints=$(gpg --batch --show-keys --with-colons "$key_file" \
+    | awk -F: '$1 == "pub" { primary=1; next } primary && $1 == "fpr" { print $10; primary=0 }')
+  if [ "$fingerprints" != 'AB5625C5612F643BF76464DF0DC99924994EC959' ]; then
+    printf 'Signing key fingerprint mismatch; stopping.\n' >&2
+    exit 1
+  fi
+  sudo install -D -m 0644 "$key_file" /etc/apt/keyrings/scbrown-stack.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main" \
+    | sudo tee /etc/apt/sources.list.d/scbrown-stack.list
+  sudo apt update
+  sudo apt install quipu
+)
+```
+
+Run `apt update` and `apt upgrade` to pick up new releases manually. On Ubuntu,
+`unattended-upgrades` does not include third-party repositories by default.
+Automatic updates for this repository require explicitly configuring its origin
+in a drop-in, following the
+[official Ubuntu instructions](https://documentation.ubuntu.com/security/security-updates/#automatic-security-updates).
+The commands above do not enable unattended updates.
+Channels, pinning and rollback:
+[scbrown/apt](https://github.com/scbrown/apt#channels-and-pinning).
 
 Linux (x86_64, arm64) and macOS (Apple Silicon, Intel): download the
 checksummed release.
@@ -168,13 +248,19 @@ single transaction, and one fork rollback undoes it. Walkthrough:
 Every command and flag: [CLI reference](docs/book/src/reference/cli.md). The HTTP
 endpoints: [REST API](docs/book/src/reference/rest-api.md).
 
+New stores search all registered graphs minus configured `search.exclude_graphs`.
+Existing stores retain ROOT until `search.default_graph_scope = "all"` is set;
+SPARQL keeps its explicit dataset rules and ROOT default. Search responses report
+graph coverage. Existing named-only semantic vectors need bounded preparation
+before enabling them. See [named graphs, search, and promotion](docs/book/src/concepts/named-graphs.md#search-has-a-broader-default-than-sparql).
+
 ## Wire it into your agent
 
 Agents can connect directly: `quipu-server` serves streamable HTTP at `/mcp`, and
 `quipu mcp --db store.db` provides stdio using the companion server binary.
 Build both with `cargo build --release --features full`. Protected stdio writes use
 `--mcp-token-file /path/to/private-token`; HTTP writes use the existing bearer policy.
-Quipu defines 76 MCP tools (78 with `owl`), from one shared schema manifest.
+Quipu defines 77 MCP tools (79 with `owl`), from one shared schema manifest.
 Bobbin's `knowledge_*` tools and existing REST-backed proxies remain compatible.
 See the [connection and authentication guide](docs/book/src/reference/mcp-tools.md#connect-directly).
 

@@ -44,12 +44,29 @@ narrowing does not speed it up (ratio ~0.6), so it has ceilings and no ratio. It
 is here because the first cut of `aegis-tl2q4j` took this shape from 0.58 s to a
 30 s timeout.
 
+## Brief panel classes
+
+`B1_brief_priorities`, `B2_brief_asks_nested` and `B3_brief_asks_flat` are the
+work-board panel queries from `aegis-xacr`, in their natural shapes: a star
+selection in one named graph, hydrated through plain-BGP `OPTIONAL`s, and for
+`B2` a `LIMIT 21` subselect joined back to seven hydration `OPTIONAL`s. Before
+the per-row OPTIONAL probe, each `OPTIONAL { ?item p ?o }` scanned predicate `p`
+across the whole board to pair with a few left rows.
+
+Their defeated form wraps every OPTIONAL body in a subselect,
+`OPTIONAL { SELECT * WHERE { ... } }`. The answer is unchanged, and the probe
+declines a right side that is not a plain BGP, so it is evaluated bottom-up.
+`OPTIONAL { { ... FILTER(true) } }` is not a defeat: the filter becomes the
+LeftJoin expression, the right side stays a plain BGP, and the probe engages. The ratio is therefore the probe's speedup, measured in-run like the
+string classes.
+
 ## Fixture
 
 `generate` writes a deterministic store shaped like production: 150,000
 entities, 2.1M triples, 120 types with a long tail, 200 predicates, labels and
 comments, IRI and literal objects, about 70% of entities in the default graph,
-and 26 named graphs. Rare needles appear at fixed rates, so each class matches a
+and 26 named graphs, plus a 40,000-item work board (`urn:perf:graph:board`) with
+the production board's status, priority and keyword mix. Rare needles appear at fixed rates, so each class matches a
 small, stable number of rows, which is where narrowing pays. At toy scale a full
 scan is fast and the gate would prove nothing. All IRIs are under
 `http://example.org/perf/`, and the self-test asserts that no internal hostname

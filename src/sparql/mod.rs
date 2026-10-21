@@ -47,15 +47,22 @@ mod triple_alias;
 mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
+#[cfg(test)]
+mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
 pub(crate) mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
+mod graph_filter;
+#[cfg(test)]
+mod graph_filter_tests;
 mod graph_membership;
 mod group;
 mod join;
+#[cfg(test)]
+mod left_bind_join_tests;
 mod limited_scan;
 mod progress;
 mod sql_in;
@@ -213,6 +220,10 @@ pub struct TemporalContext {
     /// `GRAPH` clause may range over every named graph; `Some(set)` limits which
     /// named graphs a `GRAPH ?g` / `GRAPH <iri>` can see.
     pub named_dataset: Option<Vec<i64>>,
+    /// Optimizer-only candidates for a direct GRAPH-variable/plain-BGP scan.
+    /// This narrows work without changing whether FROM NAMED was explicit.
+    /// It is intersected with the dataset and cleared before evaluating the BGP.
+    pub graph_candidates: Option<std::sync::Arc<Vec<i64>>>,
     /// Abort evaluation once this instant passes (None = derive from the
     /// store's `query_timeout_ms`; see [`query_temporal`]). Checked between
     /// operators in the pattern evaluator, INSIDE the pure-Rust join/merge
@@ -233,6 +244,10 @@ pub struct TemporalContext {
     /// scanning once it has enough rows instead of completing the scan and
     /// discarding. `None` = no cap (every pre-existing path).
     pub row_limit: Option<usize>,
+    /// Internal explicit ORDER BY/LIMIT demand, installed only through a
+    /// Project-to-OrderBy chain. Consumed before evaluating the ordered input;
+    /// never an input scan cap or an ambient limit on nested sorts.
+    pub order_limit: Option<usize>,
     /// Service-level result ceiling eligible for pushdown through a wholly
     /// prefix-safe SELECT plan. Unlike `row_limit`, this is not an explicit
     /// SPARQL LIMIT: unsafe operators (FILTER, aggregate, DISTINCT, ORDER BY,

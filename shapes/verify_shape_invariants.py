@@ -141,6 +141,15 @@ AEGIS_NS = "http://aegis.gastown.local/ontology/"
 # above is what that produces: shapes requiring predicates nothing emitted, and
 # ingestion for 11 classes one validate_on_write flag away from dying.
 REQUIRED_PREDICATE_PROVEN = {
+    # Schema-first DailyBriefRow: complete record and each missing-field
+    # negative are exercised in tests/daily_brief_shapes.rs (aegis-hqz).
+    **{
+        ("aegis:DailyBriefRowShape", f"aegis:{predicate}"):
+            "schema-first zero-instance contract + producer/negative fixtures 2026-10-17"
+        for predicate in ("reference", "briefArtifact", "briefCollection",
+                          "briefDocumentId", "briefPayloadJson", "briefRevision",
+                          "briefCurator", "briefSourceVersion")
+    },
     # Zero asserted Reaction/ReactionFiring instances, measured 2026-09-26.
     # Schema-first contract: tests/reaction_shapes.rs covers complete producer
     # records and each missing required field; no existing class is relaxed.

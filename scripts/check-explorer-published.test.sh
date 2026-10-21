@@ -5,7 +5,7 @@ CHECK="$ROOT/scripts/check-explorer-published.sh"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/src/pkg" "$T/out/pkg"
-for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css constellation.js constellation.css entity.js; do echo source > "$T/out/$f"; done
+for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js constellation.js constellation.css entity.js relation.js; do echo source > "$T/out/$f"; done
 for f in quipu_wasm_explorer.js quipu_wasm_explorer_bg.wasm; do
   echo wasm > "$T/src/pkg/$f"; cp "$T/src/pkg/$f" "$T/out/pkg/$f"
 done
@@ -40,4 +40,11 @@ echo source > "$T/out/constellation.js"
 rm "$T/out/engine-api.js"
 expect_fail "$CHECK" "$T/src" "$T/out"
 grep -q 'missing from book output: explore/engine-api.js' "$T/error"
-echo '8 explorer publication scenarios passed'
+echo source > "$T/out/engine-api.js"
+for f in presentation.js presentation.css map-cache.js pack-loader.js relation.js; do
+  rm "$T/out/$f"
+  expect_fail "$CHECK" "$T/src" "$T/out"
+  grep -q "missing from book output: explore/$f" "$T/error"
+  echo source > "$T/out/$f"
+done
+echo '13 explorer publication scenarios passed'

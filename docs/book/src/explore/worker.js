@@ -22,6 +22,15 @@ const need = () => {
   return explorer;
 };
 
+// Native i64 values and transaction IDs can exceed Number's exact range.
+// Recover those integer tokens before posting the structured-cloneable BigInt.
+// Older JSON parsers must refuse rather than silently return a rounded value.
+const parseEntityHistory = (text) => JSON.parse(text, (_key, value, context) => {
+  if (typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value)) return value;
+  if (typeof context?.source !== "string") throw new Error("Lossless entity history requires JSON parse source support");
+  return /^-?\d+$/.test(context.source) ? BigInt(context.source) : value;
+});
+
 onmessage = async (e) => {
   const { id, cmd, bytes, source, sparql, entity, predicate, value, episode } = e.data;
   try {
@@ -73,6 +82,9 @@ onmessage = async (e) => {
         const result = await new BrowserFederatedProvider(need(), remotes, e.data.floor ?? {}).query(sparql);
         return postMessage({ id, ok: true, result });
       }
+      case "factHistory":
+        if (typeof need().factHistory !== "function") throw new Error("This browser engine does not expose fact history; use a newer bundle. No history was inferred.");
+        return postMessage({ id, ok: true, result: JSON.parse(need().factHistory(entity)) });
       case "query":
         return postMessage({ id, ok: true, result: JSON.parse(need().query(sparql)) });
       case "stats":
@@ -87,6 +99,12 @@ onmessage = async (e) => {
         });
       case "episode":
         return postMessage({ id, ok: true, result: JSON.parse(need().episode(episode)) });
+      case "knot":
+        return postMessage({ id, ok: true, result: JSON.parse(need().knot(e.data.input)) });
+      case "shapes":
+        return postMessage({ id, ok: true, result: JSON.parse(need().shapes(e.data.input)) });
+      case "entityHistory":
+        return postMessage({ id, ok: true, result: parseEntityHistory(need().entityHistory(e.data.iri)) });
       case "editLog":
         return postMessage({ id, ok: true, result: JSON.parse(need().editLog()) });
 

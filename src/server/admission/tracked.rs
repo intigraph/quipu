@@ -22,17 +22,21 @@ where
     };
     let work = registry.start(lane, quipu::metrics::inflight::Phase::Waiting);
     let acquire = admission.acquire();
-    let acquired = if kind == "point-read" {
+    let acquired = if matches!(kind, "point-read" | "episode-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
             tokio::time::timeout(std::time::Duration::from_millis(remaining), acquire)
                 .await
                 .map_err(|_| {
-                    AppError::from(quipu::Error::RequestTimeout {
-                        elapsed_ms: started.elapsed().as_millis(),
-                        limit_ms,
-                    })
+                    if kind == "episode-read" {
+                        AppError::from(deadline.request_timeout())
+                    } else {
+                        AppError::from(quipu::Error::RequestTimeout {
+                            elapsed_ms: started.elapsed().as_millis(),
+                            limit_ms,
+                        })
+                    }
                 })?
         } else {
             acquire.await

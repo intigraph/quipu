@@ -6,6 +6,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[path = "request_completion.rs"]
 mod request_completion;
 
+#[path = "request_command.rs"]
+mod request_command;
+
 static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
 
 tokio::task_local! {
@@ -179,6 +182,7 @@ async fn log_request_tracked_stores(
         .get("x-quipu-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let command_context = request_command::CommandContext::from_headers(req.headers());
     let peer = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
@@ -197,7 +201,7 @@ async fn log_request_tracked_stores(
     };
     eprintln!(
         "{}",
-        super::query_usage::with_process_id(attributed(
+        super::query_usage::with_process_id(command_context.annotate(attributed(
             quipu::request_usage::structured_request_log(
                 "request_start",
                 id,
@@ -211,7 +215,7 @@ async fn log_request_tracked_stores(
                 quipu::request_usage::AuthOutcome::Pending,
                 None,
             )
-        ))
+        )))
     );
     let completion_provenance = provenance.clone();
     let mut completion = request_completion::Completion {
@@ -223,6 +227,7 @@ async fn log_request_tracked_stores(
         endpoint: endpoint.clone(),
         declared_host,
         declared_agent,
+        command_context,
         started: std::time::Instant::now(),
         metrics: quipu::metrics::metrics(),
         cancellations: request_completion::cancellations(),

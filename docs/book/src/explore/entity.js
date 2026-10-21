@@ -46,7 +46,7 @@ export async function readEntity(query, id) {
   };
 }
 
-export function renderEntity(card, id, entity, { short, navigate, inspect }) {
+export function renderEntity(card, id, entity, { short, navigate, inspect, relation }) {
   card.replaceChildren();
   const text = (parent, tag, value, className) => {
     const e = document.createElement(tag); e.textContent = value;
@@ -70,7 +70,7 @@ export function renderEntity(card, id, entity, { short, navigate, inspect }) {
   }
   if (entity.truncated) text(card, "p", "The engine truncated this result; related links may be incomplete.", "bad");
   const provenance = (p) => /www\.w3\.org\/ns\/prov#/.test(p)
-    || /[/#](source|sourceKind|observedAt|valid_from|valid_to|wasDerivedFrom|wasGeneratedBy|authored_by)$/.test(p);
+    || /[/#](source|sourceKind|observedAt|validFrom|validTo|valid_from|valid_to|txTime|transactionTime|wasDerivedFrom|wasGeneratedBy|authored_by)$/.test(p);
   for (const [title, className, include] of [
     ["Properties", "entity-properties", (p) => !provenance(p)],
     ["Provenance", "entity-provenance", provenance],
@@ -92,6 +92,11 @@ export function renderEntity(card, id, entity, { short, navigate, inspect }) {
     b.dataset.entity = r.value; b.dataset.predicate = r.predicate;
     b.dataset.direction = r.direction; b.title = `${r.predicate}\n${r.value}`;
     b.onclick = () => navigate(r.value);
+    if (relation) {
+      const details = text(links, "a", "Relation details"); details.href = "#node-card";
+      details.onclick = (event) => { event.preventDefault(); relation(r.direction === "outgoing"
+        ? {from:id,to:r.value,rel:r.predicate} : {from:r.value,to:id,rel:r.predicate}); };
+    }
   }
   if (!entity.links.length) text(links, "p", "No related entities recorded.", "muted");
   card.append(links);

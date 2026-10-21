@@ -4,12 +4,17 @@
 //! reads, searches, shape/subscription management, and writes.
 
 mod datasets;
+#[cfg(not(target_arch = "wasm32"))]
+mod deck;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod deck_tests;
 mod graphs;
 mod queries;
 mod read;
 pub(crate) mod search;
 mod search_anchor;
 mod search_anchor_mix;
+mod search_confidence;
 mod search_fusion;
 mod search_ranking;
 mod search_scoped;
@@ -21,6 +26,8 @@ mod structured_syntax;
 mod write;
 
 pub use datasets::tool_datasets;
+#[cfg(not(target_arch = "wasm32"))]
+pub use deck::{tool_deck_attest, tool_deck_present, tool_deck_receipt};
 pub use graphs::{tool_graph_create, tool_graph_freeze, tool_graph_list, tool_graph_thaw};
 pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};

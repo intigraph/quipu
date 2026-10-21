@@ -120,3 +120,7 @@ docs/paper-merge/*.fdb_latexmk
 
 # Beads / Dolt files (added by bd init)
 *.gate.lock*
+
+# Reproducible merge-load runs and generated Node WASM glue.
+benchmark/merge-load/out/
+wasm/explorer/pkg-node/

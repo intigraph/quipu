@@ -18,6 +18,55 @@ half of the same story. It is the transcript below, with you as the receiver.
 Follow the [contributor constellation walkthrough](../concepts/contributor-constellation.md)
 to explore the vision, a design decision, and the code it governs on a phone.
 
+## Embed the browser playground
+
+Use the same released engine and repository pack in an iframe:
+
+```html
+<iframe id="quipu-playground" title="Quipu playground"
+  src="https://scbrown.github.io/quipu/explore/?embed=1&amp;theme=intigraph"
+  style="width:100%;height:860px;border:0"></iframe>
+```
+
+`embed=1` opens Map first and hides navigation, the loading-ceremony hero,
+and the take-away cards. Ask, Map, the node inspector, and **Try a bad write**
+still use the real engine. Narrow screens place the map before starter questions.
+After one successful embedded load, the browser can show a **saved map preview**
+while the worker verifies a fresh copy. The cache is bounded and keyed to the
+exact pack bytes, engine revision and compiled features. It contains the map's
+real query rows from a pristine imported pack. The preview is labelled; Ask and
+writes stay disabled until verification finishes. A verification refusal hides
+and removes it. Pack or engine changes, unavailable storage and invalid cache
+entries take the normal cold-load path.
+
+The under-five-second warm target measures when that saved map appears. Full
+verification and interactive query readiness take longer; the page reports that
+transition explicitly. Loading still verifies and imports the complete pack on
+every visit.
+
+`theme=intigraph` selects Intigraph's palette, Inter and JetBrains Mono, with
+its light variant following the system color scheme. The normal page's Theme
+picker also offers Intigraph. System, Light and Dark remain available.
+The fonts load from Google Fonts only when Intigraph is selected; system fonts
+remain the fallback if that service is unavailable.
+
+Embedded pages send `{type: "quipu:resize", height: <pixels>}` to their parent
+when content height changes, including after tab selection. A host can resize
+the iframe after checking **both** the sender origin and frame identity:
+
+```javascript
+const frame = document.querySelector("#quipu-playground");
+window.addEventListener("message", (event) => {
+  if (event.origin !== "https://scbrown.github.io"
+      || event.source !== frame.contentWindow
+      || event.data?.type !== "quipu:resize") return;
+  const height = event.data.height;
+  if (Number.isInteger(height) && height > 0 && height < 20000) {
+    frame.style.height = `${height}px`;
+  }
+});
+```
+
 ## One run, end to end
 
 This transcript is not illustrative output. It is
@@ -392,6 +441,46 @@ The variable-endpoint case is a deliberate policy
 deviation because query data cannot widen the operator's remote allowlist.
 See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for the measured
 score and named verdicts.
+
+### Endpoint pointers and Caboodle consent
+
+A pendant can declare a `kind = "endpoint"` pointer without carrying that
+remote graph. Register the **local** declaring pendant and its repository remote
+in the operator's federation configuration:
+
+```toml
+[[quipu.federation.pendants]]
+path = "/path/to/repo/knowledge/declaration.pendant"
+repo_remote = "https://github.com/example/project.git"
+```
+
+On each `SERVICE <exact-endpoint-url>` use, Quipu verifies the pendant's share
+identity and invokes `caboodle packs trust check-endpoint <repo-remote> <url>`.
+That command requires Tambo/Caboodle with endpoint decision support. Missing,
+refused, invalid or timed-out policy checks fail before network access; the error
+names the endpoint and pointing repository. Consent is rechecked after policy
+changes, including revocation. A foreign archive allow alone does not admit its
+endpoint. Use Caboodle's `packs trust allow-endpoint` or owner policy to grant
+consent; Quipu keeps no second trust policy or persistent admission cache.
+
+An admitted pointer contributes a credential-free, unlabelled endpoint only to
+the current SPARQL `SERVICE` plan. Its `_provider` is the declared graph IRI.
+It does not import triples or shapes, promote to ROOT, forward local credentials,
+follow redirects, infer trust labels, or enable REST whole-query fanout. The
+URL must match exactly, including its trailing slash: consent does not extend
+to an appended `/query` URL. Existing explicit federation remotes retain their
+operator-defined credentials and labels.
+
+The server and MCP use their federation configuration. To opt into strict
+project/user configuration from the native CLI, use:
+
+```bash
+quipu query 'SELECT ?s WHERE { SERVICE <https://example.org/sparql> { ?s ?p ?o } }' --federation
+```
+
+Without the `remote` build feature, `SERVICE` remains unsupported. Local
+filesystem declarations and the native Caboodle policy process are not a browser
+API; browser pack resolution is a separate host interface.
 
 ## The whole stack speaks it
 
