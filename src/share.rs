@@ -281,7 +281,7 @@ pub struct ShareManifest {
     /// queries. Part of `share_id`: changing one query's text changes the id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries_hash: Option<String>,
-    /// Exact ancillary bytes, included in share_id; absent preserves legacy identity.
+    /// Exact ancillary bytes, included in `share_id`; absent preserves legacy identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments_hash: Option<String>,
     /// Export scope.

@@ -26,7 +26,7 @@ pub struct DeltaFiles {
     /// `result.queries_hash`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
-    /// Complete ancillary evidence for the result, sealed by result.alignments_hash.
+    /// Complete ancillary evidence for the result, sealed by `result.alignments_hash`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alignments: Option<String>,
 }
