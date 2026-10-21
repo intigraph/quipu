@@ -37,9 +37,9 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `613c07346c5aa0f3a03cacf14bc41609750384cd` |
-| Quipu revision (syntax) | `613c07346c5aa0f3a03cacf14bc41609750384cd` |
-| Quipu version | `quipu 0.14.1` |
+| Quipu revision (evaluation) | `8fb57af0472af4bb8038247ccb54f9a4b2afe689` |
+| Quipu revision (syntax) | `8fb57af0472af4bb8038247ccb54f9a4b2afe689` |
+| Quipu version | `quipu 0.15.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
 
@@ -73,7 +73,7 @@ shown separately, so a design choice is not presented as a wrong answer.
 
 | System | Version | Query evaluation | Of those failures, same value | Update |
 |---|---|---:|---:|---:|
-| quipu | `quipu 0.14.1` | 167/168 | — | 93/93 |
+| quipu | `quipu 0.15.0` | 167/168 | — | 93/93 |
 | RDF4J | `6.1.0` | 162/168 | 5 | 87/93 |
 | Oxigraph | `0.5.11` | 159/168 | 8 | 93/93 |
 | Jena Fuseki | `6.2.0` | 155/168 | 12 | 93/93 |
@@ -381,7 +381,7 @@ status, and diagnostic or unsupported reason.
 Quipu passes **98/98** manifest-reachable SHACL Core cases.
 SHACL-SPARQL remains a deliberate non-goal: **0/22** pass and 22 are unsupported.
 Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.
-This score uses the context-free native validator; write-gate transaction behavior is tested separately.
+This score uses the context-free native validator on whole graphs; the write path is measured below.
 
 Pinned W3C Data Shapes revision: `9c863967bceaef1a87c24e4dd761eda763823120`.
 The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
@@ -397,10 +397,48 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 | `core-validation-reports` | 1 | 0 | 0 | 0 | 1 |
 | `shacl-sparql` | 0 | 0 | 0 | 22 | 22 |
 
+### Write-path conformance
+
+The same 98 Core cases are also written through the real `/knot` handler, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **74/98** agree with the W3C verdict under every split; **23** diverge under at least one; **1** could not be judged under at least one split (the write gate answered *cannot verify* instead of a SHACL verdict).
+A divergence is a case whose final graph violates (or conforms) while the write gate accepted (or refused) every write. These are known defects, listed in the ledger with the splits that expose them; the CI gate fails on any new divergence and on any entry that no longer diverges, so this number can only fall.
+
+| Constraint component | Cases using it | Agree | Diverge | Unjudged |
+|---|---:|---:|---:|---:|
+| `sh:and` | 4 | 3 | 1 | 0 |
+| `sh:class` | 19 | 12 | 7 | 0 |
+| `sh:closed` | 4 | 3 | 1 | 0 |
+| `sh:datatype` | 28 | 19 | 9 | 0 |
+| `sh:disjoint` | 3 | 1 | 2 | 0 |
+| `sh:equals` | 3 | 2 | 1 | 0 |
+| `sh:hasValue` | 5 | 4 | 1 | 0 |
+| `sh:in` | 5 | 2 | 3 | 0 |
+| `sh:languageIn` | 3 | 2 | 1 | 0 |
+| `sh:lessThan` | 3 | 0 | 3 | 0 |
+| `sh:lessThanOrEquals` | 2 | 0 | 2 | 0 |
+| `sh:maxCount` | 13 | 9 | 3 | 1 |
+| `sh:maxExclusive` | 3 | 2 | 1 | 0 |
+| `sh:maxInclusive` | 3 | 2 | 1 | 0 |
+| `sh:maxLength` | 3 | 1 | 2 | 0 |
+| `sh:minCount` | 20 | 17 | 3 | 0 |
+| `sh:minExclusive` | 4 | 1 | 3 | 0 |
+| `sh:minInclusive` | 4 | 3 | 1 | 0 |
+| `sh:minLength` | 3 | 1 | 2 | 0 |
+| `sh:node` | 5 | 2 | 3 | 0 |
+| `sh:nodeKind` | 6 | 3 | 2 | 1 |
+| `sh:not` | 4 | 3 | 1 | 0 |
+| `sh:or` | 5 | 4 | 1 | 0 |
+| `sh:pattern` | 6 | 3 | 3 | 0 |
+| `sh:property` | 55 | 35 | 19 | 1 |
+| `sh:qualifiedValueShape` | 4 | 3 | 1 | 0 |
+| `sh:uniqueLang` | 3 | 1 | 2 | 0 |
+| `sh:xone` | 3 | 2 | 1 | 0 |
+
+Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json).
+
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-10-17T12:35:08Z by [CI run](https://github.com/scbrown/quipu/actions/runs/39032653852), from quipu `613c07346c5a`.
+Ledger re-derived 2026-10-21T15:07:06Z by [CI run](https://github.com/scbrown/quipu/actions/runs/39619544090), from quipu `8fb57af0472a`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.

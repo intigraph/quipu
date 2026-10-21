@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 
@@ -15,6 +16,25 @@ CHECK_NAME = "Release correctness"
 PENDING = 0
 SUCCESS = 1
 FAILURE = 2
+DEFERRED_JOB = "Release deferred (CI not ready)"
+
+
+def report(state: int, sha: str, detail: str) -> int:
+    """Pending is not a test failure, and only SUCCESS permits publication."""
+    ready = state == SUCCESS
+    if output := os.environ.get("GITHUB_OUTPUT"):
+        with Path(output).open("a") as stream:
+            stream.write(f"ready={str(ready).lower()}\n")
+    verdict = "READY" if ready else "FAILED" if state == FAILURE else "DEFERRED"
+    message = f"{verdict}: {CHECK_NAME} on exact SHA {sha}: {detail}"
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with Path(summary).open("a") as stream:
+            stream.write(message + "\n\n")
+    if state == PENDING:
+        print(f"::warning title=Release deferred::{message}; publishing stays skipped")
+    else:
+        print(message)
+    return 1 if state == FAILURE else 0
 
 
 def classify(check_runs: list[dict[str, Any]]) -> tuple[int, str]:
@@ -68,14 +88,13 @@ def main() -> int:
             state, detail = PENDING, f"could not read checks: {exc}"
         print(f"[{attempt}/{attempts}] {sha}: {detail}", flush=True)
         if state == SUCCESS:
-            return 0
+            return report(state, sha, detail)
         if state == FAILURE:
-            return 1
+            return report(state, sha, detail)
         if attempt < attempts:
             time.sleep(interval)
 
-    print(f"timed out waiting for {CHECK_NAME!r} on exact SHA {sha}", file=sys.stderr)
-    return 1
+    return report(PENDING, sha, f"wait budget exhausted; {detail}")
 
 
 if __name__ == "__main__":
