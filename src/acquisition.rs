@@ -13,6 +13,10 @@ use crate::{Error, Result, Store};
 /// Versioned, qualified-main acquisition with a fenced attachment census.
 pub mod composed;
 
+/// Metadata-only eligibility observation; never an acquisition receipt.
+#[path = "acquisition/eligibility.rs"]
+pub mod eligibility;
+
 /// Bounded physical row/byte scope of a direct-main acquisition (G1).
 #[path = "acquisition/scope.rs"]
 pub mod scope;

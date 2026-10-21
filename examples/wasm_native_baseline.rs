@@ -7,8 +7,8 @@
 //! cumulative or 30 iters. Emits the same JSON so the two halves diff cleanly.
 //!
 //! ```bash
-//! cargo run --release --no-default-features --example wasm_native_baseline -- 1000
-//! QUIPU_READ_MODEL=1 cargo run --release --no-default-features --example wasm_native_baseline -- 1000
+//! cargo run --release --no-default-features --features shacl --example wasm_native_baseline -- 1000
+//! QUIPU_READ_MODEL=1 cargo run --release --no-default-features --features shacl --example wasm_native_baseline -- 1000
 //! ```
 
 use std::time::Instant;

@@ -47,6 +47,8 @@ trim = true
 # `[] []`. The bracket rules mirror the paren ones, and the run rule comes first so
 # a sequence of bracketed refs collapses in one pass rather than leaving gaps.
 commit_preprocessors = [
+    # Keep the signed-write compatibility rollback in generated release notes.
+    { pattern = '(?m)^Revert "feat: require enrolled session keys with narrow onboarding reads \(#687\)"$', replace = "revert(auth): restore the previous signed-write contract (#687)" },
     # Preserve receiver-diagnostics commits without rewriting published history.
     { pattern = '(?m)^Log observed transport peer and request provenance gaps$', replace = "fix(server): log observed transport peer and request provenance gaps" },
     { pattern = '(?m)^Bind conformance ledgers to receiver diagnostics source$', replace = "docs(conformance): bind conformance ledgers to receiver diagnostics source" },

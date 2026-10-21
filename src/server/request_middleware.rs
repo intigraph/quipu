@@ -15,6 +15,20 @@ tokio::task_local! {
     static REQUEST_ID: u64;
 }
 
+#[derive(Clone)]
+pub(super) struct StoreWorkContext {
+    pub lane: quipu::metrics::inflight::Lane,
+    pub registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+}
+
+tokio::task_local! {
+    static STORE_WORK: StoreWorkContext;
+}
+
+pub(super) fn request_store_work() -> Option<StoreWorkContext> {
+    STORE_WORK.try_with(Clone::clone).ok()
+}
+
 pub(super) fn request_id() -> Option<u64> {
     REQUEST_ID.try_with(|id| *id).ok()
 }
@@ -32,6 +46,8 @@ pub(crate) fn render_request_starts(out: &mut String) {
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
     request_completion::cancellations().render(out);
+    quipu::metrics::inflight::http().render(out, false);
+    quipu::metrics::inflight::store().render(out, true);
 }
 
 tokio::task_local! {
@@ -94,6 +110,38 @@ async fn log_request_with_sequence(
     next: axum::middleware::Next,
     sequence: &AtomicU64,
 ) -> axum::response::Response {
+    log_request_tracked(
+        req,
+        next,
+        sequence,
+        quipu::metrics::inflight::http().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
+    log_request_tracked_stores(
+        req,
+        next,
+        sequence,
+        registry,
+        quipu::metrics::inflight::store().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked_stores(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+    store_registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     // Use the route template, not the raw path, to bound metric cardinality.
@@ -101,6 +149,14 @@ async fn log_request_with_sequence(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+    let lane = if quipu::http_auth::is_write_request(&endpoint, method.as_str()) {
+        quipu::metrics::inflight::Lane::Write
+    } else if quipu::http_auth::READ_ENDPOINTS.contains(&endpoint.as_str()) {
+        quipu::metrics::inflight::Lane::Read
+    } else {
+        quipu::metrics::inflight::Lane::Other
+    };
+    let _inflight = registry.start(lane, quipu::metrics::inflight::Phase::Active);
     let client = quipu::metrics::normalize_client(
         req.headers()
             .get("x-quipu-client")
@@ -187,12 +243,18 @@ async fn log_request_with_sequence(
         }),
         finished: false,
     };
-    let resp = REQUEST_WRITE_KIND
+    let resp = STORE_WORK
         .scope(
-            quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_ID.scope(
-                id,
-                REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            StoreWorkContext {
+                lane,
+                registry: store_registry,
+            },
+            REQUEST_WRITE_KIND.scope(
+                quipu::write_kind::WriteKind::for_route(&endpoint),
+                REQUEST_ID.scope(
+                    id,
+                    REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                ),
             ),
         )
         .await;
@@ -412,3 +474,11 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "request_inflight_tests.rs"]
+mod inflight_tests;
+
+#[cfg(test)]
+#[path = "request_generic_inflight_tests.rs"]
+mod generic_inflight_tests;

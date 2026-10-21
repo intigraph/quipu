@@ -383,12 +383,17 @@ pub(super) fn apply_update_attributed(
     let mut batches: Vec<_> = changes.into_iter().collect();
     // Deterministic commit (and report) order across graphs; ROOT first.
     batches.sort_unstable_by_key(|(graph, _)| *graph);
-    let txs = store.transact_graph_batches_tx(
-        &batches,
-        &now,
-        attribution.actor.as_deref(),
-        Some(&attribution.source),
-    )?;
+    let shapes = store
+        .get_combined_shapes()?
+        .map(|s| quipu::shacl::split_shapes_by_policy(&s).reject);
+    let txs = store.with_write_shapes(shapes.as_deref(), |store| {
+        store.transact_graph_batches_tx(
+            &batches,
+            &now,
+            attribution.actor.as_deref(),
+            Some(&attribution.source),
+        )
+    })?;
     // Register every named graph this update asserted into, so the next
     // update's dataset includes it (aegis-e9o5ci). After the commit, so a
     // refused write leaves no empty registry row behind.
