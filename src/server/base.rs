@@ -164,7 +164,11 @@ pub(crate) async fn version() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": env!("QUIPU_GIT_SHA"),
         "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-        "read_contracts": ["quipu-acquisition/v1", "quipu-acquisition/composed-v1"],
+        "read_contracts": [
+            "quipu-acquisition/v1",
+            "quipu-acquisition/composed-v1",
+            quipu::acquisition::eligibility::CONTRACT,
+        ],
         "features": compiled_features(),
     }))
 }

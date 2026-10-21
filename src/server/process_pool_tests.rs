@@ -10,6 +10,7 @@ fn process_routing_never_sends_writes_or_streams_to_readers() {
         "/events/stream",
         "/export",
         "/acquire/composed",
+        "/acquire/eligibility",
         "/metrics",
         "/health",
         "/unknown",

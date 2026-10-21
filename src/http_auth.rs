@@ -188,6 +188,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Read transaction and volatile admission cache only; no fact, registry,
     // filesystem, or persistent history mutation.
     "/acquire/composed",
+    // Metadata-only eligibility observation: no fact read, no write, no
+    // attestation settlement, no provider sync (aegis-ehf).
+    "/acquire/eligibility",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",

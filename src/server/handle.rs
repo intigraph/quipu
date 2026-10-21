@@ -224,6 +224,14 @@ impl StoreHandle {
         guard
     }
 
+    /// The writer connection for a metadata-only eligibility observation
+    /// (aegis-ehf): no attestation settlement and no reader provider sync, so
+    /// holding it spends no nonce and remounts nothing. Callers must refuse an
+    /// attested request BEFORE calling this, and must not write through it.
+    pub(crate) fn metadata_lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.writer.lock()
+    }
+
     /// A cancelled promotion must also leave the queue without waiting for an
     /// unrelated long writer. Settle signed authority only after acquisition.
     pub(crate) fn promotion_lock(

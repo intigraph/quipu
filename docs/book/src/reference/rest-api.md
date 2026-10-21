@@ -248,6 +248,10 @@ or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
 providers. The latter uses a separate version-gated contract and refuses
 unsupported required attached or derived scope;
 see [atomic acquisition](acquisition.md) for its versioned contract.
+`POST /acquire/eligibility` answers only whether each named graph would pass
+that admission and the configured label floor at the current head, from graph
+metadata alone; it is an observation, not a receipt (see
+[eligibility observation](acquisition.md#eligibility-observation)).
 
 `POST /share` is also read-only. It returns the canonical Git-share manifest and
 exact file contents in one JSON response, allowing a proxy on another host to
