@@ -98,9 +98,15 @@ pub fn import_share(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<ShareImportResult> {
-    atomic(store, |store| {
+    // Review metadata and graph admission must not trigger the generic
+    // write hook. Only eligible staged documents are indexed after commit.
+    let automatic = store.embedding_config().auto_embed;
+    store.embedding_config_mut().auto_embed = false;
+    let admitted = atomic(store, |store| {
         open(store, &request.manifest.share_id)?;
         let old = state(store, &request.manifest.share_id)?;
+        // Staging is not a ROOT write or permission to index quarantined data.
+        // Collect selected-graph work only after admission has completed.
         let result = crate::share_import::import_inner(store, request, timestamp, actor)?;
         let next = if result.promotion.eligible {
             "staged"
@@ -116,11 +122,21 @@ pub fn import_share(
             } else {
                 "import.quarantined"
             };
-            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
+            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
         Ok(result)
-    })
+    });
+    store.embedding_config_mut().auto_embed = automatic;
+    let mut result = admitted?;
+    // The graph admission commits atomically. Inference is a separate result:
+    // never roll back its named-origin marker around an external vector write.
+    if let Err(error) = crate::import_embedding::prepare(store, &mut result, timestamp) {
+        result.embedding.state = "failed".into();
+        result.embedding.message = Some(format!("Graph staged, embedding failed: {error}"));
+        crate::import_embedding::refresh(store, &mut result)?;
+    }
+    Ok(result)
 }
 /// Explicit promotion; success and resolution event commit atomically.
 pub fn promote_import(

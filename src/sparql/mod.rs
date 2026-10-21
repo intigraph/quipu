@@ -19,6 +19,9 @@ pub mod left_join;
 #[cfg(test)]
 mod left_join_tests;
 mod order;
+mod order_pushdown;
+#[cfg(test)]
+mod order_pushdown_tests;
 pub mod pattern;
 pub mod pattern_util;
 #[cfg(test)]
@@ -47,6 +50,8 @@ mod triple_alias;
 mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
+#[cfg(test)]
+mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
 pub(crate) mod count_mmap;
@@ -59,6 +64,8 @@ mod graph_filter_tests;
 mod graph_membership;
 mod group;
 mod join;
+#[cfg(test)]
+mod left_bind_join_tests;
 mod limited_scan;
 mod progress;
 mod sql_in;
