@@ -64,7 +64,7 @@ impl Store {
             };
             let sql = format!(
                 "SELECT entity_id, embedding, valid_from FROM vectors \
-                               WHERE entity_id IN ({placeholders}) AND {validity} LIMIT 1001"
+                               WHERE entity_id IN ({placeholders}) AND {validity} ORDER BY entity_id, valid_from LIMIT 1001"
             );
             let mut values: Vec<Value> = chunk.iter().copied().map(Value::Integer).collect();
             if let Some(at) = valid_at {

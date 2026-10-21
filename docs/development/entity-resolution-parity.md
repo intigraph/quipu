@@ -47,3 +47,25 @@ just --command cargo test --locked --release --features full --lib \
 index construction, SQL ID-to-IRI resolution, embeddings and both complete caller
 pipelines. It is not end-to-end hint parity or a production performance result.
 Those require a separately admitted, representative offline store comparison.
+
+## Exact vector batch access
+
+The SQLite current-vector batch scan uses a partial covering index on entity ID
+and embedding, avoiding each vector row's potentially large text payload. Normal
+writable store initialization builds the index; this can add startup time and
+substantial derived storage, which must be measured separately from request time.
+SQLite maintains it on insertion, closure, replacement and rollback. It is not
+an approximate index or a process cache. Queries never build it.
+
+The indexed scan feeds SQLite rowid into the unchanged top-k comparator as the
+legacy tie key, avoiding a SQL sort of the large payloads. Finite scores therefore
+retain exactly the original ordering. Non-finite inputs, unrepresentable rowids
+and dimension errors use the original row traversal so unordered comparisons and
+first-error identity remain unchanged. Historical scans retain their original path. Read-only stores without the new
+index use the previous scan. Tests compare complete results, score bits and
+order across both paths, including validity changes, rollback and errors.
+
+Removing the index through a separately approved maintenance path returns
+queries to the legacy scan; an older binary can also ignore the derived index.
+Source rollback does not automatically reclaim its storage. A faster vector
+scan alone does not establish the full episode performance target.

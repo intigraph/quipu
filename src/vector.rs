@@ -14,6 +14,7 @@ use rusqlite::{OptionalExtension, params};
 use crate::error::Result;
 use crate::store::Store;
 
+mod batch;
 mod scoped;
 
 /// Schema for the vectors table, created alongside the fact log.
@@ -27,6 +28,8 @@ CREATE TABLE IF NOT EXISTS vectors (
     PRIMARY KEY (entity_id, valid_from)
 );
 CREATE INDEX IF NOT EXISTS idx_vectors_valid ON vectors(valid_to);
+CREATE INDEX IF NOT EXISTS idx_vectors_current_payload_v1
+    ON vectors(entity_id, embedding) WHERE valid_to IS NULL;
 "#;
 
 /// A vector search result.
@@ -281,7 +284,7 @@ impl Store {
             "SELECT entity_id, embedding FROM vectors \
              WHERE valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1)"
         } else {
-            "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL"
+            "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL ORDER BY rowid"
         };
 
         let scan_trace = crate::search_trace::phase(crate::search_trace::Phase::Scan);
@@ -360,7 +363,7 @@ impl Store {
              WHERE entity_id = ?1 AND valid_from <= ?2 AND (valid_to IS NULL OR valid_to > ?2) LIMIT 1"
         } else {
             "SELECT text, valid_from, valid_to FROM vectors \
-             WHERE entity_id = ?1 AND valid_to IS NULL LIMIT 1"
+             WHERE entity_id = ?1 AND valid_to IS NULL ORDER BY valid_from LIMIT 1"
         };
         let mut text_stmt = self.conn.prepare(text_sql)?;
         let mut matches = Vec::with_capacity(scored.len());
@@ -394,91 +397,6 @@ impl Store {
             }
         }
         Ok(matches)
-    }
-
-    /// One brute-force scan scoring every query; result `i` equals
-    /// `scan_vectors(queries[i], limit, valid_at, None)`.
-    ///
-    /// Each query keeps a bounded top-`limit` instead of a score per row, and the
-    /// survivors are ordered by score descending with scan order breaking ties,
-    /// which is what the stable sort-then-truncate in `scan_vectors` yields.
-    fn scan_vectors_batch(
-        &self,
-        queries: &[&[f32]],
-        limit: usize,
-        valid_at: Option<&str>,
-    ) -> Result<Vec<Vec<VectorMatch>>> {
-        crate::time::check_request_deadline()?;
-        if queries.is_empty() {
-            return Ok(Vec::new());
-        }
-        let sql = if valid_at.is_some() {
-            "SELECT entity_id, embedding FROM vectors \
-             WHERE valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1)"
-        } else {
-            "SELECT entity_id, embedding FROM vectors WHERE valid_to IS NULL"
-        };
-        let scan_trace = crate::search_trace::phase(crate::search_trace::Phase::Scan);
-        let mut stmt = self.conn.prepare(sql)?;
-        let mut rows = if let Some(vt) = valid_at {
-            stmt.query(params![vt])?
-        } else {
-            stmt.query([])?
-        };
-
-        let mut tops: Vec<TopK> = queries.iter().map(|_| TopK::new(limit)).collect();
-        // Each query's squared norm once, not once per stored row.
-        let query_norms: Vec<f64> = queries.iter().map(|q| squared_norm(q)).collect();
-        let mut seq = 0usize;
-        while let Some(row) = rows.next()? {
-            // The scan is the long phase of a write's resolution pass; honour the
-            // request deadline inside it, not only around it (aegis-xi0).
-            if seq.is_multiple_of(64) {
-                crate::time::check_request_deadline()?;
-            }
-            let entity_id: i64 = row.get(0)?;
-            let blob: Vec<u8> = row.get(1)?;
-            let stored = bytes_to_f32_slice(&blob);
-            // The stored vector's squared norm once per row, not once per query.
-            let stored_norm = squared_norm(&stored);
-            for (query_index, ((query, top), query_norm)) in queries
-                .iter()
-                .zip(tops.iter_mut())
-                .zip(query_norms.iter())
-                .enumerate()
-            {
-                if query_index.is_multiple_of(16) {
-                    crate::time::check_request_deadline()?;
-                }
-                if !stored.is_empty() && stored.len() != query.len() {
-                    return Err(crate::Error::Store(format!(
-                        "embedding dimension mismatch: query has {} dims but the stored \
-                         vector for entity {} has {} — re-embed after changing the \
-                         embedding model/dimension",
-                        query.len(),
-                        entity_id,
-                        stored.len()
-                    )));
-                }
-                top.offer(
-                    cosine_with_norms(query, &stored, *query_norm, stored_norm),
-                    seq,
-                    entity_id,
-                );
-            }
-            seq += 1;
-        }
-        drop(scan_trace);
-
-        let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);
-        tops.into_iter()
-            .map(|top| {
-                crate::time::check_request_deadline()?;
-                let matches = self.fetch_vector_matches(top.into_sorted(), valid_at)?;
-                crate::time::check_request_deadline()?;
-                Ok(matches)
-            })
-            .collect()
     }
 
     /// Return a reference to this store's vector backend.
@@ -632,3 +550,6 @@ impl TopK {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod batch_tests;
