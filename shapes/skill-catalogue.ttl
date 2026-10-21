@@ -1,0 +1,34 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skill: <urn:quipu:skills:> .
+
+# Opt-in catalogue types; legacy Skill observations are not installable releases.
+skill:Release a rdfs:Class ; rdfs:label "Pinned skill release" .
+skill:Profile a rdfs:Class ; rdfs:label "Pinned skill profile" .
+skill:Pin a rdfs:Class ; rdfs:label "Skill profile pin" .
+
+skill:ReleaseShape a sh:NodeShape ;
+    sh:targetClass skill:Release ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path skill:skill ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:name ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9-]{1,64}$" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:description ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 4096 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:repository ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:sourcePath ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 1024 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:version ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 2048 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:shareId ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:renderSpec ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:scope ; sh:datatype xsd:string ; sh:in ( "public" "internal" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:harness ; sh:datatype xsd:string ; sh:in ( "claude" "codex" ) ; sh:minCount 1 ; sh:maxCount 2 ] .
+
+skill:PinShape a sh:NodeShape ;
+    sh:targetClass skill:Pin ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path skill:skill ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:version ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 2048 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:shareId ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+skill:ProfileShape a sh:NodeShape ;
+    sh:targetClass skill:Profile ; sh:nodeKind sh:IRI ;
+    sh:property [ sh:path skill:publicOnly ; sh:datatype xsd:boolean ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path skill:harness ; sh:datatype xsd:string ; sh:in ( "claude" "codex" ) ; sh:minCount 1 ; sh:maxCount 2 ] ;
+    sh:property [ sh:path skill:pin ; sh:nodeKind sh:IRI ; sh:class skill:Pin ; sh:node skill:PinShape ; sh:minCount 1 ; sh:maxCount 128 ] .
