@@ -41,9 +41,11 @@ pub(crate) mod cache;
 #[cfg(test)]
 mod cache_tests;
 mod index;
+mod jaro;
 mod matching;
 #[cfg(test)]
 mod perf_tests;
+mod selection;
 pub(crate) use index::LabelIndex;
 #[cfg(test)]
 pub(crate) use index::LabelProfile;
@@ -225,36 +227,19 @@ pub(crate) fn resolve_with_matches(
         for m in matches {
             if m.score >= threshold {
                 let iri = store.resolve(store.canonical_id(m.entity_id)?)?;
-                candidates.push(EntityCandidate {
+                candidates.push(selection::Candidate::Known(EntityCandidate {
                     iri,
                     score: m.score,
                     matched_on: format!("embedding:{:.2}", m.score),
-                });
+                }));
             }
         }
     }
 
     // Phase 2: Canonical name matching (Jaro-Winkler), over the whole
     // composition rather than the local store alone.
-    candidates.extend(index.candidates(store, name, threshold)?);
-
-    // Phase 3: drop pairings the writer or the graph has already excused.
-    if !excluded.is_empty() {
-        let excused: HashSet<&str> = excluded.iter().map(String::as_str).collect();
-        candidates.retain(|c| !excused.contains(c.iri.as_str()));
-    }
-
-    // SQL row order and cache delta insertion order are not selection policy.
-    // Use one explicit tie rule for cold/warm/stale/disabled paths before top_k.
-    // Merge: deduplicate by IRI, keeping the highest score.
-    candidates.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.iri.cmp(&b.iri))
-    });
-    dedup_by_iri(&mut candidates);
-    candidates.truncate(top_k);
+    candidates.extend(index.candidates(name, threshold)?);
+    let candidates = selection::select(store, candidates, excluded, top_k, selection::Ties::Iri)?;
 
     Ok(ResolutionResult {
         has_matches: !candidates.is_empty(),

@@ -1,5 +1,5 @@
 //! Label scan and exact canonical-name matching.
-use super::{EntityCandidate, id_list, is_slash_qualified_commit_id};
+use super::{id_list, is_slash_qualified_commit_id, selection::Candidate};
 use crate::{error::Result, namespace, store::Store};
 
 /// Every current `rdfs:label` in the composition, read ONCE.
@@ -82,6 +82,13 @@ impl LabelProfile {
     /// against a real 0.88 (dearing, review of #538).
     #[allow(clippy::cast_precision_loss)]
     pub(crate) fn jaro_winkler_upper_bound(&self, other: &Self) -> f64 {
+        self.upper_bound_with_prefix(other, 4)
+    }
+
+    /// The actual common prefix yields a tighter, still conservative bound
+    /// than assuming all four prefix characters match for every label pair.
+    #[allow(clippy::cast_precision_loss)]
+    pub(super) fn upper_bound_with_prefix(&self, other: &Self, prefix: usize) -> f64 {
         if self.chars == 0 || other.chars == 0 || !self.exact || !other.exact {
             return 1.0;
         }
@@ -93,7 +100,7 @@ impl LabelProfile {
             .sum();
         let m = common.min(self.chars).min(other.chars) as f64;
         let jaro = (m / self.chars as f64 + m / other.chars as f64 + 1.0) / 3.0;
-        0.6 * jaro + 0.4 + JW_BOUND_MARGIN
+        jaro + 0.1 * prefix.min(4) as f64 * (1.0 - jaro) + JW_BOUND_MARGIN
     }
 }
 
@@ -207,15 +214,11 @@ impl LabelIndex {
     }
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
-    pub(crate) fn candidates(
-        &self,
-        store: &Store,
-        name: &str,
-        threshold: f64,
-    ) -> Result<Vec<EntityCandidate>> {
+    pub(super) fn candidates(&self, name: &str, threshold: f64) -> Result<Vec<Candidate>> {
         let name_lower = name.to_lowercase();
         let name_profile = LabelProfile::of(&name_lower);
         let name_is_commit = is_slash_qualified_commit_id(&name_lower);
+        let mut matcher = super::jaro::Matcher::new(&name_lower);
         let mut candidates = Vec::new();
         for entry in &self.entries {
             crate::time::check_request_deadline()?;
@@ -223,10 +226,10 @@ impl LabelIndex {
 
             // Exact match (case-insensitive).
             if name_lower == *label_lower {
-                candidates.push(EntityCandidate {
-                    iri: store.resolve(*entity_id)?,
+                candidates.push(Candidate::Name {
+                    entity_id: *entity_id,
                     score: 1.0,
-                    matched_on: "canonical_name:exact".to_string(),
+                    exact: true,
                 });
                 continue;
             }
@@ -242,20 +245,37 @@ impl LabelIndex {
 
             // A label that cannot reach the threshold is skipped without the
             // ~1 us Jaro-Winkler comparison; the bound never undercuts it.
-            if name_profile.jaro_winkler_upper_bound(&entry.profile) < threshold {
+            let prefix = name_lower
+                .chars()
+                .zip(label_lower.chars())
+                .take(4)
+                .take_while(|(a, b)| a == b)
+                .count();
+            let bound = if prefix == 4 {
+                name_profile.jaro_winkler_upper_bound(&entry.profile)
+            } else {
+                name_profile.upper_bound_with_prefix(&entry.profile, prefix)
+            };
+            if bound < threshold {
                 continue;
             }
 
             // Jaro-Winkler similarity.
-            let jw = strsim::jaro_winkler(&name_lower, label_lower);
+            let Some(jw) = matcher.score(label_lower, threshold) else {
+                continue;
+            };
             if jw >= threshold {
-                candidates.push(EntityCandidate {
-                    iri: store.resolve(*entity_id)?,
+                candidates.push(Candidate::Name {
+                    entity_id: *entity_id,
                     score: jw,
-                    matched_on: format!("canonical_name:jaro_winkler:{jw:.2}"),
+                    exact: false,
                 });
             }
         }
         Ok(candidates)
     }
 }
+
+#[cfg(test)]
+#[path = "resolution_lab_tests.rs"]
+mod lab_tests;
