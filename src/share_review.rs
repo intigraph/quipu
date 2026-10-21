@@ -122,7 +122,7 @@ pub fn import_share(
             } else {
                 "import.quarantined"
             };
-            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
+            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
         Ok(result)

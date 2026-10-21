@@ -30,6 +30,9 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
             literal(hash.strip_prefix("sha256:").unwrap_or(hash))
         )
     });
+    let alignments = manifest.alignments_hash.as_ref().map_or_else(String::new, |hash| {
+        format!(",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ; dcat:downloadURL <payload:alignments.ttl> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
+    });
     let destination = match manifest.destination {
         Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
         _ => "",
@@ -55,7 +58,7 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
   [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
     dcat:downloadURL <payload:shapes.ttl> ;
     spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ]{queries} .
+      spdx:checksumValue {} ] ]{queries}{alignments} .
 "#,
         literal(&manifest.share_id),
         literal(&manifest.created_at),

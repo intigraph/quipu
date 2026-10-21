@@ -87,6 +87,8 @@ pub struct ShareOptions {
     /// registered against the scope, `Some(names)` exactly those (`Some([])`
     /// carries none). See `share_queries` for the default's definition.
     pub queries: Option<Vec<String>>,
+    /// Optional ancillary alignment evidence; never automatically applied.
+    pub alignments_turtle: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -124,6 +126,7 @@ impl Default for ShareOptions {
             shapes: Vec::new(),
             no_shapes: false,
             queries: None,
+            alignments_turtle: None,
             parent_share: None,
             turtle_view: false,
             pack_dir: Some(PENDANT_PACK_DIR.into()),
@@ -153,6 +156,9 @@ pub struct SharePayloadRequest {
     /// Stored queries to carry; absent means those registered against the scope.
     #[serde(default)]
     pub queries: Option<Vec<String>>,
+    /// Optional exact alignment evidence, sealed and outward-scrubbed.
+    #[serde(default)]
+    pub alignments_turtle: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also include a human-readable `export.ttl` derived view.
@@ -170,6 +176,7 @@ impl SharePayloadRequest {
             shapes: self.shapes.clone(),
             no_shapes: self.no_shapes,
             queries: self.queries.clone(),
+            alignments_turtle: self.alignments_turtle.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -237,6 +244,9 @@ pub struct ShareFiles {
     /// queries, so such a manifest is byte-identical to one from before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
+    /// Fixed optional ancillary member name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments: Option<String>,
 }
 
 mod pointers;
@@ -271,6 +281,9 @@ pub struct ShareManifest {
     /// queries. Part of `share_id`: changing one query's text changes the id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries_hash: Option<String>,
+    /// Exact ancillary bytes, included in share_id; absent preserves legacy identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments_hash: Option<String>,
     /// Export scope.
     pub scope: ShareScope,
     /// Prior share in this lineage.
@@ -481,6 +494,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         None
     };
 
+    if let Some(text) = &opts.alignments_turtle {
+        crate::share_alignments::validate(text)?;
+    }
     let tx_anchor = store.latest_tx_id()?;
     let created_at = if tx_anchor == 0 {
         "1970-01-01T00:00:00Z".to_string()
@@ -504,6 +520,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
         queries_hash: queries.as_ref().map(|q| sha256(q.as_bytes())),
+        alignments_hash: opts
+            .alignments_turtle
+            .as_ref()
+            .map(|text| sha256(text.as_bytes())),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
         merge_parents: Vec::new(),
@@ -515,6 +535,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             version: env!("CARGO_PKG_VERSION").into(),
         },
         files: ShareFiles {
+            alignments: opts
+                .alignments_turtle
+                .as_ref()
+                .map(|_| crate::share_alignments::ALIGNMENTS_FILE.into()),
             graph: "export.nt".into(),
             shapes: "shapes.ttl".into(),
             turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
@@ -557,6 +581,12 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         String::from_utf8(shapes)
             .map_err(|e| Error::Serialization(format!("share shapes UTF-8: {e}")))?,
     );
+    if let Some(text) = &opts.alignments_turtle {
+        files.insert(
+            crate::share_alignments::ALIGNMENTS_FILE.into(),
+            text.clone(),
+        );
+    }
     if let Some(queries) = queries {
         files.insert(crate::share_queries::QUERIES_FILE.into(), queries);
     }

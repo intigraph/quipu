@@ -26,6 +26,9 @@ pub struct DeltaFiles {
     /// `result.queries_hash`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
+    /// Complete ancillary evidence for the result, sealed by result.alignments_hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments: Option<String>,
 }
 
 /// A verified delta from one full share to another.
@@ -156,6 +159,8 @@ pub struct DeltaPayload {
     pub shapes: String,
     /// `queries.ttl` contents for the resulting share, if it carries queries.
     pub queries: Option<String>,
+    /// Complete ancillary alignment member; never applied as an update.
+    pub alignments: Option<String>,
 }
 
 impl DeltaPayload {
@@ -180,6 +185,9 @@ impl DeltaPayload {
         ];
         if let (Some(name), Some(queries)) = (&self.manifest.files.queries, &self.queries) {
             files.push((name.clone(), queries.clone()));
+        }
+        if let (Some(name), Some(text)) = (&self.manifest.files.alignments, &self.alignments) {
+            files.push((name.clone(), text.clone()));
         }
         Ok(files)
     }
@@ -246,6 +254,10 @@ pub fn build_delta_with_limit(
         .files
         .get(crate::share_queries::QUERIES_FILE)
         .cloned();
+    let alignments = result
+        .files
+        .get(crate::share_alignments::ALIGNMENTS_FILE)
+        .cloned();
     let mut manifest = DeltaManifest {
         schema: SCHEMA.into(),
         delta_id: String::new(),
@@ -254,6 +266,9 @@ pub fn build_delta_with_limit(
         result: result.manifest,
         delta_hash: sha256(update.as_bytes()),
         files: DeltaFiles {
+            alignments: alignments
+                .as_ref()
+                .map(|_| crate::share_alignments::ALIGNMENTS_FILE.into()),
             update: "delta.ru".into(),
             shapes: "shapes.ttl".into(),
             queries: queries
@@ -273,6 +288,7 @@ pub fn build_delta_with_limit(
     let files = BTreeMap::from([("delta.ru".to_string(), update.clone())]);
     crate::share_scrub::enforce_destination(store, &files, opts.destination, "delta scrub")?;
     let payload = DeltaPayload {
+        alignments,
         manifest,
         update,
         shapes,
@@ -409,6 +425,19 @@ pub fn materialize(parent_dir: &str, delta_dir: &str) -> Result<ShareImportReque
         shapes_turtle: std::fs::read_to_string(root.join(&manifest.files.shapes))
             .map_err(|e| Error::InvalidValue(format!("delta shapes read: {e}")))?,
         // Sealed by `result.queries_hash`; the import's `verify_share` checks it.
+        alignments_turtle: match manifest.files.alignments.as_deref() {
+            Some(crate::share_alignments::ALIGNMENTS_FILE) => {
+                Some(crate::share_alignments::read_file(
+                    &root.join(crate::share_alignments::ALIGNMENTS_FILE),
+                )?)
+            }
+            None => None,
+            Some(_) => {
+                return Err(Error::InvalidValue(
+                    "delta misnames alignment member".into(),
+                ));
+            }
+        },
         queries_turtle: match manifest.files.queries.as_deref() {
             Some(crate::share_queries::QUERIES_FILE) => Some(
                 std::fs::read_to_string(root.join(crate::share_queries::QUERIES_FILE))
