@@ -860,24 +860,32 @@ def render_markdown(data: dict) -> str:
         out.append(f"| `{category}` | {counts['passed']} | {counts['failed']} | {counts['error']} | {counts['unsupported']} | {counts['cases']} |")
     write = data["shacl_write_path"]
     diverging = sorted({case for case, _ in write["divergences"]})
+    # An unjudged case (the gate answered CannotVerify, not a SHACL verdict) is
+    # neither agreeing nor diverging, so it is counted on its own (aegis-1c8q option A).
+    unjudged = sorted({case for case, _, _ in write.get("unjudged", [])} - set(diverging))
+    agree = write["cases"] - len(diverging) - len(unjudged)
     out += [
         "", "### Write-path conformance", "",
         f"The same {write['cases']} Core cases are also written through the real `/knot` handler, "
         "whole and split across writes (subject halves, one write per subject, one write per triple, "
-        f"each in both orders). **{write['cases'] - len(diverging)}/{write['cases']}** agree with the "
-        f"W3C verdict under every split; **{len(diverging)}** diverge under at least one.",
+        f"each in both orders). **{agree}/{write['cases']}** agree with the "
+        f"W3C verdict under every split; **{len(diverging)}** diverge under at least one"
+        + (f"; **{len(unjudged)}** could not be judged under at least one split (the write gate "
+           "answered *cannot verify* instead of a SHACL verdict)" if unjudged else "") + ".",
         "A divergence is a case whose final graph violates (or conforms) while the write gate "
         "accepted (or refused) every write. These are known defects, listed in the ledger with "
         "the splits that expose them; the CI gate fails on any new divergence and on any entry "
         "that no longer diverges, so this number can only fall.", "",
-        "| Constraint component | Cases using it | Agree | Diverge |",
-        "|---|---:|---:|---:|",
+        "| Constraint component | Cases using it | Agree | Diverge | Unjudged |",
+        "|---|---:|---:|---:|---:|",
     ]
     for component, counts in write["by_component"].items():
         if component == "(none)":
             continue
         agree, diverge = counts.get("agrees", 0), counts.get("diverges", 0)
-        out.append(f"| `sh:{component}` | {agree + diverge} | {agree} | {diverge} |")
+        unjudged_count = counts.get("write_error", 0)
+        out.append(f"| `sh:{component}` | {agree + diverge + unjudged_count} | {agree} | {diverge} "
+                   f"| {unjudged_count} |")
     out += ["", "Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json)."]
     entailment = classes["entailment"]["counts"]
     # Read the commitment from the LEDGER rather than printing a literal. The

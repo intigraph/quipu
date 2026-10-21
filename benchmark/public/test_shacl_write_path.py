@@ -11,8 +11,17 @@ sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 
+SHACL_REJECTION = {"accepted": False, "rejection": "shacl"}
+LOCKED = {"accepted": None, "error": "database is locked"}
+
+
+def full_modes(expected, **overrides):
+    """All seven required split verdicts agreeing with `expected`, plus overrides."""
+    return {**{mode: expected for mode in MODULE.EXPECTED_MODES}, **overrides}
+
+
 def row(case, expected=True, modes=None, control=None, status=None):
-    modes = modes or {"single": expected, "per_triple": expected}
+    modes = full_modes(expected, **(modes or {}))
     if status is None:
         status = "agrees" if all(v == expected for v in modes.values()) else "diverges"
     return {"id": case, "components": [], "status": status, "expected_conforms": expected,
@@ -74,18 +83,23 @@ class WritePathGateTests(unittest.TestCase):
         self.assertNotIn(["core/x/batch#batch", "per_triple"], MODULE.divergences(rows))
 
 
+def judged_mode(expected):
+    """A split whose one write got the expected SHACL verdict."""
+    write = {"accepted": True} if expected else dict(SHACL_REJECTION)
+    return {"conforms": expected, "writes": [write]}
+
+
 def adapter_out(expected, single_writes, control=None):
-    """--write-path output with one mode, `single`, made of `single_writes`."""
+    """--write-path output: `single` made of `single_writes`; every other required split agrees."""
     conforms = all(w.get("accepted") is True for w in single_writes)
     if any(w.get("accepted") is None for w in single_writes):
         conforms = None
-    return {"batch": {"conforms": expected}, "triples": 2,
-            "modes": {"single": {"conforms": conforms, "writes": single_writes}},
+    modes = {mode: judged_mode(expected) for mode in MODULE.EXPECTED_MODES}
+    modes["single"] = {"conforms": conforms, "writes": single_writes}
+    return {"batch": {"conforms": expected}, "triples": 2, "modes": modes,
             "control_payload_only": {"conforms": expected if control is None else control}}
 
 
-SHACL_REJECTION = {"accepted": False, "rejection": "shacl"}
-LOCKED = {"accepted": None, "error": "database is locked"}
 
 
 class WriteErrorIsNotAVerdictTests(unittest.TestCase):
@@ -100,7 +114,9 @@ class WriteErrorIsNotAVerdictTests(unittest.TestCase):
         row = MODULE.classify(adapter_out(False, [{"accepted": True}, LOCKED]), False)
         self.assertEqual(row["status"], "write_error")
         self.assertIn("database is locked", row["reason"])
-        self.assertEqual(row["modes"], {"single": None})
+        self.assertIsNone(row["modes"]["single"])
+        self.assertEqual({m: v for m, v in row["modes"].items() if m != "single"},
+                         {m: False for m in MODULE.EXPECTED_MODES - {"single"}})
 
     def test_an_error_reported_as_false_without_a_shacl_rejection_is_still_unjudged(self):
         # Defence in depth: the driver does not trust an adapter that folds an
@@ -122,6 +138,88 @@ class WriteErrorIsNotAVerdictTests(unittest.TestCase):
         ledger = {"owners": owned, "divergences": [["core/x/late#late", "single"]]}
         failures = MODULE.gate(suite(bad), ledger)
         self.assertTrue(any(f.startswith("core/x/late#late: write_error") for f in failures), failures)
+
+
+CANNOT_VERIFY = {"accepted": None, "error": "cannot verify: complex path"}
+SEQ = "core/x/seq#seq"
+SEQ_OWNER = {SEQ: {"class": "cannot-verify-complex-path", "item": "aegis-x"}}
+
+
+def seq_row(single=False, errors=(CANNOT_VERIFY,)):
+    """An invalid case whose split writes are unjudged and whose single write is judged."""
+    out = adapter_out(False, [{"accepted": True} if single else dict(SHACL_REJECTION)])
+    out["modes"]["single"]["conforms"] = single
+    out["modes"]["per_triple"] = {"conforms": None, "writes": list(errors)}
+    row = {"id": SEQ, "components": []}
+    row.update(MODULE.classify(out, False))
+    return row
+
+
+class KnownUnjudgedLedgerTests(unittest.TestCase):
+    """sattler's option A: a known unjudged write is an owned ledger entry bound to its error text."""
+
+    def ledger(self, error="cannot verify: complex path", owners=SEQ_OWNER):
+        return {"owners": owners, "divergences": [], "unjudged": [[SEQ, "per_triple", error]]}
+
+    def test_a_known_owned_unjudged_pair_passes(self):
+        self.assertEqual(MODULE.gate(suite(seq_row()), self.ledger()), [])
+
+    def test_an_unjudged_pair_missing_from_the_ledger_still_fails(self):
+        failures = MODULE.gate(suite(seq_row()), {"divergences": []})
+        self.assertTrue(any(f.startswith(f"{SEQ}: write_error") for f in failures), failures)
+
+    def test_a_stale_unjudged_entry_fails(self):
+        judged = {"id": SEQ, "components": []}
+        judged.update(MODULE.classify(adapter_out(False, [SHACL_REJECTION]), False))
+        failures = MODULE.gate(suite(judged), self.ledger())
+        self.assertTrue(any(f.startswith("STALE unjudged entry") for f in failures), failures)
+
+    def test_a_changed_error_text_fails(self):
+        failures = MODULE.gate(suite(seq_row()), self.ledger(error="cannot verify: something else"))
+        self.assertTrue(any(f.startswith(f"{SEQ}: write_error") for f in failures), failures)
+        self.assertTrue(any(f.startswith("STALE unjudged entry") for f in failures), failures)
+
+    def test_an_unowned_unjudged_case_fails(self):
+        failures = MODULE.gate(suite(seq_row()), self.ledger(owners={}))
+        self.assertEqual(failures, [f"UNOWNED ledger case (needs class and item): {SEQ}"])
+
+    def test_an_unjudged_mode_does_not_hide_a_divergence_in_a_judged_mode(self):
+        failures = MODULE.gate(suite(seq_row(single=True)), self.ledger())
+        self.assertIn(f"NEW divergence: {SEQ} under single", failures)
+
+
+class ModeInventoryTests(unittest.TestCase):
+    """franklin's #707 finding: a lost split must not leave the gate green."""
+
+    def test_deleting_one_mode_from_every_case_fails_against_an_unchanged_ledger(self):
+        rows = suite()
+        self.assertEqual(MODULE.gate(rows, {"divergences": []}), [])
+        for r in rows:
+            del r["modes"]["single"]
+        failures = MODULE.gate(rows, {"divergences": []})
+        self.assertEqual(len(failures), MODULE.EXPECTED_CASES, failures[:3])
+        self.assertTrue(all("mode inventory: missing ['single']" in f for f in failures), failures[:3])
+
+    def test_an_empty_mode_map_is_not_classified_as_agreeing(self):
+        out = adapter_out(True, [{"accepted": True}])
+        out["modes"] = {}
+        bad = {"id": "core/x/none#none", "components": []}
+        bad.update(MODULE.classify(out, True))
+        self.assertEqual(bad["status"], "mode_inventory")
+        self.assertTrue(any(f.startswith("core/x/none#none: mode_inventory")
+                            for f in MODULE.gate(suite(bad), {"divergences": []})))
+
+    def test_a_split_with_no_writes_for_nonempty_data_is_refused(self):
+        out = adapter_out(True, [{"accepted": True}])
+        out["modes"]["per_triple"] = {"conforms": True, "writes": []}
+        self.assertEqual(MODULE.classify(out, True)["status"], "mode_inventory")
+
+    def test_an_unexpected_extra_mode_fails(self):
+        rows = suite()
+        rows[5]["modes"]["mystery_split"] = True
+        failures = MODULE.gate(rows, {"divergences": []})
+        self.assertEqual(len(failures), 1)
+        self.assertIn("unexpected ['mystery_split']", failures[0])
 
 
 if __name__ == "__main__":

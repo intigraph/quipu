@@ -1,7 +1,7 @@
 {
  "schema": "quipu-shacl-write-path/v1",
  "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
- "note": "Known write-path divergences. This list may only shrink (aegis-1c8q ratchet).",
+ "note": "Known write-path divergences and unjudged writes. Both lists may only shrink (aegis-1c8q ratchet; unjudged = sattler option A).",
  "cases": 98,
  "by_component": {
   "and": {
@@ -9,16 +9,16 @@
    "agrees": 3
   },
   "class": {
-   "diverges": 8,
-   "agrees": 11
+   "agrees": 12,
+   "diverges": 7
   },
   "closed": {
-   "diverges": 2,
-   "agrees": 2
+   "agrees": 3,
+   "diverges": 1
   },
   "datatype": {
-   "diverges": 11,
-   "agrees": 17
+   "agrees": 19,
+   "diverges": 9
   },
   "disjoint": {
    "diverges": 2,
@@ -47,8 +47,9 @@
    "diverges": 2
   },
   "maxCount": {
-   "diverges": 9,
-   "agrees": 4
+   "agrees": 9,
+   "diverges": 3,
+   "write_error": 1
   },
   "maxExclusive": {
    "diverges": 1,
@@ -83,8 +84,9 @@
    "agrees": 2
   },
   "nodeKind": {
-   "diverges": 4,
-   "agrees": 2
+   "agrees": 3,
+   "diverges": 2,
+   "write_error": 1
   },
   "not": {
    "diverges": 1,
@@ -95,12 +97,13 @@
    "agrees": 4
   },
   "pattern": {
-   "diverges": 4,
-   "agrees": 2
+   "agrees": 3,
+   "diverges": 3
   },
   "property": {
-   "diverges": 25,
-   "agrees": 30
+   "agrees": 35,
+   "diverges": 19,
+   "write_error": 1
   },
   "qualifiedValueShape": {
    "diverges": 1,
@@ -116,10 +119,6 @@
   }
  },
  "owners": {
-  "core/complex/personexample#personexample": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
   "core/complex/shacl-shacl#shacl-shacl": {
    "class": "over-refusal-on-split",
    "item": "aegis-9q3v"
@@ -129,8 +128,8 @@
    "item": "aegis-kaj"
   },
   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001": {
-   "class": "class-path-unexplained",
-   "item": "aegis-kaj"
+   "class": "cannot-verify-complex-path",
+   "item": "aegis-9q3v"
   },
   "core/path/path-strange-001#path-strange-001": {
    "class": "class-path-unexplained",
@@ -161,10 +160,6 @@
    "item": "aegis-7ur8"
   },
   "core/property/lessThanOrEquals-001#lessThanOrEquals-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
-  "core/property/maxCount-001#maxCount-001": {
    "class": "cross-write-value-set",
    "item": "aegis-7ur8"
   },
@@ -212,21 +207,9 @@
    "class": "cross-write-value-set",
    "item": "aegis-7ur8"
   },
-  "core/targets/targetClass-001#targetClass-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
   "core/targets/targetClassImplicit-001#targetClassImplicit-001": {
    "class": "class-path-unexplained",
    "item": "aegis-kaj"
-  },
-  "core/targets/targetSubjectsOf-001#targetSubjectsOf-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
-  "core/targets/targetSubjectsOf-002#targetSubjectsOf-002": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
   },
   "core/validation-reports/shared#shared": {
    "class": "class-path-unexplained",
@@ -234,14 +217,6 @@
   }
  },
  "divergences": [
-  [
-   "core/complex/personexample#personexample",
-   "per_triple"
-  ],
-  [
-   "core/complex/personexample#personexample",
-   "per_triple_reversed"
-  ],
   [
    "core/complex/shacl-shacl#shacl-shacl",
    "per_subject"
@@ -283,22 +258,6 @@
    "per_triple_reversed"
   ],
   [
-   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
-   "per_subject"
-  ],
-  [
-   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
-   "per_subject_reversed"
-  ],
-  [
-   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
-   "per_triple"
-  ],
-  [
-   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
-   "per_triple_reversed"
-  ],
-  [
    "core/path/path-strange-001#path-strange-001",
    "per_subject"
   ],
@@ -376,14 +335,6 @@
   ],
   [
    "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/property/maxCount-001#maxCount-001",
-   "per_triple"
-  ],
-  [
-   "core/property/maxCount-001#maxCount-001",
    "per_triple_reversed"
   ],
   [
@@ -491,14 +442,6 @@
    "per_triple_reversed"
   ],
   [
-   "core/targets/targetClass-001#targetClass-001",
-   "per_triple"
-  ],
-  [
-   "core/targets/targetClass-001#targetClass-001",
-   "per_triple_reversed"
-  ],
-  [
    "core/targets/targetClassImplicit-001#targetClassImplicit-001",
    "per_subject"
   ],
@@ -512,22 +455,6 @@
   ],
   [
    "core/targets/targetClassImplicit-001#targetClassImplicit-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/targets/targetSubjectsOf-001#targetSubjectsOf-001",
-   "per_triple"
-  ],
-  [
-   "core/targets/targetSubjectsOf-001#targetSubjectsOf-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/targets/targetSubjectsOf-002#targetSubjectsOf-002",
-   "per_triple"
-  ],
-  [
-   "core/targets/targetSubjectsOf-002#targetSubjectsOf-002",
    "per_triple_reversed"
   ],
   [
@@ -553,6 +480,38 @@
   [
    "core/validation-reports/shared#shared",
    "subject_halves_reversed"
+  ]
+ ],
+ "unjudged": [
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject_reversed",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple_reversed",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "subject_halves",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "subject_halves_reversed",
+   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
   ]
  ]
 }
