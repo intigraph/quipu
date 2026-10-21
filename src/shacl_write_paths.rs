@@ -12,7 +12,10 @@ use crate::{Error, Result};
 
 pub(crate) struct CardinalityPlan {
     pub(crate) has_upper_bound: bool,
+    pub(crate) has_value_constraint: bool,
     pub(crate) incoming_predicates: BTreeSet<String>,
+    pub(crate) object_target_predicates: BTreeSet<String>,
+    pub(crate) node_reference_predicates: BTreeSet<String>,
 }
 
 impl Validator {
@@ -28,7 +31,10 @@ impl Validator {
         let mut seen = HashSet::new();
         let mut plan = CardinalityPlan {
             has_upper_bound: false,
+            has_value_constraint: false,
             incoming_predicates: BTreeSet::new(),
+            object_target_predicates: BTreeSet::new(),
+            node_reference_predicates: BTreeSet::new(),
         };
         while let Some(index) = pending.pop() {
             if !seen.insert(index) {
@@ -44,10 +50,30 @@ impl Validator {
                 if let Target::ObjectsOf(predicate) = target {
                     plan.incoming_predicates
                         .insert(predicate.as_str().to_owned());
+                    plan.object_target_predicates
+                        .insert(predicate.as_str().to_owned());
                 }
             }
             pending.extend(shape.property_shapes().iter().copied());
             for component in shape.components() {
+                if matches!(
+                    component,
+                    IRComponent::Datatype(_)
+                        | IRComponent::NodeKind(_)
+                        | IRComponent::Class(_)
+                        | IRComponent::Pattern(_)
+                        | IRComponent::MinLength(_)
+                        | IRComponent::MaxLength(_)
+                        | IRComponent::MinExclusive(_)
+                        | IRComponent::MinInclusive(_)
+                        | IRComponent::MaxExclusive(_)
+                        | IRComponent::MaxInclusive(_)
+                        | IRComponent::In(_)
+                        | IRComponent::LanguageIn(_)
+                        | IRComponent::Node(_)
+                ) {
+                    plan.has_value_constraint = true;
+                }
                 match component {
                     IRComponent::MaxCount(_) => {
                         plan.has_upper_bound = true;
@@ -66,7 +92,13 @@ impl Validator {
                     IRComponent::And(value) => pending.extend(value.shapes().iter().copied()),
                     IRComponent::Or(value) => pending.extend(value.shapes().iter().copied()),
                     IRComponent::Xone(value) => pending.extend(value.shapes().iter().copied()),
-                    IRComponent::Node(value) => pending.push(*value.shape()),
+                    IRComponent::Node(value) => {
+                        if let Some(SHACLPath::Predicate { pred }) = shape.path() {
+                            plan.node_reference_predicates
+                                .insert(pred.as_str().to_owned());
+                        }
+                        pending.push(*value.shape());
+                    }
                     IRComponent::Not(value) => pending.push(*value.shape()),
                     IRComponent::QualifiedValueShape(value) => {
                         pending.push(*value.shape());

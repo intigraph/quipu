@@ -56,6 +56,17 @@ whole-graph pending-post-state check:
   it cannot introduce new violations found only in that context. A conforming
   payload takes the fast path. This preserves incremental-write compatibility
   and is **not** whole-graph conformance certification.
+- Write-savepoint admission also checks the stored values of touched focuses
+  for maximum count, datatype, node kind, class, pattern, length, numeric bounds,
+  enumeration, language, and nested-node constraints. This catches a value written
+  before the type or edge that targets it. Referenced-node context stays in the
+  destination graph (ROOT contributes types only), with explicit fact/node caps;
+  inability to verify refuses before commit. It does not turn context nodes into
+  additional write-owned focuses. Changes to a child recheck its bounded
+  incoming dependents on declared direct-predicate `sh:node` paths. Other incoming
+  dependencies are not a whole-graph revalidation guarantee. This does not add a new minimum-count requirement to an
+  incomplete incremental write. Existing deactivation and unsupported cardinality
+  path behavior remain unchanged.
 - With `governance.enforce_on_write` enabled, an applicable action-boundary
   policy evaluates its claim for touched targets against the transaction's
   pending post-state. A parent can require evidence on its linked child in the
