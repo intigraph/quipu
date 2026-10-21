@@ -13,6 +13,7 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod shacl_poststate;
 pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
 #[cfg(test)]
@@ -104,6 +105,8 @@ pub struct Store {
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
+    /// Explicit per-operation shapes, restored when the scoped operation ends.
+    pub(crate) write_shapes: Option<String>,
     /// OWL write-time constraint policy (aegis-bmqup).
     pub(crate) owl_config: OwlConfig,
     /// Ontology built from the stored ontologies, cached because the write gate

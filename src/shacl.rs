@@ -20,6 +20,9 @@ use shacl_engine::validator::store::ShaclDataManager;
 #[path = "shacl_targets.rs"]
 mod targets;
 
+#[path = "shacl_write_paths.rs"]
+mod write_paths;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
