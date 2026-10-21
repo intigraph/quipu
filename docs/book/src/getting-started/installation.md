@@ -271,8 +271,8 @@ quipu = { package = "quipu-ai", version = "0.15" }
 ```
 
 Verify with `cargo check`. Enable required capabilities with Cargo features;
-`shacl` is enabled by default, while `full` also includes the server-related
-capabilities. **Upgrade:** update the version requirement deliberately and run
+`shacl` supplies validation support, while `full` also includes the
+server-related capabilities. **Upgrade:** update the version requirement deliberately and run
 `cargo update -p quipu-ai && cargo check` with your application's tests.
 **Remove:** remove the dependency entry and its imports, then run `cargo check`
 and let Cargo update the lockfile. A dependency does not install CLI commands,
