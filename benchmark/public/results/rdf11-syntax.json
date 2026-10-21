@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF 1.1 syntax suites (Turtle, N-Triples, N-Quads, TriG)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "613c07346c5aa0f3a03cacf14bc41609750384cd",
-  "quipu_version": "quipu 0.14.1\ngit_sha: 613c07346c5aa0f3a03cacf14bc41609750384cd\ngit_dirty: false",
+  "quipu_revision": "8fb57af0472af4bb8038247ccb54f9a4b2afe689",
+  "quipu_version": "quipu 0.15.0\ngit_sha: 8fb57af0472af4bb8038247ccb54f9a4b2afe689\ngit_dirty: false",
   "scope": "every manifest case; loading through `quipu knot`, evaluation compared after `quipu export --format ntriples`; N-Quads and TriG unsupported",
   "departures": [
     "Turtle inputs get a leading @base line naming the suite's retrieval IRI",
@@ -2119,7 +2119,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point ' '"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point ' '"
     },
     {
       "class": "rdf11-syntax",
@@ -2130,7 +2130,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 41: The escape sequence '\\u00ZZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 41: The escape sequence '\\u00ZZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -2141,7 +2141,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 41: The escape sequence '\\U00ZZ1111' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 41: The escape sequence '\\U00ZZ1111' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -2152,7 +2152,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 37 and 39: Unexpected escape character '\\n'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 37 and 39: Unexpected escape character '\\n'"
     },
     {
       "class": "rdf11-syntax",
@@ -2163,7 +2163,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 37 and 39: Unexpected escape character '\\/'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 37 and 39: Unexpected escape character '\\/'"
     },
     {
       "class": "rdf11-syntax",
@@ -2174,7 +2174,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point ' '"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point ' '"
     },
     {
       "class": "rdf11-syntax",
@@ -2185,7 +2185,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point '<'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point '<'"
     },
     {
       "class": "rdf11-syntax",
@@ -2196,7 +2196,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point '>'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 44: Invalid IRI code point '>'"
     },
     {
       "class": "rdf11-syntax",
@@ -2207,7 +2207,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 43: Invalid IRI code point '{'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 43: Invalid IRI code point '{'"
     },
     {
       "class": "rdf11-syntax",
@@ -2218,7 +2218,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 3: The prefix : has not been declared"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 3: The prefix : has not been declared"
     },
     {
       "class": "rdf11-syntax",
@@ -2229,7 +2229,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 between columns 49 and 51: The prefix : has not been declared"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 between columns 49 and 51: The prefix : has not been declared"
     },
     {
       "class": "rdf11-syntax",
@@ -2240,7 +2240,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 13: The PREFIX declaration should be followed by a prefix and its value as an IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 13: The PREFIX declaration should be followed by a prefix and its value as an IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -2251,7 +2251,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 9 and 46: The PREFIX keyword should be followed by a prefix like 'ex:'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 9 and 46: The PREFIX keyword should be followed by a prefix like 'ex:'"
     },
     {
       "class": "rdf11-syntax",
@@ -2262,7 +2262,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 9: The PREFIX keyword should be followed by a prefix like 'ex:'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 9: The PREFIX keyword should be followed by a prefix like 'ex:'"
     },
     {
       "class": "rdf11-syntax",
@@ -2273,7 +2273,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 7: The BASE keyword should be followed by an IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 7: The BASE keyword should be followed by an IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -2284,7 +2284,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 6: @BASE is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 6: @BASE is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2295,7 +2295,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 44: . is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 44: . is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2306,7 +2306,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 1 and 3: A blank node ID cannot be empty"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 1 and 3: A blank node ID cannot be empty"
     },
     {
       "class": "rdf11-syntax",
@@ -2317,7 +2317,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 6 and 10: The prefix : has not been declared"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 6 and 10: The prefix : has not been declared"
     },
     {
       "class": "rdf11-syntax",
@@ -2328,7 +2328,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 1: { is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 1: { is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2339,7 +2339,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 40: = is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 40: = is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2350,7 +2350,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 118 and 156: A dot is expected at the end of statements"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 118 and 156: A dot is expected at the end of statements"
     },
     {
       "class": "rdf11-syntax",
@@ -2361,7 +2361,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 8: \"hello\" is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 8: \"hello\" is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2372,7 +2372,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 40 and 47: \"hello\" is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 40 and 47: \"hello\" is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2383,7 +2383,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 40: [ is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 40: [ is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2394,7 +2394,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 40 and 43: _:p is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 40 and 43: _:p is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2405,7 +2405,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 4: A is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 4: A is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2416,7 +2416,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 1: a is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 1: a is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2427,7 +2427,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 7: a is not a valid RDF object"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 7: a is not a valid RDF object"
     },
     {
       "class": "rdf11-syntax",
@@ -2438,7 +2438,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 5: true is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 5: true is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2449,7 +2449,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 4 and 8: true is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 4 and 8: true is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2460,7 +2460,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 5 column 1: { is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 5 column 1: { is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2471,7 +2471,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 5 column 4: = is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 5 column 4: = is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2482,7 +2482,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 6 column 3: . is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 6 column 3: . is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2493,7 +2493,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 6 column 3: ^ is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 6 column 3: ^ is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2504,7 +2504,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 5 between columns 4 and 6: is is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 5 between columns 4 and 6: is is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2515,7 +2515,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 5 column 10: . is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 5 column 10: . is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2526,7 +2526,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2537,7 +2537,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2548,7 +2548,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 between columns 4 and 6: => is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 between columns 4 and 6: => is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2559,7 +2559,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 4 column 4 and line 5 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 4 column 4 and line 5 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2570,7 +2570,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 between columns 1 and 9: @forSome is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 between columns 1 and 9: @forSome is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2581,7 +2581,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 between columns 1 and 8: @forAll is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 between columns 1 and 8: @forAll is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2592,7 +2592,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 10: @keywords is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2603,7 +2603,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2614,7 +2614,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2625,7 +2625,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2636,7 +2636,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2647,7 +2647,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2658,7 +2658,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2669,7 +2669,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2680,7 +2680,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 46 and 52: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2691,7 +2691,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\ud800' is encoding D800 that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2702,7 +2702,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 44 and 50: The escape sequence '\\udfff' is encoding DFFF that is not a valid unicode character"
     },
     {
       "class": "rdf11-syntax",
@@ -2713,7 +2713,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 column 1: Unexpected end"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 column 1: Unexpected end"
     },
     {
       "class": "rdf11-syntax",
@@ -2724,7 +2724,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 120: . is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 120: . is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2735,7 +2735,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 120: . is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 120: . is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2746,7 +2746,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 column 1: Unexpected end"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 column 1: Unexpected end"
     },
     {
       "class": "rdf11-syntax",
@@ -2757,7 +2757,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 1: Unexpected end"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 1: Unexpected end"
     },
     {
       "class": "rdf11-syntax",
@@ -2768,7 +2768,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 1: Unexpected end"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 1: Unexpected end"
     },
     {
       "class": "rdf11-syntax",
@@ -2779,7 +2779,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 1 and 6: \"abc\" is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 1 and 6: \"abc\" is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2790,7 +2790,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 40 and 45: \"abc\" is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 40 and 45: \"abc\" is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2801,7 +2801,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 40: [ is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 40: [ is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2812,7 +2812,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 40 and 43: _:a is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 40 and 43: _:a is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2823,7 +2823,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 88: A language code should always start with a letter"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 88: A language code should always start with a letter"
     },
     {
       "class": "rdf11-syntax",
@@ -2834,7 +2834,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 81 and 83: Unexpected escape character '\\z'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 81 and 83: Unexpected escape character '\\z'"
     },
     {
       "class": "rdf11-syntax",
@@ -2845,7 +2845,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 82: The escape sequence '\\uWXYZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 82: The escape sequence '\\uWXYZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -2856,7 +2856,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 86: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 86: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -2867,7 +2867,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 86: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 86: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -2878,7 +2878,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 column 3: ~ is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 column 3: ~ is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -2889,7 +2889,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 between columns 2 and 5: escapes in IRIs should be % followed by two hexadecimal characters, found '%2 '"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 between columns 2 and 5: escapes in IRIs should be % followed by two hexadecimal characters, found '%2 '"
     },
     {
       "class": "rdf11-syntax",
@@ -2900,7 +2900,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 4 column 3: The character that are allowed to be escaped in IRIs are _~.-!$&'()*+,;=/?#@%, found 'u'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 4 column 3: The character that are allowed to be escaped in IRIs are _~.-!$&'()*+,;=/?#@%, found 'u'"
     },
     {
       "class": "rdf11-syntax",
@@ -2911,7 +2911,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2922,7 +2922,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2933,7 +2933,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2944,7 +2944,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 3 column 7 and line 4 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2955,7 +2955,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 4 column 7 and line 6 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 4 column 7 and line 6 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2966,7 +2966,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 4 column 16 and line 5 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 4 column 16 and line 5 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2977,7 +2977,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 4 column 16 and line 5 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 4 column 16 and line 5 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -2988,7 +2988,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 83 and 86: abc is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 83 and 86: abc is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -2999,7 +2999,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 79 and 83: A double exponent cannot be empty"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 79 and 83: A double exponent cannot be empty"
     },
     {
       "class": "rdf11-syntax",
@@ -3010,7 +3010,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 82 and 85: abc is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 82 and 85: abc is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -3021,7 +3021,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 80 and 84: x123 is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 80 and 84: x123 is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -3032,7 +3032,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 79: An integer should not be empty"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 79: An integer should not be empty"
     },
     {
       "class": "rdf11-syntax",
@@ -3417,7 +3417,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 67 and 69: ^^ is not a valid subject or graph name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 67 and 69: ^^ is not a valid subject or graph name"
     },
     {
       "class": "rdf11-syntax",
@@ -3450,7 +3450,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 5: . is not a valid predicate"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 5: . is not a valid predicate"
     },
     {
       "class": "rdf11-syntax",
@@ -3461,7 +3461,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 6 column 9: blank node property lists should end with a ']'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 6 column 9: blank node property lists should end with a ']'"
     },
     {
       "class": "rdf11-syntax",
@@ -3472,7 +3472,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 column 8: An integer should not be empty"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 column 8: An integer should not be empty"
     },
     {
       "class": "rdf11-syntax",
@@ -3483,7 +3483,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 8 and 11: escapes in IRIs should be % followed by two hexadecimal characters, found '%2 '"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 8 and 11: escapes in IRIs should be % followed by two hexadecimal characters, found '%2 '"
     },
     {
       "class": "rdf11-syntax",
@@ -3494,7 +3494,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 7 and 10: escapes in IRIs should be % followed by two hexadecimal characters, found '%2o'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 7 and 10: escapes in IRIs should be % followed by two hexadecimal characters, found '%2o'"
     },
     {
       "class": "rdf11-syntax",
@@ -3505,7 +3505,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 9 and 11: The PREFIX keyword should be followed by a prefix like 'ex:'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 9 and 11: The PREFIX keyword should be followed by a prefix like 'ex:'"
     },
     {
       "class": "rdf11-syntax",
@@ -3516,7 +3516,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 9: The PREFIX keyword should be followed by a prefix like 'ex:'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 9: The PREFIX keyword should be followed by a prefix like 'ex:'"
     },
     {
       "class": "rdf11-syntax",
@@ -3527,7 +3527,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 3 between columns 8 and 17: 'invalid.' is not a valid prefix: prefixes are not allowed to end with '.'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 3 between columns 8 and 17: 'invalid.' is not a valid prefix: prefixes are not allowed to end with '.'"
     },
     {
       "class": "rdf11-syntax",
@@ -3538,7 +3538,7 @@
       "approval": "Approved",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 8: The PREFIX keyword should be followed by a prefix like 'ex:'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 8: The PREFIX keyword should be followed by a prefix like 'ex:'"
     },
     {
       "class": "rdf11-syntax",
@@ -3835,7 +3835,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 1 and 24: Invalid IRI code point ' '"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 1 and 24: Invalid IRI code point ' '"
     },
     {
       "class": "rdf11-syntax",
@@ -3846,7 +3846,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 21: The escape sequence '\\u00ZZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 21: The escape sequence '\\u00ZZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -3857,7 +3857,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 21: The escape sequence '\\U00ZZ1111' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 21: The escape sequence '\\U00ZZ1111' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -3868,7 +3868,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 17 and 19: Unexpected escape character '\\n'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 17 and 19: Unexpected escape character '\\n'"
     },
     {
       "class": "rdf11-syntax",
@@ -3879,7 +3879,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 17 and 19: Unexpected escape character '\\/'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 17 and 19: Unexpected escape character '\\/'"
     },
     {
       "class": "rdf11-syntax",
@@ -3890,7 +3890,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 1 and 4: No scheme found in an absolute IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 1 and 4: No scheme found in an absolute IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -3901,7 +3901,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 20 and 23: No scheme found in an absolute IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 20 and 23: No scheme found in an absolute IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -3912,7 +3912,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 39 and 42: No scheme found in an absolute IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 39 and 42: No scheme found in an absolute IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -3923,7 +3923,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 46 and 50: No scheme found in an absolute IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 46 and 50: No scheme found in an absolute IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -3934,7 +3934,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 1 and 8: The subject of a triple must be an IRI or a blank node"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 1 and 8: The subject of a triple must be an IRI or a blank node"
     },
     {
       "class": "rdf11-syntax",
@@ -3945,7 +3945,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 1 and 6: The subject of a triple must be an IRI or a blank node"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 1 and 6: The subject of a triple must be an IRI or a blank node"
     },
     {
       "class": "rdf11-syntax",
@@ -3956,7 +3956,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 1 and 3: A blank node ID cannot be empty"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 1 and 3: A blank node ID cannot be empty"
     },
     {
       "class": "rdf11-syntax",
@@ -3967,7 +3967,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 6 and 10: The predicate of a triple must be an IRI"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 6 and 10: The predicate of a triple must be an IRI"
     },
     {
       "class": "rdf11-syntax",
@@ -3978,7 +3978,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 column 57: The subject of a triple must be an IRI or a blank node"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 column 57: The subject of a triple must be an IRI or a blank node"
     },
     {
       "class": "rdf11-syntax",
@@ -3989,7 +3989,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 column 57: The subject of a triple must be an IRI or a blank node"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 column 57: The subject of a triple must be an IRI or a blank node"
     },
     {
       "class": "rdf11-syntax",
@@ -4000,7 +4000,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 48: A language code should always start with a letter"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 48: A language code should always start with a letter"
     },
     {
       "class": "rdf11-syntax",
@@ -4011,7 +4011,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 between columns 41 and 43: Unexpected escape character '\\z'"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 between columns 41 and 43: Unexpected escape character '\\z'"
     },
     {
       "class": "rdf11-syntax",
@@ -4022,7 +4022,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 42: The escape sequence '\\uWXYZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 42: The escape sequence '\\uWXYZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -4033,7 +4033,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 2 column 46: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 2 column 46: The escape sequence '\\U0000WXYZ' is not a valid hexadecimal string"
     },
     {
       "class": "rdf11-syntax",
@@ -4044,7 +4044,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 39 and line 2 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 1 column 39 and line 2 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -4055,7 +4055,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -4066,7 +4066,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 39 and 44: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 39 and 44: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -4077,7 +4077,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 column 39: ''' is not allowed at the beginning of a prefix name"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 column 39: ''' is not allowed at the beginning of a prefix name"
     },
     {
       "class": "rdf11-syntax",
@@ -4088,7 +4088,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 41 and 46: The subject of a triple must be an IRI or a blank node"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 41 and 46: The subject of a triple must be an IRI or a blank node"
     },
     {
       "class": "rdf11-syntax",
@@ -4099,7 +4099,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error between line 1 column 39 and line 2 column 1: Unexpected end of file"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error between line 1 column 39 and line 2 column 1: Unexpected end of file"
     },
     {
       "class": "rdf11-syntax",
@@ -4110,7 +4110,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -4121,7 +4121,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 column 39: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 column 39: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -4132,7 +4132,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 39 and 42: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -4143,7 +4143,7 @@
       "approval": "unmarked",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "error ingesting: RDF parse error: Parser error at line 1 between columns 39 and 44: The object of a triple must be an IRI, a blank node or a literal"
+      "diagnostic": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\nerror ingesting: RDF parse error: Parser error at line 1 between columns 39 and 44: The object of a triple must be an IRI, a blank node or a literal"
     },
     {
       "class": "rdf11-syntax",
@@ -9283,6 +9283,6 @@
       "diagnostic": "Quipu has no TriG parser"
     }
   ],
-  "generated_at": "2026-10-17T12:35:06Z",
-  "generated_by": "https://github.com/scbrown/quipu/actions/runs/39032653852"
+  "generated_at": "2026-10-21T15:07:04Z",
+  "generated_by": "https://github.com/scbrown/quipu/actions/runs/39619544090"
 }
