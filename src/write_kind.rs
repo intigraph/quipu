@@ -111,6 +111,8 @@ impl WriteKind {
             | "/align/apply" => Self::Derive,
             "/ontology" => Self::Ontology,
             "/reason" => Self::Reasoner,
+            // aegis-blh.2: a stored challenge, then a signed human decision.
+            "/deck/present" | "/deck/attest" => Self::Verdict,
             _ => return None,
         })
     }

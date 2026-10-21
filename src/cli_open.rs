@@ -73,5 +73,35 @@ pub fn open_store(db_path: &str) -> Store {
         eprintln!("error initializing keyword index: {e}");
         std::process::exit(1);
     }
+    store.embedding_config_mut().clone_from(&config().embedding);
+    // Pure reads and backups do not need to construct an inference session.
+    // Import/share and ordinary writes must use the configured provider.
+    let command = std::env::args().nth(1).unwrap_or_default();
+    if !matches!(
+        command.as_str(),
+        "read"
+            | "query"
+            | "cord"
+            | "stats"
+            | "export"
+            | "pack"
+            | "report"
+            | "unravel"
+            | "explain"
+            | "impact"
+    ) {
+        configure_embeddings(&mut store);
+    }
     store
+}
+
+/// Apply the same provider policy to explicitly transient import stores.
+pub fn configure_embeddings(store: &mut Store) {
+    match quipu::embedding_runtime::configure_provider(store, &config().embedding) {
+        Ok(status) => eprintln!("{status}"),
+        Err(error) => {
+            eprintln!("embedding configuration error: {error}");
+            std::process::exit(1);
+        }
+    }
 }

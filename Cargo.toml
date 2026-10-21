@@ -83,6 +83,10 @@ path = "examples/mergebench/main.rs"
 required-features = ["shacl"]
 
 [[example]]
+name = "merge_load"
+required-features = ["shacl"]
+
+[[example]]
 name = "replay"
 path = "examples/replay/main.rs"
 required-features = ["shacl"]

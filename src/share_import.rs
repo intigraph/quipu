@@ -13,6 +13,9 @@ use crate::store::Store;
 
 pub use crate::share_review::{import_share, promote_import};
 
+mod identity;
+use identity::{import_id, provenance_source, staging_graph};
+
 const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -25,6 +28,9 @@ pub struct ShareImportRequest {
     /// The `queries.ttl` member, when the share carries one (aegis-fxpbys.2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries_turtle: Option<String>,
+    /// Verified ancillary evidence, retained separately; never loaded as graph or policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments_turtle: Option<String>,
     /// Registry namespace for the share's queries; defaults to one derived from
     /// the producer's store identity (`share_queries::default_namespace`).
     #[serde(default)]
@@ -125,6 +131,8 @@ pub struct PromotionStatus {
 /// Completed import decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareImportResult {
+    #[serde(default)]
+    pub embedding: crate::import_embedding::ImportEmbeddingStatus,
     pub outcome: String,
     pub import_id: String,
     pub share_id: String,
@@ -165,30 +173,6 @@ pub struct PromoteImportResult {
     /// absent when the share carried none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<crate::share_queries::QueryImport>,
-}
-
-fn hash_suffix(value: &str) -> Result<&str> {
-    value
-        .strip_prefix("sha256:")
-        .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or_else(|| Error::InvalidValue(format!("invalid sha256 identifier: {value}")))
-}
-
-fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
-    let hash = hash_suffix(share_id)?;
-    let kind = if quarantine { "quarantine" } else { "staging" };
-    Ok(format!("urn:quipu:import:{kind}:{hash}"))
-}
-
-fn import_id(share_id: &str) -> Result<String> {
-    Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
-}
-
-fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
-    claim.map_or_else(
-        || format!("{prefix}:{id}"),
-        |actor| format!("{prefix}:{id}:claimed-actor={actor}"),
-    )
 }
 
 pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
@@ -236,6 +220,10 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
         )));
     }
     crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
+    crate::share_alignments::verify_member(
+        &request.manifest,
+        request.alignments_turtle.as_deref(),
+    )?;
     // A hand-edited manifest must not carry what the producer would have refused.
     crate::share::validate_pointers(&request.manifest.pointers)?;
     let expected = sha256(&manifest_bytes(&request.manifest, false)?);
@@ -412,6 +400,7 @@ pub(crate) fn import_inner(
     // be signing the wrong thing.
     verify_share(request)?;
     crate::namespace_publication::receive(store, request)?;
+    crate::import_embedding::verify_recipe(store, request.manifest.embedding.as_ref())?;
     // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
     // staged (aegis-auw0o7). A share stamped `internal` was produced with the
     // outward scrub skipped, so importing it here is the moment that exemption
@@ -439,6 +428,9 @@ pub(crate) fn import_inner(
             ("export.nt".to_string(), request.export_ntriples.clone()),
             ("shapes.ttl".to_string(), request.shapes_turtle.clone()),
         ]);
+        if let Some(text) = &request.alignments_turtle {
+            files.insert("alignments.ttl".into(), text.clone());
+        }
         if let Some(queries) = &request.queries_turtle {
             files.insert("queries.ttl".to_string(), queries.clone());
         }
@@ -524,8 +516,14 @@ pub(crate) fn import_inner(
         quarantined,
         timestamp,
     )?;
+    crate::share_alignments::retain(
+        store,
+        &request.manifest.share_id,
+        request.alignments_turtle.as_deref(),
+    )?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
+        embedding: crate::import_embedding::ImportEmbeddingStatus::default(),
         outcome: outcome.into(),
         import_id: import_id(&request.manifest.share_id)?,
         share_id: request.manifest.share_id.clone(),

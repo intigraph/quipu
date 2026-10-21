@@ -1047,13 +1047,13 @@ workflow tools reject unknown or wrong-typed top-level fields; pass an exact
 
 Produce a bounded portable share payload, including canonical manifest and member bytes. Read-only; no server-local output path. Pass the exact scope. Internal-only export exemptions are not accepted over this transport.
 
-Fields: `scope` (required), `shapes`, `no_shapes`, `queries`, `parent_share`, `turtle_view`, `max_bytes`.
+Fields: `scope` (required), `shapes`, `no_shapes`, `queries`, `alignments_turtle`, `parent_share`, `turtle_view`, `max_bytes`.
 
 ### `quipu_import`
 
 Stage a portable share with hash, vocabulary and attestation gates. Copy member contents from quipu_share; this is not a server file path. Exact-name merges default off; review before promotion.
 
-Fields: `manifest` (required), `export_ntriples` (required), `shapes_turtle` (required), `queries_turtle`, `query_namespace`, `replace_queries`, `source` (required), `actor`, `accept_exact`, `attestation`.
+Fields: `manifest` (required), `export_ntriples` (required), `shapes_turtle` (required), `queries_turtle`, `alignments_turtle`, `query_namespace`, `replace_queries`, `source` (required), `actor`, `accept_exact`, `attestation`.
 
 ### `quipu_import_promote`
 
@@ -1185,8 +1185,9 @@ To move a portable share, call `quipu_share` with
 `{"scope":{"kind":"graph","value":"urn:example:graph"}}`. Its result includes
 `manifest` and `files`. Pass that manifest, `files["export.nt"]` as
 `export_ntriples`, `files["shapes.ttl"]` as `shapes_turtle`, and a provenance
-`source` to `quipu_import` on the destination. Include `queries_turtle` when
-present. Review quarantine/resolution output before `quipu_import_promote`.
+`source` to `quipu_import` on the destination. Include `queries_turtle` and
+`files["alignments.ttl"]` as `alignments_turtle` when present; alignments are
+sealed evidence, never applied mappings. Review quarantine/resolution output before `quipu_import_promote`.
 An import result or `pending` upload result is not promotion acceptance.
 
 For `quipu_update`, provide a SPARQL `update` string, with explicit `GRAPH`

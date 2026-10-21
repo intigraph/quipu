@@ -1,5 +1,4 @@
-//! RDF view of the immutable share manifest.
-
+//! RDF view of the canonical share manifest.
 use super::{ShareDestination, ShareManifest};
 
 pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
@@ -30,6 +29,9 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
              spdx:checksumValue {} ] ]",
             literal(hash.strip_prefix("sha256:").unwrap_or(hash))
         )
+    });
+    let alignments = manifest.alignments_hash.as_ref().map_or_else(String::new, |hash| {
+        format!(",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ; dcat:downloadURL <payload:alignments.ttl> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
     });
     let destination = manifest.destination.as_ref().map_or_else(String::new, |d| {
         let text = serde_json::to_string(d).expect("destination JSON");
@@ -63,7 +65,7 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
   [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
     dcat:downloadURL <payload:shapes.ttl> ;
     spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ]{queries} .
+      spdx:checksumValue {} ] ]{queries}{alignments} .
 "#,
         literal(&manifest.share_id),
         literal(&manifest.created_at),

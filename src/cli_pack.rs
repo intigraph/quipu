@@ -41,7 +41,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--queries <name>]... [--no-queries] [--parent-share <sha256:id>] \
+             [--queries <name>]... [--no-queries] [--alignments <file>] [--parent-share <sha256:id>] \
              [--since <parent-reference>] [--turtle] [--destination internal]"
             );
             std::process::exit(1);
@@ -83,7 +83,14 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         eprintln!("share accepts either --queries or --no-queries, not both");
         std::process::exit(1);
     }
+    let alignments_turtle = flag_value(args, "--alignments").map(|path| {
+        quipu::share_alignments::read_file(std::path::Path::new(path)).unwrap_or_else(|error| {
+            eprintln!("share alignments: {error}");
+            std::process::exit(1)
+        })
+    });
     let opts = quipu::share::ShareOptions {
+        alignments_turtle,
         scope,
         shapes,
         no_shapes,
@@ -286,6 +293,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             request.actor = actor.map(String::from);
             request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
             let mut store = quipu::Store::open_in_memory()?;
+            crate::cli_open::configure_embeddings(&mut store);
             quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
         });
         match imported {
@@ -353,6 +361,9 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         } else {
             crate::cli_open::open_store(db_path)
         };
+        if transient {
+            crate::cli_open::configure_embeddings(&mut store);
+        }
         quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
     });
     match imported {
