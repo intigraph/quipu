@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 ### Perf
 
 - *(sparql)* Probe a plain-BGP OPTIONAL once per left row (#698)([d86a48a](https://github.com/scbrown/quipu/commit/d86a48a9b6db8e8227c8d725a2754bc138a9b272))
+- *(sparql)* Hydrate OPTIONALs only for the rows an ORDER BY LIMIT returns (#700)([6d15af4](https://github.com/scbrown/quipu/commit/6d15af4088450f4ca5e8329f762f6844d4c1e7c2))
 
 ## [0.15.0] - 2026-10-20
 
