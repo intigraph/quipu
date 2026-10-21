@@ -424,6 +424,8 @@ pub fn eval_pattern_seeded(
                 let mut vars = Vec::new();
                 for graph in store.list_graphs(None, None)? {
                     if graph.g == 0
+                        || (ctx.named_dataset.is_none()
+                            && crate::store::inferred::is_inferred_graph_iri(&graph.iri))
                         || bound_graph.is_some_and(|bound| bound != graph.g)
                         || ctx
                             .named_dataset
