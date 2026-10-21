@@ -159,3 +159,117 @@ fn non_strict_equality_and_disabled_language_constraint_remain_valid() {
         write(&mut s, &shape, &[data], 0).unwrap();
     }
 }
+
+// franklin's #713 counterexamples (aegis-7ur8): a value-set constraint reached
+// through sh:node reports NodeConstraintComponent, not the leaf component, so the
+// post-state filter must keep it, for the same focus and for a parent link.
+fn d(s: &Store, subject: &str, predicate: &str, value: Value) -> Datum {
+    Datum {
+        entity: s.intern(&format!("{NS}{subject}")).unwrap(),
+        attribute: s.intern(&format!("{NS}{predicate}")).unwrap(),
+        value,
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    }
+}
+fn r(s: &Store, entity: &str) -> Value {
+    Value::Ref(s.intern(&format!("{NS}{entity}")).unwrap())
+}
+fn facts_of(s: &Store, entity: &str, predicate: &str) -> usize {
+    let e = s.lookup(&format!("{NS}{entity}")).unwrap().unwrap();
+    let p = s.lookup(&format!("{NS}{predicate}")).unwrap().unwrap();
+    s.entity_facts_in_graph(e, 0)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == p)
+        .count()
+}
+
+#[test]
+fn wrapped_same_focus_node_value_set_rejects_a_split_and_admits_a_valid_one() {
+    let shape = format!(
+        "@prefix ex: <{NS}> . @prefix sh: <http://www.w3.org/ns/shacl#> .
+         ex:S a sh:NodeShape; sh:targetNode ex:focus;
+         sh:node [sh:property [sh:path ex:left; sh:uniqueLang true]]."
+    );
+    let mut s = Store::open_in_memory().unwrap();
+    {
+        let v = [d(&s, "focus", "left", lang("first", "en"))];
+        write(&mut s, &shape, &v, 0)
+    }
+    .unwrap();
+    let refused = {
+        let v = [d(&s, "focus", "left", lang("second", "en"))];
+        write(&mut s, &shape, &v, 0)
+    };
+    assert!(
+        matches!(
+            refused,
+            Err(Error::ValidationFailed { .. } | Error::CannotVerify(_))
+        ),
+        "wrapped uniqueLang split was admitted: {refused:?}"
+    );
+    assert_eq!(
+        facts_of(&s, "focus", "left"),
+        1,
+        "the refused value must not be current"
+    );
+    // Control: different languages satisfy uniqueLang and must still commit.
+    let mut ok = Store::open_in_memory().unwrap();
+    {
+        let v = [d(&ok, "focus", "left", lang("first", "en"))];
+        write(&mut ok, &shape, &v, 0)
+    }
+    .unwrap();
+    {
+        let v = [d(&ok, "focus", "left", lang("second", "fr"))];
+        write(&mut ok, &shape, &v, 0)
+    }
+    .unwrap();
+    assert_eq!(facts_of(&ok, "focus", "left"), 2);
+}
+
+#[test]
+fn parent_nested_node_value_set_rejects_a_child_only_split_and_admits_a_valid_one() {
+    let shape = format!(
+        "@prefix ex: <{NS}> . @prefix sh: <http://www.w3.org/ns/shacl#> .
+         ex:S a sh:NodeShape; sh:targetNode ex:parent;
+         sh:property [sh:path ex:child; sh:node [sh:property [sh:path ex:name; sh:uniqueLang true]]]."
+    );
+    let mut s = Store::open_in_memory().unwrap();
+    let first = [
+        d(&s, "parent", "child", r(&s, "c")),
+        d(&s, "c", "name", lang("a", "en")),
+    ];
+    write(&mut s, &shape, &first, 0).unwrap();
+    // The second write touches ONLY the child; the violation belongs to the parent focus.
+    let refused = {
+        let v = [d(&s, "c", "name", lang("b", "en"))];
+        write(&mut s, &shape, &v, 0)
+    };
+    assert!(
+        matches!(
+            refused,
+            Err(Error::ValidationFailed { .. } | Error::CannotVerify(_))
+        ),
+        "parent-nested uniqueLang split was admitted: {refused:?}"
+    );
+    assert_eq!(
+        facts_of(&s, "c", "name"),
+        1,
+        "the refused child value must not be current"
+    );
+    let mut ok = Store::open_in_memory().unwrap();
+    let first = [
+        d(&ok, "parent", "child", r(&ok, "c")),
+        d(&ok, "c", "name", lang("a", "en")),
+    ];
+    write(&mut ok, &shape, &first, 0).unwrap();
+    {
+        let v = [d(&ok, "c", "name", lang("b", "fr"))];
+        write(&mut ok, &shape, &v, 0)
+    }
+    .unwrap();
+    assert_eq!(facts_of(&ok, "c", "name"), 2);
+}
