@@ -1,5 +1,8 @@
 # The AI Agent Builder
 
+Configure and verify the connection with [Agent Setup](../getting-started/agent-setup.md)
+before following this workflow.
+
 > "I want my agents to share structured knowledge."
 
 You're building AI agents that observe the world and need to share what they

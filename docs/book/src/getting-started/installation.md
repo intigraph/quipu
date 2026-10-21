@@ -1,139 +1,322 @@
-# Installation
+# Installation, upgrades and removal
 
-## As a Rust Dependency
+Choose one installation owner for each executable directory. Mixing Cargo,
+Homebrew, apt and manual copies can leave a different version first on `PATH`.
+The CLI command is `quipu`; `qp` is its relative alias. Native MCP also needs
+`quipu-server` from the same release beside the CLI.
 
-Add to your `Cargo.toml`:
+| Method | Prerequisites | Executable location |
+|---|---|---|
+| Release installer | Python 3.9+, curl, Linux/macOS | `$STACK_INSTALL_ROOT/bin`, default `~/.local/bin` |
+| Release archive | curl, tar, SHA-256 utility, matching platform | Your selected directory |
+| Homebrew | macOS, Homebrew | `$(brew --prefix)/bin` links into the Cellar |
+| apt | Debian/Ubuntu amd64 or arm64, sudo, curl, GnuPG | `/usr/bin` |
+| Cargo | Rust toolchain, native build prerequisites | `$CARGO_INSTALL_ROOT/bin` or `~/.cargo/bin` |
+| Source checkout | Rust toolchain, Git, just | Selected directory, default `~/.local/bin` |
+| Tambo | Tambo and a reviewed plan | The installer selected by the plan |
+| Rust dependency | Rust toolchain and Cargo project | Project dependency, not a CLI installation |
 
-```toml
-[dependencies]
-quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu" }
+Binary installers do not create your knowledge database, register an agent or
+start a service. Running Quipu can create data; see
+[configuration and data removal](#remove-configuration-and-data) separately.
+
+## Release installer
+
+Supported release targets are Linux x86_64/aarch64 and macOS x86_64/arm64.
+Download the installer for inspection, then run it:
+
+```sh
+curl --fail --show-error --location \
+  https://raw.githubusercontent.com/scbrown/quipu/main/install.sh -o install-quipu.sh
+sh install-quipu.sh
 ```
 
-To use SHACL validation (enabled by default):
+Set variables on the **receiving shell**, not on curl, for a pinned release or
+custom prefix:
 
-```toml
-[dependencies]
-quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu", features = ["shacl"] }
+```sh
+STACK_VERSION=quipu-ai-v0.15.0 STACK_INSTALL_ROOT="$HOME/.local" sh install-quipu.sh
+"$HOME/.local/bin/quipu" --version
+"$HOME/.local/bin/qp" --version
+"$HOME/.local/bin/quipu-server" --version
 ```
 
-To exclude SHACL (smaller binary, faster compile):
+The installer verifies the archive checksum, safe extraction and executable
+version before publishing links. The full bundle and `.release.json` receipt
+live under `PREFIX/lib/quipu/TAG`; `PREFIX/bin/{quipu,qp,quipu-server}` point into
+that bundle. Add `PREFIX/bin` to `PATH`.
 
-```toml
-[dependencies]
-quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu", default-features = false }
+**Upgrade:** rerun the installer without `STACK_VERSION` for the latest stable
+release, or select another published tag. Previous bundle directories remain
+available. Verify all three commands after changing versions.
+
+**Remove:** set `prefix` to the prefix actually used. Inspect the links first;
+remove only commands owned by this installation:
+
+```sh
+prefix="$HOME/.local"
+ls -l "$prefix/bin/quipu" "$prefix/bin/qp" "$prefix/bin/quipu-server"
+rm -- "$prefix/bin/quipu" "$prefix/bin/qp" "$prefix/bin/quipu-server"
+rm -r -- "$prefix/lib/quipu"
 ```
 
-## From Source
+This removes every retained Quipu release in that prefix, not user databases.
+Remove a dedicated PATH entry from your shell configuration if no other tool
+uses the directory. Do not remove the whole `~/.local` directory.
 
-`qp` is the preferred command name; `quipu` remains supported. Install both
-names plus the companion server with:
+## Release archive
 
-```bash
-just install
-# Optional destination directory:
-just install "$HOME/.local/bin"
-qp --version
+Use the archive matching your operating system and architecture. For Linux
+x86_64, with an explicit published version:
+
+```sh
+V=0.15.0
+T=x86_64-unknown-linux-gnu
+A="quipu-quipu-ai-v$V-$T"
+BASE="https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V"
+curl --fail --show-error --location "$BASE/$A.tar.gz" -o "$A.tar.gz"
+curl --fail --show-error --location "$BASE/$A.tar.gz.sha256" -o "$A.tar.gz.sha256"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c "$A.tar.gz.sha256"
+else
+  shasum -a 256 -c "$A.tar.gz.sha256"
+fi
+tar -xzf "$A.tar.gz"
+"./$A/quipu" --version
+"./$A/quipu-server" --version
+"./$A/qp" --version
+```
+
+Other target names are `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and
+`aarch64-apple-darwin`. Keep the extracted bundle intact: it contains the
+companion server and supporting files, not just the CLI. Add its absolute
+directory to `PATH`, or use the release installer to manage command links.
+
+**Upgrade:** download and verify the next bundle into a different directory;
+change your PATH or dedicated links after all three version checks succeed.
+Do not extract a new archive over a running installation.
+
+**Remove:** remove your PATH entry or links, then the exact extracted directory,
+archive and checksum file. No service is installed by extraction. Database
+removal is independent.
+
+## Homebrew
+
+The tap name `scbrown/tap` resolves to the `scbrown/homebrew-tap` repository.
+The Quipu formula supplies macOS Intel and Apple Silicon archives:
+
+```sh
+brew install scbrown/tap/quipu
 quipu --version
+qp --version
+quipu-server --version
+brew list --verbose quipu
 ```
 
-`qp` is a relative symlink to `quipu`, so both execute the same binary after
-upgrades. The installer refuses an existing conflicting `qp` in the destination
-or on PATH. It never replaces another tool's command name. Release archives
-also carry this relative link beside both binaries.
+**Upgrade:** `brew update && brew upgrade quipu`, then repeat the version checks.
+Homebrew owns its Cellar paths and command links; do not manually overwrite them.
+The current formula defines no Homebrew service.
 
-To add the command name to an existing installation without opening a store:
+**Remove:** `brew uninstall quipu`. `brew cleanup quipu` removes eligible cached
+versions. Use `brew untap scbrown/tap` only if no other installed stack formula
+uses the tap. Homebrew removal does not erase knowledge stores or shared config.
+This macOS method must be verified on macOS; a Linux archive test is not a
+Homebrew installation test.
+
+## apt
+
+Requires Debian or Ubuntu, amd64 or arm64, curl, GnuPG and administrator rights.
+Check the key fingerprint **before** adding the repository:
 
 ```bash
+(
+  set -euo pipefail
+  key_file=$(mktemp)
+  trap 'rm -f "$key_file"' EXIT
+  curl -fsSL https://scbrown.github.io/apt/key.gpg -o "$key_file"
+  fingerprints=$(gpg --batch --show-keys --with-colons "$key_file" \
+    | awk -F: '$1 == "pub" { primary=1; next } primary && $1 == "fpr" { print $10; primary=0 }')
+  test "$fingerprints" = AB5625C5612F643BF76464DF0DC99924994EC959
+  sudo install -D -m 0644 "$key_file" /etc/apt/keyrings/scbrown-stack.gpg
+  echo 'deb [signed-by=/etc/apt/keyrings/scbrown-stack.gpg] https://scbrown.github.io/apt stable main' \
+    | sudo tee /etc/apt/sources.list.d/scbrown-stack.list
+  sudo apt update
+  sudo apt install quipu
+)
+quipu --version
+quipu-server --version
+dpkg-query -L quipu
+```
+
+Use the package file list to check whether your package provides `qp` and any
+service unit. Do not create a manual alias inside a package-owned directory.
+
+**Upgrade:** `sudo apt update && sudo apt install --only-upgrade quipu`, then
+repeat the checks. Adding this repository does not itself enable unattended
+third-party updates. [Repository channels and pinning](https://github.com/scbrown/apt#channels-and-pinning)
+are controlled separately.
+
+**Remove:** stop a Quipu service you explicitly configured, then
+`sudo apt purge quipu`. Only if no other stack package uses this repository,
+remove `/etc/apt/sources.list.d/scbrown-stack.list` and
+`/etc/apt/keyrings/scbrown-stack.gpg`, then run `sudo apt update`.
+Package removal does not remove project databases or shared configuration.
+A real disposable Debian/Ubuntu install and purge is required to verify this
+method; unpacking a `.deb` alone does not exercise package-manager scripts.
+
+## Cargo executable installation
+
+The package is **`quipu-ai`**, while the library and CLI are named `quipu`.
+Use `full` to include the companion server:
+
+```sh
+cargo install quipu-ai --locked --features full
 quipu install-alias --check
 quipu install-alias
-```
-
-```bash
-git clone https://github.com/scbrown/quipu
-cd quipu
-cargo build --release --features full
-```
-
-This produces two binaries:
-
-- `target/release/quipu` -- CLI tool
-- `target/release/quipu-server` -- REST API server
-
-`quipu-server` requires **both** `onnx` (the embedding runtime it uses to
-auto-embed queries) and `server` (axum, tower-http and tokio — the HTTP stack is
-feature-gated so the library does not carry a web server; `server` also implies
-`remote`, the federation client). The `full` bundle is what releases are built
-with and enables both. Neither is a default feature, so a
-plain `cargo build --release` produces only the `quipu` CLI and **silently omits
-the server** (cargo skips a bin whose `required-features` are off). If you only
-want the CLI, `cargo build --release` is enough. Verify the server built:
-
-```bash
-ls target/release/quipu-server
-```
-
-Keep the CLI and server from the same build beside each other for `quipu mcp`.
-Both `quipu --version` and `quipu-server --version` report `git_sha` and
-`git_dirty` without opening a database or loading configuration. A source archive
-without Git metadata reports `git_sha: unknown`; a dirty build reports
-`git_dirty: true`. The HTTP `/version` response retains its existing format.
-
-## With Cargo
-
-Cargo installs the executable targets; finish the installation with the alias
-command to provide both supported names:
-
-```bash
-cargo install --git https://github.com/scbrown/quipu --locked --features full
-quipu install-alias
+quipu --version
 qp --version
+quipu-server --version
+cargo install --list
 ```
 
-`install-alias` uses the directory containing the running Quipu executable,
-including Cargo's `--root` destination. It refuses conflicting `qp` names and
-verifies the same inode and exact version output. `--check` only checks for
-collisions and does not create the link.
+Cargo installs binaries into `CARGO_INSTALL_ROOT/bin`, `ROOT/bin` with `--root ROOT`, or
+`~/.cargo/bin`. `install-alias` creates `qp` beside the running executable and
+refuses another tool's conflicting name. A plain build without the server's
+required features can omit `quipu-server`.
 
-`just install` resolves its root as `QUIPU_INSTALL_ROOT`, then
-`CARGO_INSTALL_ROOT`, then `$HOME/.local`, and installs into that root's `bin`
-directory. Its optional directory argument overrides this resolution.
+**Upgrade:** rerun `cargo install quipu-ai --locked --features full`; add
+`--version VERSION` to select a published version, or `--force` only when you
+intend to rebuild an already installed version. Repeat the alias and version
+checks.
 
-## The Full Stack (caboodle)
+**Remove:** `cargo uninstall quipu-ai`, using the same `--root ROOT` if supplied
+at installation. Cargo does not own an alias created afterward: inspect the
+remaining `ROOT/bin/qp` and remove it only if it is the `quipu` symlink from this
+installation. Do not remove other Cargo packages or the shared Cargo directory.
 
-To install Quipu as part of the whole knowledge stack —
-[caboodle](https://github.com/scbrown/caboodle) interviews, plans, applies,
-and verifies the installation of every stack tool — use the wrapper script:
+## Source checkout
 
-```bash
-# Phase one: install caboodle if absent, write a reviewable plan, STOP.
-scripts/install-stack.sh --profile kg
-
-# Phase two: after reviewing caboodle-plan.toml, apply + verify,
-# then verify and load knowledge packs into the target store.
-scripts/install-stack.sh --profile kg --yes \
-  --pendant domain.pendant.db --db my.db
+```sh
+git clone https://github.com/scbrown/quipu.git
+cd quipu
+just install
+quipu --version
+qp --version
+quipu-server --version
 ```
 
-The two-phase gate is deliberate and mirrors caboodle's own doctrine: nothing
-installs until the written plan has been reviewed (or `--yes` given
-explicitly). Every `--pendant` is checked with `quipu pack --verify` before
-`quipu unpack` — a content-hash mismatch refuses the pack rather than
-installing silently corrupted knowledge. `--dry-run` prints every command the
-script would run and executes nothing; `--profile` selects the caboodle
-profile (default `kg`).
+`just install` builds both release executables with `full`, checks for alias
+collisions, then installs the pair and relative alias. Destination resolution:
+its explicit directory argument, then `QUIPU_INSTALL_ROOT/bin`, then
+`CARGO_INSTALL_ROOT/bin`, then `~/.local/bin`. For example:
+`just install "$HOME/quipu-tools/bin"`.
 
-## Python Client
+**Upgrade:** fetch the desired reviewed source revision and rerun `just install`
+with the same destination. Keep a known-good binary pair for rollback.
 
-The REST API has a thin, zero-dependency Python client under `python/`:
+**Remove:** remove the installed `quipu`, `quipu-server` and owned `qp` alias
+from that destination. This method has no versioned `lib/quipu` bundle. Remove
+the checkout and its `target/` only if you no longer need the source or build
+cache. It does not install a service.
 
-```bash
-pip install ./python
+## Tambo and the stack wrapper
+
+Tambo installs selected tools, not just Quipu. Start in a directory you will
+retain and review the generated plan before applying it:
+
+```sh
+tambo --version
+tambo plan --profile kg
+tambo apply
+tambo verify
 ```
 
-See the [Python Client reference](../reference/python-client.md).
+Read `caboodle-plan.toml` before `apply`. Preserve it and `.caboodle/` to resume
+the same installation. The plan determines the package manager and installed
+paths: inspect its Quipu entry rather than assuming Cargo or Homebrew.
 
-## Requirements
+**Upgrade:** use the installed Tambo version's supported update/apply commands
+against that retained plan; verify the resulting tool versions and functional
+checks. **Remove Quipu:** follow the removal procedure for the package manager
+or binary prefix in the plan. Removing the plan is not an uninstall. Remove a
+Tambo-created store only after backing it up and checking its exact path.
+Do not delete `.caboodle/` if you intend to keep managing other installed tools.
 
-- Rust 1.85+ (edition 2024)
-- SQLite is bundled via rusqlite -- no system dependency needed
-- Python >= 3.11 for the optional Python client (stdlib only)
+The repository also contains `scripts/install-stack.sh`. Its current executable
+contract invokes `caboodle plan/apply/verify` and can load explicitly supplied
+pendants. Inspect `--help` and `--dry-run` before use; it is not an alias for
+arbitrary Tambo subcommands. Its `--yes` path applies the whole selected plan
+and can write the selected database. No separate uninstall command exists in
+that wrapper: use the same per-tool owners and data-removal procedure above.
+
+## Rust library dependency
+
+In a Cargo project:
+
+```toml
+[dependencies]
+quipu = { package = "quipu-ai", version = "0.15" }
+```
+
+Verify with `cargo check`. Enable required capabilities with Cargo features;
+`shacl` is enabled by default, while `full` also includes the server-related
+capabilities. **Upgrade:** update the version requirement deliberately and run
+`cargo update -p quipu-ai && cargo check` with your application's tests.
+**Remove:** remove the dependency entry and its imports, then run `cargo check`
+and let Cargo update the lockfile. A dependency does not install CLI commands,
+aliases, services or a global database. Do not use `cargo uninstall` for it.
+
+## Container and MCP Registry
+
+`server.json` declares `ghcr.io/scbrown/quipu:0.8.1` for the MCP Registry; that
+explicit registry pin is independent of the latest native release. A compatible
+Docker runtime is required. For a deliberately selected image:
+
+```sh
+docker run --name quipu-mcp -i -v quipu-data:/data ghcr.io/scbrown/quipu:0.8.1
+```
+
+Verify the image/version before configuring an agent; use the
+[Agent Setup connection control](agent-setup.md#verify-the-clients-connection)
+afterward. **Upgrade:** select and verify another published image, stop the
+old container, and recreate it with the same intended volume and configuration.
+**Remove:** `docker stop quipu-mcp && docker rm quipu-mcp`. Container removal
+retains the `quipu-data` volume. `docker volume rm quipu-data` **permanently
+deletes its database**; run it only after a verified backup and after checking
+that no other container uses that volume. Remove the client registration too.
+
+## Python client
+
+The optional zero-dependency REST client is under `python/` and requires
+Python 3.11+. Install it in a dedicated virtual environment with
+`python -m pip install ./python`. Verify with `python -m pip show quipu-client`.
+Upgrade by installing the desired checkout into that environment. Remove with
+`python -m pip uninstall quipu-client`, or remove the dedicated virtual
+environment after disconnecting its users. The client does not install a
+server, alias or local graph. It does not erase data held by a remote server.
+
+## Remove configuration and data
+
+First stop your own Quipu processes and disconnect agents. None of the binary
+methods above automatically creates a systemd or launchd service. If you added
+one, stop and disable **that exact unit**, remove its unit/plist file, then
+reload the relevant manager. Check both user and system managers as applicable;
+do not guess a service name or stop an unrelated shared service.
+
+Configuration can come from project `.bobbin/config.toml`, global
+`~/.config/bobbin/config.toml`, explicit flags and environment. These files can
+also configure other stack tools: remove the **Quipu sections** you own, not the
+whole shared file. Remove dedicated token files and agent registrations only
+after their consumers are disconnected.
+
+The default store is `.bobbin/quipu/quipu.db` relative to the working directory;
+`--db` or configuration can select another location. Record the
+actual paths before uninstalling. Store files, SQLite sidecars, attachments,
+embeddings and other configured data are separate from executables.
+
+**Deleting a store is irreversible without a backup.** Back it up first,
+confirm no server or client still has it open, and remove only its dedicated
+data directory. Never delete `.bobbin/` wholesale: other tools may use it.
+Finally run `command -v quipu`, `command -v qp` and `command -v quipu-server` in
+a new shell. Any surviving command must be attributed to another installation,
+not treated as proof that the removed copy remains installed.

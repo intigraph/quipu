@@ -7,6 +7,7 @@
 
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
+- [Agent Setup](getting-started/agent-setup.md)
 - [Configuration](getting-started/configuration.md)
 
 # Concepts
