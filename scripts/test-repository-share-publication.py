@@ -195,6 +195,37 @@ class Publication(unittest.TestCase):
         )
         self.assertEqual(status, "")
 
+    def test_optional_alignment_member_is_declared_and_hash_bound(self):
+        import hashlib
+        data = b"@prefix sssom: <https://w3id.org/sssom/> .\n"
+        member = self.stage / "alignments.ttl"
+        member.write_bytes(data)
+        manifest = json.loads((self.stage / "manifest.json").read_text())
+        bound = {**manifest, "alignments_hash": "sha256:" + hashlib.sha256(data).hexdigest(),
+                 "files": {"alignments": "alignments.ttl"}}
+        (self.stage / "manifest.json").write_text(json.dumps(bound))
+        self.prepare()
+        tag = self.proof["release_tag"]
+        self.assertEqual(verifier.verify(self.root, tag, self.revision)["source_revision"], self.revision)
+        for invalid in (
+            manifest,
+            {**bound, "files": {}},
+            {**bound, "alignments_hash": bound["alignments_hash"][7:]},
+            {**bound, "files": {"alignments": "other.ttl"}},
+        ):
+            (self.stage / "manifest.json").write_text(json.dumps(invalid))
+            with self.assertRaisesRegex(ValueError, "alignment member"):
+                publisher.check_share(self.stage)
+        (self.stage / "manifest.json").write_text(json.dumps(bound))
+        member.write_bytes(data + b"# tampered\n")
+        with self.assertRaisesRegex(ValueError, "alignment member"):
+            publisher.check_share(self.stage)
+        member.unlink()
+        with self.assertRaisesRegex(ValueError, "alignment member"):
+            publisher.check_share(self.stage)
+        (self.stage / "manifest.json").write_text(json.dumps(manifest))
+        publisher.check_share(self.stage)
+
     def test_wait_is_bounded(self):
         calls, pauses = [], []
 

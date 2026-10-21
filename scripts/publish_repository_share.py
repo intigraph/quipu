@@ -23,6 +23,7 @@ MEMBERS = {
     "manifest.ttl",
     "shapes.ttl",
     "queries.ttl",
+    "alignments.ttl",
 }
 
 
@@ -40,6 +41,24 @@ def digest(path):
     return result.hexdigest()
 
 
+def check_alignment_member(stage, manifest):
+    """Accept a physical optional carrier only with its exact manifest binding."""
+    files = manifest.get("files", {})
+    if not isinstance(files, dict):
+        raise ValueError("invalid alignment member declaration")
+    member = stage / "alignments.ttl"
+    claimed = manifest.get("alignments_hash")
+    if member.exists() or claimed is not None or "alignments" in files:
+        if (
+            files.get("alignments") != "alignments.ttl"
+            or not isinstance(claimed, str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", claimed) is None
+            or not member.is_file()
+            or claimed != "sha256:" + digest(member)
+        ):
+            raise ValueError("missing, undeclared or corrupt alignment member")
+
+
 def check_share(stage):
     files = list(stage.iterdir())
     if any(not p.is_file() or p.is_symlink() or p.name not in MEMBERS for p in files):
@@ -53,7 +72,9 @@ def check_share(stage):
     ):
         if not (stage / name).is_file() or not (stage / name).stat().st_size:
             raise ValueError("required nonempty share member missing: " + name)
-    recipe = json.loads((stage / "manifest.json").read_text()).get("embedding")
+    manifest = json.loads((stage / "manifest.json").read_text())
+    check_alignment_member(stage, manifest)
+    recipe = manifest.get("embedding")
     if (
         not isinstance(recipe, dict)
         or not isinstance(recipe.get("model"), str)
