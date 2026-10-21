@@ -1,7 +1,7 @@
-//! Cardinality admission against staged current facts, inside the write savepoint.
+//! Value-set admission against staged current facts, inside the write savepoint.
 //!
 //! Payload context repair remains monotone for the other SHACL constraints.
-//! Upper bounds cannot use that repair: an individually valid delta can make a
+//! Set constraints cannot use that repair: an individually valid delta can make a
 //! stored focus node invalid. No whole-graph revalidation or history deletion.
 
 #[cfg(feature = "shacl")]
@@ -74,13 +74,19 @@ impl Store {
         datums: &[Datum],
         graph: i64,
     ) -> Result<()> {
-        const COMPONENT: &str = "http://www.w3.org/ns/shacl#MaxCountConstraintComponent";
+        const COMPONENTS: &[&str] = &[
+            "http://www.w3.org/ns/shacl#MaxCountConstraintComponent",
+            "http://www.w3.org/ns/shacl#UniqueLangConstraintComponent",
+            "http://www.w3.org/ns/shacl#DisjointConstraintComponent",
+            "http://www.w3.org/ns/shacl#LessThanConstraintComponent",
+            "http://www.w3.org/ns/shacl#LessThanOrEqualsConstraintComponent",
+        ];
         // The caller selects reject shapes using its existing admission policy.
         // CLI --shapes and inline episode shapes remain strict, as before.
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
-        if !plan.has_upper_bound || datums.is_empty() {
+        if !plan.has_value_set_constraint || datums.is_empty() {
             return Ok(());
         }
         let subjects: BTreeSet<_> = datums
@@ -139,7 +145,7 @@ impl Store {
             .results
             .iter()
             .filter(|issue| {
-                issue.component.trim_matches(['<', '>']) == COMPONENT
+                COMPONENTS.contains(&issue.component.trim_matches(['<', '>']))
                     && focuses.contains(issue.focus_node.trim_matches(['<', '>']))
                     && issue.severity.eq_ignore_ascii_case("violation")
             })
@@ -159,7 +165,7 @@ impl Store {
                         issue
                             .message
                             .as_deref()
-                            .unwrap_or("maximum cardinality exceeded"),
+                            .unwrap_or("post-state value-set constraint violated"),
                     )
                 })
                 .collect(),
