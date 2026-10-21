@@ -4,7 +4,8 @@
 > review. Nothing here is implemented.**
 > It records the contract to build, the shipped primitives it reuses, and
 > the defects in those primitives that block replication today. Every
-> source claim cites the file at `origin/main` 453845ad. The store and
+> source claim cites the file at `origin/main` 453845ad; this is a historical
+> source inventory, not an assessment of current runtime capabilities. The store and
 > merge choices marked **OPEN (quipu lead)** are recommendations that still
 > need the quipu lead's ruling.
 
@@ -21,10 +22,10 @@ server. The loop:
    against the slice as it was at the pull, and conflicts come back as
    results, never as silent overwrites.
 
-The same path serves the HA read replicas of aegis-s34: **one replication
+The same path serves the HA read replicas: **one replication
 path, several profiles** (§3).
 
-Non-goals for this design: automatic failover (s34 phase 2, separately
+Non-goals for this design: automatic failover (HA phase 2, separately
 gated), dynamic pattern subscriptions (§4), partial merge apply (§7), and
 offline erasure of data a client already holds (§4).
 
@@ -68,14 +69,14 @@ fixed.
 ## 3. Roles: one replication path, several profiles
 
 There is one bootstrap-and-tail **applier**, one cursor and recovery
-implementation, and one compatibility matrix. s34 builds it. s24 adds the
+implementation, and one compatibility matrix. The HA follower work builds it. The client profile adds the
 overlay and admission on top. Each profile is a configuration of that
 applier:
 
 | Profile | Holds | Serves | Writes | May relay | Promotable |
 |---|---|---|---|---|---|
 | **Master** | the authoritative store | everything | orders all accepted writes | yes | n/a |
-| **Full follower** (s34) | every graph, canonical, read-only | reads within a declared lag | refuses every mutation (positive control in s34) | yes | phase 2 only, behind the fenced epoch (§9) |
+| **Full follower** (HA) | every graph, canonical, read-only | reads within a declared lag | refuses every mutation (positive control in the HA profile) | yes | phase 2 only, behind the fenced epoch (§9) |
 | **Scoped follower** | a declared graph set, canonical, read-only | reads within its scope | refuses | yes, for a subset of its scope | **never** |
 | **Client** | a scoped follower base plus a local overlay | local reads; base reads are tagged with freshness | local overlay only; changesets go to the master | no (MVP) | **never** |
 
@@ -87,7 +88,7 @@ Rules:
   requires a replica manifest whose scope is `full`, a matching
   `(store_id, log_epoch)`, and a caught-up watermark. Any scoped manifest
   refuses promotion structurally, not by convention.
-- s34's followers are the full-follower profile of this applier. s34 should
+- HA followers are the full-follower profile of this applier. The HA design should
   link to this contract rather than build a second feed applier.
 
 ## 4. Replication unit and scope
@@ -443,7 +444,7 @@ identify by registered `key_id`, and the master identifies by
 `(store_id, log_epoch)`, with `log_epoch` re-minted on restore or detected
 clone (F5).
 
-## 9. HA reads and authority (s34 boundary)
+## 9. HA reads and authority (HA boundary)
 
 - **Phase 1 followers are read-only.** Failover is phase 2 and separately
   gated.
@@ -515,7 +516,7 @@ rollback.
 |---|---|---|
 | **P0** feed correctness | F1–F5: supersede retracts, freeze epoch bump, valid time, lossless bytes, `store_id`/`log_epoch` on pages | A replica built from the feed equals an as-of read for every graph in the conformance fixtures, including OWL supersede and freeze. Mutation tests fail without each fix. The `adopt`/`restore` ownership step refuses a copied store until run. |
 | **P1** cut and authz | as-of scoped share with the §5 manifest; per-graph read authorization on query, export and stream | Bootstrap at `T` under concurrent writes followed by a tail from `T` has no gap or overlap. A denied graph is refused on every route, metadata included (positive and negative controls). Revocation refuses a cached share and a resume token; an expired lease fails closed for a second principal. |
-| **P2** follower (= s34 phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; freshness challenge controls (§5: 60 s-delayed heartbeat refuses `bounded=100ms`, fresh challenge passes, restart and replayed nonce rejected); quiet source passes by challenge; disconnected follower goes UNKNOWN; filtered no-op; dropped matching tx detected; a >1 MiB tx through a relay; zero visible facts and unchanged cursor on disconnect mid-part, quota, oversize and corrupt part; revocation mid-chunk; restart, restore and epoch change; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
+| **P2** follower (= HA phase 1) | the applier, full and scoped profiles, chunked frames | duplicate, reordered and dropped frames; freshness challenge controls (§5: 60 s-delayed heartbeat refuses `bounded=100ms`, fresh challenge passes, restart and replayed nonce rejected); quiet source passes by challenge; disconnected follower goes UNKNOWN; filtered no-op; dropped matching tx detected; a >1 MiB tx through a relay; zero visible facts and unchanged cursor on disconnect mid-part, quota, oversize and corrupt part; revocation mid-chunk; restart, restore and epoch change; a partial replica's promotion refused; 0 failed reads across a rolling deploy; lag bound with an alert |
 | **P3** client | overlay, changeset envelope, admission, receipts | offline proposal → master receipt → all replicas converge; stale shapes and conflicting edits return DecisionRecords; `foreign-epoch`, `base-unavailable` and `base-mismatch` refused with the overlay intact, then rebased under a new `operation_id`; tamper, replay and revoked-key cases refused; identical retries return the same receipt |
 | **P4** stack | Seeds plates, Yupana rebuild, Bobbin indexing, Tambo marker round-trip | master read load and client footprint measured before and after; UNKNOWN and no-false-zero controls |
 | **P5** browser | wasm verification, key custody, OPFS | explicit support boundary; no assumed parity |
@@ -535,10 +536,10 @@ granted by this document.
 
 ## 13. Open questions
 
-1. **OPEN (quipu lead):** the six store and merge recommendations as filed
-   on aegis-s24: named-graph unit; F1/F2 fix by emitting records rather than
+1. **OPEN (quipu lead):** the six store and merge recommendations in this
+   design: named-graph unit; F1/F2 fix by emitting records rather than
    refusing; chunking over re-pull; `log_epoch`; `share_merge`-based admission
-   with a post-merge SHACL gate; one applier shared with s34.
+   with a post-merge SHACL gate; one applier shared with HA followers.
 2. Valid time on client edits: proposed valid time accepted under the §7
    conflict rule, or master-stamped only?
 3. Clients offline across a shape change: re-validate the overlay locally
