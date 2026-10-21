@@ -263,7 +263,9 @@ fn plain(p: &GraphPattern) -> bool {
 
 const METADATA: [&str; 4] = ["_provider", "_trust", "_freshness", "_policy"];
 
-/// Whether a reserved response-metadata name appears as a variable anywhere.
+/// Whether a reserved response-metadata name appears as a binding key anywhere.
+/// Blank-node labels are binding keys too (`triple_pattern_vars`), so
+/// `_:_provider` counts as well as `?_provider` (franklin, #700 third review).
 fn mentions_metadata(
     chain: &GraphPattern,
     expression: &[OrderExpression],
@@ -279,15 +281,17 @@ fn mentions_metadata(
         text.push(' ');
         text.push_str(&f.to_string());
     }
-    METADATA.iter().any(|name| {
-        let needle = format!("?{name}");
-        text.match_indices(&needle).any(|(i, _)| {
-            text[i + needle.len()..]
-                .chars()
-                .next()
-                .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+    METADATA
+        .iter()
+        .flat_map(|name| [format!("?{name}"), format!("_:{name}")])
+        .any(|needle| {
+            text.match_indices(&needle).any(|(i, _)| {
+                text[i + needle.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+            })
         })
-    })
 }
 
 fn leftmost(p: &GraphPattern) -> &GraphPattern {

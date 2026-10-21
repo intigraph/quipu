@@ -386,6 +386,13 @@ ex:b ex:rank "2" ; ex:other "trusted" .
              ORDER BY ?rank"
         );
         same_answer(&header, &q, 1);
+        // A blank-node label is a binding key too: `_:_provider` in a plain
+        // right side adds the same header column (franklin, #700 third review).
+        let q = format!(
+            "PREFIX ex: <http://example.test/> SELECT ?s ?rank WHERE {{ GRAPH <{META_GRAPH}> {{ \
+             ?s ex:rank ?rank OPTIONAL {{ ?s ex:other _:{meta} }} }} }} ORDER BY ?rank"
+        );
+        same_answer(&header, &q, 1);
     }
 }
 
@@ -409,6 +416,10 @@ fn declines_metadata_names_and_non_plain_right_sides_but_keeps_plain_ones() {
             "metadata name in a plain right side",
             "WHERE { ?s ex:rank ?rank OPTIONAL { ?s ex:other ?_provider } }",
         ),
+        (
+            "metadata name as a blank-node label",
+            "WHERE { ?s ex:rank ?rank OPTIONAL { ?s ex:other _:_provider } }",
+        ),
     ] {
         assert!(
             !engages(&format!("{p} {body} ORDER BY ?rank LIMIT 3")),
@@ -418,5 +429,9 @@ fn declines_metadata_names_and_non_plain_right_sides_but_keeps_plain_ones() {
     // Positive control: an ordinary name that merely starts like one still engages.
     assert!(engages(&format!(
         "{p} WHERE {{ ?s ex:rank ?rank OPTIONAL {{ ?s ex:other ?_providers }} }} ORDER BY ?rank LIMIT 3"
+    )));
+    // Positive control: an ordinary blank-node label still engages.
+    assert!(engages(&format!(
+        "{p} WHERE {{ ?s ex:rank ?rank OPTIONAL {{ ?s ex:other _:o }} }} ORDER BY ?rank LIMIT 3"
     )));
 }
