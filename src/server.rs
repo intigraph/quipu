@@ -9,7 +9,6 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use quipu::EmbeddingProvider;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -276,40 +275,15 @@ async fn main() {
         );
     }
 
-    if let (Some(model_path), Some(tokenizer_path)) = (
-        &config.embedding.model_path,
-        &config.embedding.tokenizer_path,
-    ) {
-        match quipu::OnnxEmbeddingProvider::load(
-            model_path,
-            tokenizer_path,
-            config.embedding.dimension,
-            config.embedding.max_sequence_length,
-        ) {
-            Ok(provider) => {
-                let dim = provider.dimension();
-                store.set_embedding_provider(Arc::new(provider));
-                store.embedding_config_mut().auto_embed = config.embedding.auto_embed;
-                store.embedding_config_mut().embed_batch_size = config.embedding.embed_batch_size;
-                // Server mode defers the write-path ONNX embed OUT of the
-                // store lock: an episode write held the global
-                // mutex ~10s while embedding under it, so a write flood
-                // starved every reader. Write handlers drain + finish via
-                // finish_deferred_embed. CLI/library keep the inline path.
-                store.set_defer_auto_embed(true);
-                eprintln!(
-                    "ONNX embedding provider loaded (dim={dim}, auto_embed={}, deferred)",
-                    config.embedding.auto_embed
-                );
-            }
-            Err(e) => {
-                eprintln!("warning: failed to load ONNX embedder: {e}");
-                eprintln!("  model: {}", model_path.display());
-                eprintln!("  tokenizer: {}", tokenizer_path.display());
-                eprintln!("  vector search will be unavailable");
-            }
+    match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
+        Ok(status) => eprintln!("{status}"),
+        Err(error) => {
+            eprintln!("embedding configuration error: {error}");
+            std::process::exit(1);
         }
     }
+    // Keep expensive inference outside the global writer lock.
+    store.set_defer_auto_embed(true);
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.

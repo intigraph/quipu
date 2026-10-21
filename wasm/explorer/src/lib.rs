@@ -366,6 +366,7 @@ impl Explorer {
             &self.parent_export_ntriples,
             &ShareOptions {
                 scope: ShareScope::Root,
+                alignments_turtle: quipu::share_alignments::imported_member(&self.store, &self.parent_share).map_err(err_js)?,
                 ..ShareOptions::default()
             },
             MAX_EXPORT_BYTES,
@@ -430,6 +431,7 @@ impl Explorer {
             &self.store,
             &ShareOptions {
                 scope: ShareScope::Root,
+                alignments_turtle: quipu::share_alignments::imported_member(&self.store, &self.parent_share).map_err(err_js)?,
                 parent_share: Some(self.parent_share.clone()),
                 ..ShareOptions::default()
             },

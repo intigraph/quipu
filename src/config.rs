@@ -661,7 +661,7 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct EmbeddingConfig {
-    /// Whether to auto-embed entities after writes (default: false).
+    /// Whether to auto-embed entities after writes (default: true).
     pub auto_embed: bool,
 
     /// Number of entities to embed in each batch (default: 32).
@@ -685,7 +685,7 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            auto_embed: false,
+            auto_embed: true,
             embed_batch_size: 32,
             model_path: None,
             tokenizer_path: None,

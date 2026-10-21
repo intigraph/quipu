@@ -13,6 +13,7 @@ pub mod context;
 pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
+pub mod embedding_runtime;
 pub mod episode;
 pub mod error;
 pub mod governance;
@@ -20,6 +21,7 @@ pub mod graph;
 pub mod graph_view;
 pub mod http_auth;
 pub mod impact;
+pub mod import_embedding;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
@@ -114,6 +116,7 @@ pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod promotion_control;
+pub mod share_alignments;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;

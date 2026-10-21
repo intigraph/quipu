@@ -60,6 +60,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // `facts`, so the copy can promote it; dropping these would make that
     // promotion silently lose the share's queries.
     ("pending_share_queries", Disposition::Content),
+    // Verified ancillary evidence is content, not receiver authority. Full-store
+    // reconstruction preserves exact bytes; ordinary graph shares carry only
+    // an explicitly selected carrier and never apply these mappings.
+    ("share_alignment_members", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     // Pendant autoload repository state (aegis-koxp0u) travels with the datasets
