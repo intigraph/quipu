@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "base64",
  "bigdecimal",
