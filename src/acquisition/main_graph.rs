@@ -83,6 +83,12 @@ pub(super) fn metadata(store: &Store, iri: &str) -> Result<(i64, String)> {
     ))
 }
 
+/// The physical rows a direct-main acquisition reads for graph `?1` at pin
+/// `?2`. The scope measurement counts exactly these, so its denominator is the
+/// acquisition's own (aegis-ehf G1).
+pub(super) const PHYSICAL_ROWS: &str =
+    "FROM main.facts WHERE g=?1 AND op=1 AND tx<=?2 AND (valid_to IS NULL OR retracted_tx>?2)";
+
 pub(super) fn read(
     store: &Store,
     graph: i64,
@@ -90,9 +96,9 @@ pub(super) fn read(
     max_bytes: usize,
     check: &impl Fn() -> Result<()>,
 ) -> Result<String> {
-    let mut q = store.conn.prepare(
-        "SELECT DISTINCT e,a,CASE WHEN length(v)<=?3 THEN v ELSE NULL END FROM main.facts WHERE g=?1 AND op=1 AND tx<=?2 AND (valid_to IS NULL OR retracted_tx>?2) LIMIT 100001"
-    )?;
+    let mut q = store.conn.prepare(&format!(
+        "SELECT DISTINCT e,a,CASE WHEN length(v)<=?3 THEN v ELSE NULL END {PHYSICAL_ROWS} LIMIT 100001"
+    ))?;
     let sql_bytes = i64::try_from(max_bytes).map_err(|_| invalid("invalid graph byte budget"))?;
     let mut rows = q.query(params![graph, tx, sql_bytes])?;
     let mut out = String::new();

@@ -13,6 +13,10 @@ use crate::{Error, Result, Store};
 /// Versioned, qualified-main acquisition with a fenced attachment census.
 pub mod composed;
 
+/// Bounded physical row/byte scope of a direct-main acquisition (G1).
+#[path = "acquisition/scope.rs"]
+pub mod scope;
+
 #[path = "acquisition/census.rs"]
 mod census;
 #[path = "acquisition/main_graph.rs"]
