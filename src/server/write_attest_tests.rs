@@ -134,7 +134,7 @@ fn identity_fixture() -> (SharedStore, Ed25519KeyPair, SessionBinding) {
     (Arc::new(StoreHandle::writer_only(store)), key, binding)
 }
 
-fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
+fn identity_router(keys_required: bool) -> (axum::Router, Ed25519KeyPair, SessionBinding) {
     let (store, key, binding) = identity_fixture();
     let app = axum::Router::new()
         .route(
@@ -142,7 +142,7 @@ fn identity_router() -> (axum::Router, Ed25519KeyPair, SessionBinding) {
             axum::routing::post(super::super::session_identity),
         )
         .layer(axum::middleware::from_fn(move |req, next| {
-            super::handle(store.clone(), req, next)
+            super::handle(store.clone(), keys_required, req, next)
         }));
     (app, key, binding)
 }
@@ -152,6 +152,18 @@ fn identity_request(
     binding: &SessionBinding,
     nonce: &str,
     claim: Option<&str>,
+) -> axum::extract::Request {
+    let headers: Vec<(&str, &str)> = claim.map(|c| ("X-Quipu-Agent", c)).into_iter().collect();
+    signed_post(key, binding, nonce, "/identity", &headers)
+}
+
+/// A signed POST of `{}` to `path`, plus extra (declared provenance) headers.
+fn signed_post(
+    key: &Ed25519KeyPair,
+    binding: &SessionBinding,
+    nonce: &str,
+    path: &str,
+    headers: &[(&str, &str)],
 ) -> axum::extract::Request {
     use base64::Engine as _;
     use quipu::session_attestation::{
@@ -172,7 +184,7 @@ fn identity_request(
         &envelope,
         &SignedBinding::Write(WriteBinding {
             method: "POST",
-            path: "/identity",
+            path,
             content_type: "application/json",
             body_sha256: &hash,
             audience: None,
@@ -181,20 +193,20 @@ fn identity_request(
     envelope.signature = hex::encode(key.sign(&message).as_ref());
     let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&envelope).unwrap());
-    let mut request = axum::http::Request::post("/identity")
+    let mut request = axum::http::Request::post(path)
         .header("content-type", "application/json")
         .header(super::HEADER, header);
-    if let Some(claim) = claim {
-        request = request.header("X-Quipu-Agent", claim);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
     }
     request.body(axum::body::Body::from("{}")).unwrap()
 }
 
 #[tokio::test]
-async fn identity_is_key_derived_and_replay_wrong_key_and_actor_override_refuse() {
+async fn identity_is_key_derived_and_replay_and_wrong_key_refuse() {
     use axum::http::StatusCode;
     use tower::ServiceExt;
-    let (app, key, binding) = identity_router();
+    let (app, key, binding) = identity_router(false);
     let nonce = "00000000000000000000000000000001";
     let response = app
         .clone()
@@ -230,12 +242,33 @@ async fn identity_is_key_derived_and_replay_wrong_key_and_actor_override_refuse(
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // Enforcement off: a differing DECLARED agent is provenance, not a claim
+    // over the key, so it is admitted and the principal stays key-derived.
     let response = app
         .clone()
         .oneshot(identity_request(
             &key,
             &binding,
             "00000000000000000000000000000003",
+            Some("synthetic-other"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let value: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["principal"], "synthetic-owner");
+    // Enforcement on: the same override is refused.
+    let (strict, key, binding) = identity_router(true);
+    let response = strict
+        .oneshot(identity_request(
+            &key,
+            &binding,
+            "00000000000000000000000000000006",
             Some("synthetic-other"),
         ))
         .await
@@ -269,7 +302,7 @@ async fn concurrent_signed_reads_admit_exactly_one_before_handler_dispatch() {
             gate.wait().await;
             // Deliberately stop before the handler and post-handler spend:
             // admission itself must atomically exclude every duplicate.
-            super::verify(&store, req)
+            super::verify(&store, false, req)
                 .await
                 .map(|_| ())
                 .map_err(|e| e.verdict)
@@ -288,9 +321,71 @@ async fn concurrent_signed_reads_admit_exactly_one_before_handler_dispatch() {
     assert!(
         super::verify(
             &store,
+            false,
             identity_request(&key, &binding, "00000000000000000000000000000005", None,)
         )
         .await
         .is_ok()
+    );
+}
+
+/// The REAL sd request shape (aegis-m6o): a signed write from a registered
+/// host key that also DECLARES the crew agent and the harness session, neither
+/// equal to the binding. quipu #687 refused exactly this with enforcement off,
+/// and every crew write failed. Off must admit it; on must refuse only a true
+/// mismatch, and admit matching declarations.
+#[tokio::test]
+async fn sd_signed_write_with_declared_provenance_is_refused_only_when_keys_are_required() {
+    let sd_headers = [
+        ("X-Quipu-Agent", "malcolm"),
+        ("X-Quipu-Session", "0185d3e0-crew-harness-session"),
+        ("X-Quipu-Harness", "claude"),
+    ];
+    let (store, key, binding) = identity_fixture();
+    let write = |nonce: &str, headers: &[(&str, &str)]| {
+        signed_post(&key, &binding, nonce, "/graph/create", headers)
+    };
+
+    let off = super::verify(
+        &store,
+        false,
+        write("000000000000000000000000000000a1", &sd_headers),
+    )
+    .await;
+    assert!(
+        off.is_ok(),
+        "enforcement off refused the sd request shape: {:?}",
+        off.err().map(|r| r.message)
+    );
+
+    let on = super::verify(
+        &store,
+        true,
+        write("000000000000000000000000000000a2", &sd_headers),
+    )
+    .await;
+    let Err(refusal) = on else {
+        panic!("enforcement on admitted a mismatched declared identity");
+    };
+    assert_eq!(refusal.verdict, "invalid");
+    assert_eq!(
+        refusal.message,
+        "declared identity differs from the authenticated session"
+    );
+
+    let matching = [
+        ("X-Quipu-Agent", binding.agent.as_str()),
+        ("X-Quipu-Session", binding.session.as_str()),
+    ];
+    let control = super::verify(
+        &store,
+        true,
+        write("000000000000000000000000000000a3", &matching),
+    )
+    .await;
+    assert!(
+        control.is_ok(),
+        "enforcement on refused a matching declaration: {:?}",
+        control.err().map(|r| r.message)
     );
 }

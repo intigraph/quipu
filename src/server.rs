@@ -518,7 +518,7 @@ async fn main() {
                     // A signed write authenticates by attestation, never by a
                     // bearer on the same request (aegis-bys8d1).
                     if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
-                        return auth::write_attest::handle(attest_store, req, next).await;
+                        return auth::write_attest::handle(attest_store, session_keys.required, req, next).await;
                     }
                     if let Some(response) = auth::session_key_refusal(
                         &session_keys, &req, is_write && read_only,
