@@ -2,6 +2,9 @@
 #![cfg(feature = "shacl")]
 use quipu::{Datum, Op, Store, Value};
 
+#[path = "write_cardinality/deactivation.rs"]
+mod deactivation;
+
 const TS: &str = "2026-10-21T00:00:00Z";
 const TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const SHAPES: &str = r#"

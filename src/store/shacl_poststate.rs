@@ -74,56 +74,14 @@ impl Store {
         datums: &[Datum],
         graph: i64,
     ) -> Result<()> {
-        use oxrdfio::{RdfFormat, RdfParser};
-        const MAX: &str = "http://www.w3.org/ns/shacl#maxCount";
-        const PATH: &str = "http://www.w3.org/ns/shacl#path";
         const COMPONENT: &str = "http://www.w3.org/ns/shacl#MaxCountConstraintComponent";
         // The caller selects reject shapes using its existing admission policy.
         // CLI --shapes and inline episode shapes remain strict, as before.
-        // Match Validator::from_turtle, including relative manifest IRIs.
-        let quads = RdfParser::from_format(RdfFormat::Turtle)
-            .with_base_iri("http://quipu.local/shapes")
-            .map_err(|e| Error::InvalidValue(format!("write shapes base: {e}")))?
-            .for_reader(shapes.as_bytes())
-            .map(|q| q.map_err(|e| Error::InvalidValue(format!("write shapes: {e}"))))
-            .collect::<Result<Vec<_>>>()?;
-        let upper_bounds: BTreeSet<_> = quads
-            .iter()
-            .filter(|q| q.predicate.as_str() == MAX)
-            .map(|q| q.subject.to_string())
-            .collect();
-        if upper_bounds.is_empty() || datums.is_empty() {
+        // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
+        // must not impose unsupported-path or context-gathering obligations.
+        let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
+        if !plan.has_upper_bound || datums.is_empty() {
             return Ok(());
-        }
-        // Resolve inverse predicate paths without walking unrelated entities.
-        // More complex paths still refuse rather than checking partial data.
-        let mut inverse_predicates = BTreeSet::new();
-        for q in &quads {
-            if !upper_bounds.contains(&q.subject.to_string()) || q.predicate.as_str() != PATH {
-                continue;
-            }
-            match &q.object {
-                oxrdf::Term::NamedNode(_) => {}
-                oxrdf::Term::BlankNode(path) => {
-                    let inverse = quads.iter().find(|edge| {
-                        edge.subject == oxrdf::NamedOrBlankNode::BlankNode(path.clone())
-                            && edge.predicate.as_str() == "http://www.w3.org/ns/shacl#inversePath"
-                    });
-                    if let Some(oxrdf::Quad {
-                        object: oxrdf::Term::NamedNode(predicate),
-                        ..
-                    }) = inverse
-                    {
-                        inverse_predicates.insert(predicate.as_str().to_owned());
-                    } else {
-                        return Err(Error::CannotVerify(
-                            "post-state maxCount requires a predicate or inverse predicate path"
-                                .into(),
-                        ));
-                    }
-                }
-                _ => return Err(Error::CannotVerify("invalid maxCount path".into())),
-            }
         }
         let subjects: BTreeSet<_> = datums
             .iter()
@@ -137,18 +95,7 @@ impl Store {
                 })
             })
             .collect();
-        let mut incoming_targets: BTreeSet<_> = quads
-            .iter()
-            .filter_map(|q| {
-                if q.predicate.as_str() == "http://www.w3.org/ns/shacl#targetObjectsOf"
-                    && let oxrdf::Term::NamedNode(predicate) = &q.object
-                {
-                    return Some(predicate.as_str().to_owned());
-                }
-                None
-            })
-            .collect();
-        incoming_targets.extend(inverse_predicates);
+        let incoming_targets = plan.incoming_predicates;
         let mut facts = Vec::new();
         let mut focuses = BTreeSet::new();
         for entity in subjects {

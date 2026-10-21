@@ -192,6 +192,12 @@ subjects and referenced objects, with at most 100,000 facts and 1,024 classes.
 Exceeding these limits, or encountering another complex upper-bound property path,
 refuses admission with `cannot verify` rather than accepting partial evidence.
 
+Capability and incoming-context obligations use the batch validator's compiled
+shape graph. Its deactivation flags suppress obligations for inactive node
+shapes and their solely dependent properties. A shared property still imposes
+its obligations when another active shape or its own target reaches it; logical and qualified shape
+references retain that conservative check. Unsupported active paths still refuse.
+
 Other constraints retain payload validation and contextual type/required-field
 repair. This is not whole-store conformance checking or automatic revalidation
 of every dependent node after changing a schema, class hierarchy, or target
