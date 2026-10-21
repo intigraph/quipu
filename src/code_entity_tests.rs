@@ -370,7 +370,8 @@ fn code_entity_debt_policy_only_routes_four_narrow_shapes_to_emit() {
         let data = format!("{prefix}{body}");
         assert!(validate_shapes(&split.reject, &data).unwrap().conforms);
         let feedback = validate_shapes(&split.emit, &data).unwrap();
-        assert!(!feedback.results.is_empty());
+        assert_eq!(feedback.violations, 0);
+        assert!(feedback.warnings > 0);
     }
     fails_on(
         &split.reject,
