@@ -310,3 +310,50 @@ fn a_physical_duplicate_counts_once_as_the_readers_return_it() {
         composed.source_receipt.main.graphs[PROJECT].triples as u64
     );
 }
+
+/// Slow every statement that touches `table` at preparation, without adding
+/// VM steps: the progress handler never fires for these statements.
+fn slow_table(store: &Store, table: &'static str, millis: u64) {
+    store
+        .conn
+        .authorizer(Some(move |context: AuthContext<'_>| {
+            if let AuthAction::Read { table_name, .. } = context.action
+                && table_name == table
+            {
+                std::thread::sleep(std::time::Duration::from_millis(millis));
+            }
+            Authorization::Allow
+        }))
+        .unwrap();
+}
+
+/// ian, #705 review: short SQL that runs past the wall deadline must refuse at
+/// the phase boundary, naming the phase, rather than report a measurement.
+/// Each case is paired with the same slowdown under a generous deadline.
+#[test]
+fn a_slow_short_phase_past_the_wall_deadline_refuses_and_names_the_phase() {
+    let dir = tempfile::tempdir().unwrap();
+    let (store, _, _) = store(dir.path());
+    for (table, phase) in [
+        ("store_identity", "identity"),
+        ("graphs", "graph_metadata"),
+        ("facts", "physical_distinct"),
+    ] {
+        slow_table(&store, table, 120);
+        let mut tight = request(&store, &[PROJECT], None);
+        tight.deadline_ms = 60;
+        let error = measure(&store, &tight).unwrap_err().to_string();
+        assert!(
+            error.contains(&format!("wall deadline exceeded during {phase}")),
+            "{table}: {error}"
+        );
+        assert!(error.contains("completeness UNKNOWN"), "{error}");
+        // Paired positive control: same slowdown, generous deadline.
+        let measured = measure(&store, &request(&store, &[PROJECT], None)).unwrap();
+        assert_eq!(rows(&measured, PROJECT), 2, "{table}");
+        store
+            .conn
+            .authorizer(None::<fn(AuthContext<'_>) -> Authorization>)
+            .unwrap();
+    }
+}

@@ -125,6 +125,7 @@ struct Budget<'s> {
     store: &'s Store,
     steps: Arc<AtomicU64>,
     exhausted: Arc<AtomicBool>,
+    deadline: crate::time::Deadline,
 }
 
 impl<'s> Budget<'s> {
@@ -152,7 +153,22 @@ impl<'s> Budget<'s> {
             store,
             steps,
             exhausted,
+            deadline,
         })
+    }
+
+    /// The wall deadline at a phase boundary. The progress handler sees it only
+    /// once per 1000 VM steps of one statement, so a run of short but slow
+    /// statements could otherwise finish past it and still report a result
+    /// (ian, #705 review).
+    fn check_deadline(&self, phase: Phase) -> Result<()> {
+        if self.deadline.passed() {
+            return Err(invalid(format!(
+                "scope wall deadline exceeded during {}; completeness UNKNOWN",
+                phase.name()
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -220,10 +236,13 @@ fn measure_within(store: &Store, request: &Request, budget: &Budget<'_>) -> Resu
     if applied_tx == 0 {
         return Err(invalid("scope source has no committed transaction"));
     }
+    budget.check_deadline(Phase::Identity)?;
     let mut graphs = BTreeMap::new();
     for iri in &request.graphs {
         phase.set(Phase::Metadata);
-        let graph = match main_graph::metadata(store, iri) {
+        let admitted = main_graph::metadata(store, iri);
+        budget.check_deadline(Phase::Metadata)?;
+        let graph = match admitted {
             Ok((graph, _)) => graph,
             Err(Error::InvalidValue(reason) | Error::PolicyDenied(reason))
                 if !budget.exhausted.load(Ordering::Relaxed) =>
@@ -246,6 +265,7 @@ fn measure_within(store: &Store, request: &Request, budget: &Budget<'_>) -> Resu
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .map_err(|e| interrupted(e.into()))?;
+        budget.check_deadline(Phase::PhysicalRows)?;
         let scope = if rows.unsigned_abs() > ROW_CAP {
             GraphScope::ExceedsCap
         } else {
@@ -258,6 +278,8 @@ fn measure_within(store: &Store, request: &Request, budget: &Budget<'_>) -> Resu
         graphs.insert(iri.clone(), scope);
     }
     read.commit().map_err(|e| interrupted(e.into()))?;
+    // Final boundary: nothing is reported if the run ended past its deadline.
+    budget.check_deadline(phase.get())?;
     Ok(Measurement {
         schema: CONTRACT.into(),
         source_store_id,
