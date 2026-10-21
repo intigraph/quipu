@@ -10,7 +10,7 @@ release = Path(".github/workflows/release.yml").read_text()
 
 assert "  release-correctness:\n" in ci
 assert "    name: Release correctness\n" in ci
-assert "needs: [clippy, test, build, check]" in ci
+assert "needs: [clippy, test, build, check, shacl-write-path]" in ci
 aggregate_header = ci[ci.index("  release-correctness:\n") :].split("    runs-on:", 1)[0]
 for excluded in ("source-size", "fmt", "lint-markdown", "build-full", "wasm", "shapes"):
     assert excluded not in aggregate_header, f"housekeeping job {excluded} must not gate release"
@@ -41,6 +41,9 @@ jobs = yaml.load(ci, Loader=UniqueSafeLoader)["jobs"]
 combined = jobs["source-size"]
 assert "if" not in combined, "combined invariants must not be conditional"
 assert combined.get("continue-on-error", False) is False, "combined failures must gate"
+write_path = jobs["shacl-write-path"]
+assert "if" not in write_path, "SHACL write-path conformance must not be conditional"
+assert write_path.get("continue-on-error", False) is False, "write-path divergence must gate release"
 aggregate = jobs["extended-correctness"]
 assert "source-size" in aggregate["needs"], "combined invariants must gate the aggregate"
 assert aggregate.get("continue-on-error", False) is False, "aggregate failures must gate"
