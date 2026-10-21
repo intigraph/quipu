@@ -6,20 +6,30 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+from pathlib import Path
 
 REPOSITORY = "scbrown/quipu"
-MEMBERS = {"export.nt", "export.ttl", "payload.nq", "manifest.json", "manifest.ttl", "shapes.ttl", "queries.ttl"}
+MEMBERS = {
+    "export.nt",
+    "export.ttl",
+    "payload.nq",
+    "manifest.json",
+    "manifest.ttl",
+    "shapes.ttl",
+    "queries.ttl",
+}
 
 
 def command(args):
-    return subprocess.run([str(v) for v in args], check=True, capture_output=True, text=True).stdout
+    return subprocess.run(
+        [str(v) for v in args], check=True, capture_output=True, text=True
+    ).stdout
 
 
 def digest(path):
@@ -34,7 +44,13 @@ def check_share(stage):
     files = list(stage.iterdir())
     if any(not p.is_file() or p.is_symlink() or p.name not in MEMBERS for p in files):
         raise ValueError("unexpected or non-regular share member")
-    for name in ("export.nt", "manifest.json", "manifest.ttl", "shapes.ttl", "queries.ttl"):
+    for name in (
+        "export.nt",
+        "manifest.json",
+        "manifest.ttl",
+        "shapes.ttl",
+        "queries.ttl",
+    ):
         if not (stage / name).is_file() or not (stage / name).stat().st_size:
             raise ValueError("required nonempty share member missing: " + name)
     recipe = json.loads((stage / "manifest.json").read_text()).get("embedding")
@@ -45,7 +61,10 @@ def check_share(stage):
         or Path(recipe["model"]).name != recipe["model"]
         or type(recipe.get("dimension")) is not int
         or recipe["dimension"] <= 0
-        or any(not re.fullmatch("[0-9a-f]{64}", recipe.get(k, "")) for k in ("model_sha256", "tokenizer_sha256"))
+        or any(
+            not re.fullmatch("[0-9a-f]{64}", recipe.get(k, ""))
+            for k in ("model_sha256", "tokenizer_sha256")
+        )
     ):
         raise ValueError("share omitted a provider-byte embedding recipe")
     # This repository pack is pointer-only. Curated idea summaries use
@@ -73,7 +92,9 @@ def package(stage, archive):
 
 
 def held():
-    path = Path(os.environ.get("QUIPU_SHARE_HOLD_FILE", str(Path.home() / ".quipu-share-hold")))
+    path = Path(
+        os.environ.get("QUIPU_SHARE_HOLD_FILE", str(Path.home() / ".quipu-share-hold"))
+    )
     try:
         path.lstat()
     except FileNotFoundError:
@@ -93,7 +114,10 @@ def publish(tag, revision, output):
     source = Path(__file__).resolve().parents[1]
     if (
         command(["git", "-C", source, "rev-parse", "HEAD"]).strip() != revision
-        or command(["git", "-C", source, "rev-parse", "refs/tags/" + tag + "^{commit}"]).strip() != revision
+        or command(
+            ["git", "-C", source, "rev-parse", "refs/tags/" + tag + "^{commit}"]
+        ).strip()
+        != revision
         or command(["git", "-C", source, "status", "--porcelain"]).strip()
     ):
         raise ValueError("publisher source is not the exact clean release")
@@ -106,10 +130,12 @@ def publish(tag, revision, output):
     engine_revision = os.environ["QUIPU_SHARE_ENGINE_REVISION"]
     if (
         not re.fullmatch("[0-9a-f]{40}", engine_revision)
-        or command(["git", "-C", tooling, "rev-parse", "HEAD"]).strip() != engine_revision
+        or command(["git", "-C", tooling, "rev-parse", "HEAD"]).strip()
+        != engine_revision
         or command(["git", "-C", tooling, "status", "--porcelain"]).strip()
         or digest(binary) != os.environ["QUIPU_SHARE_ENGINE_BIN_SHA256"]
-        or digest(binary.with_name("quipu-server")) != os.environ["QUIPU_SHARE_ENGINE_SERVER_SHA256"]
+        or digest(binary.with_name("quipu-server"))
+        != os.environ["QUIPU_SHARE_ENGINE_SERVER_SHA256"]
         or digest(bobbin) != os.environ["QUIPU_SHARE_BOBBIN_SHA256"]
     ):
         raise ValueError("trusted engine/source/indexer pin mismatch")
@@ -121,14 +147,21 @@ def publish(tag, revision, output):
             "bobbin_share_build", source / "scripts/build-repository-share.py"
         )
         builder = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(builder)
+        _previous_bytecode = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(builder)
+        finally:
+            sys.dont_write_bytecode = _previous_bytecode
         builder.build(revision, source, tooling, binary, bobbin, stage)
         archive_name = "quipu-" + tag + "-repository.pendant.tar.gz"
         prepared = private / "assets"
         prepared.mkdir(mode=0o700)
         archive = prepared / archive_name
         package(stage, archive)
-        (prepared / (archive_name + ".sha256")).write_text(digest(archive) + "  " + archive_name + "\n")
+        (prepared / (archive_name + ".sha256")).write_text(
+            digest(archive) + "  " + archive_name + "\n"
+        )
         proof = {
             "schema": "quipu.repository-share-producer/v1",
             "source_repository": REPOSITORY,
@@ -141,11 +174,17 @@ def publish(tag, revision, output):
             "quipu_server_sha256": digest(binary.with_name("quipu-server")),
             "destination": "outward",
         }
-        (prepared / (archive_name + ".provenance.json")).write_text(json.dumps(proof, sort_keys=True, indent=2) + "\n")
+        (prepared / (archive_name + ".provenance.json")).write_text(
+            json.dumps(proof, sort_keys=True, indent=2) + "\n"
+        )
         names = sorted(p.name for p in prepared.iterdir())
         if held():
             raise ValueError("publication held after preparation")
-        available = json.loads(command(["gh", "release", "view", tag, "--repo", REPOSITORY, "--json", "assets"]))
+        available = json.loads(
+            command(
+                ["gh", "release", "view", tag, "--repo", REPOSITORY, "--json", "assets"]
+            )
+        )
         present = {a["name"] for a in available["assets"]} & set(names)
         if present and present != set(names):
             raise ValueError("partial publication; explicit reconciliation required")
@@ -155,7 +194,17 @@ def publish(tag, revision, output):
         if not present:
             if held():
                 raise ValueError("publication held immediately before upload")
-            command(["gh", "release", "upload", tag, "--repo", REPOSITORY, *(output / name for name in names)])
+            command(
+                [
+                    "gh",
+                    "release",
+                    "upload",
+                    tag,
+                    "--repo",
+                    REPOSITORY,
+                    *(output / name for name in names),
+                ]
+            )
         downloaded = private / "downloaded"
         downloaded.mkdir()
         command(
@@ -173,7 +222,9 @@ def publish(tag, revision, output):
         )
         for name in names:
             if (downloaded / name).read_bytes() != (output / name).read_bytes():
-                raise ValueError("existing or newly published asset differs; never overwrite")
+                raise ValueError(
+                    "existing or newly published asset differs; never overwrite"
+                )
         receipt = {
             **proof,
             "published_and_read_back": True,
@@ -186,5 +237,7 @@ def publish(tag, revision, output):
 
 if __name__ == "__main__":
     if len(sys.argv) != 5 or sys.argv[1] != "--trusted-release":
-        raise SystemExit("usage: publish-repository-share.sh --trusted-release <tag> <revision> <new-private-state>")
+        raise SystemExit(
+            "usage: publish-repository-share.sh --trusted-release <tag> <revision> <new-private-state>"
+        )
     print(json.dumps(publish(sys.argv[2], sys.argv[3], sys.argv[4])))

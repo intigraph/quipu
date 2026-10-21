@@ -111,6 +111,28 @@
       "properties": {
         "startHereOrder": 3
       }
+    },
+    {
+      "kind": "interface",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md#run-it-anywhere",
+      "summary": "The native server exposes REST, MCP at /mcp and a web interface over the same graph engine. Remote deployment and write credentials are separately configured.",
+      "source_sha256": "2ef33a0b3c8af42d614a6d8ebde333fb4a56bc243e6e8614ea8d0c4a12999f9f",
+      "properties": {
+        "interfaceKind": "REST",
+        "publicName": "quipu-server HTTP"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/config.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
+      "summary": "Configuration resolves command flags, project and global TOML files before built-in defaults. Graph-label floors are not read confidentiality controls.",
+      "source_sha256": "97ec30f105461feae223652a0ae1e0a07b5a471400e69116851ea5237ce611fa",
+      "properties": {
+        "interfaceKind": "config",
+        "publicName": "QuipuConfig and TOML resolution"
+      }
     }
   ]
 }

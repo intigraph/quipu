@@ -6,9 +6,13 @@
 
 import importlib.util
 import json
-from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
@@ -32,7 +36,12 @@ class Publication(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.stage = self.root / "stage"
         self.stage.mkdir()
-        recipe = {"model": "model.onnx", "model_sha256": "a" * 64, "tokenizer_sha256": "b" * 64, "dimension": 384}
+        recipe = {
+            "model": "model.onnx",
+            "model_sha256": "a" * 64,
+            "tokenizer_sha256": "b" * 64,
+            "dimension": 384,
+        }
         (self.stage / "manifest.json").write_text(json.dumps({"embedding": recipe}))
         for name in ("export.nt", "manifest.ttl", "shapes.ttl", "queries.ttl"):
             (self.stage / name).write_text("# synthetic fixture only\n")
@@ -42,7 +51,9 @@ class Publication(unittest.TestCase):
     def prepare(self):
         publisher.package(self.stage, self.archive)
         sha = publisher.digest(self.archive)
-        self.archive.with_name(self.archive.name + ".sha256").write_text(sha + "  " + self.archive.name + "\n")
+        self.archive.with_name(self.archive.name + ".sha256").write_text(
+            sha + "  " + self.archive.name + "\n"
+        )
         self.proof = {
             "schema": "quipu.repository-share-producer/v1",
             "source_repository": "scbrown/quipu",
@@ -63,7 +74,12 @@ class Publication(unittest.TestCase):
         other = self.root / "second.tar.gz"
         publisher.package(self.stage, other)
         self.assertEqual(self.archive.read_bytes(), other.read_bytes())
-        self.assertEqual(verifier.verify(self.root, "quipu-ai-v1.2.3", self.revision)["source_revision"], self.revision)
+        self.assertEqual(
+            verifier.verify(self.root, "quipu-ai-v1.2.3", self.revision)[
+                "source_revision"
+            ],
+            self.revision,
+        )
 
     def test_required_members_and_recipe(self):
         (self.stage / "queries.ttl").unlink()
@@ -77,9 +93,14 @@ class Publication(unittest.TestCase):
     def test_text_line_span_and_private_members_refuse(self):
         for predicate in ("content", "startLine", "endLine"):
             (self.stage / "export.nt").write_text(
-                "<https://example.org/s> <http://aegis.gastown.local/ontology/" + predicate + '> "body" .\n'
+                "<https://example.org/s> <http://aegis.gastown.local/ontology/"
+                + predicate
+                + '> "body" .\n'
             )
-            with self.subTest(predicate=predicate), self.assertRaisesRegex(ValueError, "duplicates source"):
+            with (
+                self.subTest(predicate=predicate),
+                self.assertRaisesRegex(ValueError, "duplicates source"),
+            ):
                 publisher.check_share(self.stage)
         (self.stage / "export.nt").write_text("# empty synthetic")
         (self.stage / "policy-token").write_text("not a real token")
@@ -95,7 +116,10 @@ class Publication(unittest.TestCase):
             ("archive_sha256", "f" * 64),
         ]:
             self.proof_path.write_text(json.dumps({**self.proof, field: value}))
-            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "provenance mismatch"):
+            with (
+                self.subTest(field=field),
+                self.assertRaisesRegex(ValueError, "provenance mismatch"),
+            ):
                 verifier.verify(self.root, "quipu-ai-v1.2.3", self.revision)
 
     def test_checksum_refuses(self):
@@ -111,13 +135,65 @@ class Publication(unittest.TestCase):
             hold.symlink_to(self.root / "missing-target")
             self.assertTrue(publisher.held())
             with self.assertRaisesRegex(ValueError, "held before"):
-                publisher.publish("invalid-tag", "invalid-revision", self.root / "output")
+                publisher.publish(
+                    "invalid-tag", "invalid-revision", self.root / "output"
+                )
             self.assertFalse((self.root / "output").exists())
 
     def test_unreadable_hold_fails_closed(self):
-        with patch.object(Path, "lstat", side_effect=PermissionError("synthetic denied")):
-            with self.assertRaisesRegex(ValueError, "cannot inspect publication hold"):
-                publisher.held()
+        with patch.object(
+            Path, "lstat", side_effect=PermissionError("synthetic denied")
+        ), self.assertRaisesRegex(ValueError, "cannot inspect publication hold"):
+            publisher.held()
+
+    def test_readonly_verifier_keeps_nonpython_checkout_clean(self):
+        source = self.root / "clean-source"
+        (source / "scripts").mkdir(parents=True)
+        for name in (
+            "verify-repository-share.py",
+            "publish_repository_share.py",
+            "build-repository-share.py",
+            "build-repository-knowledge.py",
+        ):
+            shutil.copyfile(ROOT / name, source / "scripts" / name)
+        subprocess.run(["git", "init", "-q", str(source)], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source),
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.org",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+            check=True,
+        )
+        environment = dict(os.environ)
+        environment.pop("PYTHONDONTWRITEBYTECODE", None)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(source / "scripts/verify-repository-share.py"),
+                "not-a-release",
+                "a" * 40,
+            ],
+            cwd=source,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid release identity", result.stderr)
+        status = subprocess.check_output(
+            ["git", "-C", str(source), "status", "--porcelain"], text=True
+        )
+        self.assertEqual(status, "")
 
     def test_wait_is_bounded(self):
         calls, pauses = [], []
@@ -130,7 +206,13 @@ class Publication(unittest.TestCase):
             return Result()
 
         with self.assertRaisesRegex(ValueError, "bounded"):
-            verifier.wait("quipu-ai-v1.2.3", self.revision, attempts=2, pause=pauses.append, run=run)
+            verifier.wait(
+                "quipu-ai-v1.2.3",
+                self.revision,
+                attempts=2,
+                pause=pauses.append,
+                run=run,
+            )
         self.assertEqual(len(calls), 2)
         self.assertEqual(pauses, [30])
 

@@ -4,25 +4,37 @@
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
+from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("publisher", Path(__file__).with_name("publish_repository_share.py"))
+spec = importlib.util.spec_from_file_location(
+    "publisher", Path(__file__).with_name("publish_repository_share.py")
+)
 publisher = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(publisher)
+_previous_bytecode = sys.dont_write_bytecode
+try:
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(publisher)
+finally:
+    sys.dont_write_bytecode = _previous_bytecode
 
 
 def verify(folder, tag, revision):
-    if not re.fullmatch(r"quipu-ai-v\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?", tag) or not re.fullmatch("[0-9a-f]{40}", revision):
+    if not re.fullmatch(
+        r"quipu-ai-v\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?", tag
+    ) or not re.fullmatch("[0-9a-f]{40}", revision):
         raise ValueError("invalid release identity")
     archive = folder / ("quipu-" + tag + "-repository.pendant.tar.gz")
     sha = hashlib.sha256(archive.read_bytes()).hexdigest()
-    if archive.with_name(archive.name + ".sha256").read_text() != sha + "  " + archive.name + "\n":
+    if (
+        archive.with_name(archive.name + ".sha256").read_text()
+        != sha + "  " + archive.name + "\n"
+    ):
         raise ValueError("archive checksum mismatch")
     proof = json.loads(archive.with_name(archive.name + ".provenance.json").read_text())
     expected = {
@@ -56,7 +68,9 @@ def verify(folder, tag, revision):
 
 
 def wait(tag, revision, attempts=80, pause=time.sleep, run=subprocess.run):
-    if not re.fullmatch(r"quipu-ai-v\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?", tag) or not re.fullmatch("[0-9a-f]{40}", revision):
+    if not re.fullmatch(
+        r"quipu-ai-v\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?", tag
+    ) or not re.fullmatch("[0-9a-f]{40}", revision):
         raise ValueError("invalid release identity before lookup")
     stem = "quipu-" + tag + "-repository.pendant.tar.gz"
     last_read = "not attempted"
@@ -92,10 +106,15 @@ def wait(tag, revision, attempts=80, pause=time.sleep, run=subprocess.run):
                 last_read = "read timeout"
         if number + 1 < attempts:
             pause(30)
-    raise ValueError("repository pendant unverified after bounded trusted-producer wait; " + last_read)
+    raise ValueError(
+        "repository pendant unverified after bounded trusted-producer wait; "
+        + last_read
+    )
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        raise SystemExit("usage: verify-repository-share.py <release-tag> <exact-release-sha>")
+        raise SystemExit(
+            "usage: verify-repository-share.py <release-tag> <exact-release-sha>"
+        )
     print(json.dumps(wait(sys.argv[1], sys.argv[2])))
