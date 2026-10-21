@@ -59,6 +59,8 @@ mod graph_filter_tests;
 mod graph_membership;
 mod group;
 mod join;
+#[cfg(test)]
+mod left_bind_join_tests;
 mod limited_scan;
 mod progress;
 mod sql_in;
