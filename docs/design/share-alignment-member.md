@@ -27,6 +27,10 @@ Transport is not an alignment decision. Import retains exact verified bytes
 separately from graph data, reachable through
 `share_alignments::imported_member(store, share_id)`. It neither loads shapes nor
 asserts identity, and ROOT promotion does not apply the ancillary mappings.
+Full-store reconstruction carries the retained evidence table verbatim; it does
+not turn those bytes into applied mappings or receiver authority. Ordinary graph
+shares include only the explicitly selected carrier, rather than aggregating
+every previously received carrier.
 Existing alignment propose/decide/apply remains the curation route. An empty
 carrier claims no accepted mapping dataset. Delta shares carry the complete
 result member; the browser archive reader verifies it through the same core,

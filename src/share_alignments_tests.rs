@@ -303,7 +303,7 @@ fn delta_carries_complete_sealed_ancillary_and_detects_tampering() {
 
 #[test]
 fn alignment_bytes_cannot_bypass_outward_producer_or_receiver_scrub() {
-    let text = "<urn:alignment:x> <urn:description> \"private.svc\" .\n";
+    let text = "<urn:alignment:x> <urn:description> \"FIXTURE_PRIVATE_TOKEN\" .\n";
     let mut source = Store::open_in_memory().unwrap();
     crate::share_scrub::seed_test_catalogue(&mut source);
     let opts = ShareOptions {
