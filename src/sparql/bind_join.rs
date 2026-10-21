@@ -194,16 +194,114 @@ pub(crate) fn try_subject_bind_join(
     left_rows: &[Bindings],
     left_vars: &[String],
 ) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let Some(vars) = subject_bind_vars(
+        right,
+        ctx,
+        seed,
+        left_rows,
+        left_vars,
+        SUBJECT_BIND_MAX_ROWS,
+    )?
+    else {
+        return Ok(None);
+    };
+    if left_rows.is_empty() {
+        return Ok(Some((Vec::new(), vars)));
+    }
+    let row_ctx = TemporalContext {
+        row_limit: None,
+        ..ctx.clone()
+    };
+    let mut rows = Vec::new();
+    for (i, row) in left_rows.iter().enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        let (mut found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
+        rows.append(&mut found);
+        check_eval_budget(ctx, i, rows.len())?;
+    }
+    Ok(Some((rows, vars)))
+}
+
+/// Left rows above which OPTIONAL keeps one right-side scan (aegis-xacr).
+///
+/// A seeded probe is a bound-subject lookup (~0.1ms); one scan of a common
+/// predicate over the production Seeds graph is ~0.05-0.3s. Past this many
+/// left rows the per-row probes cost more than the scan the keyed probe in
+/// `left_join` was built for (OPTIONAL over a whole board, aegis-d8c).
+pub(crate) const LEFT_BIND_MAX_ROWS: usize = 2_048;
+
+/// OPTIONAL over a plain BGP, probed once per left row (aegis-xacr).
+///
+/// The LeftJoin arm evaluated its right side with only the OUTER seed, so
+/// `?item seed:priority 0 . OPTIONAL { ?item s:agent ?owner }` materialised
+/// all 45,772 agent facts of the 2026-10-14 production Seeds graph to pair
+/// with 105 left rows, and the Brief's twenty-seed hydration scanned seven
+/// such predicates. Under the same guard as the subject bind join, each left
+/// row's seeded right rows are exactly its compatible right solutions, and
+/// `left_join` over that single row applies the OPTIONAL expression and keeps
+/// an unmatched row exactly as the full evaluation would.
+pub(crate) fn try_subject_bind_left_join(
+    store: &Store,
+    right: &GraphPattern,
+    expression: Option<&spargebra::algebra::Expression>,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let Some(vars) = subject_bind_vars(right, ctx, seed, left_rows, left_vars, LEFT_BIND_MAX_ROWS)?
+    else {
+        return Ok(None);
+    };
+    if left_rows.is_empty() {
+        let mut all = left_vars.to_vec();
+        for v in vars {
+            push_unique(&mut all, v);
+        }
+        return Ok(Some((Vec::new(), all)));
+    }
+    let row_ctx = TemporalContext {
+        row_limit: None,
+        ..ctx.clone()
+    };
+    let mut rows = Vec::new();
+    for (i, row) in left_rows.iter().enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        let (found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
+        let joined =
+            super::left_join::left_join(store, ctx, std::slice::from_ref(row), &found, expression)?;
+        rows.extend(joined);
+        check_eval_budget(ctx, i, rows.len())?;
+    }
+    // Same variable order as the LeftJoin arm: left first, then the right's new ones.
+    let mut all = left_vars.to_vec();
+    for v in vars {
+        push_unique(&mut all, v);
+    }
+    Ok(Some((rows, all)))
+}
+
+/// The subject bind guard shared by Join and OPTIONAL: the right side's
+/// variables when it may be probed per left row, else `None`. An empty left
+/// relation passes (the caller answers it without probing).
+fn subject_bind_vars(
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+    max_rows: usize,
+) -> Result<Option<Vec<String>>> {
     let mut patterns = Vec::new();
     let mut vars = Vec::new();
     if !subject_lookup_patterns(right, &mut patterns, &mut vars) {
         return Ok(None);
     }
-    if left_rows.len() > SUBJECT_BIND_MAX_ROWS {
+    if left_rows.len() > max_rows {
         return Ok(None);
     }
     if left_rows.is_empty() {
-        return Ok(Some((Vec::new(), vars)));
+        return Ok(Some(vars));
     }
     let mut newly_bound_subject = false;
     for pattern in patterns {
@@ -227,16 +325,5 @@ pub(crate) fn try_subject_bind_join(
     if !newly_bound_subject {
         return Ok(None);
     }
-    let row_ctx = TemporalContext {
-        row_limit: None,
-        ..ctx.clone()
-    };
-    let mut rows = Vec::new();
-    for (i, row) in left_rows.iter().enumerate() {
-        check_eval_budget(ctx, i, rows.len())?;
-        let (mut found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
-        rows.append(&mut found);
-        check_eval_budget(ctx, i, rows.len())?;
-    }
-    Ok(Some((rows, vars)))
+    Ok(Some(vars))
 }
