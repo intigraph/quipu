@@ -80,8 +80,9 @@ Quipu is for.
 
 - [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
-- [Cross-repository pendant diagram (source-only)](https://github.com/scbrown/quipu/blob/5f51e5d2cda5cee0f3ca37016b312c308fce33eb/docs/book/src/sharing/cross-repo-pendants.svg).
 - [Detailed examples and agent setup](docs/installation-reference.md).
+
+![Repository pendants compose; dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
 
 **Load this repository’s graph:** the [latest release](https://github.com/scbrown/quipu/releases/latest) includes a repository pendant, checksum and provenance. Verify those together, extract the share directory, then use `quipu import SHARE_DIR --db repository.db`; import stages knowledge and leaves ROOT unchanged. See the [verified import workflow](https://scbrown.github.io/quipu/sharing/index.html).
 
