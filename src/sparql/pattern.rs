@@ -317,6 +317,12 @@ pub fn eval_pattern_seeded(
                 order_limit: None,
                 ..ctx.clone()
             };
+            // aegis-xacr: under a limit, hydrate OPTIONALs for only the rows
+            // the limit can return.
+            let pushed = ctx
+                .order_limit
+                .and_then(|k| super::order_pushdown::rewrite(inner, expression, k));
+            let inner = pushed.as_ref().unwrap_or(inner);
             let (rows, vars) = eval_pattern_seeded(store, inner, &inner_ctx, seed)?;
             let sorted = match ctx.order_limit {
                 Some(limit) => super::order::top_rows(store, rows, expression, ctx, limit)?,
