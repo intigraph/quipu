@@ -15,6 +15,8 @@ use crate::types::{Op, Value};
 use crate::verdict_schemes::{Scheme, webauthn};
 
 mod admission;
+#[cfg(test)]
+mod golden_tests;
 mod operator;
 #[cfg(test)]
 mod tests;

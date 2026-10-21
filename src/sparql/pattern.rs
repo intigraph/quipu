@@ -277,25 +277,7 @@ pub fn eval_pattern_seeded(
             left,
             right,
             expression,
-        } => {
-            let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
-            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
-            let mut vars = left_vars;
-            for v in &right_vars {
-                if !vars.contains(v) {
-                    vars.push(v.clone());
-                }
-            }
-            // Keyed probe, same output and order as the nested loop (aegis-d8c).
-            let results = super::left_join::left_join(
-                store,
-                ctx,
-                &left_rows,
-                &right_rows,
-                expression.as_ref(),
-            )?;
-            Ok((results, vars))
-        }
+        } => super::left_join::eval(store, left, right, expression.as_ref(), ctx, seed),
 
         GraphPattern::Minus { left, right } => {
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;

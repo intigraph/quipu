@@ -212,10 +212,11 @@ ex:alice rdfs:label "Alice the Great" .
 }
 
 #[test]
-fn auto_embed_disabled_by_default() {
+fn auto_embed_explicitly_disabled() {
     let mut store = Store::open_in_memory().unwrap();
     store.set_embedding_provider(Arc::new(DummyProvider));
-    // auto_embed defaults to false — no embeddings generated.
+    // Explicit opt-out must remain effective with a configured provider.
+    store.embedding_config_mut().auto_embed = false;
 
     let turtle = r#"
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
