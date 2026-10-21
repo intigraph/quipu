@@ -232,7 +232,7 @@ pub(crate) const LEFT_BIND_MAX_ROWS: usize = 2_048;
 
 /// OPTIONAL over a plain BGP, probed once per left row (aegis-xacr).
 ///
-/// The LeftJoin arm evaluated its right side with only the OUTER seed, so
+/// The `LeftJoin` arm evaluated its right side with only the OUTER seed, so
 /// `?item seed:priority 0 . OPTIONAL { ?item s:agent ?owner }` materialised
 /// all 45,772 agent facts of the 2026-10-14 production Seeds graph to pair
 /// with 105 left rows, and the Brief's twenty-seed hydration scanned seven

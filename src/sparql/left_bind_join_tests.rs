@@ -90,7 +90,7 @@ fn ordered(rows: &[Bindings]) -> Vec<String> {
         .collect()
 }
 
-/// The per-row probe and the bottom-up keyed probe for the same LeftJoin node.
+/// The per-row probe and the bottom-up keyed probe for the same `LeftJoin` node.
 fn both_ways(
     store: &Store,
     sparql: &str,
