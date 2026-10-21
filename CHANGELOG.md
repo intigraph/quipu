@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - *(server)* Retain finite native read operation declarations (#688)([201076a](https://github.com/scbrown/quipu/commit/201076aac71becdb429ce74539f21ec689a891d5))
 - *(graph)* Exclude inferred companions before registration (#708)([630c980](https://github.com/scbrown/quipu/commit/630c9804719d0dd0bae169b9f8193b7aa23ffd2a))
 - *(shacl)* Enforce maxCount across staged writes (#697)([0e89d72](https://github.com/scbrown/quipu/commit/0e89d729e254430806853ade78f9a7287de9e921))
+- *(shacl)* Validate stored values when targets become applicable (#715)([063b48e](https://github.com/scbrown/quipu/commit/063b48e3507125de1dd4fc036cfbee11fafd1ec1))
 
 ### Reverted
 
