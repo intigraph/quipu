@@ -783,6 +783,10 @@ fn a_failing_provider_cannot_block_minting() {
         POLICY,
     );
     store.set_embedding_provider(Arc::new(FailingEmbedder));
+    // Isolate advisory precedent lookup from the independent write-indexing
+    // hook, now enabled by default. The provider must still be consulted for
+    // advice and its failure must not prevent mint_request.
+    store.embedding_config_mut().auto_embed = false;
     let datums = mint_request(&store, POLICY, "http://ex/alpha-2", None, 600, NOW, TS)
         .expect("a failing advisory path must not fail the mint");
     store.transact(&datums, TS, None, None).unwrap();

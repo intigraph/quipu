@@ -1,7 +1,7 @@
 //! Protected read computation, distinct from graph-write classification.
 use super::{
     AccessDecision, AuthGeneration, Authorization, BearerPolicy, authorize_bearers,
-    is_write_request,
+    is_write_request, requires_read_identity,
 };
 
 /// HTTP rendering is a protected computation, not a graph write. Keep the
@@ -17,7 +17,7 @@ pub fn authorize_http_bearers(
     let write = is_write_request(path, method);
     let protected_read = path == "/render";
     let authorization = authorize_bearers(
-        write || protected_read,
+        write || protected_read || requires_read_identity(path),
         write && read_only,
         policy,
         auth_header,
@@ -35,6 +35,33 @@ pub fn authorize_http_bearers(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn renderer_adapter_preserves_memory_identity_routes() {
+        let policy = BearerPolicy::new(Some("test-secret".into()), None, None, 1).unwrap();
+        for path in ["/memory/projection", "/memory/receipt"] {
+            for read_only in [false, true] {
+                for header in [None, Some("Bearer wrong")] {
+                    assert_eq!(
+                        authorize_http_bearers(path, "POST", read_only, &policy, header, 2)
+                            .decision,
+                        AccessDecision::Unauthorized
+                    );
+                }
+                assert_eq!(
+                    authorize_http_bearers(
+                        path,
+                        "POST",
+                        read_only,
+                        &policy,
+                        Some("Bearer test-secret"),
+                        2
+                    )
+                    .decision,
+                    AccessDecision::Allow
+                );
+            }
+        }
+    }
     #[test]
     fn rendering_requires_real_bearer_without_becoming_a_write() {
         let policy = BearerPolicy::new(Some("test-secret".into()), None, None, 1).unwrap();

@@ -1,9 +1,9 @@
 use super::*;
 use serde_json::json;
 
-const AT: &str = "2026-01-01T00:00:00Z";
+pub(super) const AT: &str = "2026-01-01T00:00:00Z";
 
-fn fixture() -> Store {
+pub(super) fn fixture() -> Store {
     let mut s = Store::open_in_memory().unwrap();
     s.search_config_mut().keyword = true;
     s.search_config_mut().named_graphs = true;
@@ -51,7 +51,7 @@ fn keyword_scope_applies_before_limit_and_named_types_are_visible() {
     let s = fixture();
     let root = crate::tool_search(
         &s,
-        &json!({"mode":"keyword","query":"shared","verbose":true}),
+        &json!({"mode":"keyword","query":"shared","graph":"urn:quipu:graph:root","verbose":true}),
     )
     .unwrap();
     assert_eq!(root["count"], 1);
@@ -160,7 +160,11 @@ fn semantic_scopes_use_the_full_ranking_and_default_root_is_unchanged() {
             .embed_entity(id, iri, &embedding, AT)
             .unwrap();
     }
-    let root = crate::tool_search(&s, &json!({"embedding":[1.0,0.0],"verbose":true})).unwrap();
+    let root = crate::tool_search(
+        &s,
+        &json!({"embedding":[1.0,0.0],"graph":"urn:quipu:graph:root","verbose":true}),
+    )
+    .unwrap();
     assert_eq!(root["count"], 1);
     assert_eq!(root["results"][0]["entity"], "urn:root");
     let named=crate::tool_search(&s,&json!({"embedding":[1.0,0.0],"graph":"urn:graph:a","limit":1,"entity_type":"urn:type:WorkItem","verbose":true})).unwrap();
@@ -276,7 +280,11 @@ fn default_off_refuses_exposure_while_prepared_named_vectors_stay_out_of_root() 
             .to_string()
             .contains("disabled")
     );
-    let out = crate::tool_search(&s, &json!({"embedding":[1.0,0.0],"verbose":true})).unwrap();
+    let out = crate::tool_search(
+        &s,
+        &json!({"embedding":[1.0,0.0],"graph":"urn:quipu:graph:root","verbose":true}),
+    )
+    .unwrap();
     assert_eq!(out["count"], 1);
     assert_eq!(out["results"][0]["entity"], "urn:root");
 }
@@ -322,7 +330,7 @@ fn deleting_named_facts_cannot_turn_their_vector_into_a_root_hit() {
         .embed_entity(root, "root", &[0.5, 0.5], AT)
         .unwrap();
     s.search_config_mut().named_graphs = false;
-    let query = json!({"embedding":[1.0,0.0],"verbose":true});
+    let query = json!({"embedding":[1.0,0.0],"graph":"urn:quipu:graph:root","verbose":true});
     let before = crate::tool_search(&s, &query).unwrap();
     assert_eq!(before["count"], 1);
     s.conn
@@ -336,4 +344,77 @@ fn deleting_named_facts_cannot_turn_their_vector_into_a_root_hit() {
         after["results"], before["results"],
         "deletion must not admit a previously hidden named vector into ROOT"
     );
+}
+
+#[test]
+fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
+    // aegis-rcz5ib.10: keyword scope reads the lexical index's own graph column,
+    // so it needs no named-only vectors; every other mode keeps the refusal.
+    let mut s = fixture();
+    s.search_config_mut().named_graphs = false;
+    s.search_config_mut().hybrid = true;
+    let out = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","graph":"urn:graph:a","verbose":true}),
+    )
+    .unwrap();
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["results"][0]["entity"], "urn:alpha");
+    assert_eq!(out["results"][0]["graph"], "urn:graph:a");
+    let all = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","all_graphs":true}),
+    )
+    .unwrap();
+    assert_eq!(all["count"], 3);
+    // Hybrid at alpha=0 is pure keyword ranking and takes the keyword path.
+    let pure = crate::tool_search(
+        &s,
+        &json!({"mode":"hybrid","query":"shared","alpha":0.0,"graph":"urn:graph:a"}),
+    )
+    .unwrap();
+    assert_eq!(pure["count"], 1);
+    assert_eq!(pure["results"][0]["entity"], "urn:alpha");
+    for input in [
+        json!({"mode":"semantic","embedding":[1.0,0.0],"graph":"urn:graph:a"}),
+        json!({"mode":"hybrid","query":"shared","alpha":0.5,"graph":"urn:graph:a"}),
+        json!({"query":"shared","graph":"urn:graph:a"}),
+    ] {
+        let err = crate::tool_search(&s, &input).unwrap_err().to_string();
+        assert!(err.contains("named_graphs = false"), "{input}: {err}");
+    }
+    let root = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","graph":"urn:quipu:graph:root"}),
+    )
+    .unwrap();
+    assert_eq!(root["count"], 1, "explicit scope stays ROOT");
+    assert_eq!(root["results"][0]["entity"], "urn:root");
+}
+
+#[test]
+fn keyword_graph_scope_still_refuses_an_incomplete_index() {
+    let mut s = Store::open_in_memory().unwrap();
+    s.search_config_mut().keyword = true;
+    s.search_config_mut().named_graphs = false;
+    let id = s.graph_create("urn:graph:a").unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        &mut s,
+        &b"<urn:alpha> <http://www.w3.org/2000/01/rdf-schema#label> \"shared alpha\" ."[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        AT,
+        None,
+        None,
+        id,
+    )
+    .unwrap();
+    s.initialize_lexical_index().unwrap();
+    let err = crate::tool_search(
+        &s,
+        &json!({"mode":"keyword","query":"shared","graph":"urn:graph:a"}),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("not ready"), "{err}");
 }

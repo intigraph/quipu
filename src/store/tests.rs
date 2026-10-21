@@ -3162,3 +3162,22 @@ fn label_index_scan_uses_the_current_fact_index() {
         "the current-fact label scan must not full-scan facts, plan={details:?}"
     );
 }
+
+#[test]
+fn read_only_connections_have_explicit_replica_busy_timeout() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("timeout.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let reader = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    reader
+        .set_busy_timeout(std::time::Duration::from_secs(1))
+        .unwrap();
+    let timeout: i64 = reader
+        .conn
+        .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+        .unwrap();
+    assert!(
+        timeout == 1_000,
+        "short follower apply locks must not fail immediately"
+    );
+}

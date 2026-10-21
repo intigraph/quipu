@@ -25,6 +25,7 @@ pub struct ComposedPack {
     pub created_at: String,
     pub source: String,
     pub manifest: crate::share::ShareManifest,
+    #[cfg(not(target_arch = "wasm32"))]
     pub attestation: crate::share_attestation::AttestationStatus,
 }
 
@@ -36,6 +37,20 @@ pub struct Composition {
     pub shapes_authority: String,
     pub packs: Vec<ComposedPack>,
     pub validation: serde_json::Value,
+    /// Graphs the inputs NAME without carrying (aegis-3fy1kp), each with the share
+    /// that declared it. Reported, never followed: loading a pointer is the
+    /// consumer's trust decision. Omitted when empty, so a composition of
+    /// pointer-free packs serializes exactly as before.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<DeclaredPointer>,
+}
+
+/// One pointer and the input share that declared it.
+#[derive(Debug, Serialize)]
+pub struct DeclaredPointer {
+    pub share_id: String,
+    #[serde(flatten)]
+    pub pointer: crate::share::SharePointer,
 }
 
 /// Where a composition's graphs and dataset live.
@@ -229,6 +244,7 @@ pub(crate) fn compose_scoped(
     let chosen = requests
         .get(selected)
         .ok_or_else(|| Error::InvalidValue("shape authority is not an input pack".into()))?;
+    #[cfg(not(target_arch = "wasm32"))]
     let mut attestations = Vec::new();
     for request in requests {
         crate::share_import::verify_share(request)?;
@@ -247,19 +263,35 @@ pub(crate) fn compose_scoped(
             .is_some_and(crate::share::ShareDestination::is_internal)
             && !request.destination.is_internal()
         {
+            let mut files = BTreeMap::from([
+                ("export.nt".into(), request.export_ntriples.clone()),
+                ("shapes.ttl".into(), request.shapes_turtle.clone()),
+                (
+                    crate::share::POINTERS_SCRUB_LABEL.into(),
+                    crate::share::pointer_scrub_text(&request.manifest.pointers),
+                ),
+            ]);
+            if let Some(text) = &request.alignments_turtle {
+                files.insert("alignments.ttl".into(), text.clone());
+            }
             crate::share_scrub::scrub_outward_payload(
                 store,
-                &BTreeMap::from([
-                    ("export.nt".into(), request.export_ntriples.clone()),
-                    ("shapes.ttl".into(), request.shapes_turtle.clone()),
-                ]),
+                &files,
                 "composition of an internal share",
             )?;
         }
         // Integrity is not authorship; retain the ordinary import verification.
+        #[cfg(not(target_arch = "wasm32"))]
         attestations.push(crate::share_attestation::verify_attestation(
             store, request, timestamp,
         )?);
+    }
+    for request in requests {
+        crate::share_alignments::retain(
+            store,
+            &request.manifest.share_id,
+            request.alignments_turtle.as_deref(),
+        )?;
     }
     let mut suppressed: Suppressed = Vec::new();
     let graphs = requests
@@ -344,9 +376,8 @@ pub(crate) fn compose_scoped(
     let dataset = scope.dataset(&digest);
     let packs: Vec<_> = requests
         .iter()
-        .zip(attestations)
         .enumerate()
-        .map(|(index, (r, attestation))| ComposedPack {
+        .map(|(index, r)| ComposedPack {
             share_id: r.manifest.share_id.clone(),
             graph: scope.pack_graph(index, &r.manifest.share_id),
             store_id: r.manifest.store_id.clone(),
@@ -354,7 +385,8 @@ pub(crate) fn compose_scoped(
             created_at: r.manifest.created_at.clone(),
             source: r.source.clone(),
             manifest: r.manifest.clone(),
-            attestation,
+            #[cfg(not(target_arch = "wasm32"))]
+            attestation: attestations[index].clone(),
         })
         .collect();
     let result = Composition {
@@ -368,6 +400,15 @@ pub(crate) fn compose_scoped(
         shapes_authority: chosen.manifest.share_id.clone(),
         packs,
         validation,
+        pointers: requests
+            .iter()
+            .flat_map(|r| {
+                r.manifest.pointers.iter().map(|pointer| DeclaredPointer {
+                    share_id: r.manifest.share_id.clone(),
+                    pointer: pointer.clone(),
+                })
+            })
+            .collect(),
     };
     store.conn.execute_batch("SAVEPOINT quipu_composition")?;
     let write = (|| -> Result<()> {

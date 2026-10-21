@@ -1,8 +1,16 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[cfg(feature = "onnx")]
+#[path = "import_embedding_tests.rs"]
+mod import_embedding_tests;
+
 #[path = "acquisition_tests.rs"]
 mod acquisition_tests;
 
+#[path = "episode_two_phase_tests.rs"]
+mod episode_two_phase_tests;
+#[path = "point_read_tests.rs"]
+mod point_read_tests;
 #[path = "search_keyword_tests.rs"]
 mod search_keyword_tests;
 #[path = "search_structured_tests.rs"]
@@ -853,6 +861,9 @@ fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
     });
 
     let mut store = Store::open_in_memory().unwrap();
+    // This control measures explicit backfill, including a stale snapshot;
+    // automatic write indexing would consume the blocking provider in setup.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(provider.clone());
     store.embedding_config_mut().dimension = 8;
     quipu::ingest_rdf(
@@ -1031,10 +1042,16 @@ pub(super) fn pooled_handle_with_provider(
         search_config: store.search_config().clone(),
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
+        log_query_admission: false,
+        log_query_phases: false,
+        deck_http: false,
+        query_capture: None,
+        replica: None,
         federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,
             next: std::sync::atomic::AtomicUsize::new(0),
+            point_reserve: false,
         },
         #[cfg(feature = "reactive-reasoner")]
         reasoner: None,
@@ -1693,6 +1710,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
     let batches = Arc::new(parking_lot::Mutex::new(vec![]));
     let mut store = Store::open_in_memory().unwrap();
+    // This fixture starts deliberately unindexed to measure explicit backfill.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(RecordingProvider {
         batches: batches.clone(),
     }));
@@ -1783,4 +1802,182 @@ async fn request_deadline_reports_original_budget_as_http_408() {
     assert!(error.contains("budget 20ms"));
     assert!(error.contains("elapsed 41ms"));
     assert!(!error.contains("query_timeout_ms"));
+}
+
+#[tokio::test]
+async fn f79_standard_results_signal_actual_truncation() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().max_sparql_rows = 2;
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    for (values, expected) in [("1", "false"), ("1 2", "false"), ("1 2 3", "true")] {
+        for accept in [
+            "application/sparql-results+json",
+            "application/sparql-results+xml",
+            "text/csv",
+            "text/tab-separated-values",
+        ] {
+            let response = query_post(
+                State(shared.clone()),
+                query_headers("application/json", accept),
+                Bytes::from(
+                    serde_json::to_vec(
+                        &json!({"query":format!("SELECT ?x WHERE {{ VALUES ?x {{ {values} }} }}")}),
+                    )
+                    .unwrap(),
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            println!(
+                "{accept} VALUES {values}: X-Quipu-Truncated={:?}",
+                response.headers().get("x-quipu-truncated")
+            );
+            assert_eq!(
+                response
+                    .headers()
+                    .get("x-quipu-truncated")
+                    .and_then(|v| v.to_str().ok()),
+                Some(expected),
+                "{accept}: {values}"
+            );
+            if accept == "application/sparql-results+json" {
+                let bytes = axum::body::to_bytes(response.into_body(), 65536)
+                    .await
+                    .unwrap();
+                let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                assert_eq!(
+                    body["results"]["bindings"].as_array().unwrap().len(),
+                    values.split_whitespace().count().min(2)
+                );
+                assert!(body.get("truncated").is_none());
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn f79_default_ten_thousand_row_boundary_is_explicit() {
+    let store = Store::open_in_memory().unwrap();
+    assert_eq!(store.search_config().max_sparql_rows, 10_000);
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    for count in [9999, 10_000, 10_001] {
+        let values = (0..count)
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let response = query_post(
+            State(shared.clone()),
+            query_headers("application/json", "application/sparql-results+json"),
+            Bytes::from(
+                serde_json::to_vec(
+                    &json!({"query":format!("SELECT ?x WHERE {{ VALUES ?x {{ {values} }} }}")}),
+                )
+                .unwrap(),
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            response.headers()["x-quipu-truncated"],
+            if count > 10_000 { "true" } else { "false" }
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 2_000_000)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            body["results"]["bindings"].as_array().unwrap().len(),
+            count.min(10_000)
+        );
+    }
+}
+
+#[tokio::test]
+async fn f79_graph_formats_signal_truncation_without_changing_rdf_body() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().max_sparql_rows = 2;
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    for (values, expected) in [
+        ("<urn:a> <urn:b>", "false"),
+        ("<urn:a> <urn:b> <urn:c>", "true"),
+    ] {
+        for accept in ["text/turtle", "application/n-triples"] {
+            let response = query_post(State(shared.clone()), query_headers("application/json", accept),
+                Bytes::from(serde_json::to_vec(&json!({"query":format!("CONSTRUCT {{ ?s <urn:p> 1 }} WHERE {{ VALUES ?s {{ {values} }} }}")})).unwrap()),
+            ).await.unwrap();
+            assert_eq!(response.headers()["x-quipu-truncated"], expected);
+            let bytes = axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap();
+            let format = if accept == "text/turtle" {
+                oxrdfio::RdfFormat::Turtle
+            } else {
+                oxrdfio::RdfFormat::NTriples
+            };
+            let triples: Vec<_> = oxrdfio::RdfParser::from_format(format)
+                .for_reader(bytes.as_ref())
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert_eq!(triples.len(), 2);
+        }
+    }
+}
+
+#[tokio::test]
+async fn substring_contract_refuses_before_query_and_echoes_ready_snapshot() {
+    let empty: SharedStore = Arc::new(super::StoreHandle::writer_only(
+        Store::open_in_memory().unwrap(),
+    ));
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert("x-quipu-require-substring", "v6".parse().unwrap());
+    headers.insert(
+        axum::http::header::ACCEPT,
+        "application/sparql-results+json".parse().unwrap(),
+    );
+    let error = query(
+        State(empty),
+        headers.clone(),
+        axum::Json(json!({"query":"not valid SPARQL"})),
+    )
+    .await
+    .unwrap_err();
+    let body = axum::body::to_bytes(error.into_response().into_body(), 65536)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&body).contains("substring index is not ready"));
+    let store = Store::open_in_memory().unwrap();
+    store.backfill_substring_batch(1).unwrap();
+    let ready: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    let response = query(
+        State(ready.clone()),
+        headers.clone(),
+        axum::Json(json!({"query":"ASK {}"})),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.headers()["x-quipu-substring-index"], "v6");
+    let body = axum::body::to_bytes(response.into_body(), 65536)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["boolean"],
+        true
+    );
+    for input in [
+        json!({"query":"ASK {}","tx":1}),
+        json!({"query":"ASK {}","federated":true}),
+    ] {
+        assert!(
+            query(State(ready.clone()), headers.clone(), axum::Json(input))
+                .await
+                .is_err()
+        );
+    }
+    headers.insert("x-quipu-require-substring", "unknown".parse().unwrap());
+    assert!(
+        query(State(ready), headers, axum::Json(json!({"query":"ASK {}"})))
+            .await
+            .is_err()
+    );
 }

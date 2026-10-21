@@ -13,6 +13,10 @@ pub(crate) fn acquisition_routes() -> axum::Router<SharedStore> {
     axum::Router::new()
         .route("/acquire", axum::routing::post(acquire))
         .route("/acquire/composed", axum::routing::post(acquire_composed))
+        .route(
+            "/acquire/eligibility",
+            axum::routing::post(acquire_eligibility),
+        )
 }
 
 pub(crate) async fn acquire(
@@ -39,6 +43,32 @@ pub(crate) async fn acquire_composed(
         )?))
     })
     .await
+}
+
+pub(crate) async fn acquire_eligibility(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::acquisition::eligibility::Request>,
+) -> Result<axum::Json<quipu::acquisition::eligibility::Observation>, AppError> {
+    super::admission::read_blocking(move || Ok(axum::Json(eligibility(&store, &input)?))).await
+}
+
+/// The eligibility handler body, on the calling thread's request identity.
+pub(crate) fn eligibility(
+    store: &super::StoreHandle,
+    input: &quipu::acquisition::eligibility::Request,
+) -> Result<quipu::acquisition::eligibility::Observation, AppError> {
+    // Refused before any lock: the ordinary writer guard would settle a
+    // signed attestation and spend its nonce, and this guard never does.
+    if quipu::transaction_auth::current_attestation().is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "eligibility observation does not accept a signed write attestation".into(),
+        )
+        .into());
+    }
+    // The writer handle holds the configured label floor and owns the main
+    // connection; `read()` would synchronize reader providers.
+    let store = store.metadata_lock();
+    Ok(quipu::acquisition::eligibility::observe(&store, input)?)
 }
 
 pub(crate) async fn export(
@@ -128,7 +158,7 @@ pub(crate) async fn import_share(
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
     blocking(move || {
-        let (result, work) = {
+        let (mut result, work) = {
             let mut st = store.lock();
             let result = quipu::share_import::import_share(
                 &mut st,
@@ -138,9 +168,13 @@ pub(crate) async fn import_share(
             )?;
             (result, st.take_deferred_embed())
         };
-        if let Some(work) = work {
-            finish_deferred_embed(&store, &work)?;
+        if let Some(work) = work
+            && let Err(error) = finish_deferred_embed(&store, &work)
+        {
+            result.embedding.state = "failed".into();
+            result.embedding.message = Some(format!("Graph staged, embedding failed: {error:?}"));
         }
+        quipu::import_embedding::refresh(&store.lock(), &mut result)?;
         Ok(axum::Json(serde_json::to_value(result).map_err(|e| {
             quipu::Error::Serialization(format!("import response: {e}"))
         })?))

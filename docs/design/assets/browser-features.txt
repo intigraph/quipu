@@ -1,0 +1,12 @@
+ACTUAL PUBLIC BASELINE
+SEARCH_PROBE {"error":"semantic search needs embeddings, which need quipu's `onnx` feature. This bundle is built with default-features = false, so `onnx` is not linked and there is no model to run. It is unavailable in the page, not failing.","available":["query","episode","set","retract","stats","delta","share","version"]}
+
+CANDIDATE / ISOLATED FIXTURE
+PASS real pack load, compiled flags, no heavy assets before search
+PASS violating write refused with real feedback; existing two widgets preserved
+PASS adopted Datalog 0->1 and OWL load plus later reactive inverse write
+PASS semantic ranking over actual ROOT data with self-hosted ONNX
+PASS malformed null/scalar/array/SELECT members preserve local and valid peer rows
+PASS fetch selected graph, federation completeness, native floor before network, timeout
+PASS actual workbench search UI/window/HTTP, structured SHACL errors on both relays, valid write readback
+WASM full browser feature acceptance: all checks passed

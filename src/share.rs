@@ -16,6 +16,9 @@ pub use crate::share_scrub::ShareDestination;
 use crate::share_scrub::enforce_destination;
 use crate::store::Store;
 
+mod manifest_rdf;
+pub(crate) use manifest_rdf::manifest_turtle;
+
 /// The graph slice written into a share.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ShareScope {
@@ -84,6 +87,8 @@ pub struct ShareOptions {
     /// registered against the scope, `Some(names)` exactly those (`Some([])`
     /// carries none). See `share_queries` for the default's definition.
     pub queries: Option<Vec<String>>,
+    /// Optional ancillary alignment evidence; never automatically applied.
+    pub alignments_turtle: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -110,6 +115,8 @@ pub struct ShareOptions {
     /// travels with the bytes rather than living in the shell history of
     /// whoever ran the command.
     pub destination: ShareDestination,
+    /// Graphs to name without carrying (aegis-3fy1kp). Empty for an ordinary share.
+    pub pointers: Vec<SharePointer>,
 }
 
 impl Default for ShareOptions {
@@ -119,12 +126,14 @@ impl Default for ShareOptions {
             shapes: Vec::new(),
             no_shapes: false,
             queries: None,
+            alignments_turtle: None,
             parent_share: None,
             turtle_view: false,
             pack_dir: Some(PENDANT_PACK_DIR.into()),
             #[cfg(not(target_arch = "wasm32"))]
             attest: None,
             destination: ShareDestination::default(),
+            pointers: Vec::new(),
         }
     }
 }
@@ -147,6 +156,9 @@ pub struct SharePayloadRequest {
     /// Stored queries to carry; absent means those registered against the scope.
     #[serde(default)]
     pub queries: Option<Vec<String>>,
+    /// Optional exact alignment evidence, sealed and outward-scrubbed.
+    #[serde(default)]
+    pub alignments_turtle: Option<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also include a human-readable `export.ttl` derived view.
@@ -164,6 +176,7 @@ impl SharePayloadRequest {
             shapes: self.shapes.clone(),
             no_shapes: self.no_shapes,
             queries: self.queries.clone(),
+            alignments_turtle: self.alignments_turtle.clone(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -185,6 +198,10 @@ impl SharePayloadRequest {
             // (aegis-auw0o7). An internal share is produced at the machine that
             // owns the store, with `quipu share --destination internal`.
             destination: ShareDestination::Outward,
+            // Not settable over HTTP: pointers are a property of the producing
+            // repository (aegis-3fy1kp), and a caller who does not own it must not
+            // make this server's share point anywhere.
+            pointers: Vec::new(),
         }
     }
 
@@ -227,11 +244,24 @@ pub struct ShareFiles {
     /// queries, so such a manifest is byte-identical to one from before it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<String>,
+    /// Fixed optional ancillary member name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments: Option<String>,
 }
+
+mod pointers;
+pub(crate) use pointers::pointer_scrub_text;
+pub(crate) use pointers::validate_pointers;
+/// The name a scrub refusal gives the pointer entries of `manifest.json`.
+pub(crate) const POINTERS_SCRUB_LABEL: &str = "manifest.json pointers";
+pub use pointers::{PointerTarget, SharePointer};
 
 /// Versioned, hash-checked share envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
+    /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
     /// Manifest schema identifier.
     pub schema: String,
     /// Hash of this manifest with `share_id` omitted.
@@ -251,6 +281,9 @@ pub struct ShareManifest {
     /// queries. Part of `share_id`: changing one query's text changes the id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries_hash: Option<String>,
+    /// Exact ancillary bytes, included in `share_id`; absent preserves legacy identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments_hash: Option<String>,
     /// Export scope.
     pub scope: ShareScope,
     /// Prior share in this lineage.
@@ -308,6 +341,15 @@ pub struct ShareManifest {
     /// produced before this existed — the field is additive, not a format break.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<ShareDestination>,
+    /// Graphs this share names but does not carry (aegis-3fy1kp).
+    ///
+    /// INSIDE `share_id`, like `destination`: removing or editing a pointer makes
+    /// the manifest hash to something else and `verify_share` refuses. Skipped
+    /// when empty, so every share produced before this field is byte-identical.
+    /// An older reader drops the unknown field, recomputes a different id and
+    /// refuses the share: it fails closed rather than silently ignoring pointers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pointers: Vec<SharePointer>,
 }
 
 /// The directory name a share uses when its manifest does not say.
@@ -452,6 +494,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         None
     };
 
+    if let Some(text) = &opts.alignments_turtle {
+        crate::share_alignments::validate(text)?;
+    }
     let tx_anchor = store.latest_tx_id()?;
     let created_at = if tx_anchor == 0 {
         "1970-01-01T00:00:00Z".to_string()
@@ -461,7 +506,12 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             .ok_or_else(|| Error::Store(format!("share: missing anchor tx {tx_anchor}")))?
             .timestamp
     };
+    let embedding = store.embedding_provider().and_then(|p| p.recipe());
+    if let Some(recipe) = &embedding {
+        recipe.validate()?;
+    }
     let mut manifest = ShareManifest {
+        embedding,
         schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
         share_id: String::new(),
         store_id: store.store_id()?,
@@ -470,6 +520,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         canonicalization: Some("RDFC-1.0".into()),
         shapes_hash: sha256(&shapes),
         queries_hash: queries.as_ref().map(|q| sha256(q.as_bytes())),
+        alignments_hash: opts
+            .alignments_turtle
+            .as_ref()
+            .map(|text| sha256(text.as_bytes())),
         scope: opts.scope.clone(),
         parent_share: opts.parent_share.clone(),
         merge_parents: Vec::new(),
@@ -481,6 +535,10 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             version: env!("CARGO_PKG_VERSION").into(),
         },
         files: ShareFiles {
+            alignments: opts
+                .alignments_turtle
+                .as_ref()
+                .map(|_| crate::share_alignments::ALIGNMENTS_FILE.into()),
             graph: "export.nt".into(),
             shapes: "shapes.ttl".into(),
             turtle_view: turtle.as_ref().map(|_| "export.ttl".to_string()),
@@ -494,7 +552,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
             .destination
             .is_internal()
             .then_some(ShareDestination::Internal),
+        pointers: opts.pointers.clone(),
     };
+    validate_pointers(&manifest.pointers)?;
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
     // MINTED AFTER share_id EXISTS, because the envelope signs it. The field is
     // stripped from the hashed form (see `manifest_bytes`), so assigning it here
@@ -521,6 +581,12 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         String::from_utf8(shapes)
             .map_err(|e| Error::Serialization(format!("share shapes UTF-8: {e}")))?,
     );
+    if let Some(text) = &opts.alignments_turtle {
+        files.insert(
+            crate::share_alignments::ALIGNMENTS_FILE.into(),
+            text.clone(),
+        );
+    }
     if let Some(queries) = queries {
         files.insert(crate::share_queries::QUERIES_FILE.into(), queries);
     }
@@ -532,82 +598,14 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         );
     }
     enforce_destination(store, &files, opts.destination, "share scrub")?;
+    if !manifest.pointers.is_empty() {
+        let pointers = BTreeMap::from([(
+            POINTERS_SCRUB_LABEL.to_string(),
+            pointers::pointer_scrub_text(&manifest.pointers),
+        )]);
+        enforce_destination(store, &pointers, opts.destination, "share scrub")?;
+    }
     Ok(SharePayload { manifest, files })
-}
-
-pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
-    let id = format!("urn:{}", manifest.share_id);
-    let literal = |value: &str| serde_json::to_string(value).expect("string JSON cannot fail");
-    let parent = manifest
-        .parent_share
-        .as_ref()
-        .map_or_else(String::new, |parent| {
-            format!(" ;\n  prov:wasRevisionOf <urn:{parent}>")
-        });
-    // Emitted only when set, so an outward manifest.ttl is byte-identical to
-    // one produced before this field existed. A reader of the RDF view sees the
-    // same marker as a reader of the JSON — the exemption must not be visible
-    // in only one of the two representations a consumer might read.
-    let merge_parents = manifest
-        .merge_parents
-        .iter()
-        .map(|parent| format!(" ;\n  prov:wasDerivedFrom <urn:{parent}>"))
-        .collect::<String>();
-    // A third distribution only when the share carries queries, for the same
-    // byte-identity reason as the destination marker below.
-    let queries = manifest.queries_hash.as_ref().map_or_else(String::new, |hash| {
-        format!(
-            ",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ;\n    \
-             dcat:downloadURL <payload:queries.ttl> ;\n    \
-             spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;\n      \
-             spdx:checksumValue {} ] ]",
-            literal(hash.strip_prefix("sha256:").unwrap_or(hash))
-        )
-    });
-    let destination = match manifest.destination {
-        Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
-        _ => "",
-    };
-    format!(
-        r#"@prefix dcat: <http://www.w3.org/ns/dcat#> .
-@prefix dct: <http://purl.org/dc/terms/> .
-@prefix prov: <http://www.w3.org/ns/prov#> .
-@prefix spdx: <http://spdx.org/rdf/terms#> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-@prefix quipu: <https://quipu.dev/ontology/> .
-
-<{id}> a dcat:Dataset, prov:Entity ;
-  dct:identifier {} ;
-  prov:generatedAtTime {}^^xsd:dateTime ;
-  prov:wasAttributedTo [ a prov:SoftwareAgent ;
-    dct:title {} ; quipu:version {} ]{parent}{merge_parents}{destination} ;
-  dcat:distribution [ a dcat:Distribution ;
-    dcat:mediaType "application/n-triples" ;
-    dcat:downloadURL <payload:export.nt> ;
-    spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ],
-  [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
-    dcat:downloadURL <payload:shapes.ttl> ;
-    spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ]{queries} .
-"#,
-        literal(&manifest.share_id),
-        literal(&manifest.created_at),
-        literal(&manifest.producer.name),
-        literal(&manifest.producer.version),
-        literal(
-            manifest
-                .graph_hash
-                .strip_prefix("sha256:")
-                .unwrap_or(&manifest.graph_hash)
-        ),
-        literal(
-            manifest
-                .shapes_hash
-                .strip_prefix("sha256:")
-                .unwrap_or(&manifest.shapes_hash)
-        ),
-    )
 }
 
 /// Build a complete share response with the same canonical producer as [`share`].
@@ -672,3 +670,7 @@ pub fn share(store: &Store, out_dir: &str, opts: &ShareOptions) -> Result<ShareM
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "share/pointer_tests.rs"]
+mod pointer_tests;

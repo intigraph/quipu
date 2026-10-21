@@ -41,7 +41,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
             eprintln!(
                 "usage: quipu share --output <dir> [--graph <iri> | --group-id <id> | \
              --construct <query>] [--shapes <name>]... [--no-shapes] \
-             [--queries <name>]... [--no-queries] [--parent-share <sha256:id>] \
+             [--queries <name>]... [--no-queries] [--alignments <file>] [--parent-share <sha256:id>] \
              [--since <parent-reference>] [--turtle] [--destination internal]"
             );
             std::process::exit(1);
@@ -83,7 +83,14 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         eprintln!("share accepts either --queries or --no-queries, not both");
         std::process::exit(1);
     }
+    let alignments_turtle = flag_value(args, "--alignments").map(|path| {
+        quipu::share_alignments::read_file(std::path::Path::new(path)).unwrap_or_else(|error| {
+            eprintln!("share alignments: {error}");
+            std::process::exit(1)
+        })
+    });
     let opts = quipu::share::ShareOptions {
+        alignments_turtle,
         scope,
         shapes,
         no_shapes,
@@ -99,6 +106,7 @@ pub fn cmd_share(args: &[String], db_path: &str) {
         ),
         attest: attest_options(args),
         destination: destination_flag(args),
+        pointers: pointers_flag(args),
     };
     let store = crate::cli_open::open_store(db_path);
     if let Some(parent) = flag_value(args, "--since") {
@@ -285,6 +293,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             request.actor = actor.map(String::from);
             request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
             let mut store = quipu::Store::open_in_memory()?;
+            crate::cli_open::configure_embeddings(&mut store);
             quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
         });
         match imported {
@@ -352,6 +361,9 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         } else {
             crate::cli_open::open_store(db_path)
         };
+        if transient {
+            crate::cli_open::configure_embeddings(&mut store);
+        }
         quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
     });
     match imported {
@@ -443,4 +455,46 @@ fn attest_options(args: &[String]) -> Option<quipu::share::AttestOptions> {
         expires_at_epoch: issued + ttl,
         nonce: need("--attest-nonce"),
     })
+}
+
+/// `--pointers <file.toml>`: graphs this share names without carrying (aegis-3fy1kp).
+///
+/// The file holds `[[pointer]]` tables, as in the pendant autoload design:
+///
+/// ```toml
+/// [[pointer]]
+/// graph = "https://example.org/homelab"
+/// kind = "endpoint"
+/// endpoint = "https://quipu.example.org/sparql"
+///
+/// [[pointer]]
+/// graph = "https://example.org/reference"
+/// kind = "pack"
+/// url = "https://example.org/reference.pendant.tar.gz"
+/// sha256 = "<64 hex>"
+/// ```
+fn pointers_flag(args: &[String]) -> Vec<quipu::share::SharePointer> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct PointerFile {
+        #[serde(default)]
+        pointer: Vec<quipu::share::SharePointer>,
+    }
+    let Some(path) = flag_value(args, "--pointers") else {
+        return Vec::new();
+    };
+    let parsed = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|body| toml::from_str::<PointerFile>(&body).map_err(|e| e.to_string()));
+    match parsed {
+        Ok(file) if file.pointer.is_empty() => {
+            eprintln!("--pointers {path}: no [[pointer]] entries");
+            std::process::exit(1);
+        }
+        Ok(file) => file.pointer,
+        Err(error) => {
+            eprintln!("--pointers {path}: {error}");
+            std::process::exit(1);
+        }
+    }
 }

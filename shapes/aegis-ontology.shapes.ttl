@@ -63,7 +63,7 @@ aegis:LXCContainerShape a sh:NodeShape ;
 
 # ── ProxmoxNode ────────��────────────────────────────────────��────
 #
-# A physical Proxmox host (e.g., koror, kota).
+# A physical Proxmox host (e.g., korimako, kotare).
 
 aegis:ProxmoxNodeShape a sh:NodeShape ;
     sh:targetClass aegis:ProxmoxNode ;
@@ -2299,3 +2299,18 @@ aegis:AboutWorkItemShape a sh:NodeShape ;
         sh:nodeKind sh:IRI ;
         sh:maxCount 1 ;
     ] .
+
+# Canonical curated Daily Brief rows (aegis-hqz, schema proposal 32).
+# JSON semantics, identity uniqueness and CAS are checked by the application.
+aegis:DailyBriefRow rdfs:subClassOf aegis:Artifact .
+aegis:DailyBriefRowShape a sh:NodeShape ;
+  sh:targetClass aegis:DailyBriefRow ;
+  sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path aegis:reference ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 1024 ] ;
+  sh:property [ sh:path aegis:briefArtifact ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:property [ sh:path aegis:briefCollection ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 64 ] ;
+  sh:property [ sh:path aegis:briefDocumentId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 256 ] ;
+  sh:property [ sh:path aegis:briefPayloadJson ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 2 ; sh:maxLength 16384 ] ;
+  sh:property [ sh:path aegis:briefRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+  sh:property [ sh:path aegis:briefCurator ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 128 ] ;
+  sh:property [ sh:path aegis:briefSourceVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

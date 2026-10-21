@@ -91,13 +91,19 @@ wasm cmd="check" n="1000":
     case "{{cmd}}" in
         check) RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
                cargo check --target wasm32-unknown-unknown --no-default-features --lib ;;
+        explorer-build) cd wasm/explorer && cargo build --locked --release ;;
+        explorer-lock) cd wasm/explorer && cargo generate-lockfile --offline ;;
+        explorer-node) just wasm explorer-build && cd wasm/explorer && \
+               target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])') && \
+               wasm-bindgen --target nodejs --out-dir pkg-node \
+                   "$target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm" ;;
         build) cd wasm/harness && cargo build --release && \
                wasm-bindgen --target web --out-dir www/pkg \
                    target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm ;;
         test)  just wasm build && cd wasm/harness && node run.mjs ;;
         bench) just wasm build && cd wasm/harness && node bench.mjs {{n}} ;;
         roundtrip) just wasm build && cd wasm/harness && node roundtrip.mjs ;;
-        *)     echo "unknown wasm command: {{cmd}} (check|build|test|bench|roundtrip)"; exit 1 ;;
+        *)     echo "unknown wasm command: {{cmd}} (check|explorer-build|build|test|bench|roundtrip)"; exit 1 ;;
     esac
 
 # === Fixtures ===
@@ -141,6 +147,8 @@ paper-merge cmd="build":
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
+    elif [ "{{ name }}" = "merge-load-build" ]; then \
+        cargo build --locked --example merge_load --bin quipu; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
     elif [ "{{ name }}" = "memory" ]; then \
@@ -267,6 +275,11 @@ docs-demo-test:
 # Map acceptance against the staged real browser engine and repository pack.
 explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
+    node scripts/test-explore-cords.cjs {{args}}
+
+# Presentation acceptance against the same staged browser engine.
+explorer-presentation *args:
+    node scripts/test-explore-presentation.cjs {{args}}
 
 # Author a canonical demo share from explicit data, shapes and reviewed policy.
 docs-data graph shapes policy:
@@ -342,3 +355,16 @@ search-eval cmd="test" *args="":
     @if [ "{{cmd}}" = "test" ]; then python3 scripts/test_search_eval.py; \
     elif [ "{{cmd}}" = "run" ]; then python3 scripts/search-eval.py {{args}}; \
     else echo "unknown search-eval command: {{cmd}}" >&2; exit 1; fi
+
+# Scratch follower: actual start, 100 reads, write refusals, lag and no DB writes.
+replica-test server cli:
+    python3 scripts/test-replica-server.py {{quote(server)}} {{quote(cli)}}
+
+# Scratch-only process isolation and failure controls using owned binary copies.
+read-process-test server cli:
+    python3 scripts/test-read-process-pool.py {{quote(server)}} {{quote(cli)}}
+
+# Verify the standalone installer using private release fixtures.
+installer-check:
+    sh -n install.sh
+    python3 scripts/test-install-release.py

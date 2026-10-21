@@ -15,6 +15,14 @@ use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt as _;
 
+#[path = "mcp_transport/input.rs"]
+mod input;
+#[cfg(test)]
+#[path = "mcp_transport/parity_tests.rs"]
+mod parity_tests;
+#[path = "mcp_transport/search_context.rs"]
+mod search_context;
+
 /// MCP dispatch paired with an already guarded REST router.
 #[derive(Clone)]
 pub struct McpServer {
@@ -27,6 +35,20 @@ pub struct McpServer {
 fn endpoint(name: &str) -> (Method, String) {
     let path = match name {
         "quipu_graph_list" => return (Method::GET, "/graphs".into()),
+        "quipu_stats" => return (Method::GET, "/stats".into()),
+        "quipu_health" => return (Method::GET, "/health".into()),
+        "quipu_version" => return (Method::GET, "/version".into()),
+        "quipu_events" => return (Method::GET, "/events".into()),
+        "quipu_changes" => return (Method::GET, "/changes".into()),
+        "quipu_transactions" => return (Method::GET, "/transactions".into()),
+        "quipu_entity" => return (Method::GET, "/entity".into()),
+        "quipu_fragments" => return (Method::GET, "/fragments".into()),
+        "quipu_workflow_capabilities" => return (Method::GET, "/workflow/capabilities".into()),
+        "quipu_import_promote" => "/import/promote",
+        "quipu_acquire_composed" => "/acquire/composed",
+        "quipu_events_commit" => "/events/commit",
+        "quipu_knot_stage" => "/knot/stage",
+        "quipu_knot_promote" => "/knot/promote",
         "quipu_graph_create" => "/graph/create",
         "quipu_graph_label" => "/graph/label",
         "quipu_load_ontology" => "/ontology",
@@ -91,25 +113,62 @@ impl McpServer {
         input: Value,
         headers: &HeaderMap,
     ) -> Result<CallToolResult, ErrorData> {
-        if !self.tools.iter().any(|tool| tool.name == name) {
-            return Err(ErrorData::invalid_params("unknown Quipu tool", None));
+        let tool = self
+            .tools
+            .iter()
+            .find(|tool| tool.name == name)
+            .ok_or_else(|| ErrorData::invalid_params("unknown Quipu tool", None))?;
+        // New workflow schemas are strict: a misspelled scope or a wrong-typed
+        // graph must refuse before a legacy handler can default to ROOT.
+        let schema = serde_json::to_value(&tool.input_schema)
+            .map_err(|_| ErrorData::internal_error("cannot read tool schema", None))?;
+        if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+            input::validate(&schema, &input, "arguments")?;
         }
         let (method, mut path) = endpoint(name);
         if method == Method::GET {
             let mut query = url::form_urlencoded::Serializer::new(String::new());
             for (key, value) in input.as_object().into_iter().flatten() {
-                let value = value.as_str().ok_or_else(|| {
-                    ErrorData::invalid_params("graph filters must be strings", None)
-                })?;
-                query.append_pair(key, value);
+                let value = match value {
+                    Value::String(value) => value.clone(),
+                    Value::Number(_) | Value::Bool(_) => value.to_string(),
+                    _ => {
+                        return Err(ErrorData::invalid_params(
+                            "GET parameters must be scalar strings, numbers or booleans",
+                            None,
+                        ));
+                    }
+                };
+                query.append_pair(key, &value);
             }
             path.push('?');
             path.push_str(&query.finish());
         }
+        // SPARQL Update is a protocol body, not a JSON handler. Encode declared
+        // provenance as form fields so the same REST attribution parser owns it.
+        let (content_type, body) = if name == "quipu_update" {
+            let mut form = url::form_urlencoded::Serializer::new(String::new());
+            let update = input
+                .get("update")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ErrorData::invalid_params("update must be a string", None))?;
+            form.append_pair("update", update);
+            for key in ["actor", "source"] {
+                if let Some(value) = input.get(key) {
+                    let value = value.as_str().ok_or_else(|| {
+                        ErrorData::invalid_params("update provenance must be strings", None)
+                    })?;
+                    form.append_pair(key, value);
+                }
+            }
+            ("application/x-www-form-urlencoded", form.finish())
+        } else {
+            ("application/json", input.to_string())
+        };
         let mut builder = Request::builder()
             .method(method)
             .uri(path)
-            .header("content-type", "application/json")
+            .header("content-type", content_type)
             .header("accept", "application/json")
             .header("x-quipu-client", "native-mcp");
         for key in ["authorization", "x-quipu-task"] {
@@ -118,7 +177,7 @@ impl McpServer {
             }
         }
         let request = builder
-            .body(Body::from(input.to_string()))
+            .body(Body::from(body))
             .map_err(|_| ErrorData::internal_error("cannot construct tool request", None))?;
         let response = self
             .app
@@ -132,6 +191,14 @@ impl McpServer {
             .map_err(|_| ErrorData::internal_error("tool response exceeds limit", None))?;
         let text = String::from_utf8(bytes.to_vec())
             .map_err(|_| ErrorData::internal_error("tool response is not text", None))?;
+        let text = if success && name == "quipu_search" {
+            match search_context::render(&text) {
+                Ok(text) => text,
+                Err(reason) => return Ok(CallToolResult::error(vec![Content::text(reason)])),
+            }
+        } else {
+            text
+        };
         Ok(if success {
             CallToolResult::success(vec![Content::text(text)])
         } else {
@@ -240,12 +307,15 @@ pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &st
         serve_stdio(app, args).await;
     } else {
         let native = http_router(app.clone(), origins);
-        let listener = tokio::net::TcpListener::bind(bind)
-            .await
-            .unwrap_or_else(|error| {
-                eprintln!("error binding {bind}: {error}");
-                std::process::exit(1);
-            });
+        let listener = if std::env::var("QUIPU_READ_WORKER_LISTENER_FD").as_deref() == Ok("0") {
+            inherited_reader_listener(bind)
+        } else {
+            tokio::net::TcpListener::bind(bind).await
+        }
+        .unwrap_or_else(|error| {
+            eprintln!("error binding {bind}: {error}");
+            std::process::exit(1);
+        });
         // A failed bind must never record the process as serving.
         crate::metrics::init_start_time();
         eprintln!("quipu-server listening on {bind} (db: {db}); MCP at /mcp");
@@ -256,6 +326,29 @@ pub async fn serve(app: Router, args: &[String], origins: Vec<String>, bind: &st
         )
         .await
         .unwrap();
+    }
+}
+
+fn inherited_reader_listener(bind: &str) -> std::io::Result<tokio::net::TcpListener> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsFd;
+        // The supervisor supplies a bound nonblocking socket as HTTP-only
+        // stdin. Clone its descriptor through the safe ownership API, leaving
+        // standard-descriptor ownership alone; Tokio owns the clone until exit.
+        let input = std::io::stdin();
+        let listener = std::net::TcpListener::from(input.as_fd().try_clone_to_owned()?);
+        if listener.local_addr()?.to_string() != bind {
+            return Err(std::io::Error::other(
+                "inherited reader listener address mismatch",
+            ));
+        }
+        tokio::net::TcpListener::from_std(listener)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = bind;
+        Err(std::io::Error::other("reader listeners require Linux"))
     }
 }
 
@@ -404,7 +497,10 @@ mod tests {
                 source.contains(&format!("\"{path}\""))
                     || include_str!("server/align.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/merge_decisions.rs").contains(&format!("\"{path}\""))
-                    || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\"")),
+                    || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\""))
+                    || include_str!("server/publication.rs").contains(&format!("\"{path}\""))
+                    || include_str!("server/base.rs").contains(&format!("\"{path}\""))
+                    || include_str!("query_endpoint/routes.rs").contains(&format!("\"{path}\"")),
                 "{name}: {path}"
             );
         }

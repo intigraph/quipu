@@ -4,6 +4,8 @@
 use std::sync::Arc;
 
 use parking_lot::FairMutex;
+#[path = "resolution_cache.rs"]
+mod resolution_cache;
 
 /// FAIR (FIFO) mutex on purpose: std's Mutex is unfair, so a
 /// sustained stream of episode writers could re-acquire the lock ahead of
@@ -33,6 +35,14 @@ pub(crate) struct StoreHandle {
     pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
+    /// Opt-in log-only admission timing; immutable after startup.
+    pub(crate) log_query_admission: bool,
+    /// Opt-in per-query `SQLite` statement totals; immutable after startup.
+    pub(crate) log_query_phases: bool,
+    /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
+    pub(crate) deck_http: bool,
+    pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
+    pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
     /// clone boxed external/LanceDB backends. Keep those searches on the writer
     /// so moving `SQLite` search to WAL readers never changes backend semantics.
@@ -92,6 +102,7 @@ pub(crate) struct StoreHandle {
 pub(crate) struct ReadPool {
     pub(crate) conns: Vec<FairMutex<quipu::Store>>,
     pub(crate) next: std::sync::atomic::AtomicUsize,
+    pub(crate) point_reserve: bool,
 }
 
 impl ReadPool {
@@ -99,11 +110,21 @@ impl ReadPool {
         Self {
             conns: Vec::new(),
             next: std::sync::atomic::AtomicUsize::new(0),
+            point_reserve: false,
         }
     }
 
     pub(crate) fn len(&self) -> usize {
         self.conns.len()
+    }
+
+    pub(crate) fn reserve_point_reads(&mut self, enabled: bool) -> bool {
+        self.point_reserve = enabled && self.len() >= 2;
+        self.point_reserve
+    }
+
+    pub(crate) fn ordinary_len(&self) -> usize {
+        self.len() - usize::from(self.point_reserve)
     }
 }
 
@@ -127,6 +148,9 @@ impl StoreHandle {
         db_path: &str,
         federation: quipu::config::FederationConfig,
     ) -> Self {
+        if let Err(error) = store.prepare_resolution_index() {
+            eprintln!("resolution label warm failed; using exact scans: {error}");
+        }
         let commit_wake = Self::commit_wake_for(&store);
         Self {
             commit_wake,
@@ -136,10 +160,23 @@ impl StoreHandle {
             search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers,
+            log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
+            query_capture: None,
+            replica: None,
             federation,
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
         }
+    }
+
+    /// Enter the serving lifecycle after startup warming, with one coalesced
+    /// background worker. Requires the server's Tokio runtime.
+    pub(crate) fn into_shared(self) -> SharedStore {
+        let state = Arc::new(self);
+        resolution_cache::start(&state);
+        state
     }
 
     /// Attach the registered reactive reasoner (see the `reasoner` field).
@@ -164,6 +201,11 @@ impl StoreHandle {
             search_config: store.search_config().clone(),
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
+            log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
+            query_capture: None,
+            replica: None,
             federation: quipu::config::FederationConfig::default(),
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
@@ -184,6 +226,36 @@ impl StoreHandle {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
         }
         guard
+    }
+
+    /// The writer connection for a metadata-only eligibility observation
+    /// (aegis-ehf): no attestation settlement and no reader provider sync, so
+    /// holding it spends no nonce and remounts nothing. Callers must refuse an
+    /// attested request BEFORE calling this, and must not write through it.
+    pub(crate) fn metadata_lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.writer.lock()
+    }
+
+    /// A cancelled promotion must also leave the queue without waiting for an
+    /// unrelated long writer. Settle signed authority only after acquisition.
+    pub(crate) fn promotion_lock(
+        &self,
+        control: &quipu::promotion_control::PromotionControl,
+    ) -> quipu::Result<parking_lot::FairMutexGuard<'_, quipu::Store>> {
+        loop {
+            control.check()?;
+            if let Some(guard) = self
+                .writer
+                .try_lock_for(std::time::Duration::from_millis(50))
+            {
+                control.check()?;
+                if let Some(pending) = quipu::transaction_auth::current_attestation() {
+                    let _ = guard.settle_attestation(&pending);
+                }
+                quipu::transaction_auth::refuse_if_refused()?;
+                return Ok(guard);
+            }
+        }
     }
 
     /// First writer acquisition for tool handlers. Budget rejection precedes
@@ -207,9 +279,10 @@ impl StoreHandle {
     /// but failing a request is still a bug, and the borrow checker cannot
     /// catch it here the way `&Store` vs `&mut Store` does in the tool layer.
     pub(crate) fn read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
-        let mut guard = if self.readers.conns.is_empty() {
+        let readers = &self.readers.conns[usize::from(self.readers.point_reserve)..];
+        let guard = if readers.is_empty() {
             self.writer.lock()
-        } else if let Some(g) = self.readers.conns.iter().find_map(FairMutex::try_lock) {
+        } else if let Some(g) = readers.iter().find_map(FairMutex::try_lock) {
             // Work-conserving fast path.
             g
         } else {
@@ -219,9 +292,26 @@ impl StoreHandle {
                 .readers
                 .next
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                % self.readers.conns.len();
-            self.readers.conns[i].lock()
+                % readers.len();
+            readers[i].lock()
         };
+        Self::sync_reader(guard)
+    }
+
+    /// The reserved connection is never borrowed by ordinary readers. Keeping
+    /// both connection and async admission separate prevents either FIFO from
+    /// recreating the expensive backlog in front of a point request.
+    pub(crate) fn point_read(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        if self.readers.point_reserve {
+            Self::sync_reader(self.readers.conns[0].lock())
+        } else {
+            self.read()
+        }
+    }
+
+    fn sync_reader(
+        mut guard: parking_lot::FairMutexGuard<'_, quipu::Store>,
+    ) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
         // Deep freeze: a pooled reader opened before a freeze has no pack
         // attached, and its `facts_source` is plain "facts" — a query over
         // the frozen graph would silently read zero rows. Sync against the
@@ -238,6 +328,13 @@ impl StoreHandle {
             );
         }
         guard
+    }
+
+    /// Whether `/episode` can resolve on a pooled reader (aegis-xi0): only when
+    /// `vector_read()` would NOT fall back to the writer, which would put the
+    /// resolution back under the writer mutex with nothing gained.
+    pub(crate) fn resolves_off_writer(&self) -> bool {
+        self.vector_reads_pooled && !self.readers.conns.is_empty()
     }
 
     /// A read connection that preserves the configured vector backend.
@@ -297,6 +394,7 @@ impl ReadPool {
             ReadPool {
                 conns,
                 next: std::sync::atomic::AtomicUsize::new(0),
+                point_reserve: false,
             }
         }
     }

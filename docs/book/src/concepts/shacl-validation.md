@@ -10,12 +10,28 @@ explaining exactly what's wrong.
 Without validation, agents can write anything:
 
 ```turtle
-hw:koror hw:cpuCores "lots" .   # Should be an integer
-hw:koror a hw:Host .            # Missing required hostname
+hw:korimako hw:cpuCores "lots" .   # Should be an integer
+hw:korimako a hw:Host .            # Missing required hostname
 ```
 
 With SHACL shapes loaded, Quipu catches these problems before they enter
 the fact log.
+
+## Class targets and subclasses
+
+A `sh:targetClass` selects instances of that class and of its subclasses,
+following the data graph's `rdfs:subClassOf` edges transitively. For example,
+if the validation data declares `ex:Step rdfs:subClassOf ex:Action`, an entity
+typed only `ex:Step` must satisfy a shape targeting `ex:Action`. Cycles and
+multiple inheritance do not duplicate a focus node within the same shape.
+This follows [SHACL class-based targets](https://www.w3.org/TR/shacl/#targetClass).
+
+Target selection leaves asserted data unchanged. It does not manufacture
+`rdf:type ex:Action` values for a constraint such as `sh:hasValue` on
+`rdf:type`. An explicit-type requirement still needs an explicit assertion.
+Subclass declarations present only in the shapes graph are not merged into
+the validation data by this mechanism. Write vocabulary admission remains a
+separate check against loaded shapes.
 
 ## Defining a Shape
 
@@ -151,6 +167,42 @@ Quipu rejects it with structured feedback:
 This feedback is designed for agents — structured JSON with enough detail
 to fix the problem automatically.
 
+## Cardinality across writes
+
+A valid delta can still violate a stored upper bound. For example, writing
+`ex:item ex:value "A"` and later `ex:item ex:value "B"` must not bypass
+`sh:maxCount 1` just because each request carries one value.
+
+Write admission checks predicate and inverse-predicate `sh:maxCount` against the staged current
+facts inside the same SQLite savepoint as the write. The second distinct
+value is rejected and rolled back. Reasserting an identical RDF term remains
+idempotent; retracting the old value and asserting its replacement in one
+transaction is valid. Historical facts remain available.
+
+This check covers CLI `knot --shapes`, the knot and SPARQL Update entrypoints,
+inline episode shapes, conditional writes with loaded shapes, and configured
+`validate_on_write` transactions. It preserves each entrypoint's existing
+reject/advisory policy. Low-level transactions without explicit shapes or
+write validation configured do not acquire an implicit shape policy.
+
+Cardinality uses each destination graph's own values. ROOT type and subclass
+context can select targets in a named graph; ROOT property values and unrelated
+third graphs do not contribute to its counts. The context is bounded to touched
+subjects and referenced objects, with at most 100,000 facts and 1,024 classes.
+Exceeding these limits, or encountering another complex upper-bound property path,
+refuses admission with `cannot verify` rather than accepting partial evidence.
+
+Capability and incoming-context obligations use the batch validator's compiled
+shape graph. Its deactivation flags suppress obligations for inactive node
+shapes and their solely dependent properties. A shared property still imposes
+its obligations when another active shape or its own target reaches it; logical and qualified shape
+references retain that conservative check. Unsupported active paths still refuse.
+
+Other constraints retain payload validation and contextual type/required-field
+repair. This is not whole-store conformance checking or automatic revalidation
+of every dependent node after changing a schema, class hierarchy, or target
+relation. Standalone `validate` remains a check of the supplied data only.
+
 ## Supported Constraints
 
 | Constraint | What it checks |
@@ -185,10 +237,14 @@ curl -s localhost:3030/validate -X POST \
   }'
 ```
 
-## Pre-Built Shapes
+## Domain shapes in practice
 
-Quipu ships with shapes for the Aegis infrastructure ontology in the
-`shapes/` directory. These cover:
+Domain constraints belong to their domain producer. The staged
+[Camayoc domain profiles](https://github.com/scbrown/camayoc/tree/main/shapes/aegis)
+separate infrastructure, personal media and software production. The
+[worked example](domain-shapes.md) explains their compatibility and rollout.
+The transition retains the existing bundled Aegis shapes until destination
+publication, pinning, loading and validation have been verified. They cover:
 
 - `LXCContainer`, `ProxmoxNode`, `BareMetalHost` — compute resources
 - `SystemdService`, `WebApplication`, `Database` — services
@@ -205,10 +261,10 @@ Quipu ships with shapes for the Aegis infrastructure ontology in the
   that equivalent before push.
 - Common properties: hostname, ipAddress, memoryMB, cpuCores, dependsOn
 
-Load them with:
+An offline check can use the producer-owned file:
 
 ```bash
-quipu shapes load --name aegis --file shapes/aegis-ontology.shapes.ttl --db homelab.db
+quipu validate --shapes ../camayoc/shapes/aegis/homelab-infra.shapes.ttl --data example.ttl
 ```
 
 ## Best Practices
@@ -219,3 +275,19 @@ quipu shapes load --name aegis --file shapes/aegis-ontology.shapes.ttl --db home
   add datatype checks as your ontology stabilizes
 - **Use validation feedback** — the structured JSON is designed for automated
   remediation by agents
+
+## Episode provenance activities
+
+The shipped `shapes/provenance.ttl` includes a minimal `prov:Activity` profile
+for episode provenance. It requires a string `rdfs:label`, which the episode
+producer emits. Body and source fields remain optional so historical episodes
+remain valid, and multiple retained comments are permitted. This profile does
+not authorize a new write path or change import/promotion checks. A receiver
+must load its reviewed shapes and verify the loaded vocabulary before importing
+activity facts; a source file alone does not establish runtime governance.
+
+Write-time shape pre-parsing uses the batch validator's fallback base IRI for
+relative Turtle identifiers, including relative manifest references in shape
+documents. An explicit Turtle base still takes precedence. This compatibility
+does not relax cross-write constraint checks or the atomic refusal of invalid
+post-state data.

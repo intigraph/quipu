@@ -235,8 +235,8 @@ WHERE {
 ## Step 6: Derived Knowledge with the Reasoner
 
 Agents write raw facts — "traefik runs on webproxy", "webproxy runs on
-koror". But other agents need to query *derived* facts — "traefik runs
-on koror" (transitively). Instead of making every consuming agent write
+korimako". But other agents need to query *derived* facts — "traefik runs
+on korimako" (transitively). Instead of making every consuming agent write
 property path queries, use the reasoner to materialise derived facts that
 every agent can query directly.
 

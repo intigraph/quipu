@@ -82,6 +82,7 @@ END;
 /// an already-indexed database. A trigger must never depend on one caller's
 /// decoder installation. Functions are deterministic and have no side effects.
 pub(crate) fn register(conn: &Connection) -> rusqlite::Result<()> {
+    crate::substring::register(conn)?;
     let flags = FunctionFlags::SQLITE_UTF8
         | FunctionFlags::SQLITE_DETERMINISTIC
         | FunctionFlags::SQLITE_INNOCUOUS;

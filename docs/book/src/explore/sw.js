@@ -30,7 +30,7 @@
 // saying exactly that. It never returns an empty result set, because an empty
 // result is indistinguishable from a successful query that matched nothing.
 
-const ROUTES = new Set(["query", "episode", "set", "retract", "stats", "delta", "search"]);
+const ROUTES = new Set(["query", "episode", "set", "retract", "stats", "delta", "search", "validate", "ontology"]);
 
 // Immediate control, so the page that registered this worker is served by it
 // without a reload. Without both of these the first visit silently gets no
@@ -43,21 +43,6 @@ const json = (body, status = 200) =>
     status,
     headers: { "content-type": "application/json" },
   });
-
-// 501, not 404 and not 200-with-[]. A 404 reads as "wrong URL" and sends the
-// caller looking for a typo; an empty list reads as "nothing matched". The verb
-// exists, this build cannot serve it, and the response says which feature is
-// missing (aegis-onew9p §4.1).
-const UNSUPPORTED_SEARCH = {
-  error: "unsupported",
-  verb: "search",
-  reason:
-    "semantic search needs embeddings, which need quipu's `onnx` feature. This "
-    + "bundle is built with default-features = false, so `onnx` is not linked and "
-    + "there is no model to run. It is unavailable in the page, not failing.",
-  available: ["query", "episode", "set", "retract", "stats", "delta"],
-  server: "A quipu HTTP server answers POST /search; this page cannot.",
-};
 
 async function relay(verb, body) {
   // `includeUncontrolled` because a client that has not yet been claimed still
@@ -80,15 +65,16 @@ async function relay(verb, body) {
   // enough not to fire during a normal load and short enough to be an answer.
   return await new Promise((resolve) => {
     const chan = new MessageChannel();
+    const timeoutMs = verb === "search" ? 180_000 : 30_000;
     const timer = setTimeout(
       () =>
         resolve(json({
           error: "timeout",
           reason:
-            "The page did not answer within 30s. It is most likely still "
-            + "importing the pack; retry once it reports loaded.",
+            `The page did not answer within ${timeoutMs / 1000}s. `
+            + "It may still be loading the pack or the search model.",
         }, 504)),
-      30_000,
+      timeoutMs,
     );
     chan.port1.onmessage = (ev) => {
       clearTimeout(timer);
@@ -96,6 +82,7 @@ async function relay(verb, body) {
       resolve(r && r.ok ? json(r.result) : json({
         error: "store_error",
         reason: String(r && r.error ? r.error : "unknown"),
+        ...(r?.validation ? { validation: r.validation } : {}),
       }, 500));
     };
     clients[0].postMessage({ quipuVerb: verb, body }, [chan.port2]);
@@ -120,7 +107,6 @@ self.addEventListener("fetch", (event) => {
         reason: `POST a JSON body to ./${verb}.`,
       }, 405);
     }
-    if (verb === "search") return json(UNSUPPORTED_SEARCH, 501);
     let body;
     try {
       body = await event.request.json();

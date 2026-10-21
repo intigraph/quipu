@@ -12,12 +12,13 @@
 //!
 //! Seeding is substitution, and substitution only equals join semantics for
 //! operands that cannot observe a variable before it is joined: BGPs, `GRAPH`
-//! around them, and joins of those. `OPTIONAL` with a filter, `MINUS`, `FILTER`,
+//! around them, and joins of those. The subject bind join also admits a
+//! `UNION` of them and `BIND(<constant> AS ?v)`, which reads no binding. `OPTIONAL` with a filter, `MINUS`, `FILTER`,
 //! subqueries and paths can — a filter that sees `?x` bound by substitution
 //! answers differently from one evaluated bottom-up — so they keep the hash join.
 
-use spargebra::algebra::GraphPattern;
-use spargebra::term::{GroundTerm, NamedNodePattern, Variable};
+use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable};
 
 use crate::error::Result;
 use crate::store::Store;
@@ -143,4 +144,210 @@ pub(crate) fn try_values_bind_join(
         push_unique(&mut vars, v);
     }
     Ok(Some((rows, vars)))
+}
+
+/// A selected relation may drive indexed metadata lookups without scanning the
+/// unrelated right relation. This is a finite work bound, not a result limit.
+pub(crate) const SUBJECT_BIND_MAX_ROWS: usize = 16_384;
+
+// These wrappers cannot observe substitution; variable GRAPH and expressions
+// deliberately decline. Keep this separate from the broader VALUES planner.
+fn subject_lookup_patterns<'a>(
+    pattern: &'a GraphPattern,
+    triples: &mut Vec<&'a TriplePattern>,
+    variables: &mut Vec<String>,
+    constants: &mut Vec<&'a Variable>,
+) -> bool {
+    match pattern {
+        GraphPattern::Bgp { patterns } => {
+            for triple in patterns {
+                triples.push(triple);
+                for variable in triple_pattern_vars(triple) {
+                    push_unique(variables, variable);
+                }
+            }
+            true
+        }
+        GraphPattern::Graph {
+            name: NamedNodePattern::NamedNode(_),
+            inner,
+        } => subject_lookup_patterns(inner, triples, variables, constants),
+        GraphPattern::Union { left, right } => {
+            subject_lookup_patterns(left, triples, variables, constants)
+                && subject_lookup_patterns(right, triples, variables, constants)
+        }
+        // `{ ?item q:blockedOn ?t . BIND("blocks" AS ?relation) }` (aegis-xacr):
+        // a constant reads no binding, so seeding cannot change its value.
+        // Seeded Extend overwrites the variable where the bottom-up join would
+        // drop a conflicting row, so the caller refuses a left row that binds it.
+        GraphPattern::Extend {
+            inner,
+            variable,
+            expression: Expression::Literal(_) | Expression::NamedNode(_),
+        } => {
+            let ok = subject_lookup_patterns(inner, triples, variables, constants);
+            push_unique(variables, variable.as_str().to_string());
+            constants.push(variable);
+            ok
+        }
+        _ => false,
+    }
+}
+
+/// Bind a plain BGP or constant GRAPH/UNION thereof to a left relation. Every right
+/// subject must be constant or an IRI bound in every input row, and at least
+/// one must be newly supplied by the left operand. FILTER, OPTIONAL, MINUS,
+/// paths, variable GRAPH and subqueries keep bottom-up evaluation.
+///
+/// Only expression-free BGP substitution is used: no expression gains visibility of bindings
+/// that it would not have in the ordinary join. The one expression admitted is
+/// `BIND(<constant> AS ?v)` over such a pattern, which reads no binding at all. Multiplicity is retained by
+/// evaluating once for every left row, including duplicates.
+pub(crate) fn try_subject_bind_join(
+    store: &Store,
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let Some(vars) = subject_bind_vars(
+        right,
+        ctx,
+        seed,
+        left_rows,
+        left_vars,
+        SUBJECT_BIND_MAX_ROWS,
+    )?
+    else {
+        return Ok(None);
+    };
+    if left_rows.is_empty() {
+        return Ok(Some((Vec::new(), vars)));
+    }
+    let row_ctx = TemporalContext {
+        row_limit: None,
+        ..ctx.clone()
+    };
+    let mut rows = Vec::new();
+    for (i, row) in left_rows.iter().enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        let (mut found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
+        rows.append(&mut found);
+        check_eval_budget(ctx, i, rows.len())?;
+    }
+    Ok(Some((rows, vars)))
+}
+
+/// Left rows above which OPTIONAL keeps one right-side scan (aegis-xacr).
+///
+/// A seeded probe is a bound-subject lookup (~0.1ms); one scan of a common
+/// predicate over the production Seeds graph is ~0.05-0.3s. Past this many
+/// left rows the per-row probes cost more than the scan the keyed probe in
+/// `left_join` was built for (OPTIONAL over a whole board, aegis-d8c).
+pub(crate) const LEFT_BIND_MAX_ROWS: usize = 2_048;
+
+/// OPTIONAL over a plain BGP, probed once per left row (aegis-xacr).
+///
+/// The `LeftJoin` arm evaluated its right side with only the OUTER seed, so
+/// `?item seed:priority 0 . OPTIONAL { ?item s:agent ?owner }` materialised
+/// all 45,772 agent facts of the 2026-10-14 production Seeds graph to pair
+/// with 105 left rows, and the Brief's twenty-seed hydration scanned seven
+/// such predicates. Under the same guard as the subject bind join, each left
+/// row's seeded right rows are exactly its compatible right solutions, and
+/// `left_join` over that single row applies the OPTIONAL expression and keeps
+/// an unmatched row exactly as the full evaluation would.
+pub(crate) fn try_subject_bind_left_join(
+    store: &Store,
+    right: &GraphPattern,
+    expression: Option<&spargebra::algebra::Expression>,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let Some(vars) = subject_bind_vars(right, ctx, seed, left_rows, left_vars, LEFT_BIND_MAX_ROWS)?
+    else {
+        return Ok(None);
+    };
+    if left_rows.is_empty() {
+        let mut all = left_vars.to_vec();
+        for v in vars {
+            push_unique(&mut all, v);
+        }
+        return Ok(Some((Vec::new(), all)));
+    }
+    let row_ctx = TemporalContext {
+        row_limit: None,
+        ..ctx.clone()
+    };
+    let mut rows = Vec::new();
+    for (i, row) in left_rows.iter().enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        let (found, _) = eval_pattern_seeded(store, right, &row_ctx, row)?;
+        let joined =
+            super::left_join::left_join(store, ctx, std::slice::from_ref(row), &found, expression)?;
+        rows.extend(joined);
+        check_eval_budget(ctx, i, rows.len())?;
+    }
+    // Same variable order as the LeftJoin arm: left first, then the right's new ones.
+    let mut all = left_vars.to_vec();
+    for v in vars {
+        push_unique(&mut all, v);
+    }
+    Ok(Some((rows, all)))
+}
+
+/// The subject bind guard shared by Join and OPTIONAL: the right side's
+/// variables when it may be probed per left row, else `None`. An empty left
+/// relation passes (the caller answers it without probing).
+fn subject_bind_vars(
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    left_rows: &[Bindings],
+    left_vars: &[String],
+    max_rows: usize,
+) -> Result<Option<Vec<String>>> {
+    let mut patterns = Vec::new();
+    let mut vars = Vec::new();
+    let mut constants = Vec::new();
+    if !subject_lookup_patterns(right, &mut patterns, &mut vars, &mut constants) {
+        return Ok(None);
+    }
+    if left_rows.len() > max_rows {
+        return Ok(None);
+    }
+    for variable in constants {
+        let name = variable.as_str();
+        if seed.contains_key(name) || left_rows.iter().any(|row| row.contains_key(name)) {
+            return Ok(None);
+        }
+    }
+    if left_rows.is_empty() {
+        return Ok(Some(vars));
+    }
+    let mut newly_bound_subject = false;
+    for pattern in patterns {
+        match &pattern.subject {
+            TermPattern::NamedNode(_) => {}
+            TermPattern::Variable(variable) => {
+                let name = variable.as_str();
+                for (i, row) in left_rows.iter().enumerate() {
+                    // Preparation is inside the same deadline as execution.
+                    check_eval_budget(ctx, i, 0)?;
+                    if !matches!(row.get(name), Some(crate::types::Value::Ref(id)) if *id > 0) {
+                        return Ok(None);
+                    }
+                }
+                newly_bound_subject |=
+                    !seed.contains_key(name) && left_vars.iter().any(|v| v == name);
+            }
+            _ => return Ok(None),
+        }
+    }
+    if !newly_bound_subject {
+        return Ok(None);
+    }
+    Ok(Some(vars))
 }

@@ -8,13 +8,13 @@
 //!   quipu impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]...  Impact walk
 //!   quipu explain <s> <p> <o> [--depth N]  Walk a derived fact back to its premises
 //!   quipu reason [--rules <file.ttl>] [--db <path>]  Run the Datalog reasoner
-//!   quipu validate --shapes <shapes.ttl> --data <data.ttl>  Validate without writing
+//!   quipu validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]  Validate without writing
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
 //!   quipu status <share-dir> [--db <path>]  Report share divergence
 //!   quipu merge <share-dir> [--actor <id>] [--db <path>]  Reconnect a share
-//!   quipu merge <share-dir> --emit-decisions <file.json> [--propose]  Conflicts to resolve
+//!   quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose]
 //!   quipu merge <share-dir> --decisions <file.json> --reviewer <who>  Finish a decided merge
 //!   quipu import <share-dir|archive|URL> [--actor <id>]  Verify into memory
 //!   quipu import delta <parent-share> <delta-share>  Verify a delta chain
@@ -58,18 +58,22 @@ mod cli_hooks;
 mod cli_ingest;
 mod cli_knot;
 mod cli_mcp;
+mod cli_memory_files;
 mod cli_merge;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
+mod cli_pointer;
 mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;
 mod cli_render;
+mod cli_rule_answers;
 mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
 mod cli_trust_root;
+mod cli_validate;
 mod hook_session_capture;
 mod hooks_install;
 
@@ -151,6 +155,7 @@ fn main() {
         "attest" => cli_attest::cmd_attest(&args, db_path),
         "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
+        "rule-query" => cli_rule_answers::run(&args, db_path),
         "cord" => cli::cmd_cord(&args, db_path),
         "unravel" => cli::cmd_unravel(&args, db_path),
         "impact" => cli::cmd_impact(&args, db_path),
@@ -176,9 +181,10 @@ fn main() {
         "propose" => cli_propose::cmd_propose(&args, db_path),
         "audit" => cli_audit::cmd_audit(&args, db_path, &config.base_ns),
         "ontology" => cmd_ontology(&args, db_path),
-        "validate" => cli_commands::cmd_validate(&args),
+        "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
+        "memory" => cli_memory_files::command(&args),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
@@ -353,6 +359,7 @@ COMMANDS:
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
     qp ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]
     qp read \"<sparql>\" [--valid-at <date>] [--tx N] [--fork <name>] [--db <path>]
+    qp rule-query <request.json> [--db <existing-path>]  Typed ROOT support and judgment
     qp cord [--type <IRI>] [--limit N] [--db <path>]
     qp unravel [--tx N] [--valid-at <date>] [--db <path>]
     qp impact <entity-IRI> [--remove] [--hops N] [--predicate <IRI>]... [--db <path>]
@@ -372,9 +379,10 @@ COMMANDS:
     qp gate shadow --rules <candidate.ttl> --db <quiescent-copy.db> [--since 7d | --from-tx A --to-tx B] [--mode add|replace] [--json]
     qp propose list|submit|accept|reject [--status pending] [--db <path>]
     qp ontology load|list|remove [--db <path>]
-    qp validate --shapes <shapes.ttl> --data <data.ttl>
+    qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
     qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
@@ -399,6 +407,7 @@ COMMANDS:
                                                                      REPLACES the store with a --full pack, binary or text
     qp share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     qp share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
+    qp share ... [--pointers <file.toml>]   name graphs this share does not carry ([[pointer]] kind = endpoint | pack)
     qp share ... [--queries NAME]... [--no-queries]   stored queries for queries.ttl (default: those registered against the scope)
     qp share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]   commit this repo's project graph to .quipu/graph
     qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
@@ -413,13 +422,14 @@ COMMANDS:
     qp load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]   import a project bundle (.quipu/graph) into its own graph
     qp compose <pack>... [--shapes-from <pack>] [--destination internal] [--db <path>]
     qp compose --repo <repo> <pack-key>=<pack>... [--shapes-from <pack-key>] | --repo <repo> --rollback [--db <path>]
+    qp compose --repo <repo> --revoke-tombstone '<s> <p> <o> .' --pack-key <key> --reason <text> [--db <path>]
     qp import promote <share-id> [--actor <id>] [--db <path>]
     qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
     qp align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
     qp status <share-dir> [--db <path>]
     qp merge <share-dir> [--actor <id>] [--db <path>]
-    qp merge <share-dir> --emit-decisions <file.json> [--propose] [--db <path>]
+    qp merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]
     qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
     qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
     qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver

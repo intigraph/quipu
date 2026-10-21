@@ -18,6 +18,55 @@ half of the same story. It is the transcript below, with you as the receiver.
 Follow the [contributor constellation walkthrough](../concepts/contributor-constellation.md)
 to explore the vision, a design decision, and the code it governs on a phone.
 
+## Embed the browser playground
+
+Use the same released engine and repository pack in an iframe:
+
+```html
+<iframe id="quipu-playground" title="Quipu playground"
+  src="https://scbrown.github.io/quipu/explore/?embed=1&amp;theme=intigraph"
+  style="width:100%;height:860px;border:0"></iframe>
+```
+
+`embed=1` opens Map first and hides navigation, the loading-ceremony hero,
+and the take-away cards. Ask, Map, the node inspector, and **Try a bad write**
+still use the real engine. Narrow screens place the map before starter questions.
+After one successful embedded load, the browser can show a **saved map preview**
+while the worker verifies a fresh copy. The cache is bounded and keyed to the
+exact pack bytes, engine revision and compiled features. It contains the map's
+real query rows from a pristine imported pack. The preview is labelled; Ask and
+writes stay disabled until verification finishes. A verification refusal hides
+and removes it. Pack or engine changes, unavailable storage and invalid cache
+entries take the normal cold-load path.
+
+The under-five-second warm target measures when that saved map appears. Full
+verification and interactive query readiness take longer; the page reports that
+transition explicitly. Loading still verifies and imports the complete pack on
+every visit.
+
+`theme=intigraph` selects Intigraph's palette, Inter and JetBrains Mono, with
+its light variant following the system color scheme. The normal page's Theme
+picker also offers Intigraph. System, Light and Dark remain available.
+The fonts load from Google Fonts only when Intigraph is selected; system fonts
+remain the fallback if that service is unavailable.
+
+Embedded pages send `{type: "quipu:resize", height: <pixels>}` to their parent
+when content height changes, including after tab selection. A host can resize
+the iframe after checking **both** the sender origin and frame identity:
+
+```javascript
+const frame = document.querySelector("#quipu-playground");
+window.addEventListener("message", (event) => {
+  if (event.origin !== "https://scbrown.github.io"
+      || event.source !== frame.contentWindow
+      || event.data?.type !== "quipu:resize") return;
+  const height = event.data.height;
+  if (Number.isInteger(height) && height > 0 && height < 20000) {
+    frame.style.height = `${height}px`;
+  }
+});
+```
+
 ## One run, end to end
 
 This transcript is not illustrative output. It is
@@ -194,6 +243,84 @@ deterministic tar archive named `*.pendant.tar.gz`.
 > warning; release pages publish the repository pendant under both asset names.
 > New artifacts are written only as `.pendant`.
 
+### How repository pendants connect
+
+A repository pendant describes that repository and points back to its source.
+Load Quipu, Bobbin, Yupana and Camayoc pendants into the same receiving store to
+query their relationships together. Each import still passes verification and
+quarantine; **composition follows explicit promotion**, not merely downloading
+or opening an archive. The cords below illustrate that composition, not a claim
+that every repository already publishes a complete pendant.
+
+{{#include cross-repo-pendants.svg}}
+
+An idea, interface or symbol can carry a repository-qualified entity IRI and a
+file pointer. The pointer identifies where to read the definition; it does not
+copy the file's text into Quipu. For example:
+
+| Repository | Source pointer to inspect |
+|---|---|
+| Quipu | [Import verification and resolution](https://github.com/scbrown/quipu/blob/main/src/share_import.rs) |
+| Bobbin | [The knowledge import MCP handler](https://github.com/scbrown/bobbin/blob/main/src/mcp/knowledge_tools/handlers.rs) |
+| Yupana | [CLI entry point](https://github.com/scbrown/yupana/blob/main/src/main.rs) |
+| Camayoc | [Native WorkItem backfill adapter](https://github.com/scbrown/camayoc/blob/main/scripts/seed_work_item_backfill.py) |
+
+These are navigable source references, not embedded copies or four equivalent
+interfaces. A released pendant's source revision and provenance receipt identify
+the version to inspect; the links above follow each repository's main branch.
+Bobbin's `knowledge_import` handler calls Quipu's `/import` endpoint, so a
+cross-repository **depends-on** edge can describe that interface dependency.
+It does not say that the two interfaces are the same entity.
+
+The repository content contract requires the following alongside code and
+documentation pointers. This table specifies what a producer must represent;
+it does **not** certify those contents in every currently released artifact.
+
+| Required knowledge | What to connect |
+|---|---|
+| High-level ideas | Repository concepts to the interfaces, symbols and source files that implement them |
+| Public interfaces | CLI commands, MCP tools, REST routes, configuration keys and file formats to defining files; cross-repository dependencies to their target interfaces |
+| Stored queries | Queries the repository answers, with their definitions in `queries.ttl` |
+| Decisions | Decision status and supersession, with links to the evidence and affected source |
+| Freshness | `reviewAfter` / `maxAge` information on knowledge facts, so missing or expired review remains visible |
+| Start-here knowledge | A glossary linked to Quechua terms, plus source files to read first |
+| Shapes | Validation of ideas, interfaces and mappings; a prose claim is not a shape |
+| Cross-repository mappings | The existing shareable alignment record, identifying the two IRIs and the reviewed relationship |
+
+Chunk nodes, where retained for navigation, carry pointer metadata and
+relationships. Chunking and source-text retrieval belong to Bobbin; this
+contract does not ask Quipu to duplicate chunk bodies or line spans. Missing
+producer coverage is unknown, not evidence that a relationship does not exist.
+Embedding model metadata and vector rebuilding are separate load capabilities;
+composing two graphs does not itself prove either one.
+
+#### Composition is not an identity decision
+
+- **The same exact IRI** names the same RDF subject in the composed data.
+  Repository-qualified identifiers prevent unrelated local names such as
+  `config` from colliding. The diagram deliberately uses a generic repository
+  namespace rather than declaring a new permanent namespace.
+- **Different IRIs remain different by default**, even when their labels match.
+  The current import resolver reports exact canonical-name matches as proposals;
+  it preserves the foreign IRI unless the caller explicitly enables
+  `accept_exact`. That compatibility option rewrites IRIs and does not create a
+  retractable alignment record.
+- **A dependency is not identity.** Bobbin calling Quipu is a relationship
+  between interfaces, not permission to merge their names.
+- **A proposed mapping is not accepted alignment.** Use the existing
+  [propose → decide → apply workflow](align.md). Its SSSOM record carries
+  `subject_id`, `object_id`, `predicate_id` and `mapping_justification`;
+  the decision records the reviewer. Applying the decided version can derive
+  accepted identity into a separate alignment graph, leaving both source
+  graphs recoverable. A close match, undecided row or rejected identity does
+  not authorize `owl:sameAs`.
+
+The two differently named ideas in the diagram are an illustrative mapping
+candidate, not a published cross-stack alignment dataset. Share a reviewed
+alignment record with the pendants when one exists; do not manufacture mappings
+from a picture or a common label. See [Aligning concepts across graphs](align.md)
+for the expected-version guard and rejection history.
+
 ## Receiving: verify, quarantine, promote
 
 Import is **two verbs**, and the split is the point.
@@ -279,6 +406,48 @@ digest mismatch (`src/share_delta.rs`: `write_delta`, `materialize`). These are
 local artifact writes and reads: they do not send a delta to a remote store or
 grant ROOT admission.
 
+### Pointers: graphs a share names but does not carry
+
+A share can also name graphs it does not contain. A repository that only points
+at knowledge ships a share with no facts:
+
+```sh
+quipu share --output pointers --pointers pointers.toml --no-shapes
+```
+
+```toml
+[[pointer]]
+graph = "https://example.org/homelab"
+kind = "endpoint"                         # a live graph, reached by federation
+endpoint = "https://quipu.example.org/sparql"
+
+[[pointer]]
+graph = "https://example.org/reference"
+kind = "pack"                             # a pinned pack, fetched on first use
+url = "https://example.org/reference.pendant.tar.gz"
+sha256 = "<64 lowercase hex digits of the archive>"
+```
+
+Pointers are part of the share's identity, like the internal destination
+marker. Removing or editing one changes the hash, so `verify_share` refuses the
+share, and the verifier applies the producer's own rules, so a hand-edited
+manifest cannot carry what `quipu share` would refuse:
+
+- an IRI graph;
+- an `http(s)` URL with no credentials;
+- a 64-hex `sha256`;
+- one pointer per graph.
+
+A share without pointers is byte-identical to one produced before the field
+existed. An older quipu refuses a share that has pointers, because it
+recomputes a different identity; it never silently drops them.
+
+`quipu compose` reports every input's pointers, each with the share that
+declared it, and never follows them. Loading a pointer is the consumer's trust
+decision (caboodle `packs trust`). Following `kind = "pack"` pointers on first
+use, and joining `kind = "endpoint"` pointers to the federation list, are
+separate steps.
+
 The older SQLite pack commands remain an internal/archive compatibility surface:
 
 ```sh
@@ -350,6 +519,46 @@ The variable-endpoint case is a deliberate policy
 deviation because query data cannot widen the operator's remote allowlist.
 See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for the measured
 score and named verdicts.
+
+### Endpoint pointers and Caboodle consent
+
+A pendant can declare a `kind = "endpoint"` pointer without carrying that
+remote graph. Register the **local** declaring pendant and its repository remote
+in the operator's federation configuration:
+
+```toml
+[[quipu.federation.pendants]]
+path = "/path/to/repo/knowledge/declaration.pendant"
+repo_remote = "https://github.com/example/project.git"
+```
+
+On each `SERVICE <exact-endpoint-url>` use, Quipu verifies the pendant's share
+identity and invokes `caboodle packs trust check-endpoint <repo-remote> <url>`.
+That command requires Tambo/Caboodle with endpoint decision support. Missing,
+refused, invalid or timed-out policy checks fail before network access; the error
+names the endpoint and pointing repository. Consent is rechecked after policy
+changes, including revocation. A foreign archive allow alone does not admit its
+endpoint. Use Caboodle's `packs trust allow-endpoint` or owner policy to grant
+consent; Quipu keeps no second trust policy or persistent admission cache.
+
+An admitted pointer contributes a credential-free, unlabelled endpoint only to
+the current SPARQL `SERVICE` plan. Its `_provider` is the declared graph IRI.
+It does not import triples or shapes, promote to ROOT, forward local credentials,
+follow redirects, infer trust labels, or enable REST whole-query fanout. The
+URL must match exactly, including its trailing slash: consent does not extend
+to an appended `/query` URL. Existing explicit federation remotes retain their
+operator-defined credentials and labels.
+
+The server and MCP use their federation configuration. To opt into strict
+project/user configuration from the native CLI, use:
+
+```bash
+quipu query 'SELECT ?s WHERE { SERVICE <https://example.org/sparql> { ?s ?p ?o } }' --federation
+```
+
+Without the `remote` build feature, `SERVICE` remains unsupported. Local
+filesystem declarations and the native Caboodle policy process are not a browser
+API; browser pack resolution is a separate host interface.
 
 ## The whole stack speaks it
 

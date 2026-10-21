@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **50 tools** in a default build, or
-**52** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **77 tools** in a default build, or
+**79** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -77,6 +77,23 @@ Execute a SPARQL SELECT query.
 
 Query results use prefixes declared by the loaded shape sets for compact CURIE
 values by default. IRIs in unknown namespaces remain full IRIs.
+
+### `quipu_rule_query`
+
+Read one grounded claim using independent positive and explicit-negative evidence.
+The result preserves supported, refuted, both and neither, with a separate admitted
+judgment disposition. Failed, capped or incomplete reads return UNKNOWN; answers
+never grant action authority. See [rule answers](../concepts/rule-answers.md) for
+strict request fields, evidence scope and retained judgment requirements.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `subject` | Yes | Absolute subject IRI |
+| `positive_predicate` | Yes | Absolute predicate for explicit positive support |
+| `negative_predicate` | Yes | Distinct absolute predicate for explicit negative support |
+| `object` | Yes | One strict IRI or plain-string value object |
+| `judgment_policy` | Yes | Expected admitted judgment policy |
+| `witness_limit` | No | Evidence row bound per side, 1–256 (default 64) |
 
 ### `quipu_export`
 
@@ -404,9 +421,13 @@ named-graph facts. This is membership scoping, not per-graph embedding text.
 Explicit graph scope supports semantic and keyword ranking; ROOT content and
 anchor reranking are refused with it.
 
-Explicit graph selection requires `[quipu.search] named_graphs = true`.
-The default is false. Prepare named-only vectors with bounded backfill before
-enabling it; the flag also gates automatic named-only embedding text.
+Explicit graph selection in semantic and hybrid search requires
+`[quipu.search] named_graphs = true`. The default is false. Prepare named-only
+vectors with bounded backfill before enabling it; the flag also gates automatic
+named-only embedding text. Keyword mode does not need it: the lexical index
+records each assertion's graph, so keyword search accepts an explicit scope
+whenever `keyword = true` and the index is complete. Hybrid with `alpha = 0`
+is pure keyword ranking and follows the keyword rule.
 
 Keyword mode returns `score` (positive relevance, higher first), raw SQLite
 `bm25` (lower first), and `ranking_reason: "keyword"`. It indexes literal terms
@@ -858,6 +879,7 @@ consumer must treat as "cannot tell" — never as "no graphs".
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
+| `graph` | No | Exact registered absolute IRI; excludes kind/lifecycle; no materialization enrichment. Same count/graphs envelope, absent count zero, failures are errors. Attached source must support creator index v1. |
 | `kind` | No | Only graphs declaring this `dataKind` token (e.g. `operational`, `archive`) |
 | `lifecycle` | No | Only graphs in this storage lifecycle state (`frozen`) |
 
@@ -1000,3 +1022,183 @@ unregistered graphs are refused.
 `quipu_graph_list` includes each graph's `creation` alongside class and labels.
 Follow the [complete MCP-only named graph recipe](../recipes/named-graph-mcp.md)
 for create, label, new-class shapes, write and scoped query.
+
+## Portable graph workflows
+
+These tools call the existing guarded REST handlers. Bearer authentication,
+read-only mode, graph selectors and validation have the same authority. New
+workflow tools reject unknown or wrong-typed top-level fields; pass an exact
+`scope` to shares. None accepts a server-local file path.
+
+### `quipu_share`
+
+Produce a bounded portable share payload, including canonical manifest and member bytes. Read-only; no server-local output path. Pass the exact scope. Internal-only export exemptions are not accepted over this transport.
+
+Fields: `scope` (required), `shapes`, `no_shapes`, `queries`, `alignments_turtle`, `parent_share`, `turtle_view`, `max_bytes`.
+
+### `quipu_import`
+
+Stage a portable share with hash, vocabulary and attestation gates. Copy member contents from quipu_share; this is not a server file path. Exact-name merges default off; review before promotion.
+
+Fields: `manifest` (required), `export_ntriples` (required), `shapes_turtle` (required), `queries_turtle`, `alignments_turtle`, `query_namespace`, `replace_queries`, `source` (required), `actor`, `accept_exact`, `attestation`.
+
+### `quipu_import_promote`
+
+Promote a staged share only when existing promotion gates permit it. Does not bypass quarantine or resolution review.
+
+Fields: `share_id` (required), `actor`.
+
+### `quipu_reason`
+
+Run stored or inline Datalog rules to fixpoint and persist derivations. Omitted graph means ROOT; pass graph to scope premises. Derivations persist in that graph's reserved companion inferred graph, not alongside asserted facts.
+
+Fields: `rules`, `prefix`, `graph`, `timestamp`.
+
+### `quipu_update`
+
+Execute SPARQL 1.1 Update through the guarded update endpoint. Use explicit GRAPH clauses for named graphs; absent scope has standard SPARQL default-graph semantics. Actor/source are declared provenance, not authorization.
+
+Fields: `update` (required), `actor`, `source`.
+
+### `quipu_events`
+
+Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector.
+
+Fields: `since`, `limit`, `types`, `group`, `consumer`.
+
+### `quipu_events_commit`
+
+Durably set a consumer cursor. Lower offsets explicitly rewind; delivery alone never commits.
+
+Fields: `consumer_id` (required), `offset` (required).
+
+### `quipu_changes`
+
+Read whole transaction change pages. graph scopes an exact graph; use next_tx for the next page. No cursor write.
+
+Fields: `since`, `limit`, `capture`, `graph`.
+
+### `quipu_subscriptions`
+
+Manage persistent push subscriptions (create/list/delete). Creates may deliver externally; list is still conservatively write-classified like REST.
+
+Fields: `consumer_id`, `webhook_url`, `sparql_ask`, `action`, `types`, `mode`, `batch_size`, `batch_window_s`.
+
+### `quipu_entity`
+
+Dereference an exact IRI as JSON-LD. IRIs are encoded as query values, including slashes and fragments; expanded includes label expansion.
+
+Fields: `iri` (required), `expanded`.
+
+### `quipu_entity_history`
+
+Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+
+Fields: `iri` (required).
+
+### `quipu_transactions`
+
+Read bounded transaction metadata after since; does not change a cursor.
+
+Fields: `since`, `limit`.
+
+### `quipu_acquire`
+
+Acquire complete bounded registered named graphs from an expected MAIN store lineage. Unknown graphs, unsupported attachments/pins and overflow refuse.
+
+Fields: `source_store_id` (required), `graphs` (required), `tx`, `max_bytes`.
+
+### `quipu_acquire_composed`
+
+Acquire qualified MAIN graphs with a fenced attachment census. expected_generation is required with an explicit main tx; provider clocks are never a global transaction.
+
+Fields: `source_store_id` (required), `graphs` (required), `expected_generation`, `tx`, `max_bytes`.
+
+### `quipu_embed_backfill`
+
+Backfill missing ROOT entity embeddings using the configured provider. May consume external embedding resources and persist vectors.
+
+Fields: none.
+
+### `quipu_embed_backfill_graph`
+
+Backfill a bounded number of named-graph entity embeddings; does not rewrite ROOT entity text.
+
+Fields: `graph` (required), `max_entities`.
+
+### `quipu_search_query`
+
+Fuse ranked search seeds with a SPARQL query. Existing mode-specific validation and query budgets apply.
+
+Fields: `mode`, `query`, `seed_variable`, `sparql`, `valid_at`, `entity_type`, `embedding`, `seed_limit`, `query_options`, `group_ids`.
+
+### `quipu_fragments`
+
+Read a bounded triple-pattern fragment. page and pageSize select a page; absent terms are wildcards.
+
+Fields: `subject`, `predicate`, `object`, `page`, `pageSize`.
+
+### `quipu_reconcile`
+
+Get the reconciliation service manifest or resolve keyed query objects without merging entities.
+
+Fields: `queries`.
+
+### `quipu_spotlight`
+
+Annotate text with known entities, read-only. A busy cold cache may return no annotations; that is not an absence proof.
+
+Fields: `text` (required), `confidence`.
+
+### `quipu_knot_stage`
+
+Stage one immutable numbered snapshot part. Supply exact sha256 hashes and upload identity; replay is idempotent, changed bytes refuse. No file paths.
+
+Fields: `upload_id` (required), `snapshot` (required), `content_hash` (required), `part_hash` (required), `payload` (required), `timestamp`, `actor`, `source`, `graph`, `total_parts` (required), `total_bytes` (required), `part_number` (required).
+
+### `quipu_knot_promote`
+
+Start or read back atomic promotion of a staged snapshot upload. pending=true is not completion; poll the same upload_id. Existing validation gates remain authoritative.
+
+Fields: `upload_id` (required).
+
+### `quipu_workflow_capabilities`
+
+Read the direct-workflow enforcement capability before guarded updates. No
+arguments. A successful read reports `enabled`, signature version and scope;
+it does not grant write authority.
+
+To move a portable share, call `quipu_share` with
+`{"scope":{"kind":"graph","value":"urn:example:graph"}}`. Its result includes
+`manifest` and `files`. Pass that manifest, `files["export.nt"]` as
+`export_ntriples`, `files["shapes.ttl"]` as `shapes_turtle`, and a provenance
+`source` to `quipu_import` on the destination. Include `queries_turtle` and
+`files["alignments.ttl"]` as `alignments_turtle` when present; alignments are
+sealed evidence, never applied mappings. Review quarantine/resolution output before `quipu_import_promote`.
+An import result or `pending` upload result is not promotion acceptance.
+
+For `quipu_update`, provide a SPARQL `update` string, with explicit `GRAPH`
+clauses for named scope. The adapter form-encodes the exact string and optional
+`actor`/`source`; the existing update handler applies structural, vocabulary,
+workflow and attribution gates. A declared actor is not authenticated identity.
+
+`quipu_events` returns `next_offset` without committing. Commit only after
+processing with `quipu_events_commit`. `quipu_changes` returns `next_tx` and
+supports exact `graph` filtering. Both are bounded pull APIs; they do not
+promise a persistent SSE connection. Subscription creation can trigger external
+webhook delivery and retains the REST write classification even for list.
+
+### `quipu_stats`
+
+Read serving-store statistics with no arguments. Unlike CLI `stats --db`, this
+operates on the server's store, not a caller-selected local path.
+
+### `quipu_health`
+
+Read server health with no arguments. A positive liveness control does not
+certify target coverage or graph completeness.
+
+### `quipu_version`
+
+Read serving version, source commit and dirty-build identity without REST.
+No arguments; version identity does not replace behavioral acceptance.

@@ -29,14 +29,42 @@ reloading, or opening that URL in another tab restores it in the map.
 
 ![The contributor constellation on a 390px viewport](../images/contributor-constellation-mobile.png)
 
-The cluster outlines separate vision, decisions, episodes, code and reading.
-Positions follow a stable order within each cluster; following a link can add
+The main cord joins five pendant cords: vision/book, decisions/rules, episodes,
+code, and reading trail. These are deterministic topic/type groups, not inferred
+Louvain communities. Entity IRIs sort the knots along each pendant; following a link can add
 entities beyond the initial overview. Drag or use arrow keys to pan; pinch,
 use the mouse wheel or the zoom buttons to zoom. **All clusters** fits the
 reading map; tap a cluster to enter it. At that overview scale, cluster controls
-replace individual node controls. Visible node targets and controls are at least
+replace individual node controls. Overview cords show up to eight actual knots
+in IRI order at reduced scale. Visible node targets and controls are at least
 44 CSS pixels, independent of zoom. The node card and search results provide
 text navigation without hovering or precise graph taps.
+
+## Knot size and relation details
+
+Knot radius is `5 + min(13, 3 × sqrt(degree))` CSS pixels. Degree counts distinct
+incoming and outgoing `(subject, predicate, object)` links in the currently loaded
+map, including newly explored neighbors. It is local view importance, not global
+PageRank. Selection changes highlighting, never importance size. The on-screen
+legend states the metric. Geometry is static; no force simulation or animation
+is needed, and reduced-motion preferences disable transitions.
+
+Click a relation line, focus it and press Enter/Space, or use **Relation details**
+in the entity card. The panel names the predicate, subject, and object as full
+IRIs, with buttons to inspect each endpoint or the predicate itself. Subject
+provenance properties are labeled as subject-level evidence, not edge provenance.
+
+**Fact history, valid time & transaction time** shows the receiving store's
+assertions/retractions, valid intervals, transaction IDs/timestamps, sources and
+actors. Relation history filters by the exact predicate and IRI object. Entity
+history covers its outgoing facts in ROOT, matching this map's dataset. History
+is capped at 2,000 facts and explicitly marked incomplete at the cap. It is not
+an all-graph or producer audit view. A static RDF share does not carry the original
+producer transaction log: receiver import time must never be presented as original
+author time. Episode/source properties retain whatever the pack actually states.
+An older browser bundle without `factHistory` displays an unavailable message;
+it never fabricates history from current SPARQL rows. The query and edit paths
+still wait for the normal native verification ceremony, including saved previews.
 
 ## Ask the same question with SPARQL
 

@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # A merge queue tests each entry on main plus every entry ahead of it, so the
+  # combined state is green before it lands, without each PR rebasing in turn.
+  # Queue runs mirror push runs: the six gating checks and release correctness.
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "17 5 * * *"
   workflow_dispatch:
@@ -160,7 +165,7 @@ jobs:
   # required checks for account runners.
   extended-features:
     name: Extended feature surfaces
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     env:
       # Serial feature builds need headroom for tests and cache compression.
@@ -193,6 +198,8 @@ jobs:
           cargo test --features full --lib mcp_transport
           timeout 120 python3 scripts/test-native-mcp.py target/debug/quipu-server
           timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
+          timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
+          timeout 120 python3 scripts/test-read-process-pool.py target/debug/quipu-server target/debug/quipu
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the
@@ -217,22 +224,9 @@ jobs:
           set -euo pipefail
           mkdir -p oci-context
           cp target/debug/quipu target/debug/quipu-server oci-context/
-          # The Dockerfile's base, pinned by digest and pulled from whichever
-          # registry answers. Both serve the same content-addressed index, and
-          # the build then uses only the local tag. Anonymous ECR Public pulls
-          # hit "429 Data limit exceeded" on shared runners.
-          base_digest=sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
-          pulled=
-          for attempt in 1 2 3; do
-            for repo in mirror.gcr.io/library/debian public.ecr.aws/docker/library/debian; do
-              if docker pull --quiet "$repo@$base_digest"; then
-                pulled="$repo@$base_digest"; break 2
-              fi
-            done
-            sleep $((attempt * 20))
-          done
-          test -n "$pulled" || { echo "::error::base image $base_digest unavailable from every mirror"; exit 1; }
-          docker tag "$pulled" quipu-oci-base:ci
+          # The Dockerfile's digest-pinned base, pulled with mirror fallbacks.
+          # mcp-registry.yml builds the release image from the same script.
+          scripts/ci/oci-base.sh quipu-oci-base:ci
           docker build --build-arg BASE_IMAGE=quipu-oci-base:ci \
             -f packaging/oci/Dockerfile -t quipu-mcp:ci oci-context
           trap 'docker volume rm -f quipu-ci >/dev/null' EXIT
@@ -280,7 +274,7 @@ jobs:
   # the worst possible place to find it.
   build-full:
     name: Build (full bundle)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -307,7 +301,7 @@ jobs:
   # just dependency, matching the raw-cargo style of the other jobs.
   wasm:
     name: Wasm (browser harness)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -381,7 +375,7 @@ jobs:
   # and merging them would hide which of the two went red.
   wasm-explorer:
     name: Wasm (browser bundle)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -434,6 +428,8 @@ jobs:
         run: |
           python3 scripts/test_release_ci_gate.py
           python3 scripts/test_release_ci_gate_controls.py
+          python3 scripts/test_semver_policy.py
+          python3 scripts/check-semver-policy.py
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
@@ -498,7 +494,7 @@ jobs:
 
   load-test:
     name: Mixed load performance ratchet
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -552,7 +548,7 @@ jobs:
   # control, so runner speed cancels out. Release build, as served.
   query-perf:
     name: String filter query performance gate
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -613,7 +609,7 @@ jobs:
 
   lint-markdown:
     name: Markdown lint
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -650,7 +646,7 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: always() && github.event_name != 'push'
+    if: ${{ always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     steps:

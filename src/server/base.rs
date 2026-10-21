@@ -23,9 +23,26 @@ pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
             .find(|window| window[0] == name)
             .map(|window| window[1].as_str())
     };
-    let config = quipu::QuipuConfig::load(std::path::Path::new("."))
+    let mut config = quipu::QuipuConfig::load_strict(std::path::Path::new("."))
+        .unwrap_or_else(|error| {
+            eprintln!("error: {error}");
+            std::process::exit(1);
+        })
         .with_db_override(flag("--db"))
         .with_bind_override(flag("--bind"));
+    if args.iter().any(|arg| arg == "--read-only") {
+        let primary_url = flag("--primary-url")
+            .map(str::to_owned)
+            .or_else(|| {
+                config
+                    .server
+                    .replica
+                    .as_ref()
+                    .map(|r| r.primary_url.clone())
+            })
+            .unwrap_or_default();
+        config.server.replica = Some(quipu::config::ReplicaConfig { primary_url });
+    }
     super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
     config
 }
@@ -115,6 +132,9 @@ pub(crate) async fn metrics_handler(
     State(store): State<SharedStore>,
 ) -> Result<impl IntoResponse, AppError> {
     let mut body = store.graph_metrics.render();
+    if let Some(replica) = &store.replica {
+        body.push_str(&replica.metrics());
+    }
     super::request_middleware::render_request_starts(&mut body);
     super::update::render_update_paths(&mut body);
     Ok((
@@ -144,7 +164,11 @@ pub(crate) async fn version() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": env!("QUIPU_GIT_SHA"),
         "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-        "read_contracts": ["quipu-acquisition/v1", "quipu-acquisition/composed-v1"],
+        "read_contracts": [
+            "quipu-acquisition/v1",
+            "quipu-acquisition/composed-v1",
+            quipu::acquisition::eligibility::CONTRACT,
+        ],
         "features": compiled_features(),
     }))
 }
@@ -188,38 +212,9 @@ fn compiled_features() -> serde_json::Value {
 /// `/health` no matter how long a query runs. The store mutex still serializes
 /// store access — that is a separate, intended property — but it no longer
 /// serializes the HTTP server itself.
-pub(crate) async fn blocking<T, F>(f: F) -> Result<T, AppError>
-where
-    F: FnOnce() -> Result<T, AppError> + Send + 'static,
-    T: Send + 'static,
-{
-    let identity = super::auth::request_identity();
-    let kind = super::request_middleware::request_write_kind();
-    let provenance = super::request_middleware::request_write_provenance();
-    // On a deep stack: request work parses and walks caller-supplied SPARQL,
-    // whose recursion follows its structure, and the pool's default stack
-    // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
-    // structural bound in `sparql_structure` keeps requests inside this stack;
-    // the stack keeps the bound's margin. Identity, write kind and write
-    // provenance are thread-scoped, so they are re-established on the new thread.
-    match tokio::task::spawn_blocking(move || {
-        quipu::sparql_structure::on_deep_stack(move || {
-            quipu::transaction_auth::with_identity(identity, || {
-                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
-            })
-        })
-    })
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(AppError(e)),
-        // Only reachable if the handler panicked; the mutex is then poisoned and
-        // the process is not going to recover on its own either way.
-        Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
-            "request handler failed: {e}"
-        )))),
-    }
-}
+#[path = "blocking.rs"]
+mod blocking_work;
+pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 
 /// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
 ///
@@ -337,6 +332,7 @@ impl IntoResponse for AppError {
         // A governance denial is an authorization outcome, not a malformed
         // request — surface it as 403 so callers can distinguish it.
         let status = match &self.0 {
+            quipu::Error::ConditionalWriteConflict => StatusCode::CONFLICT,
             quipu::Error::PolicyDenied(_) => StatusCode::FORBIDDEN,
             // A query that ran out of budget is neither malformed nor a server
             // fault — 408 lets a caller distinguish "narrow your query" from
@@ -378,6 +374,8 @@ USAGE:
 OPTIONS:
     --db <path>       Store file (default: from .bobbin/config.toml)
     --bind <addr>     Listen address (default: from .bobbin/config.toml)
+    --read-only       Serve a SQLite read-only replica (never a writer fallback)
+    --primary-url URL Primary named by replica write refusals and metadata polls
     --embed-backfill  Backfill embeddings for all entities on startup
     --mcp-stdio       Serve MCP on stdin/stdout instead of binding HTTP
     --mcp-token-file <path>  Private bearer file for stdio tool writes

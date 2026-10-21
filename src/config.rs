@@ -11,12 +11,18 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 mod attachments;
+mod memory_files;
+pub use memory_files::MemoryFilesConfig;
 mod federation;
+mod query_capture;
 mod vector_backend;
 pub use attachments::{
     AttachmentConfig, describe_attachments, open_with_configured_attachments, resolve_attachments,
 };
-pub use federation::{FederationConfig, RemoteEndpoint};
+pub use federation::{EndpointPendant, FederationConfig, RemoteEndpoint};
+pub use query_capture::QueryCaptureConfig;
+#[cfg(all(feature = "remote", not(target_arch = "wasm32")))]
+mod endpoint_pointers;
 pub use vector_backend::install_vector_backend;
 
 use crate::namespace;
@@ -123,6 +129,15 @@ pub struct SearchConfig {
     /// Left at 0 the server behaves exactly as it did before this key existed.
     pub request_timeout_ms: u64,
 
+    /// Admission budget for `/episode` alone, in milliseconds (default: 0 =
+    /// use `request_timeout_ms`).
+    ///
+    /// A non-strict `/episode` resolves its nodes on a read connection before it
+    /// takes the writer (aegis-xi0), so a longer budget here no longer holds
+    /// other writers for its duration. Reads keep `request_timeout_ms`, which is
+    /// sized to their own clients.
+    pub episode_request_timeout_ms: u64,
+
     /// Ceiling on INTERMEDIATE binding rows during SPARQL evaluation
     /// (default: 1,000,000; 0 disables). The wall-clock budget alone is not
     /// enough: an exploding join burns its whole timeout at 100% CPU while
@@ -154,6 +169,12 @@ pub struct SearchConfig {
     /// Explicit graph search and automatic named-only embedding fallback.
     /// Default off: prepare vectors through bounded maintenance before enabling.
     pub named_graphs: bool,
+    /// Explicit omitted-search scope: "all" or "root". Unset uses the store's
+    /// persisted default: ALL for new stores, ROOT compatibility for old ones.
+    pub default_graph_scope: Option<String>,
+    /// Graph IRIs excluded from search, including explicit selections.
+    /// This is retrieval policy, not a read authorization boundary.
+    pub exclude_graphs: Vec<String>,
 }
 
 impl Default for SearchConfig {
@@ -165,6 +186,7 @@ impl Default for SearchConfig {
             max_sparql_rows: 10_000,
             query_timeout_ms: 30_000,
             request_timeout_ms: 0,
+            episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: false,
@@ -175,6 +197,8 @@ impl Default for SearchConfig {
             fusion: "rrf".into(),
             rrf_k: 60.0,
             named_graphs: false,
+            default_graph_scope: None,
+            exclude_graphs: Vec::new(),
         }
     }
 }
@@ -381,6 +405,9 @@ pub enum VectorBackend {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ResolutionConfig {
+    /// Reuse shared writer-maintained labels in unattached stores; false restores scans.
+    /// Composed stores always scan: read-only mounting does not certify immutability.
+    pub cache_labels: bool,
     /// Whether entity resolution is enabled (default: false).
     pub enabled: bool,
 
@@ -398,6 +425,7 @@ pub struct ResolutionConfig {
 impl Default for ResolutionConfig {
     fn default() -> Self {
         Self {
+            cache_labels: true,
             enabled: false,
             threshold: 0.85,
             top_k: 3,
@@ -430,6 +458,8 @@ impl Default for VectorConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct QuipuConfig {
+    /// Versioned-file RPC; disabled until its explicit deployment scope is set.
+    pub memory_files: MemoryFilesConfig,
     /// Path to the triple store database (default: `.bobbin/quipu/quipu.db`).
     pub store_path: PathBuf,
 
@@ -494,6 +524,7 @@ pub struct QuipuConfig {
 impl Default for QuipuConfig {
     fn default() -> Self {
         Self {
+            memory_files: MemoryFilesConfig::default(),
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
@@ -510,6 +541,13 @@ impl Default for QuipuConfig {
             attachments: Vec::new(),
         }
     }
+}
+
+/// Opt-in read-only follower; primary metadata is polled every 15 seconds.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplicaConfig {
+    /// Primary URL named by write refusals; the replica never forwards writes.
+    pub primary_url: String,
 }
 
 /// REST API server configuration.
@@ -543,6 +581,9 @@ pub struct ServerConfig {
     /// Reject all write endpoints with 403 (hq-azs). Reads stay available.
     pub read_only: bool,
 
+    /// Opt-in follower serving: SQLite read-only opens, no writers, 503 on writes.
+    pub replica: Option<ReplicaConfig>,
+
     /// CORS origin allowlist (hq-azs). Empty (default) = allow any origin,
     /// preserving the existing browser-tab behaviour; non-empty restricts
     /// cross-origin requests to these exact origins.
@@ -562,6 +603,39 @@ pub struct ServerConfig {
     /// `SQLite` connection with its own page cache.
     pub read_pool_size: usize,
 
+    /// Total server memory budget in MiB, including all reader processes.
+    /// None preserves legacy SQLite settings. This sizes caches, not query heaps;
+    /// the service manager must enforce the same total as its cgroup limit.
+    pub memory_budget_mib: Option<u64>,
+
+    /// Separate read-only worker processes. Zero preserves in-process serving.
+    pub read_processes: usize,
+
+    /// First loopback port for opt-in reader workers (default3031).
+    pub read_process_base_port: u16,
+
+    /// Reserve one existing reader for bounded ground point-ASK requests.
+    /// Opt-in; requires at least two usable readers. Ordinary reads retain
+    /// the remaining readers and admission permits. No extra connection opens.
+    pub reserve_point_reads: bool,
+
+    /// Include an optional permit-acquisition timestamp in query observation
+    /// logs. Off by default; does not change admission or enable point reads.
+    pub log_query_admission: bool,
+
+    /// Add per-query `SQLite` statement totals (count, rows, time, costliest
+    /// statement texts) to query observation logs (aegis-xacr). Off by default;
+    /// when on, every connection carries a profile hook, so measure its
+    /// overhead before enabling it in production.
+    pub log_query_phases: bool,
+    /// Serve the decision-deck routes (`/deck/present`, `/deck/attest`,
+    /// `/deck/receipt`, aegis-blh.2). Off by default. Independent of, and in
+    /// addition to, the store's operator-only deck switch: both must be on.
+    pub deck_http: bool,
+
+    /// Expiring, operator-only private specimen capture; omitted by default.
+    pub query_capture: Option<QueryCaptureConfig>,
+
     /// Ceiling on facts copied for one `/update` that cannot be sliced (an
     /// open subject with an open predicate copies the whole store). Past it
     /// the update is refused with advice instead of exhausting memory
@@ -579,8 +653,17 @@ impl Default for ServerConfig {
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
             read_only: false,
+            replica: None,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
+            memory_budget_mib: None,
+            read_processes: 0,
+            read_process_base_port: 3031,
+            reserve_point_reads: false,
+            log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
+            query_capture: None,
             update_full_copy_max_facts: 250_000,
         }
     }
@@ -590,7 +673,7 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct EmbeddingConfig {
-    /// Whether to auto-embed entities after writes (default: false).
+    /// Whether to auto-embed entities after writes (default: true).
     pub auto_embed: bool,
 
     /// Number of entities to embed in each batch (default: 32).
@@ -614,7 +697,7 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            auto_embed: false,
+            auto_embed: true,
             embed_batch_size: 32,
             model_path: None,
             tokenizer_path: None,

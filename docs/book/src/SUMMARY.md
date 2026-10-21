@@ -22,9 +22,11 @@
 - [Knowledge Packs](concepts/knowledge-packs.md)
 - [Contributor Constellation](concepts/contributor-constellation.md)
 - [SHACL Validation](concepts/shacl-validation.md)
+- [Domain shapes in practice](concepts/domain-shapes.md)
 - [Schema Evolution](concepts/schema-evolution.md)
 - [OWL Ontology Layer](concepts/owl.md)
 - [The Reasoner](concepts/reasoning.md)
+- [Four-valued rule answers](concepts/rule-answers.md)
 - [Embeddings and Semantic Search](concepts/embeddings.md)
 
 # Tutorials
@@ -42,7 +44,9 @@
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
+  - [Versioned file memory](reference/memory-files.md)
 - [Atomic source acquisition](reference/acquisition.md)
+- [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
 - [Reasoner](reference/reasoner.md)
@@ -87,6 +91,7 @@
 
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)
+- [Related work](reference/related-work.md)
 
 # Map
 

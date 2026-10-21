@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 570" role="img" aria-labelledby="pendant-title pendant-desc" style="width:100%;max-width:100%;height:auto;font-family:system-ui,sans-serif;font-size:15px">
+  <title id="pendant-title">Repository pendants compose; dependencies and alignment remain distinct</title>
+  <desc id="pendant-desc">Four repository cords join one receiving store after verification and explicit promotion. Inside each are ideas, interfaces and symbols pointing to repository files. A separate example shows Bobbin knowledge_import depending on Quipu /import. A dashed illustrative mapping between differently named ideas requires a reviewed alignment record and is not an accepted identity.</desc>
+  <style>
+    .pendant-bg{fill:#f4f6fa}.pendant-card{fill:#fff;stroke:#526681}.pendant-ink{fill:#17263c}
+    .pendant-muted{fill:#40536e}.pendant-cord{stroke:#526681;fill:none;stroke-width:3}
+    .pendant-node{fill:#e5edf8;stroke:#526681}.pendant-edge{stroke:#285c8e;fill:none;stroke-width:2}
+    .pendant-map{stroke:#765238;fill:none;stroke-width:2;stroke-dasharray:6 4}
+    .pendant-arrow{fill:#285c8e}.pendant-map-arrow{fill:#765238}
+    .pendant-ink,.pendant-muted{font-family:system-ui,sans-serif}.pendant-heading{font-size:19px;font-weight:650}
+    .pendant-small{font-size:13px}
+    @media(prefers-color-scheme:dark){
+      .pendant-bg{fill:#182231}.pendant-card{fill:#202f43;stroke:#adbed5}.pendant-ink{fill:#edf3fd}
+      .pendant-muted{fill:#c6d3e5}.pendant-cord{stroke:#adbed5}.pendant-node{fill:#304660;stroke:#adbed5}
+      .pendant-edge{stroke:#95caff}.pendant-map{stroke:#efbc8c}.pendant-arrow{fill:#95caff}.pendant-map-arrow{fill:#efbc8c}
+    }
+  </style>
+  <defs>
+    <marker id="pendant-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8Z" class="pendant-arrow"/>
+    </marker>
+    <marker id="pendant-map-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8Z" class="pendant-map-arrow"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="570" rx="12" class="pendant-bg"/>
+  <text x="500" y="33" text-anchor="middle" class="pendant-ink pendant-heading">One receiving store · explicit composition</text>
+  <text x="500" y="58" text-anchor="middle" class="pendant-muted">Verify each pendant → quarantine → explicitly promote</text>
+  <path d="M55 85 H945 M130 85 V123 M375 85 V123 M625 85 V123 M870 85 V123" class="pendant-cord"/>
+  <g class="pendant-card" stroke-width="1.5">
+    <rect x="20" y="123" width="220" height="226" rx="10"/>
+    <rect x="265" y="123" width="220" height="226" rx="10"/>
+    <rect x="515" y="123" width="220" height="226" rx="10"/>
+    <rect x="760" y="123" width="220" height="226" rx="10"/>
+  </g>
+  <g class="pendant-ink pendant-heading" text-anchor="middle">
+    <text x="130" y="153">Quipu</text><text x="375" y="153">Bobbin</text>
+    <text x="625" y="153">Yupana</text><text x="870" y="153">Camayoc</text>
+  </g>
+  <g class="pendant-node">
+    <rect x="42" y="173" width="176" height="31" rx="6"/>
+    <rect x="287" y="173" width="176" height="31" rx="6"/>
+    <rect x="537" y="173" width="176" height="31" rx="6"/>
+    <rect x="782" y="173" width="176" height="31" rx="6"/>
+  </g>
+  <g class="pendant-ink" text-anchor="middle">
+    <text x="130" y="194">Ideas</text><text x="375" y="194">Ideas</text>
+    <text x="625" y="194">Ideas</text><text x="870" y="194">Ideas</text>
+    <text x="130" y="230">Interfaces · symbols</text><text x="375" y="230">Interfaces · symbols</text>
+    <text x="625" y="230">Interfaces · symbols</text><text x="870" y="230">Interfaces · symbols</text>
+  </g>
+  <path d="M130 243 V276" class="pendant-edge" marker-end="url(#pendant-arrow)"/>
+<path d="M375 243 V276" class="pendant-edge" marker-end="url(#pendant-arrow)"/>
+<path d="M625 243 V276" class="pendant-edge" marker-end="url(#pendant-arrow)"/>
+<path d="M870 243 V276" class="pendant-edge" marker-end="url(#pendant-arrow)"/>
+  <g class="pendant-muted" text-anchor="middle">
+    <text x="130" y="300">Repository files</text><text x="375" y="300">Repository files</text>
+    <text x="625" y="300">Repository files</text><text x="870" y="300">Repository files</text>
+    <text x="130" y="326" class="pendant-small">Pointers, not copied text</text>
+    <text x="375" y="326" class="pendant-small">Pointers, not copied text</text>
+    <text x="625" y="326" class="pendant-small">Pointers, not copied text</text>
+    <text x="870" y="326" class="pendant-small">Pointers, not copied text</text>
+  </g>
+  <text x="500" y="377" text-anchor="middle" class="pendant-muted">Repository-qualified entity IRIs · generic namespace shown</text>
+  <g class="pendant-card" stroke-width="1.5">
+    <rect x="20" y="395" width="465" height="155" rx="10"/>
+    <rect x="515" y="395" width="465" height="155" rx="10"/>
+  </g>
+  <g class="pendant-ink" text-anchor="middle">
+    <text x="252" y="424" font-weight="650">Dependency · source-backed example</text>
+    <text x="117" y="460">Bobbin</text><text x="117" y="482" class="pendant-small">knowledge_import</text>
+    <text x="392" y="460">Quipu</text><text x="392" y="482" class="pendant-small">/import</text>
+    <text x="748" y="424" font-weight="650">Mapping · illustrative candidate only</text>
+    <text x="614" y="463">Idea “A”</text><text x="888" y="463">Idea “B”</text>
+  </g>
+  <path d="M204 465 H325" class="pendant-edge" marker-end="url(#pendant-arrow)"/>
+  <text x="265" y="452" text-anchor="middle" class="pendant-muted pendant-small">depends on</text>
+  <path d="M665 460 H834" class="pendant-map" marker-end="url(#pendant-map-arrow)"/>
+  <g class="pendant-muted pendant-small" text-anchor="middle">
+    <text x="252" y="528">An edge between interfaces, not an identity merge</text>
+    <text x="748" y="495">Shareable alignment record: propose → decide → apply</text>
+    <text x="748" y="528">No accepted cross-stack identity is asserted here</text>
+  </g>
+</svg>

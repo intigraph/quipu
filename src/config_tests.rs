@@ -241,7 +241,7 @@ fn defaults() {
     assert_eq!(cfg.server.bind, "127.0.0.1:3030");
     assert!(!cfg.server.enabled);
     assert!(cfg.federation.remotes.is_empty());
-    assert!(!cfg.embedding.auto_embed);
+    assert!(cfg.embedding.auto_embed);
     assert_eq!(cfg.embedding.embed_batch_size, 32);
     assert_eq!(cfg.vector.backend, VectorBackend::Sqlite);
     assert_eq!(
@@ -452,4 +452,16 @@ fn structured_search_config_defaults_off_and_loads_explicit_flag() {
     let enabled: ConfigFile =
         toml::from_str("[quipu]\nstore_path='/d'\n[quipu.search]\nstructured=true\n").unwrap();
     assert!(enabled.quipu.search.structured);
+}
+
+#[test]
+fn episode_request_timeout_ms_parses_and_defaults_to_disabled() {
+    let file: ConfigFile = toml::from_str(
+        "[quipu]\nstore_path = \"/d\"\n\n[quipu.search]\nepisode_request_timeout_ms = 25000\n",
+    )
+    .unwrap();
+    assert_eq!(file.quipu.search.episode_request_timeout_ms, 25000);
+    assert_eq!(file.quipu.search.request_timeout_ms, 0);
+    let bare: ConfigFile = toml::from_str("[quipu]\nstore_path = \"/d\"\n").unwrap();
+    assert_eq!(bare.quipu.search.episode_request_timeout_ms, 0);
 }

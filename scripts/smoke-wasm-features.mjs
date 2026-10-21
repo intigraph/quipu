@@ -17,45 +17,38 @@ const requests = [], remoteBodies = [];
 const malformedResponses = [null, true, 1, "invalid", [], ["invalid"], {},
   { variables: [], rows: null }, { variables: [1], rows: [] },
   { variables: [], rows: [null] }, { variables: [], rows: [[]] }];
-const worker = `
-import init, * as engine from "/pkg/quipu_wasm_explorer.js";
-import { BrowserSemanticSearch, BrowserRemoteProvider, BrowserFederatedProvider } from "/runtime/browser-runtime.mjs";
-const ready = init(); let ex, semantic;
-onmessage = async ({data:m}) => {
- try {
-  await ready; let value;
-  if(m.cmd === "load") {
-   ex = engine.Explorer.loadQpack(new Uint8Array(m.bytes), "feature-fixture", new Date().toISOString());
-   semantic = new BrowserSemanticSearch(ex, {runtimeUrl:new URL("/runtime/transformers.mjs",location.href).href,
-    modelPath:new URL("/runtime/models/",location.href).href,wasmPath:new URL("/runtime/",location.href).href});
-   value = {report:JSON.parse(ex.loadReport()),version:JSON.parse(engine.explorerVersion()),semantic:semantic.capabilities()};
-  } else if(m.cmd === "query") value = JSON.parse(ex.query(m.sparql));
-  else if(m.cmd === "episode") value = JSON.parse(ex.episode(JSON.stringify(m.input)));
-  else if(m.cmd === "set") value = JSON.parse(ex.set(m.entity,m.predicate,JSON.stringify(m.value)));
-  else if(m.cmd === "retract") value = JSON.parse(ex.retract(m.entity,m.predicate,JSON.stringify(m.value)));
-  else if(m.cmd === "ontology") value = JSON.parse(ex.ontology(JSON.stringify(m.input)));
-  else if(m.cmd === "validate") value = JSON.parse(engine.validateShapes(m.shapes,m.data));
-  else if(m.cmd === "semantic") value = await semantic.search(m.query,m.limit);
-  else if(m.cmd === "remote") {
-   const remote = new BrowserRemoteProvider(engine,m.options);
-   value = await remote.query(m.sparql,m.graph);
-  } else if(m.cmd === "federate") {
-   const remotes = m.remotes.map(options=>new BrowserRemoteProvider(engine,options));
-   value = await new BrowserFederatedProvider(ex,remotes,m.floor).query(m.sparql);
-  } else throw new Error("unknown command");
-  postMessage({id:m.id,ok:true,value});
- } catch(error) {postMessage({id:m.id,ok:false,error:String(error?.message??error),validation:error?.validation});}
-};`;
-const html = `<!doctype html><title>Private WASM feature acceptance</title><script>
+// Exercise the shipped worker, not a parallel implementation of its commands.
+const worker = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8");
+const html = `<!doctype html><title>Private WASM feature acceptance</title><script type="module">
+import { createEngineApi } from "/engine-api.js";
 const worker=new Worker('/worker.mjs',{type:'module'}); const pending=new Map(); let seq=0;
-worker.onmessage=({data:m})=>{const p=pending.get(m.id);pending.delete(m.id);p.resolve(m)};
+worker.onmessage=({data:m})=>{const p=pending.get(m.id);pending.delete(m.id);p.resolve({...m,value:m.result})};
 worker.onerror=e=>{for(const p of pending.values())p.reject(new Error(e.message))};
 window.ask=msg=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});worker.postMessage({...msg,id})});
+window.quipu=createEngineApi(async msg=>{
+ const answer=await window.ask(msg);
+ if(!answer.ok) throw Object.assign(new Error(answer.error),{validation:answer.validation});
+ return answer.value;
+});
 </script>`;
 const server = createServer(async (req, res) => {
   const pathname = new URL(req.url, "http://localhost").pathname;
   requests.push(pathname);
+  if (pathname.startsWith("/page/")) {
+    const relative = pathname.slice("/page/".length) || "index.html";
+    const root = relative.startsWith("pkg/runtime/") ? runtime : relative.startsWith("pkg/") ? bundle : join(repo,"docs/book/src/explore");
+    const file = relative.startsWith("pkg/runtime/") ? relative.slice(12) : relative.startsWith("pkg/") ? relative.slice(4) : relative;
+    const target = resolve(root, file);
+    if (!target.startsWith(`${resolve(root)}/`)) { res.writeHead(403); res.end(); return; }
+    try {
+      const body = relative === "repository.pendant.tar.gz" ? readFileSync(fixture.pack) : readFileSync(target);
+      res.setHeader("Content-Type", /\.m?js$/.test(file) ? "text/javascript" : file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".html") ? "text/html" : file.endsWith(".css") ? "text/css" : "application/octet-stream");
+      res.end(body);
+    } catch { res.writeHead(404); res.end(); }
+    return;
+  }
   if (pathname === "/") { res.setHeader("Content-Type", "text/html"); res.end(html); return; }
+  if (pathname === "/engine-api.js") { res.setHeader("Content-Type", "text/javascript"); res.end(readFileSync(join(repo,"docs/book/src/explore/engine-api.js"))); return; }
   if (pathname === "/worker.mjs") { res.setHeader("Content-Type", "text/javascript"); res.end(worker); return; }
   if (pathname.endsWith("/query")) {
     let bytes = ""; for await (const chunk of req) bytes += chunk;
@@ -67,8 +60,8 @@ const server = createServer(async (req, res) => {
     if (malformed) { res.end(JSON.stringify(malformedResponses[Number(malformed[1])])); return; }
     res.end(JSON.stringify({ variables: ["s"], rows: [{ s: "http://example.org/remote" }] })); return;
   }
-  const root = pathname.startsWith("/pkg/") ? bundle : runtime;
-  const relative = pathname.replace(/^\/(pkg|runtime)\//, "");
+  const root = pathname.startsWith("/pkg/runtime/") ? runtime : bundle;
+  const relative = pathname.replace(/^\/pkg\/(runtime\/)?/, "");
   const file = resolve(root, relative);
   if (!file.startsWith(`${root}/`)) { res.writeHead(403); res.end(); return; }
   try {
@@ -88,14 +81,50 @@ try {
   const page = await browser.newPage();
   const errors = []; page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
-  const ask = (input) => page.evaluate((m) => window.ask(m), input);
+  await page.waitForFunction(() => window.quipu && window.ask);
+  const memoryDatabase = await page.evaluate(async () => {
+    const wasm = await import("/pkg/quipu_wasm_explorer.js");
+    await wasm.default();
+    const db = new wasm.Database();
+    try {
+      const invoke = (operation, input) => db.invoke(operation, JSON.stringify(input));
+      const caps = JSON.parse(db.capabilities());
+      invoke("quipu_shapes", {action: "load", name: "browser-memory",
+        turtle: "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] ."});
+      const write = JSON.parse(invoke("quipu_knot", {
+        turtle: '<urn:good> a <urn:Record>; <urn:title> "Before"; <urn:n> 9007199254740993 .'}));
+      let refused = false;
+      try { refused = JSON.parse(invoke("quipu_knot", {turtle: "<urn:bad> a <urn:Record> ."})).conforms === false; }
+      catch (error) { const detail = JSON.parse(String(error)); refused = detail.details?.kind === "validation_failed"; }
+      const result = JSON.parse(invoke("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
+      const raw = invoke("quipu_entity_history", {iri: "urn:good"});
+      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw};
+    } finally { db.free(); }
+  });
+  assert.equal(memoryDatabase.caps.storage, "memory");
+  assert.equal(memoryDatabase.caps.full_parity, false);
+  assert.equal(memoryDatabase.committed, true);
+  assert.equal(memoryDatabase.refused, true);
+  assert.equal(memoryDatabase.count, 1);
+  assert.match(memoryDatabase.raw, /9007199254740993/);
+  assert.doesNotMatch(memoryDatabase.raw, /9007199254740992/);
+  console.log("PASS fresh shared Database governed write/refusal/no-leak/lossless browser history");
+  const ask = (input) => {
+    const message = { ...input };
+    if (message.cmd === "semantic") message.cmd = "search";
+    if (message.cmd === "episode") { message.episode = JSON.stringify(message.input); delete message.input; }
+    if (message.cmd === "ontology") message.input = JSON.stringify(message.input);
+    if (["knot", "shapes"].includes(message.cmd)) message.input = JSON.stringify(message.input);
+    if (["set", "retract"].includes(message.cmd)) message.value = JSON.stringify(message.value);
+    return page.evaluate((m) => window.ask(m), message);
+  };
   const ok = async (input) => { const result = await ask(input); assert.equal(result.ok, true, result.error); return result.value; };
-  const loaded = await ok({ cmd: "load", bytes: Array.from(readFileSync(fixture.pack)) });
-  assert.equal(loaded.report.shacl_compiled, true);
-  assert.equal(loaded.report.import.validation.conforms, true);
-  assert.equal(loaded.report.promotion.outcome, "promoted");
-  assert.deepEqual(loaded.version.compiled_features, { shacl: true, owl: true, reactive_reasoner: true });
-  assert.equal(loaded.semantic.state, "not_loaded");
+  const loaded = await ok({ cmd: "load", source: "feature-fixture", bytes: Array.from(readFileSync(fixture.pack)) });
+  assert.equal(loaded.shacl_compiled, true);
+  assert.equal(loaded.import.validation.conforms, true);
+  assert.equal(loaded.promotion.outcome, "promoted");
+  assert.deepEqual((await ok({ cmd: "version" })).compiled_features, { shacl: true, owl: true, reactive_reasoner: true });
+  assert.equal((await ok({ cmd: "capabilities" })).state, "not_loaded");
   assert.equal(requests.filter((url) => /transformers|\/models\/|ort-wasm/.test(url)).length, 0);
   console.log("PASS real pack load, compiled flags, no heavy assets before search");
 
@@ -110,6 +139,51 @@ try {
   assert.equal(validation.conforms, false); assert.ok(validation.results.length > 0);
   console.log("PASS violating write refused with real feedback; existing two widgets preserved");
 
+  const extraShape = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:binding:RecordShape> a sh:NodeShape; sh:targetClass <urn:binding:Record>;
+ sh:property [sh:path <urn:binding:title>; sh:minCount 1] .`;
+  await ok({ cmd: "shapes", input: { action: "load", name: "browser-store-ops", turtle: extraShape } });
+  assert.equal((await ok({ cmd: "shapes", input: { action: "get", name: "browser-store-ops" } })).turtle, extraShape);
+  const goodKnot = await ok({ cmd: "knot", input: {
+    turtle: '<urn:binding:good> a <urn:binding:Record>; <urn:binding:title> "Before" .',
+  } });
+  assert.ok(goodKnot.tx_id > 0);
+  const editsBeforeBadKnot = (await ok({ cmd: "editLog" })).length;
+  const badKnot = await ask({ cmd: "knot", input: { turtle: '<urn:binding:bad> a <urn:binding:Record> .' } });
+  assert.ok(badKnot.ok === false || badKnot.value?.conforms === false);
+  assert.equal((await ok({ cmd: "query", sparql: 'SELECT ?p WHERE { <urn:binding:bad> ?p ?v }' })).rows.length, 0);
+  assert.equal((await ok({ cmd: "editLog" })).length, editsBeforeBadKnot);
+  await ok({ cmd: "set", entity: "urn:binding:good", predicate: "urn:binding:title", value: { str: "After" } });
+  const history = await ok({ cmd: "entityHistory", iri: "urn:binding:good" });
+  assert.ok(history.history.some((fact) => fact.value === "Before"));
+  assert.ok(history.history.some((fact) => fact.value === "After"));
+  assert.equal((await ask({ cmd: "entityHistory", iri: "urn:binding:absent" })).ok, false);
+  console.log("PASS shipped worker shape adoption, knot admission/refusal/no-leak and native entity history");
+
+  await ok({ cmd: "knot", input: { turtle: `<urn:binding:precision> a <urn:binding:Record>;
+    <urn:binding:title> "precision";
+    <urn:binding:small> 7;
+    <urn:binding:safe> 9007199254740991;
+    <urn:binding:large> 9007199254740993;
+    <urn:binding:negative> -9007199254740993;
+    <urn:binding:max> 9223372036854775807;
+    <urn:binding:min> -9223372036854775808;
+    <urn:binding:text> "9007199254740993";
+    <urn:binding:decimal> 1.25 .` } });
+  const precise = await ok({ cmd: "entityHistory", iri: "urn:binding:precision" });
+  const historyValue = (name) => precise.history.find((fact) => fact.predicate === `urn:binding:${name}`).value;
+  assert.equal(historyValue("small"), 7);
+  assert.equal(historyValue("safe"), Number.MAX_SAFE_INTEGER);
+  assert.equal(historyValue("large"), 9007199254740993n);
+  assert.equal(historyValue("negative"), -9007199254740993n);
+  assert.equal(historyValue("max"), 9223372036854775807n);
+  assert.equal(historyValue("min"), -9223372036854775808n);
+  assert.equal(historyValue("text"), "9007199254740993");
+  assert.deepEqual(historyValue("decimal"), {
+    datatype: "http://www.w3.org/2001/XMLSchema#decimal", value: "1.25",
+  });
+  console.log("PASS shipped worker preserves i64 values through structured clone; safe numbers/text/typed decimal unchanged");
+
   const edge = (predicate, subject = "car", object = "cat") =>
     `SELECT ?s FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> WHERE { <http://example.org/${subject}> <http://example.org/${predicate}> ?s . FILTER(?s=<http://example.org/${object}>) }`;
   assert.equal((await ok({ cmd: "query", sparql: edge("derivedBack") })).rows.length, 0);
@@ -122,7 +196,7 @@ try {
   assert.equal((await ok({ cmd: "query", sparql: edge("owlBack", "cat", "car") })).rows.length, 1);
   console.log("PASS adopted Datalog 0->1 and OWL load plus later reactive inverse write");
 
-  const result = await ok({ cmd: "semantic", query: "a pet cat playing", limit: 2 });
+  const result = await page.evaluate(() => window.quipu.search("a pet cat playing", 2));
   // Preserve the engine's compact term representation in search results.
   assert.equal(result[0].entity, "ex:cat"); assert.ok(result[0].score > result[1].score);
   assert.ok(requests.some((url) => url.endsWith("model_quantized.onnx")));
@@ -157,6 +231,40 @@ try {
   const timeout = await ask({ cmd: "remote", options: { name: "slow", endpoint: `${base}/slow`, timeoutMs: 10 }, sparql });
   assert.equal(timeout.ok, false);
   console.log("PASS fetch selected graph, federation completeness, native floor before network, timeout");
+  await page.close();
+  const actual = await browser.newPage(process.env.BROWSER_DEMO_DIR
+    ? { viewport: {width:1280,height:960}, recordVideo: {dir:process.env.BROWSER_DEMO_DIR} } : {});
+  actual.on("pageerror", error => errors.push(error.message));
+  await actual.goto(`${base}/page/`);
+  await actual.waitForFunction(() => /^Loaded /.test(document.querySelector("#status")?.textContent ?? ""));
+  const beforeSearch = await actual.evaluate(() => window.quipu.capabilities());
+  assert.equal(beforeSearch.state, "not_loaded");
+  assert.equal(requests.filter(url=>url.startsWith("/page/") && /transformers|\/models\/|ort-wasm/.test(url)).length,0);
+  const rejection = await actual.evaluate(async () => {
+    try { await window.quipu.episode({name:"page-invalid",source:"page-control",nodes:[{name:"invalid-page-policy",type:"InternalIdentifierPattern"}]}); }
+    catch(error) { return { message:error.message,validation:error.validation }; }
+  });
+  assert.match(rejection.message,/SHACL/); assert.ok(rejection.validation.violations > 0);
+  await actual.locator("#semantic-query").fill("a pet cat playing");
+  await actual.locator("#semantic-run").click();
+  await actual.waitForFunction(() => document.querySelector("#semantic-results p strong"));
+  assert.match(await actual.locator("#semantic-results p").first().innerText(),/ex:cat/);
+  await actual.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  const http = await actual.evaluate(async () => {
+    const response=await fetch("./search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:"a pet cat playing",limit:2})});
+    return {status:response.status,body:await response.json()};
+  });
+  assert.equal(http.status,200); assert.equal(http.body[0].entity,"ex:cat");
+  const invalidHttp = await actual.evaluate(async () => {
+    const response=await fetch("./episode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:"http-invalid",source:"page-control",nodes:[{name:"invalid-http-policy",type:"InternalIdentifierPattern"}]})});
+    return {status:response.status,body:await response.json()};
+  });
+  assert.equal(invalidHttp.status,500); assert.ok(invalidHttp.body.validation.violations > 0);
+  await actual.evaluate(() => window.quipu.set("http://example.org/cat","http://www.w3.org/2000/01/rdf-schema#comment",{str:"A kitten purrs"}));
+  const written=await actual.evaluate(() => window.quipu.query('SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#comment> "A kitten purrs" }'));
+  assert.equal(written.rows.length,1);
+  if (process.env.BROWSER_DEMO_DIR) await actual.screenshot({path:join(process.env.BROWSER_DEMO_DIR,"workbench.png"),fullPage:true});
+  console.log("PASS actual workbench search UI/window/HTTP, structured SHACL errors on both relays, valid write readback");
   assert.deepEqual(errors, []);
   console.log("WASM full browser feature acceptance: all checks passed");
 } finally {

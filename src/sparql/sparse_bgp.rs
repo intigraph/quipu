@@ -7,7 +7,7 @@ use super::triple::eval_triple_pattern_limited;
 use super::{Bindings, TemporalContext};
 use crate::{Result, Store};
 
-const SMALL: usize = 128;
+pub(super) const SMALL: usize = 128;
 
 pub(super) fn try_eval(
     store: &Store,
@@ -24,14 +24,17 @@ pub(super) fn try_eval(
     }
     let mut chosen = None;
     for (index, pattern) in patterns.iter().enumerate() {
+        // A correlated EXISTS may supply the exact plain identifier through
+        // its seed rather than spell it as a literal in the query. Use the
+        // same complete ordinary lookup; never infer an absent binding.
+        let fixed_literal = matches!(pattern.object, TermPattern::Literal(_))
+            || matches!(&pattern.object, TermPattern::Variable(v)
+                if matches!(seed.get(v.as_str()), Some(crate::types::Value::Str(_))));
         if !matches!(
-            (&pattern.subject, &pattern.predicate, &pattern.object),
-            (
-                TermPattern::Variable(_),
-                NamedNodePattern::NamedNode(_),
-                TermPattern::Literal(_)
-            )
-        ) {
+            (&pattern.subject, &pattern.predicate),
+            (TermPattern::Variable(_), NamedNodePattern::NamedNode(_),)
+        ) || !fixed_literal
+        {
             continue;
         }
         if patterns.iter().any(|other| {

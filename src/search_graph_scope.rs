@@ -5,13 +5,37 @@ use serde_json::Value;
 pub(crate) struct GraphScope {
     pub ids: Vec<i64>,
     pub explicit: bool,
+    pub all: bool,
 }
 
+#[cfg(test)]
+mod default_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod migration_tests;
 #[cfg(test)]
 mod tests;
 
 impl GraphScope {
+    /// Scope for semantic, hybrid and anchored search: a named graph needs
+    /// `[quipu.search] named_graphs`, because their named-only vectors must be
+    /// prepared by bounded backfill first.
     pub fn parse(store: &Store, input: &Value) -> Result<Self> {
+        let scope = Self::parse_any(store, input)?;
+        if scope.ids.iter().any(|id| *id != 0) && !store.search_config().named_graphs {
+            return Err(Error::InvalidValue("named graph semantic search is disabled ([quipu.search] named_graphs = false); selected scope includes named graphs; prepare bounded backfill before enabling, or explicitly select graph urn:quipu:graph:root for ROOT-only coverage".into()));
+        }
+        Ok(scope)
+    }
+
+    /// Scope for keyword search. The lexical index records every assertion's
+    /// graph, and keyword search already refuses until that index is complete,
+    /// so an explicit graph needs no embedding preparation and no
+    /// `named_graphs` (aegis-rcz5ib.10).
+    pub fn parse_keyword(store: &Store, input: &Value) -> Result<Self> {
+        Self::parse_any(store, input)
+    }
+
+    fn parse_any(store: &Store, input: &Value) -> Result<Self> {
         let graph = input.get("graph").filter(|v| !v.is_null());
         let graphs = input.get("graphs");
         let all = match input.get("all_graphs") {
@@ -25,8 +49,19 @@ impl GraphScope {
             ));
         }
         let mut ids = vec![0];
-        let explicit = graph.is_some() || graphs.is_some() || all;
-        if all || graph.and_then(Value::as_str) == Some("all") {
+        let selected = graph.is_some() || graphs.is_some() || all;
+        let default_all = match store.default_search_graph_scope()?.0 {
+            "all" => !selected,
+            "root" => false,
+            _ => {
+                return Err(Error::InvalidValue(
+                    "search.default_graph_scope must be all or root".into(),
+                ));
+            }
+        };
+        let explicit = selected;
+        let all = all || default_all || graph.and_then(Value::as_str) == Some("all");
+        if all {
             ids.extend(store.all_named_graph_ids()?);
         } else if explicit {
             let iris = match (graph, graphs) {
@@ -63,23 +98,66 @@ impl GraphScope {
         }
         ids.sort_unstable();
         ids.dedup();
-        if explicit && !store.search_config().named_graphs {
-            return Err(Error::InvalidValue("explicit graph search is disabled ([quipu.search] named_graphs = false); prepare bounded backfill before enabling".into()));
+        for iri in &store.search_config().exclude_graphs {
+            oxrdf::NamedNode::new(iri)
+                .map_err(|e| Error::InvalidValue(format!("invalid excluded graph IRI: {e}")))?;
+            ids.retain(|id| store.graph_display_name(*id) != *iri);
         }
-        Ok(Self { ids, explicit })
+        if ids.is_empty() {
+            return Err(Error::InvalidValue(
+                "search graph scope is empty after configured exclusions".into(),
+            ));
+        }
+        let explicit = explicit || (default_all && ids.as_slice() != [0]);
+        let all = all && ids.as_slice() != [0];
+        Ok(Self { ids, explicit, all })
+    }
+
+    pub fn coverage(&self, store: &Store, input: &Value) -> Value {
+        let (default, default_source) = store
+            .default_search_graph_scope()
+            .unwrap_or(("unavailable", "unavailable"));
+        let selected = input.get("graph").is_some_and(|v| !v.is_null())
+            || input.get("graphs").is_some()
+            || input.get("all_graphs") == Some(&Value::Bool(true));
+        serde_json::json!({
+            "selection": if selected { "explicit" } else { "default" },
+            "default": default,
+            "default_source": default_source,
+            "graphs": self.ids.iter().map(|id| store.graph_display_name(*id)).collect::<Vec<_>>(),
+            "excluded_graphs": store.search_config().exclude_graphs,
+            "named_vectors_enabled": store.search_config().named_graphs,
+            "index_completeness": "not_certified",
+            "remote_endpoints": "not_searched"
+        })
     }
 
     pub fn matching(&self, store: &Store, entity: i64, at: Option<&str>) -> Result<Vec<i64>> {
         let mut out = Vec::new();
         for id in &self.ids {
-            let found: bool = store.conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM facts WHERE e=?1 AND g=?2 AND op=1 AND ((?3 IS NULL AND valid_to IS NULL) OR (?3 IS NOT NULL AND valid_from<=?3 AND (valid_to IS NULL OR valid_to>?3))))",
-                rusqlite::params![entity,id,at], |r| r.get(0))?;
-            if found {
+            if Self::has_fact(store, entity, *id, at)? {
                 out.push(*id);
             }
         }
         Ok(out)
+    }
+
+    /// Check candidates lazily for broad unions rather than materializing all
+    /// subjects in the store on every ordinary search. Exclusions and temporal
+    /// membership still apply, including when only historical vectors remain.
+    pub fn contains(&self, store: &Store, entity: i64, at: Option<&str>) -> Result<bool> {
+        for id in &self.ids {
+            if Self::has_fact(store, entity, *id, at)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    fn has_fact(store: &Store, entity: i64, graph: i64, at: Option<&str>) -> Result<bool> {
+        Ok(store.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM facts WHERE e=?1 AND g=?2 AND op=1 AND ((?3 IS NULL AND valid_to IS NULL) OR (?3 IS NOT NULL AND valid_from<=?3 AND (valid_to IS NULL OR valid_to>?3))))",
+            rusqlite::params![entity, graph, at], |r| r.get(0))?)
     }
 
     pub fn entities(

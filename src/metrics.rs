@@ -24,8 +24,10 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+pub mod agents;
 pub(crate) mod attestation;
 mod histogram;
+pub mod inflight;
 use histogram::Hist;
 pub(crate) mod write_provenance;
 pub mod writes;
@@ -228,6 +230,8 @@ pub struct Metrics {
     durations: Mutex<BTreeMap<String, Hist>>,
     /// /policy/check outcome -> count.
     policy: Mutex<BTreeMap<String, u64>>,
+    /// `/query` by declared agent (aegis-ufw); bounded, no task/endpoint dimension.
+    agent_queries: agents::AgentQueryMetrics,
     /// (client, task, endpoint template) -> (request count, summed seconds).
     clients: Mutex<BTreeMap<ClientTaskEndpoint, RequestObservation>>,
     /// Per-caller tails, sharing the counter's bounded identity but not its task dimension.
@@ -320,6 +324,11 @@ impl Metrics {
         let mut durs = self.durations.lock().unwrap();
         let h = durs.entry(endpoint.to_string()).or_default();
         h.observe(seconds);
+    }
+
+    /// Count a completed `/query` by its DECLARED agent (aegis-ufw); see [`agents`].
+    pub fn observe_agent_query(&self, client: &str, ep: &str, agent: Option<&str>, secs: f64) {
+        self.agent_queries.observe(client, ep, agent, secs);
     }
 
     /// Attribute one request's TIME to a caller (aegis-ma1hy).
@@ -447,6 +456,7 @@ impl Metrics {
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.write_provenance.render(&mut out);
+        self.agent_queries.render(&mut out);
 
         out.push_str(
             "# HELP quipu_http_auth_refusals_total HTTP 401 responses by bounded client, route template and method.\n\

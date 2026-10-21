@@ -1,5 +1,8 @@
 //! SPARQL Protocol transports and the primary query endpoint.
 
+mod routes;
+pub(crate) use routes::routes;
+
 use axum::{
     body::Bytes,
     extract::{OriginalUri, Query, State},
@@ -9,7 +12,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 
-use super::{SharedStore, admission::read_blocking, base::AppError};
+use super::{SharedStore, admission::query_blocking, base::AppError};
 
 /// Conservative bounds for the two standard SPARQL Protocol transports.
 /// GET is intentionally small enough for common proxies; clients with larger
@@ -38,6 +41,7 @@ pub(crate) async fn query_get(
         store,
         headers,
         json!({"query": query, "verbose": query_flag(params.verbose.as_deref()), "_sparql_protocol": true}),
+        false,
     )
     .await
 }
@@ -129,7 +133,7 @@ async fn query_post_at(
         let query = input.get("query").and_then(JsonValue::as_str).unwrap_or("");
         input["query"] = json!(protocol_dataset_query(query, &uri)?);
     }
-    query_core(store, headers, input).await
+    query_core(store, headers, input, true).await
 }
 
 fn protocol_dataset_query(query: &str, uri: &axum::http::Uri) -> Result<String, AppError> {
@@ -183,13 +187,14 @@ pub(crate) async fn query(
     headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::response::Response, AppError> {
-    query_core(store, headers, input).await
+    query_core(store, headers, input, true).await
 }
 
 async fn query_core(
     store: SharedStore,
     headers: HeaderMap,
     input: JsonValue,
+    is_post: bool,
 ) -> Result<axum::response::Response, AppError> {
     let query_shape =
         quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));
@@ -209,8 +214,38 @@ async fn query_core(
     // shared function is a stronger guarantee of agreement than one shared value
     // passed through two layers.
     let client = super::query_usage::client(&headers);
+    let require_substring = match headers.get("x-quipu-require-substring") {
+        None => false,
+        Some(value) if value.as_bytes() == b"v6" => true,
+        Some(_) => {
+            return Err(
+                quipu::Error::InvalidValue("unsupported substring read contract".into()).into(),
+            );
+        }
+    };
+    if require_substring
+        && (input.get("tx").is_some()
+            || input.get("valid_at").is_some()
+            || input.get("federated").and_then(JsonValue::as_bool) == Some(true))
+    {
+        return Err(quipu::Error::InvalidValue(
+            "substring read contract is current and local only".into(),
+        )
+        .into());
+    }
 
-    read_blocking(move || {
+    let point = store.readers.point_reserve && super::point_reads::eligible(&input);
+    let mut observation = super::query_usage::Observation::new(
+        &input,
+        super::request_middleware::request_id(),
+        store.log_query_admission,
+    );
+    if let Some(capture) = &store.query_capture {
+        observation.capture(capture, &input, &client, is_post);
+    }
+    let stamp = observation.admission_stamp();
+    query_blocking(point, stamp, move || {
+        observation.dispatched();
         // Query TEXT at START, before taking the store lock: the query that
         // never completes — or never gets the mutex — must still be on the
         // record. Completion-only text logging is how the mfg0 killer query
@@ -224,14 +259,21 @@ async fn query_core(
         // boundary because that boundary cannot tell them apart, and conflating
         // them is what makes a queued caller look like an expensive one.
         let federation = store.federation.clone();
+        let phases = store.log_query_phases;
         let lock_t0 = std::time::Instant::now();
+        observation.waiting();
         // POOLED READ. SPARQL is read-only, so this takes a
         // read-only connection instead of the writer's mutex. `wait_secs` keeps
         // meaning the same thing — time spent acquiring — which is what makes
         // the before/after curve comparable rather than merely different.
-        let store = store.read();
+        let store = if point {
+            store.point_read()
+        } else {
+            store.read()
+        };
         let wait_secs = lock_t0.elapsed().as_secs_f64();
         let started = std::time::Instant::now();
+        observation.acquired();
 
         let run = |store: &quipu::Store| -> Result<axum::response::Response, AppError> {
             // quipu-tkh: `"federated": true` fans the WHOLE query text out
@@ -358,7 +400,7 @@ async fn query_core(
                     })
             });
             if let Some(fmt) = format {
-                let (result, _truncated) = quipu::query_result_with_federation(
+                let (result, truncated) = quipu::query_result_with_federation(
                     store,
                     &input,
                     Some(std::sync::Arc::new(federation.clone())),
@@ -369,6 +411,14 @@ async fn query_core(
                     // this, one Accept header reopens the exact silence the marker
                     // closes on the bespoke shape — for SELECT as much as for ASK.
                     let mut headers = HeaderMap::new();
+                    headers.insert(
+                        axum::http::HeaderName::from_static("x-quipu-truncated"),
+                        axum::http::HeaderValue::from_static(if truncated {
+                            "true"
+                        } else {
+                            "false"
+                        }),
+                    );
                     super::input_fields::query_header(&input, &mut headers);
                     if let Ok(ct) = axum::http::HeaderValue::from_str(content_type) {
                         headers.insert(axum::http::header::CONTENT_TYPE, ct);
@@ -402,7 +452,21 @@ async fn query_core(
             ))
         };
 
-        let result = run(&store);
+        // Pin readiness and evaluation to the same schema/fact snapshot: a
+        // concurrent explicit index drop cannot turn this into a scan fallback.
+        let mut result = super::query_usage::profiled(&mut observation, phases, || {
+            if require_substring {
+                store.substring_query(|| run(&store))
+            } else {
+                Ok(run(&store))
+            }
+        })?;
+        if require_substring && let Ok(response) = &mut result {
+            response.headers_mut().insert(
+                axum::http::HeaderName::from_static("x-quipu-substring-index"),
+                axum::http::HeaderValue::from_static("v6"),
+            );
+        }
         // Recorded while the guard is STILL ALIVE, so `held` is genuinely the
         // lock-holding interval and not "until the response was serialised".
         quipu::metrics::metrics().observe_store_time(
@@ -433,6 +497,7 @@ async fn query_core(
             let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
         }
+        observation.finished(result.is_ok());
         result
     })
     .await

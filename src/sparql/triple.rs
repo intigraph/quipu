@@ -4,10 +4,19 @@
 //! SPARQL algebra over rows, while everything here turns a triple pattern into
 //! `SQL` over `facts` and binds the variables in the rows that come back.
 
+mod model;
 mod scan;
+mod temporal_visibility;
 
-pub(super) use scan::eval_complete_relation;
+#[cfg(test)]
+mod limited_tests;
+#[cfg(test)]
+mod named_limit_tests;
+
+pub(super) use model::eval_triple_pattern_from_model;
+
 use scan::{ScanMode, collect_triple_pattern};
+pub(super) use scan::{binding_bytes, eval_complete_relation, selected_relation, subject_relation};
 
 use std::collections::HashSet;
 
@@ -37,6 +46,9 @@ pub fn eval_bgp(
         return Ok((vec![seed.clone()], vec![]));
     }
     if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
+        return Ok(result);
+    }
+    if let Some(result) = super::batch_star::try_eval(store, patterns, ctx, seed)? {
         return Ok(result);
     }
     if let Some(result) = super::sql_star::try_eval(store, patterns, ctx, seed)? {
@@ -175,11 +187,21 @@ fn visit_triple_pattern_limited(
     bindings: &Bindings,
     ctx: &TemporalContext,
     limit: Option<usize>,
-    mode: ScanMode,
+    mode: ScanMode<'_>,
     mut emit: Option<&mut dyn FnMut(Bindings) -> Result<()>>,
 ) -> Result<usize> {
     let streaming = matches!(mode, ScanMode::Streamed);
     if limit == Some(0) {
+        return Ok(0);
+    }
+    // GraphPattern::Graph uses -1 only for an absent or dataset-excluded
+    // named graph. In a primary-only store it cannot contribute any facts.
+    // Avoid repeating a predicate scan for each correlated EXISTS seed.
+    // Attached stores retain their ordinary dictionary/composition path.
+    if !store.has_attachments()
+        && matches!(&ctx.graph, GraphScope::Named(graphs)
+            if !graphs.is_empty() && graphs.iter().all(|graph| *graph == -1))
+    {
         return Ok(0);
     }
     // Formal default: a constant rdf:type query uses the loaded RDFS class
@@ -218,24 +240,13 @@ fn visit_triple_pattern_limited(
     let mut sql_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let direct_refs = super::count_stream::direct_refs() && !store.has_attachments();
 
-    // Subject
-    let subject_ref = match &tp.subject {
-        TermPattern::Variable(v) => bindings.get(v.as_str()),
-        TermPattern::BlankNode(v) => bindings.get(v.as_str()),
-        _ => None,
-    };
-    if direct_refs
-        && let Some(Value::Ref(id)) = subject_ref
-        && *id >= 0
+    if let Some(condition) =
+        scan::subject_condition(store, tp, bindings, direct_refs, mode, &mut sql_params)?
     {
-        conditions.push(format!("e = ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(*id));
-    } else if let Some(iri) = resolve_subject_pattern(store, &tp.subject, bindings)? {
-        let ids = store.lookup_all(&iri)?;
-        if ids.is_empty() {
-            return Ok(0); // IRI not in dictionary -> no matches
+        if condition.is_empty() {
+            return Ok(0);
         }
-        conditions.push(sql_id_in("e", &ids, &mut sql_params));
+        conditions.push(condition);
     }
 
     // Predicate
@@ -280,8 +291,8 @@ fn visit_triple_pattern_limited(
 
     // aegis-tl2q4j: string FILTERs over this BGP narrow the scan. Only an
     // UNBOUND variable position; a bound one is already an id lookup.
-    let narrows_active =
-        push_string_narrows(store, tp, bindings, ctx, &mut conditions, &mut sql_params);
+    let (narrows_active, substring_candidates) =
+        push_string_narrows(store, tp, bindings, ctx, &mut conditions, &mut sql_params)?;
 
     // Temporal filtering.
     conditions.push("op = 1".to_string());
@@ -306,7 +317,22 @@ fn visit_triple_pattern_limited(
                     gids,
                     &mut sql_params,
                 )?,
-                ScanMode::Streamed | ScanMode::CompleteRelation => None,
+                ScanMode::Streamed
+                    if matches!(&tp.subject, TermPattern::Variable(v)
+                        if matches!(bindings.get(v.as_str()), Some(Value::Ref(id)) if *id >= 0)) =>
+                {
+                    super::graph_membership::predicate(
+                        store,
+                        ctx,
+                        tp,
+                        bindings,
+                        gids,
+                        &mut sql_params,
+                    )?
+                }
+                ScanMode::Streamed
+                | ScanMode::CompleteRelation
+                | ScanMode::BoundedRelation(_, _) => None,
             };
             conditions.push(membership.unwrap_or_else(|| sql_graph_in(gids, &mut sql_params)));
             None
@@ -335,6 +361,8 @@ fn visit_triple_pattern_limited(
                         .lookup(crate::namespace::META_GRAPH_IRI)?
                         .unwrap_or(-1);
                     sql_params.push(Box::new(meta_g));
+                    // Registration must not implicitly admit engine-derived data.
+                    conditions.push(store.inferred_graph_exclusion_sql());
                 }
                 Some(ids) => conditions.push(sql_graph_in(ids, &mut sql_params)),
             }
@@ -345,38 +373,7 @@ fn visit_triple_pattern_limited(
     // keep DISTINCT on (e,a,v), so a triple present in several graphs of a FROM
     // union collapses to ONE solution (default-graph merge), not one per graph.
     let want_g = bind_graph_var.is_some();
-    if let Some(vt) = &ctx.valid_at {
-        conditions.push(format!("valid_from <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(vt.clone()));
-        conditions.push(format!(
-            "(valid_to IS NULL OR valid_to > ?{})",
-            sql_params.len()
-        ));
-    } else if let Some(tx) = ctx.as_of_tx {
-        // quipu #83: as-of-TRANSACTION liveness, not present-tense liveness.
-        //
-        // This used to push `valid_to IS NULL` and then merely ADD `tx <= N`,
-        // so a fact live at N but retracted since was invisible at every N —
-        // silently, as a smaller answer rather than an error. The row is live
-        // at N when it was asserted by then AND was not retracted by then.
-        //
-        // A legacy row closed before the #83 migration has `retracted_tx` NULL,
-        // so `retracted_tx > N` is NULL and the row stays invisible exactly as
-        // it is today. That is deliberate: the tx that closed it was never
-        // recorded, and guessing would place it in windows it may not have been
-        // live in.
-        conditions.push(format!(
-            "(valid_to IS NULL OR retracted_tx > ?{})",
-            sql_params.len() + 1
-        ));
-        sql_params.push(Box::new(tx));
-    } else {
-        conditions.push("valid_to IS NULL".to_string());
-    }
-    if let Some(tx) = ctx.as_of_tx {
-        conditions.push(format!("tx <= ?{}", sql_params.len() + 1));
-        sql_params.push(Box::new(tx));
-    }
+    temporal_visibility::add_conditions(ctx, &mut conditions, &mut sql_params);
 
     let where_clause = if conditions.is_empty() {
         String::new()
@@ -402,18 +399,40 @@ fn visit_triple_pattern_limited(
     // `facts` are either the write path, local bookkeeping, or deliberately
     // ROOT-scoped — and an attachment contributes only NAMED graphs, so a
     // ROOT-scoped read could not see one even if it composed.
-    let facts = store.facts_source();
-    let sql = if emit.is_none() {
+    // A complete scoped FTS list must drive primary-key lookups. Without
+    // this hint SQLite prefers the predicate index and retests every value.
+    // The candidate flag proves primary-only facts and retains every filter.
+    let facts = if substring_candidates {
+        "facts NOT INDEXED"
+    } else if matches!(mode, ScanMode::Retained | ScanMode::Streamed) {
+        super::graph_membership::object_source(store, ctx, tp, bindings)?
+            .unwrap_or(store.facts_source())
+    } else {
+        store.facts_source()
+    };
+    let sql = if emit.is_none() && !substring_candidates {
         super::count_cover::projection(store, ctx, &conditions)?.unwrap_or_else(|| {
             format!("SELECT e, a, v FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v)")
         })
-    } else if matches!(mode, ScanMode::CompleteRelation) {
+    } else if matches!(
+        mode,
+        ScanMode::CompleteRelation | ScanMode::BoundedRelation(_, _)
+    ) {
         let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
         // Prove primary membership inside this bounded scan. Missing or
         // attached-only subjects retain normal resolution and its errors.
         format!(
             "SELECT {columns}, EXISTS(SELECT 1 FROM main.terms AS primary_term WHERE primary_term.id=e) FROM {facts}{where_clause}"
         )
+    } else if matches!(mode, ScanMode::Retained) && limit.is_some() && super::limited_scan::active()
+    {
+        // Only an explicitly limited, independent single leaf can enter this
+        // scope. Retained scans already canonicalize and deduplicate each row
+        // below; do that lazily instead of grouping the whole physical graph
+        // before SQLite can return the first row. No SQL LIMIT: duplicates do
+        // not consume the bound-row budget.
+        let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
+        format!("SELECT {columns} FROM {facts}{where_clause}")
     } else if want_g {
         format!("SELECT e, a, v, g FROM {facts}{where_clause} GROUP BY e,a,quipu_term_key(v),g")
     } else {
@@ -457,8 +476,10 @@ fn visit_triple_pattern_limited(
     while let Some(row) = rows.next()? {
         let physical_e_id = row.get(0)?;
         let e_id = canonical(physical_e_id)?;
-        let verified_subject = matches!(mode, ScanMode::CompleteRelation)
-            && e_id == physical_e_id
+        let verified_subject = matches!(
+            mode,
+            ScanMode::CompleteRelation | ScanMode::BoundedRelation(_, _)
+        ) && e_id == physical_e_id
             && row.get::<_, bool>(if want_g { 4 } else { 3 })?;
         let a_id = canonical(row.get(1)?)?;
         let v_bytes: Vec<u8> = row.get(2)?;
@@ -502,102 +523,6 @@ fn visit_triple_pattern_limited(
     Ok(count)
 }
 
-/// Evaluate one triple pattern against the resident read model instead of SQL.
-///
-/// Only ever reached when `read_model_applicable` admits (see
-/// `src/store/read_model.rs`), which is what makes the shortcuts here sound:
-/// the graph is plain ROOT so no graph variable binds and `g_id` is always
-/// `None`, and there are no attachments so `canonical_id` is the identity and
-/// `lookup_all` degenerates to `lookup`.
-///
-/// Rows go through the same [`bind_row`] as the SQL path, so the two cannot
-/// disagree about what a triple binds to.
-///
-/// Candidates are sorted by `(e, a, v)`. The SQL this replaces carries no
-/// `ORDER BY`, so its order was incidental — index order, usually `idx_eavt`.
-/// Sorting makes the fast path deterministic rather than merely different.
-pub(super) fn eval_triple_pattern_from_model(
-    store: &Store,
-    tp: &TriplePattern,
-    bindings: &Bindings,
-    graph: i64,
-) -> Result<Vec<Bindings>> {
-    let subject = match resolve_subject_pattern(store, &tp.subject, bindings)? {
-        Some(iri) => match store.lookup(&iri)? {
-            Some(id) => Some(id),
-            None => return Ok(vec![]), // not in the dictionary -> no matches
-        },
-        None => None,
-    };
-    let predicate = match resolve_predicate_pattern(store, &tp.predicate, bindings)? {
-        Some(iri) => match store.lookup(&iri)? {
-            Some(id) => Some(id),
-            None => return Ok(vec![]),
-        },
-        None => None,
-    };
-    let object = resolve_object_pattern(store, &tp.object, bindings)?;
-
-    let model = store.read_model_for(graph)?;
-    let mut candidates: Vec<(i64, i64, Value)> = match (subject, predicate, &object) {
-        (Some(e), Some(a), Some(v)) => {
-            if model.contains(store, e, a, v)? {
-                vec![(e, a, v.clone())]
-            } else {
-                vec![]
-            }
-        }
-        (Some(e), Some(a), None) => model
-            .by_subject(store, e)?
-            .iter()
-            .filter(|(pa, _)| *pa == a)
-            .map(|(pa, v)| (e, *pa, v.clone()))
-            .collect(),
-        (Some(e), None, Some(v)) => model
-            .by_subject(store, e)?
-            .iter()
-            .filter(|(_, pv)| *pv == *v)
-            .map(|(pa, pv)| (e, *pa, pv.clone()))
-            .collect(),
-        (Some(e), None, None) => model
-            .by_subject(store, e)?
-            .iter()
-            .map(|(pa, pv)| (e, *pa, pv.clone()))
-            .collect(),
-        (None, Some(a), Some(v)) => model
-            .by_predicate_object(store, a, v)?
-            .iter()
-            .map(|e| (*e, a, v.clone()))
-            .collect(),
-        (None, Some(a), None) => model
-            .by_predicate(store, a)?
-            .iter()
-            .map(|(e, pv)| (*e, a, pv.clone()))
-            .collect(),
-        (None, None, Some(v)) => model
-            .by_object(store, v)?
-            .iter()
-            .map(|(e, a)| (*e, *a, v.clone()))
-            .collect(),
-        (None, None, None) => model.triples(store)?,
-    };
-    candidates.sort_unstable_by_key(|l| (l.0, l.1, l.2.term_key()));
-
-    let mut results = Vec::with_capacity(candidates.len());
-    for (e_id, a_id, v) in candidates {
-        let matched = MatchedRow {
-            e_id,
-            a_id,
-            v,
-            g_id: None,
-        };
-        if let Some(row) = bind_row(store, tp, bindings, matched, None)? {
-            results.push(row);
-        }
-    }
-    Ok(results)
-}
-
 /// Add one SQL condition per string narrowing on an unbound variable of `tp`
 /// (aegis-tl2q4j). Returns whether any was added.
 fn push_string_narrows(
@@ -607,9 +532,9 @@ fn push_string_narrows(
     ctx: &TemporalContext,
     conditions: &mut Vec<String>,
     sql_params: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
-) -> bool {
+) -> Result<(bool, bool)> {
     let Some(narrows) = &ctx.string_narrows else {
-        return false;
+        return Ok((false, false));
     };
     let unbound = |name: &str| !bindings.contains_key(name);
     let subject = match &tp.subject {
@@ -630,6 +555,7 @@ fn push_string_narrows(
     // a 0.5 s join into a 30 s timeout (measured). There, narrow only by value.
     let scan_terms = subject.is_some() && object.is_some();
     let mut added = false;
+    let mut substring_candidates = false;
     for (k, narrow) in narrows.iter().enumerate() {
         let var = Some(narrow.var.as_str());
         let n = sql_params.len() + 1;
@@ -667,7 +593,25 @@ fn push_string_narrows(
         if pushed {
             sql_params.push(Box::new(i64::try_from(k).unwrap_or(i64::MAX)));
             added = true;
+            if object == var
+                && ctx.valid_at.is_none()
+                && ctx.as_of_tx.is_none()
+                && bindings.is_empty()
+                && !store.has_attachments()
+                && let Some(phrase) = narrow.substring_phrase()
+                && ctx.graph.single_graph().is_some()
+                && let NamedNodePattern::NamedNode(predicate) = &tp.predicate
+                && store.substring_index_ready()?
+            {
+                let ids = store.lookup_all(predicate.as_str())?;
+                if let [_predicate] = ids.as_slice() {
+                    let parameter = sql_params.len() + 1;
+                    sql_params.push(Box::new(format!("text:{phrase}")));
+                    conditions.push(format!("facts.rowid IN (SELECT rowid FROM main.substring_fts WHERE substring_fts MATCH ?{parameter})"));
+                    substring_candidates = true;
+                }
+            }
         }
     }
-    added
+    Ok((added, substring_candidates))
 }

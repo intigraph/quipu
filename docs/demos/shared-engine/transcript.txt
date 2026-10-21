@@ -1,0 +1,6 @@
+BEFORE: existing Explorer=function; general Database=undefined
+AFTER: Database=function; storage=memory; schema=not_adopted; full_parity=false
+write before adoption: schema_not_adopted; commit_state=not_started
+write after explicit shape adoption: committed
+missing title refused; current Record count=1 (positive control retained)
+history JSON retains exact integer token 9007199254740993

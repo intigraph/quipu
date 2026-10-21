@@ -1,0 +1,53 @@
+name: Merge load
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shipped-paths:
+    name: Seeded merge paths (1000 edits per replica)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: extractions/setup-just@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install rdflib==7.6.0
+      - name: Oracle controls
+        run: python3 -m unittest discover -s benchmark/merge-load -p test_model.py
+      - name: Native driver and real Git transport
+        run: just bench merge-load-build
+      - name: Actual explorer WASM
+        run: |
+          # No `--locked` for the explorer crate, for the reason documented in
+          # .github/actions/wasm-explorer-build: it carries its own Cargo.lock,
+          # which records the parent crate's version, and release-plz bumps only
+          # the root lockfile. Every release PR leaves it one bump stale, and
+          # `--locked` refused on #692 (v0.15.1) with exit 101. The committed
+          # lockfile still pins wasm-bindgen below.
+          (cd wasm/explorer && cargo build --release)
+          version=$(python3 -c 'import tomllib; d=tomllib.load(open("wasm/explorer/Cargo.lock","rb")); print(next(p["version"] for p in d["package"] if p["name"]=="wasm-bindgen"))')
+          cargo install wasm-bindgen-cli --version "$version" --locked
+          target=$(cd wasm/explorer && cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')
+          wasm-bindgen --target nodejs --out-dir "$RUNNER_TEMP/merge-wasm" "$target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
+      - name: Five actual paths against the operation ledger
+        run: |
+          target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')
+          python3 benchmark/merge-load/run.py --sizes 1000 --seed 42 \
+            --driver "$target/debug/examples/merge_load" --quipu "$target/debug/quipu" \
+            --wasm-module "$RUNNER_TEMP/merge-wasm/quipu_wasm_explorer.js" \
+            --out "$RUNNER_TEMP/merge-load-results"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: merge-load-results
+          path: ${{ runner.temp }}/merge-load-results

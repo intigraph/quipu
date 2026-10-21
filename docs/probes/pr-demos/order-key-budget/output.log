@@ -1,0 +1,13 @@
+Script started on 2026-10-15 01:59:30-04:00 [COMMAND="bash docs/probes/pr-demos/order-key-budget/run.sh" <not executed on terminal>]
+Before: candidate94db, retained real independent memory measurement
+Retained independent candidate94db memory control, 2000 rows / 4 literal keys:
+REVIEW563 rows=2000 keys=4 literal_bytes=16385 query_bytes=74492 peak_before_kib=9496 peak_after_kib=139904 delta_kib=130408 elapsed_ms=68
+After: 76bbbbc8908212d876f87ccba8f5cf2776c27cbd, private in-memory library fixture
+$ cargo test --lib large_literal_keys_refuse -- --nocapture
+running 1 test
+ORDER BY 2000 rows x 4 keys x 16385 bytes: ORDER BY retained key budget exceeded (65536 entries / 8388608 bytes)
+ORDER BY ordinary numeric control: [Int(1), Int(1), Int(2), Int(3)]
+test sparql::order::tests::large_literal_keys_refuse_without_retaining_rows_times_key_bytes ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2298 filtered out; finished in 0.03s
+
+Script done on 2026-10-15 01:59:49-04:00 [COMMAND_EXIT_CODE="0"]

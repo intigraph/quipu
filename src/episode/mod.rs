@@ -15,8 +15,9 @@ use crate::error::Result;
 use crate::resolution::{self, Contention, EntityCandidate};
 #[cfg(feature = "shacl")]
 use crate::shacl;
-use crate::{namespace, rdf::parse_rdf, store::Store};
+use crate::{namespace, store::Store};
 
+mod commit;
 mod descriptions;
 mod edge_predicate;
 #[cfg(test)]
@@ -26,6 +27,9 @@ mod node_type;
 use node_type::validate_node_type;
 pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
 mod validation;
+mod write;
+
+pub use commit::ingest_episode_resolved;
 
 /// Options controlling entity resolution during episode ingest.
 #[derive(Debug, Clone)]
@@ -125,9 +129,6 @@ pub fn ingest_episode_with_resolution(
     base_ns: &str,
     resolution_opts: Option<&IngestResolutionOpts>,
 ) -> Result<IngestResult> {
-    let mut resolution_hints = Vec::new();
-    let mut resolution_contentions = Vec::new();
-
     // Resolve every node in ONE pass: it scans the label set once for the whole
     // episode rather than once per node, and it can see two nodes claiming one
     // existing entity — which a per-node loop structurally cannot.
@@ -135,11 +136,7 @@ pub fn ingest_episode_with_resolution(
         && opts.enabled
     {
         let resolved = resolution::resolve_episode_nodes(store, &episode.nodes, base_ns, opts)?;
-        if let Some(msg) = resolved.refusal {
-            return Err(crate::error::Error::InvalidValue(msg));
-        }
-        resolution_hints = resolved.hints;
-        resolution_contentions = resolved.contentions;
+        return ingest_episode_resolved(store, episode, timestamp, base_ns, resolved);
     }
 
     let (tx_id, count, outcome) = ingest_episode_outcome(store, episode, timestamp, base_ns)?;
@@ -148,8 +145,8 @@ pub fn ingest_episode_with_resolution(
         tx_id,
         count,
         outcome,
-        resolution_hints,
-        resolution_contentions,
+        resolution_hints: Vec::new(),
+        resolution_contentions: Vec::new(),
     })
 }
 
@@ -411,14 +408,12 @@ pub fn ingest_episode_outcome(
     // facts (label/comment/source/groupId/contentHash) so the update replaces
     // them rather than leaving stale active values. Only the activity node is
     // retracted; its generated entities are reconciled by fact-level dedup.
-    // SHACL has already passed above, so this never half-mutates on rejection.
+    // These retractions share the final write savepoint and its SHACL check.
     let outcome = if existing_hash.is_some() {
         IngestOutcome::Updated
     } else {
         IngestOutcome::Created
     };
-    let source_str = format!("episode:{}", episode.name);
-
     // Named graph (aegis-g1al / #36): register the graph and write there.
     // Absent = ROOT (g=0). The graph is itself an entity (its term id), which
     // is where #37 provenance (owner/tenant) attaches.
@@ -434,37 +429,7 @@ pub fn ingest_episode_outcome(
         _ => 0,
     };
 
-    if existing_hash.is_some()
-        && !episode.replace_snapshot
-        && let Some(ep_id) = store.lookup(&ep_iri)?
-    {
-        descriptions::retract_activity(store, ep_id, graph, timestamp, actor, &source_str)?;
-    }
-
-    let (tx_id, count) = if episode.replace_snapshot {
-        let mut datums = store.plan_episode_retraction(&episode.name, graph)?;
-        let mut assertions = parse_rdf(
-            store,
-            turtle.as_bytes(),
-            oxrdfio::RdfFormat::Turtle,
-            None,
-            timestamp,
-        )?;
-        let count = assertions.len();
-        // Facts present in both snapshots stay active. Besides avoiding needless
-        // history churn, this is required by the fact-log key: one transaction
-        // cannot contain both a Retract and Assert for the same (e, a, v).
-        datums.retain(|old| {
-            !assertions.iter().any(|new| {
-                old.entity == new.entity && old.attribute == new.attribute && old.value == new.value
-            })
-        });
-        datums.append(&mut assertions);
-        let tx_id = store.transact_snapshot(&datums, timestamp, actor, &source_str, graph)?;
-        (tx_id, count)
-    } else {
-        descriptions::ingest_reconciled(store, episode, &turtle, timestamp, base_ns, actor, graph)?
-    };
+    let (tx_id, count) = write::commit(store, episode, &turtle, timestamp, base_ns, actor, graph)?;
     Ok((tx_id, count, outcome))
 }
 

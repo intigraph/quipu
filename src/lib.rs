@@ -5,6 +5,7 @@
 
 pub mod acquisition;
 pub mod align;
+pub mod bindings;
 pub mod compact;
 pub mod config;
 mod config_load;
@@ -12,6 +13,7 @@ pub mod context;
 pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
+pub mod embedding_runtime;
 pub mod episode;
 pub mod error;
 pub mod governance;
@@ -19,12 +21,15 @@ pub mod graph;
 pub mod graph_view;
 pub mod http_auth;
 pub mod impact;
+pub mod import_embedding;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
 pub mod lexical;
 mod literal_identity;
 pub mod mcp;
+pub mod memory_budget;
+pub mod memory_files;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
@@ -32,8 +37,10 @@ pub mod namespace;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod replica_provider;
 mod search_graph_scope;
 pub mod search_trace;
+pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
@@ -67,6 +74,7 @@ pub mod render;
 pub mod report;
 pub mod request_usage;
 pub mod resolution;
+pub mod rule_answers;
 pub mod schema;
 pub mod semweb;
 #[cfg(not(target_arch = "wasm32"))]
@@ -99,16 +107,18 @@ pub mod project_graph;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_attestation;
 pub mod share_completeness;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod share_compose;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_current;
 pub mod share_delta;
+pub mod share_pointer_load;
 // Entity-grouped, blank-node-stable payload diffs and the `git diff` textconv
 // rendering (aegis-fxpbys.1). Pure apart from `read_payload`, which is gated.
 pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
+pub mod promotion_control;
+pub mod share_alignments;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
@@ -127,6 +137,8 @@ pub mod share_transport;
 pub mod signing;
 pub mod sparql;
 pub mod sparql_structure;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod statement_profile;
 pub mod store;
 pub mod time;
 pub mod types;
@@ -187,6 +199,7 @@ pub use mcp::align::{tool_align_apply, tool_align_decide, tool_align_propose};
 #[cfg(feature = "owl")]
 pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
+pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
@@ -198,13 +211,16 @@ pub use mcp::proposal::{
     tool_accept_proposal, tool_list_proposals, tool_propose_schema_change, tool_reject_proposal,
 };
 pub use mcp::resolution::tool_resolve_entity;
+pub use mcp::rule_answers::tool_rule_query;
 pub use mcp::search::{tool_search_facts, tool_search_nodes};
 pub use mcp::tools::{
-    resolve_validation_shapes, tool_cord, tool_datasets, tool_episode, tool_graph_freeze,
-    tool_graph_list, tool_graph_thaw, tool_hybrid_search, tool_queries, tool_retract,
-    tool_retract_episode, tool_search, tool_set, tool_shapes, tool_subscriptions, tool_unravel,
-    tool_validate,
+    PreparedEpisode, resolve_validation_shapes, tool_cord, tool_datasets, tool_episode,
+    tool_episode_commit, tool_episode_prepare, tool_graph_freeze, tool_graph_list, tool_graph_thaw,
+    tool_hybrid_search, tool_queries, tool_retract, tool_retract_episode, tool_search, tool_set,
+    tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use mcp::tools::{tool_deck_attest, tool_deck_present, tool_deck_receipt};
 pub use mcp::{
     inference_header, labels_json, query_inference, query_result, query_result_with_federation,
     tool_cooccurrence, tool_definitions, tool_export, tool_graph_create, tool_graph_label,

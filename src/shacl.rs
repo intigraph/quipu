@@ -14,8 +14,14 @@ use rudof_rdf::rdf_core::term::Object;
 use rudof_rdf::rdf_impl::{OxigraphInMemory, ReaderMode};
 use shacl_engine::ir::IRSchema;
 use shacl_engine::validator::ShaclValidationMode;
-use shacl_engine::validator::processor::{GraphValidation, ShaclProcessor};
-use shacl_engine::validator::store::{Graph, ShaclDataManager};
+use shacl_engine::validator::processor::ShaclProcessor;
+use shacl_engine::validator::store::ShaclDataManager;
+
+#[path = "shacl_targets.rs"]
+mod targets;
+
+#[path = "shacl_write_paths.rs"]
+mod write_paths;
 
 use serde::{Deserialize, Serialize};
 
@@ -165,8 +171,7 @@ impl Validator {
         )
         .map_err(|e| Error::InvalidValue(format!("data load error: {e}")))?;
 
-        let graph = Graph::from(data);
-        let mut validator = GraphValidation::new(graph);
+        let mut validator = targets::SubclassValidation(data);
         let report = ShaclProcessor::validate(
             &mut validator,
             &schema,

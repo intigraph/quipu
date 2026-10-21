@@ -311,14 +311,23 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     )?;
     let result =
         episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))
-            .map_err(|error| match (error, crate::time::request_deadline()) {
-                (Error::QueryTimeout { .. }, Some(deadline)) if deadline.passed() => {
-                    deadline.request_timeout()
-                }
-                (other, _) => other,
-            })?;
+            .map_err(request_timeout_if_expired)?;
+    Ok(episode_json(&result, &ep.name))
+}
 
-    Ok(serde_json::json!({
+/// A `QueryTimeout` raised because the ambient request budget ran out is the
+/// request's timeout, reported with the request's budget (aegis-xi0, PR536).
+fn request_timeout_if_expired(error: Error) -> Error {
+    match (error, crate::time::request_deadline()) {
+        (Error::QueryTimeout { .. }, Some(deadline)) if deadline.passed() => {
+            deadline.request_timeout()
+        }
+        (other, _) => other,
+    }
+}
+
+fn episode_json(result: &episode::IngestResult, name: &str) -> JsonValue {
+    serde_json::json!({
         "tx_id": result.tx_id,
         "count": result.count,
         // BRANCH ON THIS, NOT ON `count`. `unchanged` means the
@@ -326,9 +335,98 @@ pub fn tool_episode(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         // caller retrying after a lost response needs. `count: 0` alone cannot
         // say that, and reads as a failed write.
         "outcome": result.outcome.as_str(),
-        "episode": ep.name,
+        "episode": name,
         "resolution_hints": crate::mcp::resolution_hints_json(&result.resolution_hints),
         "resolution_contentions":
             crate::mcp::resolution_contentions_json(&result.resolution_contentions)
+    })
+}
+
+/// An episode resolved on a read connection, waiting for the writer.
+///
+/// Phase 0 of a two-phase `/episode` (aegis-xi0). Resolution is advisory when
+/// it is not strict, and it is the expensive part (one embedding and a label
+/// scan per node), so it runs without holding the single writer. The commit
+/// revalidates it against what was written in between.
+#[derive(Debug)]
+pub struct PreparedEpisode {
+    episode: Episode,
+    resolved: crate::resolution::EpisodeResolution,
+    read_at: crate::resolution::ResolutionGeneration,
+}
+
+/// Phase 0: parse, gate the vocabulary and resolve on a READ connection.
+///
+/// Returns `None` when two phases do not apply: resolution is off (nothing to
+/// move) or strict (a refusal must see the writer's latest state). The caller
+/// then runs [`tool_episode`] under the writer, exactly as before.
+///
+/// # Errors
+/// The same refusals [`tool_episode`] gives before it writes.
+pub fn tool_episode_prepare(store: &Store, input: &JsonValue) -> Result<Option<PreparedEpisode>> {
+    crate::time::check_request_deadline()?;
+    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    if !opts.enabled || opts.strict_mode {
+        return Ok(None);
+    }
+    let episode: Episode = serde_json::from_value(input.clone())
+        .map_err(|e| Error::InvalidValue(format!("invalid episode JSON: {e}")))?;
+    let base_ns = store.base_ns().to_string();
+    crate::vocabulary::enforce_episode_types(
+        store,
+        episode.nodes.iter().filter_map(|n| n.node_type.as_deref()),
+        &base_ns,
+    )?;
+    let read_at = crate::resolution::ResolutionGeneration::of(store)?;
+    let resolved = crate::resolution::resolve_episode_nodes(store, &episode.nodes, &base_ns, &opts)
+        .map_err(request_timeout_if_expired)?;
+    Ok(Some(PreparedEpisode {
+        episode,
+        resolved,
+        read_at,
     }))
+}
+
+/// Phase 1: under the writer, revalidate a prepared resolution and commit.
+///
+/// The configuration, vocabulary and namespace are read again here, so the
+/// commit is governed by the writer's state, not the reader's. If the frozen
+/// layers changed or the configuration became strict, resolution runs again in
+/// full under the writer, which is the single-phase behaviour.
+///
+/// # Errors
+/// The same refusals and failures as [`tool_episode`].
+pub fn tool_episode_commit(store: &mut Store, prepared: PreparedEpisode) -> Result<JsonValue> {
+    crate::time::check_request_deadline()?;
+    let PreparedEpisode {
+        episode: ep,
+        resolved,
+        read_at,
+    } = prepared;
+    let timestamp = crate::time::now_iso();
+    let opts = episode::IngestResolutionOpts::from_config(store.resolution_config());
+    let base_ns = store.base_ns().to_string();
+    crate::vocabulary::enforce_episode_types(
+        store,
+        ep.nodes.iter().filter_map(|n| n.node_type.as_deref()),
+        &base_ns,
+    )?;
+    let current = if opts.enabled && !opts.strict_mode {
+        crate::resolution::revalidate_episode_resolution(
+            store, &ep.nodes, &base_ns, &opts, &read_at, resolved,
+        )
+        .map_err(request_timeout_if_expired)?
+    } else {
+        None
+    };
+    let result = match current {
+        Some(resolved) => {
+            episode::ingest_episode_resolved(store, &ep, &timestamp, &base_ns, resolved)
+        }
+        None => {
+            episode::ingest_episode_with_resolution(store, &ep, &timestamp, &base_ns, Some(&opts))
+        }
+    }
+    .map_err(request_timeout_if_expired)?;
+    Ok(episode_json(&result, &ep.name))
 }

@@ -6,7 +6,32 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[path = "request_completion.rs"]
 mod request_completion;
 
+#[path = "request_command.rs"]
+mod request_command;
+
 static REQUEST_STARTS: AtomicU64 = AtomicU64::new(0);
+
+tokio::task_local! {
+    static REQUEST_ID: u64;
+}
+
+#[derive(Clone)]
+pub(super) struct StoreWorkContext {
+    pub lane: quipu::metrics::inflight::Lane,
+    pub registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+}
+
+tokio::task_local! {
+    static STORE_WORK: StoreWorkContext;
+}
+
+pub(super) fn request_store_work() -> Option<StoreWorkContext> {
+    STORE_WORK.try_with(Clone::clone).ok()
+}
+
+pub(super) fn request_id() -> Option<u64> {
+    REQUEST_ID.try_with(|id| *id).ok()
+}
 
 /// Arrivals include pending/cancelled requests and the metrics scrape itself.
 /// Completion counters cannot distinguish low traffic from stalled handlers.
@@ -21,6 +46,8 @@ pub(crate) fn render_request_starts(out: &mut String) {
         REQUEST_STARTS.load(Ordering::Relaxed)
     );
     request_completion::cancellations().render(out);
+    quipu::metrics::inflight::http().render(out, false);
+    quipu::metrics::inflight::store().render(out, true);
 }
 
 tokio::task_local! {
@@ -83,6 +110,38 @@ async fn log_request_with_sequence(
     next: axum::middleware::Next,
     sequence: &AtomicU64,
 ) -> axum::response::Response {
+    log_request_tracked(
+        req,
+        next,
+        sequence,
+        quipu::metrics::inflight::http().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
+    log_request_tracked_stores(
+        req,
+        next,
+        sequence,
+        registry,
+        quipu::metrics::inflight::store().clone(),
+    )
+    .await
+}
+
+async fn log_request_tracked_stores(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    sequence: &AtomicU64,
+    registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+    store_registry: std::sync::Arc<quipu::metrics::inflight::Registry>,
+) -> axum::response::Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     // Use the route template, not the raw path, to bound metric cardinality.
@@ -90,6 +149,14 @@ async fn log_request_with_sequence(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+    let lane = if quipu::http_auth::is_write_request(&endpoint, method.as_str()) {
+        quipu::metrics::inflight::Lane::Write
+    } else if quipu::http_auth::READ_ENDPOINTS.contains(&endpoint.as_str()) {
+        quipu::metrics::inflight::Lane::Read
+    } else {
+        quipu::metrics::inflight::Lane::Other
+    };
+    let _inflight = registry.start(lane, quipu::metrics::inflight::Phase::Active);
     let client = quipu::metrics::normalize_client(
         req.headers()
             .get("x-quipu-client")
@@ -115,6 +182,7 @@ async fn log_request_with_sequence(
         .get("x-quipu-agent")
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let command_context = request_command::CommandContext::from_headers(req.headers());
     let peer = req
         .extensions()
         .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
@@ -133,19 +201,21 @@ async fn log_request_with_sequence(
     };
     eprintln!(
         "{}",
-        attributed(quipu::request_usage::structured_request_log(
-            "request_start",
-            id,
-            &client,
-            &task,
-            method.as_str(),
-            &path,
-            &endpoint,
-            None,
-            None,
-            quipu::request_usage::AuthOutcome::Pending,
-            None,
-        ))
+        super::query_usage::with_process_id(command_context.annotate(attributed(
+            quipu::request_usage::structured_request_log(
+                "request_start",
+                id,
+                &client,
+                &task,
+                method.as_str(),
+                &path,
+                &endpoint,
+                None,
+                None,
+                quipu::request_usage::AuthOutcome::Pending,
+                None,
+            )
+        )))
     );
     let completion_provenance = provenance.clone();
     let mut completion = request_completion::Completion {
@@ -157,25 +227,35 @@ async fn log_request_with_sequence(
         endpoint: endpoint.clone(),
         declared_host,
         declared_agent,
+        command_context,
         started: std::time::Instant::now(),
         metrics: quipu::metrics::metrics(),
         cancellations: request_completion::cancellations(),
         emit: Box::new(move |log| {
             eprintln!(
                 "{}",
-                quipu::request_usage::with_request_context(
+                super::query_usage::with_process_id(quipu::request_usage::with_request_context(
                     log,
                     peer,
                     completion_provenance.as_deref()
-                )
+                ))
             );
         }),
         finished: false,
     };
-    let resp = REQUEST_WRITE_KIND
+    let resp = STORE_WORK
         .scope(
-            quipu::write_kind::WriteKind::for_route(&endpoint),
-            REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+            StoreWorkContext {
+                lane,
+                registry: store_registry,
+            },
+            REQUEST_WRITE_KIND.scope(
+                quipu::write_kind::WriteKind::for_route(&endpoint),
+                REQUEST_ID.scope(
+                    id,
+                    REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                ),
+            ),
         )
         .await;
     let status = resp.status().as_u16();
@@ -197,6 +277,49 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn server_request_identity_is_task_local_across_overlapping_requests() {
+        let sequence = Arc::new(AtomicU64::new(0));
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let handler_barrier = barrier.clone();
+        let app = axum::Router::new()
+            .route(
+                "/identity",
+                axum::routing::get(move || {
+                    let barrier = handler_barrier.clone();
+                    async move {
+                        barrier.wait().await;
+                        request_id().unwrap().to_string()
+                    }
+                }),
+            )
+            .layer(axum::middleware::from_fn(move |req, next| {
+                let sequence = sequence.clone();
+                async move { log_request_with_sequence(req, next, &sequence).await }
+            }));
+        let request = || {
+            axum::http::Request::builder()
+                .uri("/identity")
+                .body(axum::body::Body::empty())
+                .unwrap()
+        };
+        let (a, b) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            tokio::join!(app.clone().oneshot(request()), app.oneshot(request()))
+        })
+        .await
+        .unwrap();
+        let mut ids = Vec::new();
+        for response in [a.unwrap(), b.unwrap()] {
+            let bytes = axum::body::to_bytes(response.into_body(), 64)
+                .await
+                .unwrap();
+            ids.push(std::str::from_utf8(&bytes).unwrap().parse::<u64>().unwrap());
+        }
+        ids.sort();
+        assert_eq!(ids, [0, 1]);
+        assert_eq!(request_id(), None);
+    }
 
     #[tokio::test]
     async fn arrivals_count_before_completion_and_survive_cancellation() {
@@ -315,4 +438,47 @@ mod tests {
         );
         assert_eq!(body(call("/query", &named).await.unwrap()).await, "none");
     }
+
+    /// aegis-ufw: a completed `/query` is counted by its DECLARED agent; a
+    /// missing agent is `undeclared`; other routes do not enter this counter.
+    #[tokio::test]
+    async fn query_completions_are_counted_by_declared_agent() {
+        async fn ok() -> &'static str {
+            "ok"
+        }
+        let app = axum::Router::new()
+            .route("/query", axum::routing::post(ok))
+            .route("/knot", axum::routing::post(ok))
+            .layer(axum::middleware::from_fn(log_request));
+        let send = |uri: &'static str, agent: Option<&'static str>| {
+            let mut req = axum::http::Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("x-quipu-client", "ufw-agent-probe");
+            if let Some(agent) = agent {
+                req = req.header("x-quipu-agent", agent);
+            }
+            app.clone()
+                .oneshot(req.body(axum::body::Body::empty()).unwrap())
+        };
+        send("/query", Some("Tim")).await.unwrap();
+        send("/query", Some("tim")).await.unwrap();
+        send("/query", None).await.unwrap();
+        send("/knot", Some("tim")).await.unwrap();
+        let metrics = quipu::metrics::metrics().render(0, 0, 0, None);
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"tim\"} 2\n"
+        ), "{metrics}");
+        assert!(metrics.contains(
+            "quipu_http_agent_query_requests_total{client=\"ufw-agent-probe\",agent=\"undeclared\"} 1\n"
+        ));
+    }
 }
+
+#[cfg(test)]
+#[path = "request_inflight_tests.rs"]
+mod inflight_tests;
+
+#[cfg(test)]
+#[path = "request_generic_inflight_tests.rs"]
+mod generic_inflight_tests;

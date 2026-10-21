@@ -30,6 +30,8 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     store.search_config_mut().named_graphs = true;
     store.initialize_lexical_index().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
+    // Count query-time provider calls, not the independent fixture write hook.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(ForbiddenEmbed(calls.clone())));
     let datum = quipu::Datum {
         entity: store.intern("https://example.org/device").unwrap(),
@@ -77,17 +79,21 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     ready_rx.recv().unwrap();
     let mut results = Vec::new();
     for (input, count) in [
-        (json!({"mode":"keyword","query":"walneedle"}), 1),
+        (json!({"mode":"keyword","query":"walneedle"}), 2),
         (
-            json!({"mode":"keyword","query":"walneedle","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
+            json!({"mode":"keyword","query":"walneedle","graph":"urn:quipu:graph:root"}),
             1,
         ),
         (
-            json!({"mode":"hybrid","alpha":0,"query":"walneedle","anchor":"https://example.org/device"}),
+            json!({"mode":"keyword","query":"walneedle","graph":"urn:quipu:graph:root","anchor":"https://example.org/device","anchor_mode":"filter","explain":true}),
             1,
         ),
-        (json!({"query":"walneedle"}), 1),
-        (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 1),
+        (
+            json!({"mode":"hybrid","alpha":0,"query":"walneedle","graph":"urn:quipu:graph:root","anchor":"https://example.org/device"}),
+            1,
+        ),
+        (json!({"query":"walneedle"}), 2),
+        (json!({"mode":"hybrid","alpha":0,"query":"walneedle"}), 2),
         (
             json!({"mode":"keyword","query":"walneedle","graph":"urn:test:keyword:graph"}),
             1,
@@ -203,6 +209,8 @@ async fn search_query_http_is_read_only_and_keyword_default_never_embeds() {
     store.search_config_mut().keyword = true;
     store.initialize_lexical_index().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
+    // Count query-time provider calls, not the independent fixture write hook.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(ForbiddenEmbed(calls.clone())));
     let datum = quipu::Datum {
         entity: store.intern("https://example.org/device").unwrap(),

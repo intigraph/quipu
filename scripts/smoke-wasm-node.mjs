@@ -23,6 +23,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import vm from "node:vm";
 
 const bundleDir = process.argv[2];
 if (!bundleDir) {
@@ -105,6 +106,36 @@ if (!existsSync(entry)) {
 const mod = require(entry);
 
 check("the bundle exports Explorer", typeof mod.Explorer === "function", typeof mod.Explorer);
+check("the bundle exports a general Database", typeof mod.Database === "function", typeof mod.Database);
+const database = new mod.Database();
+const databaseCaps = JSON.parse(database.capabilities());
+check("general Database reports memory and incomplete parity", databaseCaps.storage === "memory"
+  && databaseCaps.full_parity === false && databaseCaps.features.shacl === true);
+let unsupportedDatabase;
+try { database.invoke("quipu_update", "{}"); } catch (error) { unsupportedDatabase = JSON.parse(String(error)); }
+check("unsupported binding refuses before dispatch", unsupportedDatabase?.code === "unsupported_capability"
+  && unsupportedDatabase.commit_state === "not_started" && unsupportedDatabase.retryable === false);
+const invokeDatabase = (operation, input) => database.invoke(operation, JSON.stringify(input));
+invokeDatabase("quipu_shapes", {action: "load", name: "general-database",
+  turtle: "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] ."});
+const databaseWrite = JSON.parse(invokeDatabase("quipu_knot", {
+  turtle: '<urn:good> a <urn:Record>; <urn:title> "Before"; <urn:n> 9007199254740993 .'}));
+check("fresh Database admits a governed write", databaseWrite.tx_id > 0);
+let databaseRefusal = false;
+try {
+  databaseRefusal = JSON.parse(invokeDatabase("quipu_knot", {turtle: "<urn:bad> a <urn:Record> ."})).conforms === false;
+} catch (error) {
+  const detail = JSON.parse(String(error));
+  databaseRefusal = detail.code === "engine_error" && detail.commit_state === "unknown"
+    && detail.details?.kind === "validation_failed" && detail.details.violations > 0;
+}
+check("fresh Database enforces adopted shapes", databaseRefusal);
+const databaseRows = JSON.parse(invokeDatabase("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
+check("fresh Database refuses without leaking facts and retains positive control", databaseRows.count === 1);
+const databaseHistory = invokeDatabase("quipu_entity_history", {iri: "urn:good"});
+check("general Database JSON text preserves unsafe integer tokens", databaseHistory.includes("9007199254740993")
+  && !databaseHistory.includes("9007199254740992"));
+database.free();
 check("the bundle exports explorerVersion", typeof mod.explorerVersion === "function");
 if (failures.length) {
   console.error("\nthe module did not load; no further check would mean anything");
@@ -118,6 +149,76 @@ check("it reports a quipu version", Boolean(version.version), JSON.stringify(ver
 const bytes = readFileSync(join(work, "smoke.pendant.tar.gz"));
 const ex = mod.Explorer.loadPendant(new Uint8Array(bytes), "node-smoke", new Date().toISOString());
 const report = JSON.parse(ex.loadReport());
+
+// An independent receiver keeps the existing export/delta fixture unchanged.
+// A declared method alone is not parity: adopt shapes, write real RDF, reject
+// invalid RDF, and verify both state and history through the compiled engine.
+const ops = mod.Explorer.loadPendant(new Uint8Array(bytes), "node-store-ops", new Date().toISOString());
+const opsShapes = `@prefix sh: <http://www.w3.org/ns/shacl#> .
+<urn:binding:RecordShape> a sh:NodeShape; sh:targetClass <urn:binding:Record>;
+ sh:property [sh:path <urn:binding:title>; sh:minCount 1] .`;
+check("shapes adoption uses the native catalogue", JSON.parse(ops.shapes(JSON.stringify({
+  action: "load", name: "store-ops", turtle: opsShapes,
+}))).action === "loaded");
+const editsBeforeRead = JSON.parse(ops.editLog()).length;
+check("shape readback returns the adopted bytes", JSON.parse(ops.shapes(JSON.stringify({
+  action: "get", name: "store-ops",
+}))).turtle === opsShapes);
+check("catalogue reads are not edits", JSON.parse(ops.editLog()).length === editsBeforeRead);
+const knot = JSON.parse(ops.knot(JSON.stringify({
+  turtle: '<urn:binding:good> a <urn:binding:Record>; <urn:binding:title> "Before" .',
+})));
+check("knot commits real governed RDF", knot.tx_id > 0 && knot.count > 0);
+const editsBeforeRefusal = JSON.parse(ops.editLog()).length;
+let refused = false;
+try {
+  refused = JSON.parse(ops.knot(JSON.stringify({
+    turtle: '<urn:binding:bad> a <urn:binding:Record> .',
+  }))).conforms === false;
+} catch (error) { refused = /SHACL|validation/i.test(String(error)); }
+check("knot refuses a missing required property", refused);
+check("a refused knot did not commit", JSON.parse(ops.query(
+  'SELECT ?p WHERE { <urn:binding:bad> ?p ?v }',
+)).rows.length === 0);
+check("a refused knot is not logged as an edit", JSON.parse(ops.editLog()).length === editsBeforeRefusal);
+ops.set("urn:binding:good", "urn:binding:title", JSON.stringify({ str: "After" }));
+const history = JSON.parse(ops.entityHistory("urn:binding:good"));
+check("native history retains the replaced value", history.history.some((fact) => fact.value === "Before"));
+check("native history includes the current value", history.history.some((fact) => fact.value === "After"));
+let absentRefused = false;
+try { ops.entityHistory("urn:binding:absent"); } catch { absentRefused = true; }
+check("missing history refuses instead of minting an entity", absentRefused);
+
+// Execute the shipped relay against the real compiled receiver, including the
+// explicit refusal on engines without JSON reviver source text.
+ops.knot(JSON.stringify({ turtle: `<urn:binding:precision> a <urn:binding:Record>;
+  <urn:binding:title> "precision"; <urn:binding:large> 9007199254740993 .
+  <urn:binding:small-only> a <urn:binding:Record>;
+  <urn:binding:title> "small"; <urn:binding:value> 7 .` }));
+const workerSource = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8")
+  .replace(/^import .* from .*;$/gm, "")
+  .replaceAll("import.meta.url", JSON.stringify("https://fixture.invalid/worker.js"));
+const relayHistory = async (iri, parse = JSON.parse) => {
+  let reply;
+  const context = vm.createContext({ init: () => Promise.resolve(), __receiver: ops,
+    JSON: { parse, stringify: JSON.stringify },
+    postMessage: (message) => { reply = structuredClone(message); } });
+  vm.runInContext(`${workerSource}\nexplorer=__receiver;`, context);
+  await context.onmessage({ data: { id: 1, cmd: "entityHistory", iri } });
+  return reply;
+};
+const preciseReply = await relayHistory("urn:binding:precision");
+check("shipped relay keeps a native unsafe integer exact", preciseReply.ok
+  && preciseReply.result.history.some((fact) => fact.value === 9007199254740993n));
+const withoutSource = (text, reviver) => JSON.parse(text, reviver && function (key, value) {
+  return reviver.call(this, key, value);
+});
+const safeReply = await relayHistory("urn:binding:small-only", withoutSource);
+check("legacy JSON parser still returns safe integer history", safeReply.ok
+  && safeReply.result.history.some((fact) => fact.value === 7));
+const unsafeReply = await relayHistory("urn:binding:precision", withoutSource);
+check("legacy JSON parser refuses instead of rounding history", unsafeReply.ok === false
+  && /requires JSON parse source support/.test(unsafeReply.error) && !unsafeReply.result);
 
 check("the pack it loaded is the pack the CLI wrote",
   report.manifest.share_id === producerManifest.share_id, report.manifest.share_id);

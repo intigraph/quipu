@@ -1,0 +1,14 @@
+Script started on 2026-10-16 09:17:26-04:00 [COMMAND="python3 docs/probes/pr-demos/inflight-writes/run.py" <not executed on terminal>]
+Before: completed-response metrics do not expose pending writes.
+Candidate: actual registry, controlled 35-write fixture and simulated age.
+stall-shape t=0s waiting=34 active=1 oldest=0s
+stall-shape t=60s waiting=34 active=1 oldest=60s
+stall-shape t=120s waiting=34 active=1 oldest=120s
+stall-shape t=180s waiting=34 active=1 oldest=180s
+stall-shape t=240s waiting=34 active=1 oldest=240s
+stall-shape t=300s waiting=34 active=1 oldest=300s
+stall-shape completed: waiting=0 active=0 oldest=0s
+stall-shape fresh-process control: waiting=0 active=0 oldest=0s
+No production replay or historical telemetry reconstruction.
+
+Script done on 2026-10-16 09:17:55-04:00 [COMMAND_EXIT_CODE="0"]

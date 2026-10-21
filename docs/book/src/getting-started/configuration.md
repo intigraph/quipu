@@ -77,7 +77,9 @@ stops being read.
 | `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
 | `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
 | `search.rrf_k` | `60.0` | Positive RRF denominator offset. |
-| `search.named_graphs` | `false` | Explicit graph search and automatic named-only embedding text. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
+| `search.named_graphs` | `false` | Named-graph scope for semantic and hybrid search, and automatic named-only embedding text. Keyword search accepts named scope without it. Prepare existing named-only vectors with bounded backfill before enabling. Disabling retains the ROOT exclusion for prepared vectors. |
+| `search.default_graph_scope` | unset (stored default) | New stores use `"all"`: ROOT plus registered named graphs, minus exclusions. Existing stores retain `"root"` until explicitly broadened. Set `"all"` or `"root"` to override; semantic named scope also requires prepared vectors and `named_graphs = true`. Does not change SPARQL datasets. |
+| `search.exclude_graphs` | `[]` | Graph IRI exclusion list for all search selections, including explicit ones. Empty selections refuse. Retrieval policy, not authorization. |
 | `search.max_limit` | `1000` | Hard cap on requested result limits |
 | `search.max_sparql_rows` | `10000` | Cap on SPARQL result rows |
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |
@@ -94,7 +96,7 @@ stops being read.
 | `governance.quarantine.retain_full` | `[]` | Graph IRIs (or `"*"`) whose refused attempts are also kept in full, sealed; purge with `quipu audit quarantine purge` |
 | `resolution.enabled` | `false` | Entity resolution (dedup) on the episode write path |
 | `resolution.threshold` / `top_k` / `strict_mode` | `0.85` / `3` / `false` | Match threshold, candidate count, refuse-on-ambiguity |
-| `embedding.auto_embed` | `false` | Auto-embed entities on write (needs model/tokenizer paths) |
+| `embedding.auto_embed` | `true` | Auto-embed entities on write (needs model/tokenizer paths) |
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
@@ -212,3 +214,102 @@ CLI flags always take precedence:
 quipu read "SELECT ..." --db /tmp/test.db    # Overrides store_path
 quipu-server --bind 0.0.0.0:8080             # Overrides server.bind
 ```
+
+## Read-only follower serving
+
+A file-level replication operator can serve a changing follower with:
+
+```toml
+[quipu.server.replica]
+primary_url = "https://primary.example"
+```
+
+Start `quipu-server --read-only --db /path/to/follower.db` from that configuration
+directory. Keep `--read-only` in the service invocation: it refuses startup if
+neither config nor `--primary-url URL` supplies a valid primary, even if the
+config file disappears. `--primary-url URL` overrides the configured primary.
+This is an opt-in serving role, separate from the older `server.read_only`
+HTTP-only access-control flag. The default primary serving role is unchanged. Server startup now refuses invalid
+or unreadable existing configuration instead of silently falling back to defaults.
+Replica mode opens **only existing SQLite databases read-only**, with no schema
+setup or migration. Every read connection explicitly waits up to one second for
+short apply locks. It never falls back to opening a writable database. SQLite
+may create WAL/SHM sidecars; the directory must support the follower's locking
+protocol. Do not use `immutable=1` for a database that replication updates.
+
+The replica does not initialize a keyword index, materialize OWL, register write
+observers, load a signing identity, reset/checkpoint WAL, deliver subscriptions,
+refresh graph-count snapshots, or prune events. Read policies (namespace, search
+limits, labels and resolution) are still configured. Keyword search requires an
+index already present on the primary. Attachments and external vector backends
+currently refuse startup rather than silently dropping configured providers.
+Graph-count metrics remain unavailable until an independent read-only refresh
+contract is implemented; they must not be interpreted as healthy zeros.
+
+Mutating HTTP routes return **503** with `reason: "read_only_replica"` and the
+configured `primary` URL. Writes are never forwarded or redirected, including
+signed writes: the refusal occurs before credential/nonce settlement. SQLite's
+read-only handle independently refuses a planted writer that bypasses HTTP.
+This role does not provision, replicate, promote or fail over a database.
+
+### Lag observations
+
+`GET /watermark` returns the serving store's `store_id` and `watermark_tx` using
+indexed reads. A replica polls that endpoint on its configured primary every
+15 seconds, with a two-second HTTP timeout, no redirects and a bounded response.
+This is its only background task and performs no database writes.
+
+Responses include `X-Quipu-Replica-Lag-Tx`. The metrics are:
+
+- `quipu_replica_lag_transactions`: primary minus follower transaction IDs;
+  **-1 means UNKNOWN**.
+- `quipu_replica_lag_known`: 1 only for a successful observation no older than
+  30 seconds; otherwise 0.
+
+A failed request, malformed response, mismatched store lineage, primary behind
+the follower, unavailable local connection, or stale observation gives UNKNOWN,
+not zero. Values describe the most recent bounded observation, not an atomic
+cross-host snapshot, elapsed seconds or proof of identical contents. The
+replication operator must establish the same primary lineage and common-prefix
+contract before interpreting transaction distance. A primary without
+`/watermark` yields UNKNOWN until upgraded; no expensive fallback query runs.
+
+`just replica-test /path/to/quipu-server /path/to/quipu` checks a scratch follower:
+100 positive reads, unchanged main DB hash/counter/mtime across start and stop,
+503 write responses, lag failure handling and a pending-subscription trap that
+must never deliver. Library/server tests also plant a write against the actual
+read-only connection. The scratch test does not change or probe production.
+
+## Private bounded query specimen
+
+`server.query_capture` is omitted by default. An omitted configuration or
+`enabled = false` creates no capture worker, file or capture-state log. An
+operator can explicitly configure `enabled`, an exact lowercase `query_sha256`,
+`query_bytes` (1–4096), a unique alphanumeric/underscore/hyphen `window_id`, and
+absolute `start_epoch_secs`/`end_epoch_secs`. The window is at most five minutes;
+startup refuses an expired window or a start more than fifteen minutes ahead.
+A parsed selector/window that fails validation disables the diagnostic without
+changing normal query results; malformed configuration still follows normal
+strict configuration-loading errors. There is no HTTP endpoint to arm it.
+
+Only the first matching Seeds-category POST `/query` request can consume the
+claim. Eligibility is the intersection of the absolute UTC window and its
+startup-pinned monotonic start/end, so clock jumps cannot extend or start it early. At startup the
+server exclusively claims `query-captures/<window_id>.json` beside the canonical
+store file, using a same-owner private directory and descriptor-relative,
+no-follow exclusive creation. Existing claims are never overwritten, including
+empty files left by a crash: restarting cannot renew the attempt. Unsupported
+platforms refuse enabled capture. Operators retain and adjudicate these private
+artifacts; the server does not delete or retry them.
+
+A capacity-one worker writes at most 16 KiB outside store locks. The record
+contains exact raw SPARQL, bounded planning options, UTC, build identity and the
+existing request/process/query/input digests. Headers, response bodies and
+unknown JSON fields are excluded; omitted fields are explicitly flagged. Raw
+query literals can be sensitive, and a digest is not anonymization. The Seeds
+client category is an unauthenticated attribution label, not proof of caller
+identity. Serialization overflow consumes the attempt and records refusal
+without a truncated query. File failures leave an UNKNOWN partial or empty
+claim; no request is retried. Default-off source deployment does not authorize
+arming: use a separately approved window and flag-off rollback, then read back
+that the flag is off.

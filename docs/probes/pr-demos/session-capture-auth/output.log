@@ -1,0 +1,31 @@
+Script started on 2026-10-16 15:31:30-04:00 [COMMAND="./run.sh ./before ./after" <not executed on terminal>]
+
+before: actual CLI solicitation, isolated hook state, no HTTP
+quipu 0.14.1
+git_sha: 19d2765ebda0618744a900e88318380d2d84bd97
+git_dirty: false
+$ quipu hook session-capture < same-stop-event.json
+If yes, capture it as a Quipu episode in group demo: POST https://example.invalid/episode. Writes require a bearer token: send Authorization: Bearer $QUIPU_AUTH_TOKEN from your environment, and never print the token. Reads such as /search stay open. Send the header X-Quipu-Client: session-capture on every call so this traffic is attributable. Three rules:
+{
+  "solicitation_present": true,
+  "token_file_fallback": false,
+  "missing_credential_stops_before_http": false,
+  "authenticated_mcp_preferred": false,
+  "skip_preserved": true
+}
+
+after: actual CLI solicitation, isolated hook state, no HTTP
+quipu 0.14.1
+git_sha: 046a8567ec5d13d409978fd83cf51419fbe72ade
+git_dirty: false
+$ quipu hook session-capture < same-stop-event.json
+If yes, capture it as a Quipu episode in group demo. Prefer the authenticated Quipu MCP tools or your deployment's gated graph-extract helper. For HTTP fallback, /search stays open, but /shapes vocabulary reads, POST https://example.invalid/episode and POST https://example.invalid/propose require Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, then QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the bearer server-side where possible and never print it. Send the header X-Quipu-Client: session-capture on every call so this traffic is attributable. Three rules:
+{
+  "solicitation_present": true,
+  "token_file_fallback": true,
+  "missing_credential_stops_before_http": true,
+  "authenticated_mcp_preferred": true,
+  "skip_preserved": true
+}
+
+Script done on 2026-10-16 15:31:30-04:00 [COMMAND_EXIT_CODE="0"]

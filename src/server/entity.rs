@@ -9,7 +9,7 @@ use axum::{
     http::HeaderMap,
     response::{Html, IntoResponse},
 };
-use serde_json::{Value as JsonValue, json};
+use serde_json::Value as JsonValue;
 
 use quipu::semweb;
 
@@ -21,27 +21,8 @@ pub(crate) async fn entity_history(
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let iri = input
-            .get("iri")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| quipu::Error::InvalidValue("missing 'iri' parameter".into()))?;
         let store = store.lock();
-        let eid = store
-            .lookup(iri)?
-            .ok_or_else(|| quipu::Error::InvalidValue(format!("entity not found: {iri}")))?;
-        let entries: Vec<JsonValue> = store
-            .entity_history(eid)?
-            .iter()
-            .map(|f| {
-                let pred = store.resolve(f.attribute).unwrap_or_default();
-                json!({ "op": if f.op == quipu::Op::Assert { "assert" } else { "retract" },
-                    "predicate": pred, "value": quipu::value_to_json(&store, &f.value),
-                    "valid_from": f.valid_from, "valid_to": f.valid_to, "tx": f.tx })
-            })
-            .collect();
-        Ok(axum::Json(
-            json!({ "iri": iri, "history": entries, "count": entries.len() }),
-        ))
+        Ok(axum::Json(quipu::tool_entity_history(&store, &input)?))
     })
     .await
 }

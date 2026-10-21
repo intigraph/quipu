@@ -4,7 +4,7 @@
 set -euo pipefail
 SOURCE=${1:-docs/book/src/explore}
 OUTPUT=${2:-docs/book/book/explore}
-for f in index.html explorer.js worker.js constellation.js constellation.css entity.js; do
+for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js constellation.js constellation.css entity.js relation.js; do
   test -s "$OUTPUT/$f" || { echo "missing from book output: explore/$f"; exit 1; }
 done
 pending=false
