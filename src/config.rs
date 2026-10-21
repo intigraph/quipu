@@ -623,6 +623,11 @@ pub struct ServerConfig {
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
 
+    /// Serve the decision-deck routes (`/deck/present`, `/deck/attest`,
+    /// `/deck/receipt`, aegis-blh.2). Off by default. Independent of, and in
+    /// addition to, the store's operator-only deck switch: both must be on.
+    pub deck_http: bool,
+
     /// Expiring, operator-only private specimen capture; omitted by default.
     pub query_capture: Option<QueryCaptureConfig>,
 
@@ -651,6 +656,7 @@ impl Default for ServerConfig {
             read_process_base_port: 3031,
             reserve_point_reads: false,
             log_query_admission: false,
+            deck_http: false,
             query_capture: None,
             update_full_copy_max_facts: 250_000,
         }

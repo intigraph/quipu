@@ -45,6 +45,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/import",
     "/import/promote",
     "/episodes/complete",
+    // aegis-blh.2: present stores a challenge; attest settles a decision.
+    "/deck/present",
+    "/deck/attest",
     "/retract",
     // aegis-rz75m6: retract-only repair path. Writes a retraction transaction
     // stamped repair:<ticket> when `apply` is true.
@@ -99,6 +102,8 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // aegis-blh.2: exact receipt lookup by nonce; no write.
+    "/deck/receipt",
     "/memory/read",
     "/memory/export",
     "/memory/projection",
