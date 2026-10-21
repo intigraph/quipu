@@ -13,6 +13,10 @@ pub(crate) fn acquisition_routes() -> axum::Router<SharedStore> {
     axum::Router::new()
         .route("/acquire", axum::routing::post(acquire))
         .route("/acquire/composed", axum::routing::post(acquire_composed))
+        .route(
+            "/acquire/eligibility",
+            axum::routing::post(acquire_eligibility),
+        )
 }
 
 pub(crate) async fn acquire(
@@ -39,6 +43,32 @@ pub(crate) async fn acquire_composed(
         )?))
     })
     .await
+}
+
+pub(crate) async fn acquire_eligibility(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<quipu::acquisition::eligibility::Request>,
+) -> Result<axum::Json<quipu::acquisition::eligibility::Observation>, AppError> {
+    super::admission::read_blocking(move || Ok(axum::Json(eligibility(&store, &input)?))).await
+}
+
+/// The eligibility handler body, on the calling thread's request identity.
+pub(crate) fn eligibility(
+    store: &super::StoreHandle,
+    input: &quipu::acquisition::eligibility::Request,
+) -> Result<quipu::acquisition::eligibility::Observation, AppError> {
+    // Refused before any lock: the ordinary writer guard would settle a
+    // signed attestation and spend its nonce, and this guard never does.
+    if quipu::transaction_auth::current_attestation().is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "eligibility observation does not accept a signed write attestation".into(),
+        )
+        .into());
+    }
+    // The writer handle holds the configured label floor and owns the main
+    // connection; `read()` would synchronize reader providers.
+    let store = store.metadata_lock();
+    Ok(quipu::acquisition::eligibility::observe(&store, input)?)
 }
 
 pub(crate) async fn export(

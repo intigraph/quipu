@@ -5,6 +5,37 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
+/// Opt-in cryptographic request identity. Transport bearers never satisfy this
+/// policy. The only unauthenticated onboarding reads are explicit health/version
+/// probes; registration remains an out-of-band introducer operation.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionKeyPolicy {
+    pub required: bool,
+    pub onboarding_read_paths: Vec<String>,
+}
+
+impl SessionKeyPolicy {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let mut seen = std::collections::HashSet::new();
+        for path in &self.onboarding_read_paths {
+            if !matches!(path.as_str(), "/health" | "/version") || !seen.insert(path) {
+                return Err(
+                    "session key onboarding exceptions must be unique exact /health or /version reads",
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn allows_unsigned(&self, path: &str, method: &str) -> bool {
+        !self.required
+            || (matches!(method, "GET" | "HEAD")
+                && self.onboarding_read_paths.iter().any(|p| p == path))
+    }
+}
+
 /// The set of write endpoints. A request to one of these mutates the fact log
 /// (or schema), so it is subject to read-only mode and bearer auth. Everything
 /// else (query, search, entity reads, UI, health) is treated as read-only and
@@ -102,6 +133,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    "/identity",
     // aegis-blh.2: exact receipt lookup by nonce; no write.
     "/deck/receipt",
     "/memory/read",
@@ -188,6 +220,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // Read transaction and volatile admission cache only; no fact, registry,
     // filesystem, or persistent history mutation.
     "/acquire/composed",
+    // Metadata-only eligibility observation: no fact read, no write, no
+    // attestation settlement, no provider sync (aegis-ehf).
+    "/acquire/eligibility",
     // Resolution dry-run: reads labels + vector store, writes
     // nothing — the read-only twin of the resolution /episode performs.
     "/resolve",
@@ -200,7 +235,7 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/memory/projection" | "/memory/receipt")
+    matches!(path, "/identity" | "/memory/projection" | "/memory/receipt")
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.

@@ -259,6 +259,7 @@ async fn query_core(
         // boundary because that boundary cannot tell them apart, and conflating
         // them is what makes a queued caller look like an expensive one.
         let federation = store.federation.clone();
+        let phases = store.log_query_phases;
         let lock_t0 = std::time::Instant::now();
         observation.waiting();
         // POOLED READ. SPARQL is read-only, so this takes a
@@ -453,11 +454,13 @@ async fn query_core(
 
         // Pin readiness and evaluation to the same schema/fact snapshot: a
         // concurrent explicit index drop cannot turn this into a scan fallback.
-        let mut result = if require_substring {
-            store.substring_query(|| run(&store))?
-        } else {
-            run(&store)
-        };
+        let mut result = super::query_usage::profiled(&mut observation, phases, || {
+            if require_substring {
+                store.substring_query(|| run(&store))
+            } else {
+                Ok(run(&store))
+            }
+        })?;
         if require_substring && let Ok(response) = &mut result {
             response.headers_mut().insert(
                 axum::http::HeaderName::from_static("x-quipu-substring-index"),

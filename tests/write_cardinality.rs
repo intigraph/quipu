@@ -2,6 +2,9 @@
 #![cfg(feature = "shacl")]
 use quipu::{Datum, Op, Store, Value};
 
+#[path = "write_cardinality/deactivation.rs"]
+mod deactivation;
+
 const TS: &str = "2026-10-21T00:00:00Z";
 const TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const SHAPES: &str = r#"
@@ -456,4 +459,42 @@ fn inverse_path_also_checks_literal_object_targets() {
         store.with_write_shapes(Some(&shapes), |s| s.transact(&[second], TS, None, None)),
         Err(quipu::Error::ValidationFailed { .. })
     ));
+}
+
+#[test]
+fn relative_manifest_iris_in_min_count_and_deactivated_shapes_match_batch() {
+    for (shapes, subject) in [
+        (
+            include_str!("fixtures/write_relative_shapes/minCount-002.ttl"),
+            "http://datashapes.org/sh/tests/core/property/minCount-002.test#ValidResource1",
+        ),
+        (
+            include_str!("fixtures/write_relative_shapes/deactivated-001.ttl"),
+            "http://datashapes.org/sh/tests/core/misc/deactivated-001.test#InvalidResource",
+        ),
+    ] {
+        let resource = "http://www.w3.org/2000/01/rdf-schema#Resource";
+        let data = format!("<{subject}> <{TYPE}> <{resource}> .");
+        assert!(quipu::validate_shapes(shapes, &data).unwrap().conforms);
+        let mut store = Store::open_in_memory().unwrap();
+        let datum = Datum {
+            entity: store.intern(subject).unwrap(),
+            attribute: store.intern(TYPE).unwrap(),
+            value: Value::Ref(store.intern(resource).unwrap()),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: Op::Assert,
+        };
+        store
+            .with_write_shapes(Some(shapes), |store| {
+                store.transact(&[datum], TS, None, None)
+            })
+            .unwrap();
+        assert!(
+            !store
+                .entity_facts(store.lookup(subject).unwrap().unwrap())
+                .unwrap()
+                .is_empty()
+        );
+    }
 }
