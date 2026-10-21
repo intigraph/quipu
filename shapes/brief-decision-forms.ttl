@@ -1,0 +1,26 @@
+# aegis-blh.6 — proposed, never loaded in production by the UI.
+# Schema owner must carry accepted shapes into the deployment's governance file.
+@prefix a: <http://aegis.gastown.local/ontology/> .
+@prefix schema: <https://schema.org/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+a:DecisionFormShape a sh:NodeShape ;
+ sh:targetClass a:DecisionForm ;
+ sh:property [ sh:path a:formKind ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "approve-reject" "choose-one" "ranked-choice" "free-text" "date-window" "step-confirm" "acknowledge" ) ] ;
+ sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:maxLength 200 ] ;
+ sh:property [ sh:path schema:description ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:maxLength 4096 ] ;
+ sh:property [ sh:path schema:subjectOf ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:version ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ] ;
+ sh:property [ sh:path a:formOption ; sh:nodeKind sh:IRI ; sh:class a:DecisionFormOption ; sh:maxCount 12 ] ;
+ sh:property [ sh:path a:recommendedOption ; sh:nodeKind sh:IRI ; sh:class a:DecisionFormOption ; sh:maxCount 1 ] ;
+ sh:property [ sh:path a:minimumCharacters ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 8192 ] ;
+ sh:property [ sh:path a:maximumCharacters ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 1 ; sh:maxInclusive 8192 ] ;
+ sh:property [ sh:path a:minimumDate ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" ] ;
+ sh:property [ sh:path a:maximumDate ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" ] .
+a:DecisionFormOptionShape a sh:NodeShape ;
+ sh:targetClass a:DecisionFormOption ;
+ sh:property [ sh:path a:optionValue ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[a-z][a-z0-9-]{0,63}$" ] ;
+ sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:maxLength 200 ] ;
+ sh:property [ sh:path schema:description ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ; sh:maxLength 4096 ] ;
+ sh:property [ sh:path a:optionOrder ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 11 ] ;
+ sh:property [ sh:path schema:subjectOf ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 4 ] .
