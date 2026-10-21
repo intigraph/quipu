@@ -60,8 +60,14 @@ whole-graph pending-post-state check:
   for maximum count, datatype, node kind, class, pattern, length, numeric bounds,
   enumeration, language, and nested-node constraints. This catches a value written
   before the type or edge that targets it. Referenced-node context stays in the
-  destination graph (ROOT contributes types only), with explicit fact/node caps;
-  inability to verify refuses before commit. It does not turn context nodes into
+  destination graph (ROOT contributes types only). Scalar constraints do not
+  walk references; class checks add only referenced types, and nested-node
+  checks follow declared direct-predicate node paths, not arbitrary links.
+  Optional context has fact/node work budgets, not graph-size admission limits.
+  Exhaustion discards partial value context and falls back to the pre-existing
+  payload/maxCount path; it does not reject a valid write or certify its stored
+  value constraints. Existing maxCount context limits still apply. These budgets
+  are not measurements of the largest production graph. It does not turn context nodes into
   additional write-owned focuses. Changes to a child recheck its bounded
   incoming dependents on declared direct-predicate `sh:node` paths. Other incoming
   dependencies are not a whole-graph revalidation guarantee. This does not add a new minimum-count requirement to an

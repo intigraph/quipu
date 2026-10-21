@@ -13,6 +13,7 @@ use crate::{Error, Result};
 pub(crate) struct CardinalityPlan {
     pub(crate) has_upper_bound: bool,
     pub(crate) has_value_constraint: bool,
+    pub(crate) has_class_constraint: bool,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
     pub(crate) node_reference_predicates: BTreeSet<String>,
@@ -32,6 +33,7 @@ impl Validator {
         let mut plan = CardinalityPlan {
             has_upper_bound: false,
             has_value_constraint: false,
+            has_class_constraint: false,
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
             node_reference_predicates: BTreeSet::new(),
@@ -73,6 +75,9 @@ impl Validator {
                         | IRComponent::Node(_)
                 ) {
                     plan.has_value_constraint = true;
+                }
+                if matches!(component, IRComponent::Class(_)) {
+                    plan.has_class_constraint = true;
                 }
                 match component {
                     IRComponent::MaxCount(_) => {

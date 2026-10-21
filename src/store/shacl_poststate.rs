@@ -98,111 +98,146 @@ impl Store {
         if !(plan.has_upper_bound || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
-        let subjects: BTreeSet<_> = datums
-            .iter()
-            .flat_map(|d| {
-                // Object targets can become applicable when this write adds an
-                // incoming edge. Include referenced focuses without validating
-                // unrelated subjects elsewhere in the graph.
-                std::iter::once(d.entity).chain(match d.value {
-                    crate::Value::Ref(object) => Some(object),
-                    _ => None,
-                })
-            })
-            .collect();
-        let mut value_focuses = self.value_focuses(datums, &plan.object_target_predicates)?;
-        let incoming_targets = plan.incoming_predicates;
-        let mut facts = Vec::new();
-        let mut focuses = BTreeSet::new();
-        self.append_node_dependents(
-            &mut facts,
-            &mut value_focuses,
-            &subjects,
-            graph,
-            &plan.node_reference_predicates,
-        )?;
-        for entity in subjects {
-            focuses.insert(self.resolve(entity)?);
-            self.append_bounded_entity(&mut facts, entity, graph, None)?;
-            self.append_object_targets(
-                &mut facts,
-                &crate::Value::Ref(entity),
-                graph,
-                &incoming_targets,
-            )?;
-            if graph != 0 {
-                // ROOT types may target a named-graph focus, but ROOT values
-                // never contribute to that graph's cardinality.
-                if let Some(rdf_type) =
-                    self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
-                {
-                    self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
-                }
-            }
-        }
-        if !incoming_targets.is_empty() {
-            let mut seen = BTreeSet::new();
-            for datum in datums {
-                if !matches!(datum.value, crate::Value::Ref(_))
-                    && seen.insert(datum.value.term_key())
-                {
-                    if let oxrdf::Term::Literal(literal) =
-                        crate::rdf::value_to_term(self, &datum.value)?
-                    {
-                        focuses.insert(literal.value().to_owned());
-                    }
-                    self.append_object_targets(&mut facts, &datum.value, graph, &incoming_targets)?;
-                }
-            }
-        }
-        if plan.has_value_constraint {
-            self.append_value_context(&mut facts, graph)?;
-        }
-        self.append_subclass_context(&mut facts, graph)?;
-        let data = self.cardinality_context(&facts)?;
-        let feedback = crate::validate_shapes(shapes, &data)?;
-        let issues: Vec<_> = feedback
-            .results
-            .iter()
-            .filter(|issue| {
-                let Some(component) = issue
-                    .component
-                    .trim_matches(['<', '>'])
-                    .strip_prefix("http://www.w3.org/ns/shacl#")
-                else {
-                    return false;
-                };
-                let owned = if component == "MaxCountConstraintComponent" {
-                    &focuses
-                } else {
-                    &value_focuses
-                };
-                COMPONENTS.contains(&component)
-                    && owned.contains(issue.focus_node.trim_matches(['<', '>']))
-                    && issue.severity.eq_ignore_ascii_case("violation")
-            })
-            .collect();
-        if issues.is_empty() {
-            return Ok(());
-        }
-        Err(Error::ValidationFailed {
-            violations: issues.len(),
-            messages: issues
+        let result = (|| {
+            let subjects: BTreeSet<_> = datums
                 .iter()
-                .map(|issue| {
-                    format!(
-                        "post-state {} on {}: {}",
-                        issue.component,
-                        issue.focus_node,
-                        issue
-                            .message
-                            .as_deref()
-                            .unwrap_or("post-state value constraint violated"),
-                    )
+                .flat_map(|d| {
+                    // Object targets can become applicable when this write adds an
+                    // incoming edge. Include referenced focuses without validating
+                    // unrelated subjects elsewhere in the graph.
+                    std::iter::once(d.entity).chain(match d.value {
+                        crate::Value::Ref(object) => Some(object),
+                        _ => None,
+                    })
                 })
-                .collect(),
-        })
+                .collect();
+            let mut value_focuses = self.value_focuses(datums, &plan.object_target_predicates)?;
+            let incoming_targets = plan.incoming_predicates;
+            let mut facts = Vec::new();
+            let mut focuses = BTreeSet::new();
+            for &entity in &subjects {
+                focuses.insert(self.resolve(entity)?);
+                self.append_bounded_entity(&mut facts, entity, graph, None)?;
+                self.append_object_targets(
+                    &mut facts,
+                    &crate::Value::Ref(entity),
+                    graph,
+                    &incoming_targets,
+                )?;
+                if graph != 0 {
+                    // ROOT types may target a named-graph focus, but ROOT values
+                    // never contribute to that graph's cardinality.
+                    if let Some(rdf_type) =
+                        self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
+                    {
+                        self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
+                    }
+                }
+            }
+            if !incoming_targets.is_empty() {
+                let mut seen = BTreeSet::new();
+                for datum in datums {
+                    if !matches!(datum.value, crate::Value::Ref(_))
+                        && seen.insert(datum.value.term_key())
+                    {
+                        if let oxrdf::Term::Literal(literal) =
+                            crate::rdf::value_to_term(self, &datum.value)?
+                        {
+                            focuses.insert(literal.value().to_owned());
+                        }
+                        self.append_object_targets(
+                            &mut facts,
+                            &datum.value,
+                            graph,
+                            &incoming_targets,
+                        )?;
+                    }
+                }
+            }
+            self.append_subclass_context(&mut facts, graph)?;
+            // Preserve the pre-value-admission context. Exhausting this optional
+            // repair budget falls back to the existing payload/maxCount path; a
+            // partial context must never manufacture a new value violation.
+            let base_len = facts.len();
+            let value_context = (|| {
+                self.append_node_dependents(
+                    &mut facts,
+                    &mut value_focuses,
+                    &subjects,
+                    graph,
+                    &plan.node_reference_predicates,
+                )?;
+                self.append_value_context(
+                    &mut facts,
+                    graph,
+                    &plan.node_reference_predicates,
+                    plan.has_class_constraint,
+                )?;
+                self.append_subclass_context(&mut facts, graph)
+            })();
+            let complete_values = match value_context {
+                Ok(()) => true,
+                Err(Error::CannotVerify(message)) if context_budget_exhausted(&message) => {
+                    facts.truncate(base_len);
+                    false
+                }
+                Err(error) => return Err(error),
+            };
+            let data = self.cardinality_context(&facts)?;
+            let feedback = crate::validate_shapes(shapes, &data)?;
+            let issues: Vec<_> = feedback
+                .results
+                .iter()
+                .filter(|issue| {
+                    let Some(component) = issue
+                        .component
+                        .trim_matches(['<', '>'])
+                        .strip_prefix("http://www.w3.org/ns/shacl#")
+                    else {
+                        return false;
+                    };
+                    let owned = if component == "MaxCountConstraintComponent" {
+                        &focuses
+                    } else {
+                        &value_focuses
+                    };
+                    COMPONENTS.contains(&component)
+                        && (component == "MaxCountConstraintComponent" || complete_values)
+                        && owned.contains(issue.focus_node.trim_matches(['<', '>']))
+                        && issue.severity.eq_ignore_ascii_case("violation")
+                })
+                .collect();
+            if issues.is_empty() {
+                return Ok(());
+            }
+            Err(Error::ValidationFailed {
+                violations: issues.len(),
+                messages: issues
+                    .iter()
+                    .map(|issue| {
+                        format!(
+                            "post-state {} on {}: {}",
+                            issue.component,
+                            issue.focus_node,
+                            issue
+                                .message
+                                .as_deref()
+                                .unwrap_or("post-state value constraint violated"),
+                        )
+                    })
+                    .collect(),
+            })
+        })();
+        match result {
+            Err(Error::CannotVerify(message))
+                if !plan.has_upper_bound && context_budget_exhausted(&message) =>
+            {
+                Ok(())
+            }
+            result => result,
+        }
     }
+
     #[cfg(feature = "shacl")]
     fn append_node_dependents(
         &self,
@@ -276,10 +311,27 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    fn append_value_context(&self, facts: &mut Vec<crate::Fact>, graph: i64) -> Result<()> {
-        // A late sh:node target can inspect values on nodes already referenced
-        // by the focus. Bound this closure, preserve graph isolation, and never
-        // turn those context nodes into additional write-owned focuses.
+    fn append_value_context(
+        &self,
+        facts: &mut Vec<crate::Fact>,
+        graph: i64,
+        node_predicates: &BTreeSet<String>,
+        needs_classes: bool,
+    ) -> Result<()> {
+        // Scalar constraints need no reference walk. sh:node follows only its
+        // declared predicate paths; sh:class reads types, never a value closure.
+        // A context node is not an additional write-owned focus.
+        if node_predicates.is_empty() && !needs_classes {
+            return Ok(());
+        }
+        let node_attributes: BTreeSet<_> = node_predicates
+            .iter()
+            .map(|p| self.lookup(p))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+        let rdf_type = self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
         let mut seen: BTreeSet<_> = facts.iter().map(|fact| fact.entity).collect();
         let mut start = 0;
         while start < facts.len() {
@@ -287,10 +339,26 @@ impl Store {
             let refs: BTreeSet<_> = facts[start..end]
                 .iter()
                 .filter_map(|fact| match fact.value {
-                    crate::Value::Ref(entity) => Some(entity),
+                    crate::Value::Ref(entity) if node_attributes.contains(&fact.attribute) => {
+                        Some(entity)
+                    }
                     _ => None,
                 })
                 .collect();
+            if needs_classes && let Some(rdf_type) = rdf_type {
+                let classes: BTreeSet<_> = facts[start..end]
+                    .iter()
+                    .filter_map(|fact| match fact.value {
+                        crate::Value::Ref(entity) if fact.attribute != rdf_type => Some(entity),
+                        _ => None,
+                    })
+                    .collect();
+                for entity in classes {
+                    for g in BTreeSet::from([0, graph]) {
+                        self.append_bounded_entity(facts, entity, g, Some(rdf_type))?;
+                    }
+                }
+            }
             start = end;
             for entity in refs {
                 if !seen.insert(entity) {
@@ -454,4 +522,13 @@ impl Store {
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "shacl")]
+fn context_budget_exhausted(message: &str) -> bool {
+    message.starts_with("post-state SHACL ")
+        && (message.contains("exceeds 100000 facts")
+            || message.contains("exceed 1024 nodes")
+            || message.contains("exceeds 1024 nodes")
+            || message.contains("exceeds 1024 classes"))
 }

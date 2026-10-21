@@ -239,3 +239,134 @@ fn changing_a_referenced_node_rechecks_only_its_declared_node_dependents() {
         "invalid child mutation must roll back"
     );
 }
+
+#[test]
+fn large_linked_graph_does_not_become_scalar_or_class_context() {
+    for constraint in ["sh:datatype xsd:integer", "sh:class ex:ValueClass"] {
+        let mut store = Store::open_in_memory().unwrap();
+        let shapes = shape(constraint);
+        let class = store.intern(&(EX.to_owned() + "ValueClass")).unwrap();
+        let mut facts = Vec::new();
+        for i in 0..1200 {
+            let subject = format!("{EX}item{i}");
+            let next = store
+                .intern(&format!("{EX}item{}", (i + 1) % 1200))
+                .unwrap();
+            let value = if constraint.contains("datatype") {
+                Value::Int(1)
+            } else {
+                Value::Ref(next)
+            };
+            facts.push(datum(&store, &subject, &(EX.to_owned() + "value"), value));
+            facts.push(datum(
+                &store,
+                &subject,
+                &(EX.to_owned() + "link"),
+                Value::Ref(next),
+            ));
+            facts.push(datum(&store, &subject, TYPE, Value::Ref(class)));
+        }
+        let target = store.intern(&(EX.to_owned() + "C")).unwrap();
+        facts.push(datum(
+            &store,
+            &(EX.to_owned() + "item0"),
+            TYPE,
+            Value::Ref(target),
+        ));
+        assert_eq!(facts.len(), 3601);
+        write(&mut store, &shapes, &facts, 0).unwrap();
+    }
+}
+
+#[test]
+fn node_context_ignores_unrelated_link_predicates() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes =
+        shape("sh:node ex:Child") + " ex:Child sh:property [sh:path ex:name; sh:minLength 3].";
+    let mut facts = Vec::new();
+    for i in 0..1200 {
+        let subject = format!("{EX}child{i}");
+        let next = store
+            .intern(&format!("{EX}child{}", (i + 1) % 1200))
+            .unwrap();
+        facts.push(datum(
+            &store,
+            &subject,
+            &(EX.to_owned() + "link"),
+            Value::Ref(next),
+        ));
+    }
+    let child = store.intern(&(EX.to_owned() + "child0")).unwrap();
+    facts.push(datum(
+        &store,
+        &(EX.to_owned() + "child0"),
+        &(EX.to_owned() + "name"),
+        Value::Str("valid".into()),
+    ));
+    facts.push(datum(
+        &store,
+        &(EX.to_owned() + "item"),
+        &(EX.to_owned() + "value"),
+        Value::Ref(child),
+    ));
+    store.transact_to_graph(&facts, TS, None, None, 0).unwrap();
+    let class = store.intern(&(EX.to_owned() + "C")).unwrap();
+    let typed = datum(&store, &(EX.to_owned() + "item"), TYPE, Value::Ref(class));
+    write(&mut store, &shapes, &[typed], 0).unwrap();
+}
+
+#[test]
+fn exhausted_optional_node_context_falls_back_without_losing_max_count() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = shape("sh:node ex:Child; sh:maxCount 1200")
+        + " ex:Child sh:property [sh:path ex:name; sh:minLength 3].";
+    let mut facts = Vec::new();
+    for i in 0..1200 {
+        let child = format!("{EX}child{i}");
+        facts.push(datum(
+            &store,
+            &child,
+            &(EX.to_owned() + "name"),
+            Value::Str("valid".into()),
+        ));
+        facts.push(datum(
+            &store,
+            &(EX.to_owned() + "item"),
+            &(EX.to_owned() + "value"),
+            Value::Ref(store.intern(&child).unwrap()),
+        ));
+    }
+    assert_eq!(facts.len(), 2400);
+    store.transact_to_graph(&facts, TS, None, None, 0).unwrap();
+    let class = store.intern(&(EX.to_owned() + "C")).unwrap();
+    let typed = datum(&store, &(EX.to_owned() + "item"), TYPE, Value::Ref(class));
+    // 1201 focus/context nodes exceed the optimization budget. A partial
+    // context would falsely report missing child names; it must be discarded.
+    write(&mut store, &shapes, &[typed], 0).unwrap();
+    let extra_name = datum(
+        &store,
+        &(EX.to_owned() + "extra"),
+        &(EX.to_owned() + "name"),
+        Value::Str("valid".into()),
+    );
+    store
+        .transact_to_graph(&[extra_name], TS, None, None, 0)
+        .unwrap();
+    let extra = datum(
+        &store,
+        &(EX.to_owned() + "item"),
+        &(EX.to_owned() + "value"),
+        Value::Ref(store.intern(&(EX.to_owned() + "extra")).unwrap()),
+    );
+    match write(&mut store, &shapes, &[extra], 0) {
+        Err(Error::ValidationFailed { messages, .. }) => assert!(
+            messages
+                .iter()
+                .any(|message| message.contains("MaxCountConstraintComponent")),
+            "must retain actual maxCount rejection: {messages:?}"
+        ),
+        result => panic!("expected existing maxCount admission, got {result:?}"),
+    }
+    let item = store.lookup(&(EX.to_owned() + "item")).unwrap().unwrap();
+    assert_eq!(store.entity_facts(item).unwrap().len(), 1201);
+}
