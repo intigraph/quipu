@@ -5,6 +5,8 @@ use super::*;
 fn old_membership_does_not_admit_a_later_backfill_vector() {
     use quipu::KnowledgeVectorStore as _;
     let mut store = Store::open_in_memory().unwrap();
+    // Establish the temporal gap before the explicit later backfill.
+    store.embedding_config_mut().auto_embed = false;
     store.search_config_mut().named_graphs = true;
     store.embedding_config_mut().dimension = 8;
     store.set_embedding_provider(Arc::new(RecordingProvider {

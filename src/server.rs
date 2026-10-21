@@ -9,7 +9,6 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use quipu::EmbeddingProvider;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -30,6 +29,8 @@ mod background;
 mod base;
 #[path = "server/cors.rs"]
 mod cors;
+#[path = "server/deck.rs"]
+mod deck;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/feed.rs"]
@@ -276,40 +277,15 @@ async fn main() {
         );
     }
 
-    if let (Some(model_path), Some(tokenizer_path)) = (
-        &config.embedding.model_path,
-        &config.embedding.tokenizer_path,
-    ) {
-        match quipu::OnnxEmbeddingProvider::load(
-            model_path,
-            tokenizer_path,
-            config.embedding.dimension,
-            config.embedding.max_sequence_length,
-        ) {
-            Ok(provider) => {
-                let dim = provider.dimension();
-                store.set_embedding_provider(Arc::new(provider));
-                store.embedding_config_mut().auto_embed = config.embedding.auto_embed;
-                store.embedding_config_mut().embed_batch_size = config.embedding.embed_batch_size;
-                // Server mode defers the write-path ONNX embed OUT of the
-                // store lock: an episode write held the global
-                // mutex ~10s while embedding under it, so a write flood
-                // starved every reader. Write handlers drain + finish via
-                // finish_deferred_embed. CLI/library keep the inline path.
-                store.set_defer_auto_embed(true);
-                eprintln!(
-                    "ONNX embedding provider loaded (dim={dim}, auto_embed={}, deferred)",
-                    config.embedding.auto_embed
-                );
-            }
-            Err(e) => {
-                eprintln!("warning: failed to load ONNX embedder: {e}");
-                eprintln!("  model: {}", model_path.display());
-                eprintln!("  tokenizer: {}", tokenizer_path.display());
-                eprintln!("  vector search will be unavailable");
-            }
+    match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
+        Ok(status) => eprintln!("{status}"),
+        Err(error) => {
+            eprintln!("embedding configuration error: {error}");
+            std::process::exit(1);
         }
     }
+    // Keep expensive inference outside the global writer lock.
+    store.set_defer_auto_embed(true);
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
@@ -353,6 +329,7 @@ async fn main() {
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.deck_http = config.server.deck_http;
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config
         .server
@@ -455,6 +432,9 @@ async fn main() {
         .route("/impact", post(impact_analysis))
         .route("/path/cone", post(path_cone))
         .route("/path/backtest", post(path_backtest))
+        .route("/deck/present", post(deck::deck_present))
+        .route("/deck/attest", post(deck::deck_attest))
+        .route("/deck/receipt", post(deck::deck_receipt))
         .route("/retract", post(retract))
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
