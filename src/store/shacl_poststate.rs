@@ -92,17 +92,35 @@ impl Store {
         if upper_bounds.is_empty() || datums.is_empty() {
             return Ok(());
         }
-        // This bounded adapter currently supplies simple property paths only.
-        // Refuse complex upper-bound paths rather than validate an incomplete
-        // neighborhood and silently call it conformant.
-        if quads.iter().any(|q| {
-            upper_bounds.contains(&q.subject.to_string())
-                && q.predicate.as_str() == PATH
-                && !matches!(q.object, oxrdf::Term::NamedNode(_))
-        }) {
-            return Err(Error::CannotVerify(
-                "post-state maxCount requires a simple property path".into(),
-            ));
+        // Resolve inverse predicate paths without walking unrelated entities.
+        // More complex paths still refuse rather than checking partial data.
+        let mut inverse_predicates = BTreeSet::new();
+        for q in &quads {
+            if !upper_bounds.contains(&q.subject.to_string()) || q.predicate.as_str() != PATH {
+                continue;
+            }
+            match &q.object {
+                oxrdf::Term::NamedNode(_) => {}
+                oxrdf::Term::BlankNode(path) => {
+                    let inverse = quads.iter().find(|edge| {
+                        edge.subject == oxrdf::NamedOrBlankNode::BlankNode(path.clone())
+                            && edge.predicate.as_str() == "http://www.w3.org/ns/shacl#inversePath"
+                    });
+                    if let Some(oxrdf::Quad {
+                        object: oxrdf::Term::NamedNode(predicate),
+                        ..
+                    }) = inverse
+                    {
+                        inverse_predicates.insert(predicate.as_str().to_owned());
+                    } else {
+                        return Err(Error::CannotVerify(
+                            "post-state maxCount requires a predicate or inverse predicate path"
+                                .into(),
+                        ));
+                    }
+                }
+                _ => return Err(Error::CannotVerify("invalid maxCount path".into())),
+            }
         }
         let subjects: BTreeSet<_> = datums
             .iter()
@@ -116,7 +134,7 @@ impl Store {
                 })
             })
             .collect();
-        let incoming_targets: BTreeSet<_> = quads
+        let mut incoming_targets: BTreeSet<_> = quads
             .iter()
             .filter_map(|q| {
                 if q.predicate.as_str() == "http://www.w3.org/ns/shacl#targetObjectsOf"
@@ -127,12 +145,18 @@ impl Store {
                 None
             })
             .collect();
+        incoming_targets.extend(inverse_predicates);
         let mut facts = Vec::new();
         let mut focuses = BTreeSet::new();
         for entity in subjects {
             focuses.insert(self.resolve(entity)?);
             self.append_bounded_entity(&mut facts, entity, graph, None)?;
-            self.append_object_targets(&mut facts, entity, graph, &incoming_targets)?;
+            self.append_object_targets(
+                &mut facts,
+                &crate::Value::Ref(entity),
+                graph,
+                &incoming_targets,
+            )?;
             if graph != 0 {
                 // ROOT types may target a named-graph focus, but ROOT values
                 // never contribute to that graph's cardinality.
@@ -140,6 +164,21 @@ impl Store {
                     self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
                 {
                     self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
+                }
+            }
+        }
+        if !incoming_targets.is_empty() {
+            let mut seen = BTreeSet::new();
+            for datum in datums {
+                if !matches!(datum.value, crate::Value::Ref(_))
+                    && seen.insert(datum.value.term_key())
+                {
+                    if let oxrdf::Term::Literal(literal) =
+                        crate::rdf::value_to_term(self, &datum.value)?
+                    {
+                        focuses.insert(literal.value().to_owned());
+                    }
+                    self.append_object_targets(&mut facts, &datum.value, graph, &incoming_targets)?;
                 }
             }
         }
@@ -217,7 +256,7 @@ impl Store {
     fn append_object_targets(
         &self,
         facts: &mut Vec<crate::Fact>,
-        entity: i64,
+        object: &crate::Value,
         graph: i64,
         predicates: &BTreeSet<String>,
     ) -> Result<()> {
@@ -227,7 +266,7 @@ impl Store {
             let Some(attribute) = self.lookup(predicate)? else {
                 continue;
             };
-            let bytes = crate::Value::Ref(entity).to_bytes();
+            let bytes = object.to_bytes();
             let mut stmt = self.conn.prepare(
                 "SELECT e,a,v,tx,valid_from,valid_to,op FROM facts WHERE v=?1 AND a=?2 \
                  AND g=?3 AND op=1 AND valid_to IS NULL LIMIT 100001",

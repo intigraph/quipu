@@ -173,7 +173,7 @@ A valid delta can still violate a stored upper bound. For example, writing
 `ex:item ex:value "A"` and later `ex:item ex:value "B"` must not bypass
 `sh:maxCount 1` just because each request carries one value.
 
-Write admission checks simple-path `sh:maxCount` against the staged current
+Write admission checks predicate and inverse-predicate `sh:maxCount` against the staged current
 facts inside the same SQLite savepoint as the write. The second distinct
 value is rejected and rolled back. Reasserting an identical RDF term remains
 idempotent; retracting the old value and asserting its replacement in one
@@ -189,7 +189,7 @@ Cardinality uses each destination graph's own values. ROOT type and subclass
 context can select targets in a named graph; ROOT property values and unrelated
 third graphs do not contribute to its counts. The context is bounded to touched
 subjects and referenced objects, with at most 100,000 facts and 1,024 classes.
-Exceeding these limits, or encountering a complex upper-bound property path,
+Exceeding these limits, or encountering another complex upper-bound property path,
 refuses admission with `cannot verify` rather than accepting partial evidence.
 
 Other constraints retain payload validation and contextual type/required-field

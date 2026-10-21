@@ -221,7 +221,7 @@ fn root_subclass_context_targets_named_graph_without_counting_root_values() {
 #[test]
 fn unsupported_complex_upper_bound_fails_closed_instead_of_partial_validation() {
     let mut store = Store::open_in_memory().unwrap();
-    let complex = SHAPES.replace("sh:path ex:value", "sh:path [sh:inversePath ex:value]");
+    let complex = SHAPES.replace("sh:path ex:value", "sh:path (ex:first ex:value)");
     let a = batch(&store, "A", true);
     let result = store.with_write_shapes(Some(&complex), |s| s.transact(&a, TS, None, None));
     assert!(
@@ -402,4 +402,58 @@ fn stored_blank_node_identity_survives_context_serialization() {
             .count(),
         1
     );
+}
+
+#[test]
+fn inverse_path_counts_prior_incoming_edges_for_the_same_focus() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = SHAPES
+        .replace("sh:targetClass ex:C", "sh:targetObjectsOf ex:link")
+        .replace("sh:path ex:value", "sh:path [sh:inversePath ex:link]");
+    let link = |store: &Store, name: &str| Datum {
+        entity: store
+            .intern(&format!("https://example.org/d6s/{name}"))
+            .unwrap(),
+        attribute: store.intern("https://example.org/d6s/link").unwrap(),
+        value: Value::Ref(store.intern("https://example.org/d6s/focus").unwrap()),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let first = link(&store, "first");
+    store
+        .with_write_shapes(Some(&shapes), |s| s.transact(&[first], TS, None, None))
+        .unwrap();
+    let second = link(&store, "second");
+    assert!(matches!(
+        store.with_write_shapes(Some(&shapes), |s| s.transact(&[second], TS, None, None)),
+        Err(quipu::Error::ValidationFailed { .. })
+    ));
+}
+
+#[test]
+fn inverse_path_also_checks_literal_object_targets() {
+    let mut store = Store::open_in_memory().unwrap();
+    let shapes = SHAPES
+        .replace("sh:targetClass ex:C", "sh:targetObjectsOf ex:link")
+        .replace("sh:path ex:value", "sh:path [sh:inversePath ex:link]");
+    let link = |store: &Store, name: &str| Datum {
+        entity: store
+            .intern(&format!("https://example.org/d6s/{name}"))
+            .unwrap(),
+        attribute: store.intern("https://example.org/d6s/link").unwrap(),
+        value: Value::Str("literal focus".into()),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let first = link(&store, "first");
+    store
+        .with_write_shapes(Some(&shapes), |s| s.transact(&[first], TS, None, None))
+        .unwrap();
+    let second = link(&store, "second");
+    assert!(matches!(
+        store.with_write_shapes(Some(&shapes), |s| s.transact(&[second], TS, None, None)),
+        Err(quipu::Error::ValidationFailed { .. })
+    ));
 }
