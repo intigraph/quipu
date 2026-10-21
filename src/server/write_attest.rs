@@ -50,10 +50,11 @@ const MAX_BODY: usize = 64 * 1024 * 1024;
 
 pub(crate) async fn handle(
     store: SharedStore,
+    keys_required: bool,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Response {
-    let (pending, identity, req) = match verify(&store, req).await {
+    let (pending, identity, req) = match verify(&store, keys_required, req).await {
         Ok(verified) => verified,
         Err(refusal) => return refuse(&refusal),
     };
@@ -99,7 +100,11 @@ pub(crate) async fn handle(
 
 type Verified = (Arc<PendingAttestation>, Identity, axum::extract::Request);
 
-async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Verified, Refusal> {
+async fn verify(
+    store: &SharedStore,
+    keys_required: bool,
+    req: axum::extract::Request,
+) -> Result<Verified, Refusal> {
     let invalid = |message: &str| Refusal {
         verdict: "invalid",
         message: message.to_owned(),
@@ -200,10 +205,16 @@ async fn verify(store: &SharedStore, req: axum::extract::Request) -> Result<Veri
         })??
     };
 
-    if claimed_agent.as_ref().is_some_and(|v| v != &checked.agent)
-        || claimed_session
-            .as_ref()
-            .is_some_and(|v| v != &checked.session)
+    // X-Quipu-Agent / X-Quipu-Session are DECLARED provenance, not identity:
+    // sd sends the crew agent and the harness session on every request, and
+    // they never equal a per-host key binding. Comparing them with enforcement
+    // off refused every sd signed write in production (aegis-m6o, 2026-10-21),
+    // so the comparison is an enforcement-on check only.
+    if keys_required
+        && (claimed_agent.as_ref().is_some_and(|v| v != &checked.agent)
+            || claimed_session
+                .as_ref()
+                .is_some_and(|v| v != &checked.session))
     {
         return Err(invalid(
             "declared identity differs from the authenticated session",

@@ -29,6 +29,7 @@ SYNTAX_LEDGER = "sparql11-syntax.json"
 EVALUATION_LEDGER = "sparql11-evaluation.json"
 ENTAILMENT_LEDGER = "sparql11-entailment.json"
 SHACL_LEDGER = "shacl-core.json"
+SHACL_WRITE_PATH_LEDGER = "shacl-write-path.json"
 FEDERATED_LEDGER = "sparql11-federated-query.json"
 RDF11_SYNTAX_LEDGER = "rdf11-syntax.json"
 RDF12_SYNTAX_LEDGER = "rdf12-syntax.json"
@@ -188,8 +189,10 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
     evaluation_path = results_dir / EVALUATION_LEDGER
     entailment_path = results_dir / ENTAILMENT_LEDGER
     shacl_path = results_dir / SHACL_LEDGER
+    shacl_write_path = results_dir / SHACL_WRITE_PATH_LEDGER
     federated_path = results_dir / FEDERATED_LEDGER
-    for path in (syntax_path, evaluation_path, entailment_path, shacl_path, federated_path):
+    for path in (syntax_path, evaluation_path, entailment_path, shacl_path, shacl_write_path,
+                 federated_path):
         if not path.is_file():
             raise LedgerError(f"missing ledger: {path}")
 
@@ -283,6 +286,7 @@ def load(results_dir: Path, competitors_dir: Path | None = None) -> dict:
         "reproduce": evaluation.get("reproduce", {}),
         "entailment": entailment,
         "shacl": shacl,
+        "shacl_write_path": json.loads(shacl_write_path.read_text()),
         "rdf_syntax": load_rdf_syntax(results_dir, evaluation["suite_revision"]),
         "competitors": (
             load_competitors(competitors_dir, evaluation["suite_revision"])
@@ -844,7 +848,7 @@ def render_markdown(data: dict) -> str:
         f"Quipu passes **{core_counts['passed']}/{core_counts['cases']}** manifest-reachable SHACL Core cases.",
         f"SHACL-SPARQL remains a deliberate non-goal: **{sparql_counts['passed']}/{sparql_counts['cases']}** pass and {sparql_counts['unsupported']} are unsupported.",
         "Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.",
-        "This score uses the context-free native validator; write-gate transaction behavior is tested separately.", "",
+        "This score uses the context-free native validator on whole graphs; the write path is measured below.", "",
         f"Pinned W3C Data Shapes revision: `{data['shacl']['suite_revision']}`.",
         "The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).",
         "`nodeValidator-001.ttl` exists in the checkout but is not manifest-reachable and is not scored.", "",
@@ -854,6 +858,35 @@ def render_markdown(data: dict) -> str:
     for category in data["shacl"].get("classes", {}):
         counts = tally([row for row in shacl_rows if row.get("category") == category])
         out.append(f"| `{category}` | {counts['passed']} | {counts['failed']} | {counts['error']} | {counts['unsupported']} | {counts['cases']} |")
+    write = data["shacl_write_path"]
+    diverging = sorted({case for case, _ in write["divergences"]})
+    # An unjudged case (the gate answered CannotVerify, not a SHACL verdict) is
+    # neither agreeing nor diverging, so it is counted on its own (aegis-1c8q option A).
+    unjudged = sorted({case for case, _, _ in write.get("unjudged", [])} - set(diverging))
+    agree = write["cases"] - len(diverging) - len(unjudged)
+    out += [
+        "", "### Write-path conformance", "",
+        f"The same {write['cases']} Core cases are also written through the real `/knot` handler, "
+        "whole and split across writes (subject halves, one write per subject, one write per triple, "
+        f"each in both orders). **{agree}/{write['cases']}** agree with the "
+        f"W3C verdict under every split; **{len(diverging)}** diverge under at least one"
+        + (f"; **{len(unjudged)}** could not be judged under at least one split (the write gate "
+           "answered *cannot verify* instead of a SHACL verdict)" if unjudged else "") + ".",
+        "A divergence is a case whose final graph violates (or conforms) while the write gate "
+        "accepted (or refused) every write. These are known defects, listed in the ledger with "
+        "the splits that expose them; the CI gate fails on any new divergence and on any entry "
+        "that no longer diverges, so this number can only fall.", "",
+        "| Constraint component | Cases using it | Agree | Diverge | Unjudged |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for component, counts in write["by_component"].items():
+        if component == "(none)":
+            continue
+        agree, diverge = counts.get("agrees", 0), counts.get("diverges", 0)
+        unjudged_count = counts.get("write_error", 0)
+        out.append(f"| `sh:{component}` | {agree + diverge + unjudged_count} | {agree} | {diverge} "
+                   f"| {unjudged_count} |")
+    out += ["", "Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json)."]
     entailment = classes["entailment"]["counts"]
     # Read the commitment from the LEDGER rather than printing a literal. The
     # previous version stated "All six regimes remain deliberate non-goals" and

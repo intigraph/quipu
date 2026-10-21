@@ -1,0 +1,34 @@
+Script started on 2026-10-21 10:17:52-04:00 [COMMAND="python3 docs/probes/pr-demos/inferred-registry-filter/run.py" <not executed on terminal>]
+BEFORE: SQL leaf exclusion sabotaged
+$ $DEMO_BEFORE smdlnm_ --nocapture
+
+running 2 tests
+test store::labels::tests::smdlnm_registered_companions_are_excluded_from_all_named_graph_ids ... ok
+
+thread 'store::labels::tests::smdlnm_graph_variable_excludes_companions_but_explicit_names_include_them' (4104898) panicked at src/store/labels_tests.rs:1495:5:
+assertion `left == right` failed: unrestricted SQL leaf exposed inference
+  left: 2
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test store::labels::tests::smdlnm_graph_variable_excludes_companions_but_explicit_names_include_them ... FAILED
+
+failures:
+
+failures:
+    store::labels::tests::smdlnm_graph_variable_excludes_companions_but_explicit_names_include_them
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 2569 filtered out; finished in 0.12s
+
+exit: 101 (expected 101)
+AFTER: all exclusions present
+$ $DEMO_AFTER smdlnm_ --nocapture
+
+running 2 tests
+test store::labels::tests::smdlnm_registered_companions_are_excluded_from_all_named_graph_ids ... ok
+test store::labels::tests::smdlnm_graph_variable_excludes_companions_but_explicit_names_include_them ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2569 filtered out; finished in 0.12s
+
+exit: 0 (expected 0)
+
+Script done on 2026-10-21 10:17:53-04:00 [COMMAND_EXIT_CODE="0"]

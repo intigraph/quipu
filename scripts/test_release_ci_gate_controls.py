@@ -66,6 +66,9 @@ for name, fixture, expected in cases:
         path.mkdir(parents=True)
         (path / "ci.yml").write_text(fixture)
         (path / "release.yml").write_text(release)
+        (path / "release-ci-ready.yml").write_text(
+            (root / ".github/workflows/release-ci-ready.yml").read_text()
+        )
         result = subprocess.run(
             [sys.executable, str(root / "scripts/test_release_ci_gate.py")],
             cwd=directory, capture_output=True, text=True,
@@ -73,3 +76,30 @@ for name, fixture, expected in cases:
         assert (result.returncode == 0) == expected, (name, result.stderr)
         print("PASS:", name)
 print(f"{len(cases)} release-contract controls passed")
+
+# Prove the new readiness and privileged-event boundaries fail closed, too.
+rearm = (root / ".github/workflows/release-ci-ready.yml").read_text()
+readiness_cases = [
+    ("missing readiness publication gate", release.replace(
+        " && needs.ci-correctness.outputs.ready == 'true'", "", 1), rearm),
+    ("pending publication gate", release.replace(
+        "needs.ci-correctness.outputs.ready == 'true'", "needs.ci-correctness.outputs.ready == 'false'", 1), rearm),
+    ("missing readiness output", release.replace(
+        "ready: ${{ steps.correctness.outputs.ready }}", "ready: 'true'", 1), rearm),
+    ("foreign event admitted", release, rearm.replace(
+        "github.event.workflow_run.head_repository.full_name == github.repository", "true", 1)),
+    ("untrusted checkout", release, rearm.replace(
+        "github.event.repository.default_branch", "github.event.workflow_run.head_sha", 1)),
+]
+for name, release_fixture, rearm_fixture in readiness_cases:
+    with tempfile.TemporaryDirectory(prefix="readiness-contract-") as directory:
+        path = Path(directory) / ".github/workflows"
+        path.mkdir(parents=True)
+        (path / "ci.yml").write_text(ci)
+        (path / "release.yml").write_text(release_fixture)
+        (path / "release-ci-ready.yml").write_text(rearm_fixture)
+        result = subprocess.run([sys.executable, str(root / "scripts/test_release_ci_gate.py")],
+                                cwd=directory, capture_output=True, text=True)
+        assert result.returncode != 0, name
+        print("PASS:", name)
+print(f"{len(readiness_cases)} readiness mutation controls passed")

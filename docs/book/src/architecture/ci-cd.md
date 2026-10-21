@@ -42,6 +42,17 @@ not block release. The workflow then uses
 3. Generate a changelog from commit messages
 4. Create a GitHub release with a git tag
 
+If the wait budget expires while correctness is queued, running, absent or
+unreadable, the waiter reports **DEFERRED**, emits `ready=false`, and skips
+release-plz. This is neither a code failure nor permission to publish. A genuine
+completed non-success check still fails the waiter. `release-ci-ready.yml`
+observes both CI and Release completion, then rearms only an initially deferred
+Release whose exact SHA is still main and whose genuine correctness check is
+terminal. It retries once, using the existing gate again. Superseded commits,
+pull requests, foreign repositories and already retried runs are never rearmed.
+If that one retry remains unready, inspect the recorded reason before an operator
+reruns it; no deadline or completion event substitutes for a successful check.
+
 ### Conventional Commits
 
 Commit messages drive changelog categories:
