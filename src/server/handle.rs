@@ -39,6 +39,8 @@ pub(crate) struct StoreHandle {
     pub(crate) log_query_admission: bool,
     /// Opt-in per-query `SQLite` statement totals; immutable after startup.
     pub(crate) log_query_phases: bool,
+    /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
+    pub(crate) deck_http: bool,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
@@ -160,6 +162,7 @@ impl StoreHandle {
             readers,
             log_query_admission: false,
             log_query_phases: false,
+            deck_http: false,
             query_capture: None,
             replica: None,
             federation,
@@ -200,6 +203,7 @@ impl StoreHandle {
             readers: ReadPool::empty(),
             log_query_admission: false,
             log_query_phases: false,
+            deck_http: false,
             query_capture: None,
             replica: None,
             federation: quipu::config::FederationConfig::default(),
