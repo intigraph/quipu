@@ -60,6 +60,16 @@ impl CommandContext {
                     | "stats"
                     | "tend"
                     | "ready-count"
+                    | "uses-native-schema"
+                    | "closed-status"
+                    | "closed-statuses"
+                    | "owner-shape-supported"
+                    | "owner-rows"
+                    | "deferred-rows"
+                    | "unassigned-counts"
+                    | "unblocked-ids"
+                    | "due-rows"
+                    | "decision-lists"
                     | "create"
                     | "update"
                     | "close"
@@ -158,5 +168,56 @@ mod tests {
             assert!(log["declared_source"].is_null());
             assert!(log["declared_operation"].is_null());
         }
+    }
+
+    #[test]
+    fn native_projection_operations_are_retained() {
+        // Finite operation names already emitted by Shantytown's native reads.
+        // They are diagnostic declarations, not an authenticated caller identity.
+        for operation in [
+            "uses-native-schema",
+            "closed-status",
+            "closed-statuses",
+            "owner-shape-supported",
+            "owner-rows",
+            "deferred-rows",
+            "unassigned-counts",
+            "unblocked-ids",
+            "due-rows",
+            "decision-lists",
+        ] {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert("x-quipu-source", "st-anchor".parse().unwrap());
+            headers.insert("x-quipu-operation", operation.parse().unwrap());
+            let log: serde_json::Value =
+                serde_json::from_str(&CommandContext::from_headers(&headers).annotate(
+                    "{\"client\":\"seeds\",\"endpoint\":\"/query\",\"status\":200}".into(),
+                ))
+                .unwrap();
+            assert_eq!(log["declared_operation"], operation, "{operation}");
+            assert_eq!(log["declared_source"], "st-anchor");
+            assert_eq!(log["client"], "seeds");
+            assert_eq!(log["endpoint"], "/query");
+            assert_eq!(log["status"], 200);
+        }
+    }
+
+    #[test]
+    fn unknown_and_repeated_native_operations_remain_unknown() {
+        for operation in ["private-operation", "owner-rows private", "/private/path"] {
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert("x-quipu-operation", operation.parse().unwrap());
+            let log: serde_json::Value =
+                serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
+                    .unwrap();
+            assert!(log["declared_operation"].is_null());
+        }
+        let mut headers = axum::http::HeaderMap::new();
+        headers.append("x-quipu-operation", "owner-rows".parse().unwrap());
+        headers.append("x-quipu-operation", "due-rows".parse().unwrap());
+        let log: serde_json::Value =
+            serde_json::from_str(&CommandContext::from_headers(&headers).annotate("{}".into()))
+                .unwrap();
+        assert!(log["declared_operation"].is_null());
     }
 }
