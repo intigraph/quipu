@@ -256,6 +256,36 @@ fn equal_present_reads_without_an_explicit_pin_do_not_match() {
 }
 
 #[test]
+fn both_unpinned_reads_with_generations_refuse() {
+    // Native verify allows an unpinned request that still binds a generation, and
+    // two such equal reads would otherwise compare as matched at equal heads.
+    let (source, _expected) = fixture();
+    let mut unpinned = copy(&source);
+    unpinned.source_receipt.main.requested_tx = None;
+    restamp(&mut unpinned);
+    let unpinned_request = request(&unpinned);
+    assert!(unpinned_request.tx.is_none());
+    assert!(unpinned_request.expected_generation.is_some());
+    unpinned.verify(&unpinned_request).unwrap();
+    assert!(compare(&unpinned, &unpinned_request, &unpinned, &unpinned_request).is_err());
+}
+
+#[test]
+fn source_side_tamper_is_not_bypassed() {
+    // Changed MAIN bytes with the receipt left as is: the two receipts still
+    // agree, so only the source payload's own native verification can refuse.
+    let (source, expected) = fixture();
+    let mut tampered = copy(&source);
+    let text = tampered.graphs.get_mut(MAIN).unwrap();
+    *text = text.replace("\"warm\"", "\"changed\"");
+    assert_ne!(text.as_str(), source.graphs[MAIN].as_str());
+    assert_eq!(tampered.source_receipt_sha256, source.source_receipt_sha256);
+    assert!(tampered.verify(&expected).is_err());
+    assert!(compare(&tampered, &expected, &source, &expected).is_err());
+    assert!(compare(&source, &expected, &source, &expected).is_ok());
+}
+
+#[test]
 fn native_tamper_scope_and_generation_checks_are_not_bypassed() {
     let (source, expected) = fixture();
     let mut tampered = copy(&source);

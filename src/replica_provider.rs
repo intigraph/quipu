@@ -50,6 +50,8 @@ fn portable_equal(a: &Provider, b: &Provider) -> bool {
         && a.exclusion == b.exclusion
 }
 
+// Collapsing by alias is safe only because native `verify()` has already
+// refused a census with duplicate aliases before this map is built.
 fn by_alias(payload: &Payload) -> BTreeMap<&str, &Provider> {
     payload
         .source_receipt
