@@ -83,12 +83,8 @@ impl Store {
             "LessThanConstraintComponent",
             "LessThanOrEqualsConstraintComponent",
         ];
+        // Value components, judged once the value closure is complete.
         const COMPONENTS: &[&str] = &[
-            "MaxCountConstraintComponent",
-            "UniqueLangConstraintComponent",
-            "DisjointConstraintComponent",
-            "LessThanConstraintComponent",
-            "LessThanOrEqualsConstraintComponent",
             "DatatypeConstraintComponent",
             "NodeKindConstraintComponent",
             "ClassConstraintComponent",
@@ -214,7 +210,7 @@ impl Store {
                     } else {
                         &value_focuses
                     };
-                    COMPONENTS.contains(&component)
+                    (VALUE_SETS.contains(&component) || COMPONENTS.contains(&component))
                         && (VALUE_SETS.contains(&component) || complete_values)
                         && owned.contains(issue.focus_node.trim_matches(['<', '>']))
                         && issue.severity.eq_ignore_ascii_case("violation")
