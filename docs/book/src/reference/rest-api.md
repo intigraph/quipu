@@ -149,22 +149,33 @@ Two cases where the pool disables itself, both announced on stderr at startup:
 
 ## Authentication
 
-**Reads are open; writes need a bearer token.** When the server is started with an
-auth token configured, every *write* endpoint requires:
+**Legacy migration profile: reads are open; writes need a bearer token.** When
+required session keys are disabled and an auth token is configured, write endpoints require:
 
 ```text
 Authorization: Bearer <token>
 ```
 
-Reads — `/query`, `/search`, entity lookups, `/health`, `/version` — need no
-credential and answer normally.
+In that legacy profile, reads such as `/query`, `/search`, entity lookups,
+`/health` and `/version` need no credential. `/identity` always requires a signed
+session identity.
 
 A bearer refusal returns HTTP 401 with a JSON `reason` of
 `missing_or_invalid_bearer_token`, `credential_type: "bearer"`, the endpoint,
 and provisioning guidance. Clients should configure a matching
 `QUIPU_AUTH_TOKEN` or `QUIPU_AUTH_TOKEN_FILE`; retrying an absent or rejected
-credential does not repair it. Signed authentication is available only on
-signed-write routes with a registered, unexpired identity and write scope.
+credential does not repair it. Signed authentication uses the existing protected
+registry with a registered, unexpired identity and write scope; read routes also
+accept that signature. Signed mutations remain restricted to the four audited
+routes, and signed requests cannot carry URL query strings.
+
+Set `[quipu.server] session_keys = { required = true, onboarding_read_paths = [] }`
+only after completing the client and distinct-OS-user migration. This policy
+requires signed keys even for reads; a shared or named bearer is insufficient.
+The optional onboarding list admits only unique exact `/health` and `/version`
+GET/HEAD paths. Other paths, wildcards and duplicates fail startup validation.
+Strict mode refuses OPTIONS outside CORS, requiring a same-origin client or an
+authenticated broker. This option is default OFF and performs no enrollment.
 
 ### Provision a client credential
 
@@ -248,6 +259,10 @@ or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
 providers. The latter uses a separate version-gated contract and refuses
 unsupported required attached or derived scope;
 see [atomic acquisition](acquisition.md) for its versioned contract.
+`POST /acquire/eligibility` answers only whether each named graph would pass
+that admission and the configured label floor at the current head, from graph
+metadata alone; it is an observation, not a receipt (see
+[eligibility observation](acquisition.md#eligibility-observation)).
 
 `POST /share` is also read-only. It returns the canonical Git-share manifest and
 exact file contents in one JSON response, allowing a proxy on another host to
@@ -327,6 +342,16 @@ curl localhost:3030/health
 ```
 
 Response: `{"status": "ok"}`
+
+### `POST /identity`
+
+Requires an existing session-attestation signature. Returns the principal,
+public key ID and session selected from the protected binding, with
+`authenticated: true` and `auth_class: "attested_session"`. A bearer or unkeyed
+request returns 401. Agent/session declaration headers, if present, must match
+the verified binding. Replay, expired/revoked bindings and wrong keys refuse.
+No private key is returned. Use `sd identity --json` with an enrolled own key;
+plain curl without a signed envelope cannot produce the authenticated result.
 
 ### `GET /stats`
 
@@ -757,6 +782,25 @@ curl -s localhost:3030/validate -X POST \
   -H "Content-Type: application/json" \
   -d '{"shapes": "@prefix sh: ...", "data": "@prefix ex: ..."}'
 ```
+
+### Decision deck: `POST /deck/present`, `POST /deck/attest`, `POST /deck/receipt`
+
+A curated decision request is settled by an enrolled human's `WebAuthn`
+assertion. These routes are **off by default**: they answer `403` unless
+`[quipu.server] deck_http = true`. Even then they settle nothing until an
+operator has configured and enabled the store's deck, which no route can do.
+
+- `/deck/present` (write): `{"request", "revision", "credential", "choice"}`
+  returns `{"challenge", "webauthn_challenge"}`. Sign `webauthn_challenge`
+  (unpadded base64url) exactly as returned. Never rebuild the challenge
+  client-side: the server verifies against the challenge it stored.
+- `/deck/attest` (write): `{"nonce", "client_data_json", "authenticator_data",
+  "signature"}`, each byte field base64url, returns `{"decision", "nonce",
+  "recorded_at"}`. A challenge settles once: a replayed, expired or stale
+  one is refused. After a lost response, look the receipt up; do not resubmit.
+- `/deck/receipt` (read): `{"nonce"}` returns `{"found", "receipt", "tx"}`.
+
+Unknown fields are refused on all three.
 
 ### `POST /retract`
 

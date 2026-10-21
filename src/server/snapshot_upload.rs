@@ -199,7 +199,7 @@ async fn promote_with_lease(
     };
     let kind = super::request_middleware::request_write_kind();
     let provenance = super::request_middleware::request_write_provenance();
-    tokio::task::spawn_blocking(move || {
+    super::base::spawn_tracked(move || {
         let result = quipu::transaction_auth::with_identity(identity, || {
             quipu::write_provenance::scoped(provenance, || {
                 quipu::write_kind::scoped(kind, || {

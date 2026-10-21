@@ -9,7 +9,6 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use quipu::EmbeddingProvider;
 
 // A bin crate root resolves `mod x;` to `src/x.rs`, which would collide with
 // the library's modules — so each submodule names its path under `src/server/`
@@ -30,6 +29,8 @@ mod background;
 mod base;
 #[path = "server/cors.rs"]
 mod cors;
+#[path = "server/deck.rs"]
+mod deck;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/feed.rs"]
@@ -276,40 +277,15 @@ async fn main() {
         );
     }
 
-    if let (Some(model_path), Some(tokenizer_path)) = (
-        &config.embedding.model_path,
-        &config.embedding.tokenizer_path,
-    ) {
-        match quipu::OnnxEmbeddingProvider::load(
-            model_path,
-            tokenizer_path,
-            config.embedding.dimension,
-            config.embedding.max_sequence_length,
-        ) {
-            Ok(provider) => {
-                let dim = provider.dimension();
-                store.set_embedding_provider(Arc::new(provider));
-                store.embedding_config_mut().auto_embed = config.embedding.auto_embed;
-                store.embedding_config_mut().embed_batch_size = config.embedding.embed_batch_size;
-                // Server mode defers the write-path ONNX embed OUT of the
-                // store lock: an episode write held the global
-                // mutex ~10s while embedding under it, so a write flood
-                // starved every reader. Write handlers drain + finish via
-                // finish_deferred_embed. CLI/library keep the inline path.
-                store.set_defer_auto_embed(true);
-                eprintln!(
-                    "ONNX embedding provider loaded (dim={dim}, auto_embed={}, deferred)",
-                    config.embedding.auto_embed
-                );
-            }
-            Err(e) => {
-                eprintln!("warning: failed to load ONNX embedder: {e}");
-                eprintln!("  model: {}", model_path.display());
-                eprintln!("  tokenizer: {}", tokenizer_path.display());
-                eprintln!("  vector search will be unavailable");
-            }
+    match quipu::embedding_runtime::configure_provider(&mut store, &config.embedding) {
+        Ok(status) => eprintln!("{status}"),
+        Err(error) => {
+            eprintln!("embedding configuration error: {error}");
+            std::process::exit(1);
         }
     }
+    // Keep expensive inference outside the global writer lock.
+    store.set_defer_auto_embed(true);
 
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
@@ -347,12 +323,17 @@ async fn main() {
         wal_maintenance::reset_at_startup(&store);
     }
 
+    if config.server.log_query_phases {
+        store.enable_statement_profile();
+    }
     let read_pool: ReadPool = point_reads::open_pool(&db_path, &store, &config.server);
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.log_query_phases = config.server.log_query_phases;
+    handle.deck_http = config.server.deck_http;
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config
         .server
@@ -371,6 +352,8 @@ async fn main() {
         std::process::exit(1)
     });
     let auth_policy = auth::bearer_policy(&config.server);
+    let session_keys = auth::session_key_policy(&config.server);
+    let preflight_keys_required = session_keys.required;
     let read_only = config.server.read_only || is_replica;
     let replica_config = config.server.replica.clone();
     if read_only {
@@ -453,6 +436,9 @@ async fn main() {
         .route("/impact", post(impact_analysis))
         .route("/path/cone", post(path_cone))
         .route("/path/backtest", post(path_backtest))
+        .route("/deck/present", post(deck::deck_present))
+        .route("/deck/attest", post(deck::deck_attest))
+        .route("/deck/receipt", post(deck::deck_receipt))
         .route("/retract", post(retract))
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
@@ -493,6 +479,7 @@ async fn main() {
             post(graph_backfill::embed_backfill_graph),
         )
         // Entity + history
+        .route("/identity", post(auth::session_identity))
         .route("/entity", get(entity_query_conneg))
         .route("/entity/{iri}", get(entity_conneg))
         .route("/entity/{iri}/json", get(entity_json))
@@ -519,6 +506,7 @@ async fn main() {
         .layer(axum::middleware::from_fn(
             move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let auth_policy = auth_policy.clone();
+                let session_keys = session_keys.clone();
                 let attest_store = attest_store.clone();
                 let replica_config = replica_config.clone();
                 async move {
@@ -529,20 +517,16 @@ async fn main() {
                     }
                     // A signed write authenticates by attestation, never by a
                     // bearer on the same request (aegis-bys8d1).
-                    if is_write && !read_only && req.headers().contains_key(auth::write_attest::HEADER) {
+                    if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
                         return auth::write_attest::handle(attest_store, req, next).await;
                     }
-                    let auth_header = req
-                        .headers()
-                        .get(axum::http::header::AUTHORIZATION)
-                        .and_then(|v| v.to_str().ok())
-                        .map(str::to_string);
-                    let authorization = quipu::http_auth::authorize_bearers(
-                        is_write || quipu::http_auth::requires_read_identity(&path),
-                        read_only && is_write,
-                        &auth_policy,
-                        auth_header.as_deref(),
-                        quipu::time::epoch_secs(),
+                    if let Some(response) = auth::session_key_refusal(
+                        &session_keys, &req, is_write && read_only,
+                    ) {
+                        return response;
+                    }
+                    let (auth_header, authorization) = auth::authorize_request(
+                        &req, &auth_policy, is_write, read_only,
                     );
                     match authorization.decision {
                         quipu::http_auth::AccessDecision::Allow => {
@@ -647,6 +631,11 @@ async fn main() {
         // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
         // preflight (GH#5). Built above from the configured allowlist.
         .layer(cors)
+        // Strict profiles cannot admit an unsigned CORS preflight before the
+        // signature verifier. Use a same-origin client or authenticated broker.
+        .layer(axum::middleware::from_fn(move |req, next| {
+            auth::strict_preflight(preflight_keys_required, req, next)
+        }))
         // Body limit: axum's 2MB default silently caps /knot at small graphs —
         // a code-graph promotion of one real repository is ~9MB of Turtle and
         // was refused 413. 64MB bounds a whole-repo promotion with headroom

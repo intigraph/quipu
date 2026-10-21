@@ -346,6 +346,7 @@ fn routes_in_server_source() -> Vec<String> {
     // listed as route-free.
     const NO_ROUTES: &[&str] = &[
         "server/memory_files.rs", // handlers only; routes registered in server.rs
+        "server/deck.rs",         // handlers only; routes registered in server.rs
         "server/background.rs",   // primary worker startup, no route registration
         "server/replica.rs",      // handlers/middleware; route is registered in server.rs
         "server/admission.rs",
@@ -615,4 +616,34 @@ fn auth_refusals_carry_a_json_body_not_a_bare_status() {
         src.contains("server_is_read_only"),
         "the 403 arm no longer emits its JSON reason code"
     );
+}
+
+#[test]
+fn session_keys_require_keys_with_only_exact_onboarding_reads() {
+    let strict = SessionKeyPolicy {
+        required: true,
+        onboarding_read_paths: vec!["/health".into()],
+    };
+    strict.validate().unwrap();
+    assert!(strict.allows_unsigned("/health", "GET"));
+    for (path, method) in [
+        ("/health", "POST"),
+        ("/health/", "GET"),
+        ("/version", "GET"),
+        ("/query", "POST"),
+        ("/update", "POST"),
+    ] {
+        assert!(!strict.allows_unsigned(path, method));
+    }
+    assert!(SessionKeyPolicy::default().allows_unsigned("/query", "POST"));
+    for paths in [vec!["/query"], vec!["*"], vec!["/health", "/health"]] {
+        assert!(
+            SessionKeyPolicy {
+                required: true,
+                onboarding_read_paths: paths.into_iter().map(str::to_owned).collect()
+            }
+            .validate()
+            .is_err()
+        );
+    }
 }

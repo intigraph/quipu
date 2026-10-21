@@ -104,6 +104,13 @@ impl Store {
         Ok(Self::with_connection(conn))
     }
 
+    /// Count this connection's SQLite statements for queries that arm
+    /// [`crate::statement_profile`] (aegis-xacr). Off unless a server enables it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_statement_profile(&self) {
+        crate::statement_profile::enable(&self.conn);
+    }
+
     /// Set this connection's bounded wait for transient SQLite apply locks.
     /// This changes only connection-local policy, never persistent store state.
     pub fn set_busy_timeout(&self, timeout: std::time::Duration) -> Result<()> {

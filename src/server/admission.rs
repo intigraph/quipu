@@ -3,7 +3,11 @@
 //! Writes have been admitted here since this module was written; reads were
 //! added after aegis-raq1ok, where the missing read half wedged the server.
 
-use super::base::{AppError, blocking};
+use super::base::AppError;
+
+#[path = "admission/tracked.rs"]
+mod tracked;
+use tracked::admit_tracked;
 
 /// Admit one write before moving it onto Tokio's uncancellable blocking pool.
 ///
@@ -113,49 +117,15 @@ where
     F: FnOnce() -> Result<T, AppError> + Send + 'static,
     T: Send + 'static,
 {
-    let acquire = admission.acquire();
-    let acquired = if matches!(kind, "point-read" | "episode-read") {
-        if let Some(deadline) = deadline {
-            let remaining = deadline.remaining_millis();
-            let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
-            tokio::time::timeout(std::time::Duration::from_millis(remaining), acquire)
-                .await
-                .map_err(|_| {
-                    if kind == "episode-read" {
-                        AppError::from(deadline.request_timeout())
-                    } else {
-                        AppError::from(quipu::Error::RequestTimeout {
-                            elapsed_ms: started.elapsed().as_millis(),
-                            limit_ms,
-                        })
-                    }
-                })?
-        } else {
-            acquire.await
-        }
-    } else {
-        acquire.await
-    };
-    let permit = acquired.map_err(|_| {
-        AppError::from(quipu::Error::InvalidValue(format!(
-            "{kind} admission is closed"
-        )))
-    })?;
-    if let Some(stamp) = stamp {
-        let _ = stamp.set(std::time::Instant::now());
-    }
-    blocking(move || {
-        let _permit = permit;
-        // Held across `f()` and restored on drop: blocking threads are pooled
-        // and reused, so a leaked deadline would be inherited by an unrelated
-        // later request on the same thread.
-        let _deadline = quipu::time::set_request_deadline(deadline);
-        let _wait = WriteWaitGuard::start((kind == "write").then_some(started));
-        if kind == "write" {
-            reject_expired_write()?;
-        }
-        f()
-    })
+    admit_tracked(
+        admission,
+        kind,
+        deadline,
+        started,
+        stamp,
+        f,
+        quipu::metrics::inflight::store().clone(),
+    )
     .await
 }
 
@@ -416,3 +386,7 @@ mod point_timeout_tests;
 #[cfg(test)]
 #[path = "admission/observation_tests.rs"]
 mod observation_tests;
+
+#[cfg(test)]
+#[path = "admission/inflight_tests.rs"]
+mod inflight_tests;

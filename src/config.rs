@@ -565,6 +565,9 @@ pub struct ServerConfig {
     /// writes, preserving today's LAN-trusted behaviour.
     pub auth_token: Option<String>,
 
+    /// Explicitly require an enrolled session key for HTTP requests.
+    pub session_keys: crate::http_auth::SessionKeyPolicy,
+
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
@@ -623,6 +626,16 @@ pub struct ServerConfig {
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
 
+    /// Add per-query `SQLite` statement totals (count, rows, time, costliest
+    /// statement texts) to query observation logs (aegis-xacr). Off by default;
+    /// when on, every connection carries a profile hook, so measure its
+    /// overhead before enabling it in production.
+    pub log_query_phases: bool,
+    /// Serve the decision-deck routes (`/deck/present`, `/deck/attest`,
+    /// `/deck/receipt`, aegis-blh.2). Off by default. Independent of, and in
+    /// addition to, the store's operator-only deck switch: both must be on.
+    pub deck_http: bool,
+
     /// Expiring, operator-only private specimen capture; omitted by default.
     pub query_capture: Option<QueryCaptureConfig>,
 
@@ -639,6 +652,7 @@ impl Default for ServerConfig {
             enabled: false,
             bind: "127.0.0.1:3030".to_string(),
             auth_token: None,
+            session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
@@ -651,6 +665,8 @@ impl Default for ServerConfig {
             read_process_base_port: 3031,
             reserve_point_reads: false,
             log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
             query_capture: None,
             update_full_copy_max_facts: 250_000,
         }
@@ -661,7 +677,7 @@ impl Default for ServerConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct EmbeddingConfig {
-    /// Whether to auto-embed entities after writes (default: false).
+    /// Whether to auto-embed entities after writes (default: true).
     pub auto_embed: bool,
 
     /// Number of entities to embed in each batch (default: 32).
@@ -685,7 +701,7 @@ pub struct EmbeddingConfig {
 impl Default for EmbeddingConfig {
     fn default() -> Self {
         Self {
-            auto_embed: false,
+            auto_embed: true,
             embed_batch_size: 32,
             model_path: None,
             tokenizer_path: None,

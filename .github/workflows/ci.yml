@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # A merge queue tests each entry on main plus every entry ahead of it, so the
+  # combined state is green before it lands, without each PR rebasing in turn.
+  # Queue runs mirror push runs: the six gating checks and release correctness.
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: "17 5 * * *"
   workflow_dispatch:
@@ -160,7 +165,7 @@ jobs:
   # required checks for account runners.
   extended-features:
     name: Extended feature surfaces
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     env:
       # Serial feature builds need headroom for tests and cache compression.
@@ -269,7 +274,7 @@ jobs:
   # the worst possible place to find it.
   build-full:
     name: Build (full bundle)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -296,7 +301,7 @@ jobs:
   # just dependency, matching the raw-cargo style of the other jobs.
   wasm:
     name: Wasm (browser harness)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -370,7 +375,7 @@ jobs:
   # and merging them would hide which of the two went red.
   wasm-explorer:
     name: Wasm (browser bundle)
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -489,7 +494,7 @@ jobs:
 
   load-test:
     name: Mixed load performance ratchet
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -543,7 +548,7 @@ jobs:
   # control, so runner speed cancels out. Release build, as served.
   query-perf:
     name: String filter query performance gate
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -604,7 +609,7 @@ jobs:
 
   lint-markdown:
     name: Markdown lint
-    if: github.event_name != 'push'
+    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -641,7 +646,7 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: always() && github.event_name != 'push'
+    if: ${{ always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     steps:

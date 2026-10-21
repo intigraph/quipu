@@ -13,6 +13,7 @@ pub mod context;
 pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
+pub mod embedding_runtime;
 pub mod episode;
 pub mod error;
 pub mod governance;
@@ -20,6 +21,7 @@ pub mod graph;
 pub mod graph_view;
 pub mod http_auth;
 pub mod impact;
+pub mod import_embedding;
 pub mod lattice;
 pub mod lattice_fold;
 pub mod lattice_kind;
@@ -35,6 +37,7 @@ pub mod namespace;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod replica_provider;
 mod search_graph_scope;
 pub mod search_trace;
 pub mod substring;
@@ -114,6 +117,7 @@ pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod promotion_control;
+pub mod share_alignments;
 pub mod share_import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
@@ -132,6 +136,8 @@ pub mod share_transport;
 pub mod signing;
 pub mod sparql;
 pub mod sparql_structure;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod statement_profile;
 pub mod store;
 pub mod time;
 pub mod types;
@@ -212,6 +218,8 @@ pub use mcp::tools::{
     tool_hybrid_search, tool_queries, tool_retract, tool_retract_episode, tool_search, tool_set,
     tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use mcp::tools::{tool_deck_attest, tool_deck_present, tool_deck_receipt};
 pub use mcp::{
     inference_header, labels_json, query_inference, query_result, query_result_with_federation,
     tool_cooccurrence, tool_definitions, tool_export, tool_graph_create, tool_graph_label,

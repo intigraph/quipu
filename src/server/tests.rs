@@ -1,5 +1,9 @@
 //! Tests for the server's lock discipline and handler wiring.
 
+#[cfg(feature = "onnx")]
+#[path = "import_embedding_tests.rs"]
+mod import_embedding_tests;
+
 #[path = "acquisition_tests.rs"]
 mod acquisition_tests;
 
@@ -857,6 +861,9 @@ fn backfill_yields_the_writer_lock_and_retries_stale_snapshots() {
     });
 
     let mut store = Store::open_in_memory().unwrap();
+    // This control measures explicit backfill, including a stale snapshot;
+    // automatic write indexing would consume the blocking provider in setup.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(provider.clone());
     store.embedding_config_mut().dimension = 8;
     quipu::ingest_rdf(
@@ -1036,6 +1043,8 @@ pub(super) fn pooled_handle_with_provider(
         writer: parking_lot::FairMutex::new(store),
         vector_reads_pooled: true,
         log_query_admission: false,
+        log_query_phases: false,
+        deck_http: false,
         query_capture: None,
         replica: None,
         federation: quipu::config::FederationConfig::default(),
@@ -1696,6 +1705,8 @@ fn graph_backfill_is_bounded_per_call_and_skips_root() {
 
     let batches = Arc::new(parking_lot::Mutex::new(vec![]));
     let mut store = Store::open_in_memory().unwrap();
+    // This fixture starts deliberately unindexed to measure explicit backfill.
+    store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(RecordingProvider {
         batches: batches.clone(),
     }));

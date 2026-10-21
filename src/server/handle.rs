@@ -37,6 +37,10 @@ pub(crate) struct StoreHandle {
     pub(crate) readers: ReadPool,
     /// Opt-in log-only admission timing; immutable after startup.
     pub(crate) log_query_admission: bool,
+    /// Opt-in per-query `SQLite` statement totals; immutable after startup.
+    pub(crate) log_query_phases: bool,
+    /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
+    pub(crate) deck_http: bool,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
@@ -157,6 +161,8 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers,
             log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
             query_capture: None,
             replica: None,
             federation,
@@ -196,6 +202,8 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             log_query_admission: false,
+            log_query_phases: false,
+            deck_http: false,
             query_capture: None,
             replica: None,
             federation: quipu::config::FederationConfig::default(),
@@ -218,6 +226,14 @@ impl StoreHandle {
             let _refusal_is_recorded_on_the_request = guard.settle_attestation(&pending);
         }
         guard
+    }
+
+    /// The writer connection for a metadata-only eligibility observation
+    /// (aegis-ehf): no attestation settlement and no reader provider sync, so
+    /// holding it spends no nonce and remounts nothing. Callers must refuse an
+    /// attested request BEFORE calling this, and must not write through it.
+    pub(crate) fn metadata_lock(&self) -> parking_lot::FairMutexGuard<'_, quipu::Store> {
+        self.writer.lock()
     }
 
     /// A cancelled promotion must also leave the queue without waiting for an
