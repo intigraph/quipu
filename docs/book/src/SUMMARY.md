@@ -19,6 +19,7 @@
 - [Graph Labels & the Trust Lattice](concepts/graph-labels.md)
 - [Graph Kinds & Deep Freeze](concepts/graph-kinds.md)
 - [Governance: Policies, Verdicts & the Write Gate](concepts/governance.md)
+- [Decision forms](concepts/decision-forms.md)
 - [Knowledge Packs](concepts/knowledge-packs.md)
 - [Contributor Constellation](concepts/contributor-constellation.md)
 - [SHACL Validation](concepts/shacl-validation.md)
