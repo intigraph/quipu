@@ -277,25 +277,7 @@ pub fn eval_pattern_seeded(
             left,
             right,
             expression,
-        } => {
-            let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
-            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
-            let mut vars = left_vars;
-            for v in &right_vars {
-                if !vars.contains(v) {
-                    vars.push(v.clone());
-                }
-            }
-            // Keyed probe, same output and order as the nested loop (aegis-d8c).
-            let results = super::left_join::left_join(
-                store,
-                ctx,
-                &left_rows,
-                &right_rows,
-                expression.as_ref(),
-            )?;
-            Ok((results, vars))
-        }
+        } => super::left_join::eval(store, left, right, expression.as_ref(), ctx, seed),
 
         GraphPattern::Minus { left, right } => {
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
@@ -335,7 +317,24 @@ pub fn eval_pattern_seeded(
                 order_limit: None,
                 ..ctx.clone()
             };
-            let (rows, vars) = eval_pattern_seeded(store, inner, &inner_ctx, seed)?;
+            // aegis-xacr: under a limit, hydrate OPTIONALs for only the rows
+            // the limit can return.
+            let pushed = ctx
+                .order_limit
+                .and_then(|k| super::order_pushdown::rewrite(inner, expression, k));
+            let (rows, vars) = match &pushed {
+                Some(rewritten) => {
+                    let guard = super::order_pushdown::Guard::arm();
+                    let result = eval_pattern_seeded(store, rewritten, &inner_ctx, seed)?;
+                    if guard.finish() {
+                        eval_pattern_seeded(store, inner, &inner_ctx, seed)?
+                    } else {
+                        result
+                    }
+                }
+                None => eval_pattern_seeded(store, inner, &inner_ctx, seed)?,
+            };
+            super::order_pushdown::check(store, &rows, expression);
             let sorted = match ctx.order_limit {
                 Some(limit) => super::order::top_rows(store, rows, expression, ctx, limit)?,
                 None => super::order::sort_rows(store, rows, expression, ctx)?,
