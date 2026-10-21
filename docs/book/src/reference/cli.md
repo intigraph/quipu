@@ -8,6 +8,31 @@ The `quipu` binary provides a command-line interface for all operations.
 |------|-------------|
 | `--db <path>` | Store database path (default: `.bobbin/quipu/quipu.db`) |
 
+## Help and usage errors
+
+`quipu --help` (or `-h`) and command help exit before reading configuration,
+credentials or input files, opening a database, or starting a network client.
+Nested commands support the same flags and `help` prefix:
+
+```bash
+quipu shapes --help
+quipu shapes load -h
+quipu help shapes remove
+quipu import review notify --help
+```
+
+Unknown commands, subcommands and options exit with a nonzero usage result
+before opening a store. Option values are consumed literally: for example,
+`stats --db --help` names a database file called `--help`; use
+`stats --help --db some.db` to request help with an explicit path.
+
+Store commands operate on the **local** database selected by `--db` or
+configuration (default `.bobbin/quipu/quipu.db`), not on the running HTTP service.
+There is no `--remote` option. `import` can fetch a share URL and
+`read --federation` uses configured remotes. `mcp` starts the installed local
+stdio companion. Git transport and hook management have their own local file
+or configuration effects during normal operation; their help remains pure.
+
 ## Build identity
 
 `quipu --version` (also `-V` or `version`) reports build identity without loading
