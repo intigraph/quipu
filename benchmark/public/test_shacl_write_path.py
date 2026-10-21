@@ -38,10 +38,24 @@ class WritePathGateTests(unittest.TestCase):
 
     def test_a_known_divergence_passes_and_a_stale_one_fails(self):
         bad = row("core/x/late#late", expected=False, modes={"single": False, "per_triple": True})
-        self.assertEqual(MODULE.gate(suite(bad), {"divergences": [["core/x/late#late", "per_triple"]]}), [])
-        failures = MODULE.gate(suite(), {"divergences": [["core/x/late#late", "per_triple"]]})
+        owned = {"core/x/late#late": {"class": "late-targeting", "item": "aegis-x"}}
+        ledger = {"owners": owned, "divergences": [["core/x/late#late", "per_triple"]]}
+        self.assertEqual(MODULE.gate(suite(bad), ledger), [])
+        failures = MODULE.gate(suite(), ledger)
         self.assertEqual(len(failures), 1)
         self.assertIn("STALE ledger entry", failures[0])
+
+    def test_an_owner_left_behind_after_its_entry_is_removed_fails(self):
+        owned = {"core/x/late#late": {"class": "late-targeting", "item": "aegis-x"}}
+        self.assertEqual(MODULE.gate(suite(), {"owners": owned, "divergences": []}),
+                         ["STALE owner entry (case no longer in the ledger; remove it): core/x/late#late"])
+
+    def test_a_known_divergence_without_class_and_item_fails(self):
+        bad = row("core/x/late#late", expected=False, modes={"single": False, "per_triple": True})
+        ledger = {"owners": {"core/x/late#late": {"class": "late-targeting"}},
+                  "divergences": [["core/x/late#late", "per_triple"]]}
+        self.assertEqual(MODULE.gate(suite(bad), ledger),
+                         ["UNOWNED ledger case (needs class and item): core/x/late#late"])
 
     def test_a_missing_control_is_unknown_not_clean(self):
         rows = suite()

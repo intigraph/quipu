@@ -103,6 +103,14 @@ def gate(results: list[dict], ledger: dict | None) -> list[str]:
     failures += [f"NEW divergence: {case} under {mode}" for case, mode in sorted(current - known)]
     failures += [f"STALE ledger entry (no longer diverges; remove it): {case} under {mode}"
                  for case, mode in sorted(known - current)]
+    # sattler's ruling: every known divergence names its class and owning fix item.
+    owners = ledger.get("owners", {})
+    diverging_cases = {case for case, _ in known}
+    failures += [f"UNOWNED ledger case (needs class and item): {case}"
+                 for case in sorted(diverging_cases)
+                 if not (owners.get(case, {}).get("class") and owners.get(case, {}).get("item"))]
+    failures += [f"STALE owner entry (case no longer in the ledger; remove it): {case}"
+                 for case in sorted(set(owners) - diverging_cases)]
     return failures
 
 
@@ -146,10 +154,14 @@ def main(argv=None) -> int:
     args.output.write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps(report["summary"], indent=1))
     if args.write_ledger:
+        previous = json.loads(args.write_ledger.read_text()) if args.write_ledger.exists() else {}
+        diverging = {case for case, _ in report["divergences"]}
         ledger = {"schema": SCHEMA, "suite_revision": revision,
                   "note": "Known write-path divergences. This list may only shrink (aegis-1c8q ratchet).",
                   "cases": len(results),
                   "by_component": report["summary"]["by_component"],
+                  "owners": {case: owner for case, owner in sorted(previous.get("owners", {}).items())
+                             if case in diverging},
                   "divergences": report["divergences"]}
         args.write_ledger.write_text(json.dumps(ledger, indent=1) + "\n")
     ledger = json.loads(args.ledger.read_text()) if args.ledger else None

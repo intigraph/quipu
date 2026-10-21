@@ -115,6 +115,124 @@
    "agrees": 2
   }
  },
+ "owners": {
+  "core/complex/personexample#personexample": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/complex/shacl-shacl#shacl-shacl": {
+   "class": "over-refusal-on-split",
+   "item": "aegis-9q3v"
+  },
+  "core/path/path-complex-002#path-complex-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-strange-001#path-strange-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-strange-002#path-strange-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/property/datatype-001#datatype-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/disjoint-001#disjoint-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/property/in-001#in-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/lessThan-001#lessThan-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/property/lessThan-002#lessThan-002": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/property/lessThanOrEquals-001#lessThanOrEquals-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/property/maxCount-001#maxCount-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/property/maxLength-001#maxLength-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/minExclusive-001#minExclusive-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/minExclusive-002#minExclusive-002": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/minLength-001#minLength-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/node-001#node-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/node-002#node-002": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/nodeKind-001#nodeKind-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/pattern-001#pattern-001": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/pattern-002#pattern-002": {
+   "class": "late-targeting",
+   "item": "aegis-0ky"
+  },
+  "core/property/property-001#property-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/property/uniqueLang-001#uniqueLang-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/targets/targetClass-001#targetClass-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/targets/targetClassImplicit-001#targetClassImplicit-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/targets/targetSubjectsOf-001#targetSubjectsOf-001": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/targets/targetSubjectsOf-002#targetSubjectsOf-002": {
+   "class": "cross-write-value-set",
+   "item": "aegis-7ur8"
+  },
+  "core/validation-reports/shared#shared": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  }
+ },
  "divergences": [
   [
    "core/complex/personexample#personexample",
