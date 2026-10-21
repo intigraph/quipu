@@ -92,6 +92,11 @@ wasm cmd="check" n="1000":
         check) RUSTFLAGS='--cfg getrandom_backend="wasm_js"' \
                cargo check --target wasm32-unknown-unknown --no-default-features --lib ;;
         explorer-build) cd wasm/explorer && cargo build --locked --release ;;
+        explorer-lock) cd wasm/explorer && cargo generate-lockfile --offline ;;
+        explorer-node) just wasm explorer-build && cd wasm/explorer && \
+               target=$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])') && \
+               wasm-bindgen --target nodejs --out-dir pkg-node \
+                   "$target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm" ;;
         build) cd wasm/harness && cargo build --release && \
                wasm-bindgen --target web --out-dir www/pkg \
                    target/wasm32-unknown-unknown/release/quipu_wasm_harness.wasm ;;
@@ -142,6 +147,8 @@ paper-merge cmd="build":
 bench name *args:
     @if [ "{{ name }}" = "census" ]; then \
         cargo run --quiet --release --example census -- {{ args }}; \
+    elif [ "{{ name }}" = "merge-load-build" ]; then \
+        cargo build --locked --example merge_load --bin quipu; \
     elif [ "{{ name }}" = "merge" ]; then \
         cargo run --quiet --release --example mergebench --features shacl -- {{ args }}; \
     elif [ "{{ name }}" = "memory" ]; then \
