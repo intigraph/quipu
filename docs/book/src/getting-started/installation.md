@@ -20,6 +20,18 @@ Binary installers do not create your knowledge database, register an agent or
 start a service. Running Quipu can create data; see
 [configuration and data removal](#remove-configuration-and-data) separately.
 
+## Verification scope
+
+The release installer and archive commands have been exercised with the
+published Linux x86_64 bundles, including an upgrade and removal. The Python
+client has been installed and removed in a dedicated virtual environment.
+
+The Homebrew, apt, Cargo/source-build, Rust-library, Tambo apply/removal and
+container procedures below are **not yet independently exercised for this
+reference revision**. Their commands are derived from the current source and
+package definitions; they are not a claim of a successful installation on your
+platform. Use the listed version and removal checks to verify that boundary.
+
 ## Release installer
 
 Supported release targets are Linux x86_64/aarch64 and macOS x86_64/arm64.
