@@ -12,11 +12,12 @@
 //!
 //! Seeding is substitution, and substitution only equals join semantics for
 //! operands that cannot observe a variable before it is joined: BGPs, `GRAPH`
-//! around them, and joins of those. `OPTIONAL` with a filter, `MINUS`, `FILTER`,
+//! around them, and joins of those. The subject bind join also admits a
+//! `UNION` of them and `BIND(<constant> AS ?v)`, which reads no binding. `OPTIONAL` with a filter, `MINUS`, `FILTER`,
 //! subqueries and paths can — a filter that sees `?x` bound by substitution
 //! answers differently from one evaluated bottom-up — so they keep the hash join.
 
-use spargebra::algebra::GraphPattern;
+use spargebra::algebra::{Expression, GraphPattern};
 use spargebra::term::{GroundTerm, NamedNodePattern, TermPattern, TriplePattern, Variable};
 
 use crate::error::Result;
@@ -155,6 +156,7 @@ fn subject_lookup_patterns<'a>(
     pattern: &'a GraphPattern,
     triples: &mut Vec<&'a TriplePattern>,
     variables: &mut Vec<String>,
+    constants: &mut Vec<&'a Variable>,
 ) -> bool {
     match pattern {
         GraphPattern::Bgp { patterns } => {
@@ -169,10 +171,24 @@ fn subject_lookup_patterns<'a>(
         GraphPattern::Graph {
             name: NamedNodePattern::NamedNode(_),
             inner,
-        } => subject_lookup_patterns(inner, triples, variables),
+        } => subject_lookup_patterns(inner, triples, variables, constants),
         GraphPattern::Union { left, right } => {
-            subject_lookup_patterns(left, triples, variables)
-                && subject_lookup_patterns(right, triples, variables)
+            subject_lookup_patterns(left, triples, variables, constants)
+                && subject_lookup_patterns(right, triples, variables, constants)
+        }
+        // `{ ?item q:blockedOn ?t . BIND("blocks" AS ?relation) }` (aegis-xacr):
+        // a constant reads no binding, so seeding cannot change its value.
+        // Seeded Extend overwrites the variable where the bottom-up join would
+        // drop a conflicting row, so the caller refuses a left row that binds it.
+        GraphPattern::Extend {
+            inner,
+            variable,
+            expression: Expression::Literal(_) | Expression::NamedNode(_),
+        } => {
+            let ok = subject_lookup_patterns(inner, triples, variables, constants);
+            push_unique(variables, variable.as_str().to_string());
+            constants.push(variable);
+            ok
         }
         _ => false,
     }
@@ -184,7 +200,8 @@ fn subject_lookup_patterns<'a>(
 /// paths, variable GRAPH and subqueries keep bottom-up evaluation.
 ///
 /// Only expression-free BGP substitution is used: no expression gains visibility of bindings
-/// that it would not have in the ordinary join. Multiplicity is retained by
+/// that it would not have in the ordinary join. The one expression admitted is
+/// `BIND(<constant> AS ?v)` over such a pattern, which reads no binding at all. Multiplicity is retained by
 /// evaluating once for every left row, including duplicates.
 pub(crate) fn try_subject_bind_join(
     store: &Store,
@@ -294,11 +311,18 @@ fn subject_bind_vars(
 ) -> Result<Option<Vec<String>>> {
     let mut patterns = Vec::new();
     let mut vars = Vec::new();
-    if !subject_lookup_patterns(right, &mut patterns, &mut vars) {
+    let mut constants = Vec::new();
+    if !subject_lookup_patterns(right, &mut patterns, &mut vars, &mut constants) {
         return Ok(None);
     }
     if left_rows.len() > max_rows {
         return Ok(None);
+    }
+    for variable in constants {
+        let name = variable.as_str();
+        if seed.contains_key(name) || left_rows.iter().any(|row| row.contains_key(name)) {
+            return Ok(None);
+        }
     }
     if left_rows.is_empty() {
         return Ok(Some(vars));

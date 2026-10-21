@@ -47,6 +47,8 @@ mod triple_alias;
 mod bind_join;
 #[cfg(test)]
 mod bind_join_tests;
+#[cfg(test)]
+mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
 pub(crate) mod count_mmap;
