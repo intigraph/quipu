@@ -623,6 +623,12 @@ pub struct ServerConfig {
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
 
+    /// Add per-query `SQLite` statement totals (count, rows, time, costliest
+    /// statement texts) to query observation logs (aegis-xacr). Off by default;
+    /// when on, every connection carries a profile hook, so measure its
+    /// overhead before enabling it in production.
+    pub log_query_phases: bool,
+
     /// Expiring, operator-only private specimen capture; omitted by default.
     pub query_capture: Option<QueryCaptureConfig>,
 
@@ -651,6 +657,7 @@ impl Default for ServerConfig {
             read_process_base_port: 3031,
             reserve_point_reads: false,
             log_query_admission: false,
+            log_query_phases: false,
             query_capture: None,
             update_full_copy_max_facts: 250_000,
         }

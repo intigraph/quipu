@@ -28,6 +28,7 @@ pub(super) struct Observation {
     wait_ms: Option<f64>,
     acquired: Option<Instant>,
     held_ms: Option<f64>,
+    statements: Option<quipu::statement_profile::Totals>,
     outcome: &'static str,
     emit: Box<dyn FnMut(Value) + Send>,
 }
@@ -69,6 +70,7 @@ impl Observation {
             wait_ms: None,
             acquired: None,
             held_ms: None,
+            statements: None,
             outcome: "not_started",
             emit,
         };
@@ -107,6 +109,11 @@ impl Observation {
         self.acquired = Some(Instant::now());
     }
 
+    /// `SQLite` statement totals for this query, when `log_query_phases` is on.
+    pub(super) fn statements(&mut self, totals: Option<quipu::statement_profile::Totals>) {
+        self.statements = totals;
+    }
+
     pub(super) fn finished(&mut self, ok: bool) {
         self.held_ms = self.acquired.map(|t| t.elapsed().as_secs_f64() * 1_000.0);
         self.outcome = if ok { "ok" } else { "error" };
@@ -128,8 +135,26 @@ impl Observation {
         record["store_wait_ms"] = json!(self.wait_ms);
         record["store_held_ms"] = json!(self.held_ms);
         record["worker_outcome"] = json!(self.outcome);
+        if let Some(totals) = &self.statements {
+            // Compare with store_held_ms: the remainder is spent outside SQLite.
+            record["sqlite_statements"] = json!(totals.statements);
+            record["sqlite_rows"] = json!(totals.rows);
+            record["sqlite_ms"] = json!(nanos_ms(totals.nanos));
+            record["sqlite_top"] = json!(
+                totals
+                    .top(3)
+                    .into_iter()
+                    .map(|(sql, count, nanos)| json!({"sql": sql, "count": count, "ms": nanos_ms(nanos)}))
+                    .collect::<Vec<_>>()
+            );
+        }
         record
     }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn nanos_ms(nanos: u64) -> f64 {
+    nanos as f64 / 1_000_000.0
 }
 
 impl Drop for Observation {
@@ -368,6 +393,51 @@ mod tests {
         let records = records.lock().unwrap();
         assert_eq!(records.len(), 2);
         assert_eq!(records[1]["worker_outcome"], "ok");
+    }
+
+    /// aegis-xacr: statement totals reach the end record, and the statement
+    /// texts they name carry no query constants (the log keeps digests only).
+    #[test]
+    fn statement_totals_reach_the_end_record_without_query_constants() {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        quipu::tool_knot(
+            &mut store,
+            &json!({"turtle":"<urn:private-marker:s> <urn:private-marker:p> \"secret-literal\" ."}),
+        )
+        .unwrap();
+        store.enable_statement_profile();
+        let query = "SELECT ?o WHERE { <urn:private-marker:s> <urn:private-marker:p> ?o \
+                     FILTER(?o = \"secret-literal\") }";
+        let (mut observation, records) = capture(&json!({"query":query}), Some(5));
+        quipu::statement_profile::begin();
+        let result = quipu::tool_query(&store, &json!({"query":query})).unwrap();
+        observation.statements(quipu::statement_profile::take());
+        observation.finished(true);
+        drop(observation);
+        assert_eq!(result["count"], 1, "positive control: the query answered");
+        let records = records.lock().unwrap();
+        assert!(records[0].get("sqlite_statements").is_none());
+        let end = &records[1];
+        assert!(end["sqlite_statements"].as_u64().unwrap() > 0);
+        assert!(end["sqlite_rows"].as_u64().unwrap() > 0);
+        assert!(end["sqlite_ms"].as_f64().unwrap() >= 0.0);
+        let top = end["sqlite_top"].as_array().unwrap();
+        assert!(!top.is_empty() && top.len() <= 3);
+        let text = end.to_string();
+        assert!(!text.contains("private-marker"), "{text}");
+        assert!(!text.contains("secret-literal"), "{text}");
+    }
+
+    #[test]
+    fn statement_totals_are_absent_unless_recorded() {
+        let (mut observation, records) = capture(&json!({"query":"ASK {}"}), Some(6));
+        observation.finished(true);
+        drop(observation);
+        assert!(
+            records.lock().unwrap()[1]
+                .get("sqlite_statements")
+                .is_none()
+        );
     }
 }
 

@@ -259,6 +259,7 @@ async fn query_core(
         // boundary because that boundary cannot tell them apart, and conflating
         // them is what makes a queued caller look like an expensive one.
         let federation = store.federation.clone();
+        let phases = store.log_query_phases;
         let lock_t0 = std::time::Instant::now();
         observation.waiting();
         // POOLED READ. SPARQL is read-only, so this takes a
@@ -453,6 +454,9 @@ async fn query_core(
 
         // Pin readiness and evaluation to the same schema/fact snapshot: a
         // concurrent explicit index drop cannot turn this into a scan fallback.
+        if phases {
+            quipu::statement_profile::begin();
+        }
         let mut result = if require_substring {
             store.substring_query(|| run(&store))?
         } else {
@@ -493,6 +497,9 @@ async fn query_core(
         if elapsed_ms > 1_000 || result.is_err() {
             let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
+        }
+        if phases {
+            observation.statements(quipu::statement_profile::take());
         }
         observation.finished(result.is_ok());
         result
