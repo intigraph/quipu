@@ -3741,15 +3741,28 @@ fn knot_is_silent_when_every_type_is_governed() {
             "actor": "test",
             "source": "unit-test"
         }),
-    )
-    .unwrap();
-
-    assert_eq!(result["conforms"], true);
-    // ABSENT, not empty: the field's existence is the signal.
-    assert!(
-        result.get("vocabulary_hint").is_none(),
-        "a fully governed write must carry no advisory, got {result}"
     );
+    #[cfg(not(feature = "shacl"))]
+    {
+        assert!(matches!(result, Err(crate::Error::CannotVerify(message))
+            if message == "write SHACL requires the shacl feature"));
+        let target = tool_query(
+            &store,
+            &serde_json::json!({"query": "ASK { <http://example.org/carol> ?p ?o }"}),
+        )
+        .unwrap();
+        assert_eq!(target["result"], false);
+    }
+    #[cfg(feature = "shacl")]
+    {
+        let result = result.unwrap();
+        assert_eq!(result["conforms"], true);
+        // ABSENT, not empty: the field's existence is the signal.
+        assert!(
+            result.get("vocabulary_hint").is_none(),
+            "a fully governed write must carry no advisory, got {result}"
+        );
+    }
 }
 
 /// One governed type must not hide an unknown sibling type; the whole write is
@@ -3896,11 +3909,24 @@ fn vocabulary_gate_accepts_prefix_neutral_targets_and_declared_parents() {
                        <http://example.org/service> a aegis:Service .",
             "actor": "test"
         }),
-    )
-    .unwrap();
-
-    assert_eq!(result["conforms"], true);
-    assert_eq!(result["count"], 2);
+    );
+    #[cfg(not(feature = "shacl"))]
+    {
+        assert!(matches!(result, Err(crate::Error::CannotVerify(message))
+            if message == "write SHACL requires the shacl feature"));
+        let target = tool_query(
+            &store,
+            &serde_json::json!({"query": "ASK { <http://example.org/code> ?p ?o }"}),
+        )
+        .unwrap();
+        assert_eq!(target["result"], false);
+    }
+    #[cfg(feature = "shacl")]
+    {
+        let result = result.unwrap();
+        assert_eq!(result["conforms"], true);
+        assert_eq!(result["count"], 2);
+    }
 }
 
 // ---------------------------------------------------------------------------
