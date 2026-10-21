@@ -1,0 +1,25 @@
+Script started on 2026-10-21 14:06:54-04:00 [COMMAND="python3 docs/demos/release-readiness/demo.py 730824e85297f7824c99ccdd0f36ecb0852f1962 bfed5997" <not executed on terminal>]
+
+Revision 730824e85297f7824c99ccdd0f36ecb0852f1962; actual waiter main(), mocked check API, one poll
+  queued/None: exit=1, (not emitted)
+    timed out waiting for 'Release correctness' on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  in_progress/None: exit=1, (not emitted)
+    timed out waiting for 'Release correctness' on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  completed/failure: exit=1, (not emitted)
+    [1/1] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: check 42 concluded failure
+  completed/success: exit=0, (not emitted)
+    [1/1] aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: check 42 passed
+
+Revision bfed5997e39a0260acc82d8ad302b6d913edf042; actual waiter main(), mocked check API, one poll
+  queued/None: exit=0, ready=false
+    ::warning title=Release deferred::DEFERRED: Release correctness on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: wait budget exhausted; check 42 is queued; publishing stays skipped
+  in_progress/None: exit=0, ready=false
+    ::warning title=Release deferred::DEFERRED: Release correctness on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: wait budget exhausted; check 42 is in_progress; publishing stays skipped
+  completed/failure: exit=1, ready=false
+    FAILED: Release correctness on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: check 42 concluded failure
+  completed/success: exit=0, ready=true
+    READY: Release correctness on exact SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: check 42 passed
+
+Observed: pending timeout defers; real failure still fails; only success is ready.
+
+Script done on 2026-10-21 14:06:54-04:00 [COMMAND_EXIT_CODE="0"]
