@@ -37,6 +37,8 @@ pub(crate) struct StoreHandle {
     pub(crate) readers: ReadPool,
     /// Opt-in log-only admission timing; immutable after startup.
     pub(crate) log_query_admission: bool,
+    /// Opt-in per-query `SQLite` statement totals; immutable after startup.
+    pub(crate) log_query_phases: bool,
     /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
     pub(crate) deck_http: bool,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
@@ -159,6 +161,7 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers,
             log_query_admission: false,
+            log_query_phases: false,
             deck_http: false,
             query_capture: None,
             replica: None,
@@ -199,6 +202,7 @@ impl StoreHandle {
             writer: FairMutex::new(store),
             readers: ReadPool::empty(),
             log_query_admission: false,
+            log_query_phases: false,
             deck_http: false,
             query_capture: None,
             replica: None,
