@@ -323,12 +323,16 @@ async fn main() {
         wal_maintenance::reset_at_startup(&store);
     }
 
+    if config.server.log_query_phases {
+        store.enable_statement_profile();
+    }
     let read_pool: ReadPool = point_reads::open_pool(&db_path, &store, &config.server);
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.log_query_phases = config.server.log_query_phases;
     handle.deck_http = config.server.deck_http;
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config

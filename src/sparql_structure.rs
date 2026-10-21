@@ -157,19 +157,29 @@ pub fn on_deep_stack<T: Send>(f: impl FnOnce() -> T + Send) -> Result<T> {
     if ON_DEEP_STACK.with(std::cell::Cell::get) {
         return Ok(f());
     }
-    std::thread::scope(|scope| {
+    // A query counted by `statement_profile` keeps counting on this thread.
+    let profiled = crate::statement_profile::armed();
+    let (out, worker) = std::thread::scope(|scope| {
         let handle = std::thread::Builder::new()
             .name("quipu-parse".into())
             .stack_size(DEEP_STACK_BYTES)
             .spawn_scoped(scope, move || {
                 ON_DEEP_STACK.with(|deep| deep.set(true));
-                f()
+                if profiled {
+                    crate::statement_profile::begin();
+                }
+                let out = f();
+                (out, crate::statement_profile::take())
             })
             .map_err(|e| Error::InvalidValue(format!("could not start parse thread: {e}")))?;
-        Ok(handle
-            .join()
-            .unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
-    })
+        Ok::<_, Error>(
+            handle
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+        )
+    })?;
+    crate::statement_profile::absorb(worker);
+    Ok(out)
 }
 
 /// Bound, then parse a query on a deep stack. The outer `Result` is the bound;

@@ -37,6 +37,7 @@ pub mod namespace;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+pub mod replica_provider;
 mod search_graph_scope;
 pub mod search_trace;
 pub mod substring;
@@ -135,6 +136,8 @@ pub mod share_transport;
 pub mod signing;
 pub mod sparql;
 pub mod sparql_structure;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod statement_profile;
 pub mod store;
 pub mod time;
 pub mod types;
