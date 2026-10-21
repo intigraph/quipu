@@ -113,6 +113,31 @@ pub fn take() -> Option<Totals> {
     ACTIVE.with(|a| a.borrow_mut().take())
 }
 
+/// One armed span on this thread. Dropping it disarms the thread, so an early
+/// return or an unwind cannot leave a reused worker counting other work.
+#[must_use = "dropping the span disarms the thread immediately"]
+pub struct Span(());
+
+impl Span {
+    /// Start counting on this thread, discarding anything unread.
+    pub fn arm() -> Self {
+        begin();
+        Self(())
+    }
+
+    /// Stop counting and return what was counted since [`Span::arm`].
+    pub fn finish(self) -> Option<Totals> {
+        take()
+    }
+}
+
+impl Drop for Span {
+    fn drop(&mut self) {
+        // After `finish` this is a no-op: `take` already cleared the thread.
+        take();
+    }
+}
+
 /// Whether this thread is counting.
 #[must_use]
 pub fn armed() -> bool {
@@ -168,6 +193,45 @@ mod tests {
         assert_eq!(totals.rows, 6);
         assert_eq!(totals.top(3)[0].0, ROWS);
         assert_eq!(totals.top(3)[0].1, 2);
+        assert!(!armed());
+    }
+
+    #[test]
+    fn a_span_disarms_on_early_return_and_later_work_is_not_counted() {
+        let conn = conn();
+        fn early(conn: &rusqlite::Connection) -> Result<(), ()> {
+            let _span = Span::arm();
+            rows(conn);
+            Err(())?;
+            unreachable!()
+        }
+        assert!(early(&conn).is_err());
+        assert!(!armed(), "the early return left the thread armed");
+        rows(&conn);
+        assert!(take().is_none(), "unrelated later work was counted");
+    }
+
+    #[test]
+    fn a_span_disarms_on_unwind_and_later_work_is_not_counted() {
+        let conn = conn();
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _span = Span::arm();
+            rows(&conn);
+            panic!("evaluation failed");
+        }));
+        assert!(unwound.is_err());
+        assert!(!armed(), "the unwind left the thread armed");
+        rows(&conn);
+        assert!(take().is_none(), "unrelated later work was counted");
+    }
+
+    #[test]
+    fn finish_returns_the_span_totals_and_disarms() {
+        let conn = conn();
+        let span = Span::arm();
+        rows(&conn);
+        let totals = span.finish().unwrap();
+        assert_eq!((totals.statements, totals.rows), (1, 3));
         assert!(!armed());
     }
 

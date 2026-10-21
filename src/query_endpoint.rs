@@ -454,14 +454,13 @@ async fn query_core(
 
         // Pin readiness and evaluation to the same schema/fact snapshot: a
         // concurrent explicit index drop cannot turn this into a scan fallback.
-        if phases {
-            quipu::statement_profile::begin();
-        }
-        let mut result = if require_substring {
-            store.substring_query(|| run(&store))?
-        } else {
-            run(&store)
-        };
+        let mut result = super::query_usage::profiled(&mut observation, phases, || {
+            if require_substring {
+                store.substring_query(|| run(&store))
+            } else {
+                Ok(run(&store))
+            }
+        })?;
         if require_substring && let Ok(response) = &mut result {
             response.headers_mut().insert(
                 axum::http::HeaderName::from_static("x-quipu-substring-index"),
@@ -497,9 +496,6 @@ async fn query_core(
         if elapsed_ms > 1_000 || result.is_err() {
             let text = super::query_usage::query_text(&input);
             eprintln!("query {elapsed_ms}ms: {text}");
-        }
-        if phases {
-            observation.statements(quipu::statement_profile::take());
         }
         observation.finished(result.is_ok());
         result

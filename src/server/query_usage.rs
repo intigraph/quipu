@@ -152,6 +152,24 @@ impl Observation {
     }
 }
 
+/// Evaluate with `SQLite` statement totals armed when `enabled`, and record
+/// them on `observation` whatever `evaluate` returns, including an outer error
+/// such as an unready substring index. The span guard disarms the thread on
+/// every exit, unwind included, so a reused blocking worker never keeps
+/// counting after the query (harding, #702).
+pub(super) fn profiled<T>(
+    observation: &mut Observation,
+    enabled: bool,
+    evaluate: impl FnOnce() -> T,
+) -> T {
+    let span = enabled.then(quipu::statement_profile::Span::arm);
+    let out = evaluate();
+    if let Some(span) = span {
+        observation.statements(span.finish());
+    }
+    out
+}
+
 #[allow(clippy::cast_precision_loss)]
 fn nanos_ms(nanos: u64) -> f64 {
     nanos as f64 / 1_000_000.0
@@ -426,6 +444,77 @@ mod tests {
         let text = end.to_string();
         assert!(!text.contains("private-marker"), "{text}");
         assert!(!text.contains("secret-literal"), "{text}");
+    }
+
+    fn profiled_store() -> quipu::Store {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        quipu::tool_knot(
+            &mut store,
+            &json!({"turtle":"<urn:demo:s> <urn:demo:p> <urn:demo:o> ."}),
+        )
+        .unwrap();
+        store.enable_statement_profile();
+        store
+    }
+
+    /// harding #702: a substring outer error (no prepared index) exits the
+    /// endpoint closure through `?`. The thread must be disarmed, the totals
+    /// recorded, and an unrelated later operation on the thread not counted.
+    #[test]
+    fn a_substring_outer_error_records_totals_and_disarms_the_thread() {
+        let store = profiled_store();
+        let (mut observation, records) = capture(&json!({"query":"ASK {}"}), Some(7));
+        let mut evaluated = false;
+        let outer = profiled(&mut observation, true, || {
+            store.substring_query(|| {
+                evaluated = true;
+            })
+        });
+        assert!(
+            outer.is_err(),
+            "positive control: the index is not prepared"
+        );
+        assert!(!evaluated, "the outer error came before evaluation");
+        assert!(!quipu::statement_profile::armed());
+        observation.finished(false);
+        drop(observation);
+        let end = records.lock().unwrap()[1].clone();
+        assert!(end["sqlite_statements"].as_u64().unwrap() > 0, "{end}");
+        quipu::tool_query(&store, &json!({"query":"SELECT ?s WHERE { ?s ?p ?o }"})).unwrap();
+        assert!(quipu::statement_profile::take().is_none());
+    }
+
+    #[test]
+    fn an_unwinding_evaluation_disarms_the_thread() {
+        let store = profiled_store();
+        let (mut observation, _records) = capture(&json!({"query":"ASK {}"}), Some(8));
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            profiled(&mut observation, true, || {
+                quipu::tool_query(&store, &json!({"query":"ASK { ?s ?p ?o }"})).unwrap();
+                panic!("evaluation failed");
+            })
+        }));
+        assert!(unwound.is_err());
+        assert!(!quipu::statement_profile::armed());
+        quipu::tool_query(&store, &json!({"query":"SELECT ?s WHERE { ?s ?p ?o }"})).unwrap();
+        assert!(quipu::statement_profile::take().is_none());
+    }
+
+    #[test]
+    fn profiling_off_arms_nothing_and_records_nothing() {
+        let store = profiled_store();
+        let (mut observation, records) = capture(&json!({"query":"ASK {}"}), Some(9));
+        profiled(&mut observation, false, || {
+            assert!(!quipu::statement_profile::armed());
+            quipu::tool_query(&store, &json!({"query":"ASK { ?s ?p ?o }"})).unwrap();
+        });
+        observation.finished(true);
+        drop(observation);
+        assert!(
+            records.lock().unwrap()[1]
+                .get("sqlite_statements")
+                .is_none()
+        );
     }
 
     #[test]
