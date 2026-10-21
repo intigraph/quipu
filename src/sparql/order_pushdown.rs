@@ -26,13 +26,111 @@
 //!   `k` rows of the stably sorted `L`, in the same order. Ties need nothing
 //!   extra: tied `L` rows keep their original order on both sides.
 //!
+//! Both hold only when the comparator is a total order over the key values.
+//! Mixed kinds are not: an integer and a string compare `Equal`, so `10 = "x"`
+//! and `"x" = 1` while `1 < 10`, and a merge sort's output then depends on the
+//! arrangement of its input (franklin's counterexample on #700). So while the
+//! rewritten pattern runs, the selection's `ORDER BY` checks that every key's
+//! values share one comparison class; if any does not, the result is
+//! discarded and the original pattern is evaluated instead.
+//!
 //! The rewritten pattern is evaluated and then sorted and cut exactly as
 //! before; this only decides how many left rows reach the OPTIONALs.
+
+use std::cell::Cell;
 
 use spargebra::algebra::{Expression, Function, GraphPattern, OrderExpression};
 use spargebra::term::NamedNodePattern;
 
+use super::Bindings;
 use super::pattern_util::triple_pattern_vars;
+use crate::store::Store;
+use crate::types::Value;
+
+thread_local! {
+    /// (armed, declined) for the rewritten evaluation running on this thread.
+    static STATE: Cell<(bool, bool)> = const { Cell::new((false, false)) };
+}
+
+/// Arms the comparison-class check for one rewritten evaluation; restores the
+/// enclosing state when dropped, so nested rewrites stay independent.
+pub(super) struct Guard((bool, bool));
+
+impl Guard {
+    pub(super) fn arm() -> Self {
+        Self(STATE.with(|s| s.replace((true, false))))
+    }
+
+    /// Disarm, restoring the enclosing state, and report whether an `ORDER BY`
+    /// inside the rewritten pattern saw mixed key kinds.
+    pub(super) fn finish(self) -> bool {
+        let declined = STATE.with(|s| s.get().1);
+        // Restore before the caller's fallback evaluation runs.
+        drop(self);
+        declined
+    }
+}
+
+impl Drop for Guard {
+    fn drop(&mut self) {
+        STATE.with(|s| s.set(self.0));
+    }
+}
+
+/// Under an armed guard, decline the rewrite unless `rows` order totally
+/// under every key in `expression`. A no-op otherwise.
+pub(super) fn check(store: &Store, rows: &[Bindings], expression: &[OrderExpression]) {
+    if !STATE.with(|s| s.get().0) {
+        return;
+    }
+    let total = expression.iter().all(|order| {
+        let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = order;
+        let mut class = None;
+        rows.iter().all(|row| {
+            let Some(kind) = kind(super::filter::eval_expr(store, e, row).as_ref()) else {
+                return false;
+            };
+            // Unbound sorts first against everything, consistently.
+            kind == Kind::Unbound || *class.get_or_insert(kind) == kind
+        })
+    });
+    if !total {
+        STATE.with(|s| s.set((true, true)));
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Unbound,
+    Numeric,
+    Lexical,
+    Bool,
+    Iri,
+}
+
+/// The comparison class `compare_option_values` and the IRI key give a value,
+/// or `None` where it is not totally ordered (NaN, bytes, an unparsable
+/// numeric literal).
+fn kind(v: Option<&Value>) -> Option<Kind> {
+    let Some(v) = v else {
+        return Some(Kind::Unbound);
+    };
+    if v.datatype()
+        .is_some_and(crate::namespace::is_numeric_datatype)
+    {
+        // Numeric pairs go through `numeric_value::compare`; a value it cannot
+        // compare with itself (unparsable lexical, NaN) compares `Equal` to
+        // everything and breaks transitivity.
+        return (crate::numeric_value::compare(v, v) == Some(std::cmp::Ordering::Equal))
+            .then_some(Kind::Numeric);
+    }
+    match v {
+        Value::Ref(_) => Some(Kind::Iri),
+        Value::Bool(_) => Some(Kind::Bool),
+        Value::Str(_) | Value::Lang { .. } | Value::Typed { .. } => Some(Kind::Lexical),
+        _ => None,
+    }
+}
 
 /// The pattern to evaluate under `ORDER BY expression` with a `k`-row limit,
 /// or `None` when the shape does not qualify (evaluate `inner` unchanged).

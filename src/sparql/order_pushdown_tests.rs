@@ -168,3 +168,78 @@ fn declines_what_an_optional_or_the_context_could_change() {
         );
     }
 }
+
+/// Keys whose values mix comparison kinds (franklin's #700 counterexample:
+/// ranks 10, "x", 1 with unmatched OPTIONALs). `compare_option_values` gives
+/// `10 = "x" = 1` but `1 < 10`, so the order is not transitive and the rewrite
+/// must fall back to the full evaluation.
+fn mixed_store() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let mut ttl = String::from(
+        "@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n",
+    );
+    let ranks = [
+        "10", "\"x\"", "1", "\"y\"", "5", "\"a\"", "3", "\"10\"", "7", "\"b\"",
+    ];
+    let tags = ["ex:t1", "\"m\"", "ex:t2", "\"a\"", "ex:t0"];
+    let weights = ["\"NaN\"^^xsd:double", "2.5", "\"INF\"^^xsd:double", "1.0"];
+    for i in 0..30 {
+        ttl.push_str(&format!(
+            "ex:i{i:02} ex:rank {} ; ex:tag {} ; ex:weight {} .\n",
+            ranks[i % ranks.len()],
+            tags[i % tags.len()],
+            weights[i % weights.len()]
+        ));
+        if i % 3 == 0 {
+            ttl.push_str(&format!("ex:i{i:02} ex:name \"n{i}\" .\n"));
+        }
+    }
+    ingest_rdf(
+        &mut store,
+        ttl.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-21T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store
+}
+
+#[test]
+fn mixed_kind_keys_fall_back_to_the_full_sort_window() {
+    let store = mixed_store();
+    let ctx = TemporalContext::default();
+    let head = "PREFIX ex: <http://example.org/> SELECT ?item ?rank ?tag ?weight ?name";
+    let body = "WHERE { ?item ex:rank ?rank ; ex:tag ?tag ; ex:weight ?weight \
+                OPTIONAL { ?item ex:name ?name } }";
+    for order in [
+        "?rank",
+        "DESC(?rank) ?item",
+        "?tag ?item",
+        "?weight ?item",
+        "?item",
+    ] {
+        let full =
+            query_temporal(&store, &format!("{head} {body} ORDER BY {order}"), &ctx).unwrap();
+        for (offset, k) in [(0, 1), (0, 3), (2, 5), (0, 9), (4, 12), (0, 40)] {
+            let limited = query_temporal(
+                &store,
+                &format!("{head} {body} ORDER BY {order} LIMIT {k} OFFSET {offset}"),
+                &ctx,
+            )
+            .unwrap();
+            let expected: Vec<String> = ordered(full.rows())
+                .into_iter()
+                .skip(offset)
+                .take(k)
+                .collect();
+            assert_eq!(
+                ordered(limited.rows()),
+                expected,
+                "ORDER BY {order} LIMIT {k} OFFSET {offset}"
+            );
+        }
+    }
+}

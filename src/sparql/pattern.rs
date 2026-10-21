@@ -322,8 +322,19 @@ pub fn eval_pattern_seeded(
             let pushed = ctx
                 .order_limit
                 .and_then(|k| super::order_pushdown::rewrite(inner, expression, k));
-            let inner = pushed.as_ref().unwrap_or(inner);
-            let (rows, vars) = eval_pattern_seeded(store, inner, &inner_ctx, seed)?;
+            let (rows, vars) = match &pushed {
+                Some(rewritten) => {
+                    let guard = super::order_pushdown::Guard::arm();
+                    let result = eval_pattern_seeded(store, rewritten, &inner_ctx, seed)?;
+                    if guard.finish() {
+                        eval_pattern_seeded(store, inner, &inner_ctx, seed)?
+                    } else {
+                        result
+                    }
+                }
+                None => eval_pattern_seeded(store, inner, &inner_ctx, seed)?,
+            };
+            super::order_pushdown::check(store, &rows, expression);
             let sorted = match ctx.order_limit {
                 Some(limit) => super::order::top_rows(store, rows, expression, ctx, limit)?,
                 None => super::order::sort_rows(store, rows, expression, ctx)?,
