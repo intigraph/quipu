@@ -29,6 +29,8 @@ mod background;
 mod base;
 #[path = "server/cors.rs"]
 mod cors;
+#[path = "server/deck.rs"]
+mod deck;
 #[path = "server/entity.rs"]
 mod entity;
 #[path = "server/feed.rs"]
@@ -327,6 +329,7 @@ async fn main() {
 
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.log_query_admission = config.server.log_query_admission;
+    handle.deck_http = config.server.deck_http;
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config
         .server
@@ -427,6 +430,9 @@ async fn main() {
         .route("/impact", post(impact_analysis))
         .route("/path/cone", post(path_cone))
         .route("/path/backtest", post(path_backtest))
+        .route("/deck/present", post(deck::deck_present))
+        .route("/deck/attest", post(deck::deck_attest))
+        .route("/deck/receipt", post(deck::deck_receipt))
         .route("/retract", post(retract))
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))
