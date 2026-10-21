@@ -39,6 +39,14 @@ pub(crate) fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
     }
 }
 
+fn ordered_limit_safe(pattern: &GraphPattern) -> bool {
+    match pattern {
+        GraphPattern::OrderBy { .. } => true,
+        GraphPattern::Project { inner, .. } => ordered_limit_safe(inner),
+        _ => false,
+    }
+}
+
 /// Evaluate a graph pattern, returning rows and the variable names encountered.
 pub fn eval_pattern(
     store: &Store,
@@ -146,6 +154,8 @@ pub fn eval_pattern_seeded(
             // aegis-tl2q4j: narrow the scan by the filter's string tests.
             let narrowed = super::string_pushdown::narrowed(expr, inner, inner_seed, ctx);
             let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
+            let graph_narrowed = super::graph_filter::narrowed(store, expr, inner, inner_ctx)?;
+            let inner_ctx = graph_narrowed.as_ref().unwrap_or(inner_ctx);
             let (rows, vars) = match super::status_pushdown::candidates(
                 store, expr, inner, inner_ctx, inner_seed,
             )? {
@@ -230,13 +240,20 @@ pub fn eval_pattern_seeded(
             start,
             length,
         } => {
-            // LIMIT pushdown (quipu-0lr): when the subtree between here and
-            // the BGP is prefix-safe, the leaf may stop after start+len rows —
-            // solution order is unchanged, only completion is earlier. An
-            // OFFSET-only slice (no length) has no cap to push.
+            // Push only a prefix-safe subtree or a proven constant presence marker.
             let capped;
             let inner_ctx = match length {
-                Some(len) if limit_pushdown_safe(inner) => {
+                Some(len) if ordered_limit_safe(inner) => {
+                    capped = TemporalContext {
+                        order_limit: Some(start.saturating_add(*len)),
+                        ..ctx.clone()
+                    };
+                    &capped
+                }
+                Some(len)
+                    if limit_pushdown_safe(inner)
+                        || super::limited_scan::named_presence(inner, ctx, seed) =>
+                {
                     capped = TemporalContext {
                         row_limit: Some(start.saturating_add(*len)),
                         ..ctx.clone()
@@ -260,25 +277,7 @@ pub fn eval_pattern_seeded(
             left,
             right,
             expression,
-        } => {
-            let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
-            let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
-            let mut vars = left_vars;
-            for v in &right_vars {
-                if !vars.contains(v) {
-                    vars.push(v.clone());
-                }
-            }
-            // Keyed probe, same output and order as the nested loop (aegis-d8c).
-            let results = super::left_join::left_join(
-                store,
-                ctx,
-                &left_rows,
-                &right_rows,
-                expression.as_ref(),
-            )?;
-            Ok((results, vars))
-        }
+        } => super::left_join::eval(store, left, right, expression.as_ref(), ctx, seed),
 
         GraphPattern::Minus { left, right } => {
             let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
@@ -314,8 +313,16 @@ pub fn eval_pattern_seeded(
         }
 
         GraphPattern::OrderBy { inner, expression } => {
-            let (rows, vars) = eval_pattern_seeded(store, inner, ctx, seed)?;
-            Ok((super::order::sort_rows(store, rows, expression, ctx)?, vars))
+            let inner_ctx = TemporalContext {
+                order_limit: None,
+                ..ctx.clone()
+            };
+            let (rows, vars) = eval_pattern_seeded(store, inner, &inner_ctx, seed)?;
+            let sorted = match ctx.order_limit {
+                Some(limit) => super::order::top_rows(store, rows, expression, ctx, limit)?,
+                None => super::order::sort_rows(store, rows, expression, ctx)?,
+            };
+            Ok((sorted, vars))
         }
 
         GraphPattern::Reduced { inner } => eval_pattern_seeded(store, inner, ctx, seed),
@@ -405,6 +412,10 @@ pub fn eval_pattern_seeded(
                             .named_dataset
                             .as_ref()
                             .is_some_and(|visible| !visible.contains(&graph.g))
+                        || ctx
+                            .graph_candidates
+                            .as_ref()
+                            .is_some_and(|ids| !ids.contains(&graph.g))
                     {
                         continue;
                     }
@@ -412,6 +423,9 @@ pub fn eval_pattern_seeded(
                     graph_seed.insert(graph_var.clone(), Value::Ref(graph.g));
                     let mut graph_ctx = ctx.clone();
                     graph_ctx.graph = GraphScope::Named(vec![graph.g]);
+                    graph_ctx.graph_candidates = None;
+                    #[cfg(test)]
+                    super::graph_filter::record_scan();
                     let (mut graph_rows, graph_vars) =
                         eval_pattern_seeded(store, inner, &graph_ctx, &graph_seed)?;
                     rows.append(&mut graph_rows);
@@ -483,12 +497,12 @@ pub fn eval_pattern_seeded(
                 };
             };
             let remote_query = format!("SELECT * WHERE {{ {inner} }}");
-            let outcome = crate::provider::query_configured_service(
+            let outcome = crate::provider::query_configured_service_with_deadline(
                 store,
                 remotes,
                 endpoint,
                 &remote_query,
-                ctx.deadline.map(|deadline| deadline.remaining_millis()),
+                ctx.deadline,
             );
             let (result, provider, label) = match outcome {
                 Ok(v) => v,

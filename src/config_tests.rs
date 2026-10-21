@@ -241,7 +241,7 @@ fn defaults() {
     assert_eq!(cfg.server.bind, "127.0.0.1:3030");
     assert!(!cfg.server.enabled);
     assert!(cfg.federation.remotes.is_empty());
-    assert!(!cfg.embedding.auto_embed);
+    assert!(cfg.embedding.auto_embed);
     assert_eq!(cfg.embedding.embed_batch_size, 32);
     assert_eq!(cfg.vector.backend, VectorBackend::Sqlite);
     assert_eq!(

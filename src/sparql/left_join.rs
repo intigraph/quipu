@@ -37,12 +37,13 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use spargebra::algebra::Expression;
+use spargebra::algebra::{Expression, GraphPattern};
 
 use crate::error::Result;
 use crate::store::Store;
 
 use super::filter::eval_filter;
+use super::pattern::eval_pattern_seeded;
 use super::pattern_util::{check_eval_budget, merge_bindings};
 use super::{Bindings, TemporalContext};
 
@@ -90,6 +91,36 @@ fn row_key(row: &Bindings, keys: &[String]) -> Option<Vec<Vec<u8>>> {
     keys.iter()
         .map(|k| row.get(k).map(crate::types::Value::term_key))
         .collect()
+}
+
+/// Evaluate the `LeftJoin` operator (moved from `pattern.rs` for the file-size
+/// ratchet). A plain-BGP right side is probed once per left row when the
+/// subject bind guard allows (aegis-xacr); otherwise both sides are evaluated
+/// and joined by the keyed probe below.
+pub(super) fn eval(
+    store: &Store,
+    left: &GraphPattern,
+    right: &GraphPattern,
+    expression: Option<&Expression>,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
+    let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, seed)?;
+    if let Some(done) = super::bind_join::try_subject_bind_left_join(
+        store, right, expression, ctx, seed, &left_rows, &left_vars,
+    )? {
+        return Ok(done);
+    }
+    let (right_rows, right_vars) = eval_pattern_seeded(store, right, ctx, seed)?;
+    let mut vars = left_vars;
+    for v in &right_vars {
+        if !vars.contains(v) {
+            vars.push(v.clone());
+        }
+    }
+    // Keyed probe, same output and order as the nested loop (aegis-d8c).
+    let results = left_join(store, ctx, &left_rows, &right_rows, expression)?;
+    Ok((results, vars))
 }
 
 /// Evaluate `left OPTIONAL { right } [FILTER expression]` over materialized

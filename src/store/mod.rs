@@ -8,7 +8,10 @@ pub mod attach;
 pub mod attestation;
 mod batches;
 pub mod changes;
+pub mod conditional;
 pub mod datasets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod decision_deck;
 mod decision_nonces;
 pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
@@ -30,6 +33,7 @@ mod migrate;
 mod open;
 pub(crate) use open::open_file_immutable;
 mod graph_creation;
+mod graph_metadata;
 pub mod ops;
 pub mod overlays;
 pub mod push;
@@ -42,6 +46,7 @@ pub mod respace;
 mod respace_map;
 mod retract_triples;
 mod retraction;
+mod search_scope_policy;
 mod serialize;
 mod set;
 mod settings;
@@ -89,6 +94,7 @@ pub struct Store {
     /// disabled; the server sets it from `[quipu.resolution]` at startup so
     /// dedup actually fires on ingest (hq-uye).
     pub(crate) resolution_config: ResolutionConfig,
+    pub(crate) resolution_cache: crate::resolution::cache::SharedCache,
     /// Search/limit guardrails. Defaults are conservative; the server sets
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).

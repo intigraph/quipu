@@ -17,6 +17,7 @@ pub const MAX_SHARE_EXPANDED_BYTES: usize = 64 * 1024 * 1024;
 
 const REQUIRED: [&str; 3] = ["manifest.json", "export.nt", "shapes.ttl"];
 const QUERIES: &str = crate::share_queries::QUERIES_FILE;
+const ALIGNMENTS: &str = crate::share_alignments::ALIGNMENTS_FILE;
 
 /// The file-name marker a pendant carries: `x.pendant`, `x.pendant.tar.gz`,
 /// or `x.pendant.db` for the internal SQLite pack.
@@ -88,6 +89,7 @@ fn request_from_files(
         // Optional member; whether it must be present is the manifest's call,
         // checked by `verify_share` (aegis-fxpbys.2).
         queries_turtle: files.get(QUERIES).cloned(),
+        alignments_turtle: files.get(ALIGNMENTS).cloned(),
         query_namespace: None,
         replace_queries: false,
         source: source.to_string(),
@@ -107,8 +109,13 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
     for entry in entries {
         let mut entry =
             entry.map_err(|e| Error::InvalidValue(format!("share archive {source}: {e}")))?;
-        if !entry.header().entry_type().is_file() {
+        if entry.header().entry_type().is_dir() {
             continue;
+        }
+        if !entry.header().entry_type().is_file() {
+            return Err(Error::InvalidValue(
+                "share archive contains a non-regular member".into(),
+            ));
         }
         let path = entry
             .path()
@@ -131,7 +138,10 @@ fn archive_files<R: Read>(reader: R, source: &str) -> Result<BTreeMap<String, St
             .ok_or_else(|| Error::InvalidValue("share archive path is not UTF-8".into()))?
             .to_string();
         if !REQUIRED.contains(&name.as_str())
-            && !matches!(name.as_str(), "export.ttl" | "manifest.ttl" | QUERIES)
+            && !matches!(
+                name.as_str(),
+                "export.ttl" | "manifest.ttl" | QUERIES | ALIGNMENTS
+            )
         {
             return Err(Error::InvalidValue(format!(
                 "share archive contains undeclared file: {}",
@@ -204,6 +214,9 @@ pub fn read_local(reference: &str) -> Result<ShareImportRequest> {
         if let Ok(queries) = std::fs::read_to_string(path.join(QUERIES)) {
             files.insert(QUERIES.to_string(), queries);
         }
+        if let Some(text) = crate::share_alignments::read_directory(path)? {
+            files.insert(ALIGNMENTS.into(), text);
+        }
         return request_from_files(&files, reference);
     }
     let bytes = std::fs::read(path)
@@ -235,7 +248,7 @@ pub fn read_reference(reference: &str) -> Result<ShareImportRequest> {
 }
 
 #[cfg(feature = "remote")]
-fn fetch(url: &str) -> Result<Vec<u8>> {
+pub(crate) fn fetch(url: &str) -> Result<Vec<u8>> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err(Error::InvalidValue(
             "share URL must use http or https".into(),
@@ -270,6 +283,16 @@ pub fn read_url(url: &str) -> Result<ShareImportRequest> {
                 name.to_string(),
                 String::from_utf8(bytes)
                     .map_err(|e| Error::InvalidValue(format!("share fetch {name} UTF-8: {e}")))?,
+            );
+        }
+        let parsed: ShareManifest = serde_json::from_str(&files["manifest.json"])
+            .map_err(|e| Error::InvalidValue(format!("share manifest: {e}")))?;
+        if parsed.alignments_hash.is_some() || parsed.files.alignments.is_some() {
+            let bytes = fetch(&format!("{url}{ALIGNMENTS}"))?;
+            files.insert(
+                ALIGNMENTS.into(),
+                String::from_utf8(bytes)
+                    .map_err(|e| Error::InvalidValue(format!("share alignment UTF-8: {e}")))?,
             );
         }
         // A served directory exposes no listing, so fetch the member only when

@@ -4633,7 +4633,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -4666,6 +4666,7 @@ dependencies = [
  "rudof_iri",
  "rudof_rdf",
  "rusqlite",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha1",

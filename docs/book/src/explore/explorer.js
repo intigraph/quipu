@@ -7,8 +7,8 @@ setupWorkbench();
 
 // UI for the "Explore this repository's graph" page.
 //
-// Everything on screen is derived from a SPARQL query this file sends to the
-// worker — there is no privileged read path. The queries are printed in the
+// Current facts are derived from SPARQL queries sent to the worker. Receiver
+// history additionally uses the read-only factHistory store API. The queries are printed in the
 // query box when you click a panel's "show the query" link, so a reader can
 // take any view apart and re-run it themselves. That is deliberate: a demo you
 // cannot reproduce is a screenshot with extra steps.
@@ -698,7 +698,8 @@ async function downloadNtriples() {
 
 // ------------------------------------------------------------ graph panel
 
-const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile });
+const constellation = createConstellation({ query, prefixes: PREFIXES, short, inspect: selectFile,
+  factHistory: (entity) => ask({ cmd: "factHistory", entity }) });
 function drawNeighbourhood(item) { constellation.focus(item); }
 
 // ------------------------------------------------------------- query panel

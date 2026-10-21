@@ -60,6 +60,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // `facts`, so the copy can promote it; dropping these would make that
     // promotion silently lose the share's queries.
     ("pending_share_queries", Disposition::Content),
+    // Verified ancillary evidence is content, not receiver authority. Full-store
+    // reconstruction preserves exact bytes; ordinary graph shares carry only
+    // an explicitly selected carrier and never apply these mappings.
+    ("share_alignment_members", Disposition::Content),
     ("datasets", Disposition::Content),
     ("dataset_members", Disposition::Content),
     // Pendant autoload repository state (aegis-koxp0u) travels with the datasets
@@ -74,6 +78,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
+    // Whole-store reconstruction retains its explicit search-default intent.
+    // RDF share imports carry facts, not this local policy, and preserve the
+    // receiver's choice. This is retrieval configuration, not authorization.
+    ("search_default_policy", Disposition::Content),
     // Digests of refused attempts, keyed by the verdicts they back (GS6). Hashes
     // and ids only — no refused content — and they are what lets a restored
     // copy still re-derive a denial from a presented delta, so they travel with
@@ -118,6 +126,16 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // refused; omitted silently, a spent one is accepted again.
     ("decision_nonces", Disposition::Excluded),
     ("registry_amendment_nonces", Disposition::Excluded),
+    // Decision Deck operator scope, enrolled keys, authoritative requests,
+    // one-use challenge state and local admission witnesses. A share may
+    // carry the projected historical graph facts, never authority to enroll,
+    // curate or admit actions on the receiving store. File backups are a
+    // separate trusted operation and retain these tables verbatim.
+    ("deck_config", Disposition::Excluded),
+    ("deck_credentials", Disposition::Excluded),
+    ("deck_requests", Disposition::Excluded),
+    ("deck_challenges", Disposition::Excluded),
+    ("deck_receipts", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
     // Receiver-local review decisions and notice routes. A foreign pack must

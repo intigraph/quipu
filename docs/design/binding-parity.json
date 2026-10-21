@@ -1,0 +1,728 @@
+{
+  "schema": "quipu-binding-parity/design-v1",
+  "status": "design; no full parity claim",
+  "native_revision": "a7510ca8ea23605b395f164b8bd56dd3de7c26ac",
+  "creel_revision": "f31b65be440378955f8a456360c237b16dbeb8b3",
+  "inventory_kind": "all literal tool names in native definition source, feature union; not compiled availability",
+  "native_count": 79,
+  "rows": [
+    {
+      "native_tool": "quipu_query",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "partial: query(str); native JSON query options not all exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_export",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "partial: exportNtriples/exportPack/manifest/delta, not full native input contract",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_align_propose",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_align_decide",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_align_apply",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_merge_decisions",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "host adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_merge_apply",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "host adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_knot",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_cord",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_unravel",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_validate",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "partial: validateShapes; standalone validation, not entire tool contract",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_shapes",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_queries",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph_create",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph_label",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph_list",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph_freeze",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph_thaw",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_datasets",
+      "definition": "src/mcp/definitions/core.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_retract",
+      "definition": "src/mcp/definitions/episodes.rs",
+      "explorer_source": "native delegate present",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_set",
+      "definition": "src/mcp/definitions/episodes.rs",
+      "explorer_source": "native delegate present",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_retract_episode",
+      "definition": "src/mcp/definitions/episodes.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_retract_source",
+      "definition": "src/mcp/definitions/episodes.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_episode",
+      "definition": "src/mcp/definitions/episodes.rs",
+      "explorer_source": "native delegate present",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_entity",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_entity_history",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_transactions",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_embed_backfill",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_embed_backfill_graph",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_search_query",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_fragments",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_reconcile",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "host adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_spotlight",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_stats",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_health",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_version",
+      "definition": "src/mcp/definitions/parity/discovery.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_share",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "partial: exportPack with explicit receiver sharing checks",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_import",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "partial: loadPendant fixed import+promotion ceremony",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_import_promote",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "partial: loadPendant internal promotion; no general explicit API",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_acquire",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "host adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_acquire_composed",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "host adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_knot_stage",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_knot_promote",
+      "definition": "src/mcp/definitions/parity/publication.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_reason",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_update",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_events",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_events_commit",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_changes",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_subscriptions",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_workflow_capabilities",
+      "definition": "src/mcp/definitions/parity/workflow.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "runtime adapter required; acceptance OPEN",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_policy_check",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_verdict_verify",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_verifier_authorized",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_cooccurrence",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_overlay_create",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_overlay_write",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_overlay_compose",
+      "definition": "src/mcp/definitions/policy_overlays.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_resolve_entity",
+      "definition": "src/mcp/definitions/projection.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_graph",
+      "definition": "src/mcp/definitions/projection.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_project",
+      "definition": "src/mcp/definitions/projection.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_context",
+      "definition": "src/mcp/definitions/projection.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_report",
+      "definition": "src/mcp/definitions/projection.rs",
+      "explorer_source": "native delegate present",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_rule_query",
+      "definition": "src/mcp/definitions/rule_answers.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_ask",
+      "definition": "src/mcp/definitions/schema.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_propose_schema_change",
+      "definition": "src/mcp/definitions/schema.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_list_proposals",
+      "definition": "src/mcp/definitions/schema.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_accept_proposal",
+      "definition": "src/mcp/definitions/schema.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_reject_proposal",
+      "definition": "src/mcp/definitions/schema.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_search",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_hybrid_search",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_search_nodes",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_search_facts",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_episodes_complete",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_impact",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_path_cone",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_path_backtest",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_unified_search",
+      "definition": "src/mcp/definitions/search.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_load_ontology",
+      "definition": "src/mcp/definitions.rs",
+      "explorer_source": "native delegate present",
+      "creel_source": "manual arm present",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    },
+    {
+      "native_tool": "quipu_explain",
+      "definition": "src/mcp/definitions.rs",
+      "explorer_source": "not exposed",
+      "creel_source": "missing arm",
+      "python_native": "missing",
+      "target": "shared engine dispatcher + conformance",
+      "behavioral_parity": "unproved at pinned current build"
+    }
+  ],
+  "baseline_browser": {
+    "command": "node tests/test-quipu.js",
+    "passed": 9,
+    "guard": "158 paths + 5 UID resources clean",
+    "binary_binding": "existing vendored Creel binary; current Quipu source binding UNKNOWN"
+  },
+  "closure_rule": "all core operations equivalent on shared fixtures; host/runtime rows need explicit equivalent adapters, never counted done merely by reporting unsupported"
+}

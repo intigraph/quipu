@@ -39,6 +39,11 @@ WHERE {
     }
     ?s ?p ?o .
   }
+  # Versioned crew memory is internal source, including references attached to
+  # otherwise public context nodes. Internal backups use a separate explicit scope.
+  FILTER(!STRSTARTS(STR(?s), "urn:quipu:memory:"))
+  FILTER(!STRSTARTS(STR(?p), "https://quipu.dev/memory#"))
+  FILTER(!STRSTARTS(STR(?o), "urn:quipu:memory:"))
   # Work tracking identifiers are not public repository knowledge. Filter
   # both endpoints and literal mentions instead of renaming entity identity.
   FILTER(!REGEX(STR(?s), "(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]"))

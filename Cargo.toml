@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.14.1"
+version = "0.15.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -83,6 +83,10 @@ path = "examples/mergebench/main.rs"
 required-features = ["shacl"]
 
 [[example]]
+name = "merge_load"
+required-features = ["shacl"]
+
+[[example]]
 name = "replay"
 path = "examples/replay/main.rs"
 required-features = ["shacl"]
@@ -90,6 +94,10 @@ required-features = ["shacl"]
 [[example]]
 name = "shape_e"
 path = "examples/shape_e.rs"
+required-features = ["shacl"]
+
+[[example]]
+name = "pendant_revoke_fixture"
 required-features = ["shacl"]
 
 [dependencies]
@@ -269,3 +277,7 @@ syn = { version = "2", features = ["full", "visit"] }
 # lock file transitively, so this pulls no new supply chain and nothing new
 # ships in the binary.
 proptest = "1"
+
+[target.'cfg(unix)'.dependencies]
+# Safe descriptor-relative private diagnostics; already present transitively.
+rustix = { version = "=1.1.4", features = ["fs", "process"] }

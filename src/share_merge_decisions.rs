@@ -5,15 +5,16 @@
 //! propose / decide / apply split as `quipu align`:
 //!
 //! 1. [`emit`] writes a decisions file: one row per [`DecisionRecord`], with the
-//!    provenance of each side, bound to the exact ROOT and incoming share it
-//!    was computed from. Nothing is written to the store.
+//!    provenance of each side, strictly bound to ROOT and the incoming share.
+//!    [`emit_scoped`] explicitly opts in to v2 reviewed-slot binding instead.
+//!    Nothing is written to the store.
 //! 2. [`propose`] fills each row's `proposal` from mechanical evidence. It never
 //!    fills `decision` and never writes the store: an agent proposes, the
 //!    operator decides.
 //! 3. [`apply`] commits the clean merge plus every decided slot in ONE
 //!    transaction whose source names the reviewer and the decisions file's
 //!    hash. It refuses, writing nothing, on an undecided row, a stale file
-//!    (ROOT or the incoming share moved, or the conflicts are no longer the
+//!    (a reviewed slot or incoming share moved, or the conflicts are no longer the
 //!    ones decided), a decided value count above the slot's `sh:maxCount`, or a
 //!    value that is not an RDF term.
 
@@ -32,11 +33,16 @@ use crate::share_merge::{
     parse_graph, read_share, root_graph, share_from_parts,
 };
 pub use crate::share_merge_decisions_view::ConflictKind;
+#[path = "share_merge_decisions_binding.rs"]
+mod binding;
 use crate::share_merge_decisions_view::{check_fields, kind, labels, rule};
 use crate::store::Store;
+use binding::{local_facts, slot_hash};
 
 /// Schema of the decisions file.
-pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v1";
+pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v2";
+/// Legacy files retain their whole-ROOT staleness check.
+pub const DECISIONS_SCHEMA_V1: &str = "https://github.com/scbrown/quipu/merge-decisions/v1";
 
 /// A decisions file: the conflicts of one merge, bound to its inputs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,8 +50,8 @@ pub struct DecisionFile {
     pub schema: String,
     pub incoming_share: String,
     pub base_share: String,
-    /// ROOT's graph hash when the file was emitted; [`apply`] refuses if ROOT
-    /// has changed since.
+    /// ROOT's graph hash when emitted. Legacy v1 files bind the whole graph;
+    /// v2 uses each row's `local_slot_hash` and keeps this for inspection.
     pub local_graph_hash: String,
     pub incoming_graph_hash: String,
     /// `rdfs:label` per IRI the rows mention, for display (item 6).
@@ -61,6 +67,9 @@ pub struct DecisionRow {
     #[serde(flatten)]
     pub record: DecisionRecord,
     pub provenance: SideProvenance,
+    /// Current values and local provenance of this reviewed slot (v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_slot_hash: Option<String>,
     /// Filled by [`propose`]; advisory only, never applied.
     pub proposal: Option<Proposal>,
     /// Filled by the operator; [`apply`] refuses while any row lacks one.
@@ -234,37 +243,6 @@ fn origin(share: &LoadedShare) -> ShareOrigin {
     }
 }
 
-fn local_facts(store: &Store, record: &DecisionRecord) -> Result<Vec<LocalFact>> {
-    let Some(subject) = record
-        .subject
-        .strip_prefix('<')
-        .and_then(|s| s.strip_suffix('>'))
-    else {
-        return Ok(Vec::new());
-    };
-    let (Some(entity), Some(attribute)) =
-        (store.lookup(subject)?, store.lookup(&record.predicate)?)
-    else {
-        return Ok(Vec::new());
-    };
-    let mut out = Vec::new();
-    for fact in store.entity_facts(entity)? {
-        if fact.attribute != attribute {
-            continue;
-        }
-        let tx = store.get_transaction(fact.tx)?;
-        out.push(LocalFact {
-            value: crate::rdf::value_to_term(store, &fact.value)?.to_string(),
-            valid_from: fact.valid_from,
-            tx: fact.tx,
-            actor: tx.as_ref().and_then(|t| t.actor.clone()),
-            source: tx.and_then(|t| t.source),
-        });
-    }
-    out.sort_by(|a, b| a.value.cmp(&b.value));
-    Ok(out)
-}
-
 /// Compute the decisions file for merging `incoming_dir` into ROOT.
 ///
 /// # Errors
@@ -278,6 +256,26 @@ pub fn emit(store: &Store, incoming_dir: &Path) -> Result<DecisionFile> {
 /// # Errors
 /// Store read failures.
 pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
+    emit_with_scope(store, pair, false)
+}
+
+/// Emit v2 slot-scoped decisions explicitly; blank-node slots retain v1.
+///
+/// # Errors
+/// Share read, base lookup, or store read failures.
+pub fn emit_scoped(store: &Store, incoming_dir: &Path) -> Result<DecisionFile> {
+    emit_pair_scoped(store, SharePair::from_dir(incoming_dir)?)
+}
+
+/// Explicit slot-scoped emission for an already-loaded share pair.
+///
+/// # Errors
+/// Store read failures.
+pub fn emit_pair_scoped(store: &Store, pair: SharePair) -> Result<DecisionFile> {
+    emit_with_scope(store, pair, true)
+}
+
+fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<DecisionFile> {
     let i = inputs(store, pair)?;
     let (_, conflicts) = merge_graphs(
         &i.base.graph,
@@ -289,10 +287,18 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
         &conflicts.iter().collect::<Vec<_>>(),
         &[&i.ours, &i.incoming.graph, &i.base.graph],
     );
+    // Blank-node provenance is not available through local_facts. Keep the
+    // conservative legacy binding for such files rather than claim slot custody.
+    let scoped = requested && conflicts.iter().all(|r| r.subject.starts_with('<'));
     let mut rows = Vec::new();
     for (n, record) in conflicts.into_iter().enumerate() {
         rows.push(DecisionRow {
             id: format!("d{}", n + 1),
+            local_slot_hash: if scoped {
+                Some(slot_hash(store, &record)?)
+            } else {
+                None
+            },
             provenance: SideProvenance {
                 ours: local_facts(store, &record)?,
                 theirs: origin(&i.incoming),
@@ -308,7 +314,12 @@ pub fn emit_pair(store: &Store, pair: SharePair) -> Result<DecisionFile> {
         });
     }
     Ok(DecisionFile {
-        schema: DECISIONS_SCHEMA.into(),
+        schema: if scoped {
+            DECISIONS_SCHEMA
+        } else {
+            DECISIONS_SCHEMA_V1
+        }
+        .into(),
         incoming_share: i.incoming.manifest.share_id,
         base_share: i.base.manifest.share_id,
         local_graph_hash: i.ours_hash,
@@ -479,7 +490,8 @@ fn plan_pair(
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue("a reviewer is required".into()));
     }
-    if file.schema != DECISIONS_SCHEMA {
+    let scoped = file.schema == DECISIONS_SCHEMA;
+    if !scoped && file.schema != DECISIONS_SCHEMA_V1 {
         return Err(Error::InvalidValue(format!(
             "not a merge decisions file: schema {:?}",
             file.schema
@@ -495,7 +507,13 @@ fn plan_pair(
     if file.incoming_share != i.incoming.manifest.share_id {
         return Err(stale("the incoming share"));
     }
-    if file.local_graph_hash != i.ours_hash {
+    if file.base_share != i.base.manifest.share_id {
+        return Err(stale("the base share"));
+    }
+    if file.incoming_graph_hash != i.incoming.manifest.graph_hash {
+        return Err(stale("the incoming graph"));
+    }
+    if !scoped && file.local_graph_hash != i.ours_hash {
         return Err(stale("ROOT"));
     }
     let (mut merged, conflicts) = merge_graphs(
@@ -511,6 +529,16 @@ fn plan_pair(
             .all(|c| file.rows.iter().any(|row| &row.record == c));
     if !same {
         return Err(stale("the set of conflicts"));
+    }
+    if scoped {
+        for row in &file.rows {
+            if !row.record.subject.starts_with('<') {
+                return Err(stale("a slot without verifiable local provenance"));
+            }
+            if row.local_slot_hash.as_deref() != Some(slot_hash(store, &row.record)?.as_str()) {
+                return Err(stale("a reviewed slot's values or provenance"));
+            }
+        }
     }
     let mut applied = Vec::new();
     for row in &file.rows {

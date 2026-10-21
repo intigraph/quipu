@@ -11,6 +11,7 @@ pub mod explain;
 pub mod governance;
 mod governance_hardware;
 pub mod graphiti;
+pub mod history;
 pub mod impact;
 pub mod knot;
 #[cfg(not(target_arch = "wasm32"))]
@@ -24,6 +25,7 @@ pub mod repair;
 #[cfg(test)]
 mod repair_tests;
 pub mod resolution;
+pub mod rule_answers;
 pub mod search;
 #[cfg(test)]
 mod tests;

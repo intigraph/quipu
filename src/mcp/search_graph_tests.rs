@@ -91,11 +91,11 @@ fn test_tool_search_graph_reaches_a_named_graph_entity_behind_root_matches() {
 }
 
 #[test]
-fn test_tool_search_without_graph_is_root_only_and_unchanged() {
+fn test_tool_search_explicit_root_is_root_only_and_unchanged() {
     let (store, query) = root_and_named_graph_store();
     let result = tool_search(
         &store,
-        &serde_json::json!({"embedding": query, "limit": 50, "verbose": true}),
+        &serde_json::json!({"embedding": query, "limit": 50, "verbose": true, "graph":"urn:quipu:graph:root"}),
     )
     .unwrap();
     let entities = result_entities(&result);
@@ -105,7 +105,7 @@ fn test_tool_search_without_graph_is_root_only_and_unchanged() {
         "a named-graph-only entity must not leak into an unscoped (ROOT) search"
     );
     assert!(entities[0].ends_with("root00"), "ROOT ranking is unchanged");
-    assert!(result["results"][0].get("graph").is_none());
+    assert_eq!(result["results"][0]["graph"], "urn:quipu:graph:root");
 }
 
 #[test]

@@ -1,0 +1,4 @@
+Script started on 2026-10-16 20:06:39-04:00 [COMMAND="python3 scripts/test-read-process-pool.py "$D5M_SERVER_COPY" "$D5M_CLI_COPY"" <not executed on terminal>]
+{"result": "PASS", "distinct_workers": 2, "slow_reader_writer_and_other_reader_seconds": 0.03822122898418456, "worker_loss": "503_no_writer_fallback", "writes": "primary_only", "parent_death": "live_child_stopped", "occupied_port": "refused_without_contact", "sampled_running_pss_peak_bytes": 69526528, "memory_samples": 59, "scope": "scratch_only"}
+
+Script done on 2026-10-16 20:06:44-04:00 [COMMAND_EXIT_CODE="0"]

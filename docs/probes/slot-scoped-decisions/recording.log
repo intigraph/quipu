@@ -1,0 +1,95 @@
+Script started on 2026-10-17 03:08:54-04:00 [COMMAND="stty -onlcr; python3 docs/probes/slot-scoped-decisions/run-demo.py --baseline "$DEMO_BASELINE" --candidate "$DEMO_CANDIDATE" --output docs/probes/slot-scoped-decisions/output.json" <not executed on terminal>]
+{
+  "baseline": {
+    "binary_sha256": "56e44135dc011e1c21aa97cad624593ae3ae70b6f14189957b07e0443b694ce6",
+    "default_schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
+    "schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
+    "arms": [
+      {
+        "unrelated_writes": 0,
+        "synthetic_elapsed_s": 0,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 1,
+        "synthetic_elapsed_s": 120,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 2,
+        "synthetic_elapsed_s": 240,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 3,
+        "synthetic_elapsed_s": 360,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 4,
+        "synthetic_elapsed_s": 480,
+        "accepted": false,
+        "refused_without_graph_change": true
+      },
+      {
+        "unrelated_writes": 5,
+        "synthetic_elapsed_s": 600,
+        "accepted": false,
+        "refused_without_graph_change": true
+      }
+    ],
+    "changed_slot_refused_without_graph_change": true,
+    "changed_incoming_refused_without_graph_change": true
+  },
+  "candidate": {
+    "binary_sha256": "dc23fd16794ea3b2e55964b9b622f3698d6830964e030865f10366a5fb6b4970",
+    "default_schema": "https://github.com/scbrown/quipu/merge-decisions/v1",
+    "schema": "https://github.com/scbrown/quipu/merge-decisions/v2",
+    "arms": [
+      {
+        "unrelated_writes": 0,
+        "synthetic_elapsed_s": 0,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 1,
+        "synthetic_elapsed_s": 120,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 2,
+        "synthetic_elapsed_s": 240,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 3,
+        "synthetic_elapsed_s": 360,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 4,
+        "synthetic_elapsed_s": 480,
+        "accepted": true,
+        "refused_without_graph_change": false
+      },
+      {
+        "unrelated_writes": 5,
+        "synthetic_elapsed_s": 600,
+        "accepted": true,
+        "refused_without_graph_change": false
+      }
+    ],
+    "changed_slot_refused_without_graph_change": true,
+    "changed_incoming_refused_without_graph_change": true
+  }
+}
+
+Script done on 2026-10-17 03:08:57-04:00 [COMMAND_EXIT_CODE="0"]

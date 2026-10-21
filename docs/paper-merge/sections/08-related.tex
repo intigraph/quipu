@@ -82,3 +82,20 @@ for source code (semi-structured and AST merges) share our motivation exactly:
 raise the merge above lines to the level at which the medium defines conflict.
 Our claim is the RDF instance of that principle, with SHACL supplying the
 structure.
+
+
+\paragraph{Evidence maintenance and reviewed agent memory.}
+Choudhary's PolyGraph~\cite{choudhary2026receiptstrustworthycleanupagentbuilt}
+records alternative evidence bundles for derived artifacts and audits receipts
+by re-derivation after evidence removal. Its abstract reports that deleting only
+directly extracted facts leaves substantial contamination. This is complementary
+to shape-aware merge: structural consistency does not establish that an
+artifact's evidence remains sufficient after source withdrawal. We do not
+benchmark receipt fidelity here.
+Raj's Plant Memory~\cite{raj2026plantmemorytechnicallanguage}
+combines rule-first extraction, optional LLM review, reified facts with evidence,
+confidence and verification state, technician review, and MCP access. Its abstract
+reports a synthetic 400-work-order evaluation. It is an application-specific
+reviewed memory system; our operator reconciles divergent RDF graphs under shared
+SHACL constraints. Neither abstract establishes a comparison of temporal or
+withdrawal semantics with this implementation, and we make no such claim.

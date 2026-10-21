@@ -201,10 +201,14 @@ curl -s localhost:3030/validate -X POST \
   }'
 ```
 
-## Pre-Built Shapes
+## Domain shapes in practice
 
-Quipu ships with shapes for the Aegis infrastructure ontology in the
-`shapes/` directory. These cover:
+Domain constraints belong to their domain producer. The staged
+[Camayoc domain profiles](https://github.com/scbrown/camayoc/tree/main/shapes/aegis)
+separate infrastructure, personal media and software production. The
+[worked example](domain-shapes.md) explains their compatibility and rollout.
+The transition retains the existing bundled Aegis shapes until destination
+publication, pinning, loading and validation have been verified. They cover:
 
 - `LXCContainer`, `ProxmoxNode`, `BareMetalHost` — compute resources
 - `SystemdService`, `WebApplication`, `Database` — services
@@ -221,10 +225,10 @@ Quipu ships with shapes for the Aegis infrastructure ontology in the
   that equivalent before push.
 - Common properties: hostname, ipAddress, memoryMB, cpuCores, dependsOn
 
-Load them with:
+An offline check can use the producer-owned file:
 
 ```bash
-quipu shapes load --name aegis --file shapes/aegis-ontology.shapes.ttl --db homelab.db
+quipu validate --shapes ../camayoc/shapes/aegis/homelab-infra.shapes.ttl --data example.ttl
 ```
 
 ## Best Practices
@@ -235,3 +239,13 @@ quipu shapes load --name aegis --file shapes/aegis-ontology.shapes.ttl --db home
   add datatype checks as your ontology stabilizes
 - **Use validation feedback** — the structured JSON is designed for automated
   remediation by agents
+
+## Episode provenance activities
+
+The shipped `shapes/provenance.ttl` includes a minimal `prov:Activity` profile
+for episode provenance. It requires a string `rdfs:label`, which the episode
+producer emits. Body and source fields remain optional so historical episodes
+remain valid, and multiple retained comments are permitted. This profile does
+not authorize a new write path or change import/promotion checks. A receiver
+must load its reviewed shapes and verify the loaded vocabulary before importing
+activity facts; a source file alone does not establish runtime governance.

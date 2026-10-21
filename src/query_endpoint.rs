@@ -1,5 +1,8 @@
 //! SPARQL Protocol transports and the primary query endpoint.
 
+mod routes;
+pub(crate) use routes::routes;
+
 use axum::{
     body::Bytes,
     extract::{OriginalUri, Query, State},
@@ -38,6 +41,7 @@ pub(crate) async fn query_get(
         store,
         headers,
         json!({"query": query, "verbose": query_flag(params.verbose.as_deref()), "_sparql_protocol": true}),
+        false,
     )
     .await
 }
@@ -129,7 +133,7 @@ async fn query_post_at(
         let query = input.get("query").and_then(JsonValue::as_str).unwrap_or("");
         input["query"] = json!(protocol_dataset_query(query, &uri)?);
     }
-    query_core(store, headers, input).await
+    query_core(store, headers, input, true).await
 }
 
 fn protocol_dataset_query(query: &str, uri: &axum::http::Uri) -> Result<String, AppError> {
@@ -183,13 +187,14 @@ pub(crate) async fn query(
     headers: HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::response::Response, AppError> {
-    query_core(store, headers, input).await
+    query_core(store, headers, input, true).await
 }
 
 async fn query_core(
     store: SharedStore,
     headers: HeaderMap,
     input: JsonValue,
+    is_post: bool,
 ) -> Result<axum::response::Response, AppError> {
     let query_shape =
         quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));
@@ -235,6 +240,9 @@ async fn query_core(
         super::request_middleware::request_id(),
         store.log_query_admission,
     );
+    if let Some(capture) = &store.query_capture {
+        observation.capture(capture, &input, &client, is_post);
+    }
     let stamp = observation.admission_stamp();
     query_blocking(point, stamp, move || {
         observation.dispatched();

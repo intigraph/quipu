@@ -179,7 +179,7 @@ fn content_in_a_named_graph_does_not_change_root_ranking() {
             &store,
             &json!({
                 "embedding": [1,0], "ranking": "content", "limit": 1,
-                "verbose": true, "valid_at": valid_at
+                "verbose": true, "valid_at": valid_at, "graph":"urn:quipu:graph:root"
             }),
         )
         .unwrap();

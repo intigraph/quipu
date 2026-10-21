@@ -291,6 +291,11 @@ fn routes_in_server_source() -> Vec<String> {
     // route moved into one of those fragments is still a registered route.
     let sources = [
         ("server.rs", include_str!("../server.rs")),
+        (
+            "query_endpoint/routes.rs",
+            include_str!("../query_endpoint/routes.rs"),
+        ),
+        ("server/cors.rs", include_str!("../server/cors.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
         (
             "server/publication.rs",
@@ -326,6 +331,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/snapshot_upload.rs",
             include_str!("../server/snapshot_upload.rs"),
         ),
+        // Startup diagnostics currently register no routes; keep future routes visible.
+        (
+            "server/query_capture.rs",
+            include_str!("../server/query_capture.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
@@ -335,6 +345,9 @@ fn routes_in_server_source() -> Vec<String> {
     // module that server.rs declares must either be scanned above or be
     // listed as route-free.
     const NO_ROUTES: &[&str] = &[
+        "server/memory_files.rs", // handlers only; routes registered in server.rs
+        "server/background.rs",   // primary worker startup, no route registration
+        "server/replica.rs",      // handlers/middleware; route is registered in server.rs
         "server/admission.rs",
         "server/auth.rs",
         "server/auth_response.rs",
@@ -349,6 +362,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/query_usage.rs",
         // Bounded point-query scheduling recognizer; no HTTP routes.
         "server/point_reads.rs",
+        "server/process_pool.rs", // middleware only; no route registration
         "server/reason.rs",
         "server/request_middleware.rs",
         "server/service_description.rs",

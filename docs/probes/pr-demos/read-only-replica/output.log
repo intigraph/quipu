@@ -1,0 +1,8 @@
+Script started on 2026-10-16 07:27:36-04:00 [COMMAND="stty -onlcr; bash docs/probes/pr-demos/read-only-replica/run.sh" <not executed on terminal>]
+Retained baseline: legacy server.read_only, installed 8170851c:
+{"before": {"counter": 2, "mtime_ns": 1792148511678796782, "size": 376832}, "after": {"counter": 2, "mtime_ns": 1792148511678796782, "size": 376832}, "positive_reads": 100, "total_reads": 100, "write_status": 403}
+Candidate: server.replica configuration; disposable DB and fake primary only.
+python3 scripts/test-replica-server.py "$IF3_SERVER" "$IF3_CLI"
+{"positive_reads": 100, "before": {"counter": 2, "mtime_ns": 1792150057017282026, "sha256": "0c7eb7fe9e02918e92fe477a034b4031cd14158bd198ff9b267ceb1ed8a0b2b6"}, "after": {"counter": 2, "mtime_ns": 1792150057017282026, "sha256": "0c7eb7fe9e02918e92fe477a034b4031cd14158bd198ff9b267ceb1ed8a0b2b6"}, "write_status": 503, "lag": "7 -> unknown on failure", "primary_reads": 2, "forbidden_pushes": 0, "invalid_replica_configs_refused": 2}
+
+Script done on 2026-10-16 07:27:52-04:00 [COMMAND_EXIT_CODE="0"]

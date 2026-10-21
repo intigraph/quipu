@@ -1,0 +1,51 @@
+Script started on 2026-10-16 15:43:53-04:00 [COMMAND="bash run-demo.sh" <not executed on terminal>]
+Private in-memory store; one query vector; deadline already expired.
+Baseline 21bd8e8e + identical regression test:
+
+running 1 test
+test vector::tests::expired_batch_scan_refuses_even_without_rows ... [31mFAILED[m
+
+failures:
+
+---- vector::tests::expired_batch_scan_refuses_even_without_rows stdout ----
+
+thread 'vector::tests::expired_batch_scan_refuses_even_without_rows' (3688733) panicked at src/vector/tests.rs:11:5:
+Ok([[]])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    vector::tests::expired_batch_scan_refuses_even_without_rows
+
+test result: [31mFAILED[m. 0 passed; 1 failed; 0 ignored; 0 measured; 2386 filtered out; finished in 0.01s
+
+Baseline exit: 101 (expected 101)
+
+Candidate, identical probe:
+
+running 1 test
+test vector::tests::expired_batch_scan_refuses_even_without_rows ... [32mok[m
+
+test result: [32mok[m. 1 passed; 0 failed; 0 ignored; 0 measured; 2386 filtered out; finished in 0.02s
+
+Candidate exit: 0 (expected 0)
+
+Candidate positive controls (populated vectors, ties and temporal results):
+
+running 11 tests
+test vector::tests::cosine_similarity_orthogonal ... ok
+test vector::tests::cosine_similarity_self ... ok
+test vector::tests::cosine_with_norms_is_bit_identical_to_cosine_similarity ... ok
+test vector::tests::embedding_round_trip ... ok
+test vector::tests::vector_store_trait_object ... ok
+test vector::tests::embed_and_search ... ok
+test vector::tests::expired_batch_scan_refuses_even_without_rows ... ok
+test vector::tests::dimension_mismatch_fails_loud ... ok
+test vector::tests::temporal_vector_search ... ok
+test vector::tests::limit_results ... ok
+test vector::tests::batch_search_equals_one_search_per_query_including_ties ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 2376 filtered out; finished in 0.09s
+
+
+Script done on 2026-10-16 15:45:11-04:00 [COMMAND_EXIT_CODE="0"]

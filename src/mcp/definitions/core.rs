@@ -108,7 +108,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "properties": {
                     "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
-                    "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." }
+                    "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." },
+                    "slot_scoped": { "type": "boolean", "default": false, "description": "Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes." }
                 },
                 "required": ["incoming", "base"]
             }
@@ -300,10 +301,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_graph_list",
-            "description": "List registered named graphs with class, source, lifecycle and labels (freshness/durability/trust/policy/kind). Filter with `kind` (a dataKind token, e.g. operational | archive) and/or `lifecycle` (frozen). Also the capability probe for the graph-kinds surface: a store without this tool predates it.",
+            "description": "List registered named graphs; optional graph selects one exact registered IRI without materialization enrichment (cannot combine with kind/lifecycle). Includes class, source, lifecycle and labels (freshness/durability/trust/policy/kind). Filter with `kind` (a dataKind token, e.g. operational | archive) and/or `lifecycle` (frozen). Also the capability probe for the graph-kinds surface: a store without this tool predates it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
+                    "graph": { "type": "string", "description": "Exact registered graph IRI; no kind/lifecycle combination or materialization enrichment" },
                     "kind": { "type": "string", "description": "Only graphs declaring this dataKind token" },
                     "lifecycle": { "type": "string", "enum": ["frozen"], "description": "Only graphs in this storage lifecycle state" }
                 }

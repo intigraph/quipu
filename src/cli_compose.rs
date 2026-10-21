@@ -3,6 +3,9 @@
 use crate::cli::{chrono_now, flag_value};
 
 pub fn cmd_compose(args: &[String], db_path: &str) {
+    if flag_value(args, "--use-pointer").is_some() {
+        return crate::cli_pointer::cmd_use_pointer(args, db_path);
+    }
     if let Some(repo) = flag_value(args, "--repo") {
         return cmd_compose_repo(args, db_path, repo);
     }
@@ -90,7 +93,9 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
 /// Pendant autoload repository mode: `--repo R <pack-key>=<path>...` composes and
 /// moves `urn:quipu:repo:R:current`; `--repo R --rollback` moves it back.
 fn cmd_compose_repo(args: &[String], db_path: &str, repo: &str) {
-    let outcome = if args.iter().any(|a| a == "--rollback") {
+    let outcome = if args.iter().any(|a| a == "--revoke-tombstone") {
+        run_revoke(args, db_path, repo)
+    } else if args.iter().any(|a| a == "--rollback") {
         run_rollback(args, db_path, repo)
     } else {
         run_repo(args, db_path, repo)
@@ -107,6 +112,45 @@ fn cmd_compose_repo(args: &[String], db_path: &str, repo: &str) {
             std::process::exit(1);
         }
     }
+}
+
+fn run_revoke(args: &[String], db_path: &str, repo: &str) -> quipu::Result<(String, bool)> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut index = 2;
+    while index < args.len() {
+        let option = args[index].as_str();
+        if !matches!(
+            option,
+            "--db" | "--repo" | "--actor" | "--revoke-tombstone" | "--pack-key" | "--reason"
+        ) || !seen.insert(option)
+            || args.get(index + 1).is_none_or(|v| v.starts_with("--"))
+        {
+            return Err(quipu::Error::InvalidValue(format!(
+                "invalid or repeated revocation option, or missing value: {option}"
+            )));
+        }
+        index += 2;
+    }
+    let required = |name| {
+        flag_value(args, name)
+            .ok_or_else(|| quipu::Error::InvalidValue(format!("revocation requires {name}")))
+    };
+    let (key, statement, reason) = (
+        required("--pack-key")?,
+        required("--revoke-tombstone")?,
+        required("--reason")?,
+    );
+    let mut store = crate::cli_open::open_store(db_path);
+    let result = quipu::share_current::revoke_tombstone(
+        &mut store,
+        repo,
+        key,
+        statement,
+        reason,
+        &chrono_now(),
+        flag_value(args, "--actor"),
+    )?;
+    Ok((serde_json::to_string_pretty(&result).unwrap(), false))
 }
 
 fn run_rollback(args: &[String], db_path: &str, repo: &str) -> quipu::Result<(String, bool)> {

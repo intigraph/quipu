@@ -14,10 +14,22 @@ use crate::types::Value;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    if input.get("structured_query").is_some() || input.get("filters").is_some() {
-        return super::structured_search::search(store, input);
+    let confidence = super::search_confidence::Policy::parse(input)?;
+    let graph_scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
+    if (input.get("structured_query").is_some() || input.get("filters").is_some())
+        && graph_scope.ids.as_slice() != [0]
+    {
+        return Err(Error::InvalidValue("structured search currently supports ROOT only; configure search.default_graph_scope = root to use it".into()));
     }
-    super::search_fusion::dispatch_search_fusion(store, input)
+    let mut response = if input.get("structured_query").is_some() || input.get("filters").is_some()
+    {
+        super::structured_search::search(store, input)?
+    } else {
+        super::search_fusion::dispatch_search_fusion(store, input)?
+    };
+    confidence.annotate(input, &mut response)?;
+    response["search_scope"] = graph_scope.coverage(store, input);
+    Ok(response)
 }
 
 pub(super) fn semantic_response(store: &Store, input: &JsonValue) -> Result<JsonValue> {
@@ -31,7 +43,7 @@ pub(super) fn semantic_response_in(
 ) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse(store, input)?;
     let content_ranking = super::search_ranking::ranking_mode(input)?;
-    if graph_scope.explicit && content_ranking {
+    if graph_scope.ids.as_slice() != [0] && content_ranking {
         return Err(Error::InvalidValue("explicit graph scope currently supports semantic or keyword ranking, not ROOT content/anchor ranking".into()));
     }
     let explicit_embedding: Option<Vec<f32>> = input
@@ -104,15 +116,16 @@ pub(super) fn semantic_response_in(
     // The in-scope predicate is applied while walking the full ranking
     // (vector_search_where), so a small graph or group is never starved by a
     // top-N cut taken over the whole store.
-    let graph_entities = graph_scope
-        .explicit
+    let graph_entities = (graph_scope.explicit && !graph_scope.all)
         .then(|| graph_scope.entities(store, valid_at))
         .transpose()?;
     let mut keep = |entity_id: i64| -> Result<bool> {
         if candidates.is_some_and(|ids| !ids.contains(&entity_id)) {
             return Ok(false);
         }
-        let in_graph = if let Some(entities) = &graph_entities {
+        let in_graph = if graph_scope.all {
+            graph_scope.contains(store, entity_id, valid_at)?
+        } else if let Some(entities) = &graph_entities {
             entities.contains(&entity_id)
         } else {
             !store.entity_is_named_graph_only(entity_id)?

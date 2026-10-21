@@ -97,6 +97,19 @@ impl Deadline {
         }
     }
 
+    /// Remaining remote-call budget without rounding a sub-millisecond tail up.
+    #[cfg(feature = "remote")]
+    pub(crate) fn remaining_duration(&self) -> std::time::Duration {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0.saturating_duration_since(std::time::Instant::now())
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            std::time::Duration::from_secs_f64((self.0 - js_sys::Date::now()).max(0.0) / 1000.0)
+        }
+    }
+
     /// Milliseconds between `start` and this deadline (saturating) — the
     /// effective budget a query ran under, for timeout reporting.
     #[must_use]
@@ -208,7 +221,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 /// legitimately be dated before the epoch even though nothing in this store was
 /// ever *written* then. Floor division, not truncation: `-1 / 86_400` is 0 in
 /// Rust, which would place 1969-12-31T23:59:59Z on 1970-01-01.
-fn format_iso_signed(secs: i64) -> String {
+pub(crate) fn format_iso_signed(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
     let (y, m, d) = civil_from_days(days);

@@ -3,6 +3,7 @@ export function createEngineApi(ask) {
   const json = (value) => typeof value === "string" ? value : JSON.stringify(value);
   return {
     query: (sparql) => ask({ cmd: "query", sparql }),
+    factHistory: (entity) => ask({ cmd: "factHistory", entity }),
     stats: () => ask({ cmd: "stats" }),
     version: () => ask({ cmd: "version" }),
     capabilities: () => ask({ cmd: "capabilities" }),

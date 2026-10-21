@@ -25,6 +25,9 @@ pub struct ShareImportRequest {
     /// The `queries.ttl` member, when the share carries one (aegis-fxpbys.2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries_turtle: Option<String>,
+    /// Verified ancillary evidence, retained separately; never loaded as graph or policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alignments_turtle: Option<String>,
     /// Registry namespace for the share's queries; defaults to one derived from
     /// the producer's store identity (`share_queries::default_namespace`).
     #[serde(default)]
@@ -125,6 +128,8 @@ pub struct PromotionStatus {
 /// Completed import decision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareImportResult {
+    #[serde(default)]
+    pub embedding: crate::import_embedding::ImportEmbeddingStatus,
     pub outcome: String,
     pub import_id: String,
     pub share_id: String,
@@ -236,6 +241,10 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
         )));
     }
     crate::share_queries::verify_member(&request.manifest, request.queries_turtle.as_deref())?;
+    crate::share_alignments::verify_member(
+        &request.manifest,
+        request.alignments_turtle.as_deref(),
+    )?;
     // A hand-edited manifest must not carry what the producer would have refused.
     crate::share::validate_pointers(&request.manifest.pointers)?;
     let expected = sha256(&manifest_bytes(&request.manifest, false)?);
@@ -411,6 +420,7 @@ pub(crate) fn import_inner(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    crate::import_embedding::verify_recipe(store, request.manifest.embedding.as_ref())?;
     // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
     // staged (aegis-auw0o7). A share stamped `internal` was produced with the
     // outward scrub skipped, so importing it here is the moment that exemption
@@ -437,6 +447,9 @@ pub(crate) fn import_inner(
             ("export.nt".to_string(), request.export_ntriples.clone()),
             ("shapes.ttl".to_string(), request.shapes_turtle.clone()),
         ]);
+        if let Some(text) = &request.alignments_turtle {
+            files.insert("alignments.ttl".into(), text.clone());
+        }
         if let Some(queries) = &request.queries_turtle {
             files.insert("queries.ttl".to_string(), queries.clone());
         }
@@ -522,8 +535,14 @@ pub(crate) fn import_inner(
         quarantined,
         timestamp,
     )?;
+    crate::share_alignments::retain(
+        store,
+        &request.manifest.share_id,
+        request.alignments_turtle.as_deref(),
+    )?;
     observation.outcome(outcome);
     Ok(ShareImportResult {
+        embedding: crate::import_embedding::ImportEmbeddingStatus::default(),
         outcome: outcome.into(),
         import_id: import_id(&request.manifest.share_id)?,
         share_id: request.manifest.share_id.clone(),
