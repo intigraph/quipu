@@ -8,16 +8,24 @@ All notable changes to this project will be documented in this file.
 
 - *(embedding)* Enable provider-backed automatic indexing by default([8d75eb0](https://github.com/scbrown/quipu/commit/8d75eb0980f08c23744acc73c835953a25a752d5))
 - Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
+- Seal optional alignment evidence in portable shares([5083203](https://github.com/scbrown/quipu/commit/5083203f0ea871581e85fa8d895c5e247e7ea0cd))
 
 ### Changed
 
 - *(share)* Split the unchanged manifest RDF renderer([5a824a1](https://github.com/scbrown/quipu/commit/5a824a1727dc23dbcb23a63221c631b94c414612))
+
+### Documentation
+
+- *(share)* Quote sealed manifest field names([0d601f8](https://github.com/scbrown/quipu/commit/0d601f8ff2ce79cbebddf6619f64d67085989db5))
 
 ### Fixed
 
 - *(import)* Separate review admission from automatic vector hooks([58b0371](https://github.com/scbrown/quipu/commit/58b03716a9a95675279c77534234fa8a77d43f8e))
 - *(embedding)* Update provider guidance and satisfy lint contracts([4dbbe58](https://github.com/scbrown/quipu/commit/4dbbe5867845869f9cdbf87c84634d9f6f9ebdd6))
 - *(import)* Require matching provider recipe before all staging([513650e](https://github.com/scbrown/quipu/commit/513650edf6468ad73faff031137cd1510bb74d48))
+- *(share)* Preserve ancillary evidence during reconstruction([d83ec29](https://github.com/scbrown/quipu/commit/d83ec296d47a3146d94ecf07b81a8e78ac3c8411))
+
+
 
 ### Testing
 
@@ -25,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - *(import)* Distinguish resolution failure from indexing failure([9628bd0](https://github.com/scbrown/quipu/commit/9628bd07df2f77496e3b33cc87c4d63ab370109b))
 - *(server)* Isolate explicit backfill from default write indexing([7a484dd](https://github.com/scbrown/quipu/commit/7a484dde8bb9034d6344dcea87be2f57493d75f1))
 - *(server)* Make unindexed and keyword fixture policies explicit([263b0e2](https://github.com/scbrown/quipu/commit/263b0e2355a7efff8de11026388318896e839096))
+- *(merge)* Add seeded load matrix for shipped reconnect paths (#694)([545cfa2](https://github.com/scbrown/quipu/commit/545cfa2350a6ef40877abbce8a89ab661b93192e))
 
 ### Style
 
