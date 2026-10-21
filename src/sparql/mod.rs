@@ -19,9 +19,6 @@ pub mod left_join;
 #[cfg(test)]
 mod left_join_tests;
 mod order;
-mod order_pushdown;
-#[cfg(test)]
-mod order_pushdown_tests;
 pub mod pattern;
 pub mod pattern_util;
 #[cfg(test)]
