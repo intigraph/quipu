@@ -496,6 +496,7 @@ impl Store {
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),
+            write_shapes: None,
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
             owl_cache: None,
