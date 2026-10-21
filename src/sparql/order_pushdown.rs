@@ -31,7 +31,8 @@
 //! and `"x" = 1` while `1 < 10`, and a merge sort's output then depends on the
 //! arrangement of its input (franklin's counterexample on #700). So while the
 //! rewritten pattern runs, the selection's `ORDER BY` checks that every key's
-//! values share one comparison class; if any does not, the result is
+//! values share one comparison class (exact numeric, float, double,
+//! lexical, boolean, IRI); if any does not, the result is
 //! discarded and the original pattern is evaluated instead.
 //!
 //! The rewritten pattern is evaluated and then sorted and cut exactly as
@@ -102,7 +103,12 @@ pub(super) fn check(store: &Store, rows: &[Bindings], expression: &[OrderExpress
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Unbound,
-    Numeric,
+    /// Integer and decimal: compared exactly (`BigDecimal`).
+    Exact,
+    /// `xsd:float` only: compared as `f32`.
+    Float,
+    /// `xsd:double` (and `Value::Float`): compared as `f64`.
+    Double,
     Lexical,
     Bool,
     Iri,
@@ -118,11 +124,21 @@ fn kind(v: Option<&Value>) -> Option<Kind> {
     if v.datatype()
         .is_some_and(crate::namespace::is_numeric_datatype)
     {
-        // Numeric pairs go through `numeric_value::compare`; a value it cannot
-        // compare with itself (unparsable lexical, NaN) compares `Equal` to
-        // everything and breaks transitivity.
-        return (crate::numeric_value::compare(v, v) == Some(std::cmp::Ordering::Equal))
-            .then_some(Kind::Numeric);
+        // Numeric pairs go through `numeric_value::compare`, which is exact
+        // between integers and decimals but casts to f32 or f64 as soon as a
+        // float or double is involved. Each domain alone is a total order;
+        // mixing them is not (franklin, #700: 9007199254740993 vs
+        // 9.007199254740992E15 vs 9007199254740992). A value that does not
+        // compare equal to itself (unparsable lexical, NaN) compares `Equal`
+        // to everything and breaks transitivity on its own.
+        if crate::numeric_value::compare(v, v) != Some(std::cmp::Ordering::Equal) {
+            return None;
+        }
+        return Some(match v.datatype() {
+            Some(crate::namespace::XSD_FLOAT) => Kind::Float,
+            Some(crate::namespace::XSD_DOUBLE) => Kind::Double,
+            _ => Kind::Exact,
+        });
     }
     match v {
         Value::Ref(_) => Some(Kind::Iri),

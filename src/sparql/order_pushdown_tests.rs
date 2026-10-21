@@ -243,3 +243,78 @@ fn mixed_kind_keys_fall_back_to_the_full_sort_window() {
         }
     }
 }
+
+/// franklin's numeric-domain counterexamples on #700: each value compares
+/// equal to itself, yet exact, float and double comparisons do not compose
+/// into one order. Every insertion order must give the oracle's windows.
+fn numeric_domain_windows(ranks: [&str; 3]) {
+    let subjects = ["a", "b", "c"];
+    let orders: [[usize; 3]; 6] = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    for perm in orders {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut ttl = String::from("@prefix ex: <http://example.test/> .\n");
+        for &i in &perm {
+            ttl.push_str(&format!("ex:{} ex:rank {} .\n", subjects[i], ranks[i]));
+        }
+        ingest_rdf(
+            &mut store,
+            ttl.as_bytes(),
+            RdfFormat::Turtle,
+            None,
+            "2026-10-21T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+        let ctx = TemporalContext::default();
+        let head = "PREFIX ex: <http://example.test/> SELECT ?s ?rank ?tag";
+        let body = "WHERE { ?s ex:rank ?rank OPTIONAL { ?s ex:missing ?tag } }";
+        for order in ["?rank ?s", "?rank", "DESC(?rank) ?s"] {
+            let full =
+                query_temporal(&store, &format!("{head} {body} ORDER BY {order}"), &ctx).unwrap();
+            for (offset, k) in [(0, 1), (1, 2), (0, 2), (0, 20)] {
+                let limited = query_temporal(
+                    &store,
+                    &format!("{head} {body} ORDER BY {order} LIMIT {k} OFFSET {offset}"),
+                    &ctx,
+                )
+                .unwrap();
+                let expected: Vec<String> = ordered(full.rows())
+                    .into_iter()
+                    .skip(offset)
+                    .take(k)
+                    .collect();
+                assert_eq!(
+                    ordered(limited.rows()),
+                    expected,
+                    "{ranks:?} order {perm:?} ORDER BY {order} LIMIT {k} OFFSET {offset}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn exact_and_double_ranks_fall_back() {
+    numeric_domain_windows([
+        "9007199254740993",
+        "9.007199254740992E15",
+        "9007199254740992",
+    ]);
+}
+
+#[test]
+fn exact_and_float_ranks_fall_back() {
+    numeric_domain_windows([
+        "16777217",
+        "\"16777216\"^^<http://www.w3.org/2001/XMLSchema#float>",
+        "16777216",
+    ]);
+}
