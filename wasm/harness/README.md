@@ -4,7 +4,10 @@ Browser acceptance harness for quipu on `wasm32-unknown-unknown`
 (quipu-qd2). Opens a real `quipu::Store` in a dedicated Web Worker, ingests
 synthetic episodes (the `scale_bench` shape), runs the three representative
 reads, and — for OPFS — proves the data survives a page reload and a full
-browser relaunch.
+browser relaunch. The harness enables SHACL because its pack scenario loads
+policy shapes before writing the synthetic catalogue. A build without SHACL
+must refuse that governed write; disabling the guard is not an interchange fix.
+`just wasm check` separately compiles the minimal no-default library.
 
 Design context: `docs/design/wasm-support.md` §8 Phase 3, §9 (how this runs
 headless, including in the Claude Code remote container).
@@ -49,7 +52,7 @@ VFS and OPFS, read model off and on, fresh page per configuration:
 
 ```bash
 node bench.mjs 5000            # or: just wasm bench 5000
-cargo run --release --no-default-features \
+cargo run --release --no-default-features --features shacl \
   --example wasm_native_baseline -- 5000   # the native half, from repo root
 ```
 
