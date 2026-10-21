@@ -6,40 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- *(embedding)* Enable provider-backed automatic indexing by default([8d75eb0](https://github.com/scbrown/quipu/commit/8d75eb0980f08c23744acc73c835953a25a752d5))
 - Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
-- Seal optional alignment evidence in portable shares([5083203](https://github.com/scbrown/quipu/commit/5083203f0ea871581e85fa8d895c5e247e7ea0cd))
+- Add stable entity namespaces and audience-bound sharing([6e52158](https://github.com/scbrown/quipu/commit/6e5215818f3ce7986cbf52f6511a137c7ca75059))
+- *(embedding)* Index native writes and imports by default (#691)([1fdea50](https://github.com/scbrown/quipu/commit/1fdea5029b9eab7e259c50a27b458dbdd5c37b28))
+- *(server)* Serve the decision deck over HTTP, off by default (#701)([9e24565](https://github.com/scbrown/quipu/commit/9e24565f426a7ec902c11a897b2dbe55b1d43f6a))
 
-### Changed
 
-- *(share)* Split the unchanged manifest RDF renderer([5a824a1](https://github.com/scbrown/quipu/commit/5a824a1727dc23dbcb23a63221c631b94c414612))
-
-### Documentation
-
-- *(share)* Quote sealed manifest field names([0d601f8](https://github.com/scbrown/quipu/commit/0d601f8ff2ce79cbebddf6619f64d67085989db5))
-
-### Fixed
-
-- *(import)* Separate review admission from automatic vector hooks([58b0371](https://github.com/scbrown/quipu/commit/58b03716a9a95675279c77534234fa8a77d43f8e))
-- *(embedding)* Update provider guidance and satisfy lint contracts([4dbbe58](https://github.com/scbrown/quipu/commit/4dbbe5867845869f9cdbf87c84634d9f6f9ebdd6))
-- *(import)* Require matching provider recipe before all staging([513650e](https://github.com/scbrown/quipu/commit/513650edf6468ad73faff031137cd1510bb74d48))
-- *(share)* Preserve ancillary evidence during reconstruction([d83ec29](https://github.com/scbrown/quipu/commit/d83ec296d47a3146d94ecf07b81a8e78ac3c8411))
-- *(mcp)* Declare alignments_turtle on share and import tools([31f68aa](https://github.com/scbrown/quipu/commit/31f68aadecb21120be61e17a91e0f416a0923d7f))
-- *(share)* Refuse undeclared alignment member in delta imports([e4d553f](https://github.com/scbrown/quipu/commit/e4d553f54488fc216e296956b7a9114607867323))
 
 
 
 ### Testing
 
-- *(embedding)* Provide import provenance in server acceptance fixture([ca1d5e6](https://github.com/scbrown/quipu/commit/ca1d5e60f7cda9c01e17cb2fba2de2e0c7779fff))
-- *(import)* Distinguish resolution failure from indexing failure([9628bd0](https://github.com/scbrown/quipu/commit/9628bd07df2f77496e3b33cc87c4d63ab370109b))
-- *(server)* Isolate explicit backfill from default write indexing([7a484dd](https://github.com/scbrown/quipu/commit/7a484dde8bb9034d6344dcea87be2f57493d75f1))
-- *(server)* Make unindexed and keyword fixture policies explicit([263b0e2](https://github.com/scbrown/quipu/commit/263b0e2355a7efff8de11026388318896e839096))
 - *(merge)* Add seeded load matrix for shipped reconnect paths (#694)([545cfa2](https://github.com/scbrown/quipu/commit/545cfa2350a6ef40877abbce8a89ab661b93192e))
 
-### Style
+### Perf
 
-- *(import)* Collapse deferred failure branch([5ff6290](https://github.com/scbrown/quipu/commit/5ff62901ad85418856442ab5cea5eb943fe47b79))
+- *(sparql)* Probe a plain-BGP OPTIONAL once per left row (#698)([d86a48a](https://github.com/scbrown/quipu/commit/d86a48a9b6db8e8227c8d725a2754bc138a9b272))
 
 ## [0.15.0] - 2026-10-20
 
