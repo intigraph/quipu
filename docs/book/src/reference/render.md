@@ -101,6 +101,32 @@ The manifest is the receipt for the current render, not a disk-to-graph sync or
 an append-only audit history. Historical graph access, installed CLI identity,
 shape projection and a real consumer run are separate from source tests.
 
+## Bind publication to an earlier read
+
+A loader that selects a pinned catalogue can pass `--expected-tx N` to the
+renderer CLI. The prepared plan's source-local transaction must equal this
+positive signed 64-bit integer before filesystem publication is called. A
+mismatch refuses both normal and dry-run publication. Invalid input refuses
+before the local store is opened.
+
+This is a compare operation, not a request to select an older transaction.
+After the catalogue's source store advances, reread the catalogue and prepare
+a new plan instead of treating the mismatch as permission to publish latest.
+Use the same source store for both operations: transaction IDs from different
+stores cannot be compared. A remote plan retains its ordinary spec/time,
+credential and content validation before this additional comparison.
+
+The flag is optional so existing render invocations retain their behavior.
+It changes neither the public RenderRequest structure nor server authority.
+File ownership, content/mode hashes, symlink checks and atomic publication
+remain enforced by the existing publisher.
+
+The native CLI controls observe a matching transaction publish successfully,
+an advanced store refuse without changing prior bytes or modification time,
+and the new matching transaction succeed. Malformed and duplicate values
+refuse without creating a database or destination. This is a private source
+fixture, not evidence of installed skill propagation or a live catalogue.
+
 ## Recorded CLI demonstration
 
 `docs/probes/pr-demos/render/reproduce.py` invokes the actual candidate CLI

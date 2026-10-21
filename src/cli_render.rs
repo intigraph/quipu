@@ -3,7 +3,7 @@
 use quipu::render::{RenderPlan, RenderRequest, RenderSpec};
 use std::path::Path;
 
-const HELP: &str = "qp render <spec-IRI> --dest <owned-dir> [--valid-at <timestamp>] [--dry-run] [--db <path>|--server <url>]\nqp render --query <SELECT-or-CONSTRUCT> [--template <text>] [--layout single|per-entity] [--path <template>] --dest <owned-dir> [--dry-run]\nThe destination parent must exist. Unknown or edited files refuse. Templates cannot read files or use the network.";
+const HELP: &str = "qp render <spec-IRI> --dest <owned-dir> [--expected-tx N] [--valid-at <timestamp>] [--dry-run] [--db <path>|--server <url>]\nqp render --query <SELECT-or-CONSTRUCT> [--template <text>] [--layout single|per-entity] [--path <template>] --dest <owned-dir> [--expected-tx N] [--dry-run]\nThe destination parent must exist. Unknown or edited files refuse. Templates cannot read files or use the network. --expected-tx requires the prepared plan's source-local transaction before publishing; it does not select an older transaction.";
 
 pub fn run(args: &[String], db_path: &str) {
     if args.iter().any(|a| a == "--help" || a == "-h") {
@@ -43,6 +43,7 @@ fn execute(args: &[String], db_path: &str) -> quipu::Result<()> {
                 | "--template"
                 | "--layout"
                 | "--path"
+                | "--expected-tx"
         ) {
             let value = args
                 .get(i + 1)
@@ -64,6 +65,16 @@ fn execute(args: &[String], db_path: &str) -> quipu::Result<()> {
     if values.contains_key("--db") && values.contains_key("--server") {
         return Err(invalid("choose --db or --server"));
     }
+    let expected_tx = values
+        .get("--expected-tx")
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .ok()
+                .filter(|tx| *tx > 0)
+                .ok_or_else(|| invalid("--expected-tx requires a positive signed 64-bit integer"))
+        })
+        .transpose()?;
     let adhoc = values.get("--query").map(|query| RenderSpec {
         query: (*query).into(),
         format: "markdown".into(),
@@ -91,6 +102,11 @@ fn execute(args: &[String], db_path: &str) -> quipu::Result<()> {
     } else {
         quipu::render::prepare(&crate::cli_open::open_store(db_path), &request)?
     };
+    if expected_tx.is_some_and(|tx| tx != plan.source_tx) {
+        return Err(invalid(
+            "prepared source transaction differs from --expected-tx",
+        ));
+    }
     // Prints the complete file list and path-level content/mode diff. Dry-run
     // deliberately performs no mkdir, lockfile or manifest/event write.
     let changes = quipu::render::publish::publish(&plan, Path::new(dest), dry_run)?;
