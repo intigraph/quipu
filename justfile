@@ -363,3 +363,8 @@ replica-test server cli:
 # Scratch-only process isolation and failure controls using owned binary copies.
 read-process-test server cli:
     python3 scripts/test-read-process-pool.py {{quote(server)}} {{quote(cli)}}
+
+# Verify the standalone installer using private release fixtures.
+installer-check:
+    sh -n install.sh
+    python3 scripts/test-install-release.py
