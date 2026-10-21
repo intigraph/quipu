@@ -318,3 +318,105 @@ fn exact_and_float_ranks_fall_back() {
         "16777216",
     ]);
 }
+
+const META_GRAPH: &str = "urn:franklin:metadata";
+
+fn graph_store(ttl: &str) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = store.graph_create(META_GRAPH).unwrap();
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        ttl.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-10-21T00:00:00Z",
+        None,
+        None,
+        g,
+    )
+    .unwrap();
+    store
+}
+
+/// Rows AND header of the limited query equal the unlimited query's window.
+fn same_answer(store: &Store, query: &str, k: usize) {
+    let ctx = TemporalContext::default();
+    let full = query_temporal(store, query, &ctx).unwrap();
+    let limited = query_temporal(store, &format!("{query} LIMIT {k}"), &ctx).unwrap();
+    let expected: Vec<String> = ordered(full.rows()).into_iter().take(k).collect();
+    assert_eq!(ordered(limited.rows()), expected, "rows: {query} LIMIT {k}");
+    assert_eq!(
+        limited.variables(),
+        full.variables(),
+        "header: {query} LIMIT {k}"
+    );
+}
+
+/// franklin's #700 metadata counterexamples: `merge_bindings` lets an OPTIONAL
+/// subquery overwrite `_provider`/`_trust`/`_freshness`, and `Project` adds a
+/// metadata column when any hydrated row carries it.
+#[test]
+fn response_metadata_overwrite_and_header_keep_the_full_evaluation() {
+    let overwrite = graph_store(
+        r#"@prefix ex: <http://example.test/> .
+ex:a ex:rank "1" ; ex:other "3" .
+ex:b ex:rank "2" ; ex:other "0" .
+"#,
+    );
+    let header = graph_store(
+        r#"@prefix ex: <http://example.test/> .
+ex:a ex:rank "1" .
+ex:b ex:rank "2" ; ex:other "trusted" .
+"#,
+    );
+    for meta in ["_provider", "_trust", "_freshness"] {
+        for filter in [format!("FILTER(?{meta}=\"2\")"), String::new()] {
+            let q = format!(
+                "PREFIX ex: <http://example.test/> SELECT ?s ?{meta} WHERE {{ GRAPH <{META_GRAPH}> {{ \
+                 ?s ex:rank ?{meta} OPTIONAL {{ {{ SELECT ?s ?{meta} WHERE {{ ?s ex:other ?{meta} }} }} }} {filter} }} }} \
+                 ORDER BY ?{meta}"
+            );
+            for k in [1, 10] {
+                same_answer(&overwrite, &q, k);
+            }
+        }
+        let q = format!(
+            "PREFIX ex: <http://example.test/> SELECT ?s ?rank WHERE {{ GRAPH <{META_GRAPH}> {{ \
+             ?s ex:rank ?rank OPTIONAL {{ {{ SELECT ?s ?{meta} WHERE {{ ?s ex:other ?{meta} }} }} }} }} }} \
+             ORDER BY ?rank"
+        );
+        same_answer(&header, &q, 1);
+    }
+}
+
+#[test]
+fn declines_metadata_names_and_non_plain_right_sides_but_keeps_plain_ones() {
+    let p = "PREFIX ex: <http://example.test/> SELECT *";
+    for (why, body) in [
+        (
+            "right side is a subquery",
+            "WHERE { ?s ex:rank ?rank OPTIONAL { { SELECT ?s ?x WHERE { ?s ex:other ?x } } } }",
+        ),
+        (
+            "right side is VALUES",
+            "WHERE { ?s ex:rank ?rank OPTIONAL { VALUES ?x { 1 } } }",
+        ),
+        (
+            "metadata name in the left BGP",
+            "WHERE { ?s ex:rank ?rank ; ex:p ?_trust OPTIONAL { ?s ex:other ?x } }",
+        ),
+        (
+            "metadata name in a plain right side",
+            "WHERE { ?s ex:rank ?rank OPTIONAL { ?s ex:other ?_provider } }",
+        ),
+    ] {
+        assert!(
+            !engages(&format!("{p} {body} ORDER BY ?rank LIMIT 3")),
+            "{why}"
+        );
+    }
+    // Positive control: an ordinary name that merely starts like one still engages.
+    assert!(engages(&format!(
+        "{p} WHERE {{ ?s ex:rank ?rank OPTIONAL {{ ?s ex:other ?_providers }} }} ORDER BY ?rank LIMIT 3"
+    )));
+}

@@ -214,6 +214,16 @@ fn push_left(
     if !read.iter().all(|v| bound.contains(v)) {
         return None;
     }
+    // Response metadata breaks both premises (franklin, #700): `merge_bindings`
+    // lets the right operand OVERWRITE `_provider`/`_trust`/`_freshness`, so a
+    // left-bound value can change across the OPTIONAL; and `Project` adds a
+    // metadata column when ANY row carries it, so hydrating only k rows can
+    // drop a column from the header. Decline wherever metadata could appear:
+    // a right side that is not plain (subquery, SERVICE, VALUES, ...), or any
+    // mention of a reserved name in the pattern, keys or filter.
+    if !right_sides_plain(chain) || mentions_metadata(chain, expression, filter) {
+        return None;
+    }
     let top = GraphPattern::Slice {
         inner: Box::new(GraphPattern::OrderBy {
             inner: Box::new(selection(leaf)),
@@ -223,6 +233,61 @@ fn push_left(
         length: Some(k),
     };
     Some(replace_leftmost(chain, top))
+}
+
+/// Every OPTIONAL right side in the chain is built only from operators that
+/// bind exactly the variables they name: no subquery, SERVICE, VALUES,
+/// aggregate, slice or DISTINCT that could carry or stamp metadata.
+fn right_sides_plain(p: &GraphPattern) -> bool {
+    match p {
+        GraphPattern::LeftJoin { left, right, .. } => right_sides_plain(left) && plain(right),
+        _ => true,
+    }
+}
+
+fn plain(p: &GraphPattern) -> bool {
+    match p {
+        GraphPattern::Bgp { .. } | GraphPattern::Path { .. } => true,
+        GraphPattern::Graph {
+            name: NamedNodePattern::NamedNode(_),
+            inner,
+        } => plain(inner),
+        GraphPattern::Join { left, right } | GraphPattern::Union { left, right } => {
+            plain(left) && plain(right)
+        }
+        GraphPattern::LeftJoin { left, right, .. } => plain(left) && plain(right),
+        GraphPattern::Filter { inner, .. } | GraphPattern::Extend { inner, .. } => plain(inner),
+        _ => false,
+    }
+}
+
+const METADATA: [&str; 4] = ["_provider", "_trust", "_freshness", "_policy"];
+
+/// Whether a reserved response-metadata name appears as a variable anywhere.
+fn mentions_metadata(
+    chain: &GraphPattern,
+    expression: &[OrderExpression],
+    filter: Option<&Expression>,
+) -> bool {
+    let mut text = chain.to_string();
+    for order in expression {
+        let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = order;
+        text.push(' ');
+        text.push_str(&e.to_string());
+    }
+    if let Some(f) = filter {
+        text.push(' ');
+        text.push_str(&f.to_string());
+    }
+    METADATA.iter().any(|name| {
+        let needle = format!("?{name}");
+        text.match_indices(&needle).any(|(i, _)| {
+            text[i + needle.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !(c.is_alphanumeric() || c == '_'))
+        })
+    })
 }
 
 fn leftmost(p: &GraphPattern) -> &GraphPattern {
