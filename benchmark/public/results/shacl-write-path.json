@@ -1,0 +1,440 @@
+{
+ "schema": "quipu-shacl-write-path/v1",
+ "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
+ "note": "Known write-path divergences. This list may only shrink (aegis-1c8q ratchet).",
+ "cases": 98,
+ "by_component": {
+  "and": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "class": {
+   "diverges": 8,
+   "agrees": 11
+  },
+  "closed": {
+   "diverges": 2,
+   "agrees": 2
+  },
+  "datatype": {
+   "diverges": 11,
+   "agrees": 17
+  },
+  "disjoint": {
+   "diverges": 2,
+   "agrees": 1
+  },
+  "equals": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "hasValue": {
+   "diverges": 1,
+   "agrees": 4
+  },
+  "in": {
+   "diverges": 3,
+   "agrees": 2
+  },
+  "languageIn": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "lessThan": {
+   "diverges": 3
+  },
+  "lessThanOrEquals": {
+   "diverges": 2
+  },
+  "maxCount": {
+   "diverges": 9,
+   "agrees": 4
+  },
+  "maxExclusive": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "maxInclusive": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "maxLength": {
+   "diverges": 2,
+   "agrees": 1
+  },
+  "minCount": {
+   "diverges": 3,
+   "agrees": 17
+  },
+  "minExclusive": {
+   "diverges": 3,
+   "agrees": 1
+  },
+  "minInclusive": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "minLength": {
+   "diverges": 2,
+   "agrees": 1
+  },
+  "node": {
+   "diverges": 3,
+   "agrees": 2
+  },
+  "nodeKind": {
+   "diverges": 4,
+   "agrees": 2
+  },
+  "not": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "or": {
+   "diverges": 1,
+   "agrees": 4
+  },
+  "pattern": {
+   "diverges": 4,
+   "agrees": 2
+  },
+  "property": {
+   "diverges": 25,
+   "agrees": 30
+  },
+  "qualifiedValueShape": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "uniqueLang": {
+   "diverges": 2,
+   "agrees": 1
+  },
+  "xone": {
+   "diverges": 1,
+   "agrees": 2
+  }
+ },
+ "divergences": [
+  [
+   "core/complex/personexample#personexample",
+   "per_triple"
+  ],
+  [
+   "core/complex/personexample#personexample",
+   "per_triple_reversed"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_subject"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_subject_reversed"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_triple"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_triple_reversed"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "subject_halves"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "subject_halves_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/datatype-001#datatype-001",
+   "per_triple"
+  ],
+  [
+   "core/property/datatype-001#datatype-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/disjoint-001#disjoint-001",
+   "per_triple"
+  ],
+  [
+   "core/property/disjoint-001#disjoint-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/in-001#in-001",
+   "per_triple"
+  ],
+  [
+   "core/property/in-001#in-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/lessThan-001#lessThan-001",
+   "per_triple"
+  ],
+  [
+   "core/property/lessThan-001#lessThan-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/lessThan-002#lessThan-002",
+   "per_triple"
+  ],
+  [
+   "core/property/lessThan-002#lessThan-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
+   "per_triple"
+  ],
+  [
+   "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/maxCount-001#maxCount-001",
+   "per_triple"
+  ],
+  [
+   "core/property/maxCount-001#maxCount-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/maxLength-001#maxLength-001",
+   "per_triple"
+  ],
+  [
+   "core/property/maxLength-001#maxLength-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/minExclusive-001#minExclusive-001",
+   "per_triple"
+  ],
+  [
+   "core/property/minExclusive-001#minExclusive-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/minExclusive-002#minExclusive-002",
+   "per_triple"
+  ],
+  [
+   "core/property/minExclusive-002#minExclusive-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/minLength-001#minLength-001",
+   "per_triple"
+  ],
+  [
+   "core/property/minLength-001#minLength-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/node-001#node-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/node-002#node-002",
+   "per_subject"
+  ],
+  [
+   "core/property/node-002#node-002",
+   "per_subject_reversed"
+  ],
+  [
+   "core/property/node-002#node-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/node-002#node-002",
+   "subject_halves"
+  ],
+  [
+   "core/property/node-002#node-002",
+   "subject_halves_reversed"
+  ],
+  [
+   "core/property/nodeKind-001#nodeKind-001",
+   "per_triple"
+  ],
+  [
+   "core/property/nodeKind-001#nodeKind-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/pattern-001#pattern-001",
+   "per_triple"
+  ],
+  [
+   "core/property/pattern-001#pattern-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/pattern-002#pattern-002",
+   "per_triple"
+  ],
+  [
+   "core/property/pattern-002#pattern-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/uniqueLang-001#uniqueLang-001",
+   "per_triple"
+  ],
+  [
+   "core/property/uniqueLang-001#uniqueLang-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetClass-001#targetClass-001",
+   "per_triple"
+  ],
+  [
+   "core/targets/targetClass-001#targetClass-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_subject"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_triple"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetSubjectsOf-001#targetSubjectsOf-001",
+   "per_triple"
+  ],
+  [
+   "core/targets/targetSubjectsOf-001#targetSubjectsOf-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetSubjectsOf-002#targetSubjectsOf-002",
+   "per_triple"
+  ],
+  [
+   "core/targets/targetSubjectsOf-002#targetSubjectsOf-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "subject_halves"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "subject_halves_reversed"
+  ]
+ ]
+}

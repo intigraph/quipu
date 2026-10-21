@@ -381,7 +381,7 @@ status, and diagnostic or unsupported reason.
 Quipu passes **98/98** manifest-reachable SHACL Core cases.
 SHACL-SPARQL remains a deliberate non-goal: **0/22** pass and 22 are unsupported.
 Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.
-This score uses the context-free native validator; write-gate transaction behavior is tested separately.
+This score uses the context-free native validator on whole graphs; the write path is measured below.
 
 Pinned W3C Data Shapes revision: `9c863967bceaef1a87c24e4dd761eda763823120`.
 The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
@@ -396,6 +396,44 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 | `core-targets` | 7 | 0 | 0 | 0 | 7 |
 | `core-validation-reports` | 1 | 0 | 0 | 0 | 1 |
 | `shacl-sparql` | 0 | 0 | 0 | 22 | 22 |
+
+### Write-path conformance
+
+The same 98 Core cases are also written through the real `/knot` handler, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **69/98** agree with the W3C verdict under every split; **29** diverge under at least one.
+A divergence is a case whose final graph violates (or conforms) while the write gate accepted (or refused) every write. These are known defects, listed in the ledger with the splits that expose them; the CI gate fails on any new divergence and on any entry that no longer diverges, so this number can only fall.
+
+| Constraint component | Cases using it | Agree | Diverge |
+|---|---:|---:|---:|
+| `sh:and` | 4 | 3 | 1 |
+| `sh:class` | 19 | 11 | 8 |
+| `sh:closed` | 4 | 2 | 2 |
+| `sh:datatype` | 28 | 17 | 11 |
+| `sh:disjoint` | 3 | 1 | 2 |
+| `sh:equals` | 3 | 2 | 1 |
+| `sh:hasValue` | 5 | 4 | 1 |
+| `sh:in` | 5 | 2 | 3 |
+| `sh:languageIn` | 3 | 2 | 1 |
+| `sh:lessThan` | 3 | 0 | 3 |
+| `sh:lessThanOrEquals` | 2 | 0 | 2 |
+| `sh:maxCount` | 13 | 4 | 9 |
+| `sh:maxExclusive` | 3 | 2 | 1 |
+| `sh:maxInclusive` | 3 | 2 | 1 |
+| `sh:maxLength` | 3 | 1 | 2 |
+| `sh:minCount` | 20 | 17 | 3 |
+| `sh:minExclusive` | 4 | 1 | 3 |
+| `sh:minInclusive` | 4 | 3 | 1 |
+| `sh:minLength` | 3 | 1 | 2 |
+| `sh:node` | 5 | 2 | 3 |
+| `sh:nodeKind` | 6 | 2 | 4 |
+| `sh:not` | 4 | 3 | 1 |
+| `sh:or` | 5 | 4 | 1 |
+| `sh:pattern` | 6 | 2 | 4 |
+| `sh:property` | 55 | 30 | 25 |
+| `sh:qualifiedValueShape` | 4 | 3 | 1 |
+| `sh:uniqueLang` | 3 | 1 | 2 |
+| `sh:xone` | 3 | 2 | 1 |
+
+Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json).
 
 ## Entailment-regime commitments
 
