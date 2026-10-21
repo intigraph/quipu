@@ -78,6 +78,8 @@ pub(crate) use terms::TermCache;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod attestation_tests;
 #[cfg(test)]
+mod canonical_statement_tests;
+#[cfg(test)]
 mod term_space_tests;
 #[cfg(test)]
 mod tests;
