@@ -13,7 +13,9 @@ All notable changes to this project will be documented in this file.
 
 
 
+### Fixed
 
+- *(cli)* Preserve audience destinations when packing([41e8b1d](https://github.com/scbrown/quipu/commit/41e8b1db6075058639274b87b76b53d11a9a0e38))
 
 ### Testing
 
