@@ -48,6 +48,9 @@ pub(super) fn defs() -> Vec<Value> {
                             "type": "string"
                         }
                     },
+                    "alignments_turtle": {
+                        "type": "string"
+                    },
                     "parent_share": {
                         "type": "string"
                     },
@@ -80,6 +83,9 @@ pub(super) fn defs() -> Vec<Value> {
                         "type": "string"
                     },
                     "queries_turtle": {
+                        "type": "string"
+                    },
+                    "alignments_turtle": {
                         "type": "string"
                     },
                     "query_namespace": {
