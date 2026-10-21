@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 - *(import)* Require matching provider recipe before all staging([513650e](https://github.com/scbrown/quipu/commit/513650edf6468ad73faff031137cd1510bb74d48))
 - *(share)* Preserve ancillary evidence during reconstruction([d83ec29](https://github.com/scbrown/quipu/commit/d83ec296d47a3146d94ecf07b81a8e78ac3c8411))
 - *(mcp)* Declare alignments_turtle on share and import tools([31f68aa](https://github.com/scbrown/quipu/commit/31f68aadecb21120be61e17a91e0f416a0923d7f))
+- *(share)* Refuse undeclared alignment member in delta imports([e4d553f](https://github.com/scbrown/quipu/commit/e4d553f54488fc216e296956b7a9114607867323))
 
 
 
