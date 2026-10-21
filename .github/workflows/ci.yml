@@ -648,8 +648,16 @@ jobs:
             ${{ runner.os }}-cargo-
       - name: Gate unit tests
         run: |
+          # Actions runs `bash -e` WITHOUT pipefail, so without this line a failing
+          # test would exit through tee with status 0.
+          set -o pipefail
           python3 -m unittest -v benchmark/public/test_shacl_write_path.py 2>&1 | tee /tmp/write-path-unit.log
           grep -q '^Ran [1-9]' /tmp/write-path-unit.log || { echo "no gate unit test ran" >&2; exit 2; }
+      - name: Adapter unit tests (verdict versus operational error)
+        run: |
+          set -o pipefail
+          cargo test --bin quipu-shacl-conformance --features shacl,dev-tools 2>&1 | tee /tmp/write-path-adapter.log
+          grep -q '^test result: ok\. [1-9]' /tmp/write-path-adapter.log || { echo "no adapter unit test ran" >&2; exit 2; }
       - name: Pinned W3C SHACL suite
         run: |
           rev="$(python3 -c 'import sys; sys.path.insert(0, "benchmark/public"); import shacl_core; print(shacl_core.PINNED_SUITE_REVISION)')"

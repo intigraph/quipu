@@ -74,5 +74,55 @@ class WritePathGateTests(unittest.TestCase):
         self.assertNotIn(["core/x/batch#batch", "per_triple"], MODULE.divergences(rows))
 
 
+def adapter_out(expected, single_writes, control=None):
+    """--write-path output with one mode, `single`, made of `single_writes`."""
+    conforms = all(w.get("accepted") is True for w in single_writes)
+    if any(w.get("accepted") is None for w in single_writes):
+        conforms = None
+    return {"batch": {"conforms": expected}, "triples": 2,
+            "modes": {"single": {"conforms": conforms, "writes": single_writes}},
+            "control_payload_only": {"conforms": expected if control is None else control}}
+
+
+SHACL_REJECTION = {"accepted": False, "rejection": "shacl"}
+LOCKED = {"accepted": None, "error": "database is locked"}
+
+
+class WriteErrorIsNotAVerdictTests(unittest.TestCase):
+    """aegis-1c8q review F1: an operational error must never score as a SHACL rejection."""
+
+    def test_a_shacl_rejection_of_an_invalid_case_still_agrees(self):
+        row = MODULE.classify(adapter_out(False, [{"accepted": True}, SHACL_REJECTION]), False)
+        self.assertEqual(row["status"], "agrees")
+        self.assertEqual(row["write_errors"], [])
+
+    def test_an_operational_error_on_an_invalid_case_is_a_write_error(self):
+        row = MODULE.classify(adapter_out(False, [{"accepted": True}, LOCKED]), False)
+        self.assertEqual(row["status"], "write_error")
+        self.assertIn("database is locked", row["reason"])
+        self.assertEqual(row["modes"], {"single": None})
+
+    def test_an_error_reported_as_false_without_a_shacl_rejection_is_still_unjudged(self):
+        # Defence in depth: the driver does not trust an adapter that folds an
+        # error into conforms=false (the shape of the reviewer's falsifier).
+        out = adapter_out(False, [{"accepted": False, "error": "database is locked"}])
+        out["modes"]["single"]["conforms"] = False
+        self.assertEqual(MODULE.classify(out, False)["status"], "write_error")
+
+    def test_a_write_error_fails_the_gate(self):
+        bad = {"id": "core/x/locked#locked", "components": []}
+        bad.update(MODULE.classify(adapter_out(False, [LOCKED]), False))
+        failures = MODULE.gate(suite(bad), {"divergences": []})
+        self.assertTrue(any(f.startswith("core/x/locked#locked: write_error") for f in failures), failures)
+
+    def test_a_write_error_on_a_known_divergent_case_is_not_masked_by_the_ledger(self):
+        bad = {"id": "core/x/late#late", "components": []}
+        bad.update(MODULE.classify(adapter_out(False, [LOCKED]), False))
+        owned = {"core/x/late#late": {"class": "late-targeting", "item": "aegis-x"}}
+        ledger = {"owners": owned, "divergences": [["core/x/late#late", "single"]]}
+        failures = MODULE.gate(suite(bad), ledger)
+        self.assertTrue(any(f.startswith("core/x/late#late: write_error") for f in failures), failures)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -50,23 +50,47 @@ def run_case(case, adapter: Path) -> dict:
         capture_output=True, text=True, timeout=300)
     if proc.returncode != 0:
         return {"status": "error", "reason": proc.stderr.strip()[-400:]}
-    out = json.loads(proc.stdout)
-    expected = case.expected_conforms
+    row = classify(json.loads(proc.stdout), case.expected_conforms)
+    row["duration_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    return row
+
+
+def unjudged(write: dict) -> bool:
+    """A write the gate never judged: no verdict, or an error that is not a SHACL rejection."""
+    return write.get("accepted") is None or ("error" in write and write.get("rejection") != "shacl")
+
+
+def classify(out: dict, expected: bool) -> dict:
+    """One case's status from the adapter's --write-path output.
+
+    Only a SHACL judgement counts as a verdict. A split with any unjudged write
+    has no verdict and the case is a write_error, which fails the gate whatever
+    the ledger says; otherwise a store or validator outage would score as a
+    correct rejection of every invalid case (aegis-1c8q review F1).
+    """
     batch = out["batch"].get("conforms")
-    modes = {name: mode["conforms"] for name, mode in out["modes"].items()}
-    errors = sorted({w["error"] for m in out["modes"].values() for w in m["writes"] if "error" in w})
+    modes = {name: (None if any(unjudged(w) for w in mode["writes"]) else mode["conforms"])
+             for name, mode in out["modes"].items()}
+    errors = sorted({w["error"] for m in out["modes"].values() for w in m["writes"] if unjudged(w)})
+    reason = ""
     if batch is None:
         status = "batch_error"
     elif batch != expected:
         status = "batch_mismatch"
+    elif any(verdict is None for verdict in modes.values()):
+        status = "write_error"
+        reason = "; ".join(f"{name}: no SHACL verdict" for name, v in sorted(modes.items()) if v is None)
+        reason += f" ({'; '.join(errors[:3]) or 'no error text'})"
     elif all(verdict == expected for verdict in modes.values()):
         status = "agrees"
     else:
         status = "diverges"
-    return {"status": status, "expected_conforms": expected, "batch_conforms": batch,
-            "modes": modes, "control_conforms": out["control_payload_only"]["conforms"],
-            "write_errors": errors[:3], "triples": out["triples"],
-            "duration_ms": round((time.perf_counter() - started) * 1000, 1)}
+    row = {"status": status, "expected_conforms": expected, "batch_conforms": batch,
+           "modes": modes, "control_conforms": out["control_payload_only"]["conforms"],
+           "write_errors": errors[:3], "triples": out["triples"]}
+    if reason:
+        row["reason"] = reason
+    return row
 
 
 def divergences(results: list[dict]) -> list[list[str]]:

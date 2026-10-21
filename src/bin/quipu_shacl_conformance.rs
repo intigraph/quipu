@@ -41,8 +41,11 @@ fn ntriples(triples: &[&Triple]) -> String {
     out
 }
 
-/// One write through the real `/knot` handler. `conforms` is the gate's
-/// verdict; any other refusal is reported separately as an error.
+/// One write through the real `/knot` handler. Only a SHACL judgement is a
+/// verdict: the gate's `conforms: false`, or a `ValidationFailed` raised inside
+/// the write. Any other error means the gate could not judge the write, so
+/// `accepted` is null rather than false; otherwise an unavailable store would
+/// score as a correct rejection of every invalid case (aegis-1c8q review F1).
 fn knot(store: &mut quipu::Store, shapes: &str, turtle: &str) -> Value {
     let input = json!({
         "turtle": turtle,
@@ -50,8 +53,23 @@ fn knot(store: &mut quipu::Store, shapes: &str, turtle: &str) -> Value {
         "timestamp": "2026-01-01T00:00:00Z",
     });
     match quipu::tool_knot(store, &input) {
-        Ok(result) => json!({"accepted": result["conforms"] != json!(false)}),
-        Err(error) => json!({"accepted": false, "error": error.to_string()}),
+        Ok(result) if result["conforms"] == json!(false) => {
+            json!({"accepted": false, "rejection": "shacl"})
+        }
+        Ok(_) => json!({"accepted": true}),
+        Err(error @ quipu::Error::ValidationFailed { .. }) => {
+            json!({"accepted": false, "rejection": "shacl", "error": error.to_string()})
+        }
+        Err(error) => json!({"accepted": null, "error": error.to_string()}),
+    }
+}
+
+/// A split's verdict: null when any write got no SHACL judgement.
+fn mode_verdict(writes: &[Value]) -> Value {
+    if writes.iter().any(|w| w["accepted"].is_null()) {
+        Value::Null
+    } else {
+        json!(writes.iter().all(|w| w["accepted"] == json!(true)))
     }
 }
 
@@ -106,10 +124,9 @@ fn write_path(shapes: &str, data: &str, base: &str) -> Value {
             .filter(|chunk| !chunk.is_empty())
             .map(|chunk| knot(&mut store, shapes, &ntriples(chunk)))
             .collect();
-        let conforms = writes.iter().all(|w| w["accepted"] == json!(true));
         modes.insert(
             name.to_string(),
-            json!({"conforms": conforms, "writes": writes}),
+            json!({"conforms": mode_verdict(&writes), "writes": writes}),
         );
     }
     // Deliberately weak positive control: every triple validated ALONE, with no
@@ -162,5 +179,54 @@ fn main() {
             eprintln!("validation error: {error}");
             std::process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SHAPES: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+        @prefix ex: <http://example.org/> .\n\
+        ex:S a sh:NodeShape ; sh:targetClass ex:P ; sh:property [ sh:path ex:name ; sh:minCount 1 ] .\n";
+
+    fn write(turtle: &str) -> Value {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        knot(&mut store, SHAPES, turtle)
+    }
+
+    #[test]
+    fn a_conforming_write_is_accepted() {
+        let w = write(
+            "<http://example.org/a> a <http://example.org/P> ; <http://example.org/name> \"a\" .",
+        );
+        assert_eq!(w["accepted"], json!(true), "{w}");
+    }
+
+    #[test]
+    fn a_shacl_violation_is_a_rejection_verdict() {
+        let w = write("<http://example.org/a> a <http://example.org/P> .");
+        assert_eq!(w["accepted"], json!(false), "{w}");
+        assert_eq!(w["rejection"], json!("shacl"), "{w}");
+    }
+
+    #[test]
+    fn an_error_that_is_not_a_shacl_judgement_is_no_verdict() {
+        // Unparseable data never reaches the gate: it must not score as a rejection.
+        let w = write("<http://example.org/a> <<< not turtle");
+        assert!(w["accepted"].is_null(), "{w}");
+        assert!(w.get("rejection").is_none(), "{w}");
+        assert!(w["error"].is_string(), "{w}");
+    }
+
+    #[test]
+    fn one_unjudged_write_makes_the_whole_split_unknown() {
+        let ok = json!({"accepted": true});
+        let rejected = json!({"accepted": false, "rejection": "shacl"});
+        let unjudged = json!({"accepted": null, "error": "database is locked"});
+        assert_eq!(mode_verdict(&[ok.clone(), ok.clone()]), json!(true));
+        assert_eq!(mode_verdict(&[ok.clone(), rejected.clone()]), json!(false));
+        assert!(mode_verdict(&[rejected, unjudged.clone()]).is_null());
+        assert!(mode_verdict(&[ok, unjudged]).is_null());
     }
 }
