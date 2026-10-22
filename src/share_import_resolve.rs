@@ -48,6 +48,9 @@ pub(crate) struct LabelCandidates {
     foreign: String,
     label: String,
     candidates: Vec<EntityCandidate>,
+    /// Name candidates found on the read and dropped under the writer because
+    /// their label changed in between. Reported, never silently lost.
+    dropped: Vec<EntityCandidate>,
 }
 
 /// A share parsed and resolved on a read connection, waiting for the writer.
@@ -117,6 +120,7 @@ pub(crate) fn resolve(
             foreign: foreign.clone(),
             label: label.clone(),
             candidates: result.candidates,
+            dropped: Vec::new(),
         });
     }
     Ok(out)
@@ -150,16 +154,15 @@ pub(crate) fn revalidate(
     let mut out = Vec::with_capacity(prepared.labels.len());
     for entry in &prepared.labels {
         crate::time::check_request_deadline()?;
-        let mut candidates: Vec<EntityCandidate> = entry
-            .candidates
-            .iter()
-            .filter(|c| !(c.matched_on.starts_with("canonical_name") && touched.contains(&c.iri)))
-            .cloned()
-            .collect();
+        let (dropped, mut candidates): (Vec<EntityCandidate>, Vec<EntityCandidate>) =
+            entry.candidates.iter().cloned().partition(|c| {
+                c.matched_on.starts_with("canonical_name") && touched.contains(&c.iri)
+            });
         candidates.extend(delta.candidates(store, &entry.label, THRESHOLD)?);
         sort(&mut candidates);
         out.push(LabelCandidates {
             candidates,
+            dropped,
             ..entry.clone()
         });
     }
@@ -217,9 +220,18 @@ pub(crate) fn finish(
     for LabelCandidates {
         foreign,
         mut candidates,
+        dropped,
         ..
     } in labels
     {
+        for candidate in dropped {
+            report.revalidation_dropped.push(ImportMatch {
+                foreign: foreign.clone(),
+                local: candidate.iri,
+                score: Some(candidate.score),
+                matched_on: Some(candidate.matched_on),
+            });
+        }
         candidates.truncate(TOP_K);
         let Some(top) = candidates.first() else {
             report.unmatched.push(foreign);

@@ -206,6 +206,20 @@ fn an_exact_match_retracted_between_the_phases_is_not_merged() {
     assert_eq!(retracted, 1);
 
     let result = import_share_prepared(&mut target, &request, TS, None, Some(prepared)).unwrap();
+    // The dropped candidate is REPORTED, not silently lost (wu's condition).
+    let dropped = &result.resolution.revalidation_dropped;
+    assert_eq!(dropped.len(), 1, "{:?}", result.resolution);
+    assert_eq!(dropped[0].foreign, "urn:foreign:alice");
+    assert_eq!(dropped[0].local, "urn:local:alice");
+    assert_eq!(
+        dropped[0].matched_on.as_deref(),
+        Some("canonical_name:exact")
+    );
+    let wire = serde_json::to_value(&result).unwrap();
+    assert_eq!(
+        wire["resolution"]["revalidation_dropped"][0]["local"],
+        "urn:local:alice"
+    );
     assert!(
         result.resolution.exact_merges.is_empty(),
         "{:?}",

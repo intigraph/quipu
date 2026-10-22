@@ -102,6 +102,12 @@ pub struct ImportResolution {
     pub exact_merges: Vec<ImportMatch>,
     pub candidates: Vec<ImportMatch>,
     pub unmatched: Vec<String>,
+    /// Name candidates found when the share was resolved off the writer, then
+    /// dropped under the writer because their label was asserted or retracted
+    /// in between (aegis-oa5). Always present, so an empty list means the
+    /// re-check ran and dropped nothing.
+    #[serde(default)]
+    pub revalidation_dropped: Vec<ImportMatch>,
 }
 
 /// Local SHACL result and vocabulary findings.
