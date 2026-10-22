@@ -177,3 +177,111 @@ fn a_deep_chain_with_a_recursive_request_shape_is_refused_not_aborted() {
         "nothing written: {rows:?}"
     );
 }
+
+/// An ACYCLIC chain of `n` node shapes, each referencing the next by `sh:node`.
+fn chain(n: usize) -> String {
+    let mut ttl = String::from(PREFIXES);
+    for i in 0..n {
+        if i + 1 < n {
+            ttl.push_str(&format!(
+                "ex:C{i} a sh:NodeShape ; sh:node ex:C{} .\n",
+                i + 1
+            ));
+        } else {
+            ttl.push_str(&format!("ex:C{i} a sh:NodeShape ; sh:nodeKind sh:IRI .\n"));
+        }
+    }
+    ttl
+}
+
+#[test]
+fn depth_counts_shapes_on_the_longest_chain_including_diamonds() {
+    assert_eq!(super::deepest_shape_chain(&chain(5)).unwrap().unwrap().0, 5);
+    // A -> B -> D and A -> C -> D: depth 3, not 4 (D counted once per path).
+    let ttl = shapes(
+        "ex:A a sh:NodeShape ; sh:node ex:B ; sh:node ex:C .
+         ex:B a sh:NodeShape ; sh:node ex:D .
+         ex:C a sh:NodeShape ; sh:node ex:D .
+         ex:D a sh:NodeShape ; sh:nodeKind sh:IRI .",
+    );
+    let (d, root) = super::deepest_shape_chain(&ttl).unwrap().unwrap();
+    assert_eq!((d, root.as_str()), (3, "http://example.org/A"));
+}
+
+#[test]
+fn a_chain_one_deeper_than_the_bound_is_refused() {
+    let err = refuse_cyclic_shapes(&chain(super::MAX_SHAPE_DEPTH + 1)).unwrap_err();
+    assert!(err.to_string().contains("nest"), "{err}");
+    refuse_cyclic_shapes(&chain(super::MAX_SHAPE_DEPTH)).unwrap();
+}
+
+/// A chain of `levels` shapes where each references the next through `kind`,
+/// one of the constraints the guard counts.
+#[cfg(feature = "shacl")]
+fn chain_via(kind: &str, levels: usize) -> String {
+    let mut ttl = String::from(PREFIXES);
+    for i in 0..levels {
+        let next = format!("ex:C{}", i + 1);
+        let link = match kind {
+            "node" => format!("sh:node {next}"),
+            "not" => format!("sh:not {next}"),
+            "property" => format!("sh:property [ sh:path ex:p ; sh:node {next} ]"),
+            "qualifiedValueShape" => format!(
+                "sh:property [ sh:path ex:p ; sh:qualifiedValueShape {next} ; sh:qualifiedMinCount 1 ]"
+            ),
+            list => format!("sh:{list} ( {next} [ sh:nodeKind sh:IRI ] )"),
+        };
+        ttl.push_str(&format!("ex:C{i} a sh:NodeShape ; {link} .\n"));
+    }
+    ttl.push_str(&format!(
+        "ex:C{levels} a sh:NodeShape ; sh:nodeKind sh:IRI .\n"
+    ));
+    ttl
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn the_deepest_accepted_chain_of_every_kind_compiles_on_a_small_stack() {
+    // The contract: whatever the guard accepts, compiling it must not abort.
+    // For each counted reference kind, take the deepest chain the guard still
+    // accepts and compile it on a 2 MiB thread (the smallest a validation runs
+    // on), in whatever profile the suite runs (debug frames are the largest).
+    for kind in [
+        "node",
+        "not",
+        "property",
+        "qualifiedValueShape",
+        "and",
+        "or",
+        "xone",
+    ] {
+        let mut levels = 1;
+        while refuse_cyclic_shapes(&chain_via(kind, levels + 1)).is_ok() {
+            levels += 1;
+        }
+        let ttl = chain_via(kind, levels);
+        let (d, _) = super::deepest_shape_chain(&ttl).unwrap().unwrap();
+        assert!(
+            d <= super::MAX_SHAPE_DEPTH && d + 2 > super::MAX_SHAPE_DEPTH,
+            "{kind}: depth {d}"
+        );
+        let built = std::thread::Builder::new()
+            .stack_size(2 * 1024 * 1024)
+            .spawn(move || crate::shacl::Validator::from_turtle(&ttl).map(|_| ()))
+            .unwrap()
+            .join()
+            .unwrap_or_else(|_| panic!("{kind}: compiling the deepest accepted chain panicked"));
+        built.unwrap_or_else(|e| panic!("{kind}: {e}"));
+    }
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn a_deep_acyclic_chain_is_refused_before_it_is_compiled() {
+    // Review counterexample on #731: a 2,000-shape acyclic chain passed the
+    // cycle guard and then overflowed the stack inside schema compilation.
+    let err = crate::shacl::Validator::from_turtle(&chain(2000))
+        .err()
+        .expect("refused");
+    assert!(err.to_string().contains("nest 2000 levels"), "{err}");
+}

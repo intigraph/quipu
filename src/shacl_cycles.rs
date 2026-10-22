@@ -8,10 +8,13 @@
 //! whole server down.
 //!
 //! Without a cycle in the shape-reference graph, nesting is bounded by the
-//! depth of the shape graph itself, whatever the data. SHACL leaves the
-//! semantics of recursive shapes to the implementation, so refusing them is
-//! within the spec; it is checked wherever shapes enter (the validator, and
-//! shape loading), never by trial validation.
+//! depth of the shape graph itself, whatever the data. That depth must be
+//! bounded too: compiling a shape graph recurses once per reference, so a deep
+//! enough ACYCLIC chain overflows the stack the same way, before any data is
+//! seen. Both are refused. SHACL leaves the semantics of recursive shapes to
+//! the implementation, so refusing them is within the spec; it is checked
+//! wherever shapes enter (the validator, and shape loading), never by trial
+//! validation.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -22,6 +25,14 @@ use crate::{Error, Result};
 const SH: &str = "http://www.w3.org/ns/shacl#";
 const RDF_FIRST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#first";
 const RDF_REST: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest";
+
+/// The deepest shape-reference chain accepted (counted in shapes, the root
+/// included; a property shape is a level of its own). Compiling recurses once
+/// per level and must stay inside the smallest stack a validation runs on (a
+/// 2 MiB worker thread) in a debug build, which has the largest frames: a
+/// plain `sh:node` chain overflows there between 80 and 96 levels. Real shape
+/// sets nest at most 4, so 16 leaves a wide margin on both sides.
+pub const MAX_SHAPE_DEPTH: usize = 16;
 
 /// Constraints whose object is ONE shape the validator evaluates in turn.
 const SINGLE: &[&str] = &["node", "property", "qualifiedValueShape", "not"];
@@ -52,6 +63,18 @@ fn key_of_term(t: &Term) -> Option<String> {
 /// list of shape nodes it passes through (first node repeated at the end), or
 /// `None` when the graph is acyclic.
 pub fn find_shape_cycle(shapes_turtle: &str) -> Result<Option<Vec<String>>> {
+    Ok(first_cycle(&reference_edges(shapes_turtle)?))
+}
+
+/// The length (in shapes) of the deepest shape-reference chain in an ACYCLIC
+/// `shapes_turtle`, with the shape it starts from; `None` when it holds no
+/// reference at all. Call only after [`find_shape_cycle`] returned `None`.
+pub fn deepest_shape_chain(shapes_turtle: &str) -> Result<Option<(usize, String)>> {
+    Ok(deepest(&reference_edges(shapes_turtle)?))
+}
+
+/// The shape-reference graph: each shape to the shapes it evaluates in turn.
+fn reference_edges(shapes_turtle: &str) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let parser = oxttl::TurtleParser::new()
         .with_base_iri("http://quipu.local/shapes")
         .map_err(|e| Error::InvalidValue(format!("shapes base IRI: {e}")))?;
@@ -100,7 +123,48 @@ pub fn find_shape_cycle(shapes_turtle: &str) -> Result<Option<Vec<String>>> {
         }
     }
 
-    Ok(first_cycle(&edges))
+    Ok(edges)
+}
+
+/// Longest chain over an acyclic graph, iteratively (post-order: a node's
+/// depth is one more than its deepest successor's).
+fn deepest(edges: &BTreeMap<String, BTreeSet<String>>) -> Option<(usize, String)> {
+    let mut depth: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut best: Option<(usize, String)> = None;
+    for root in edges.keys() {
+        if depth.contains_key(root.as_str()) {
+            continue;
+        }
+        // (node, successors expanded yet)
+        let mut stack: Vec<(&str, bool)> = vec![(root.as_str(), false)];
+        while let Some((node, expanded)) = stack.pop() {
+            if depth.contains_key(node) {
+                continue;
+            }
+            let succ = edges.get(node);
+            if expanded {
+                let d = 1 + succ
+                    .into_iter()
+                    .flatten()
+                    .map(|s| depth.get(s.as_str()).copied().unwrap_or(1))
+                    .max()
+                    .unwrap_or(0);
+                depth.insert(node, d);
+            } else {
+                stack.push((node, true));
+                for s in succ.into_iter().flatten() {
+                    if !depth.contains_key(s.as_str()) {
+                        stack.push((s.as_str(), false));
+                    }
+                }
+            }
+        }
+        let d = depth[root.as_str()];
+        if best.as_ref().is_none_or(|(b, _)| d > *b) {
+            best = Some((d, root.clone()));
+        }
+    }
+    best
 }
 
 /// Iterative DFS (this module exists because of unbounded recursion, so it
@@ -158,15 +222,24 @@ fn first_cycle(edges: &BTreeMap<String, BTreeSet<String>>) -> Option<Vec<String>
     None
 }
 
-/// `Err` naming the cycle when `shapes_turtle` contains recursive shapes.
+/// `Err` naming the cycle when `shapes_turtle` contains recursive shapes, or
+/// the root of the chain when its references nest deeper than
+/// [`MAX_SHAPE_DEPTH`].
 pub fn refuse_cyclic_shapes(shapes_turtle: &str) -> Result<()> {
-    match find_shape_cycle(shapes_turtle)? {
-        None => Ok(()),
-        Some(cycle) => Err(Error::InvalidValue(format!(
+    let edges = reference_edges(shapes_turtle)?;
+    if let Some(cycle) = first_cycle(&edges) {
+        return Err(Error::InvalidValue(format!(
             "recursive SHACL shapes are not supported (a shape reference cycle can \
              recurse once per data hop and overflow the stack): {}",
             cycle.join(" -> ")
+        )));
+    }
+    match deepest(&edges) {
+        Some((d, root)) if d > MAX_SHAPE_DEPTH => Err(Error::InvalidValue(format!(
+            "SHACL shape references nest {d} levels deep from {root}; at most \
+             {MAX_SHAPE_DEPTH} are supported (compiling recurses once per level)"
         ))),
+        _ => Ok(()),
     }
 }
 
