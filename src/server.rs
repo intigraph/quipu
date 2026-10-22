@@ -59,6 +59,8 @@ mod parse_guard_tests;
 mod point_reads;
 #[path = "server/process_pool.rs"]
 mod process_pool;
+#[path = "server/projections.rs"]
+mod projections;
 #[path = "server/publication.rs"]
 mod publication;
 #[path = "server/query_capture.rs"]
@@ -208,6 +210,25 @@ async fn main() {
     // the clone_from is load-bearing.
     if !is_replica {
         base::apply_owl(&mut store, &config);
+    }
+
+    // Current-state projections (aegis-tg5 F2). The writer installs them; a
+    // replica only reads what its primary installed. A failed install does not
+    // stop the server: aggregates over an uninstalled definition refuse
+    // (CannotVerify) instead of answering stale, which is recoverable, while a
+    // server that will not boot is not.
+    store.set_projection_defs(config.current_projections.clone());
+    if !is_replica {
+        match store.install_projections(&config.current_projections) {
+            Ok(statuses) => {
+                for s in statuses {
+                    eprintln!("projection {}: {} ({} rows)", s.name, s.action, s.rows);
+                }
+            }
+            Err(e) => eprintln!(
+                "warning: projections NOT installed -- {e}; /projections aggregates will refuse"
+            ),
+        }
     }
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
@@ -445,6 +466,7 @@ async fn main() {
         .route("/episode/retract", post(retract_episode))
         .route("/retract/source", post(retract_source))
         .route("/shapes", post(shapes))
+        .route("/projections", post(projections::projections))
         .route("/reason", post(reason))
         .route("/explain", post(explain))
         .route("/ontology", post(ontology))
