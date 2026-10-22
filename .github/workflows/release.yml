@@ -40,6 +40,8 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    outputs:
+      ready: ${{ steps.correctness.outputs.ready }}
     permissions:
       checks: read
       contents: read
@@ -55,15 +57,25 @@ jobs:
           python3 scripts/test_wait_release_correctness.py
           python3 scripts/test_release_ci_gate.py
       - name: Require CI correctness for this exact commit
+        id: correctness
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/wait_release_correctness.py "$GITHUB_SHA"
+
+  release-deferred:
+    name: Release deferred (CI not ready)
+    needs: ci-correctness
+    if: github.event_name == 'push' && needs.ci-correctness.outputs.ready == 'false'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: echo 'CI is still pending or unreadable; no publishing. Completion events rearm the same current-main Release run once.' >> "$GITHUB_STEP_SUMMARY"
 
   release-plz:
     name: Release-plz
     needs: ci-correctness
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && needs.ci-correctness.outputs.ready == 'true'
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
     steps:

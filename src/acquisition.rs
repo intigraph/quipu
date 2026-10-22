@@ -17,6 +17,10 @@ pub mod composed;
 #[path = "acquisition/eligibility.rs"]
 pub mod eligibility;
 
+/// Bounded physical row/byte scope of a direct-main acquisition (G1).
+#[path = "acquisition/scope.rs"]
+pub mod scope;
+
 #[path = "acquisition/census.rs"]
 mod census;
 #[path = "acquisition/main_graph.rs"]

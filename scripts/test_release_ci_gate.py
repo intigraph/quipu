@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import yaml
+from wait_release_correctness import DEFERRED_JOB
 
 
 ci = Path(".github/workflows/ci.yml").read_text()
@@ -10,7 +11,7 @@ release = Path(".github/workflows/release.yml").read_text()
 
 assert "  release-correctness:\n" in ci
 assert "    name: Release correctness\n" in ci
-assert "needs: [clippy, test, build, check]" in ci
+assert "needs: [clippy, test, build, check, shacl-write-path]" in ci
 aggregate_header = ci[ci.index("  release-correctness:\n") :].split("    runs-on:", 1)[0]
 for excluded in ("source-size", "fmt", "lint-markdown", "build-full", "wasm", "shapes"):
     assert excluded not in aggregate_header, f"housekeeping job {excluded} must not gate release"
@@ -41,6 +42,9 @@ jobs = yaml.load(ci, Loader=UniqueSafeLoader)["jobs"]
 combined = jobs["source-size"]
 assert "if" not in combined, "combined invariants must not be conditional"
 assert combined.get("continue-on-error", False) is False, "combined failures must gate"
+write_path = jobs["shacl-write-path"]
+assert "if" not in write_path, "SHACL write-path conformance must not be conditional"
+assert write_path.get("continue-on-error", False) is False, "write-path divergence must gate release"
 aggregate = jobs["extended-correctness"]
 assert "source-size" in aggregate["needs"], "combined invariants must gate the aggregate"
 assert aggregate.get("continue-on-error", False) is False, "aggregate failures must gate"
@@ -64,6 +68,37 @@ assert "    needs: ci-correctness\n" in release_plz.split("    steps:\n", 1)[0]
 assert "  workflow_dispatch:\n" in release, "manual artifact recovery must remain available"
 
 release_jobs = yaml.load(release, Loader=UniqueSafeLoader)["jobs"]
+waiter = release_jobs["ci-correctness"]
+assert waiter.get("continue-on-error", False) is False
+assert waiter["outputs"]["ready"] == "${{ steps.correctness.outputs.ready }}"
+gate_steps = [step for step in waiter["steps"] if step.get("id") == "correctness"]
+assert len(gate_steps) == 1
+assert gate_steps[0]["run"] == 'python3 scripts/wait_release_correctness.py "$GITHUB_SHA"'
+assert "if" not in gate_steps[0] and not gate_steps[0].get("continue-on-error", False)
+assert release_jobs["release-plz"]["if"] == (
+    "github.event_name == 'push' && needs.ci-correctness.outputs.ready == 'true'"
+), "only explicit readiness permits publication"
+deferred = release_jobs["release-deferred"]
+assert deferred["name"] == DEFERRED_JOB
+assert deferred["needs"] == "ci-correctness"
+assert deferred["if"] == (
+    "github.event_name == 'push' && needs.ci-correctness.outputs.ready == 'false'"
+)
+rearm = yaml.load(Path(".github/workflows/release-ci-ready.yml").read_text(), Loader=UniqueSafeLoader)
+trigger = rearm.get("on", rearm.get(True))["workflow_run"]
+assert trigger == {"workflows": ["CI", "Release"], "types": ["completed"], "branches": ["main"]}
+assert rearm["concurrency"]["cancel-in-progress"] is False
+job = rearm["jobs"]["rearm"]
+assert " ".join(job["if"].split()) == (
+    "github.event.workflow_run.event == 'push' && "
+    "github.event.workflow_run.head_repository.full_name == github.repository"
+)
+checkout = next(step for step in job["steps"] if step.get("uses", "").startswith("actions/checkout@"))
+assert checkout["with"] == {
+    "ref": "${{ github.event.repository.default_branch }}", "persist-credentials": False,
+}, "privileged workflow_run must execute trusted default-branch code"
+assert job["steps"][-1]["run"] == 'python3 scripts/rearm_release_correctness.py "$HEAD_SHA"'
+assert "python3 scripts/test_rearm_release_correctness.py" in ci
 steps = release_jobs["release-plz"]["steps"]
 policies = [step for step in steps if step.get("run", "").strip() == "python3 scripts/check-semver-policy.py"]
 assert len(policies) == 1, "semver exception must be bounded at release time"
