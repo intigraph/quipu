@@ -8,7 +8,7 @@ The CLI command is `quipu`; `qp` is its relative alias. Native MCP also needs
 | Method | Prerequisites | Executable location |
 |---|---|---|
 | Release installer | Python 3.9+, curl, Linux/macOS | `$STACK_INSTALL_ROOT/bin`, default `~/.local/bin` |
-| Release archive | curl, tar, SHA-256 utility, matching platform | Your selected directory |
+| Release archive | curl, tar, mktemp, SHA-256 utility, matching platform | Your selected directory |
 | Homebrew | macOS, Homebrew | `$(brew --prefix)/bin` links into the Cellar |
 | apt | Debian/Ubuntu amd64 or arm64, sudo, curl, GnuPG | `/usr/bin` |
 | Cargo | Rust toolchain, native build prerequisites | `$CARGO_INSTALL_ROOT/bin` or `~/.cargo/bin` |
@@ -85,22 +85,31 @@ Use the archive matching your operating system and architecture. For Linux
 x86_64, with an explicit published version:
 
 ```sh
-V=0.15.0
-T=x86_64-unknown-linux-gnu
-A="quipu-quipu-ai-v$V-$T"
-BASE="https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V"
-curl --fail --show-error --location "$BASE/$A.tar.gz" -o "$A.tar.gz"
-curl --fail --show-error --location "$BASE/$A.tar.gz.sha256" -o "$A.tar.gz.sha256"
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum -c "$A.tar.gz.sha256"
-else
-  shasum -a 256 -c "$A.tar.gz.sha256"
-fi
-tar -xzf "$A.tar.gz"
-"./$A/quipu" --version
-"./$A/quipu-server" --version
-"./$A/qp" --version
+(
+  set -eu
+  V=0.15.0
+  T=x86_64-unknown-linux-gnu
+  A="quipu-quipu-ai-v$V-$T"
+  BASE="https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V"
+  download_dir=$(mktemp -d)
+  trap 'rm -rf "$download_dir"' EXIT
+  curl --fail --show-error --location "$BASE/$A.tar.gz" -o "$download_dir/$A.tar.gz"
+  curl --fail --show-error --location "$BASE/$A.tar.gz.sha256" -o "$download_dir/$A.tar.gz.sha256"
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$download_dir" && sha256sum -c "$A.tar.gz.sha256")
+  else
+    (cd "$download_dir" && shasum -a 256 -c "$A.tar.gz.sha256")
+  fi
+  tar -xzf "$download_dir/$A.tar.gz"
+  "./$A/quipu" --version
+  "./$A/quipu-server" --version
+  "./$A/qp" --version
+)
 ```
+
+The subshell stops on a failed download or checksum and removes its temporary
+downloads on exit. It extracts the verified bundle into your current directory;
+a successful run keeps that extracted directory.
 
 Other target names are `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin` and
 `aarch64-apple-darwin`. Keep the extracted bundle intact: it contains the
@@ -111,9 +120,10 @@ directory to `PATH`, or use the release installer to manage command links.
 change your PATH or dedicated links after all three version checks succeed.
 Do not extract a new archive over a running installation.
 
-**Remove:** remove your PATH entry or links, then the exact extracted directory,
-archive and checksum file. No service is installed by extraction. Database
-removal is independent.
+**Remove:** remove your PATH entry or links, then the exact extracted directory
+and any archive/checksum files you separately retained. The example above
+cleans its temporary downloads automatically. No service is installed by
+extraction. Database removal is independent.
 
 ## Homebrew
 
