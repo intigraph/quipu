@@ -297,3 +297,54 @@ fn explain_takes_exactly_three_operands() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("'owl' feature"));
     }
 }
+#[test]
+fn render_options_reach_the_render_handler() {
+    // Admission fronts `render` (#559): every handler flag passes syntax and the
+    // handler's own --db/--server conflict refusal answers, before any store.
+    let dir = sandbox();
+    let root = dir.path();
+    let before = snapshot(root);
+    let output = run(
+        root,
+        &[
+            "render",
+            "urn:spec",
+            "--dest",
+            "out",
+            "--graph",
+            "urn:g",
+            "--valid-at",
+            "2026-01-01T00:00:00Z",
+            "--dry-run",
+            "--db",
+            "scratch.db",
+            "--server",
+            "http://127.0.0.1:9",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("choose --db or --server"), "{stderr}");
+    let output = run(
+        root,
+        &[
+            "render",
+            "--query",
+            "SELECT * {}",
+            "--template",
+            "t",
+            "--layout",
+            "single",
+            "--path",
+            "p",
+            "--dest",
+            "out",
+            "--db",
+            "a",
+            "--server",
+            "b",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(snapshot(root), before);
+}

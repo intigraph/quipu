@@ -60,6 +60,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("validate", "", 0, 0, "shapes data format", ""),
     spec!("repl", "", 0, 0, "", ""),
     spec!("export", "", 0, 0, "graph group-id construct format", ""),
+    spec!("render", "[spec-IRI]", 0, 1, "dest graph valid-at server query template layout path", "dry-run"),
     spec!("stats", "", 0, 0, "", ""),
     spec!("search", "<query>", 1, 1, "mode limit alpha rrf-k decay anchor anchor-mode direction max-hops via fusion valid-at type group structured-query filters graph graphs", "explain all-graphs"),
     spec!("search-index", "", 0, 0, "kind batch-size", ""),
