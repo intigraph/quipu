@@ -24,8 +24,6 @@ Nothing here is hand-carried. Every figure regenerates:
 | Arm B control | — | `cargo run --example replay --features shacl -- --negative-control` |
 | Arm E | `benchmark/shapes/` | `just bench schema`, then `just bench schema-report <results.json>` |
 | Arm E controls | — | `just bench schema --selftest` |
-| Arm F | `benchmark/memory/` | `just bench memory --scratch <fixture-root>`, then `just bench memory-report <output-dir>` |
-| Arm F controls | — | `just bench memory --selftest --scratch <fixture-root>` |
 
 Read each benchmark's `BUILD_REPORT.md` — the honesty record — **before quoting
 a number**. They state what each arm can and cannot establish, and one of the
@@ -109,10 +107,9 @@ Constrained by the novelty ruling, and the constraint is not cosmetic:
 
 ## October research update
 
-[ARM-E-F-RESULTS.md](ARM-E-F-RESULTS.md) is the generated short results note.
-The October revision builds to 16 pages and includes the datatype conflict
-detector miss, provenance-induced row conflicts and the negative indexed
-traversal result. Earlier August build counts above are historical observations.
-The new submission abstract is transcribed from the rebuilt PDF; source and PDF
-tokens are checked for equality. Every new count regenerates from published
-fixtures/results, and all test SQL servers stop after their run.
+[ARM-E-F-RESULTS.md](ARM-E-F-RESULTS.md) is the generated schema-evolution
+results note. The paper builds to 15 pages and includes the datatype conflict
+detector miss caught by
+post-merge validation. Regenerate it with `just bench merge-note`; its counts
+come from the published shape fixtures and results. The submission abstract
+matches the paper source and rebuilt PDF.
