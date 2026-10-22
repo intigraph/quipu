@@ -2215,6 +2215,33 @@ not a real one.
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
 `quipu events refusals`.
 
+### Admitted debt events (`shacl.debt_admitted`)
+
+A write can reuse an existing node by name and type when that node was stored
+before its shape existed and still lacks a required value. That violation is
+pre-existing debt, not something the write introduced, so it does not refuse
+the write. The write is admitted, and the issue is returned as a `Warning`
+whose message starts with `pre-existing debt (admitted as Warning):`.
+
+The match is exact. The node's pre-state (its stored types and its stored
+values on required paths) must report the same focus, constraint component,
+path, value and message, plus the source shape when that shape is named. A new
+node, a new type on an existing node, a new value, or a violation on another
+path is still refused. Admission covers only constraints a node's own data
+decides (minimum counts, values, datatypes, classes; never `sh:maxCount`,
+whose result does not name a value). The same rule covers stored values judged
+by the write-savepoint gate. `sh:node`,
+`sh:qualifiedValueShape` and the logical components are never admitted.
+
+On `/update`, with `shacl.validate_on_write` on, a deletion is refused when it
+leaves a node violating a `sh:minCount` or `sh:hasValue` that it satisfied
+before. **Known gap:** a deletion that breaks a non-local constraint (`sh:or`,
+`sh:and`, `sh:xone`, `sh:not`, `sh:node`, qualified counts) is not judged yet.
+
+Each admitted issue appends a `shacl.debt_admitted` event riding the write:
+`{shape, message, component, path, graph}`, with the focus node as subject.
+To count the debt still in use, query `GET /events?types=shacl.debt_admitted`.
+
 ## Linked-Data Surface
 
 Standards-flavoured read endpoints for semantic-web tooling.
