@@ -76,17 +76,51 @@ fn untimezoned_values_compare_with_each_other_directly() {
 }
 
 #[test]
-fn mixed_timezone_presence_is_determinate_only_outside_fourteen_hours() {
-    // Within +-14h the untimezoned value could be on either side: indeterminate.
-    assert_eq!(cmp("2026-10-21T10:00:00Z", "2026-10-21T12:00:00"), None);
-    // Further apart than 14h it is determinate either way round.
+fn an_untimezoned_operand_takes_the_implicit_timezone_utc() {
+    // XPath op:dateTime-* give a missing timezone the implicit one (UTC here),
+    // so the order is total: 12:00 (implicitly Z) is after 10:00Z.
     assert_eq!(
-        cmp("2026-10-21T10:00:00Z", "2026-10-22T01:00:00"),
+        cmp("2026-10-21T10:00:00Z", "2026-10-21T12:00:00"),
         Some(Ordering::Less)
     );
     assert_eq!(
-        cmp("2026-10-22T01:00:00", "2026-10-21T10:00:00Z"),
-        Some(Ordering::Greater)
+        cmp("2026-10-21T12:00:00", "2026-10-21T12:00:00Z"),
+        Some(Ordering::Equal)
+    );
+    assert_eq!(
+        cmp("2026-10-21T12:00:00", "2026-10-21T13:00:00+01:00"),
+        Some(Ordering::Equal)
+    );
+}
+
+#[test]
+fn fractions_compare_exactly_at_any_precision() {
+    // Review finding: 9-digit truncation made these equal.
+    assert_eq!(
+        cmp(
+            "2026-10-21T10:00:00.0000000001Z",
+            "2026-10-21T10:00:00.0000000002Z"
+        ),
+        Some(Ordering::Less)
+    );
+    assert_eq!(
+        cmp(
+            "2026-10-21T10:00:00.12345678901Z",
+            "2026-10-21T10:00:00.123456789010Z"
+        ),
+        Some(Ordering::Equal)
+    );
+}
+
+#[test]
+fn twenty_four_hundred_with_any_nonzero_fraction_is_invalid() {
+    assert!(!both_date_times(
+        &dt("2026-10-21T24:00:00.0000000001Z"),
+        &dt("2026-10-22T00:00:00Z")
+    ));
+    assert_eq!(
+        cmp("2026-10-21T24:00:00.000Z", "2026-10-22T00:00:00Z"),
+        Some(Ordering::Equal)
     );
 }
 
@@ -168,13 +202,22 @@ fn stored_facts_are_windowed_by_instant() {
 }
 
 #[test]
-fn an_indeterminate_comparison_filters_the_row_out() {
+fn negations_follow_the_same_determinate_order() {
+    // Review finding: an indeterminate pair used to be false for `=` and so TRUE
+    // for `!=`, `NOT IN` and `!(<)`. With the implicit timezone there is no
+    // indeterminate pair; each negation is the exact complement.
     let store = crate::Store::open_in_memory().unwrap();
-    for op in [">", "<", "=", ">=", "<="] {
-        let q = format!(
-            r#"SELECT (COUNT(*) AS ?n) WHERE {{
-                FILTER("2026-10-21T10:00:00Z"^^xsd:dateTime {op} "2026-10-21T12:00:00"^^xsd:dateTime) }}"#
-        );
-        assert_eq!(count(&store, &q), n(0), "{op}");
+    let a = r#""2026-10-21T10:00:00Z"^^xsd:dateTime"#;
+    let b = r#""2026-10-21T12:00:00"^^xsd:dateTime"#;
+    let same = r#""2026-10-21T13:00:00+01:00"^^xsd:dateTime"#;
+    for (expr, want) in [
+        (format!("{a} != {b}"), 1),
+        (format!("{b} != {same}"), 0),
+        (format!("!({a} < {b})"), 0),
+        (format!("{b} NOT IN ({same})"), 0),
+        (format!("{a} NOT IN ({b})"), 1),
+    ] {
+        let q = format!("SELECT (COUNT(*) AS ?n) WHERE {{ FILTER({expr}) }}");
+        assert_eq!(count(&store, &q), n(want), "{expr}");
     }
 }

@@ -454,7 +454,7 @@ pub fn compare_values(
         return crate::numeric_value::compare(&a, &b).is_some_and(pred);
     }
     // dateTimes compare as instants (aegis-dio): a lexical compare orders
-    // "01:00+02:00" after "23:30Z" the day before. Indeterminate -> false.
+    // "01:00+02:00" after "23:30Z" the day before. Valid pairs always order.
     if crate::datetime_value::both_date_times(&a, &b) {
         return crate::datetime_value::compare(&a, &b).is_some_and(pred);
     }
