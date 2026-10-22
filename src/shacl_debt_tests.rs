@@ -248,3 +248,87 @@ aegis:RuleShape a sh:NodeShape ;
     assert!(!v.conforms, "sh:or debt was admitted: {:?}", v.results);
     assert!(debt_events(&store).is_empty());
 }
+
+/// Two different anonymous shapes on the same path must not share a debt key
+/// (grant, review of #751): a node already lacking `p` under one type's shape,
+/// written with a NEW type whose own anonymous shape also requires `p`, is a
+/// new violation and is refused.
+#[test]
+fn a_different_anonymous_shape_on_the_same_path_is_not_debt() {
+    const TWO: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:OneShape a sh:NodeShape ; sh:targetClass aegis:One ;
+    sh:property [ sh:path aegis:p ; sh:minCount 1 ] .
+aegis:TwoShape a sh:NodeShape ; sh:targetClass aegis:Two ;
+    sh:property [ sh:path aegis:p ; sh:minCount 1 ] .
+"#;
+    let store = store_with(&format!("<{A}n> a <{A}One> .\n"));
+    // CONTROL: reusing the existing type is admitted debt.
+    let same = validate_with_store_context(&store, TWO, &format!("<{A}n> a <{A}One> .\n"))
+        .expect("validated");
+    assert!(same.conforms, "{:?}", same.results);
+    // The new type's shape is a different shape: refused.
+    let v = validate_with_store_context(&store, TWO, &format!("<{A}n> a <{A}Two> .\n"))
+        .expect("validated");
+    assert!(
+        !v.conforms,
+        "a different shape's violation was admitted: {:?}",
+        v.results
+    );
+}
+
+/// Existence is judged per focus (grant, review of #751): a write that touches
+/// an existing debt node AND a new node named by `sh:targetNode` gets no
+/// allowance for the new node, even though its pre-state is also targeted.
+#[test]
+fn a_new_target_node_in_the_same_write_is_not_debt() {
+    const TARGETED: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:FreshShape a sh:NodeShape ; sh:targetNode aegis:fresh ;
+    sh:property [ sh:path aegis:p ; sh:minCount 1 ] .
+"#;
+    let store = store_with(&debt_session());
+    let both = format!("{}<{A}fresh> <{A}note> \"new\" .\n", debt_session());
+    let v = validate_with_store_context(&store, &format!("{SHAPES}\n{TARGETED}"), &both)
+        .expect("validated");
+    assert!(
+        !v.conforms,
+        "a new targetNode focus was admitted: {:?}",
+        v.results
+    );
+    let refused: Vec<_> = v
+        .results
+        .iter()
+        .filter(|r| r.severity != "Warning")
+        .collect();
+    assert_eq!(refused.len(), 1, "{:?}", v.results);
+    assert_eq!(refused[0].focus_node, format!("{A}fresh"));
+}
+
+/// A delete can break a required VALUE too (grant, review of #751): removing a
+/// `sh:hasValue` value from a conforming node is refused.
+#[test]
+fn removing_a_required_value_is_refused() {
+    const VALUED: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:RunShape a sh:NodeShape ; sh:targetClass aegis:Run ;
+    sh:property [ sh:path aegis:sourceKind ; sh:hasValue "observed" ] .
+"#;
+    let store = store_with(&format!(
+        "<{A}run> a <{A}Run> ; <{A}sourceKind> \"observed\" .\n"
+    ));
+    let removed = format!("<{A}run> <{A}sourceKind> \"observed\" .\n");
+    let v = retraction_violations_in_graph(&store, VALUED, &removed, "", crate::schema::ROOT_GRAPH)
+        .expect("validated");
+    assert!(!v.conforms, "a delete broke a required value and passed");
+    assert!(
+        v.results[0]
+            .component
+            .ends_with("HasValueConstraintComponent"),
+        "{:?}",
+        v.results
+    );
+}
