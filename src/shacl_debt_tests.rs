@@ -478,7 +478,7 @@ fn a_new_bad_value_on_a_value_debt_node_is_refused_post_state() {
 }
 
 /// A node already over its `sh:maxCount` is not a licence to add more values:
-/// the count result carries no value, so MaxCount is never admitted as debt.
+/// the count result carries no value, so `MaxCount` is never admitted as debt.
 #[test]
 fn adding_to_an_over_count_path_is_not_debt() {
     const ONE_LABEL: &str = r#"
