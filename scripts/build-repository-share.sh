@@ -119,7 +119,32 @@ grep -q 'src%2Fshare_transport\.rs' "$OUTPUT/export.nt"
 # Bundled shapes are evidence, never authority: the receiver must explicitly
 # adopt them before import can admit their vocabulary into a fresh store.
 "$QUIPU_BIN" shapes load repository-share "$OUTPUT/shapes.ttl" --db "$FRESH_DB"
-"$QUIPU_BIN" import "$OUTPUT" --db "$FRESH_DB" > "$IMPORT_JSON"
+# The whole share is validated ONCE, in batch, against its own shapes (exit 1
+# on any violation fails the build). The scratch import that follows does not
+# re-validate incrementally: post-state validation refuses past 100,000 facts
+# of context, and a repository share is larger than that, so with validation
+# on by default every import of it was refused unverified (aegis-g51c).
+# `conforms` is false for ANY result, warnings included, and `validate` exits 1
+# on it; only a Violation blocks, as it would on an incremental write.
+"$QUIPU_BIN" validate --shapes "$OUTPUT/shapes.ttl" --data "$OUTPUT/export.nt" \
+  --format json > "$PRIVATE/validate.json" || true
+python3 - "$PRIVATE/validate.json" <<'PY'
+import json
+import sys
+
+report = json.load(open(sys.argv[1]))
+if report["violations"]:
+    print("repository share violates its own shapes:", file=sys.stderr)
+    print(json.dumps(report)[:4000], file=sys.stderr)
+    sys.exit(1)
+print(f"repository share: 0 violations, {report['warnings']} warnings")
+PY
+IMPORT_DIR=$(readlink -f "$PRIVATE")/import-config
+mkdir -p "$IMPORT_DIR/.bobbin"
+printf '[quipu.shacl]\nvalidate_on_write = false\n' > "$IMPORT_DIR/.bobbin/config.toml"
+FRESH_DB_ABS=$(readlink -f "$FRESH_DB")
+OUTPUT_ABS=$(readlink -f "$OUTPUT")
+(cd "$IMPORT_DIR" && "$QUIPU_BIN" import "$OUTPUT_ABS" --db "$FRESH_DB_ABS") > "$IMPORT_JSON"
 SHARE_ID=$(python3 - "$IMPORT_JSON" <<'PY'
 import json
 import sys
@@ -131,7 +156,7 @@ assert data["triples"]["accepted"] > 10_000, data["triples"]
 print(data["share_id"])
 PY
 )
-"$QUIPU_BIN" import promote "$SHARE_ID" --db "$FRESH_DB"
+(cd "$IMPORT_DIR" && "$QUIPU_BIN" import promote "$SHARE_ID" --db "$FRESH_DB_ABS")
 "$QUIPU_BIN" query \
   'PREFIX aegis: <http://aegis.gastown.local/ontology/> SELECT ?module WHERE { ?symbol aegis:definedIn ?module . ?symbol aegis:filePath "src/share_transport.rs" } LIMIT 1' \
   --db "$FRESH_DB" > "$QUERY_JSON"
@@ -141,8 +166,12 @@ node "$SOURCE/scripts/verify-contributor-knowledge.mjs" "$QUIPU_BIN" "$FRESH_DB"
 
 # Exercise what ships, with no receiver-side policy injection. Import alone
 # missed a pack that a browser could read but could never export outward.
-python3 "$SOURCE/scripts/verify-repository-share-receiver.py" \
-  "$QUIPU_BIN" "$OUTPUT" "$FRESH_DB" "$PRIVATE"
+# It runs under the same receiver config as the import above (the share was
+# batch-validated once); its refusal probes do not depend on it: blocked bytes
+# are a policy check and the incomplete-rule probe passes its shapes per request.
+PRIVATE_ABS=$(readlink -f "$PRIVATE")
+(cd "$IMPORT_DIR" && python3 "$SOURCE/scripts/verify-repository-share-receiver.py" \
+  "$QUIPU_BIN" "$OUTPUT_ABS" "$FRESH_DB_ABS" "$PRIVATE_ABS")
 
 wc -c "$OUTPUT"/*
 wc -l "$OUTPUT/export.nt"
