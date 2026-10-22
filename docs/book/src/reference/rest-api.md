@@ -1373,6 +1373,40 @@ curl -s localhost:3030/project -X POST \
   -d '{"algorithm": "in_degree", "limit": 10}'
 ```
 
+### `POST /render`
+
+Prepare a deterministic markdown file plan from a stored specification or an
+ad-hoc specification. This protected computation requires an accepted bearer;
+it remains a pooled read-only endpoint, including on read-only servers. Missing
+or invalid credentials refuse, and open-write mode does not open this route.
+The server neither writes files nor accepts a destination. The CLI declares `cli-render` in
+`X-Quipu-Client` and publishes the verified plan locally.
+
+```json
+{
+  "adhoc": {
+    "query": "SELECT ?title WHERE { VALUES ?title { 'Example' } }",
+    "template": "# {{ rows[0].title }}",
+    "layout": "single",
+    "path": "report.md"
+  }
+}
+```
+
+Pass `spec` as an absolute specification IRI instead of `adhoc`. Optional
+`graph` selects the same default dataset as `/query`; optional `valid_at` is an
+ISO timestamp. Unknown fields, including `dest` and `dry_run`, refuse rather
+than being ignored. Existing query floors, truncation and time-budget guards
+apply. Incomplete data cannot authorize a deletion.
+
+The response contains `schema`, `spec`, `source_tx`, `valid_at` and `files`.
+Each file has base64 bytes, a `sha256:` content address and a mode. Output is
+bounded to 2,000 files and 16 MiB of decoded bytes. The client verifies the whole
+plan and the destination ownership manifest before atomic publication. The
+[render reference](render.md) explains includes, temporal snapshots and local
+refusal/no-op behavior. Preparing a plan is not a publication or a delivery
+receipt.
+
 ### `GET|POST /report`
 
 Live graph report: top hubs (god-nodes), surprising cross-community connections,
