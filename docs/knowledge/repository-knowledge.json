@@ -1,6 +1,6 @@
 {
-  "source_revision": "817cdb95d0fd7ec5df8852b1b0979d8598fba177",
-  "reviewed_at": "2026-10-22T01:30:19.144267Z",
+  "source_revision": "017042c73e5e5ce8f90cb2348251bfd58232e2a0",
+  "reviewed_at": "2026-10-22T02:44:26.880852Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "441133d1c9c5a32fb76806b4b4c31e1025ae8ef9b98603c91685dbcbfc583aae",
+      "source_sha256": "9d0cfbc10d19a070df9e8db759149e830a0957cc092eb5e3fb7b26ee4f7aafaf",
       "type": "Concept"
     },
     {
@@ -46,7 +46,7 @@
       "source": "docs/installation-reference.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Finstallation-reference.md#wire-it-into-your-agent",
       "summary": "Agent clients connect through quipu mcp stdio or the native server streamable HTTP endpoint at /mcp.",
-      "source_sha256": "ef533abcbb3c17ebd777d02a52eb995492587c98c6e18e3879bc2ab599f11c11",
+      "source_sha256": "d57969b640e7f4daf55b297543a627a73da09639d24838ec7a62ac32fc4a3ab7",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "quipu mcp"
@@ -72,7 +72,7 @@
       "source": "docs/installation-reference.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Finstallation-reference.md#first-success-in-three-commands",
       "summary": "Start with the documented local first-success commands, then validate behavior on your own source data.",
-      "source_sha256": "ef533abcbb3c17ebd777d02a52eb995492587c98c6e18e3879bc2ab599f11c11",
+      "source_sha256": "d57969b640e7f4daf55b297543a627a73da09639d24838ec7a62ac32fc4a3ab7",
       "properties": {
         "startHereOrder": 1,
         "glossaryTerm": "https://scbrown.github.io/quechua/ns#Decision"
@@ -83,7 +83,7 @@
       "source": "docs/installation-reference.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Finstallation-reference.md#before-you-start",
       "summary": "Check supported release platforms and the native CLI and server feature requirements before choosing an installation.",
-      "source_sha256": "ef533abcbb3c17ebd777d02a52eb995492587c98c6e18e3879bc2ab599f11c11",
+      "source_sha256": "d57969b640e7f4daf55b297543a627a73da09639d24838ec7a62ac32fc4a3ab7",
       "properties": {
         "startHereOrder": 2
       }
@@ -107,7 +107,7 @@
       "source": "docs/installation-reference.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Finstallation-reference.md#on-your-own-data",
       "summary": "After a local first success, follow the documented source-data import path; public examples are not production admission.",
-      "source_sha256": "ef533abcbb3c17ebd777d02a52eb995492587c98c6e18e3879bc2ab599f11c11",
+      "source_sha256": "d57969b640e7f4daf55b297543a627a73da09639d24838ec7a62ac32fc4a3ab7",
       "properties": {
         "startHereOrder": 3
       }
@@ -117,7 +117,7 @@
       "source": "docs/installation-reference.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Finstallation-reference.md#run-it-anywhere",
       "summary": "The native quipu-server exposes REST, MCP at /mcp and a web interface over the same graph engine.",
-      "source_sha256": "ef533abcbb3c17ebd777d02a52eb995492587c98c6e18e3879bc2ab599f11c11",
+      "source_sha256": "d57969b640e7f4daf55b297543a627a73da09639d24838ec7a62ac32fc4a3ab7",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "b0fbe2548b43da17bc132bff3a7d96c0644892e1af6230fbc8d34cec691e762a",
+      "source_sha256": "908de3f0761ba516974929284767371295ef036d4357d75c06fc47c0d0add309",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
