@@ -172,4 +172,3 @@ jobs:
           # a corrector that silently produces a still-wrong section is worse than
           # no corrector, because the red check that used to catch it is gone.
           ./scripts/verify-changelog.sh --version "$VERSION"
-

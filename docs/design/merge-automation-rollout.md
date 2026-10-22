@@ -39,24 +39,34 @@ PR after every merge: that recreates the measured CI and review churn. Refresh
 only actual conflicts or an explicit current-base refusal. If a branch-updater
 is later installed, restrict it to those cases and measure its own events.
 
-## Record actual GitHub reviews
+## Record native approvals as GitHub status
 
-The current shared account cannot approve PRs authored by that same account.
-An attempted approval's self-review refusal is not an approving review, and a
-source-verdict comment must not be counted as one by the DORA reader.
+The native signed receipt is the review of record. The shared GitHub account
+cannot formally approve its own PR; preserve that refusal without attempting
+another identity. A comment alone is not the required machine-readable gate.
 
-Before enabling required GitHub approvals, provision an explicitly authorized
-non-author reviewer identity with repository access. Do not switch identities
-merely to evade a refusal. Each Codex reviewer records the actual source verdict
-on the exact commit with GitHub's review API, and records the resulting review
-ID, login, commit ID and state alongside the native content approval. Read both
-back. Failed or absent review writes stay UNKNOWN or refused. Preserve the
-existing independent source review while this identity prerequisite is open.
+Publish a commit status with context `review/approved` on the current proposal
+head only after the normal verifier accepts its native signed receipt. Name the
+non-author reviewer and receipt ID in the status description and link the
+published receipt evidence as its target. Re-read the status, commit and receipt
+binding. An unavailable verifier, missing receipt, changed content, non-approval
+or recorded veto must leave the status non-successful. A successful status on an
+old head does not approve a new head; revalidate the content-bound receipt before
+publishing a status on a successor head. Preserve earlier verdict history.
+
+After the current release, save the protection JSON and add `review/approved`
+to the seven existing required contexts. Keep the native non-author rule and
+workflow tier-3/manual exception. Native auto-merge can then wait on both the
+actual CI checks and this approval status. Do not enable a formal GitHub approval
+requirement that the shared account cannot satisfy. No repository settings are
+changed by this preparation branch.
 
 The reviewer router must route a fresh green proposal to one eligible non-author
-and observe that review receipt. A delivery attempt or dormant cron is not a
-successful route. Integrate with the existing router owner; do not create a
-second dispatcher. No required-review setting changes occur on this branch.
+and observe the native receipt and matching status. Integrate with the existing
+router owner rather than adding another dispatcher. A delivery attempt or dormant
+cron is not acceptance. The DORA reader must distinguish native signed approvals
+published as statuses from formal GitHub review objects; do not relabel historical
+comments or failed self-approvals as reviews.
 
 ## Daily release proposals
 
@@ -99,7 +109,7 @@ fails. Restore saved queue/protection settings through the same reviewed path.
 Revert this workflow branch to return release-PR generation to pushes. Preserve
 published tags and artifacts; runtime rollback uses the existing deployment lane.
 
-Track daily green-to-merge delay, actual GitHub review coverage, branch-refresh
+Track daily green-to-merge delay, native approval-status coverage, branch-refresh
 cause, queue failures and deployment smoke/rollback outcomes. The seven-day
 acceptance window begins after activation, not at this branch's preparation.
 
