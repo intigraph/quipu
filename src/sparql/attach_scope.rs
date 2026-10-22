@@ -20,7 +20,7 @@ use spargebra::term::NamedNodePattern;
 
 use super::root_scope::{Scope, visit_scopes};
 use super::{GraphScope, TemporalContext};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::store::Store;
 use crate::types::Value;
 
@@ -66,11 +66,11 @@ pub(super) fn composes(
     if open_scope || graphs.iter().any(|g| attached.binary_search(g).is_ok()) {
         return Ok(true);
     }
-    names_an_alias(store, &graphs)
+    names_an_alias(store, &graphs, ctx)
 }
 
 /// Whether a local fact in one of `graphs` names an attached alias id.
-fn names_an_alias(store: &Store, graphs: &[i64]) -> Result<bool> {
+fn names_an_alias(store: &Store, graphs: &[i64], ctx: &TemporalContext) -> Result<bool> {
     let mut aliases = Vec::new();
     {
         let mut stmt = store.prepare("SELECT alias_id FROM term_alias LIMIT ?1")?;
@@ -91,6 +91,14 @@ fn names_an_alias(store: &Store, graphs: &[i64]) -> Result<bool> {
     let mut stmt = store.prepare(ALIAS_PROBE)?;
     for &g in graphs.iter().filter(|g| **g >= 0) {
         for &alias in &aliases {
+            // Up to MAX_ALIASES probes per graph: honour the query budget
+            // between them, as the evaluator does between rows.
+            if ctx.deadline.is_some_and(|dl| dl.passed()) {
+                return Err(Error::QueryTimeout {
+                    elapsed_ms: 0,
+                    limit_ms: 0,
+                });
+            }
             let named: bool = stmt
                 .query_row(params![g, alias, Value::Ref(alias).to_bytes()], |r| {
                     r.get(0)

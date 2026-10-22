@@ -330,3 +330,60 @@ fn the_alias_probe_seeks_one_index_per_arm() {
     assert!(plan.contains("idx_vaet (v=?)"), "{plan}");
     assert!(!plan.contains("idx_geav (g=?)\n"), "{plan}");
 }
+
+/// The scope decision reads the store, so it runs inside the query's budget
+/// and reports the same timeout the evaluator would (#748 review).
+#[test]
+fn the_scope_decision_honours_the_query_budget() {
+    let f = fixture();
+    let store = attached(&f);
+    let query = format!("{PREFIX}{}", LOCAL[0]);
+    let expired = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..TemporalContext::default()
+    };
+    // The alias probe is reached (a local scope on a store with aliases) and
+    // stops at the budget instead of finishing its loop.
+    let parsed = super::super::sparql_parser().parse_query(&query).unwrap();
+    let Query::Select { dataset, .. } = &parsed else {
+        panic!("a SELECT")
+    };
+    let scoped = super::super::apply_dataset(&store, dataset.as_ref(), &expired).unwrap();
+    assert!(matches!(
+        super::composes(&store, &parsed, &scoped.graph, &expired),
+        Err(crate::Error::QueryTimeout { .. })
+    ));
+    // Through the entry point it is the normalised query timeout, and the
+    // composed view is untouched.
+    assert!(matches!(
+        query_temporal(&store, &query, &expired),
+        Err(crate::Error::QueryTimeout { .. })
+    ));
+    assert!(store.has_attachments());
+    // A live budget still suspends and answers.
+    let live = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(60_000)),
+        ..TemporalContext::default()
+    };
+    assert!(query_temporal(&store, &query, &live).is_ok());
+    assert!(store.has_attachments());
+}
+
+/// An evaluation error while the view is suspended restores it.
+#[test]
+fn an_error_inside_a_suspended_query_restores_the_composed_view() {
+    let f = fixture();
+    let store = attached(&f);
+    let failing = "SELECT ?s WHERE { GRAPH ex:board { ?s ex:id ?id FILTER(REGEX(?id, \"[\")) } }";
+    assert!(!composes(&store, failing));
+    assert!(
+        query_temporal(
+            &store,
+            &format!("{PREFIX}{failing}"),
+            &TemporalContext::default()
+        )
+        .is_err()
+    );
+    assert!(store.has_attachments());
+    assert_ne!(store.facts_source(), "facts");
+}
