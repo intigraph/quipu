@@ -204,7 +204,7 @@ pub fn format_iso(secs: u64) -> String {
 /// [`civil_from_days`]. Needed because normalising an RFC 3339 timestamp with a
 /// UTC offset is arithmetic on an instant, not string surgery: `+01:00` moves
 /// the date across a boundary for any time in the first hour of the day.
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+pub(crate) fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
     let era = if y >= 0 { y } else { y - 399 } / 400;
     let yoe = y - era * 400; // [0, 399]

@@ -453,6 +453,11 @@ pub fn compare_values(
     {
         return crate::numeric_value::compare(&a, &b).is_some_and(pred);
     }
+    // dateTimes compare as instants (aegis-dio): a lexical compare orders
+    // "01:00+02:00" after "23:30Z" the day before. Indeterminate -> false.
+    if crate::datetime_value::both_date_times(&a, &b) {
+        return crate::datetime_value::compare(&a, &b).is_some_and(pred);
+    }
     // String comparison uses the LEXICAL form, so "hello"@en compares as
     // "hello" (it used to compare as "hello@en") and an xsd:date still orders
     // by its ISO-8601 lexeme as it did when it was silently a plain string.

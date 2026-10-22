@@ -170,6 +170,10 @@ fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Binding
     let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
         return false;
     };
+    // The same instant written with different offsets is equal (aegis-dio).
+    if crate::datetime_value::both_date_times(&a, &b) {
+        return crate::datetime_value::compare(&a, &b) == Some(std::cmp::Ordering::Equal);
+    }
     crate::numeric_value::equal(&a, &b)
 }
 
