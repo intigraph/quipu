@@ -98,6 +98,22 @@ pub fn import_share(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<ShareImportResult> {
+    import_share_prepared(store, request, timestamp, actor, None)
+}
+
+/// [`import_share`] with a resolution prepared on a read connection
+/// ([`crate::share_import_resolve::prepare`]), so the writer is held only to
+/// revalidate it, validate and stage (aegis-oa5).
+///
+/// # Errors
+/// The same refusals as [`import_share`], and the request deadline.
+pub fn import_share_prepared(
+    store: &mut Store,
+    request: &ShareImportRequest,
+    timestamp: &str,
+    actor: Option<&str>,
+    mut prepared: Option<crate::share_import_resolve::PreparedImport>,
+) -> Result<ShareImportResult> {
     // Review metadata and graph admission must not trigger the generic
     // write hook. Only eligible staged documents are indexed after commit.
     let automatic = store.embedding_config().auto_embed;
@@ -107,7 +123,8 @@ pub fn import_share(
         let old = state(store, &request.manifest.share_id)?;
         // Staging is not a ROOT write or permission to index quarantined data.
         // Collect selected-graph work only after admission has completed.
-        let result = crate::share_import::import_inner(store, request, timestamp, actor)?;
+        let result =
+            crate::share_import::import_inner(store, request, timestamp, actor, prepared.take())?;
         let next = if result.promotion.eligible {
             "staged"
         } else {
@@ -125,6 +142,13 @@ pub fn import_share(
             let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
+        // The LAST check, inside the savepoint (aegis-oa5, grant's review):
+        // staging, query settlement and the review record all precede it, so
+        // an import whose deadline passed while it wrote rolls back whole
+        // rather than committing after the caller was told it timed out.
+        #[cfg(test)]
+        crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Staged);
+        crate::time::check_request_deadline()?;
         Ok(result)
     });
     store.embedding_config_mut().auto_embed = automatic;
@@ -156,6 +180,11 @@ pub fn promote_import(
             timestamp,
             &json!({"share_id":request.share_id,"actor":actor,"claimed_actor":request.actor,"triples":result.triples}),
         )?;
+        // As for staging: a promotion that overran its deadline rolls back whole
+        // instead of landing in ROOT after its caller was told it timed out.
+        #[cfg(test)]
+        crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Promoted);
+        crate::time::check_request_deadline()?;
         Ok(result)
     })
 }

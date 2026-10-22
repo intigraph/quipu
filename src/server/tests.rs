@@ -9,6 +9,8 @@ mod acquisition_tests;
 
 #[path = "episode_two_phase_tests.rs"]
 mod episode_two_phase_tests;
+#[path = "import_two_phase_tests.rs"]
+mod import_two_phase_tests;
 #[path = "point_read_tests.rs"]
 mod point_read_tests;
 #[path = "search_keyword_tests.rs"]

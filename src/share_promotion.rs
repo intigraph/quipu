@@ -68,6 +68,7 @@ pub(crate) fn promote_inner(
             "staging graph is not committed: {graph_iri}"
         )));
     }
+    crate::time::check_request_deadline()?;
     let source = provenance_source(
         "share-promotion",
         &request.share_id,
@@ -210,6 +211,8 @@ pub(crate) fn promote_subjects_into_graph(
     if !changes.is_empty() {
         moved.tx_id = store.transact_to_graph(&changes, timestamp, actor, Some(source), g)?;
     }
+    #[cfg(test)]
+    crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::TargetWritten);
     if let Some(from) = retire_from {
         // An unknown source graph holds nothing to retire; never create one.
         if let Some(b) = store.lookup(from)? {
@@ -227,6 +230,10 @@ pub(crate) fn promote_subjects_into_graph(
             }
         }
     }
+    // No check here: the caller's final check, before the savepoint RELEASE,
+    // covers this retirement, the query release and the review record.
+    #[cfg(test)]
+    crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Retired);
     Ok(moved)
 }
 
@@ -495,8 +502,63 @@ mod tests {
         assert!(promote_import(&mut store, &request, TS, None).is_err());
     }
 
+    fn promoted_reviews(store: &Store) -> i64 {
+        store
+            .conn
+            .query_row(
+                "SELECT count(*) FROM import_reviews WHERE share_id=?1 AND state='promoted'",
+                [SHARE],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    fn expire_now() {
+        // Leaked on purpose; the test's open-deadline guard restores on drop.
+        std::mem::forget(crate::time::set_request_deadline(Some(
+            crate::time::Deadline::after_millis(0),
+        )));
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+
+    // Expire at a boundary INSIDE the move, after a write. Nothing of the move
+    // or its review may survive: B = {A, W}, I = {U}, no promoted review.
+    fn assert_expiry_at_rolls_back(boundary: crate::share_import::test_hooks::Boundary) {
+        let (mut store, request, [a, w, u]) = move_setup();
+        crate::share_import::test_hooks::set(Some((boundary, expire_now)));
+        let refused = {
+            let _open = crate::time::set_request_deadline(Some(
+                crate::time::Deadline::after_millis(60_000),
+            ));
+            promote_import(&mut store, &request, TS, None)
+        };
+        crate::share_import::test_hooks::set(None);
+        assert!(
+            matches!(refused, Err(crate::Error::RequestTimeout { .. })),
+            "{boundary:?}: {refused:?}"
+        );
+        assert_eq!(subjects_in(&store, BOARD), sorted(vec![a, w]), "{boundary:?}");
+        assert_eq!(subjects_in(&store, INBOX), vec![u], "{boundary:?}");
+        assert_eq!(promoted_reviews(&store), 0, "{boundary:?}");
+        // Positive control: the same request without expiry commits the move.
+        promote_import(&mut store, &request, TS, None).unwrap();
+        assert_eq!(subjects_in(&store, BOARD), vec![w]);
+        assert_eq!(promoted_reviews(&store), 1);
+    }
+
     #[test]
-    fn expired_request_deadline_rolls_back_the_whole_move() {
+    fn expiry_after_the_target_write_rolls_back_the_whole_move() {
+        assert_expiry_at_rolls_back(crate::share_import::test_hooks::Boundary::TargetWritten);
+    }
+
+    #[test]
+    fn expiry_after_the_final_retirement_rolls_back_the_whole_move() {
+        // Only the final check before the savepoint RELEASE catches this one.
+        assert_expiry_at_rolls_back(crate::share_import::test_hooks::Boundary::Retired);
+    }
+
+    #[test]
+    fn already_expired_deadline_refuses_before_any_write() {
         let (mut store, request, [a, w, u]) = move_setup();
         let expired = crate::time::Deadline::after_millis(0);
         std::thread::sleep(std::time::Duration::from_millis(2));
