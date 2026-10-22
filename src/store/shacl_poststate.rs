@@ -74,8 +74,17 @@ impl Store {
         datums: &[Datum],
         graph: i64,
     ) -> Result<()> {
-        const COMPONENTS: &[&str] = &[
+        // Value-set components (aegis-7ur8) are judged like maxCount: on the
+        // written focuses, over base context, independent of the value closure.
+        const VALUE_SETS: &[&str] = &[
             "MaxCountConstraintComponent",
+            "UniqueLangConstraintComponent",
+            "DisjointConstraintComponent",
+            "LessThanConstraintComponent",
+            "LessThanOrEqualsConstraintComponent",
+        ];
+        // Value components, judged once the value closure is complete.
+        const COMPONENTS: &[&str] = &[
             "DatatypeConstraintComponent",
             "NodeKindConstraintComponent",
             "ClassConstraintComponent",
@@ -95,7 +104,7 @@ impl Store {
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
-        if !(plan.has_upper_bound || plan.has_value_constraint) || datums.is_empty() {
+        if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
         let result = (|| {
@@ -196,13 +205,13 @@ impl Store {
                     else {
                         return false;
                     };
-                    let owned = if component == "MaxCountConstraintComponent" {
+                    let owned = if VALUE_SETS.contains(&component) {
                         &focuses
                     } else {
                         &value_focuses
                     };
-                    COMPONENTS.contains(&component)
-                        && (component == "MaxCountConstraintComponent" || complete_values)
+                    (VALUE_SETS.contains(&component) || COMPONENTS.contains(&component))
+                        && (VALUE_SETS.contains(&component) || complete_values)
                         && owned.contains(issue.focus_node.trim_matches(['<', '>']))
                         && issue.severity.eq_ignore_ascii_case("violation")
                 })
@@ -230,7 +239,7 @@ impl Store {
         })();
         match result {
             Err(Error::CannotVerify(message))
-                if !plan.has_upper_bound && context_budget_exhausted(&message) =>
+                if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
             {
                 Ok(())
             }

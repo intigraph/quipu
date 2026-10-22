@@ -219,13 +219,32 @@ impl SearchConfig {
 }
 
 /// SHACL validation policy (hq-c6s).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ShaclConfig {
     /// Validate every write against the persistently-loaded shapes (those
     /// stored via `quipu_shapes`), not just shapes carried inline on an
-    /// episode. Default false — opt in to enforce "start strict" on all writes.
+    /// episode.
+    ///
+    /// Default true in builds with the `shacl` feature (the default build):
+    /// loaded shapes are an admission policy, the same posture as
+    /// `owl.validate_on_write`. A store with no shapes loaded has nothing to
+    /// enforce. A build without the `shacl` feature has no validator, so it
+    /// defaults false rather than refusing every write it cannot verify.
+    /// Deployments that must accept non-conformant writes opt out explicitly
+    /// with `validate_on_write = false`.
     pub validate_on_write: bool,
+}
+
+// Not derivable in every build: the value follows the `shacl` feature, and
+// only the no-shacl build makes it equal to the derived `false`.
+#[allow(clippy::derivable_impls)]
+impl Default for ShaclConfig {
+    fn default() -> Self {
+        Self {
+            validate_on_write: cfg!(feature = "shacl"),
+        }
+    }
 }
 
 /// OWL write-time constraint policy (aegis-bmqup).
@@ -268,8 +287,7 @@ pub struct GovernanceConfig {
     /// `Store::transact` evaluates the applicable policies against the pending
     /// post-state and rejects the write (`Error::PolicyDenied`) if a `deny`
     /// policy's claim is unsatisfied for a touched target. Default false — opt
-    /// in, mirroring `shacl.validate_on_write`. See
-    /// `docs/design/policy-edit-hooks.md`.
+    /// in. See `docs/design/policy-edit-hooks.md`.
     pub enforce_on_write: bool,
 
     /// Validate SARC class↔placement conformance when a write DEFINES or
@@ -280,8 +298,8 @@ pub struct GovernanceConfig {
     ///
     /// Independent of [`Self::enforce_on_write`], which governs *evaluation* of
     /// policies on every write; this governs *definition* of them, and runs
-    /// only on governance writes. Default false — opt in, mirroring
-    /// `shacl.validate_on_write`. Note the consequence of leaving it off with
+    /// only on governance writes. Default false — opt in, like
+    /// [`Self::enforce_on_write`]. Note the consequence of leaving it off with
     /// `enforce_on_write` on: a constraint whose class and enforcement point
     /// disagree will be accepted and then evaluated somewhere it cannot do its
     /// job, and nothing will say so.

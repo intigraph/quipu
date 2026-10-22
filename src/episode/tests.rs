@@ -74,8 +74,8 @@ fn episode_to_turtle_generates_valid_rdf() {
 #[test]
 #[cfg(feature = "shacl")]
 fn write_validation_enforces_loaded_shapes() {
-    // hq-c6s: persistently-loaded shapes must gate episode writes when
-    // validate_on_write is set — not just episode-inline shapes.
+    // hq-c6s: persistently-loaded shapes gate episode writes — not just
+    // episode-inline shapes. aegis-g51c: ON by default, opt-out is explicit.
     let mut store = Store::open_in_memory().unwrap();
     let shape = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -93,16 +93,17 @@ aegis:ServerShape a sh:NodeShape ;
         r#"{ "name": "ep", "nodes": [{"name": "Server1", "type": "Server"}], "edges": [] }"#,
     );
 
-    // Toggle OFF: the violating write is accepted — the pre-fix gap.
-    ingest_episode(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap();
-
-    // Toggle ON: the same write is now rejected against the loaded shape.
-    store.shacl_config_mut().validate_on_write = true;
-    let err = ingest_episode(&mut store, &ep, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap_err();
+    // Default (no configuration): the violating write is rejected.
+    assert!(store.shacl_config().validate_on_write);
+    let err = ingest_episode(&mut store, &ep, "2026-01-02T00:00:00Z", TEST_BASE_NS).unwrap_err();
     assert!(
         matches!(err, crate::error::Error::ValidationFailed { .. }),
         "expected ValidationFailed, got: {err:?}"
     );
+
+    // Explicit opt-out: the same write is accepted.
+    store.shacl_config_mut().validate_on_write = false;
+    ingest_episode(&mut store, &ep, "2026-01-03T00:00:00Z", TEST_BASE_NS).unwrap();
 }
 
 #[test]

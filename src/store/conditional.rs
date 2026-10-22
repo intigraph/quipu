@@ -12,6 +12,13 @@ pub struct ExpectedValue {
     pub value: Option<Value>,
 }
 
+/// Complete SET slot snapshot, compared under the normal writer reservation.
+pub(crate) struct SetExpectation {
+    pub entity: i64,
+    pub attribute: i64,
+    pub values: Vec<Vec<u8>>,
+}
+
 impl Store {
     /// Write a batch to a specific named graph. g=0 is ROOT. Idempotency and
     /// retraction are SCOPED to `graph`: writing to an overlay never skips a
@@ -51,6 +58,7 @@ impl Store {
             graph,
             retract_source,
             &[],
+            None,
         )
     }
 
@@ -66,7 +74,7 @@ impl Store {
         expected: &[ExpectedValue],
     ) -> Result<i64> {
         self.transact_to_graph_scoped_checked(
-            datums, timestamp, actor, source, graph, None, expected,
+            datums, timestamp, actor, source, graph, None, expected, None,
         )
     }
 
@@ -75,8 +83,9 @@ impl Store {
         graph: i64,
         expected: &[ExpectedValue],
         datums: &[Datum],
+        set: Option<&SetExpectation>,
     ) -> Result<()> {
-        if expected.is_empty() {
+        if expected.is_empty() && set.is_none() {
             return Ok(());
         }
         if expected.len() > 16 {
@@ -87,6 +96,19 @@ impl Store {
         // until the enclosing normal write savepoint releases/rolls back.
         self.conn
             .execute("UPDATE transactions SET id=id WHERE 0", [])?;
+        if let Some(slot) = set {
+            let mut query = self.conn.prepare(
+                "SELECT DISTINCT v FROM facts WHERE g=?1 AND e=?2 AND a=?3 AND op=1 AND valid_to IS NULL ORDER BY v",
+            )?;
+            let actual = query
+                .query_map(rusqlite::params![graph, slot.entity, slot.attribute], |r| {
+                    r.get::<_, Vec<u8>>(0)
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            if actual != slot.values {
+                return Err(Error::ConditionalWriteConflict);
+            }
+        }
         let mut statement = self.conn.prepare(
             "SELECT DISTINCT v FROM facts WHERE g=?1 AND e=?2 AND a=?3 \
              AND op=1 AND valid_to IS NULL LIMIT 2",
@@ -115,10 +137,18 @@ impl Store {
         // Store's low-level datum pipeline handles authority/OWL/policy, while
         // ordinary RDF entrypoints add vocabulary/SHACL admission themselves.
         // Conditional file writes must not silently skip that RDF admission.
-        self.validate_conditional_datums(graph, datums)
+        if set.is_some() && !self.shacl_config.validate_on_write && self.write_shapes.is_none() {
+            return Ok(());
+        }
+        self.validate_conditional_datums(graph, datums, set)
     }
 
-    fn validate_conditional_datums(&mut self, graph: i64, datums: &[Datum]) -> Result<()> {
+    fn validate_conditional_datums(
+        &mut self,
+        graph: i64,
+        datums: &[Datum],
+        set: Option<&SetExpectation>,
+    ) -> Result<()> {
         let assertions = datums
             .iter()
             .filter(|d| d.op == crate::Op::Assert)
@@ -135,9 +165,30 @@ impl Store {
         let bytes = crate::rdf::serialize_facts(self, &assertions, oxrdfio::RdfFormat::NTriples)?;
         let turtle = String::from_utf8(bytes)
             .map_err(|_| Error::InvalidValue("invalid conditional RDF".into()))?;
+        #[cfg(feature = "shacl")]
+        let turtle = if let Some(slot) = set {
+            // SET describes this subject although its request omits rdf:type.
+            // Add current types before the first verdict: repair-only context
+            // cannot introduce an omitted validation target later.
+            let subjects = std::collections::BTreeSet::from([self.resolve(slot.entity)?]);
+            let context =
+                crate::shacl_context::store_type_context_in_graph(self, &subjects, graph)?;
+            format!("{turtle}\n{context}")
+        } else {
+            turtle
+        };
         crate::vocabulary::enforce_turtle(self, &turtle)
             .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
-        if let Some(shapes) = self.get_combined_shapes()? {
+        let loaded = if set.is_none() || self.shacl_config.validate_on_write {
+            self.get_combined_shapes()?
+        } else {
+            None
+        };
+        let shapes = match (loaded, set.and(self.write_shapes.clone())) {
+            (Some(loaded), Some(explicit)) => Some(format!("{loaded}\n{explicit}")),
+            (loaded, explicit) => loaded.or(explicit),
+        };
+        if let Some(shapes) = shapes {
             #[cfg(feature = "shacl")]
             {
                 let split = crate::shacl::split_shapes_by_policy(&shapes);
