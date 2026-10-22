@@ -250,6 +250,14 @@ pub struct Store {
     /// Ceiling on the resident read model's size — see
     /// [`Store::set_read_model_max_triples`].
     pub(crate) read_model_max_triples: std::cell::Cell<usize>,
+    /// Graph ids the attachments contribute, as registered in `main.graphs`
+    /// (aegis-xacr). Recomputed wherever `facts_source` is, so the two cannot
+    /// disagree. Empty on an unattached store.
+    pub(crate) attached_graphs: Vec<i64>,
+    /// Set for the length of one query that can read no attached graph — see
+    /// [`Store::scope_composition`]. While set, the store answers as if it
+    /// had no attachments.
+    pub(crate) composition_suspended: std::cell::Cell<bool>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).

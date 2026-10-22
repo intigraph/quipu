@@ -5,6 +5,7 @@
 //! ORDER BY/GROUP BY, aggregates, HAVING, EXTEND, RDFS, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod attach_scope;
 mod batch_absence;
 mod batch_star;
 mod casts;
@@ -558,6 +559,17 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
 
     let started = crate::time::Stopwatch::start();
     root_scope::check(&parsed)?;
+    // A query that can read no attached graph answers as the unattached
+    // store does, so it keeps that store's fast paths (aegis-xacr).
+    let dataset = match &parsed {
+        Query::Select { dataset, .. }
+        | Query::Construct { dataset, .. }
+        | Query::Describe { dataset, .. }
+        | Query::Ask { dataset, .. } => dataset.as_ref(),
+    };
+    let scoped = apply_dataset(store, dataset, ctx)?;
+    let _composition =
+        store.scope_composition(attach_scope::composes(store, &parsed, &scoped.graph, ctx)?);
     // Precedence, widest-scope last: an explicit caller deadline wins; then the
     // request deadline stamped at ADMISSION, which already includes whatever
     // this request spent queueing (aegis-raq1ok); then the per-query default,
