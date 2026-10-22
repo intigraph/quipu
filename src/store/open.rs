@@ -165,6 +165,9 @@ impl Store {
         // them (aegis-xi0), and serves `/resolve`; both must use the served
         // `[quipu.resolution]` policy, not the defaults.
         self.resolution_config.clone_from(&other.resolution_config);
+        // Readers answer projection aggregates (aegis-tg5 F2) and must know the
+        // same declarations the writer installed.
+        self.projection_defs.clone_from(&other.projection_defs);
         self.resolution_cache = other.resolution_cache.clone();
         self.embedding_provider
             .clone_from(&other.embedding_provider);
@@ -527,6 +530,7 @@ impl Store {
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),
+            projection_defs: Vec::new(),
             write_shapes: None,
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]

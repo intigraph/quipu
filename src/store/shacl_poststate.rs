@@ -217,6 +217,8 @@ impl Store {
                     mine && issue.severity.eq_ignore_ascii_case("violation")
                 })
                 .collect();
+            // Value debt the focus had before this transaction (aegis-g51c C12).
+            let issues = crate::shacl_debt::new_only(self, shapes, &data, issues, graph, tx_id)?;
             if issues.is_empty() {
                 return Ok(());
             }
