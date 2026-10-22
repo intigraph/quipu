@@ -265,3 +265,47 @@ fn a_refused_write_leaves_the_projection_untouched() {
     );
     assert_eq!(store.check_projection(&def()).unwrap(), 0);
 }
+
+#[test]
+fn an_aggregate_reads_one_snapshot_while_writes_land() {
+    // Review finding on #734: total, groups and tx came from separate
+    // statements, so a write landing between them returned a total from one
+    // state with groups from another. Land a write through a second
+    // connection exactly between the total and the groups: the aggregate must
+    // still be internally consistent (total = sum of groups) and must not see
+    // that write at all.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("q.db");
+    let path = path.to_str().unwrap().to_string();
+    let mut reader = Store::open(&path).unwrap();
+    knot(&mut reader, r#"ex:a ex:status "open" ; ex:priority 1 ."#);
+    reader.install_projections(&[def()]).unwrap();
+    let mut writer = Store::open(&path).unwrap();
+    super::set_after_total(Some(Box::new(move || {
+        knot(&mut writer, r#"ex:late ex:status "open" ; ex:priority 1 ."#);
+    })));
+    let q = ProjectionAggregate {
+        graph: "",
+        key_in: &[json!("open")],
+        group_by: Some("priority"),
+        since: None,
+        max_groups: 0,
+    };
+    let a = reader.aggregate_projection(&def(), &q);
+    super::set_after_total(None);
+    let a = a.unwrap();
+    let sum: i64 = a["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| g["n"].as_i64().unwrap())
+        .sum();
+    assert_eq!(
+        (a["total"].as_i64().unwrap(), sum),
+        (1, 1),
+        "one snapshot: {a}"
+    );
+    // The write did land; a fresh aggregate sees it.
+    let after = reader.aggregate_projection(&def(), &q).unwrap();
+    assert_eq!(after["total"], 2, "{after}");
+}
