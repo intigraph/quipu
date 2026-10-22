@@ -21,7 +21,7 @@ use shacl_engine::validator::store::ShaclDataManager;
 mod targets;
 
 #[path = "shacl_write_paths.rs"]
-mod write_paths;
+pub(crate) mod write_paths;
 
 use serde::{Deserialize, Serialize};
 

@@ -330,7 +330,7 @@ fn evaluate_affected(
     // that companion, matching the explicit graph-scoped evaluator.
     let companion = store
         .ensure_companion_inferred_graph(graph, timestamp)
-        .map_err(|e| crate::Error::Store(e.to_string()))?;
+        .map_err(keep_refusal)?;
     let premise_head = store.transaction_head()?;
 
     for stratum_idx in &affected_strata {
@@ -365,7 +365,10 @@ fn evaluate_affected(
                 companion,
                 &mut world,
             )
-            .map_err(|e| crate::Error::Store(e.to_string()))?;
+            .map_err(|e| match e {
+                super::ReasonerError::Store(inner) => keep_refusal(inner),
+                e => crate::Error::Store(e.to_string()),
+            })?;
             total_asserted += asserted;
             total_retracted += retracted;
         }
@@ -436,6 +439,16 @@ fn build_rule_dependents(ruleset: &RuleSet) -> HashMap<usize, Vec<usize>> {
     }
 
     dependents
+}
+
+/// Stringify engine errors as before, but keep a SHACL refusal whole so the
+/// caller can name its focuses (aegis-2i6): a doubly wrapped count was all a
+/// producer saw of a derived write's refusal.
+fn keep_refusal(e: crate::Error) -> crate::Error {
+    match e {
+        e @ crate::Error::ValidationFailed { .. } => e,
+        e => crate::Error::Store(e.to_string()),
+    }
 }
 
 #[cfg(test)]
