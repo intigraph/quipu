@@ -337,7 +337,7 @@ fn dry_run_predicts_the_move_and_writes_nothing() {
 
 #[test]
 fn dry_run_warns_when_the_move_would_retract_target_facts() {
-    // The rb3 includes-share hazard: the target holds a fact of a moved subject
+    // The partial-attribute hazard: the target holds a fact of a moved subject
     // that the share does not carry, so the move would retract it.
     let (mut store, mut request, [a, _, _]) = move_setup();
     let extra = fact(&mut store, a, "A-only-in-target");
