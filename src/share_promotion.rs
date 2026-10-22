@@ -537,7 +537,11 @@ mod tests {
             matches!(refused, Err(crate::Error::RequestTimeout { .. })),
             "{boundary:?}: {refused:?}"
         );
-        assert_eq!(subjects_in(&store, BOARD), sorted(vec![a, w]), "{boundary:?}");
+        assert_eq!(
+            subjects_in(&store, BOARD),
+            sorted(vec![a, w]),
+            "{boundary:?}"
+        );
         assert_eq!(subjects_in(&store, INBOX), vec![u], "{boundary:?}");
         assert_eq!(promoted_reviews(&store), 0, "{boundary:?}");
         // Positive control: the same request without expiry commits the move.
