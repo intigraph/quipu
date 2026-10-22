@@ -205,6 +205,14 @@ pub(crate) fn episode_budget() -> (std::time::Instant, Option<quipu::time::Deadl
     (started, deadline)
 }
 
+/// The deadline for one `/import`, stamped at its start and carried through its
+/// read-side resolution and its writer section (aegis-oa5). It is the ordinary
+/// request budget: an import that cannot finish inside it rolls back and
+/// releases the writer, and the caller splits the share.
+pub(crate) fn import_budget() -> (std::time::Instant, Option<quipu::time::Deadline>) {
+    (std::time::Instant::now(), request_budget())
+}
+
 /// Bound phase-zero episodes separately while retaining ordinary read admission.
 pub(crate) async fn episode_read_blocking_until<T, F>(
     started: std::time::Instant,

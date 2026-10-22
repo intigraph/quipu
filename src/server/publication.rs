@@ -151,20 +151,49 @@ pub(crate) async fn share_payload(
     .await
 }
 
+/// `/import` in two phases (aegis-oa5), as `/episode` is (aegis-xi0).
+///
+/// Entity resolution is the expensive part of an import and it is read-only, so
+/// it runs first on a READ connection. The writer is taken only to revalidate it
+/// against what committed in between, validate and stage. One deadline, stamped
+/// here, covers both phases and every step under the writer: before this, an
+/// import had no deadline at all, and one share held the production writer for
+/// over half an hour while the client that sent it had long since given up.
 pub(crate) async fn import_share(
     State(store): State<SharedStore>,
     principal: Option<axum::Extension<quipu::http_auth::AuthenticatedPrincipal>>,
     axum::Json(input): axum::Json<quipu::share_import::ShareImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
-    blocking(move || {
+    let input = std::sync::Arc::new(input);
+    let (started, deadline) = super::admission::import_budget();
+    let prepared = if store.resolves_off_writer() {
+        let (reader_store, request) = (store.clone(), input.clone());
+        super::admission::episode_read_blocking_until(started, deadline, move || {
+            let mut reader = reader_store.vector_read();
+            // A duplicate in a frozen layer must not go unreported: if the
+            // reader cannot mount them, resolve under the writer instead.
+            if reader.sync_frozen_attachments().is_err() {
+                return Ok(None);
+            }
+            Ok(Some(quipu::share_import::prepare_import(
+                &reader, &request,
+            )?))
+        })
+        .await?
+    } else {
+        None
+    };
+    super::admission::write_blocking_until(std::time::Instant::now(), deadline, move || {
         let (mut result, work) = {
-            let mut st = store.lock();
-            let result = quipu::share_import::import_share(
+            let mut st = store.write_lock()?;
+            quipu::transaction_auth::refuse_if_refused()?;
+            let result = quipu::share_import::import_share_prepared(
                 &mut st,
                 &input,
                 &quipu::time::now_iso(),
                 actor.as_deref(),
+                prepared,
             )?;
             (result, st.take_deferred_embed())
         };
@@ -188,9 +217,14 @@ pub(crate) async fn promote_import(
     axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
-    blocking(move || {
+    // Promotion copies a whole staged graph into ROOT under the writer, so it
+    // takes the same deadline as `/import`: past it, the promotion rolls back
+    // whole and releases the writer (aegis-oa5).
+    let (started, deadline) = super::admission::import_budget();
+    super::admission::write_blocking_until(started, deadline, move || {
         let (result, work) = {
-            let mut st = store.lock();
+            let mut st = store.write_lock()?;
+            quipu::transaction_auth::refuse_if_refused()?;
             let result = quipu::share_import::promote_import(
                 &mut st,
                 &input,

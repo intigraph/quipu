@@ -357,11 +357,23 @@ entity" is itself a fact in the graph — visible, queryable, and retractable li
 any other fact. That is the model the project is built around.
 
 **Import proposes; it does not merge.** On an *exact canonical-name* match
-(`src/share_import.rs`, `resolve_and_rewrite`: `score == 1.0 && matched_on ==
+(`src/share_import_resolve.rs`, `finish`: `score == 1.0 && matched_on ==
 "canonical_name:exact"`), the incoming foreign IRI is **kept**. The match is reported
 as an `exact_merges` entry carrying its score and `matched_on`, so a caller can accept
 the exact hits in one action — but nothing is applied to the triples, and the foreign
 identity survives the import intact.
+
+The server resolves a share once, on a read connection, before it takes the writer.
+Under the writer it re-checks only the labels asserted or retracted since that read.
+A name candidate whose label changed in between is dropped. It is reported in
+`revalidation_dropped`, which is always present: an empty list means the re-check ran
+and dropped nothing. The whole import runs under the server's request budget
+(`[quipu.search] request_timeout_ms`). Past the budget it fails with a request timeout
+and rolls back whole, staging nothing and recording no review.
+The deadline is checked one last time just before the import commits, so an import
+that overran while it wrote still rolls back. `/import/promote` runs under the same
+budget and rolls back the same way. A share too large for the budget must be split, and
+re-importing a share that already staged returns `unchanged`.
 
 Sub-exact matches are reported the same way, as candidates for review. The difference
 between exact and sub-exact is now the *confidence attached to a proposal*, not whether
