@@ -94,9 +94,10 @@ pub(crate) fn check(args: &[String]) -> Result<Action, String> {
             })
         {
             help = true;
-        } else if arg.starts_with('-') && arg != "-" {
-            return Err(format!("unknown option for {command}: {arg}"));
         } else {
+            // Unknown `--name` options are refused above. A single-dash token is
+            // an operand: the handlers accept `knot -data.ttl`, and admission must
+            // never be stricter than the handler it fronts.
             positionals.push(arg);
         }
         i += 1;

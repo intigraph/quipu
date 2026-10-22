@@ -237,3 +237,63 @@ fn catalogue_covers_actual_top_level_dispatch() {
     }
     assert!(checked > 40);
 }
+#[test]
+fn single_dash_operand_is_a_filename_not_an_option() {
+    let dir = sandbox();
+    let root = dir.path();
+    fs::write(root.join("cwd/-data.ttl"), "<urn:s> <urn:p> \"dash\" .").unwrap();
+    let output = run(root, &["knot", "-data.ttl", "--db", "scratch.db"]);
+    assert!(output.status.success(), "{output:?}");
+    let output = run(
+        root,
+        &[
+            "read",
+            "SELECT ?v WHERE { <urn:s> <urn:p> ?v }",
+            "--db",
+            "scratch.db",
+        ],
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("dash"),
+        "{output:?}"
+    );
+    // Unknown options are still refused, before any store is touched.
+    let before = snapshot(root);
+    let output = run(
+        root,
+        &["knot", "--bogus", "-data.ttl", "--db", "scratch.db"],
+    );
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(snapshot(root), before);
+}
+#[test]
+fn explain_takes_exactly_three_operands() {
+    let dir = sandbox();
+    let root = dir.path();
+    fs::write(root.join("cwd/data.ttl"), "<urn:s> <urn:p> \"v\" .").unwrap();
+    assert!(
+        run(root, &["knot", "data.ttl", "--db", "data.db"])
+            .status
+            .success()
+    );
+    let before = snapshot(root);
+    let output = run(
+        root,
+        &["explain", "urn:s", "urn:p", "v", "extra", "--db", "data.db"],
+    );
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("help"));
+    assert_eq!(
+        snapshot(root),
+        before,
+        "an extra operand must refuse store-free"
+    );
+    // Three operands pass admission and reach the handler, which needs `owl`.
+    let output = run(root, &["explain", "urn:s", "urn:p", "v", "--db", "data.db"]);
+    if cfg!(feature = "owl") {
+        assert!(output.status.success(), "{output:?}");
+    } else {
+        assert_ne!(output.status.code(), Some(2), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("'owl' feature"));
+    }
+}
