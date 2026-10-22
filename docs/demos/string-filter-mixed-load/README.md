@@ -24,3 +24,9 @@ The large-fixture profile reports legacy-operation timing and memory as
 context. Their original small-fixture limits remain enforced in the separate
 standard mixed-load job. Full-suite and quality results are independent of this
 recording. Production smoke and deployment remain outside this demonstration.
+
+Recorded against candidate `b1642c7b0ddf5191861067a77b820dc31e518bbb`.
+The recording-only follow-up leaves the harness unchanged. Read the
+[transcript](transcript.txt), or download [output.log.gz](output.log.gz) and
+[timing.log](timing.log), decompress the output, then replay with
+`scriptreplay --log-timing timing.log --log-out output.log`.

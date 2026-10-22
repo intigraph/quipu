@@ -1,0 +1,21 @@
+Script started on 2026-10-22 03:11:16-04:00 [COMMAND="python3 docs/demos/string-filter-mixed-load/replay.py" <not executed on terminal>]
+Base: d798abfc6ed26dad71836bb9cdcf666af157ff87
+Before: mixed string classes = 0
+Candidate: b1642c7b0ddf5191861067a77b820dc31e518bbb
+After: mixed string classes = 10
+Retained native fixture: 2458611 triples; same starting bytes
+good: replayed exit=0, requests=144, errors={}, Q4 ratio=225.23x
+mutant: replayed exit=1, requests=144, errors={}, Q4 ratio=0.86x
+  RATCHET: Q2_graph_literal_substr: narrowing not effective: defeated/pushed 1.2x < 2.5x
+  RATCHET: Q3_label_regex: narrowing not effective: defeated/pushed 1.0x < 5x
+  RATCHET: Q4_subject_contains: narrowing not effective: defeated/pushed 0.9x < 30x
+  RATCHET: Q4_subject_contains: p95 4144.65ms > 1000ms
+  RATCHET: Q4_subject_contains: p95 is 53.42x C0 > 6x
+  RATCHET: Q5_comment_contains: narrowing not effective: defeated/pushed 1.0x < 5x
+  RATCHET: Q6_type_regex_count: narrowing not effective: defeated/pushed 1.1x < 1.5x
+  RATCHET: Q8_label_lcase_contains: narrowing not effective: defeated/pushed 1.5x < 5x
+  RATCHET: Q9_subject_strstarts: narrowing not effective: defeated/pushed 1.0x < 8x
+  RATCHET: string_filter_Q4_subject_contains: mixed p99 11124.501 > 8000 ms
+Private fixture evidence only; no production or deployment claim.
+
+Script done on 2026-10-22 03:11:16-04:00 [COMMAND_EXIT_CODE="0"]
