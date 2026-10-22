@@ -169,6 +169,10 @@ pub fn promote_import(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<PromoteImportResult> {
+    if request.dry_run {
+        // A preview writes nothing: no move, no query release, no review transition.
+        return crate::share_import::promote_inner(store, request, timestamp, actor);
+    }
     atomic(store, |store| {
         open(store, &request.share_id)?;
         let result = crate::share_import::promote_inner(store, request, timestamp, actor)?;

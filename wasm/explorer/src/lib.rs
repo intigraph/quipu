@@ -116,6 +116,7 @@ impl Explorer {
                         actor: None,
                         target_graph: None,
                         retire_from: None,
+                        dry_run: false,
                     },
                     timestamp,
                     None,

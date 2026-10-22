@@ -466,6 +466,7 @@ fn a_deadline_expiring_at_promotion_rolls_back_whole() {
         actor: None,
         target_graph: None,
         retire_from: None,
+        dry_run: false,
     };
     let error = expiring_at(Boundary::Promoted, || {
         crate::share_import::promote_import(&mut target, &promote, TS, None)

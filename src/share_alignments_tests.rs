@@ -127,6 +127,7 @@ fn nonempty_records_are_retained_without_loading_identity_or_shape_authority() {
             actor: None,
             target_graph: None,
             retire_from: None,
+            dry_run: false,
         },
         "2026-10-21T00:00:01Z",
         None,
