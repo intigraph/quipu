@@ -83,3 +83,37 @@ fn a_graph_with_any_history_is_not_new() {
     // incremental path (and its cap).
     assert!(!store.graph_is_new(0, i64::MAX).unwrap());
 }
+
+#[test]
+fn a_referenced_object_typed_only_in_root_satisfies_sh_class() {
+    // Review finding on #743 (gennaro): Bob is a Person in ROOT; a new graph
+    // says Alice knows Bob under `knows sh:class Person`. 0.16 accepts it; the
+    // batch path must too, which needs Bob's ROOT type although Bob is only an
+    // object in the new graph.
+    let shapes = "@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://ex.test/> .
+ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
+    sh:property [ sh:path ex:knows ; sh:class ex:Person ] .";
+    let mut store = loaded(shapes);
+    knot(&mut store, "ex:bob a ex:Person .").unwrap();
+    store.graph_create("urn:t16:people").unwrap();
+    let write = |store: &mut Store, ttl: &str| {
+        crate::tool_knot(
+            store,
+            &serde_json::json!({"turtle": format!("@prefix ex: <http://ex.test/> . {ttl}"),
+                                "graph": "urn:t16:people", "timestamp": "2026-10-22T00:00:00Z"}),
+        )
+    };
+    write(&mut store, "ex:alice a ex:Person ; ex:knows ex:bob .")
+        .expect("Bob's ROOT type satisfies sh:class");
+    // Control: a referenced object of the wrong type is still a violation.
+    let mut store = loaded(shapes);
+    knot(&mut store, r#"ex:rock ex:label "a rock" ."#).unwrap();
+    store.graph_create("urn:t16:people").unwrap();
+    let refused = write(&mut store, "ex:alice a ex:Person ; ex:knows ex:rock .");
+    assert!(
+        matches!(&refused, Err(Error::ValidationFailed { .. }))
+            || refused.as_ref().is_ok_and(|v| v["conforms"] == false),
+        "{refused:?}"
+    );
+}
