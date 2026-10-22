@@ -187,6 +187,13 @@ pub(crate) fn init_episode_budget_ms(ms: u64) {
     }
 }
 
+/// The admission-time request budget, stamped once at a handler's start, for a
+/// write whose own steps check the deadline (aegis-27l promote). `None` when
+/// the budget is disarmed (0), exactly as for every other request.
+pub(crate) fn request_budget_now() -> (std::time::Instant, Option<quipu::time::Deadline>) {
+    (std::time::Instant::now(), request_budget())
+}
+
 /// The deadline for one `/episode` request, stamped once at its start and
 /// carried through BOTH of its admissions (aegis-xi0). Stamping per admission
 /// would hand the commit a fresh budget after resolution had spent the first.

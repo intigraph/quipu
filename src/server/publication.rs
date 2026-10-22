@@ -188,7 +188,11 @@ pub(crate) async fn promote_import(
     axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
-    blocking(move || {
+    // Bounded like /import (aegis-oa5, aegis-27l): the request budget is stamped
+    // here and carried into the writer, where promote checks it between steps and
+    // rolls the whole promotion back on expiry instead of holding the writer.
+    let (started, deadline) = super::admission::request_budget_now();
+    super::admission::write_blocking_until(started, deadline, move || {
         let (result, work) = {
             let mut st = store.lock();
             let result = quipu::share_import::promote_import(

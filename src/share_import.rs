@@ -154,6 +154,14 @@ pub struct PromoteImportRequest {
     pub share_id: String,
     #[serde(default)]
     pub actor: Option<String>,
+    /// Promote into this named graph instead of ROOT, replacing ONLY the staged
+    /// share's subjects there; the target's other subjects are untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_graph: Option<String>,
+    /// With `target_graph`: retract exactly those subjects' facts from this
+    /// source graph in the same transaction (a move, never a whole-graph replace).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retire_from: Option<String>,
 }
 
 /// Result of explicitly promoting a staged graph into ROOT.
@@ -170,6 +178,15 @@ pub struct PromoteImportResult {
     /// absent when the share carried none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<crate::share_queries::QueryImport>,
+    /// The named graph promoted into, when not ROOT.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_graph: Option<String>,
+    /// Facts retracted from `retire_from` for the moved subjects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired: Option<usize>,
+    /// Target facts of the moved subjects that the staged facts superseded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced: Option<usize>,
 }
 
 fn hash_suffix(value: &str) -> Result<&str> {
@@ -590,28 +607,62 @@ pub(crate) fn promote_inner(
             "staging graph is not committed: {graph_iri}"
         )));
     }
-    let (tx_id, count, suppressed) = crate::share_promotion::promote_snapshot(
-        store,
-        graph,
-        timestamp,
-        authenticated_actor,
-        &provenance_source(
-            "share-promotion",
-            &request.share_id,
-            request.actor.as_deref(),
-        ),
-    )?;
+    let source = provenance_source(
+        "share-promotion",
+        &request.share_id,
+        request.actor.as_deref(),
+    );
+    let (tx_id, count, suppressed, moved) = match request.target_graph.as_deref() {
+        None if request.retire_from.is_some() => {
+            return Err(Error::InvalidValue(
+                "retire_from requires target_graph: a ROOT promotion moves nothing".into(),
+            ));
+        }
+        None => {
+            let (tx, count, suppressed) = crate::share_promotion::promote_snapshot(
+                store,
+                graph,
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (tx, count, suppressed, None)
+        }
+        Some(target) => {
+            let moved = crate::share_promotion::promote_subjects_into_graph(
+                store,
+                graph,
+                target,
+                request.retire_from.as_deref(),
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (
+                moved.tx_id,
+                moved.asserted,
+                0,
+                Some((target.to_string(), moved)),
+            )
+        }
+    };
     // AFTER the data: if installing fails, the hold survives and promoting
     // again retries it.
     let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
+    let unchanged = moved.as_ref().is_some_and(|(_, m)| m.tx_id == 0);
     Ok(PromoteImportResult {
-        outcome: "promoted".into(),
+        outcome: if unchanged { "unchanged" } else { "promoted" }.into(),
         share_id: request.share_id.clone(),
         staging_graph: graph_iri,
         tx_id,
         triples: count,
         suppressed_retractions: suppressed,
         queries,
+        retired: moved
+            .as_ref()
+            .and_then(|(_, m)| m.retire_from.as_ref().map(|_| m.retired)),
+        replaced: moved.as_ref().map(|(_, m)| m.replaced),
+        target_graph: moved.map(|(target, _)| target),
     })
 }
 

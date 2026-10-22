@@ -177,6 +177,8 @@ mod tests {
             &PromoteImportRequest {
                 share_id: staged.share_id,
                 actor: Some("reviewer".into()),
+                target_graph: None,
+                retire_from: None,
             },
             TS,
             Some("legacy-shared-bearer"),
@@ -262,6 +264,8 @@ mod tests {
                 &PromoteImportRequest {
                     share_id: result.share_id,
                     actor: None,
+                    target_graph: None,
+                    retire_from: None,
                 },
                 TS,
                 None,
