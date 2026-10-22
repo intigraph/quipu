@@ -15,6 +15,32 @@ use serde_json::{Value as JsonValue, json};
 use super::SharedStore;
 use super::base::{AppError, blocking};
 
+/// Install the declared projections at server startup. The writer installs
+/// them; a replica only reads what its primary installed. A failed install does
+/// not stop the server: aggregates over an uninstalled definition refuse
+/// (`CannotVerify`) instead of answering stale, which is recoverable, while a
+/// server that will not boot is not.
+pub(crate) fn install_at_startup(
+    store: &mut quipu::Store,
+    config: &quipu::QuipuConfig,
+    is_replica: bool,
+) {
+    store.set_projection_defs(config.current_projections.clone());
+    if is_replica {
+        return;
+    }
+    match store.install_projections(&config.current_projections) {
+        Ok(statuses) => {
+            for s in statuses {
+                eprintln!("projection {}: {} ({} rows)", s.name, s.action, s.rows);
+            }
+        }
+        Err(e) => eprintln!(
+            "warning: projections NOT installed -- {e}; /projections aggregates will refuse"
+        ),
+    }
+}
+
 pub(crate) async fn projections(
     State(s): State<SharedStore>,
     axum::Json(i): axum::Json<JsonValue>,

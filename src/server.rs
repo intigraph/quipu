@@ -212,24 +212,8 @@ async fn main() {
         base::apply_owl(&mut store, &config);
     }
 
-    // Current-state projections (aegis-tg5 F2). The writer installs them; a
-    // replica only reads what its primary installed. A failed install does not
-    // stop the server: aggregates over an uninstalled definition refuse
-    // (CannotVerify) instead of answering stale, which is recoverable, while a
-    // server that will not boot is not.
-    store.set_projection_defs(config.current_projections.clone());
-    if !is_replica {
-        match store.install_projections(&config.current_projections) {
-            Ok(statuses) => {
-                for s in statuses {
-                    eprintln!("projection {}: {} ({} rows)", s.name, s.action, s.rows);
-                }
-            }
-            Err(e) => eprintln!(
-                "warning: projections NOT installed -- {e}; /projections aggregates will refuse"
-            ),
-        }
-    }
+    // Current-state projections (aegis-tg5 F2) — see projections::install_at_startup.
+    projections::install_at_startup(&mut store, &config, is_replica);
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
     // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
