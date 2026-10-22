@@ -16,6 +16,7 @@ pub(crate) struct CardinalityPlan {
     pub(crate) has_class_constraint: bool,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
+    pub(crate) subject_target_predicates: BTreeSet<String>,
     pub(crate) node_reference_predicates: BTreeSet<String>,
 }
 
@@ -36,6 +37,7 @@ impl Validator {
             has_class_constraint: false,
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
+            subject_target_predicates: BTreeSet::new(),
             node_reference_predicates: BTreeSet::new(),
         };
         while let Some(index) = pending.pop() {
@@ -49,11 +51,18 @@ impl Validator {
                 continue;
             }
             for target in shape.targets() {
-                if let Target::ObjectsOf(predicate) = target {
-                    plan.incoming_predicates
-                        .insert(predicate.as_str().to_owned());
-                    plan.object_target_predicates
-                        .insert(predicate.as_str().to_owned());
+                match target {
+                    Target::ObjectsOf(predicate) => {
+                        plan.incoming_predicates
+                            .insert(predicate.as_str().to_owned());
+                        plan.object_target_predicates
+                            .insert(predicate.as_str().to_owned());
+                    }
+                    Target::SubjectsOf(predicate) => {
+                        plan.subject_target_predicates
+                            .insert(predicate.as_str().to_owned());
+                    }
+                    _ => {}
                 }
             }
             pending.extend(shape.property_shapes().iter().copied());

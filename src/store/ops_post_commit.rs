@@ -65,9 +65,17 @@ impl Store {
                 };
 
                 let observers: Vec<_> = self.observers.clone();
-                for obs in &observers {
-                    obs.after_commit(self, &delta)?;
-                }
+                // Request shapes judge the caller's datums, which are already
+                // committed here; derivations stay under the store's own
+                // validation policy (aegis-2i6). Inheriting them refused
+                // derived writes about unrelated nodes and answered 400 for a
+                // write that had landed.
+                let request_shapes = self.write_shapes.take();
+                let notified = observers
+                    .iter()
+                    .try_for_each(|obs| obs.after_commit(self, &delta));
+                self.write_shapes = request_shapes;
+                notified?;
             }
         }
 
