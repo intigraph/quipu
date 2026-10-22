@@ -4,8 +4,8 @@
 `aegis-tl2q4j`. Agents write `CONTAINS`, `REGEX`, `STRSTARTS` and `LCASE` filters
 naturally. Before the pushdown, these filters timed out on the production store.
 After it, most finish in milliseconds. The mixed load ratchet
-(`LOAD_TEST.md`) has no string-filter class, so without this gate, a change that
-undid the narrowing would pass CI.
+(`LOAD_TEST.md`) also interleaves these shared shapes with writes in this CI job;
+its report retains the same differential and relative controls.
 
 ## What it runs
 

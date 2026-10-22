@@ -587,7 +587,9 @@ jobs:
       - name: Harness self-test
         run: scripts/quipu-query-perf.py self-test
       - name: Reject failed and malformed defeated queries
-        run: python3 scripts/ci/test-query-perf.py
+        run: |
+          python3 scripts/ci/test-query-perf.py
+          python3 scripts/ci/test-load-string-filters.py
       - name: Build release binaries
         run: cargo build --release --locked --features full --bin quipu --bin quipu-server
       - name: Restore generated query fixture
@@ -616,12 +618,19 @@ jobs:
           scripts/quipu-query-perf.py gate --url http://127.0.0.1:3030 \
             --budget benchmark/query-perf-budget.json \
             --output query-perf-report.json
+          scripts/quipu-load-test.py \
+            --string-filter-budget benchmark/query-perf-budget.json \
+            --requests-per-level 48 \
+            --timeout 40 \
+            --baseline benchmark/load-test-baseline.json \
+            --output string-mixed-load-report.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: quipu-query-perf-report
           path: |
             query-perf-report.json
+            string-mixed-load-report.json
             server.log
 
   lint-markdown:
