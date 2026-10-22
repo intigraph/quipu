@@ -60,15 +60,11 @@ line-merge arms include process spawn for \texttt{git merge-file}, of order
 $5$\,ms, which dominates their timing at every size measured; those columns are
 not comparable with the in-process arms and we do not report them as if they
 were.
-Arm F repeats warm local SQL queries but keeps a fixed layout and query order;
-those repetitions do not establish performance outside the tested workload.
 
 \paragraph{Slot granularity is an assumption.} A conflict is reported over a
 $(subject, predicate)$ slot because that is the unit \texttt{sh:maxCount} is
 declared over. An operator working at another granularity would need a different
 scorer, and the comparison in Table~\ref{tab:armA} would not transfer unchanged.
-Arm F explicitly supplies a separate semantic-slot scorer for native relational
-conflict units and reports those native decision units separately.
 
 \paragraph{Evolving shapes need more than cardinality.} Arm E uses a small,
 fixed meta-contract over named shape nodes and an experimental orchestration,

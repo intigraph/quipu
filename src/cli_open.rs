@@ -74,6 +74,12 @@ pub fn open_store(db_path: &str) -> Store {
         std::process::exit(1);
     }
     store.embedding_config_mut().clone_from(&config().embedding);
+    // `[quipu.shacl]` reaches the CLI the same way, for the same reason: the
+    // store starts from the built-in default (validation ON in a shacl build),
+    // so without this an explicit `validate_on_write = false` was honoured by
+    // the server and ignored by `quipu knot`, which refused every write the
+    // operator had opted out of validating.
+    store.shacl_config_mut().clone_from(&config().shacl);
     // Pure reads and backups do not need to construct an inference session.
     // Import/share and ordinary writes must use the configured provider.
     let command = std::env::args().nth(1).unwrap_or_default();

@@ -165,7 +165,7 @@ impl Placement {
         // `shapes/governance.ttl` gives `onTimeout` a one-value `sh:in` and
         // `hostedAtLayer` no "prompt" value, and it is tempting to call those
         // settings unrepresentable. They are not. SHACL runs only when
-        // `shacl.validate_on_write` is set — it defaults to FALSE, and it
+        // `shacl.validate_on_write` is set — a deployment can turn it off, and it
         // validates episode ingest rather than `Store::transact` generally — so
         // a policy written through `/knot` or a direct transact could carry
         // `onTimeout "allow"` and nothing would object. "The shape rejects it"

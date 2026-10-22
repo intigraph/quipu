@@ -29,8 +29,6 @@ true before a change. [How this demo is made](https://github.com/scbrown/quipu/b
 people who run them.** It can check writes against your rules, records where each fact came from, and answers what was true when. *Bitemporal* means keeping both
 when a fact was recorded and, when supplied, when it was true.
 
-Write enforcement is opt-in: `shacl.validate_on_write` and `governance.enforce_on_write`
-default to `false` ([configuration](https://scbrown.github.io/quipu/getting-started/configuration.html)).
 The [60-second demo](https://github.com/scbrown/quipu/blob/main/docs/demos/governed-memory-v0.13.0/) shows an enabled gate,
 a refused write, corrected provenance, and a valid-time read.
 
