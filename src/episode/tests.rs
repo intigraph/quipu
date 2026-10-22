@@ -513,10 +513,19 @@ fn shacl_validation_passes_valid_episode() {
         replace_snapshot: false,
     };
 
-    let (tx_id, count) =
-        ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS).unwrap();
-    assert!(tx_id > 0);
-    assert!(count > 0);
+    let result = ingest_episode(&mut store, &ep, "2026-04-04T12:00:00Z", TEST_BASE_NS);
+    #[cfg(feature = "shacl")]
+    {
+        let (tx_id, count) = result.unwrap();
+        assert!(tx_id > 0);
+        assert!(count > 0);
+    }
+    #[cfg(not(feature = "shacl"))]
+    {
+        assert!(matches!(result, Err(crate::Error::CannotVerify(message))
+            if message == "write SHACL requires the shacl feature"));
+        assert!(store.current_facts().unwrap().is_empty());
+    }
 }
 
 #[test]

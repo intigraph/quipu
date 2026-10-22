@@ -28,10 +28,16 @@ jobs:
         run: just bench merge-load-build
       - name: Actual explorer WASM
         run: |
-          just wasm explorer-build
+          # No `--locked` for the explorer crate, for the reason documented in
+          # .github/actions/wasm-explorer-build: it carries its own Cargo.lock,
+          # which records the parent crate's version, and release-plz bumps only
+          # the root lockfile. Every release PR leaves it one bump stale, and
+          # `--locked` refused on #692 (v0.15.1) with exit 101. The committed
+          # lockfile still pins wasm-bindgen below.
+          (cd wasm/explorer && cargo build --release)
           version=$(python3 -c 'import tomllib; d=tomllib.load(open("wasm/explorer/Cargo.lock","rb")); print(next(p["version"] for p in d["package"] if p["name"]=="wasm-bindgen"))')
           cargo install wasm-bindgen-cli --version "$version" --locked
-          target=$(cd wasm/explorer && cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')
+          target=$(cd wasm/explorer && cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')
           wasm-bindgen --target nodejs --out-dir "$RUNNER_TEMP/merge-wasm" "$target/wasm32-unknown-unknown/release/quipu_wasm_explorer.wasm"
       - name: Five actual paths against the operation ledger
         run: |

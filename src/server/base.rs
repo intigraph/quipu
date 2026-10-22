@@ -164,7 +164,11 @@ pub(crate) async fn version() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "git_sha": env!("QUIPU_GIT_SHA"),
         "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-        "read_contracts": ["quipu-acquisition/v1", "quipu-acquisition/composed-v1"],
+        "read_contracts": [
+            "quipu-acquisition/v1",
+            "quipu-acquisition/composed-v1",
+            quipu::acquisition::eligibility::CONTRACT,
+        ],
         "features": compiled_features(),
     }))
 }
@@ -208,38 +212,9 @@ fn compiled_features() -> serde_json::Value {
 /// `/health` no matter how long a query runs. The store mutex still serializes
 /// store access — that is a separate, intended property — but it no longer
 /// serializes the HTTP server itself.
-pub(crate) async fn blocking<T, F>(f: F) -> Result<T, AppError>
-where
-    F: FnOnce() -> Result<T, AppError> + Send + 'static,
-    T: Send + 'static,
-{
-    let identity = super::auth::request_identity();
-    let kind = super::request_middleware::request_write_kind();
-    let provenance = super::request_middleware::request_write_provenance();
-    // On a deep stack: request work parses and walks caller-supplied SPARQL,
-    // whose recursion follows its structure, and the pool's default stack
-    // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
-    // structural bound in `sparql_structure` keeps requests inside this stack;
-    // the stack keeps the bound's margin. Identity, write kind and write
-    // provenance are thread-scoped, so they are re-established on the new thread.
-    match tokio::task::spawn_blocking(move || {
-        quipu::sparql_structure::on_deep_stack(move || {
-            quipu::transaction_auth::with_identity(identity, || {
-                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
-            })
-        })
-    })
-    .await
-    {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(AppError(e)),
-        // Only reachable if the handler panicked; the mutex is then poisoned and
-        // the process is not going to recover on its own either way.
-        Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
-            "request handler failed: {e}"
-        )))),
-    }
-}
+#[path = "blocking.rs"]
+mod blocking_work;
+pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 
 /// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
 ///

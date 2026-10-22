@@ -27,6 +27,7 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
         }
     };
 
+    let mut write_shapes = None;
     if let Some(sp) = shapes_path {
         let shapes = match std::fs::read_to_string(sp) {
             Ok(s) => s,
@@ -35,6 +36,7 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
                 std::process::exit(1);
             }
         };
+        write_shapes = Some(shapes.clone());
         match quipu::validate_shapes(&shapes, &data) {
             Ok(feedback) => {
                 if !feedback.conforms {
@@ -52,7 +54,6 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
                     }
                     std::process::exit(1);
                 }
-                println!("SHACL validation passed");
             }
             Err(e) => {
                 eprintln!("validation error: {e}");
@@ -84,19 +85,25 @@ pub fn cmd_knot(args: &[String], db_path: &str) {
     let base_iri = std::fs::canonicalize(file_path)
         .ok()
         .map(|path| format!("file://{}", path.display()));
-    match quipu::rdf::ingest_rdf_bitemporal_with_scope(
-        &mut store,
-        data.as_bytes(),
-        format,
-        base_iri.as_deref(),
-        &now,
-        &now,
-        None,
-        Some(file_path),
-        graph,
-        flag_value(args, "--blank-node-scope"),
-    ) {
+    let result = store.with_write_shapes(write_shapes.as_deref(), |store| {
+        quipu::rdf::ingest_rdf_bitemporal_with_scope(
+            store,
+            data.as_bytes(),
+            format,
+            base_iri.as_deref(),
+            &now,
+            &now,
+            None,
+            Some(file_path),
+            graph,
+            flag_value(args, "--blank-node-scope"),
+        )
+    });
+    match result {
         Ok((tx_id, count)) => {
+            if write_shapes.is_some() {
+                println!("SHACL validation passed");
+            }
             println!("knotted {count} facts from {file_path} (tx {tx_id})");
         }
         Err(e) => {

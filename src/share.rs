@@ -232,6 +232,11 @@ pub struct ShareProducer {
 }
 
 /// Fixed payload names in a share directory.
+///
+/// # Source compatibility after 0.15.0
+///
+/// Rust struct literals must now supply `alignments` (use `None` when absent).
+/// Its serde default preserves older JSON, not older Rust struct literals.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareFiles {
     /// Normative graph payload.
@@ -257,6 +262,13 @@ pub(crate) const POINTERS_SCRUB_LABEL: &str = "manifest.json pointers";
 pub use pointers::{PointerTarget, SharePointer};
 
 /// Versioned, hash-checked share envelope.
+///
+/// # Source compatibility after 0.15.0
+///
+/// Rust struct literals must now supply `embedding` and `alignments_hash`
+/// (use `None` when absent). These optional JSON members remain defaulted when
+/// reading older manifests; that wire compatibility does not preserve Rust
+/// source compatibility for this exhaustive public struct.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
     /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.

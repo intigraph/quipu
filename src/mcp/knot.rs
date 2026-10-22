@@ -251,75 +251,83 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         }
     }
 
-    let (tx_id, count) = if replace_snapshot {
-        let source_tag = format!("snapshot:{}", snapshot.unwrap());
-        // Both the retraction plan and the transaction are scoped to the
-        // resolved graph: a snapshot in graph G replaces only G's prior
-        // facts under this producer key and leaves ROOT untouched.
-        let datums = store.plan_source_retraction(&source_tag, graph)?;
-        let mut assertions = crate::rdf::parse_rdf_scoped(
-            store,
-            turtle.as_bytes(),
-            oxrdfio::RdfFormat::Turtle,
-            None,
-            &valid_from,
-            graph,
-            input.get("blank_node_scope").and_then(JsonValue::as_str),
-        )?;
-        let count = assertions.len();
-        // Compare canonical term keys once instead of an O(old * new) scan.
-        let mut keys = std::collections::BTreeSet::new();
-        for datum in &assertions {
-            crate::promotion_control::check()?;
-            keys.insert((datum.entity, datum.attribute, datum.value.term_key()));
-        }
-        let mut retained = Vec::new();
-        for old in datums {
-            crate::promotion_control::check()?;
-            if !keys.contains(&(old.entity, old.attribute, old.value.term_key())) {
-                retained.push(old);
+    #[cfg(feature = "shacl")]
+    let write_shapes = combined_shapes
+        .as_ref()
+        .map(|s| crate::shacl::split_shapes_by_policy(s).reject);
+    #[cfg(not(feature = "shacl"))]
+    let write_shapes = combined_shapes;
+    let (tx_id, count) = store.with_write_shapes(write_shapes.as_deref(), |store| {
+        Ok(if replace_snapshot {
+            let source_tag = format!("snapshot:{}", snapshot.unwrap());
+            // Both the retraction plan and the transaction are scoped to the
+            // resolved graph: a snapshot in graph G replaces only G's prior
+            // facts under this producer key and leaves ROOT untouched.
+            let datums = store.plan_source_retraction(&source_tag, graph)?;
+            let mut assertions = crate::rdf::parse_rdf_scoped(
+                store,
+                turtle.as_bytes(),
+                oxrdfio::RdfFormat::Turtle,
+                None,
+                &valid_from,
+                graph,
+                input.get("blank_node_scope").and_then(JsonValue::as_str),
+            )?;
+            let count = assertions.len();
+            // Compare canonical term keys once instead of an O(old * new) scan.
+            let mut keys = std::collections::BTreeSet::new();
+            for datum in &assertions {
+                crate::promotion_control::check()?;
+                keys.insert((datum.entity, datum.attribute, datum.value.term_key()));
             }
-        }
-        let mut datums = retained;
-        datums.append(&mut assertions);
-        let tx_id = store.transact_to_graph_scoped(
-            &datums,
-            timestamp,
-            actor,
-            Some(&source_tag),
-            graph,
-            Some(&source_tag),
-        )?;
-        (tx_id, count)
-    } else {
-        // aegis-byn4fn: the append arm passed the caller's `source` straight
-        // through, so omitting the field wrote a transaction with source NULL —
-        // and `plan_source_retraction` is `WHERE t.source = ?1`, which NULL can
-        // never satisfy. Those facts were unretractable by any producer, by any
-        // argument, permanently. Measured on the live log: 1,008 such
-        // transactions, 2026-07-20 to 2026-09-06, still growing (317 in
-        // September), and this was the only write path among /knot, /set,
-        // /retract and /episode that could produce one.
-        //
-        // Deriving a key here rather than REFUSING the request is deliberate:
-        // the append arm is a documented, in-use path, and refusing it would
-        // break callers to fix a defect none of them can see. The derived key
-        // is `knot:<actor>` — attributable, retractable, and outside the
-        // `snapshot:` namespace, which carries authority this write lacks.
-        let tagged = crate::store::source_tag::resolve("knot", actor, source);
-        crate::rdf::ingest_rdf_bitemporal_with_scope(
-            store,
-            turtle.as_bytes(),
-            oxrdfio::RdfFormat::Turtle,
-            None,
-            &valid_from,
-            timestamp,
-            actor,
-            Some(&tagged),
-            graph,
-            input.get("blank_node_scope").and_then(JsonValue::as_str),
-        )?
-    };
+            let mut retained = Vec::new();
+            for old in datums {
+                crate::promotion_control::check()?;
+                if !keys.contains(&(old.entity, old.attribute, old.value.term_key())) {
+                    retained.push(old);
+                }
+            }
+            let mut datums = retained;
+            datums.append(&mut assertions);
+            let tx_id = store.transact_to_graph_scoped(
+                &datums,
+                timestamp,
+                actor,
+                Some(&source_tag),
+                graph,
+                Some(&source_tag),
+            )?;
+            (tx_id, count)
+        } else {
+            // aegis-byn4fn: the append arm passed the caller's `source` straight
+            // through, so omitting the field wrote a transaction with source NULL —
+            // and `plan_source_retraction` is `WHERE t.source = ?1`, which NULL can
+            // never satisfy. Those facts were unretractable by any producer, by any
+            // argument, permanently. Measured on the live log: 1,008 such
+            // transactions, 2026-07-20 to 2026-09-06, still growing (317 in
+            // September), and this was the only write path among /knot, /set,
+            // /retract and /episode that could produce one.
+            //
+            // Deriving a key here rather than REFUSING the request is deliberate:
+            // the append arm is a documented, in-use path, and refusing it would
+            // break callers to fix a defect none of them can see. The derived key
+            // is `knot:<actor>` — attributable, retractable, and outside the
+            // `snapshot:` namespace, which carries authority this write lacks.
+            let tagged = crate::store::source_tag::resolve("knot", actor, source);
+            crate::rdf::ingest_rdf_bitemporal_with_scope(
+                store,
+                turtle.as_bytes(),
+                oxrdfio::RdfFormat::Turtle,
+                None,
+                &valid_from,
+                timestamp,
+                actor,
+                Some(&tagged),
+                graph,
+                input.get("blank_node_scope").and_then(JsonValue::as_str),
+            )?
+        })
+    })?;
 
     // `valid_from` is echoed as the NORMALISED value actually stored, not as
     // the caller sent it: a caller passing a local-offset stamp otherwise has

@@ -167,6 +167,46 @@ Quipu rejects it with structured feedback:
 This feedback is designed for agents — structured JSON with enough detail
 to fix the problem automatically.
 
+## Value sets across writes
+
+A valid delta can still violate a stored upper bound. For example, writing
+`ex:item ex:value "A"` and later `ex:item ex:value "B"` must not bypass
+`sh:maxCount 1` just because each request carries one value.
+
+Write admission checks predicate and inverse-predicate `sh:maxCount`,
+`sh:uniqueLang true`, `sh:disjoint`, `sh:lessThan`, and `sh:lessThanOrEquals`
+against the staged current
+facts inside the same SQLite savepoint as the write. The second distinct
+value is rejected and rolled back. Split writes cannot bypass language-tag
+uniqueness or comparisons between the stored values of two properties.
+Reasserting an identical RDF term remains
+idempotent; retracting the old value and asserting its replacement in one
+transaction is valid. Historical facts remain available.
+
+This check covers CLI `knot --shapes`, the knot and SPARQL Update entrypoints,
+inline episode shapes, conditional writes with loaded shapes, and configured
+`validate_on_write` transactions. It preserves each entrypoint's existing
+reject/advisory policy. Low-level transactions without explicit shapes or
+write validation configured do not acquire an implicit shape policy.
+
+Value-set validation uses each destination graph's own values. ROOT type and subclass
+context can select targets in a named graph; ROOT property values and unrelated
+third graphs do not contribute to its sets. The context is bounded to touched
+subjects and referenced objects, with at most 100,000 facts and 1,024 classes.
+Exceeding these limits, or encountering another complex value-set property path,
+refuses admission with `cannot verify` rather than accepting partial evidence.
+
+Capability and incoming-context obligations use the batch validator's compiled
+shape graph. Its deactivation flags suppress obligations for inactive node
+shapes and their solely dependent properties. A shared property still imposes
+its obligations when another active shape or its own target reaches it; logical and qualified shape
+references retain that conservative check. Unsupported active paths still refuse.
+
+Other constraints retain payload validation and contextual type/required-field
+repair. This is not whole-store conformance checking or automatic revalidation
+of every dependent node after changing a schema, class hierarchy, or target
+relation. Standalone `validate` remains a check of the supplied data only.
+
 ## Supported Constraints
 
 | Constraint | What it checks |
@@ -249,3 +289,9 @@ remain valid, and multiple retained comments are permitted. This profile does
 not authorize a new write path or change import/promotion checks. A receiver
 must load its reviewed shapes and verify the loaded vocabulary before importing
 activity facts; a source file alone does not establish runtime governance.
+
+Write-time shape pre-parsing uses the batch validator's fallback base IRI for
+relative Turtle identifiers, including relative manifest references in shape
+documents. An explicit Turtle base still takes precedence. This compatibility
+does not relax cross-write constraint checks or the atomic refusal of invalid
+post-state data.

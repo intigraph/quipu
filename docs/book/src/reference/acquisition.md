@@ -154,3 +154,56 @@ committed-project profile that excludes derived ephemerals does not satisfy a
 full SDK snapshot requiring them. Unknown required sidegraphs refuse. Producer
 source tests and a version advertisement do not establish configured adapter
 acceptance, installed publication, or runtime activation.
+
+## Eligibility observation
+
+`POST /acquire/eligibility` (contract `quipu-eligibility/v1`) reports, for 1 to
+16 exact named graphs, whether each would pass direct-MAIN acquisition admission
+and the store's configured label floor **at one observed head**:
+
+```json
+{"source_store_id": "urn:uuid:...", "graphs": ["https://example.org/project/board"],
+ "expected_head_tx": 4210}
+```
+
+The response carries `observed_head_tx`, a sanitized `policy` identity (a
+SHA-256 of the floor and the names of the configured axes, never their values),
+the producer identity, and per graph `eligible`, `refused` (scope admission or
+policy, with the reason) or `unknown` (the check failed; never eligibility).
+`expected_head_tx`, when given, refuses unless the head is exactly that one, and
+the head and policy are re-read after the checks; a change refuses.
+
+It reads graph metadata, terms, the dataset registry, transaction ids and store
+identity in one read transaction, and nothing else: no facts, no writes. It
+holds the writer connection through a dedicated guard that never settles a
+signed attestation and never synchronizes or remounts providers, and it refuses
+a signed request outright. A configured trust- or time-derived floor refuses as
+unsupported before any label read, exactly as acquisition does.
+
+An observation is **not** an acquisition receipt, an applied-pin policy proof,
+or authority to acquire. It carries no `applied_tx`, and a later acquisition
+can still refuse.
+
+## Physical scope measurement
+
+`quipu acquire scope` (contract `quipu-acquisition-scope/v1`) measures, for 1
+to 16 exact named graphs at one applied pin, the physical `DISTINCT(e,a,v)`
+rows a direct-MAIN acquisition reads, using the acquisition's own row
+predicate, and the bytes of their values:
+
+```sh
+quipu acquire scope --db artifact.db --source-store-id urn:uuid:... \
+  --graph https://example.org/project/board --tx 4210 \
+  --max-vm-steps 50000000 --deadline-ms 60000
+```
+
+Each graph is first admitted exactly as acquisition admits it; a refused graph
+is reported and not read. A graph with more than 100,000 rows is reported as
+`exceeds_cap` with no count. The VM-step and wall budgets are required: SQLite
+counts steps in strides of 1,000 per statement, and exhausting either budget
+aborts the whole run with the phase that was running and no partial result.
+
+The store is opened read-only with no migration, and a missing store is never
+created. The measurement returns counts only, never fact content. Running it
+against a production store or a copy of one is a read-cost decision for that
+store's owner; the command does not authorize itself.

@@ -1,0 +1,57 @@
+Script started on 2026-10-20 21:30:33-04:00 [COMMAND="python3 run.py" <not executed on terminal>]
+
+BEFORE: actual CLI, fresh disposable SQLite database
+executable SHA256=f7fc8aa0ee384e58e34a5cc85db386ac6baa811048a4160029753736ce3cc0a9
+quipu 0.14.1
+git_sha: a7510ca8ea23605b395f164b8bd56dd3de7c26ac
+git_dirty: false
+
+$ quipu knot a.ttl --shapes shapes.ttl --db demo.db
+SHACL validation passed
+knotted 2 facts from a.ttl (tx 1)
+exit=0
+$ quipu knot b.ttl --shapes shapes.ttl --db demo.db
+SHACL validation passed
+knotted 2 facts from b.ttl (tx 2)
+exit=0
+$ quipu query SELECT ?v WHERE { <https://example.org/cardinality/item> <https://example.org/cardinality/value> ?v } --db demo.db
+v
+--------------------
+"A"
+"B"
+
+2 results
+exit=0
+$ quipu knot control.ttl --shapes shapes.ttl --db demo.db
+SHACL validation passed
+knotted 2 facts from control.ttl (tx 3)
+exit=0
+Observed current values: "A", "B"
+
+AFTER: actual CLI, fresh disposable SQLite database
+executable SHA256=a71c6d628ed6bb35f2dc53215c51256fe6cb44e4e797daac0b6e5204593f4a36
+quipu 0.15.0
+git_sha: a095717f05910c42d2762ffcddf8e0be18584272
+git_dirty: false
+
+$ quipu knot a.ttl --shapes shapes.ttl --db demo.db
+SHACL validation passed
+knotted 2 facts from a.ttl (tx 1)
+exit=0
+$ quipu knot b.ttl --shapes shapes.ttl --db demo.db
+error ingesting: SHACL validation failed: 1 violation(s)
+exit=1
+$ quipu query SELECT ?v WHERE { <https://example.org/cardinality/item> <https://example.org/cardinality/value> ?v } --db demo.db
+v
+--------------------
+"A"
+
+1 results
+exit=0
+$ quipu knot control.ttl --shapes shapes.ttl --db demo.db
+SHACL validation passed
+knotted 2 facts from control.ttl (tx 2)
+exit=0
+Observed current values: "A"
+
+Script done on 2026-10-20 21:30:39-04:00 [COMMAND_EXIT_CODE="0"]

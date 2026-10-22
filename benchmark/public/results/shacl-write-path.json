@@ -1,0 +1,303 @@
+{
+ "schema": "quipu-shacl-write-path/v1",
+ "suite_revision": "9c863967bceaef1a87c24e4dd761eda763823120",
+ "note": "Known write-path divergences and unjudged writes. Both lists may only shrink (aegis-1c8q ratchet; unjudged = sattler option A).",
+ "cases": 98,
+ "by_component": {
+  "and": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "class": {
+   "agrees": 13,
+   "diverges": 6
+  },
+  "closed": {
+   "agrees": 3,
+   "diverges": 1
+  },
+  "datatype": {
+   "agrees": 27,
+   "diverges": 1
+  },
+  "disjoint": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "equals": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "hasValue": {
+   "diverges": 1,
+   "agrees": 4
+  },
+  "in": {
+   "diverges": 2,
+   "agrees": 3
+  },
+  "languageIn": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "lessThan": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "lessThanOrEquals": {
+   "diverges": 1,
+   "agrees": 1
+  },
+  "maxCount": {
+   "agrees": 11,
+   "diverges": 1,
+   "write_error": 1
+  },
+  "maxExclusive": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "maxInclusive": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "maxLength": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "minCount": {
+   "diverges": 1,
+   "agrees": 19
+  },
+  "minExclusive": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "minInclusive": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "minLength": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "node": {
+   "diverges": 1,
+   "agrees": 4
+  },
+  "nodeKind": {
+   "agrees": 4,
+   "diverges": 1,
+   "write_error": 1
+  },
+  "not": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "or": {
+   "diverges": 1,
+   "agrees": 4
+  },
+  "pattern": {
+   "agrees": 5,
+   "diverges": 1
+  },
+  "property": {
+   "agrees": 51,
+   "diverges": 3,
+   "write_error": 1
+  },
+  "qualifiedValueShape": {
+   "diverges": 1,
+   "agrees": 3
+  },
+  "uniqueLang": {
+   "diverges": 1,
+   "agrees": 2
+  },
+  "xone": {
+   "diverges": 1,
+   "agrees": 2
+  }
+ },
+ "owners": {
+  "core/complex/shacl-shacl#shacl-shacl": {
+   "class": "over-refusal-on-split",
+   "item": "aegis-9q3v"
+  },
+  "core/path/path-complex-002#path-complex-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001": {
+   "class": "cannot-verify-complex-path",
+   "item": "aegis-9q3v"
+  },
+  "core/path/path-strange-001#path-strange-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-strange-002#path-strange-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/property/property-001#property-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/targets/targetClassImplicit-001#targetClassImplicit-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/validation-reports/shared#shared": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  }
+ },
+ "divergences": [
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_subject"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_subject_reversed"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_triple"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "per_triple_reversed"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "subject_halves"
+  ],
+  [
+   "core/complex/shacl-shacl#shacl-shacl",
+   "subject_halves_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_subject"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_triple"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "subject_halves"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "subject_halves_reversed"
+  ]
+ ],
+ "unjudged": [
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_subject_reversed",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "per_triple_reversed",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "subject_halves",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ],
+  [
+   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
+   "subject_halves_reversed",
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+  ]
+ ]
+}

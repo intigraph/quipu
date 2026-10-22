@@ -34,6 +34,11 @@ pub(crate) fn open_pool(
                 .expect("configuring replica read-only connection timeout");
         }
     }
+    if config.log_query_phases {
+        for connection in &read_pool.conns {
+            connection.lock().enable_statement_profile();
+        }
+    }
     if config.reserve_point_reads && store.search_config().request_timeout_ms == 0 {
         eprintln!("error: reserve_point_reads requires a positive request_timeout_ms");
         std::process::exit(1);
