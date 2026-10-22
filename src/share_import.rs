@@ -11,7 +11,8 @@ use crate::share::{ShareManifest, manifest_bytes, sha256};
 use crate::share_scrub::ShareDestination;
 use crate::store::Store;
 
-pub use crate::share_review::{import_share, promote_import};
+pub use crate::share_import_resolve::{PreparedImport, prepare as prepare_import};
+pub use crate::share_review::{import_share, import_share_prepared, promote_import};
 
 const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
@@ -101,6 +102,12 @@ pub struct ImportResolution {
     pub exact_merges: Vec<ImportMatch>,
     pub candidates: Vec<ImportMatch>,
     pub unmatched: Vec<String>,
+    /// Name candidates found when the share was resolved off the writer, then
+    /// dropped under the writer because their label was asserted or retracted
+    /// in between (aegis-oa5). Always present, so an empty list means the
+    /// re-check ran and dropped nothing.
+    #[serde(default)]
+    pub revalidation_dropped: Vec<ImportMatch>,
 }
 
 /// Local SHACL result and vocabulary findings.
@@ -257,7 +264,7 @@ pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
     Ok(())
 }
 
-fn parse_triples(input: &str) -> Result<Vec<Triple>> {
+pub(crate) fn parse_triples(input: &str) -> Result<Vec<Triple>> {
     RdfParser::from_format(RdfFormat::NTriples)
         .for_reader(input.as_bytes())
         .map(|quad| {
@@ -267,7 +274,7 @@ fn parse_triples(input: &str) -> Result<Vec<Triple>> {
         .collect()
 }
 
-fn labels(triples: &[Triple]) -> BTreeMap<String, String> {
+pub(crate) fn labels(triples: &[Triple]) -> BTreeMap<String, String> {
     let mut labels = BTreeMap::new();
     for triple in triples {
         if triple.predicate.as_str() != RDFS_LABEL {
@@ -286,52 +293,8 @@ fn labels(triples: &[Triple]) -> BTreeMap<String, String> {
     labels
 }
 
-fn resolve_and_rewrite(
-    store: &Store,
-    triples: &mut [Triple],
-    accept_exact: bool,
-) -> Result<ImportResolution> {
-    let mut report = ImportResolution::default();
-    let mut replacements = BTreeMap::new();
-    for (foreign, label) in labels(triples) {
-        let result = crate::resolve_entity(store, &label, &[], 0.85, 5)?;
-        if result.candidates.is_empty() {
-            report.unmatched.push(foreign);
-            continue;
-        }
-        let top = &result.candidates[0];
-        if top.score == 1.0 && top.matched_on == "canonical_name:exact" {
-            // aegis-i48b9w: an exact canonical-name match is a PROPOSAL, not a rewrite.
-            //
-            // The rewrite happened BEFORE the triples were stored, so the foreign
-            // identity was gone by the time anything could record it: there was nothing
-            // left to un-knot and no `owl:sameAs` was ever written. And because identity
-            // here is the literal name string (aegis-6pd03), two graphs that each hold a
-            // node named `config` or `main` were silently unified ACROSS A TRUST
-            // BOUNDARY.
-            //
-            // The match is still reported, now carrying its score and justification so a
-            // caller can bulk-accept the exact hits in one action.
-            if accept_exact {
-                replacements.insert(foreign.clone(), top.iri.clone());
-            }
-            report.exact_merges.push(ImportMatch {
-                foreign,
-                local: top.iri.clone(),
-                score: Some(top.score),
-                matched_on: Some(top.matched_on.clone()),
-            });
-        } else {
-            for candidate in result.candidates {
-                report.candidates.push(ImportMatch {
-                    foreign: foreign.clone(),
-                    local: candidate.iri,
-                    score: Some(candidate.score),
-                    matched_on: Some(candidate.matched_on),
-                });
-            }
-        }
-    }
+/// Apply `accept_exact` rewrites: each foreign IRI becomes its local match.
+fn rewrite(triples: &mut [Triple], replacements: &BTreeMap<String, String>) -> Result<()> {
     for triple in triples {
         if let NamedOrBlankNode::NamedNode(subject) = &triple.subject
             && let Some(local) = replacements.get(subject.as_str())
@@ -350,7 +313,7 @@ fn resolve_and_rewrite(
             );
         }
     }
-    Ok(report)
+    Ok(())
 }
 
 fn serialize(triples: &[Triple]) -> Result<String> {
@@ -408,11 +371,16 @@ fn validate_local(store: &Store, data: &str) -> Result<ImportValidation> {
 }
 
 /// Verify, resolve, validate, and stage one share without touching ROOT.
+///
+/// `prepared` is a resolution computed on a read connection
+/// ([`crate::share_import_resolve::prepare`]); it is revalidated here. Without
+/// it, resolution runs here, in one pass over the label set.
 pub(crate) fn import_inner(
     store: &mut Store,
     request: &ShareImportRequest,
     timestamp: &str,
     authenticated_actor: Option<&str>,
+    prepared: Option<crate::share_import_resolve::PreparedImport>,
 ) -> Result<ShareImportResult> {
     let mut observation = crate::metrics::attestation::ImportObservation::new();
     // MANIFEST IDENTITY FIRST, THEN AUTHORSHIP, and the order is the scope's
@@ -482,10 +450,33 @@ pub(crate) fn import_inner(
         request.query_namespace.as_deref(),
         request.replace_queries,
     )?;
-    let mut triples = parse_triples(&request.export_ntriples)?;
-    let resolution = resolve_and_rewrite(store, &mut triples, request.accept_exact)?;
+    // The writer is held from here to the commit, so each step checks the
+    // request deadline: past it the import rolls back with an explicit error
+    // and the writer is released (aegis-oa5). A client that disconnects does
+    // not stop the work; the deadline does.
+    crate::time::check_request_deadline()?;
+    let prepared = prepared.filter(|p| p.is_for(request));
+    let current = match &prepared {
+        Some(p) => crate::share_import_resolve::revalidate(store, p)?,
+        None => None,
+    };
+    let (mut triples, labels) = match (prepared, current) {
+        (Some(p), Some(labels)) => (p.triples, labels),
+        _ => {
+            let triples = parse_triples(&request.export_ntriples)?;
+            let labels = crate::share_import_resolve::resolve(store, &labels(&triples))?;
+            (triples, labels)
+        }
+    };
+    let (resolution, replacements) =
+        crate::share_import_resolve::finish(labels, request.accept_exact);
+    rewrite(&mut triples, &replacements)?;
     let resolved = serialize(&triples)?;
+    #[cfg(test)]
+    test_hooks::at(test_hooks::Boundary::Resolved);
+    crate::time::check_request_deadline()?;
     let validation = validate_local(store, &resolved)?;
+    crate::time::check_request_deadline()?;
     let blockers = {
         let mut values = Vec::new();
         if validation.blocking {
@@ -511,6 +502,7 @@ pub(crate) fn import_inner(
     let outcome = if existing {
         "unchanged"
     } else {
+        crate::time::check_request_deadline()?;
         let graph = store.graph_create(&graph_iri)?;
         crate::rdf::ingest_assigned_rdf(
             store,
@@ -590,6 +582,7 @@ pub(crate) fn promote_inner(
             "staging graph is not committed: {graph_iri}"
         )));
     }
+    crate::time::check_request_deadline()?;
     let (tx_id, count, suppressed) = crate::share_promotion::promote_snapshot(
         store,
         graph,
@@ -614,6 +607,11 @@ pub(crate) fn promote_inner(
         queries,
     })
 }
+
+/// Test-only seams at the import's phase boundaries (aegis-oa5).
+#[cfg(test)]
+#[path = "share_import_test_hooks.rs"]
+pub(crate) mod test_hooks;
 
 #[cfg(test)]
 include!("share_import_tests.rs");
