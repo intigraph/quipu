@@ -382,3 +382,30 @@ fn a_delete_in_a_graph_keeps_roots_copy_of_the_value() {
         "the only copy was deleted and the delete passed"
     );
 }
+
+/// KNOWN GAP, pinned (sattler's ruling on aegis-g51c C12): a delete is judged
+/// only for minCount and hasValue. One that breaks a NON-LOCAL constraint, here
+/// an `sh:or` of two floors, is not refused today. Widening that is a separate
+/// follow-up; when it lands, this test is expected to flip.
+#[test]
+fn a_delete_that_breaks_an_or_constraint_is_not_judged_yet() {
+    const EITHER: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:EitherShape a sh:NodeShape ; sh:targetClass aegis:Either ;
+    sh:or ( [ sh:path aegis:a ; sh:minCount 1 ] [ sh:path aegis:b ; sh:minCount 1 ] ) .
+"#;
+    let store = store_with(&format!("<{A}e> a <{A}Either> ; <{A}a> \"x\" .\n"));
+    let removed = format!("<{A}e> <{A}a> \"x\" .\n");
+    // CONTROL: the post-state really does violate the sh:or.
+    let post = crate::shacl::validate_shapes(EITHER, &format!("<{A}e> a <{A}Either> .\n"))
+        .expect("validated");
+    assert!(!post.conforms, "control: the fixture must break the sh:or");
+    let v = retraction_violations_in_graph(&store, EITHER, &removed, "", crate::schema::ROOT_GRAPH)
+        .expect("validated");
+    assert!(
+        v.conforms,
+        "the known gap changed; update the docs and this pin: {:?}",
+        v.results
+    );
+}

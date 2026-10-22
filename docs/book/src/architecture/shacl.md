@@ -62,7 +62,9 @@ whole-graph pending-post-state check:
   path, value, message, and named source shape. This is pre-existing debt, and
   it is counted through `shacl.debt_admitted` events. New nodes, new types, new
   values and other paths are refused. On `/update` under `validate_on_write`, a
-  deletion that empties a required path the pre-state satisfied is refused.
+  deletion that newly breaks a `sh:minCount` or `sh:hasValue` is refused.
+  Known gap: a deletion that breaks a non-local constraint (`sh:or`/`and`/
+  `xone`/`not`, `sh:node`, qualified counts) is not judged yet.
 - Write-savepoint admission also checks the stored values of touched focuses
   for maximum count, datatype, node kind, class, pattern, length, numeric bounds,
   enumeration, language, and nested-node constraints. This catches a value written

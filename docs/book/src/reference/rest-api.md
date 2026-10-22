@@ -2206,9 +2206,14 @@ The match is exact. The node's pre-state (its stored types and its stored
 values on required paths) must report the same focus, constraint component,
 path, value and message, plus the source shape when that shape is named. A new
 node, a new type on an existing node, a new value, or a violation on another
-path is still refused. On `/update`, with `shacl.validate_on_write` on, a
-deletion that leaves a required path empty on a node that satisfied it is
-refused as well.
+path is still refused. Admission covers only constraints a node's own data
+decides (counts, values, datatypes, classes). `sh:node`,
+`sh:qualifiedValueShape` and the logical components are never admitted.
+
+On `/update`, with `shacl.validate_on_write` on, a deletion is refused when it
+leaves a node violating a `sh:minCount` or `sh:hasValue` that it satisfied
+before. **Known gap:** a deletion that breaks a non-local constraint (`sh:or`,
+`sh:and`, `sh:xone`, `sh:not`, `sh:node`, qualified counts) is not judged yet.
 
 Each admitted issue appends a `shacl.debt_admitted` event riding the write:
 `{shape, message, component, path, graph}`, with the focus node as subject.
