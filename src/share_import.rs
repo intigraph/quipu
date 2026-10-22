@@ -196,7 +196,7 @@ fn hash_suffix(value: &str) -> Result<&str> {
         .ok_or_else(|| Error::InvalidValue(format!("invalid sha256 identifier: {value}")))
 }
 
-fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
+pub(crate) fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
     let hash = hash_suffix(share_id)?;
     let kind = if quarantine { "quarantine" } else { "staging" };
     Ok(format!("urn:quipu:import:{kind}:{hash}"))
@@ -206,7 +206,7 @@ fn import_id(share_id: &str) -> Result<String> {
     Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
 }
 
-fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
+pub(crate) fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
     claim.map_or_else(
         || format!("{prefix}:{id}"),
         |actor| format!("{prefix}:{id}:claimed-actor={actor}"),
@@ -588,83 +588,7 @@ pub(crate) fn import_inner(
     })
 }
 
-/// Explicitly copy an eligible staging graph into ROOT.
-pub(crate) fn promote_inner(
-    store: &mut Store,
-    request: &PromoteImportRequest,
-    timestamp: &str,
-    authenticated_actor: Option<&str>,
-) -> Result<PromoteImportResult> {
-    let graph_iri = staging_graph(&request.share_id, false)?;
-    let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
-        Error::InvalidValue(format!(
-            "no eligible staged import for {}",
-            request.share_id
-        ))
-    })?;
-    if store.graph_class(graph)?.as_deref() != Some("committed") {
-        return Err(Error::InvalidValue(format!(
-            "staging graph is not committed: {graph_iri}"
-        )));
-    }
-    let source = provenance_source(
-        "share-promotion",
-        &request.share_id,
-        request.actor.as_deref(),
-    );
-    let (tx_id, count, suppressed, moved) = match request.target_graph.as_deref() {
-        None if request.retire_from.is_some() => {
-            return Err(Error::InvalidValue(
-                "retire_from requires target_graph: a ROOT promotion moves nothing".into(),
-            ));
-        }
-        None => {
-            let (tx, count, suppressed) = crate::share_promotion::promote_snapshot(
-                store,
-                graph,
-                timestamp,
-                authenticated_actor,
-                &source,
-            )?;
-            (tx, count, suppressed, None)
-        }
-        Some(target) => {
-            let moved = crate::share_promotion::promote_subjects_into_graph(
-                store,
-                graph,
-                target,
-                request.retire_from.as_deref(),
-                timestamp,
-                authenticated_actor,
-                &source,
-            )?;
-            (
-                moved.tx_id,
-                moved.asserted,
-                0,
-                Some((target.to_string(), moved)),
-            )
-        }
-    };
-    // AFTER the data: if installing fails, the hold survives and promoting
-    // again retries it.
-    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
-    let unchanged = moved.as_ref().is_some_and(|(_, m)| m.tx_id == 0);
-    Ok(PromoteImportResult {
-        outcome: if unchanged { "unchanged" } else { "promoted" }.into(),
-        share_id: request.share_id.clone(),
-        staging_graph: graph_iri,
-        tx_id,
-        triples: count,
-        suppressed_retractions: suppressed,
-        queries,
-        retired: moved
-            .as_ref()
-            .and_then(|(_, m)| m.retire_from.as_ref().map(|_| m.retired)),
-        replaced: moved.as_ref().map(|(_, m)| m.replaced),
-        target_graph: moved.map(|(target, _)| target),
-    })
-}
+pub(crate) use crate::share_promotion::promote_inner;
 
 #[cfg(test)]
 include!("share_import_tests.rs");

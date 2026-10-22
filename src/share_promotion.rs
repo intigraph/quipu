@@ -7,7 +7,11 @@
 
 use std::collections::HashSet;
 
+use crate::Error;
 use crate::error::Result;
+use crate::share_import::{
+    PromoteImportRequest, PromoteImportResult, provenance_source, staging_graph,
+};
 use crate::store::{Datum, Store};
 use crate::types::{Fact, Op};
 
@@ -42,6 +46,85 @@ pub(crate) fn promote_snapshot(
             Err(error)
         }
     }
+}
+
+/// Explicitly copy an eligible staging graph into ROOT, or move its subjects
+/// into a target named graph (aegis-27l).
+pub(crate) fn promote_inner(
+    store: &mut Store,
+    request: &PromoteImportRequest,
+    timestamp: &str,
+    authenticated_actor: Option<&str>,
+) -> Result<PromoteImportResult> {
+    let graph_iri = staging_graph(&request.share_id, false)?;
+    let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
+        Error::InvalidValue(format!(
+            "no eligible staged import for {}",
+            request.share_id
+        ))
+    })?;
+    if store.graph_class(graph)?.as_deref() != Some("committed") {
+        return Err(Error::InvalidValue(format!(
+            "staging graph is not committed: {graph_iri}"
+        )));
+    }
+    let source = provenance_source(
+        "share-promotion",
+        &request.share_id,
+        request.actor.as_deref(),
+    );
+    let (tx_id, count, suppressed, moved) = match request.target_graph.as_deref() {
+        None if request.retire_from.is_some() => {
+            return Err(Error::InvalidValue(
+                "retire_from requires target_graph: a ROOT promotion moves nothing".into(),
+            ));
+        }
+        None => {
+            let (tx, count, suppressed) = crate::share_promotion::promote_snapshot(
+                store,
+                graph,
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (tx, count, suppressed, None)
+        }
+        Some(target) => {
+            let moved = crate::share_promotion::promote_subjects_into_graph(
+                store,
+                graph,
+                target,
+                request.retire_from.as_deref(),
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (
+                moved.tx_id,
+                moved.asserted,
+                0,
+                Some((target.to_string(), moved)),
+            )
+        }
+    };
+    // AFTER the data: if installing fails, the hold survives and promoting
+    // again retries it.
+    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
+    let unchanged = moved.as_ref().is_some_and(|(_, m)| m.tx_id == 0);
+    Ok(PromoteImportResult {
+        outcome: if unchanged { "unchanged" } else { "promoted" }.into(),
+        share_id: request.share_id.clone(),
+        staging_graph: graph_iri,
+        tx_id,
+        triples: count,
+        suppressed_retractions: suppressed,
+        queries,
+        retired: moved
+            .as_ref()
+            .and_then(|(_, m)| m.retire_from.as_ref().map(|_| m.retired)),
+        replaced: moved.as_ref().map(|(_, m)| m.replaced),
+        target_graph: moved.map(|(target, _)| target),
+    })
 }
 
 /// What a subject-scoped promotion changed.
