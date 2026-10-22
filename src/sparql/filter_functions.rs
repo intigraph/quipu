@@ -437,6 +437,56 @@ fn typed_numeric(rank: NumericRank, value: f64) -> Value {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Temporal {
+    DateTime,
+    Date,
+    Time,
+}
+
+fn temporal(datatype: Option<&str>) -> Option<Temporal> {
+    match datatype? {
+        namespace::XSD_DATE_TIME | XSD_DATE_TIME_STAMP => Some(Temporal::DateTime),
+        XSD_DATE => Some(Temporal::Date),
+        XSD_TIME => Some(Temporal::Time),
+        _ => None,
+    }
+}
+
+const XSD_DATE: &str = "http://www.w3.org/2001/XMLSchema#date";
+const XSD_TIME: &str = "http://www.w3.org/2001/XMLSchema#time";
+const XSD_DATE_TIME_STAMP: &str = "http://www.w3.org/2001/XMLSchema#dateTimeStamp";
+
+/// `None` when neither side is temporal (the caller compares as before);
+/// `Some(None)` for a type error; `Some(Some(order))` for a value comparison.
+fn temporal_order(a: &Value, b: &Value) -> Option<Option<std::cmp::Ordering>> {
+    let (ka, kb) = (temporal(a.datatype()), temporal(b.datatype()));
+    if ka.is_none() && kb.is_none() {
+        return None;
+    }
+    let (Some(kind), true) = (ka, ka == kb) else {
+        return Some(None);
+    };
+    let (Some(x), Some(y)) = (a.as_lexical(), b.as_lexical()) else {
+        return Some(None);
+    };
+    let (x, y) = (x.trim(), y.trim());
+    Some(match kind {
+        Temporal::DateTime => match (x.parse::<oxsdatatypes::DateTime>(), y.parse()) {
+            (Ok(x), Ok(y)) => x.partial_cmp(&y),
+            _ => None,
+        },
+        Temporal::Date => match (x.parse::<oxsdatatypes::Date>(), y.parse()) {
+            (Ok(x), Ok(y)) => x.partial_cmp(&y),
+            _ => None,
+        },
+        Temporal::Time => match (x.parse::<oxsdatatypes::Time>(), y.parse()) {
+            (Ok(x), Ok(y)) => x.partial_cmp(&y),
+            _ => None,
+        },
+    })
+}
+
 /// Compare two expressions with an ordering predicate.
 pub fn compare_values(
     store: &Store,
@@ -453,9 +503,15 @@ pub fn compare_values(
     {
         return crate::numeric_value::compare(&a, &b).is_some_and(pred);
     }
+    // Temporal literals compare by VALUE (aegis-jd2t): offsets normalised, an
+    // ill-typed lexeme, a mixed pair or an indeterminate (timezoned against
+    // untimezoned) comparison is the SPARQL type error, i.e. false. A lexical
+    // compare ordered 06:00-05:00 before 10:00Z and let "not-a-time" pass.
+    if let Some(order) = temporal_order(&a, &b) {
+        return order.is_some_and(pred);
+    }
     // String comparison uses the LEXICAL form, so "hello"@en compares as
-    // "hello" (it used to compare as "hello@en") and an xsd:date still orders
-    // by its ISO-8601 lexeme as it did when it was silently a plain string.
+    // "hello" (it used to compare as "hello@en").
     match (a.as_lexical(), b.as_lexical()) {
         (Some(a), Some(b)) => pred(a.cmp(b)),
         _ => false,

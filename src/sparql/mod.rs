@@ -58,6 +58,8 @@ pub(crate) mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
+#[cfg(test)]
+mod datetime_compare_tests;
 mod graph_filter;
 #[cfg(test)]
 mod graph_filter_tests;
