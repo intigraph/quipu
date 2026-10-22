@@ -66,8 +66,13 @@ pub fn eval_values(
 /// equal, while `Str` stays distinct and still matches no fact.
 fn ground_term_to_value(store: &Store, term: &GroundTerm) -> Result<Value> {
     Ok(match term {
+        // `lookup_all` puts the local id first, then any attached layer's id, so
+        // an IRI known only to a layer still joins (aegis-gwu); unattached stores
+        // see exactly `lookup`.
         GroundTerm::NamedNode(n) => store
-            .lookup(n.as_str())?
+            .lookup_all(n.as_str())?
+            .first()
+            .copied()
             .map_or_else(|| Value::Str(n.as_str().to_string()), Value::Ref),
         GroundTerm::Literal(lit) => super::filter::literal_to_value(lit),
         // Quoted triples (RDF-star) are not stored as values, so one can never
