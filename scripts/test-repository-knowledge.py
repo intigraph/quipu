@@ -252,6 +252,46 @@ class Knowledge(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inventory incomplete"):
             self.render()
 
+    def test_kind_metadata_deletions_refuse_in_renderer(self):
+        for kind, fields in (("interface", ("interfaceKind", "publicName")),
+                             ("decision", ("status", "supersessionStatus"))):
+            for deleted in ((fields[0],), (fields[1],), fields):
+                with self.subTest(kind=kind, deleted=deleted):
+                    self.registry = json.loads((ROOT / "docs/knowledge/repository-knowledge.json").read_text())
+                    for record in self.registry["records"]:
+                        if record["kind"] == kind:
+                            for key in deleted:
+                                record["properties"].pop(key)
+                    self.save()
+                    with self.assertRaisesRegex(ValueError, "required metadata"):
+                        self.render()
+
+    @unittest.skipUnless(os.environ.get("QUIPU_TEST_BIN"), "native schema control requires explicit test artifact")
+    def test_native_schema_kind_metadata_deletions_refuse(self):
+        import rdflib
+        a = rdflib.Namespace(module.A)
+        valid = self.render()
+        data = self.root / "kind-metadata.ttl"
+        args = [os.environ["QUIPU_TEST_BIN"], "validate", "--shapes",
+                str(ROOT / "docs/knowledge/repository-knowledge.shapes.ttl"),
+                "--data", str(data), "--format", "json"]
+        data.write_text(valid)
+        positive = subprocess.run(args, capture_output=True, text=True, cwd=self.root)
+        self.assertEqual(positive.returncode, 0, positive.stderr + positive.stdout)
+        for kind, fields in (("interface", ("interfaceKind", "publicName")),
+                             ("decision", ("status", "supersessionStatus"))):
+            for deleted in ((fields[0],), (fields[1],), fields):
+                with self.subTest(kind=kind, deleted=deleted):
+                    graph = rdflib.Graph().parse(data=valid, format="turtle")
+                    subjects = set(graph.subjects(a.knowledgeKind, rdflib.Literal(kind)))
+                    self.assertTrue(subjects)
+                    for subject in subjects:
+                        for key in deleted:
+                            graph.remove((subject, a[key], None))
+                    data.write_text(graph.serialize(format="turtle"))
+                    result = subprocess.run(args, capture_output=True, text=True, cwd=self.root)
+                    self.assertNotEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_bad_freshness_and_private_summary_refuse(self):
         self.registry["max_age_seconds"] = 0
         self.save()

@@ -90,7 +90,17 @@ def render(source, revision, lookup):
             "https://github.com/scbrown/quipu/blob/" + revision + "/" + path,
             iri=True,
         )
-        for key, value in record.get("properties", {}).items():
+        properties = record.get("properties", {})
+        required = {
+            "interface": {"interfaceKind", "publicName"},
+            "decision": {"status", "supersessionStatus"},
+        }.get(record["kind"], set())
+        if not isinstance(properties, dict) or any(
+            not isinstance(properties.get(key), str) or not properties[key].strip()
+            for key in required
+        ):
+            raise ValueError("required metadata missing for " + record["kind"])
+        for key, value in properties.items():
             if key not in PROPERTIES:
                 raise ValueError("unknown content property")
             if key == "startHereOrder":
