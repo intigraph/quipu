@@ -25,8 +25,11 @@ start a service. Running Quipu can create data; see
 The release installer and archive commands have been exercised with the
 published Linux x86_64 bundles, including an upgrade and removal. The Python
 client has been installed and removed in a dedicated virtual environment.
+Cargo installation of `quipu-ai` 0.15.0 with `full`, alias creation, all three
+version checks, uninstall and owned-alias removal passed on Linux x86_64 in
+a clean HOME with a copied Rust 1.98 toolchain. Unrelated data was preserved.
 
-The Homebrew, apt, Cargo/source-build, Rust-library, Tambo apply/removal and
+The Homebrew, apt, source-checkout, Rust-library, Tambo apply/removal and
 container procedures below are **not yet independently exercised for this
 reference revision**. Their commands are derived from the current source and
 package definitions; they are not a claim of a successful installation on your
@@ -119,21 +122,54 @@ The Quipu formula supplies macOS Intel and Apple Silicon archives:
 
 ```sh
 brew install scbrown/tap/quipu
-quipu --version
-qp --version
-quipu-server --version
+brew_prefix=$(brew --prefix)
+"$brew_prefix/bin/quipu" --version
+"$brew_prefix/bin/qp" --version
+"$brew_prefix/bin/quipu-server" --version
+brew test scbrown/tap/quipu
 brew list --verbose quipu
 ```
 
-**Upgrade:** `brew update && brew upgrade quipu`, then repeat the version checks.
+Use the explicit Homebrew prefix for these checks so a Cargo or manually
+installed executable earlier on `PATH` cannot impersonate the formula.
+The formula test checks the CLI version and the relative `qp` alias.
+
+**Upgrade:**
+
+```sh
+brew update
+brew upgrade quipu
+brew_prefix=$(brew --prefix)
+"$brew_prefix/bin/quipu" --version
+"$brew_prefix/bin/qp" --version
+"$brew_prefix/bin/quipu-server" --version
+brew test scbrown/tap/quipu
+```
+
 Homebrew owns its Cellar paths and command links; do not manually overwrite them.
 The current formula defines no Homebrew service.
 
-**Remove:** `brew uninstall quipu`. `brew cleanup quipu` removes eligible cached
-versions. Use `brew untap scbrown/tap` only if no other installed stack formula
-uses the tap. Homebrew removal does not erase knowledge stores or shared config.
-This macOS method must be verified on macOS; a Linux archive test is not a
-Homebrew installation test.
+**Remove and verify:**
+
+```sh
+brew_prefix=$(brew --prefix)
+brew uninstall quipu
+brew cleanup quipu
+brew list --formula
+for name in quipu qp quipu-server; do
+  test ! -e "$brew_prefix/bin/$name" && test ! -L "$brew_prefix/bin/$name" || exit 1
+done
+```
+
+Confirm that `quipu` is absent from the formula list. The executable/link checks
+above refer to the Homebrew prefix: they do not remove or certify the absence
+of a separate installation elsewhere on `PATH`. Use `brew untap scbrown/tap`
+only if no other installed stack formula uses the tap. Homebrew removal does
+not erase knowledge stores or shared config.
+
+**Verification status: UNVERIFIED on macOS.** The commands match the current
+formula, but have not been exercised for this reference on a clean macOS
+installation. A Linux archive test is not a Homebrew installation test.
 
 ## apt
 
@@ -173,8 +209,9 @@ are controlled separately.
 remove `/etc/apt/sources.list.d/scbrown-stack.list` and
 `/etc/apt/keyrings/scbrown-stack.gpg`, then run `sudo apt update`.
 Package removal does not remove project databases or shared configuration.
-A real disposable Debian/Ubuntu install and purge is required to verify this
-method; unpacking a `.deb` alone does not exercise package-manager scripts.
+**Verification status: UNVERIFIED.** A clean-room Debian/Ubuntu install and
+purge is still required; the disposable guest bootstrap is currently blocked.
+Unpacking a `.deb` alone does not exercise package-manager scripts.
 
 ## Cargo executable installation
 
