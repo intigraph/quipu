@@ -136,3 +136,29 @@ fn restating_a_value_or_adding_another_property_does_not_own_stored_debt() {
     let mention = vec![reference(&store, "module", "mentions", "quipu")];
     write(&mut store, LABELS, &mention).unwrap();
 }
+
+/// grant (#732): an IRI may contain parentheses. A new second value under
+/// such a predicate must still be owned, read forward or inversely.
+#[test]
+fn a_new_value_under_a_parenthesised_predicate_is_still_owned() {
+    let shapes = r#"
+@prefix ex: <https://example.org/2i6/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+ex:Paren a sh:NodeShape; sh:targetClass ex:Module;
+ sh:property [sh:path <https://example.org/2i6/p(x)>; sh:maxCount 1];
+ sh:property [sh:path [sh:inversePath <https://example.org/2i6/q(y)>]; sh:maxCount 1].
+"#;
+    let mut store = Store::open_in_memory().unwrap();
+    let first = vec![
+        reference(&store, "module", TYPE, "Module"),
+        fact(&store, "module", "p(x)", Value::Str("one".into())),
+        reference(&store, "first", "q(y)", "module"),
+    ];
+    write(&mut store, shapes, &first).unwrap();
+    let forward = vec![fact(&store, "module", "p(x)", Value::Str("two".into()))];
+    let result = write(&mut store, shapes, &forward);
+    assert!(refused_on(&result, "module"), "forward: {result:?}");
+    let inverse = vec![reference(&store, "second", "q(y)", "module")];
+    let result = write(&mut store, shapes, &inverse);
+    assert!(refused_on(&result, "module"), "inverse: {result:?}");
+}
