@@ -363,18 +363,61 @@ pub fn publish(plan: &RenderPlan, destination: &Path, dry_run: bool) -> Result<C
             return Err(invalid("destination changed during staging"));
         }
         swap(&parent, &stage.name, Path::new(name), before.dir.is_some())?;
+        // The new revision is published from here on. Every fallible step below
+        // reports publication UNKNOWN with the destination and the retained
+        // previous root, and keeps cleanup off: on uncertain completion neither
+        // root is deleted or retried.
         stage.cleanup = false;
-        if before.dir.is_some() && !same(&before, &current(&parent, &stage.name)?)? {
-            // Preserve BOTH directories if an uncooperative writer changed the
-            // old root. Do not delete its data or blindly overwrite a new root.
-            return Err(invalid(format!(
-                "publication UNKNOWN: old destination changed; retained {}",
-                stage.name.display()
-            )));
+        #[cfg(test)]
+        post_swap_faults::AFTER_SWAP.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().take() {
+                hook(&parent, &stage.name);
+            }
+        });
+        let retained = parent_path.join(&stage.name);
+        let unknown = |why: String| {
+            invalid(format!(
+                "publication UNKNOWN: {why}; {} now holds the new revision; {}",
+                root.display(),
+                if before.dir.is_some() {
+                    format!("previous revision retained at {}", retained.display())
+                } else {
+                    "no previous revision existed".to_string()
+                }
+            ))
+        };
+        if before.dir.is_some() {
+            let old = current(&parent, &stage.name)
+                .map_err(|e| unknown(format!("old destination unverifiable ({e})")))?;
+            if !same(&before, &old)
+                .map_err(|e| unknown(format!("old destination unverifiable ({e})")))?
+            {
+                // Preserve BOTH directories if an uncooperative writer changed the
+                // old root. Do not delete its data or blindly overwrite a new root.
+                return Err(unknown("old destination changed".to_string()));
+            }
         }
-        lock.sync_all().map_err(io)?;
+        let synced = lock.sync_all();
+        #[cfg(test)]
+        let synced = if post_swap_faults::FAIL_SYNC.with(std::cell::Cell::get) {
+            Err(std::io::Error::other("injected parent sync failure"))
+        } else {
+            synced
+        };
+        synced.map_err(|e| unknown(format!("parent sync failed ({e})")))?;
         stage.cleanup = true;
         Ok(result)
+    }
+}
+/// Test-only faults for the post-swap window: an uncooperative writer touching
+/// the old root, and a failing parent sync, cannot be raced deterministically.
+#[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
+pub(super) mod post_swap_faults {
+    use std::cell::{Cell, RefCell};
+    type Hook = Box<dyn FnOnce(&cap_std::fs::Dir, &std::path::Path)>;
+    thread_local! {
+        pub(in crate::render) static AFTER_SWAP: RefCell<Option<Hook>> = RefCell::new(None);
+        pub(in crate::render) static FAIL_SYNC: Cell<bool> = const { Cell::new(false) };
     }
 }
 #[cfg(any(target_os = "linux", target_os = "macos"))]

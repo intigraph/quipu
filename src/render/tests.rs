@@ -371,3 +371,148 @@ fn committed_mid_render_write_cannot_change_present_or_historical_snapshot() {
         );
     }
 }
+
+// Post-swap publication must never read as an ordinary failure: once the swap
+// succeeds the new revision is live, so every later error says UNKNOWN and names
+// both roots, and neither root is deleted (Ian's review of #559 at b6b3ca82).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod post_swap {
+    use super::*;
+    use crate::render::publish::post_swap_faults::{AFTER_SWAP, FAIL_SYNC};
+    use std::path::{Path, PathBuf};
+
+    fn plan(text: &str) -> RenderPlan {
+        let store = Store::open_in_memory().unwrap();
+        prepare(
+            &store,
+            &request(&format!(
+                "SELECT ?content WHERE {{ VALUES ?content {{ '{text}' }} }}"
+            )),
+        )
+        .unwrap()
+    }
+    fn report(dir: &Path) -> String {
+        std::fs::read_to_string(dir.join("report.md")).unwrap()
+    }
+    fn stages(parent: &Path) -> Vec<PathBuf> {
+        std::fs::read_dir(parent)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(".quipu-render-stage-"))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pre_swap_refusal_is_ordinary_and_mutates_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("owned");
+        std::fs::create_dir(&dest).unwrap();
+        std::fs::write(dest.join("stray.txt"), b"not managed").unwrap();
+        let err = publish::publish(&plan("one"), &dest, false)
+            .unwrap_err()
+            .to_string();
+        assert!(!err.contains("UNKNOWN"), "{err}");
+        assert!(dest.join("stray.txt").exists() && !dest.join("report.md").exists());
+        assert!(stages(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn normal_publication_succeeds_and_leaves_no_stage() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("owned");
+        publish::publish(&plan("one"), &dest, false).unwrap();
+        publish::publish(&plan("two"), &dest, false).unwrap();
+        assert_eq!(report(&dest), "two");
+        assert!(stages(dir.path()).is_empty());
+    }
+
+    #[test]
+    fn post_swap_old_root_validation_failure_reports_unknown_and_both_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("owned");
+        publish::publish(&plan("one"), &dest, false).unwrap();
+        // An uncooperative writer touches the old root after the swap.
+        AFTER_SWAP.with(|hook| {
+            *hook.borrow_mut() = Some(Box::new(|parent: &cap_std::fs::Dir, stage: &Path| {
+                parent
+                    .open_dir(stage)
+                    .unwrap()
+                    .write("unknown.txt", b"writer")
+                    .unwrap();
+            }));
+        });
+        let err = publish::publish(&plan("two"), &dest, false)
+            .unwrap_err()
+            .to_string();
+        let stage = stages(dir.path());
+        assert_eq!(stage.len(), 1, "previous root retained, not deleted");
+        assert!(err.contains("publication UNKNOWN"), "{err}");
+        assert!(
+            err.contains(&format!("{} now holds the new revision", dest.display())),
+            "{err}"
+        );
+        assert!(
+            err.contains(&format!(
+                "previous revision retained at {}",
+                stage[0].display()
+            )),
+            "{err}"
+        );
+        assert_eq!(report(&dest), "two");
+        assert_eq!(report(&stage[0]), "one");
+        assert!(stage[0].join("unknown.txt").exists());
+    }
+
+    #[test]
+    fn post_swap_sync_failure_reports_unknown_and_keeps_the_previous_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("owned");
+        publish::publish(&plan("one"), &dest, false).unwrap();
+        FAIL_SYNC.with(|f| f.set(true));
+        let err = publish::publish(&plan("two"), &dest, false)
+            .unwrap_err()
+            .to_string();
+        FAIL_SYNC.with(|f| f.set(false));
+        let stage = stages(dir.path());
+        assert_eq!(stage.len(), 1, "previous root retained, not deleted");
+        assert!(
+            err.contains("publication UNKNOWN: parent sync failed"),
+            "{err}"
+        );
+        assert!(
+            err.contains(&format!("{} now holds the new revision", dest.display())),
+            "{err}"
+        );
+        assert!(
+            err.contains(&format!(
+                "previous revision retained at {}",
+                stage[0].display()
+            )),
+            "{err}"
+        );
+        assert_eq!(report(&dest), "two");
+        assert_eq!(report(&stage[0]), "one");
+    }
+
+    #[test]
+    fn post_swap_sync_failure_on_a_new_destination_says_no_previous_revision() {
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("owned");
+        FAIL_SYNC.with(|f| f.set(true));
+        let err = publish::publish(&plan("one"), &dest, false)
+            .unwrap_err()
+            .to_string();
+        FAIL_SYNC.with(|f| f.set(false));
+        assert!(
+            err.contains("publication UNKNOWN: parent sync failed"),
+            "{err}"
+        );
+        assert!(err.contains("no previous revision existed"), "{err}");
+        assert_eq!(report(&dest), "one");
+        assert!(stages(dir.path()).is_empty());
+    }
+}
