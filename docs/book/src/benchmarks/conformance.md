@@ -399,7 +399,7 @@ The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).
 
 ### Write-path conformance
 
-The same 98 Core cases are also written through the real `/knot` handler, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **85/98** agree with the W3C verdict under every split; **12** diverge under at least one; **1** could not be judged under at least one split (the write gate answered *cannot verify* instead of a SHACL verdict).
+The same 98 Core cases are also written through the real `/knot` handler, whole and split across writes (subject halves, one write per subject, one write per triple, each in both orders). **90/98** agree with the W3C verdict under every split; **7** diverge under at least one; **1** could not be judged under at least one split (the write gate answered *cannot verify* instead of a SHACL verdict).
 A divergence is a case whose final graph violates (or conforms) while the write gate accepted (or refused) every write. These are known defects, listed in the ledger with the splits that expose them; the CI gate fails on any new divergence and on any entry that no longer diverges, so this number can only fall.
 
 | Constraint component | Cases using it | Agree | Diverge | Unjudged |
@@ -408,13 +408,13 @@ A divergence is a case whose final graph violates (or conforms) while the write 
 | `sh:class` | 19 | 13 | 6 | 0 |
 | `sh:closed` | 4 | 3 | 1 | 0 |
 | `sh:datatype` | 28 | 27 | 1 | 0 |
-| `sh:disjoint` | 3 | 1 | 2 | 0 |
+| `sh:disjoint` | 3 | 2 | 1 | 0 |
 | `sh:equals` | 3 | 2 | 1 | 0 |
 | `sh:hasValue` | 5 | 4 | 1 | 0 |
 | `sh:in` | 5 | 3 | 2 | 0 |
 | `sh:languageIn` | 3 | 2 | 1 | 0 |
-| `sh:lessThan` | 3 | 0 | 3 | 0 |
-| `sh:lessThanOrEquals` | 2 | 0 | 2 | 0 |
+| `sh:lessThan` | 3 | 2 | 1 | 0 |
+| `sh:lessThanOrEquals` | 2 | 1 | 1 | 0 |
 | `sh:maxCount` | 13 | 11 | 1 | 1 |
 | `sh:maxExclusive` | 3 | 2 | 1 | 0 |
 | `sh:maxInclusive` | 3 | 2 | 1 | 0 |
@@ -428,9 +428,9 @@ A divergence is a case whose final graph violates (or conforms) while the write 
 | `sh:not` | 4 | 3 | 1 | 0 |
 | `sh:or` | 5 | 4 | 1 | 0 |
 | `sh:pattern` | 6 | 5 | 1 | 0 |
-| `sh:property` | 55 | 46 | 8 | 1 |
+| `sh:property` | 55 | 51 | 3 | 1 |
 | `sh:qualifiedValueShape` | 4 | 3 | 1 | 0 |
-| `sh:uniqueLang` | 3 | 1 | 2 | 0 |
+| `sh:uniqueLang` | 3 | 2 | 1 | 0 |
 | `sh:xone` | 3 | 2 | 1 | 0 |
 
 Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json).

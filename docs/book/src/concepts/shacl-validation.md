@@ -167,15 +167,19 @@ Quipu rejects it with structured feedback:
 This feedback is designed for agents — structured JSON with enough detail
 to fix the problem automatically.
 
-## Cardinality across writes
+## Value sets across writes
 
 A valid delta can still violate a stored upper bound. For example, writing
 `ex:item ex:value "A"` and later `ex:item ex:value "B"` must not bypass
 `sh:maxCount 1` just because each request carries one value.
 
-Write admission checks predicate and inverse-predicate `sh:maxCount` against the staged current
+Write admission checks predicate and inverse-predicate `sh:maxCount`,
+`sh:uniqueLang true`, `sh:disjoint`, `sh:lessThan`, and `sh:lessThanOrEquals`
+against the staged current
 facts inside the same SQLite savepoint as the write. The second distinct
-value is rejected and rolled back. Reasserting an identical RDF term remains
+value is rejected and rolled back. Split writes cannot bypass language-tag
+uniqueness or comparisons between the stored values of two properties.
+Reasserting an identical RDF term remains
 idempotent; retracting the old value and asserting its replacement in one
 transaction is valid. Historical facts remain available.
 
@@ -185,11 +189,11 @@ inline episode shapes, conditional writes with loaded shapes, and configured
 reject/advisory policy. Low-level transactions without explicit shapes or
 write validation configured do not acquire an implicit shape policy.
 
-Cardinality uses each destination graph's own values. ROOT type and subclass
+Value-set validation uses each destination graph's own values. ROOT type and subclass
 context can select targets in a named graph; ROOT property values and unrelated
-third graphs do not contribute to its counts. The context is bounded to touched
+third graphs do not contribute to its sets. The context is bounded to touched
 subjects and referenced objects, with at most 100,000 facts and 1,024 classes.
-Exceeding these limits, or encountering another complex upper-bound property path,
+Exceeding these limits, or encountering another complex value-set property path,
 refuses admission with `cannot verify` rather than accepting partial evidence.
 
 Capability and incoming-context obligations use the batch validator's compiled

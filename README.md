@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" width="200" alt="Quipu logo — knotted strings forming a knowledge graph"/>
+</p>
+
 # quipu
 
 **Quipu is a governed, bitemporal knowledge store for AI coding agents and the

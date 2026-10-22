@@ -100,6 +100,7 @@ impl Store {
         graph: i64,
         retract_source: Option<&str>,
         expected: &[super::conditional::ExpectedValue],
+        set: Option<&super::conditional::SetExpectation>,
     ) -> Result<i64> {
         // Normal graph/authority gates precede the savepoint. Conditional
         // callers share this exact pipeline and its post-rollback evidence.
@@ -124,7 +125,7 @@ impl Store {
         self.set_write_in_progress(true);
         self.conn.execute_batch("SAVEPOINT quipu_transact")?;
         let staged = self
-            .check_expected(graph, expected, datums)
+            .check_expected(graph, expected, datums, set)
             .and_then(|()| {
                 self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source)
             })
