@@ -414,7 +414,10 @@ const ON_VIOLATION_IRIS: [&str; 2] = [
 ];
 
 /// Whether one block, parsed with the prefixes in force at its position, is
-/// entirely emit: every top-level subject has the single policy `"emit"`.
+/// entirely emit: every top-level subject, every declared `sh:NodeShape` and
+/// every targeted shape has the single policy `"emit"`. A shape another block
+/// member references (`sh:node`) is an object, not a root; without the last two
+/// it rode along with its emit referrer and stopped rejecting (ian, #726).
 fn block_is_emit(prefixes: &str, block: &str) -> bool {
     use oxrdf::Term;
     let document = format!("{prefixes}{block}");
@@ -426,9 +429,18 @@ fn block_is_emit(prefixes: &str, block: &str) -> bool {
     };
     let objects: std::collections::HashSet<Term> =
         triples.iter().map(|t| t.object.clone()).collect();
+    const SH: &str = "http://www.w3.org/ns/shacl#";
+    let declared_shape = |t: &oxrdf::Triple| {
+        let predicate = t.predicate.as_str();
+        (predicate == oxrdf::vocab::rdf::TYPE.as_str()
+            && matches!(&t.object, Term::NamedNode(n) if n.as_str() == format!("{SH}NodeShape")))
+            || predicate
+                .strip_prefix(SH)
+                .is_some_and(|local| local.starts_with("target"))
+    };
     let roots: std::collections::BTreeSet<String> = triples
         .iter()
-        .filter(|t| !objects.contains(&Term::from(t.subject.clone())))
+        .filter(|t| !objects.contains(&Term::from(t.subject.clone())) || declared_shape(t))
         .map(|t| t.subject.to_string())
         .collect();
     if roots.is_empty() {

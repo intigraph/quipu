@@ -347,6 +347,29 @@ fn emit_membership_is_read_from_parsed_rdf() {
             "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W ex:X .\n",
             false,
         ),
+        // ian's paired control: E is emit and references H; H is its own
+        // targeted NodeShape with no policy. H is an object of `sh:node`, not
+        // a root, and must not ride along to emit (wu: mixed blocks reject).
+        (
+            "referenced targeted shape",
+            "ex:S a sh:NodeShape ; quipu:onViolation \"emit\" ; sh:targetClass ex:W ; sh:node ex:H . ex:H a sh:NodeShape ; sh:targetClass ex:V ;\n    sh:property [ sh:path ex:label ; sh:maxCount 1 ] .\n",
+            false,
+        ),
+        (
+            "referenced declared shape",
+            "ex:S a sh:NodeShape ; quipu:onViolation \"emit\" ; sh:targetClass ex:W ; sh:node ex:H . ex:H a sh:NodeShape ;\n    sh:property [ sh:path ex:label ; sh:maxCount 1 ] .\n",
+            false,
+        ),
+        (
+            "referenced shape also emit",
+            "ex:S a sh:NodeShape ; quipu:onViolation \"emit\" ; sh:targetClass ex:W ; sh:node ex:H . ex:H a sh:NodeShape ; quipu:onViolation \"emit\" ; sh:targetClass ex:V .\n",
+            true,
+        ),
+        (
+            "inline property shapes only",
+            "ex:S a sh:NodeShape ; quipu:onViolation \"emit\" ; sh:targetClass ex:W ;\n    sh:property [ sh:path ex:label ; sh:maxCount 1 ] .\n",
+            true,
+        ),
         (
             "plain annotation",
             "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W .\n",
@@ -365,4 +388,28 @@ fn emit_membership_is_read_from_parsed_rdf() {
         assert!(home.contains("ex:S a sh:NodeShape"), "{name}");
         assert!(!other.contains("ex:S a sh:NodeShape"), "{name}");
     }
+}
+
+/// The real candidate set from #725 (`shapes/code-entities.ttl` at ccfce041,
+/// vendored byte for byte): exactly its four debt shapes route to emit and
+/// every other `sh:NodeShape` stays reject under the conservative block rule.
+#[test]
+fn pr725_code_entities_routes_exactly_its_debt_shapes() {
+    const PR725: &str = include_str!("../tests/fixtures/shapes/code-entities-pr725-ccfce041.ttl");
+    let split = split_shapes_by_policy(PR725);
+    assert!(split.has_emit);
+    let emit = names(&shapes_of(&split.emit).0);
+    let expected: std::collections::BTreeSet<String> = [
+        "CodeEntityLabelMaxCountDebtShape",
+        "SectionHeadingMaxCountDebtShape",
+        "CommitRequiredMetadataDebtShape",
+        "CodeModuleFilePathDebtShape",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    assert_eq!(emit, expected);
+    let reject = names(&shapes_of(&split.reject).0);
+    assert_eq!(reject.len(), 8, "{reject:?}");
+    assert!(reject.is_disjoint(&expected));
 }
