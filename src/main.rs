@@ -70,6 +70,7 @@ mod cli_pointer;
 mod cli_policy;
 mod cli_propose;
 mod cli_quarantine;
+mod cli_render;
 mod cli_rule_answers;
 mod cli_search;
 mod cli_share_diff;
@@ -164,6 +165,7 @@ fn main() {
         "explain" => cli_explain::cmd_explain(&args, db_path),
         "project" => cli::cmd_project(&args, db_path),
         "report" => cli::cmd_report(&args, db_path),
+        "render" => cli_render::run(&args, db_path),
         "reason" => cli::cmd_reason(&args, db_path),
         "episode" => cli_commands::cmd_episode(&args, db_path, &config.base_ns),
         "retract" => cli_commands::cmd_retract(&args, db_path),
@@ -368,6 +370,8 @@ COMMANDS:
     qp explain <subject-IRI> <predicate-IRI> <object> [--depth N] [--db <path>]
     qp path <cone|backtest|draft> <trajectory-IRI> [options] [--db <path>]
     qp project [--algorithm pagerank] [--seed <IRI>]... [--damping 0.85] [--predicate <IRI>] [--graph <IRI>] [--db <path>]
+    qp render <spec-IRI> --dest <owned-dir> [--valid-at <timestamp>] [--dry-run] [--db <path>|--server <url>]
+    qp render --query <SELECT-or-CONSTRUCT> [--template <text>] [--layout single|per-entity] [--path <template>] --dest <owned-dir>
     qp report [--hubs N] [--surprises N] [--questions N] [--type <IRI>] [--predicate <IRI>] [--db <path>]
     qp reason [--rules <file.ttl>] [--db <path>]
     qp demotions [--graph <premise-IRI>] [--db <path>]
