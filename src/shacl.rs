@@ -436,32 +436,59 @@ impl TurtleLexer {
     }
 
     /// Scan one line, updating bracket depth and literal state; return the
-    /// line with any comment removed (literals and IRIs kept verbatim).
+    /// line with any comment removed and every literal's CONTENT masked, so
+    /// text inside a string can never read as an annotation. The one literal
+    /// kept verbatim is a short `emit`, the annotation's own value.
     fn scan_line(&mut self, line: &str) -> String {
         let chars: Vec<char> = line.chars().collect();
         let mut code = String::with_capacity(line.len());
+        // Content of an open SHORT literal on this line (it cannot span lines).
+        let mut short = String::new();
+        let mask = |text: &str| -> String {
+            if text == "emit" {
+                text.to_owned()
+            } else {
+                "_".repeat(text.chars().count())
+            }
+        };
         let mut i = 0;
         while i < chars.len() {
             let ch = chars[i];
             if let Some((quote, long)) = self.literal {
-                code.push(ch);
                 if ch == '\\' {
-                    if let Some(next) = chars.get(i + 1) {
-                        code.push(*next);
+                    let escaped = if chars.get(i + 1).is_some() {
+                        "__"
+                    } else {
+                        "_"
+                    };
+                    if long {
+                        code.push_str(escaped);
+                    } else {
+                        short.push_str(escaped);
                     }
                     i += 2;
                     continue;
                 }
-                if ch == quote {
-                    if !long {
-                        self.literal = None;
-                    } else if chars.get(i + 1) == Some(&quote) && chars.get(i + 2) == Some(&quote) {
-                        code.push(quote);
-                        code.push(quote);
-                        i += 3;
-                        self.literal = None;
-                        continue;
-                    }
+                if ch == quote && !long {
+                    code.push_str(&mask(&std::mem::take(&mut short)));
+                    code.push(quote);
+                    self.literal = None;
+                    i += 1;
+                    continue;
+                }
+                if ch == quote
+                    && chars.get(i + 1) == Some(&quote)
+                    && chars.get(i + 2) == Some(&quote)
+                {
+                    code.extend([quote; 3]);
+                    i += 3;
+                    self.literal = None;
+                    continue;
+                }
+                if long {
+                    code.push('_');
+                } else {
+                    short.push(ch);
                 }
                 i += 1;
                 continue;
@@ -499,6 +526,7 @@ impl TurtleLexer {
         }
         // A short literal cannot span lines; leaving one open would swallow the
         // rest of the document, so it stays open and the tail fails closed.
+        code.push_str(&mask(&short));
         code
     }
 }

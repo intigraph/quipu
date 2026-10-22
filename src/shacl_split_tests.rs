@@ -254,3 +254,32 @@ fn write_gate_refuses_non_debt_and_emits_debt() {
             .collect::<Vec<_>>()
     );
 }
+
+/// Review of #726: the annotation's TEXT inside any literal form (a
+/// `sh:message`, say) must not route a valid unannotated shape to emit.
+#[test]
+fn annotation_text_inside_a_literal_does_not_emit() {
+    for message in [
+        r#"'''see quipu:onViolation "emit" for advisory shapes'''"#,
+        r#""""see quipu:onViolation "emit" for advisory shapes""""#,
+        r#""see quipu:onViolation \"emit\" for advisory shapes""#,
+        r#"'see quipu:onViolation "emit" for advisory shapes'"#,
+    ] {
+        let doc = format!(
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+             @prefix ex: <http://example.org/> .\n\
+             @prefix quipu: <http://quipu.dev/ontology/> .\n\
+             ex:Hard a sh:NodeShape ;\n    sh:targetClass ex:Thing ;\n    \
+             sh:message {message} ;\n    \
+             sh:property [ sh:path ex:label ; sh:maxCount 1 ] .\n"
+        );
+        let (all, annotated) = shapes_of(&doc);
+        assert!(annotated.is_empty() && all.len() == 1, "oracle: {message}");
+        let split = split_shapes_by_policy(&doc);
+        assert!(!split.has_emit, "routed to emit by a literal: {message}");
+        assert_eq!(
+            names(&shapes_of(&split.reject).0),
+            ["Hard".to_owned()].into_iter().collect()
+        );
+    }
+}
