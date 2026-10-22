@@ -311,12 +311,17 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             .get(3)
             .filter(|s| !s.starts_with("--"))
             .unwrap_or_else(|| {
-                eprintln!("usage: quipu import promote <share-id> [--actor <id>] [--db <path>]");
+                eprintln!(
+                    "usage: quipu import promote <share-id> [--actor <id>] \
+                     [--into <graph-iri> [--retire-from <graph-iri>]] [--db <path>]"
+                );
                 std::process::exit(1);
             });
         let request = quipu::share_import::PromoteImportRequest {
             share_id: share_id.clone(),
             actor: flag_value(args, "--actor").map(String::from),
+            target_graph: flag_value(args, "--into").map(String::from),
+            retire_from: flag_value(args, "--retire-from").map(String::from),
         };
         match quipu::share_import::promote_import(&mut store, &request, &timestamp, None) {
             Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),

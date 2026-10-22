@@ -7,7 +7,11 @@
 
 use std::collections::HashSet;
 
+use crate::Error;
 use crate::error::Result;
+use crate::share_import::{
+    PromoteImportRequest, PromoteImportResult, provenance_source, staging_graph,
+};
 use crate::store::{Datum, Store};
 use crate::types::{Fact, Op};
 
@@ -44,6 +48,195 @@ pub(crate) fn promote_snapshot(
     }
 }
 
+/// Explicitly copy an eligible staging graph into ROOT, or move its subjects
+/// into a target named graph (aegis-27l).
+pub(crate) fn promote_inner(
+    store: &mut Store,
+    request: &PromoteImportRequest,
+    timestamp: &str,
+    authenticated_actor: Option<&str>,
+) -> Result<PromoteImportResult> {
+    let graph_iri = staging_graph(&request.share_id, false)?;
+    let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
+        Error::InvalidValue(format!(
+            "no eligible staged import for {}",
+            request.share_id
+        ))
+    })?;
+    if store.graph_class(graph)?.as_deref() != Some("committed") {
+        return Err(Error::InvalidValue(format!(
+            "staging graph is not committed: {graph_iri}"
+        )));
+    }
+    crate::time::check_request_deadline()?;
+    let source = provenance_source(
+        "share-promotion",
+        &request.share_id,
+        request.actor.as_deref(),
+    );
+    let (tx_id, count, suppressed, moved) = match request.target_graph.as_deref() {
+        None if request.retire_from.is_some() => {
+            return Err(Error::InvalidValue(
+                "retire_from requires target_graph: a ROOT promotion moves nothing".into(),
+            ));
+        }
+        None => {
+            let (tx, count, suppressed) = crate::share_promotion::promote_snapshot(
+                store,
+                graph,
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (tx, count, suppressed, None)
+        }
+        Some(target) => {
+            let moved = crate::share_promotion::promote_subjects_into_graph(
+                store,
+                graph,
+                target,
+                request.retire_from.as_deref(),
+                timestamp,
+                authenticated_actor,
+                &source,
+            )?;
+            (
+                moved.tx_id,
+                moved.asserted,
+                0,
+                Some((target.to_string(), moved)),
+            )
+        }
+    };
+    // AFTER the data: if installing fails, the hold survives and promoting
+    // again retries it.
+    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
+    let unchanged = moved.as_ref().is_some_and(|(_, m)| m.tx_id == 0);
+    Ok(PromoteImportResult {
+        outcome: if unchanged { "unchanged" } else { "promoted" }.into(),
+        share_id: request.share_id.clone(),
+        staging_graph: graph_iri,
+        tx_id,
+        triples: count,
+        suppressed_retractions: suppressed,
+        queries,
+        retired: moved
+            .as_ref()
+            .and_then(|(_, m)| m.retire_from.as_ref().map(|_| m.retired)),
+        replaced: moved.as_ref().map(|(_, m)| m.replaced),
+        target_graph: moved.map(|(target, _)| target),
+    })
+}
+
+/// What a subject-scoped promotion changed.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SubjectMove {
+    /// 0 when nothing needed to change (an idempotent repeat).
+    pub tx_id: i64,
+    pub asserted: usize,
+    pub replaced: usize,
+    pub retired: usize,
+    pub retire_from: Option<String>,
+}
+
+/// Promote a staged share into the named graph `target`, as a MOVE of exactly
+/// the share's subjects (aegis-27l: rb3 B3, tg5 F5):
+///
+/// - in `target`, each staged subject ends up holding exactly its staged facts;
+///   facts of every other subject in `target` are untouched (this is not
+///   [`crate::project_graph::promote_into_graph`]'s whole-graph diff, which
+///   retracts whatever the share does not mention);
+/// - with `retire_from`, the same subjects' current facts are retracted from that
+///   graph; its other subjects are untouched.
+///
+/// One transaction per graph, both inside the caller's savepoint, so a failure
+/// or an expired request deadline rolls back the move whole. The writer is
+/// bounded the way /import is (aegis-oa5): `check_request_deadline` between the
+/// steps, never a partial state to resume. A share too big for one budget is
+/// split by the caller into smaller shares.
+pub(crate) fn promote_subjects_into_graph(
+    store: &mut Store,
+    staging: i64,
+    target: &str,
+    retire_from: Option<&str>,
+    timestamp: &str,
+    actor: Option<&str>,
+    source: &str,
+) -> Result<SubjectMove> {
+    if retire_from == Some(target) {
+        return Err(crate::Error::InvalidValue(
+            "retire_from must differ from target_graph: a graph cannot be moved into itself".into(),
+        ));
+    }
+    let wanted = store.current_facts_in_graph(staging)?;
+    let subjects: HashSet<i64> = wanted.iter().map(|f| f.entity).collect();
+    let key = |f: &Fact| (f.entity, f.attribute, f.value.to_bytes());
+    let datum = |f: &Fact, op| Datum {
+        entity: f.entity,
+        attribute: f.attribute,
+        value: f.value.clone(),
+        valid_from: timestamp.to_string(),
+        valid_to: None,
+        op,
+    };
+    crate::time::check_request_deadline()?;
+    let g = store.graph_create(target)?;
+    let have: Vec<Fact> = store
+        .current_facts_in_graph(g)?
+        .into_iter()
+        .filter(|f| subjects.contains(&f.entity))
+        .collect();
+    let wanted_keys: HashSet<_> = wanted.iter().map(key).collect();
+    let have_keys: HashSet<_> = have.iter().map(key).collect();
+    let mut changes: Vec<Datum> = have
+        .iter()
+        .filter(|f| !wanted_keys.contains(&key(f)))
+        .map(|f| datum(f, Op::Retract))
+        .collect();
+    let replaced = changes.len();
+    changes.extend(
+        wanted
+            .iter()
+            .filter(|f| !have_keys.contains(&key(f)))
+            .map(|f| datum(f, Op::Assert)),
+    );
+    let asserted = changes.len() - replaced;
+    let mut moved = SubjectMove {
+        asserted,
+        replaced,
+        retire_from: retire_from.map(String::from),
+        ..SubjectMove::default()
+    };
+    crate::time::check_request_deadline()?;
+    if !changes.is_empty() {
+        moved.tx_id = store.transact_to_graph(&changes, timestamp, actor, Some(source), g)?;
+    }
+    #[cfg(test)]
+    crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::TargetWritten);
+    if let Some(from) = retire_from {
+        // An unknown source graph holds nothing to retire; never create one.
+        if let Some(b) = store.lookup(from)? {
+            crate::time::check_request_deadline()?;
+            let retire: Vec<Datum> = store
+                .current_facts_in_graph(b)?
+                .iter()
+                .filter(|f| subjects.contains(&f.entity))
+                .map(|f| datum(f, Op::Retract))
+                .collect();
+            moved.retired = retire.len();
+            if !retire.is_empty() {
+                let tx = store.transact_to_graph(&retire, timestamp, actor, Some(source), b)?;
+                moved.tx_id = moved.tx_id.max(tx);
+            }
+        }
+    }
+    // No check here: the caller's final check, before the savepoint RELEASE,
+    // covers this retirement, the query release and the review record.
+    #[cfg(test)]
+    crate::share_import::test_hooks::at(crate::share_import::test_hooks::Boundary::Retired);
+    Ok(moved)
+}
+
 fn without_retracted_root_facts(
     store: &Store,
     facts: &[Fact],
@@ -78,109 +271,5 @@ fn without_retracted_root_facts(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::share_import::{PromoteImportRequest, promote_import};
-    use crate::types::Value;
-
-    const TS: &str = "2026-09-24T00:00:00Z";
-    const SHARE: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-    fn setup() -> (Store, i64, i64, i64, PromoteImportRequest) {
-        let mut store = Store::open_in_memory().unwrap();
-        let graph = store
-            .graph_create(&format!("urn:quipu:import:staging:{}", &SHARE[7..]))
-            .unwrap();
-        let e = store.intern("https://example.org/entity").unwrap();
-        let a = store.intern("https://example.org/value").unwrap();
-        let datums = ["old", "different"].map(|v| Datum {
-            entity: e,
-            attribute: a,
-            value: Value::Str(v.into()),
-            valid_from: TS.into(),
-            valid_to: None,
-            op: Op::Assert,
-        });
-        store
-            .transact_to_graph(&datums, TS, None, Some("pack"), graph)
-            .unwrap();
-        (
-            store,
-            graph,
-            e,
-            a,
-            PromoteImportRequest {
-                share_id: SHARE.into(),
-                actor: None,
-            },
-        )
-    }
-
-    #[test]
-    fn stale_promotion_preserves_retraction_and_source_membership() {
-        let (mut store, graph, e, a, request) = setup();
-        promote_import(&mut store, &request, TS, None).unwrap();
-        store
-            .retract_triples(
-                e,
-                Some(a),
-                Some(&Value::Str("old".into())),
-                TS,
-                None,
-                true,
-                None,
-            )
-            .unwrap();
-        for _ in 0..2 {
-            let result = promote_import(&mut store, &request, TS, None).unwrap();
-            assert_eq!(result.suppressed_retractions, 1);
-            let root = store.current_facts().unwrap();
-            assert_eq!(root.len(), 1);
-            assert_eq!(root[0].value, Value::Str("different".into()));
-            assert_eq!(store.current_facts_in_graph(graph).unwrap().len(), 2);
-        }
-        // A local, explicit correction can restore a fact; pack reload cannot.
-        store
-            .transact(
-                &[Datum {
-                    entity: e,
-                    attribute: a,
-                    value: Value::Str("old".into()),
-                    valid_from: TS.into(),
-                    valid_to: None,
-                    op: Op::Assert,
-                }],
-                TS,
-                None,
-                Some("local correction"),
-            )
-            .unwrap();
-        let result = promote_import(&mut store, &request, TS, None).unwrap();
-        assert_eq!(result.suppressed_retractions, 0);
-        assert_eq!(store.current_facts().unwrap().len(), 2);
-    }
-
-    #[test]
-    fn another_graphs_retraction_does_not_hide_root_content() {
-        let (mut store, _, e, a, request) = setup();
-        let other = store.graph_create("urn:other").unwrap();
-        let mut datum = Datum {
-            entity: e,
-            attribute: a,
-            value: Value::Str("old".into()),
-            valid_from: TS.into(),
-            valid_to: None,
-            op: Op::Assert,
-        };
-        store
-            .transact_to_graph(&[datum.clone()], TS, None, None, other)
-            .unwrap();
-        datum.op = Op::Retract;
-        store
-            .transact_to_graph(&[datum], TS, None, None, other)
-            .unwrap();
-        let result = promote_import(&mut store, &request, TS, None).unwrap();
-        assert_eq!(result.suppressed_retractions, 0);
-        assert_eq!(store.current_facts().unwrap().len(), 2);
-    }
-}
+#[path = "share_promotion_tests.rs"]
+mod tests;
