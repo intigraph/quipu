@@ -35,12 +35,17 @@ fn key_of_subject(s: &NamedOrBlankNode) -> String {
     }
 }
 
+// Not a `match`: the set of `Term` variants depends on oxrdf's features (an
+// RDF 1.2 triple term exists only in some builds), so a wildcard arm is either
+// single-variant or required, depending on the build.
 fn key_of_term(t: &Term) -> Option<String> {
-    match t {
-        Term::NamedNode(n) => Some(n.as_str().to_string()),
-        Term::BlankNode(b) => Some(format!("_:{}", b.as_str())),
-        _ => None,
+    if let Term::NamedNode(n) = t {
+        return Some(n.as_str().to_string());
     }
+    if let Term::BlankNode(b) = t {
+        return Some(format!("_:{}", b.as_str()));
+    }
+    None
 }
 
 /// The first cycle in the shape-reference graph of `shapes_turtle`, as the
