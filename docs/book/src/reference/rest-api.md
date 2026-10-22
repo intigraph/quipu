@@ -777,6 +777,13 @@ A supplied `graph` field, including `null` or ROOT's IRI, is refused with HTTP
   Ref-holding predicate is a loud 400, not a mis-shaped write. `{"str": "..."}`
   states that a literal is intended and disarms that heuristic.
 
+When write validation is enabled, SET validates the replacement against loaded
+SHACL shapes, including the existing subject's types. A tagged IRI does not
+bypass a string datatype constraint. Refusal preserves the previous value.
+Explicit operation shapes remain enforced when persistent validation is off.
+A concurrent change to the complete predicate slot produces a conditional-write
+conflict instead of silently overwriting a value the request did not observe.
+
 ### `POST /validate`
 
 Dry-run SHACL validation.
@@ -1365,6 +1372,40 @@ curl -s localhost:3030/project -X POST \
   -H "Content-Type: application/json" \
   -d '{"algorithm": "in_degree", "limit": 10}'
 ```
+
+### `POST /render`
+
+Prepare a deterministic markdown file plan from a stored specification or an
+ad-hoc specification. This protected computation requires an accepted bearer;
+it remains a pooled read-only endpoint, including on read-only servers. Missing
+or invalid credentials refuse, and open-write mode does not open this route.
+The server neither writes files nor accepts a destination. The CLI declares `cli-render` in
+`X-Quipu-Client` and publishes the verified plan locally.
+
+```json
+{
+  "adhoc": {
+    "query": "SELECT ?title WHERE { VALUES ?title { 'Example' } }",
+    "template": "# {{ rows[0].title }}",
+    "layout": "single",
+    "path": "report.md"
+  }
+}
+```
+
+Pass `spec` as an absolute specification IRI instead of `adhoc`. Optional
+`graph` selects the same default dataset as `/query`; optional `valid_at` is an
+ISO timestamp. Unknown fields, including `dest` and `dry_run`, refuse rather
+than being ignored. Existing query floors, truncation and time-budget guards
+apply. Incomplete data cannot authorize a deletion.
+
+The response contains `schema`, `spec`, `source_tx`, `valid_at` and `files`.
+Each file has base64 bytes, a `sha256:` content address and a mode. Output is
+bounded to 2,000 files and 16 MiB of decoded bytes. The client verifies the whole
+plan and the destination ownership manifest before atomic publication. The
+[render reference](render.md) explains includes, temporal snapshots and local
+refusal/no-op behavior. Preparing a plan is not a publication or a delivery
+receipt.
 
 ### `GET|POST /report`
 

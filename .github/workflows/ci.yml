@@ -82,6 +82,11 @@ jobs:
   test:
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    env:
+      # Serial feature builds must fit on the hosted runner together.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     strategy:
       matrix:
         include:
@@ -123,12 +128,22 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-test-${{ matrix.name }}-${{ hashFiles('**/Cargo.lock') }}
+          # A new, sources-only namespace cannot restore old target archives.
+          key: ${{ runner.os }}-cargo-test-sources-v2-${{ matrix.name }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-${{ matrix.name }}-
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-test-sources-v2-${{ matrix.name }}-
       - run: cargo test ${{ matrix.flags }}
+      - name: Free completed test artifacts before OWL
+        if: matrix.name == 'shacl'
+        run: |
+          set -euo pipefail
+          {
+            echo 'Disk before OWL cleanup'
+            df -h / "$GITHUB_WORKSPACE"
+            cargo clean
+            echo 'Disk after OWL cleanup'
+            df -h / "$GITHUB_WORKSPACE"
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Test owl configuration in the shacl runner
         if: matrix.name == 'shacl'
         run: cargo test --features shacl,owl

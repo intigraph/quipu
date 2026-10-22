@@ -11,11 +11,12 @@ use super::Validator;
 use crate::{Error, Result};
 
 pub(crate) struct CardinalityPlan {
-    pub(crate) has_upper_bound: bool,
+    pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
+    pub(crate) subject_target_predicates: BTreeSet<String>,
     pub(crate) node_reference_predicates: BTreeSet<String>,
 }
 
@@ -31,11 +32,12 @@ impl Validator {
             .collect();
         let mut seen = HashSet::new();
         let mut plan = CardinalityPlan {
-            has_upper_bound: false,
+            has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
+            subject_target_predicates: BTreeSet::new(),
             node_reference_predicates: BTreeSet::new(),
         };
         while let Some(index) = pending.pop() {
@@ -49,11 +51,18 @@ impl Validator {
                 continue;
             }
             for target in shape.targets() {
-                if let Target::ObjectsOf(predicate) = target {
-                    plan.incoming_predicates
-                        .insert(predicate.as_str().to_owned());
-                    plan.object_target_predicates
-                        .insert(predicate.as_str().to_owned());
+                match target {
+                    Target::ObjectsOf(predicate) => {
+                        plan.incoming_predicates
+                            .insert(predicate.as_str().to_owned());
+                        plan.object_target_predicates
+                            .insert(predicate.as_str().to_owned());
+                    }
+                    Target::SubjectsOf(predicate) => {
+                        plan.subject_target_predicates
+                            .insert(predicate.as_str().to_owned());
+                    }
+                    _ => {}
                 }
             }
             pending.extend(shape.property_shapes().iter().copied());
@@ -79,9 +88,17 @@ impl Validator {
                 if matches!(component, IRComponent::Class(_)) {
                     plan.has_class_constraint = true;
                 }
+                // sh:uniqueLang false imposes nothing (aegis-7ur8).
+                if matches!(component, IRComponent::UniqueLang(value) if !value.unique_lang()) {
+                    continue;
+                }
                 match component {
-                    IRComponent::MaxCount(_) => {
-                        plan.has_upper_bound = true;
+                    IRComponent::MaxCount(_)
+                    | IRComponent::UniqueLang(_)
+                    | IRComponent::Disjoint(_)
+                    | IRComponent::LessThan(_)
+                    | IRComponent::LessThanOrEquals(_) => {
+                        plan.has_value_set_constraint = true;
                         match shape.path() {
                             None | Some(SHACLPath::Predicate { .. }) => {}
                             Some(SHACLPath::Inverse { path }) => {
@@ -118,5 +135,7 @@ impl Validator {
 }
 
 fn unsupported_path() -> Error {
-    Error::CannotVerify("post-state maxCount requires a predicate or inverse predicate path".into())
+    Error::CannotVerify(
+        "post-state value-set constraints require a predicate or inverse predicate path".into(),
+    )
 }

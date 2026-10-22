@@ -1,0 +1,6 @@
+Script started on 2026-10-21 14:47:48-04:00 [COMMAND="stty -onlcr && python3 -B run.py --before "$BEFORE" --after "$AFTER"" <not executed on terminal>]
+Input: one focus, two distinct English literals; sh:uniqueLang true.
+{"lane": "before", "batch_conforms": false, "split_conforms": {"per_triple": true, "per_triple_reversed": true}, "weak_control_conforms": true}
+{"lane": "after", "batch_conforms": false, "split_conforms": {"per_triple": false, "per_triple_reversed": false}, "weak_control_conforms": true}
+
+Script done on 2026-10-21 14:47:48-04:00 [COMMAND_EXIT_CODE="0"]

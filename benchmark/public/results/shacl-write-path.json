@@ -21,8 +21,8 @@
    "diverges": 1
   },
   "disjoint": {
-   "diverges": 2,
-   "agrees": 1
+   "diverges": 1,
+   "agrees": 2
   },
   "equals": {
    "diverges": 1,
@@ -41,10 +41,12 @@
    "agrees": 2
   },
   "lessThan": {
-   "diverges": 3
+   "diverges": 1,
+   "agrees": 2
   },
   "lessThanOrEquals": {
-   "diverges": 2
+   "diverges": 1,
+   "agrees": 1
   },
   "maxCount": {
    "agrees": 11,
@@ -101,8 +103,8 @@
    "diverges": 1
   },
   "property": {
-   "agrees": 46,
-   "diverges": 8,
+   "agrees": 51,
+   "diverges": 3,
    "write_error": 1
   },
   "qualifiedValueShape": {
@@ -110,8 +112,8 @@
    "agrees": 3
   },
   "uniqueLang": {
-   "diverges": 2,
-   "agrees": 1
+   "diverges": 1,
+   "agrees": 2
   },
   "xone": {
    "diverges": 1,
@@ -139,29 +141,9 @@
    "class": "class-path-unexplained",
    "item": "aegis-kaj"
   },
-  "core/property/disjoint-001#disjoint-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
-  "core/property/lessThan-001#lessThan-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
-  "core/property/lessThan-002#lessThan-002": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
-  "core/property/lessThanOrEquals-001#lessThanOrEquals-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
-  },
   "core/property/property-001#property-001": {
    "class": "class-path-unexplained",
    "item": "aegis-kaj"
-  },
-  "core/property/uniqueLang-001#uniqueLang-001": {
-   "class": "cross-write-value-set",
-   "item": "aegis-7ur8"
   },
   "core/targets/targetClassImplicit-001#targetClassImplicit-001": {
    "class": "class-path-unexplained",
@@ -238,38 +220,6 @@
    "per_triple_reversed"
   ],
   [
-   "core/property/disjoint-001#disjoint-001",
-   "per_triple"
-  ],
-  [
-   "core/property/disjoint-001#disjoint-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/property/lessThan-001#lessThan-001",
-   "per_triple"
-  ],
-  [
-   "core/property/lessThan-001#lessThan-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/property/lessThan-002#lessThan-002",
-   "per_triple"
-  ],
-  [
-   "core/property/lessThan-002#lessThan-002",
-   "per_triple_reversed"
-  ],
-  [
-   "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
-   "per_triple"
-  ],
-  [
-   "core/property/lessThanOrEquals-001#lessThanOrEquals-001",
-   "per_triple_reversed"
-  ],
-  [
    "core/property/property-001#property-001",
    "per_subject"
   ],
@@ -283,14 +233,6 @@
   ],
   [
    "core/property/property-001#property-001",
-   "per_triple_reversed"
-  ],
-  [
-   "core/property/uniqueLang-001#uniqueLang-001",
-   "per_triple"
-  ],
-  [
-   "core/property/uniqueLang-001#uniqueLang-001",
    "per_triple_reversed"
   ],
   [
@@ -330,32 +272,32 @@
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_subject",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_subject_reversed",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_triple",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_triple_reversed",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "subject_halves",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "subject_halves_reversed",
-   "cannot verify: post-state maxCount requires a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
   ]
  ]
 }

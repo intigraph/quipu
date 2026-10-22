@@ -70,6 +70,7 @@ mod rdf_scope;
 pub mod read_pin;
 pub mod reasoner;
 pub mod reconcile;
+pub mod render;
 pub mod report;
 pub mod request_usage;
 pub mod resolution;
@@ -119,6 +120,7 @@ pub mod share_diff;
 pub mod promotion_control;
 pub mod share_alignments;
 pub mod share_import;
+pub(crate) mod share_import_resolve;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
 pub mod share_merge_decisions;

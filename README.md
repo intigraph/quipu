@@ -1,11 +1,13 @@
+<p align="center">
+  <img src="assets/logo.svg" width="200" alt="Quipu logo — knotted strings forming a knowledge graph"/>
+</p>
+
 # quipu
 
 **Quipu is a governed, bitemporal knowledge store for AI coding agents and the
 people who run them.** It can check writes against your rules, records where each fact came from, and answers what was true when. *Bitemporal* means keeping both
 when a fact was recorded and, when supplied, when it was true.
 
-Write enforcement is opt-in: `shacl.validate_on_write` and `governance.enforce_on_write`
-default to `false` ([configuration](https://scbrown.github.io/quipu/getting-started/configuration.html)).
 The [60-second demo](docs/demos/governed-memory-v0.13.0/) shows an enabled gate,
 a refused write, corrected provenance, and a valid-time read.
 
@@ -32,7 +34,7 @@ Published targets: Linux and macOS, x86_64 and arm64.
 
 Set `STACK_INSTALL_ROOT` on the receiving shell for another prefix.
 Pinned releases, alternatives, configuration and removal are in the
-[installation and usage reference](docs/installation-reference.md).
+[installation, upgrades and removal](https://scbrown.github.io/quipu/getting-started/installation.html).
 
 ## Try it
 
@@ -80,7 +82,8 @@ Quipu is for.
 
 - [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
-- [Detailed examples and agent setup](docs/installation-reference.md).
+- [Quick Start examples](https://scbrown.github.io/quipu/getting-started/quick-start.html).
+- [Agent Setup](https://scbrown.github.io/quipu/getting-started/agent-setup.html).
 
 ![Repository pendants compose; dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
 
@@ -102,8 +105,8 @@ when.
 | [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
 | [quechua](https://github.com/scbrown/quechua) | shared vocabulary and shapes for interoperable knowledge |
 | [chaski](https://github.com/scbrown/chaski) | reacts to graph changes and delivers governed notifications |
-| [bobbin](https://github.com/scbrown/bobbin) | searches your code and can include related knowledge from Quipu |
-| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to check changes |
+| [bobbin](https://github.com/scbrown/bobbin) | indexes your codebase and injects context from that index and Quipu knowledge |
+| [yupana](https://github.com/scbrown/yupana) | shows code impact and can read policies from Quipu to govern agent actions |
 | [desire-path](https://github.com/scbrown/desire-path) | turns agent mistakes into feature requests; works on its own without Quipu |
 | [seeds](https://github.com/scbrown/seeds) | a work item tracker backed by the Quipu knowledge base |
 | [shantytown](https://github.com/scbrown/shantytown) | runs crews of AI agents on work items, triggered by hand, on a schedule or by events; can share work and memory through Quipu |
