@@ -130,7 +130,7 @@ impl Store {
                 self.stage_and_guard(datums, timestamp, actor, source, graph, retract_source)
             })
             .and_then(|staged| {
-                self.enforce_shacl_poststate(datums, graph, !expected.is_empty())
+                self.enforce_shacl_poststate(datums, graph, staged.tx_id, !expected.is_empty())
                     .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
                 crate::promotion_control::claim_commit(source)?;
                 Ok(staged)
