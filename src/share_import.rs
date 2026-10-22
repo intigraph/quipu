@@ -161,6 +161,14 @@ pub struct PromoteImportRequest {
     pub share_id: String,
     #[serde(default)]
     pub actor: Option<String>,
+    /// Promote into this named graph instead of ROOT, replacing ONLY the staged
+    /// share's subjects there; the target's other subjects are untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_graph: Option<String>,
+    /// With `target_graph`: retract exactly those subjects' facts from this
+    /// source graph in the same transaction (a move, never a whole-graph replace).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retire_from: Option<String>,
 }
 
 /// Result of explicitly promoting a staged graph into ROOT.
@@ -177,6 +185,15 @@ pub struct PromoteImportResult {
     /// absent when the share carried none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queries: Option<crate::share_queries::QueryImport>,
+    /// The named graph promoted into, when not ROOT.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_graph: Option<String>,
+    /// Facts retracted from `retire_from` for the moved subjects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retired: Option<usize>,
+    /// Target facts of the moved subjects that the staged facts superseded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaced: Option<usize>,
 }
 
 fn hash_suffix(value: &str) -> Result<&str> {
@@ -186,7 +203,7 @@ fn hash_suffix(value: &str) -> Result<&str> {
         .ok_or_else(|| Error::InvalidValue(format!("invalid sha256 identifier: {value}")))
 }
 
-fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
+pub(crate) fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
     let hash = hash_suffix(share_id)?;
     let kind = if quarantine { "quarantine" } else { "staging" };
     Ok(format!("urn:quipu:import:{kind}:{hash}"))
@@ -196,7 +213,7 @@ fn import_id(share_id: &str) -> Result<String> {
     Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
 }
 
-fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
+pub(crate) fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
     claim.map_or_else(
         || format!("{prefix}:{id}"),
         |actor| format!("{prefix}:{id}:claimed-actor={actor}"),
@@ -563,50 +580,7 @@ pub(crate) fn import_inner(
     })
 }
 
-/// Explicitly copy an eligible staging graph into ROOT.
-pub(crate) fn promote_inner(
-    store: &mut Store,
-    request: &PromoteImportRequest,
-    timestamp: &str,
-    authenticated_actor: Option<&str>,
-) -> Result<PromoteImportResult> {
-    let graph_iri = staging_graph(&request.share_id, false)?;
-    let graph = store.lookup(&graph_iri)?.ok_or_else(|| {
-        Error::InvalidValue(format!(
-            "no eligible staged import for {}",
-            request.share_id
-        ))
-    })?;
-    if store.graph_class(graph)?.as_deref() != Some("committed") {
-        return Err(Error::InvalidValue(format!(
-            "staging graph is not committed: {graph_iri}"
-        )));
-    }
-    crate::time::check_request_deadline()?;
-    let (tx_id, count, suppressed) = crate::share_promotion::promote_snapshot(
-        store,
-        graph,
-        timestamp,
-        authenticated_actor,
-        &provenance_source(
-            "share-promotion",
-            &request.share_id,
-            request.actor.as_deref(),
-        ),
-    )?;
-    // AFTER the data: if installing fails, the hold survives and promoting
-    // again retries it.
-    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
-    Ok(PromoteImportResult {
-        outcome: "promoted".into(),
-        share_id: request.share_id.clone(),
-        staging_graph: graph_iri,
-        tx_id,
-        triples: count,
-        suppressed_retractions: suppressed,
-        queries,
-    })
-}
+pub(crate) use crate::share_promotion::promote_inner;
 
 /// Test-only seams at the import's phase boundaries (aegis-oa5).
 #[cfg(test)]

@@ -125,6 +125,8 @@ fn nonempty_records_are_retained_without_loading_identity_or_shape_authority() {
         &crate::share_import::PromoteImportRequest {
             share_id: r.manifest.share_id.clone(),
             actor: None,
+            target_graph: None,
+            retire_from: None,
         },
         "2026-10-21T00:00:01Z",
         None,

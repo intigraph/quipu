@@ -127,7 +127,11 @@ fn real_sets_route_only_the_annotated_shapes_to_emit() {
         added,
         [
             "CamayocObservationProvenanceDebtShape",
-            "ChunkLabelMaxCountDebtShape"
+            "ChunkLabelMaxCountDebtShape",
+            "CodeEntityLabelMaxCountDebtShape",
+            "CodeModuleFilePathDebtShape",
+            "CommitRequiredMetadataDebtShape",
+            "SectionHeadingMaxCountDebtShape",
         ]
         .into_iter()
         .map(str::to_owned)
