@@ -472,6 +472,8 @@ pub(crate) fn import_inner(
         crate::share_import_resolve::finish(labels, request.accept_exact);
     rewrite(&mut triples, &replacements)?;
     let resolved = serialize(&triples)?;
+    #[cfg(test)]
+    test_hooks::at(test_hooks::Boundary::Resolved);
     crate::time::check_request_deadline()?;
     let validation = validate_local(store, &resolved)?;
     crate::time::check_request_deadline()?;
@@ -500,6 +502,7 @@ pub(crate) fn import_inner(
     let outcome = if existing {
         "unchanged"
     } else {
+        crate::time::check_request_deadline()?;
         let graph = store.graph_create(&graph_iri)?;
         crate::rdf::ingest_assigned_rdf(
             store,
@@ -579,6 +582,7 @@ pub(crate) fn promote_inner(
             "staging graph is not committed: {graph_iri}"
         )));
     }
+    crate::time::check_request_deadline()?;
     let (tx_id, count, suppressed) = crate::share_promotion::promote_snapshot(
         store,
         graph,
@@ -602,6 +606,37 @@ pub(crate) fn promote_inner(
         suppressed_retractions: suppressed,
         queries,
     })
+}
+
+/// Test-only seams at the import's phase boundaries (aegis-oa5).
+#[cfg(test)]
+pub(crate) mod test_hooks {
+    /// A phase boundary; a deadline check follows each, inside the rollback.
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub(crate) enum Boundary {
+        /// Resolution (and its writer-side re-check) has finished.
+        Resolved,
+        /// Staging and the review record are written; the savepoint is open.
+        Staged,
+        /// The promotion is written; the savepoint is open.
+        Promoted,
+    }
+    /// A boundary and the function to run when it is reached.
+    pub(crate) type Hook = Option<(Boundary, fn())>;
+    thread_local! {
+        static HOOK: std::cell::Cell<Hook> = const { std::cell::Cell::new(None) };
+    }
+    /// Run `hook` when an import or promotion reaches `boundary`.
+    pub(crate) fn set(hook: Hook) {
+        HOOK.with(|slot| slot.set(hook));
+    }
+    pub(crate) fn at(boundary: Boundary) {
+        if let Some((at, hook)) = HOOK.with(std::cell::Cell::get)
+            && at == boundary
+        {
+            hook();
+        }
+    }
 }
 
 #[cfg(test)]

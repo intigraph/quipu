@@ -369,7 +369,10 @@ A name candidate whose label changed in between is dropped. It is reported in
 `revalidation_dropped`, which is always present: an empty list means the re-check ran
 and dropped nothing. The whole import runs under the server's request budget
 (`[quipu.search] request_timeout_ms`). Past the budget it fails with a request timeout
-and rolls back, staging nothing. A share too large for the budget must be split, and
+and rolls back whole, staging nothing and recording no review.
+The deadline is checked one last time just before the import commits, so an import
+that overran while it wrote still rolls back. `/import/promote` runs under the same
+budget and rolls back the same way. A share too large for the budget must be split, and
 re-importing a share that already staged returns `unchanged`.
 
 Sub-exact matches are reported the same way, as candidates for review. The difference

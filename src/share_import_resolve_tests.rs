@@ -344,3 +344,141 @@ fn the_delta_reads_under_the_writer_use_the_transaction_indexes() {
         "{retracted}"
     );
 }
+
+fn expire_now() {
+    // Leaked on purpose: the guard would restore the open deadline on drop. The
+    // test's own guard restores "no deadline" when it drops.
+    std::mem::forget(crate::time::set_request_deadline(Some(
+        crate::time::Deadline::after_millis(0),
+    )));
+    std::thread::sleep(std::time::Duration::from_millis(2));
+}
+
+fn count(store: &Store, table: &str) -> i64 {
+    store
+        .conn
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+        .unwrap()
+}
+
+/// Run `work` under an open deadline that expires when it reaches `boundary`.
+fn expiring_at<T>(
+    boundary: crate::share_import::test_hooks::Boundary,
+    work: impl FnOnce() -> crate::Result<T>,
+) -> crate::Result<T> {
+    crate::share_import::test_hooks::set(Some((boundary, expire_now)));
+    let outcome = {
+        let _open =
+            crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(60_000)));
+        work()
+    };
+    crate::share_import::test_hooks::set(None);
+    outcome
+}
+
+/// wu's ruling on #736: past the bound, an explicit request timeout, a WHOLE
+/// rollback and the writer released. A deadline that expires at any phase
+/// boundary leaves zero new facts and zero new review rows. Before this, one
+/// that expired while staging still committed: facts 4 -> 5, reviews 0 -> 1
+/// (grant's review).
+#[test]
+fn a_deadline_expiring_at_any_import_boundary_rolls_back_whole() {
+    use crate::share_import::test_hooks::Boundary;
+    let (_dir, request) = request(&store_with(FOREIGN), false);
+    for boundary in [Boundary::Resolved, Boundary::Staged] {
+        let mut target = store_with(LOCAL);
+        let (facts, reviews) = (count(&target, "facts"), count(&target, "import_reviews"));
+        assert_eq!(reviews, 0);
+        let error =
+            expiring_at(boundary, || import_share(&mut target, &request, TS, None)).unwrap_err();
+        assert!(
+            matches!(error, crate::Error::RequestTimeout { .. }),
+            "{boundary:?}: {error:?}"
+        );
+        assert_eq!(
+            count(&target, "facts"),
+            facts,
+            "{boundary:?}: zero new facts"
+        );
+        assert_eq!(
+            count(&target, "import_reviews"),
+            0,
+            "{boundary:?}: zero review rows"
+        );
+        // Positive control on the same store: the writer was released, nothing
+        // lingers, and the same import then stages.
+        let ok = import_share(&mut target, &request, TS, None).unwrap();
+        assert!(
+            !staged(&target, &ok.staging_graph).is_empty(),
+            "{boundary:?}"
+        );
+        assert_eq!(count(&target, "import_reviews"), 1, "{boundary:?}");
+    }
+}
+
+/// Phase 0 runs on a reader before any writer: an expired deadline there is a
+/// request timeout with nothing written anywhere.
+#[test]
+fn a_deadline_expiring_before_the_read_phase_refuses_it() {
+    let store = store_with(LOCAL);
+    let (_dir, request) = request(&store_with(FOREIGN), false);
+    let facts = count(&store, "facts");
+    let error = {
+        let _expired =
+            crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        prepare(&store, &request).unwrap_err()
+    };
+    assert!(
+        matches!(error, crate::Error::RequestTimeout { .. }),
+        "{error:?}"
+    );
+    assert_eq!(count(&store, "facts"), facts);
+}
+
+/// A promotion that expires before its savepoint is released leaves ROOT and
+/// the review state exactly as staging left them.
+#[test]
+fn a_deadline_expiring_at_promotion_rolls_back_whole() {
+    use crate::share_import::test_hooks::Boundary;
+    let (_dir, request) = request(&store_with(FOREIGN), false);
+    let mut target = store_with(LOCAL);
+    let staged_result = import_share(&mut target, &request, TS, None).unwrap();
+    assert!(
+        staged_result.promotion.eligible,
+        "{:?}",
+        staged_result.promotion
+    );
+    let state = |store: &Store| -> String {
+        store
+            .conn
+            .query_row(
+                "SELECT state FROM import_reviews WHERE share_id = ?1",
+                [&request.manifest.share_id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let (facts, reviews) = (count(&target, "facts"), count(&target, "import_reviews"));
+    assert_eq!(state(&target), "staged");
+    let promote = crate::share_import::PromoteImportRequest {
+        share_id: request.manifest.share_id.clone(),
+        actor: None,
+    };
+    let error = expiring_at(Boundary::Promoted, || {
+        crate::share_import::promote_import(&mut target, &promote, TS, None)
+    })
+    .unwrap_err();
+    assert!(
+        matches!(error, crate::Error::RequestTimeout { .. }),
+        "{error:?}"
+    );
+    assert_eq!(count(&target, "facts"), facts, "zero new facts in ROOT");
+    assert_eq!(count(&target, "import_reviews"), reviews);
+    assert_eq!(state(&target), "staged", "the promotion did not land");
+    // Positive control: the same promotion with no expiry lands.
+    let promoted = crate::share_import::promote_import(&mut target, &promote, TS, None).unwrap();
+    assert!(promoted.triples > 0);
+    assert!(count(&target, "facts") > facts);
+    assert_eq!(state(&target), "promoted");
+}
