@@ -777,6 +777,13 @@ A supplied `graph` field, including `null` or ROOT's IRI, is refused with HTTP
   Ref-holding predicate is a loud 400, not a mis-shaped write. `{"str": "..."}`
   states that a literal is intended and disarms that heuristic.
 
+When write validation is enabled, SET validates the replacement against loaded
+SHACL shapes, including the existing subject's types. A tagged IRI does not
+bypass a string datatype constraint. Refusal preserves the previous value.
+Explicit operation shapes remain enforced when persistent validation is off.
+A concurrent change to the complete predicate slot produces a conditional-write
+conflict instead of silently overwriting a value the request did not observe.
+
 ### `POST /validate`
 
 Dry-run SHACL validation.
