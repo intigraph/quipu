@@ -142,7 +142,7 @@ pub fn import_share_prepared(
             let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
-        // The LAST check, inside the savepoint (aegis-oa5, grant's review):
+        // The LAST check, inside the savepoint (aegis-oa5):
         // staging, query settlement and the review record all precede it, so
         // an import whose deadline passed while it wrote rolls back whole
         // rather than committing after the caller was told it timed out.
