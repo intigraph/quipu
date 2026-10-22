@@ -50,7 +50,7 @@
 //! the fix, and it is structural rather than reasoned, which is the difference
 //! that matters: the earlier version was also carefully reasoned.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oxrdf::{NamedOrBlankNode, Term as OxTerm};
 use oxrdfio::{RdfFormat, RdfParser};
@@ -59,8 +59,13 @@ use crate::error::{Error, Result};
 use crate::store::Store;
 use crate::types::Value;
 
+#[cfg(feature = "shacl")]
+use crate::shacl_debt::admit_preexisting_debt;
+#[cfg(feature = "shacl")]
+pub use crate::shacl_debt::{DEBT_MESSAGE_PREFIX, retraction_violations_in_graph};
+
 /// `rdf:type`, spelled in full because that is how it is interned.
-const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+pub(crate) const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 /// What a payload asserts, split into the parts write-time validation needs.
 #[derive(Debug, Default)]
@@ -70,6 +75,9 @@ pub struct PayloadScope {
     /// IRIs the payload references in object position without typing them here.
     /// These are the nodes whose type may need to come from the store.
     pub untyped_references: BTreeSet<String>,
+    /// Named objects per predicate. A `sh:targetObjectsOf` shape makes these
+    /// FOCUS nodes even though the payload does not describe them.
+    pub objects: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// Read a payload's subjects and its untyped outbound references.
@@ -83,6 +91,7 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
     let mut subjects = BTreeSet::new();
     let mut typed_here = BTreeSet::new();
     let mut referenced = BTreeSet::new();
+    let mut objects: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
     let parser = RdfParser::from_format(RdfFormat::Turtle);
     for quad in parser.for_reader(payload_turtle.as_bytes()) {
@@ -93,10 +102,18 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
                 typed_here.insert(s.as_str().to_string());
             }
         }
-        if let OxTerm::NamedNode(o) = &quad.object
-            && quad.predicate.as_str() != RDF_TYPE
-        {
-            referenced.insert(o.as_str().to_string());
+        if let OxTerm::NamedNode(o) = &quad.object {
+            // Every predicate, rdf:type included: `sh:targetObjectsOf rdf:type`
+            // makes the CLASS a focus node just like any other predicate does.
+            objects
+                .entry(quad.predicate.as_str().to_string())
+                .or_default()
+                .insert(o.as_str().to_string());
+            // Type repair stays scoped to non-type references: a class named by
+            // rdf:type is not a value whose `sh:class` needs the store's type.
+            if quad.predicate.as_str() != RDF_TYPE {
+                referenced.insert(o.as_str().to_string());
+            }
         }
     }
 
@@ -106,6 +123,7 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
     Ok(PayloadScope {
         subjects,
         untyped_references,
+        objects,
     })
 }
 
@@ -172,6 +190,24 @@ pub fn store_type_context_in_graph(
         }
     }
     Ok(lines.into_iter().collect())
+}
+
+/// The predicates named by `sh:targetObjectsOf` in `shapes_turtle`.
+pub fn object_target_predicates(shapes_turtle: &str) -> Result<BTreeSet<String>> {
+    const SH_TARGET_OBJECTS_OF: &str = "http://www.w3.org/ns/shacl#targetObjectsOf";
+    let parser = oxttl::TurtleParser::new()
+        .with_base_iri("http://example.org/")
+        .map_err(|e| Error::InvalidValue(format!("shapes base IRI: {e}")))?;
+    let mut predicates = BTreeSet::new();
+    for triple in parser.for_reader(shapes_turtle.as_bytes()) {
+        let triple = triple.map_err(|e| Error::InvalidValue(format!("shapes parse error: {e}")))?;
+        if let OxTerm::NamedNode(p) = &triple.object
+            && triple.predicate.as_str() == SH_TARGET_OBJECTS_OF
+        {
+            predicates.insert(p.as_str().to_string());
+        }
+    }
+    Ok(predicates)
 }
 
 /// SHACL paths that some property shape REQUIRES (`sh:minCount >= 1`).
@@ -361,25 +397,44 @@ pub fn validate_with_store_context_in_graph(
     //     fixes `sh:class` on a value whose type lives in the store.
     //   - REQUIRED PROPERTIES on the payload's own SUBJECTS (aegis-dixug):
     //     fixes an incremental write being refused for a floor the store
-    //     already satisfies.
+    //     already satisfies. Objects of a `sh:targetObjectsOf` predicate are
+    //     focus nodes too (aegis-g51c C1): an edge-only write to a stored,
+    //     valid node must see that node's required properties.
     // Both are bounded, and neither can add a violation — `repaired` subtracts.
     let mut context = store_type_context_in_graph(store, &scope.untyped_references, g)?;
+    let mut focuses = scope.subjects.clone();
+    for predicate in object_target_predicates(shapes_turtle)? {
+        focuses.extend(scope.objects.get(&predicate).into_iter().flatten().cloned());
+    }
     context.push_str(&store_property_context_in_graph(
         store,
-        &scope.subjects,
+        &focuses,
         &required_paths(shapes_turtle)?,
         g,
     )?);
     if context.is_empty() {
-        return Ok(baseline);
+        // Nothing to repair with; a node in pre-existing debt lands here, since
+        // it lacks the very values the repair would add.
+        return admit_preexisting_debt(store, shapes_turtle, baseline, data_turtle, None, g);
     }
 
     // Pass 2: the same payload with the store's type triples. Turtle and
     // N-Triples concatenate cleanly, and the context is written in full-IRI
     // form precisely so it cannot depend on the payload's prefixes.
-    let augmented =
-        crate::shacl::validate_shapes(shapes_turtle, &format!("{data_turtle}\n{context}"))?;
-    Ok(repaired(baseline, &augmented))
+    let augmented_doc = format!("{data_turtle}\n{context}");
+    let augmented = crate::shacl::validate_shapes(shapes_turtle, &augmented_doc)?;
+    let feedback = repaired(baseline, &augmented);
+    if feedback.conforms {
+        return Ok(feedback);
+    }
+    admit_preexisting_debt(
+        store,
+        shapes_turtle,
+        feedback,
+        data_turtle,
+        Some(&augmented_doc),
+        g,
+    )
 }
 
 /// The baseline's violations MINUS the ones the store context resolved.
@@ -393,7 +448,7 @@ pub fn validate_with_store_context_in_graph(
 /// Recounted from the kept issues rather than carried over from either report:
 /// a result that said `conforms: false, violations: 0` would be a refusal with
 /// nothing to show for it.
-fn repaired(
+pub(crate) fn repaired(
     baseline: crate::shacl::ValidationFeedback,
     augmented: &crate::shacl::ValidationFeedback,
 ) -> crate::shacl::ValidationFeedback {
@@ -427,7 +482,7 @@ fn repaired(
 /// would make every issue unique and the subtraction a no-op — the fix would
 /// silently stop repairing anything while every test that checks REFUSALS kept
 /// passing.
-fn issue_key(issue: &crate::shacl::ValidationIssue) -> String {
+pub(crate) fn issue_key(issue: &crate::shacl::ValidationIssue) -> String {
     format!(
         "{}|{}|{}|{}",
         issue.focus_node,
@@ -440,6 +495,14 @@ fn issue_key(issue: &crate::shacl::ValidationIssue) -> String {
 #[cfg(test)]
 #[path = "shacl_context_tests.rs"]
 mod shacl_context_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_objects_of_tests.rs"]
+mod shacl_objects_of_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_debt_tests.rs"]
+mod shacl_debt_tests;
 
 /// Queue each result of an EMIT-mode validation as a `shacl.violation` event
 /// riding the next write's savepoint (event P3). One definition for every

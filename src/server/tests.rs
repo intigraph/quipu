@@ -9,6 +9,8 @@ mod acquisition_tests;
 
 #[path = "episode_two_phase_tests.rs"]
 mod episode_two_phase_tests;
+#[path = "import_two_phase_tests.rs"]
+mod import_two_phase_tests;
 #[path = "point_read_tests.rs"]
 mod point_read_tests;
 #[path = "search_keyword_tests.rs"]
@@ -1393,6 +1395,11 @@ fn every_pooled_tool_survives_a_read_only_connection() {
         serde_json::Value,
     );
     let cases: Vec<ToolCase> = vec![
+        (
+            "render_prepare",
+            quipu::render::tool_prepare,
+            json!({"adhoc":{"query":"SELECT ?label WHERE { <http://example.org/n> <http://example.org/label> ?label }"}}),
+        ),
         (
             "tool_query",
             quipu::tool_query,

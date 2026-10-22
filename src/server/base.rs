@@ -359,6 +359,17 @@ impl IntoResponse for AppError {
             )
                 .into_response();
         }
+        // Name the refused focuses (aegis-2i6): a bare count sent producers'
+        // operators to a custom build to learn which node failed.
+        if let quipu::Error::ValidationFailed { messages, .. } = &self.0 {
+            const SHOWN: usize = 50;
+            let body = json!({
+                "error": self.0.to_string(),
+                "violations": messages.iter().take(SHOWN).collect::<Vec<_>>(),
+                "violations_truncated": messages.len() > SHOWN,
+            });
+            return (status, axum::Json(body)).into_response();
+        }
         let body = json!({ "error": self.0.to_string() });
         (status, axum::Json(body)).into_response()
     }

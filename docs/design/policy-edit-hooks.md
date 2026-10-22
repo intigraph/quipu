@@ -109,8 +109,8 @@ The `claim` states the **compliant condition** (claim satisfied = good), matchin
 
 ### Config & safety
 
-Runtime-gated by `[quipu.governance] enforce_on_write` (default **false**),
-mirroring `shacl.validate_on_write`. Default builds and existing deployments are
+Runtime-gated by `[quipu.governance] enforce_on_write` (default **false**).
+Default builds and existing deployments are
 **unchanged**; enforcement is opt-in. Not behind `reactive-reasoner` (the
 existing `TransactObserver` seam is post-commit and cannot veto).
 
@@ -299,7 +299,7 @@ Status: ☐ open · ☑ done (this change).
      one-value `sh:in` and `hostedAtLayer` has no `"prompt"` value, and this was
      first written up as making the unsafe settings unrepresentable. A `sh:in`
      enum only binds when SHACL runs, and SHACL runs under
-     `shacl.validate_on_write` — default **false**, and scoped to episode ingest
+     `shacl.validate_on_write` — which a deployment can turn off, and scoped to episode ingest
      rather than every `Store::transact`. A policy written through `/knot` could
      carry `onTimeout "allow"` and nothing would object. Both values are now
      re-checked by the placement pass, which IS on the write path, before the

@@ -37,6 +37,7 @@ impl Store {
         &mut self,
         datums: &[Datum],
         graph: i64,
+        tx_id: i64,
         conditional: bool,
     ) -> Result<()> {
         // Verdict/refusal writers must not recursively validate their evidence.
@@ -57,10 +58,10 @@ impl Store {
             (None, None) => return Ok(()),
         };
         #[cfg(feature = "shacl")]
-        return self.check_poststate_cardinality(&shapes, datums, graph);
+        return self.check_poststate_cardinality(&shapes, datums, graph, tx_id);
         #[cfg(not(feature = "shacl"))]
         {
-            let _ = (shapes, datums, graph);
+            let _ = (shapes, datums, graph, tx_id);
             Err(Error::CannotVerify(
                 "write SHACL requires the shacl feature".into(),
             ))
@@ -73,9 +74,19 @@ impl Store {
         shapes: &str,
         datums: &[Datum],
         graph: i64,
+        tx_id: i64,
     ) -> Result<()> {
-        const COMPONENTS: &[&str] = &[
+        // Value-set components (aegis-7ur8) are judged like maxCount: on the
+        // written focuses, over base context, independent of the value closure.
+        const VALUE_SETS: &[&str] = &[
             "MaxCountConstraintComponent",
+            "UniqueLangConstraintComponent",
+            "DisjointConstraintComponent",
+            "LessThanConstraintComponent",
+            "LessThanOrEqualsConstraintComponent",
+        ];
+        // Value components, judged once the value closure is complete.
+        const COMPONENTS: &[&str] = &[
             "DatatypeConstraintComponent",
             "NodeKindConstraintComponent",
             "ClassConstraintComponent",
@@ -95,7 +106,7 @@ impl Store {
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
-        if !(plan.has_upper_bound || plan.has_value_constraint) || datums.is_empty() {
+        if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
         let result = (|| {
@@ -112,11 +123,10 @@ impl Store {
                 })
                 .collect();
             let mut value_focuses = self.value_focuses(datums, &plan.object_target_predicates)?;
-            let incoming_targets = plan.incoming_predicates;
+            let mut owned = self.value_set_ownership(datums, graph, tx_id, &plan)?;
+            let incoming_targets = plan.incoming_predicates.clone();
             let mut facts = Vec::new();
-            let mut focuses = BTreeSet::new();
             for &entity in &subjects {
-                focuses.insert(self.resolve(entity)?);
                 self.append_bounded_entity(&mut facts, entity, graph, None)?;
                 self.append_object_targets(
                     &mut facts,
@@ -143,7 +153,7 @@ impl Store {
                         if let oxrdf::Term::Literal(literal) =
                             crate::rdf::value_to_term(self, &datum.value)?
                         {
-                            focuses.insert(literal.value().to_owned());
+                            owned.whole.insert(literal.value().to_owned());
                         }
                         self.append_object_targets(
                             &mut facts,
@@ -196,17 +206,19 @@ impl Store {
                     else {
                         return false;
                     };
-                    let owned = if component == "MaxCountConstraintComponent" {
-                        &focuses
+                    let focus = issue.focus_node.trim_matches(['<', '>']);
+                    let mine = if VALUE_SETS.contains(&component) {
+                        owned.owns(component, focus, issue.path.as_deref())
                     } else {
-                        &value_focuses
+                        complete_values
+                            && COMPONENTS.contains(&component)
+                            && value_focuses.contains(focus)
                     };
-                    COMPONENTS.contains(&component)
-                        && (component == "MaxCountConstraintComponent" || complete_values)
-                        && owned.contains(issue.focus_node.trim_matches(['<', '>']))
-                        && issue.severity.eq_ignore_ascii_case("violation")
+                    mine && issue.severity.eq_ignore_ascii_case("violation")
                 })
                 .collect();
+            // Value debt the focus had before this transaction (aegis-g51c C12).
+            let issues = crate::shacl_debt::new_only(self, shapes, &data, issues, graph, tx_id)?;
             if issues.is_empty() {
                 return Ok(());
             }
@@ -230,7 +242,7 @@ impl Store {
         })();
         match result {
             Err(Error::CannotVerify(message))
-                if !plan.has_upper_bound && context_budget_exhausted(&message) =>
+                if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
             {
                 Ok(())
             }

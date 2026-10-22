@@ -1373,6 +1373,40 @@ curl -s localhost:3030/project -X POST \
   -d '{"algorithm": "in_degree", "limit": 10}'
 ```
 
+### `POST /render`
+
+Prepare a deterministic markdown file plan from a stored specification or an
+ad-hoc specification. This protected computation requires an accepted bearer;
+it remains a pooled read-only endpoint, including on read-only servers. Missing
+or invalid credentials refuse, and open-write mode does not open this route.
+The server neither writes files nor accepts a destination. The CLI declares `cli-render` in
+`X-Quipu-Client` and publishes the verified plan locally.
+
+```json
+{
+  "adhoc": {
+    "query": "SELECT ?title WHERE { VALUES ?title { 'Example' } }",
+    "template": "# {{ rows[0].title }}",
+    "layout": "single",
+    "path": "report.md"
+  }
+}
+```
+
+Pass `spec` as an absolute specification IRI instead of `adhoc`. Optional
+`graph` selects the same default dataset as `/query`; optional `valid_at` is an
+ISO timestamp. Unknown fields, including `dest` and `dry_run`, refuse rather
+than being ignored. Existing query floors, truncation and time-budget guards
+apply. Incomplete data cannot authorize a deletion.
+
+The response contains `schema`, `spec`, `source_tx`, `valid_at` and `files`.
+Each file has base64 bytes, a `sha256:` content address and a mode. Output is
+bounded to 2,000 files and 16 MiB of decoded bytes. The client verifies the whole
+plan and the destination ownership manifest before atomic publication. The
+[render reference](render.md) explains includes, temporal snapshots and local
+refusal/no-op behavior. Preparing a plan is not a publication or a delivery
+receipt.
+
 ### `GET|POST /report`
 
 Live graph report: top hubs (god-nodes), surprising cross-community connections,
@@ -1534,6 +1568,27 @@ type. Response: `query`, resolved `sparql`, `columns`, `rows`, `count`.
 ```bash
 curl -s localhost:3030/ask -X POST \
   -d '{"name":"service_deps","params":{"entity":"http://example.org/traefik"}}'
+```
+
+### `POST /projections`
+
+Read a current-state projection declared in `[[quipu.projections]]` (a key
+predicate plus column predicates, kept current by the writer). A read
+endpoint. Body `action`:
+
+- `"list"`: the declared projections and what is installed.
+- `"aggregate"` (default): `name`, optional `graph` (IRI; default graph if
+  omitted), `key_in` (key values to keep), `group_by` (`"key"` or a column),
+  `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`), `max_groups`.
+  Response: `total`, `groups` (`value`, `n`), `truncated`, `multi_valued_rows`,
+  `tx`.
+
+A projection that is not installed at its declared definition refuses rather
+than answer stale.
+
+```bash
+curl -s localhost:3030/projections -X POST \
+  -d '{"name":"board","graph":"http://example.org/board","key_in":["open"],"group_by":"priority"}'
 ```
 
 ### `POST /search_nodes`
@@ -2159,6 +2214,33 @@ not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
 `quipu events refusals`.
+
+### Admitted debt events (`shacl.debt_admitted`)
+
+A write can reuse an existing node by name and type when that node was stored
+before its shape existed and still lacks a required value. That violation is
+pre-existing debt, not something the write introduced, so it does not refuse
+the write. The write is admitted, and the issue is returned as a `Warning`
+whose message starts with `pre-existing debt (admitted as Warning):`.
+
+The match is exact. The node's pre-state (its stored types and its stored
+values on required paths) must report the same focus, constraint component,
+path, value and message, plus the source shape when that shape is named. A new
+node, a new type on an existing node, a new value, or a violation on another
+path is still refused. Admission covers only constraints a node's own data
+decides (minimum counts, values, datatypes, classes; never `sh:maxCount`,
+whose result does not name a value). The same rule covers stored values judged
+by the write-savepoint gate. `sh:node`,
+`sh:qualifiedValueShape` and the logical components are never admitted.
+
+On `/update`, with `shacl.validate_on_write` on, a deletion is refused when it
+leaves a node violating a `sh:minCount` or `sh:hasValue` that it satisfied
+before. **Known gap:** a deletion that breaks a non-local constraint (`sh:or`,
+`sh:and`, `sh:xone`, `sh:not`, `sh:node`, qualified counts) is not judged yet.
+
+Each admitted issue appends a `shacl.debt_admitted` event riding the write:
+`{shape, message, component, path, graph}`, with the focus node as subject.
+To count the debt still in use, query `GET /events?types=shacl.debt_admitted`.
 
 ## Linked-Data Surface
 

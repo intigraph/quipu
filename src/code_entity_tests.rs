@@ -129,6 +129,7 @@ fn valid_document_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+bobbin:span bobbin:inDocument bobbin:doc1 .
 bobbin:doc1 a bobbin:Document ;
     rdfs:label "README" ;
     bobbin:filePath "docs/README.md" .
@@ -142,14 +143,40 @@ bobbin:doc1 a bobbin:Document ;
 }
 
 #[test]
-fn document_missing_filepath_fails() {
+fn ordinary_document_without_repository_filepath_conforms() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
 bobbin:doc1 a bobbin:Document ;
     rdfs:label "README" .
 "#;
+    let fb = validate_shapes(SHAPES, data).unwrap();
+    assert!(
+        fb.conforms,
+        "ordinary Document is not repository metadata: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn document_filepath_with_wrong_datatype_fails() {
+    let data = r#"
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+bobbin:span bobbin:inDocument bobbin:doc1 .
+bobbin:doc1 a bobbin:Document ; rdfs:label "README" ; bobbin:filePath 42 .
+"#;
     fails_on(SHAPES, data, "filePath");
+}
+
+#[test]
+fn repository_metadata_without_document_type_is_still_targeted() {
+    let data = r#"
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+bobbin:span bobbin:inDocument bobbin:doc1 .
+bobbin:doc1 bobbin:filePath "README.md" .
+"#;
+    fails_on(SHAPES, data, "label");
 }
 
 #[test]
@@ -271,6 +298,7 @@ bobbin:sym1 a bobbin:CodeSymbol ;
 fn document_missing_label_fails() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
+bobbin:span bobbin:inDocument bobbin:doc1 .
 bobbin:doc1 a bobbin:Document ;
     bobbin:filePath "docs/README.md" .
 "#;
@@ -296,9 +324,96 @@ fn a_language_tagged_label_does_not_satisfy_the_datatype() {
     let data = r#"
 @prefix bobbin: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+bobbin:span bobbin:inDocument bobbin:doc1 .
 bobbin:doc1 a bobbin:Document ;
     rdfs:label "README"@en ;
     bobbin:filePath "docs/README.md" .
 "#;
     fails_on(SHAPES, data, "label");
+}
+
+#[test]
+fn code_entity_debt_policy_only_routes_four_narrow_shapes_to_emit() {
+    let split = crate::shacl::split_shapes_by_policy(SHAPES);
+    assert!(split.has_emit);
+    assert_eq!(split.emit.matches("a sh:NodeShape").count(), 4);
+    for name in [
+        "CodeEntityLabelMaxCountDebtShape",
+        "SectionHeadingMaxCountDebtShape",
+        "CommitRequiredMetadataDebtShape",
+        "CodeModuleFilePathDebtShape",
+    ] {
+        assert!(split.emit.contains(name));
+        assert!(!split.reject.contains(name));
+    }
+    assert!(split.reject.contains("bobbin:DocumentShape a sh:NodeShape"));
+    assert!(
+        split
+            .reject
+            .contains("sh:targetObjectsOf bobbin:inDocument")
+    );
+    assert!(
+        split
+            .reject
+            .contains("bobbin:CodeModuleShape a sh:NodeShape")
+    );
+    Validator::from_turtle(&split.reject).expect("reject shapes parse");
+    Validator::from_turtle(&split.emit).expect("emit shapes parse");
+
+    let prefix = "@prefix a: <http://aegis.gastown.local/ontology/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . ";
+    for body in [
+        "a:span a:inDocument a:doc . a:doc a a:Document ; rdfs:label \"first\", \"second\" ; a:filePath \"README.md\" .",
+        "a:section a a:Section ; rdfs:label \"section\" ; a:heading \"a\", \"b\" ; a:headingDepth 1 .",
+        "a:commit a a:Commit ; rdfs:label \"commit\" ; a:author \"author\" ; rdfs:comment \"message\" .",
+        "a:module a a:CodeModule ; rdfs:label \"module\" ; a:repo \"repo\" ; a:language \"rust\" .",
+    ] {
+        let data = format!("{prefix}{body}");
+        assert!(validate_shapes(&split.reject, &data).unwrap().conforms);
+        let feedback = validate_shapes(&split.emit, &data).unwrap();
+        assert_eq!(feedback.violations, 0);
+        assert!(feedback.warnings > 0);
+    }
+    fails_on(
+        &split.reject,
+        &format!("{prefix}a:span a:inDocument a:doc . a:doc a:filePath 42 ; rdfs:label \"doc\" ."),
+        "filePath",
+    );
+    fails_on(
+        &split.reject,
+        &format!("{prefix}a:span a:inDocument a:doc . a:doc a:filePath \"README.md\" ."),
+        "label",
+    );
+}
+
+#[test]
+fn unowned_filepath_subject_does_not_acquire_document_constraints() {
+    let data = r#"
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+bobbin:external bobbin:filePath 42 .
+"#;
+    assert!(validate_shapes(SHAPES, data).unwrap().conforms);
+}
+
+#[test]
+fn linked_repository_document_still_requires_filepath() {
+    let data = r#"
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+bobbin:span bobbin:inDocument bobbin:doc .
+bobbin:doc a bobbin:Document ; rdfs:label "README" .
+"#;
+    fails_on(SHAPES, data, "filePath");
+}
+
+#[test]
+fn document_remains_a_sanctioned_class_in_code_entities_only() {
+    let store = crate::store::Store::open_in_memory().unwrap();
+    store
+        .load_shapes("code-entities", SHAPES, "2026-01-01T00:00:00Z")
+        .unwrap();
+    assert!(
+        crate::vocabulary::sanctioned(&store)
+            .unwrap()
+            .contains("http://aegis.gastown.local/ontology/Document")
+    );
 }

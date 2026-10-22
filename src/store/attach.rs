@@ -269,6 +269,32 @@ pub(crate) fn build_facts_source(conn: &Connection, attachments: &[Attachment]) 
     Ok(format!("({}) AS facts", branches.join(" UNION ALL ")))
 }
 
+/// The graph ids the attachments contribute, read from the rows
+/// [`register_attached_graphs`] wrote into `main.graphs` (aegis-xacr).
+///
+/// The registry and the readable rows are one set expressed once (see
+/// [`contributed_graphs_sql`]), so a query whose graph scope names none of
+/// these ids can read no attached row.
+///
+/// # Errors
+/// [`Error::Sqlite`] if the registry read fails.
+pub(crate) fn attached_graph_ids(
+    conn: &Connection,
+    attachments: &[Attachment],
+) -> Result<Vec<i64>> {
+    let mut ids = Vec::new();
+    let mut stmt = conn.prepare("SELECT g FROM main.graphs WHERE source = ?1")?;
+    for a in attachments {
+        let mut rows = stmt.query(params![a.alias])?;
+        while let Some(row) = rows.next()? {
+            ids.push(row.get(0)?);
+        }
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    Ok(ids)
+}
+
 /// The term-resolution query for a store with no attachments — today's exact
 /// SQL, and the byte-identity baseline for [`build_resolve_sql`].
 pub(crate) const RESOLVE_SQL_LOCAL: &str = "SELECT iri FROM terms WHERE id = ?1";

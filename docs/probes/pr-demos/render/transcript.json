@@ -1,0 +1,12 @@
+{
+  "target": "candidate CLI / private local store",
+  "before": "destination absent",
+  "first_files": [
+    "report.md"
+  ],
+  "after_utf8": "# Example",
+  "repeat_noop": true,
+  "repeat_same_bytes_mtime_inode": true,
+  "unknown_file_refused_and_preserved": true,
+  "running_installation": "not invoked"
+}
