@@ -48,11 +48,28 @@ another identity. A comment alone is not the required machine-readable gate.
 Publish a commit status with context `review/approved` on the current proposal
 head only after the normal verifier accepts its native signed receipt. Name the
 non-author reviewer and receipt ID in the status description and link the
-published receipt evidence as its target. Re-read the status, commit and receipt
+PR evidence as its target. When the native receipt includes its review time,
+include `reviewed_at` as an RFC3339 UTC value ending in `Z`; historical receipts
+without that field remain UNKNOWN to the metrics reader. Never substitute the
+status creation time for the native review time. Re-read the status, commit and receipt
 binding. An unavailable verifier, missing receipt, changed content, non-approval
 or recorded veto must leave the status non-successful. A successful status on an
 old head does not approve a new head; revalidate the content-bound receipt before
 publishing a status on a successor head. Preserve earlier verdict history.
+
+This dependency is one-way: the publisher verifies the native receipt and exact
+head/content binding, independently of CI and merge admission. Run it outside the
+PR workflow graph, so review preparation never waits for the status it produces.
+A later signed CHANGES from the approving reviewer for the same head revokes the
+status; an earlier CHANGES cannot revoke a later approval. Serialize approval and
+revocation on the publisher host under the same per-head lock. Keep both history
+and indeterminate writes, and reconcile by reading before attempting another write.
+
+Classify required contexts explicitly before changing protection. The seven CI
+contexts apply to both the PR head and main. `review/approved` applies only to the
+PR head: main's squash commit does not inherit its reviewed SHA. Unknown required
+contexts refuse admission until classified. The native accepted receipt remains
+an independent merge requirement even when a successful status is visible.
 
 After the current release, save the protection JSON and add `review/approved`
 to the seven existing required contexts. Keep the native non-author rule and
@@ -67,6 +84,12 @@ router owner rather than adding another dispatcher. A delivery attempt or dorman
 cron is not acceptance. The DORA reader must distinguish native signed approvals
 published as statuses from formal GitHub review objects; do not relabel historical
 comments or failed self-approvals as reviews.
+
+Because a main push deploys Quipu, tiers 0 and 1 also need a non-author receipt
+in this rollout. Do not infer a release or ledger-bot exemption from a low tier.
+Codex-only reviewer selection belongs to the existing router; historical receipts
+do not establish the reviewer's harness at signing, and the status makes no such
+claim.
 
 ## Daily release proposals
 
@@ -96,6 +119,9 @@ availability. The existing CI merge-group trigger must report all required
 contexts on the proposed merge result. Save protection settings, stage a queue
 with bounded concurrency, and retain the workflow-change exception. Do not
 activate it before an observed merge-group run can report the required checks.
+In particular, prove how the reviewed PR head binds to the synthetic merge-group
+SHA before requiring the admission context there; a status on the original PR
+head alone is not that proof.
 
 Exercise one reviewed low-risk PR through queue admission, merged-result CI,
 actual merge, and the normal deployment smoke. Then admit the remaining eligible
