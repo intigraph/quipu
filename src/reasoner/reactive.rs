@@ -441,6 +441,16 @@ fn build_rule_dependents(ruleset: &RuleSet) -> HashMap<usize, Vec<usize>> {
     dependents
 }
 
+/// Stringify engine errors as before, but keep a SHACL refusal whole so the
+/// caller can name its focuses (aegis-2i6): a doubly wrapped count was all a
+/// producer saw of a derived write's refusal.
+fn keep_refusal(e: crate::Error) -> crate::Error {
+    match e {
+        e @ crate::Error::ValidationFailed { .. } => e,
+        e => crate::Error::Store(e.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,15 +663,5 @@ ex:r1 a rule:Rule ; rule:id "R1" ;
             .is_empty(),
             "an unrelated predicate must wake nothing"
         );
-    }
-}
-
-/// Stringify engine errors as before, but keep a SHACL refusal whole so the
-/// caller can name its focuses (aegis-2i6): a doubly wrapped count was all a
-/// producer saw of a derived write's refusal.
-fn keep_refusal(e: crate::Error) -> crate::Error {
-    match e {
-        e @ crate::Error::ValidationFailed { .. } => e,
-        e => crate::Error::Store(e.to_string()),
     }
 }

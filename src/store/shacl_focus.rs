@@ -7,7 +7,7 @@
 //! already over its bound before the write is not the write's to judge:
 //! restating a label, or adding `modifies` to a module that already carries
 //! two labels, changes no count. Refusing those froze every producer linking
-//! to such a node (QuipuIngestFailing, 2026-10-21). A write that adds a value
+//! to such a node (`QuipuIngestFailing`, 2026-10-21). A write that adds a value
 //! to an over-bound path still makes it worse and is still refused.
 
 use std::collections::BTreeSet;
