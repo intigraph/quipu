@@ -97,6 +97,14 @@ impl LabelProfile {
     }
 }
 
+/// The label delta after `tx`, by `idx_tx`; see [`LabelIndex::build_since`].
+pub(crate) fn delta_sql(tx: i64, label: i64) -> String {
+    format!(
+        "SELECT e, v FROM main.facts WHERE tx > {tx} AND +a = {label} \
+         AND valid_to IS NULL AND op = 1"
+    )
+}
+
 impl LabelIndex {
     /// Scan the composed fact source for current `rdfs:label` values.
     ///
@@ -111,7 +119,16 @@ impl LabelIndex {
     }
 
     /// Only the labels asserted in transactions after `after_tx`: the delta a
-    /// two-phase `/episode` re-checks under the writer (aegis-xi0).
+    /// two-phase `/episode` or `/import` re-checks under the writer (aegis-xi0,
+    /// aegis-oa5).
+    ///
+    /// Reads `main.facts` alone, by `idx_tx`. Only the local store can change
+    /// between the phases (the caller compares the mounted frozen layers), and a
+    /// layer's `tx` ids are its own sequence, so comparing them with a local id
+    /// is meaningless. The planner has no statistics and, given `a IN (...)`,
+    /// walked every label row in the store: MEASURED on a production-size copy,
+    /// 12.5 s for a delta of zero rows, under the writer, versus 0.008 s by
+    /// `idx_tx`. The `+a` keeps it on the index that is bounded by the delta.
     ///
     /// # Errors
     /// Propagates store and decode failures.
@@ -139,12 +156,21 @@ impl LabelIndex {
         // `facts_source()` is the literal `facts` table with no attachments and
         // the `UNION ALL` over local + layers with them, so this one statement
         // reads the composition without knowing whether there is one.
-        let since = after_tx.map_or_else(String::new, |tx| format!(" AND tx > {tx}"));
-        let sql = format!(
-            "SELECT e, v FROM {} WHERE a IN ({}) AND valid_to IS NULL AND op = 1{since}",
-            store.facts_source(),
-            id_list(&label_ids),
-        );
+        let sql = match after_tx {
+            None => format!(
+                "SELECT e, v FROM {} WHERE a IN ({}) AND valid_to IS NULL AND op = 1",
+                store.facts_source(),
+                id_list(&label_ids),
+            ),
+            Some(tx) => {
+                let Some(local) = store.lookup(&rdfs_label_iri)? else {
+                    return Ok(Self {
+                        entries: Vec::new(),
+                    });
+                };
+                delta_sql(tx, local)
+            }
+        };
         let mut stmt = store.conn.prepare(&sql)?;
 
         let rows = stmt.query_map([], |row| {
@@ -173,6 +199,11 @@ impl LabelIndex {
             }));
         }
         Ok(Self { entries })
+    }
+
+    /// The canonical entity id of every label in this index.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = i64> + '_ {
+        self.entries.iter().map(|entry| entry.entity_id)
     }
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
