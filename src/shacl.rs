@@ -334,24 +334,26 @@ pub struct ShapesSplit {
 /// Split a Turtle shapes document into reject-mode and emit-mode documents by
 /// the `quipu:onViolation` annotation on each top-level shape block.
 ///
-/// TEXTUAL, BY DESIGN, WITH ITS LIMITS STATED: this splits on the house style
-/// used by every shape set this deployment loads — top-level statements of the
-/// form `<subject> a sh:NodeShape ; … .` with inline `[ … ]` property shapes,
-/// where a statement ends with `.` at bracket depth 0 at end-of-line. It does
-/// not implement a full Turtle parser. It does lex literals, IRIs and comments,
-/// so a `#` or bracket inside a string is data; content it cannot close (an
-/// unbalanced bracket, an open literal) stays in the REJECT document, which
-/// preserves the default-reject contract. The emit annotation is read from code
-/// only, never from comments.
-/// Prefix lines are replicated into both documents so each stands alone; the
-/// emit document must declare the `quipu:` prefix itself, exactly as it must
-/// declare `sh:`.
+/// Two steps with different jobs:
+/// - BOUNDARIES are textual: a block is a top-level statement of the house
+///   style `<subject> a sh:NodeShape ; … .`, ending with `.` at bracket depth 0
+///   at end-of-line. The lexer knows literals, IRIs and comments, so a `#`,
+///   bracket or `.` inside a string is data.
+/// - MEMBERSHIP is parsed RDF (aegis-g51c C7): the block, with the prefixes
+///   declared before it, is parsed as Turtle, and it routes to emit only if
+///   every top-level subject (one that is not an object inside the block)
+///   carries exactly the policy `quipu:onViolation "emit"`. Text never decides,
+///   so the annotation quoted inside a `sh:message`, written in a comment, or
+///   set on a nested property shape cannot move a rejecting shape.
+///
+/// Everything uncertain fails closed to REJECT: a block that does not parse,
+/// a conflicting or non-string policy, and unterminated trailing content.
+/// Prefix lines are replicated into both documents so each stands alone.
 pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
     let mut prefixes = String::new();
-    // (raw block text, the same block with comments removed)
+    // (block text, the prefixes declared before it)
     let mut blocks: Vec<(String, String)> = Vec::new();
     let mut current = String::new();
-    let mut current_code = String::new();
     let mut lexer = TurtleLexer::default();
 
     for line in shapes_turtle.lines() {
@@ -373,28 +375,16 @@ pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
         current.push_str(line);
         current.push('\n');
         let code = lexer.scan_line(line);
-        current_code.push_str(&code);
-        current_code.push('\n');
         if lexer.depth == 0 && !lexer.in_literal() && code.trim_end().ends_with('.') {
-            blocks.push((
-                std::mem::take(&mut current),
-                std::mem::take(&mut current_code),
-            ));
+            blocks.push((std::mem::take(&mut current), prefixes.clone()));
         }
     }
 
     let mut reject = prefixes.clone();
     let mut emit = prefixes;
     let mut has_emit = false;
-    for (block, code) in blocks {
-        // Judged on CODE only: a comment that mentions the annotation must not
-        // move a rejecting shape to emit.
-        let is_emit = code.contains("quipu:onViolation")
-            && code
-                .split("quipu:onViolation")
-                .nth(1)
-                .is_some_and(|rest| rest.trim_start().starts_with("\"emit\""));
-        if is_emit {
+    for (block, declared) in blocks {
+        if block_is_emit(&declared, &block) {
             emit.push_str(&block);
             emit.push('\n');
             has_emit = true;
@@ -404,8 +394,8 @@ pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
         }
     }
     // Unterminated trailing content (unbalanced brackets, an open literal, a
-    // missing final '.') ALWAYS rejects, whatever annotation text it contains:
-    // the splitter could not tell where its shapes begin and end (aegis-g51c).
+    // missing final '.') ALWAYS rejects, whatever annotation it contains: the
+    // splitter could not tell where its shapes begin and end (aegis-g51c).
     if !current.trim().is_empty() {
         reject.push_str(&current);
         reject.push('\n');
@@ -415,6 +405,59 @@ pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
         emit,
         has_emit,
     }
+}
+
+/// The policy predicate, under both IRIs the admission path accepts.
+const ON_VIOLATION_IRIS: [&str; 2] = [
+    "http://quipu.dev/ontology/onViolation",
+    "http://quipu.dev/ns#onViolation",
+];
+
+/// Whether one block, parsed with the prefixes in force at its position, is
+/// entirely emit: every top-level subject has the single policy `"emit"`.
+fn block_is_emit(prefixes: &str, block: &str) -> bool {
+    use oxrdf::Term;
+    let document = format!("{prefixes}{block}");
+    let Ok(triples) = oxttl::TurtleParser::new()
+        .for_reader(document.as_bytes())
+        .collect::<std::result::Result<Vec<_>, _>>()
+    else {
+        return false;
+    };
+    let objects: std::collections::HashSet<Term> =
+        triples.iter().map(|t| t.object.clone()).collect();
+    let roots: std::collections::BTreeSet<String> = triples
+        .iter()
+        .filter(|t| !objects.contains(&Term::from(t.subject.clone())))
+        .map(|t| t.subject.to_string())
+        .collect();
+    if roots.is_empty() {
+        return false;
+    }
+    let mut policies: HashMap<String, Vec<Option<&str>>> = HashMap::new();
+    for t in &triples {
+        if !ON_VIOLATION_IRIS.contains(&t.predicate.as_str()) {
+            continue;
+        }
+        let value = match &t.object {
+            // A plain string only: "emit"@en or a typed value is not the policy.
+            Term::Literal(l)
+                if l.language().is_none() && l.datatype() == oxrdf::vocab::xsd::STRING =>
+            {
+                Some(l.value())
+            }
+            _ => None,
+        };
+        policies
+            .entry(t.subject.to_string())
+            .or_default()
+            .push(value);
+    }
+    roots.iter().all(|root| {
+        policies
+            .get(root)
+            .is_some_and(|values| values.iter().all(|v| *v == Some("emit")))
+    })
 }
 
 /// Just enough Turtle lexing to find statement boundaries: string literals
@@ -436,21 +479,14 @@ impl TurtleLexer {
     }
 
     /// Scan one line, updating bracket depth and literal state; return the
-    /// line with any comment removed and every literal's CONTENT masked, so
-    /// text inside a string can never read as an annotation. The one literal
-    /// kept verbatim is a short `emit`, the annotation's own value.
+    /// line with any comment removed and every literal's CONTENT masked. Only
+    /// statement boundaries are read from it; routing is decided by parsing.
     fn scan_line(&mut self, line: &str) -> String {
         let chars: Vec<char> = line.chars().collect();
         let mut code = String::with_capacity(line.len());
         // Content of an open SHORT literal on this line (it cannot span lines).
         let mut short = String::new();
-        let mask = |text: &str| -> String {
-            if text == "emit" {
-                text.to_owned()
-            } else {
-                "_".repeat(text.chars().count())
-            }
-        };
+        let mask = |text: &str| -> String { "_".repeat(text.chars().count()) };
         let mut i = 0;
         while i < chars.len() {
             let ch = chars[i];

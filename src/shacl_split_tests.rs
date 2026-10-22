@@ -283,3 +283,86 @@ fn annotation_text_inside_a_literal_does_not_emit() {
         );
     }
 }
+
+/// wu's ruling on #726: emit is decided from PARSED RDF, the triple
+/// `quipu:onViolation "emit"` on the block's top-level subject. Each case is
+/// one where reading the text, masked or not, gives the other answer.
+#[test]
+fn emit_membership_is_read_from_parsed_rdf() {
+    const HEAD: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                        @prefix ex: <http://example.org/> .\n\
+                        @prefix quipu: <http://quipu.dev/ontology/> .\n";
+    let cases = [
+        // ian's case: the annotation quoted in a long single-quoted literal.
+        (
+            "quoted in sh:message",
+            "ex:S a sh:NodeShape ;\n    sh:message '''quipu:onViolation \"emit\"''' ;\n    sh:property [ sh:path ex:label ; sh:maxCount 1 ] .\n",
+            false,
+        ),
+        // Only the top-level shape's policy routes the block; a nested
+        // property shape carrying the annotation does not soften its parent.
+        (
+            "nested property shape",
+            "ex:S a sh:NodeShape ;\n    sh:property [ sh:path ex:label ; sh:maxCount 1 ; quipu:onViolation \"emit\" ] .\n",
+            false,
+        ),
+        (
+            "full IRI",
+            "ex:S a sh:NodeShape ;\n    <http://quipu.dev/ontology/onViolation> \"emit\" ;\n    sh:targetClass ex:W .\n",
+            true,
+        ),
+        (
+            "another prefix name",
+            "@prefix q: <http://quipu.dev/ontology/> .\nex:S a sh:NodeShape ;\n    q:onViolation \"emit\" ;\n    sh:targetClass ex:W .\n",
+            true,
+        ),
+        (
+            "admission namespace",
+            "ex:S a sh:NodeShape ;\n    <http://quipu.dev/ns#onViolation> \"emit\" ;\n    sh:targetClass ex:W .\n",
+            true,
+        ),
+        (
+            "unrelated quipu: namespace",
+            "@prefix quipu: <https://quipu.dev/ontology/> .\nex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W .\n",
+            false,
+        ),
+        (
+            "language-tagged value",
+            "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\"@en ;\n    sh:targetClass ex:W .\n",
+            false,
+        ),
+        (
+            "conflicting policies",
+            "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\", \"reject\" ;\n    sh:targetClass ex:W .\n",
+            false,
+        ),
+        // One block, two top-level subjects: an unannotated one keeps it REJECT.
+        (
+            "unannotated second root",
+            "ex:H a sh:NodeShape . ex:S a sh:NodeShape ; quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W .\n",
+            false,
+        ),
+        (
+            "does not parse",
+            "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W ex:X .\n",
+            false,
+        ),
+        (
+            "plain annotation",
+            "ex:S a sh:NodeShape ;\n    quipu:onViolation \"emit\" ;\n    sh:targetClass ex:W .\n",
+            true,
+        ),
+    ];
+    for (name, block, expected) in cases {
+        let doc = format!("{HEAD}{block}");
+        let split = split_shapes_by_policy(&doc);
+        assert_eq!(split.has_emit, expected, "{name}");
+        let (home, other) = if expected {
+            (&split.emit, &split.reject)
+        } else {
+            (&split.reject, &split.emit)
+        };
+        assert!(home.contains("ex:S a sh:NodeShape"), "{name}");
+        assert!(!other.contains("ex:S a sh:NodeShape"), "{name}");
+    }
+}
