@@ -6,8 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- Add stable entity namespaces and audience-bound sharing([6e52158](https://github.com/scbrown/quipu/commit/6e5215818f3ce7986cbf52f6511a137c7ca75059))
 - Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
+- Add stable entity namespaces and audience-bound sharing([6e52158](https://github.com/scbrown/quipu/commit/6e5215818f3ce7986cbf52f6511a137c7ca75059))
 - *(embedding)* Index native writes and imports by default (#691)([1fdea50](https://github.com/scbrown/quipu/commit/1fdea5029b9eab7e259c50a27b458dbdd5c37b28))
 - *(server)* Serve the decision deck over HTTP, off by default (#701)([9e24565](https://github.com/scbrown/quipu/commit/9e24565f426a7ec902c11a897b2dbe55b1d43f6a))
 - *(acquisition)* Metadata-only eligibility observation (#704)([0638e63](https://github.com/scbrown/quipu/commit/0638e6381063132d94f5f5ab18763b56c575aafa))
@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 - Require enrolled session keys with narrow onboarding reads (#687)([963fc16](https://github.com/scbrown/quipu/commit/963fc163b6f208c183830981a04419de752bde82))
 - *(server)* Re-land session-key auth (#687) with declared identity checked only when keys are required (#712)([9b78ab2](https://github.com/scbrown/quipu/commit/9b78ab21bbd9b66da785694a95a8c23f59f4fcc9))
 - *(acquisition)* Bounded physical scope measurement (#705)([462268c](https://github.com/scbrown/quipu/commit/462268cc605a096eacbe1feb93690c41627ae481))
+- *(skills)* Define opt-in pinned catalogue shapes (#717)([c98f18a](https://github.com/scbrown/quipu/commit/c98f18a4c37c4fb4baf66bef1d9600cfd4e9a5a0))
 
 ### CI/CD
 
@@ -25,7 +26,10 @@ All notable changes to this project will be documented in this file.
 
 ### Documentation
 
-- *(share)* [**breaking**] Document the public sharing API migration([b78cc89](https://github.com/scbrown/quipu/commit/b78cc898e24e07499cbb6e50ca4db1e2bd061583))
+- *(share)* [**breaking**] Document the public sharing API migration (#718)([2a13c38](https://github.com/scbrown/quipu/commit/2a13c38cd82d0b3653c8d835905f82074fb15115))
+- Embed the repository pendant diagram in the README (#722)([89387d1](https://github.com/scbrown/quipu/commit/89387d1b9adc4d5d570ff748558ae0577ac4f84e))
+- Clarify Bobbin and Yupana stack descriptions (#724)([f7707dc](https://github.com/scbrown/quipu/commit/f7707dc07dfe7cf4c99cc40a280281833062a2d4))
+- Restore the centered README logo (#730)([9e79e98](https://github.com/scbrown/quipu/commit/9e79e98a1f268eaae5c4e932af82fe3c0fd337b4))
 
 ### Fixed
 
@@ -34,6 +38,8 @@ All notable changes to this project will be documented in this file.
 - *(graph)* Exclude inferred companions before registration (#708)([630c980](https://github.com/scbrown/quipu/commit/630c9804719d0dd0bae169b9f8193b7aa23ffd2a))
 - *(shacl)* Enforce maxCount across staged writes (#697)([0e89d72](https://github.com/scbrown/quipu/commit/0e89d729e254430806853ade78f9a7287de9e921))
 - *(shacl)* Validate stored values when targets become applicable (#715)([063b48e](https://github.com/scbrown/quipu/commit/063b48e3507125de1dd4fc036cfbee11fafd1ec1))
+- *(store)* Enforce SHACL admission for SET replacements (#699)([55e08b7](https://github.com/scbrown/quipu/commit/55e08b73181af575e5366aaf423e1da26f332bf7))
+- *(shacl)* Judge value sets across writes, including through sh:node (supersedes #713) (#723)([9d55d37](https://github.com/scbrown/quipu/commit/9d55d37660cc685bbacfec15195a763e1911bb8f))
 
 ### Reverted
 
