@@ -86,6 +86,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("import review reopen", "<share-id>", 1, 1, "actor reason", ""),
     spec!("compose", "<pack>... | <key=pack>...", 0, usize::MAX, "repo shapes-from actor destination revoke-tombstone pack-key reason use-pointer declaration authority repo-remote pointer-cache", "rollback"),
     spec!("changes", "", 0, 0, "from capture limit graph", ""),
+    spec!("acquire", "", GROUP, 0, "", ""),
+    spec!("acquire scope", "", 0, 0, "source-store-id graph tx max-vm-steps deadline-ms", ""),
     spec!("migrate-vectors", "", 0, 0, "from to", "dry-run"),
     spec!("git-merge", "<ref>", 1, 1, "", ""),
     spec!("merge-driver", "<base> <ours> <theirs> <path>", 4, 4, "", ""),
