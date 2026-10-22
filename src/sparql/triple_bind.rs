@@ -89,11 +89,10 @@ fn bind_row_inner(
             // equal and every such join silently dropped its blank-node rows
             // (W3C entailment `owlds02`, aegis-56bvs2). Hidden until now
             // because the root-default `rdf:type <C>` path binds Ref itself.
-            let e_val = if let Some(term_id) = store.lookup(&e_iri)? {
-                Value::Ref(term_id)
-            } else {
-                Value::Str(e_iri)
-            };
+            // The id is known: bind the local id for its IRI, or this id when the
+            // term exists only in an attached layer. Never a string: that made a
+            // layer-only subject's binding depend on the term cache (aegis-gwu).
+            let e_val = Value::Ref(store.lookup(&e_iri)?.unwrap_or(e_id));
             if !bind_var(&mut new_bindings, var.as_str(), e_val, &mut compatible) {
                 return Ok(None);
             }
@@ -103,11 +102,7 @@ fn bind_row_inner(
                 Value::Ref(e_id)
             } else {
                 let e_iri = store.resolve(e_id)?;
-                if let Some(term_id) = store.lookup(&e_iri)? {
-                    Value::Ref(term_id)
-                } else {
-                    Value::Str(e_iri)
-                }
+                Value::Ref(store.lookup(&e_iri)?.unwrap_or(e_id))
             };
             if !bind_var(&mut new_bindings, b.as_str(), e_val, &mut compatible) {
                 return Ok(None);
@@ -135,11 +130,7 @@ fn bind_remaining_row(
             Value::Ref(a_id)
         } else {
             let a_iri = store.resolve(a_id)?;
-            if let Some(term_id) = store.lookup(&a_iri)? {
-                Value::Ref(term_id)
-            } else {
-                Value::Str(a_iri)
-            }
+            Value::Ref(store.lookup(&a_iri)?.unwrap_or(a_id))
         };
         if !bind_var(&mut new_bindings, var.as_str(), a_val, &mut compatible) {
             return Ok(None);

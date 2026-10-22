@@ -104,6 +104,15 @@ impl TermCache {
         self.iri_to_id.insert(iri.to_string(), id);
     }
 
+    /// Record only `id -> IRI`: an attached layer's term. `lookup` is local-only,
+    /// so a layer id must never become what it returns for that IRI (aegis-gwu).
+    fn insert_resolve_only(&mut self, id: i64, iri: &str) {
+        if self.id_to_iri.len() >= self.limit && !self.id_to_iri.contains_key(&id) {
+            return;
+        }
+        self.id_to_iri.insert(id, iri.to_string());
+    }
+
     /// Number of distinct terms memoized. Test and telemetry surface.
     pub(crate) fn len(&self) -> usize {
         self.id_to_iri.len()
@@ -196,7 +205,26 @@ impl Store {
             .conn
             .query_row(&self.resolve_sql, params![id], |row| row.get(0))
             .map_err(|_| Error::UnknownTerm(id))?;
-        self.term_cache.borrow_mut().insert(id, &iri);
+        // `iri_to_id` stays local-only, as in `warm_term_cache`. Resolving an
+        // attached layer's id (a GRAPH ?g query ranges the layer's graphs) used to
+        // record IRI -> layer id, so a later `lookup` returned the layer id and
+        // `lookup_all` dropped the local copy of the same graph (aegis-gwu).
+        let local = self.attachments.is_empty()
+            || self
+                .conn
+                .query_row(
+                    "SELECT 1 FROM main.terms WHERE id = ?1",
+                    params![id],
+                    |_| Ok(()),
+                )
+                .optional()?
+                .is_some();
+        let mut cache = self.term_cache.borrow_mut();
+        if local {
+            cache.insert(id, &iri);
+        } else {
+            cache.insert_resolve_only(id, &iri);
+        }
         Ok(iri)
     }
 
