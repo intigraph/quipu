@@ -101,6 +101,54 @@ ex:ObservationShape a sh:NodeShape ; sh:targetClass ex:Observation ;
 }
 
 #[test]
+fn source_shape_messages_include_language_tagged_literals() {
+    for (messages, expected) in [
+        ("\"English message\"@en", "English message"),
+        ("\"Message français\"@fr", "Message français"),
+        (
+            "\"English message\"@en, \"Welsh message\"@cy",
+            "Welsh message",
+        ),
+        ("\"English message\"@en, \"plain message\"", "plain message"),
+    ] {
+        for _ in 0..4 {
+            let shapes = format!(
+                r#"{PREFIX}
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ex:TestShape a sh:NodeShape ; sh:targetNode ex:invalid ;
+    sh:datatype xsd:integer ; sh:message {messages} .
+"#
+            );
+            let validator = Validator::from_turtle(&shapes).unwrap();
+            let feedback = validator.validate(DATA.as_bytes()).unwrap();
+            assert_eq!(feedback.violations, 1);
+            assert_eq!(feedback.results[0].message.as_deref(), Some(expected));
+            assert_eq!(
+                feedback.results[0].source_shape.as_deref(),
+                Some("https://example.org/message/TestShape")
+            );
+        }
+    }
+    for property in [
+        "ex:About",
+        "[ sh:path ex:about ; sh:minCount 1 ; sh:message \"about required\"@en ]",
+    ] {
+        let shapes = format!(
+            r#"{PREFIX}
+ex:ObservationShape a sh:NodeShape ; sh:targetClass ex:Observation ; sh:property {property} .
+ex:About a sh:PropertyShape ; sh:path ex:about ; sh:minCount 1 ; sh:message "about required"@en .
+"#
+        );
+        let feedback = validate_shapes(&shapes, DATA).unwrap();
+        assert_eq!(feedback.violations, 1);
+        assert_eq!(
+            feedback.results[0].message.as_deref(),
+            Some("about required")
+        );
+    }
+}
+
+#[test]
 fn emitted_event_keeps_its_property_shapes_message() {
     use crate::episode::{Episode, Node, ingest_episode};
     use crate::namespace::DEFAULT_BASE_NS;

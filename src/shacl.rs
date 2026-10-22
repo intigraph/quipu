@@ -35,6 +35,15 @@ fn report_term(term: &Object) -> String {
     }
 }
 
+fn report_message(messages: &shacl_engine::types::MessageMap) -> Option<String> {
+    // Feedback carries one string: prefer an untagged message, otherwise the
+    // first normalized language tag, independent of HashMap iteration order.
+    messages
+        .iter()
+        .min_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, message)| message.clone())
+}
+
 fn report_severity(severity: &shacl_engine::types::Severity) -> String {
     match severity {
         shacl_engine::types::Severity::Generic(iri) => iri.to_string(),
@@ -193,9 +202,8 @@ impl Validator {
                     .source()
                     .and_then(|source| schema.get_shape(source))
                     .and_then(|shape| shape.message())
-                    .and_then(|messages| messages.get(None))
-                    .cloned()
-                    .or_else(|| result.message().get(None).cloned()),
+                    .and_then(report_message)
+                    .or_else(|| report_message(result.message())),
             });
         }
 
