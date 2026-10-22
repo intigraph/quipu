@@ -217,9 +217,14 @@ pub(crate) async fn promote_import(
     axum::Json(input): axum::Json<quipu::share_import::PromoteImportRequest>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let actor = principal.map(|axum::Extension(value)| value.as_str().to_owned());
-    blocking(move || {
+    // Promotion copies a whole staged graph into ROOT under the writer, so it
+    // takes the same deadline as `/import`: past it, the promotion rolls back
+    // whole and releases the writer (aegis-oa5).
+    let (started, deadline) = super::admission::import_budget();
+    super::admission::write_blocking_until(started, deadline, move || {
         let (result, work) = {
-            let mut st = store.lock();
+            let mut st = store.write_lock()?;
+            quipu::transaction_auth::refuse_if_refused()?;
             let result = quipu::share_import::promote_import(
                 &mut st,
                 &input,
