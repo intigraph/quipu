@@ -50,7 +50,7 @@
 //! the fix, and it is structural rather than reasoned, which is the difference
 //! that matters: the earlier version was also carefully reasoned.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oxrdf::{NamedOrBlankNode, Term as OxTerm};
 use oxrdfio::{RdfFormat, RdfParser};
@@ -70,6 +70,9 @@ pub struct PayloadScope {
     /// IRIs the payload references in object position without typing them here.
     /// These are the nodes whose type may need to come from the store.
     pub untyped_references: BTreeSet<String>,
+    /// Named objects per predicate. A `sh:targetObjectsOf` shape makes these
+    /// FOCUS nodes even though the payload does not describe them.
+    pub objects: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// Read a payload's subjects and its untyped outbound references.
@@ -83,6 +86,7 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
     let mut subjects = BTreeSet::new();
     let mut typed_here = BTreeSet::new();
     let mut referenced = BTreeSet::new();
+    let mut objects: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
     let parser = RdfParser::from_format(RdfFormat::Turtle);
     for quad in parser.for_reader(payload_turtle.as_bytes()) {
@@ -97,6 +101,10 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
             && quad.predicate.as_str() != RDF_TYPE
         {
             referenced.insert(o.as_str().to_string());
+            objects
+                .entry(quad.predicate.as_str().to_string())
+                .or_default()
+                .insert(o.as_str().to_string());
         }
     }
 
@@ -106,6 +114,7 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
     Ok(PayloadScope {
         subjects,
         untyped_references,
+        objects,
     })
 }
 
@@ -172,6 +181,24 @@ pub fn store_type_context_in_graph(
         }
     }
     Ok(lines.into_iter().collect())
+}
+
+/// The predicates named by `sh:targetObjectsOf` in `shapes_turtle`.
+pub fn object_target_predicates(shapes_turtle: &str) -> Result<BTreeSet<String>> {
+    const SH_TARGET_OBJECTS_OF: &str = "http://www.w3.org/ns/shacl#targetObjectsOf";
+    let parser = oxttl::TurtleParser::new()
+        .with_base_iri("http://example.org/")
+        .map_err(|e| Error::InvalidValue(format!("shapes base IRI: {e}")))?;
+    let mut predicates = BTreeSet::new();
+    for triple in parser.for_reader(shapes_turtle.as_bytes()) {
+        let triple = triple.map_err(|e| Error::InvalidValue(format!("shapes parse error: {e}")))?;
+        if let OxTerm::NamedNode(p) = &triple.object
+            && triple.predicate.as_str() == SH_TARGET_OBJECTS_OF
+        {
+            predicates.insert(p.as_str().to_string());
+        }
+    }
+    Ok(predicates)
 }
 
 /// SHACL paths that some property shape REQUIRES (`sh:minCount >= 1`).
@@ -361,12 +388,18 @@ pub fn validate_with_store_context_in_graph(
     //     fixes `sh:class` on a value whose type lives in the store.
     //   - REQUIRED PROPERTIES on the payload's own SUBJECTS (aegis-dixug):
     //     fixes an incremental write being refused for a floor the store
-    //     already satisfies.
+    //     already satisfies. Objects of a `sh:targetObjectsOf` predicate are
+    //     focus nodes too (aegis-g51c C1): an edge-only write to a stored,
+    //     valid node must see that node's required properties.
     // Both are bounded, and neither can add a violation — `repaired` subtracts.
     let mut context = store_type_context_in_graph(store, &scope.untyped_references, g)?;
+    let mut focuses = scope.subjects.clone();
+    for predicate in object_target_predicates(shapes_turtle)? {
+        focuses.extend(scope.objects.get(&predicate).into_iter().flatten().cloned());
+    }
     context.push_str(&store_property_context_in_graph(
         store,
-        &scope.subjects,
+        &focuses,
         &required_paths(shapes_turtle)?,
         g,
     )?);
@@ -440,6 +473,10 @@ fn issue_key(issue: &crate::shacl::ValidationIssue) -> String {
 #[cfg(test)]
 #[path = "shacl_context_tests.rs"]
 mod shacl_context_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_objects_of_tests.rs"]
+mod shacl_objects_of_tests;
 
 /// Queue each result of an EMIT-mode validation as a `shacl.violation` event
 /// riding the next write's savepoint (event P3). One definition for every
