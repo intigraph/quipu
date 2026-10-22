@@ -6,10 +6,7 @@ against your rules, records where each fact came from, and answers what was true
 when.
 
 **Quipu is that store.** *Bitemporal* means keeping both when a fact was recorded
-and, when supplied, when it was true. Write enforcement is opt-in:
-`shacl.validate_on_write` and `governance.enforce_on_write` default to `false`
-([configuration](getting-started/configuration.md)). Enable the checks you need
-before relying on automatic refusal.
+and, when supplied, when it was true.
 
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record:
 cords are entities, knots are facts.
