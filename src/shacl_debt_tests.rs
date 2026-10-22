@@ -332,3 +332,53 @@ aegis:RunShape a sh:NodeShape ; sh:targetClass aegis:Run ;
         v.results
     );
 }
+
+/// A value held in BOTH ROOT and graph `g` survives deleting `g`'s copy (grant,
+/// review of #751): the post-state is built per graph, so the delete is not
+/// refused. Paired control: when `g` holds the only copy, the delete is refused.
+#[test]
+fn a_delete_in_a_graph_keeps_roots_copy_of_the_value() {
+    let session =
+        format!("<{A}s> a <{A}Session> ; <{A}actor> <{A}alice> ; <{A}sourceKind> \"observed\" .\n");
+    let removed = format!("<{A}s> <{A}actor> <{A}alice> .\n");
+
+    let mut store = store_with(&session);
+    let g = store.graph_create("http://x/graph/plane").expect("graph");
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        session.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-10-22T00:00:00Z",
+        None,
+        Some("test"),
+        g,
+    )
+    .expect("same facts in the plane");
+    let v = retraction_violations_in_graph(&store, SHAPES, &removed, "", g).expect("validated");
+    assert!(
+        v.conforms,
+        "ROOT's copy was lost from the post-state: {:?}",
+        v.results
+    );
+
+    // CONTROL: the plane alone holds the value, so deleting it empties the path.
+    let mut store = Store::open_in_memory().expect("store");
+    let g = store.graph_create("http://x/graph/plane").expect("graph");
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        session.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-10-22T00:00:00Z",
+        None,
+        Some("test"),
+        g,
+    )
+    .expect("facts only in the plane");
+    let v = retraction_violations_in_graph(&store, SHAPES, &removed, "", g).expect("validated");
+    assert!(
+        !v.conforms,
+        "the only copy was deleted and the delete passed"
+    );
+}
