@@ -15,6 +15,7 @@ pub mod decision_deck;
 mod decision_nonces;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
+mod shacl_new_graph;
 mod shacl_poststate;
 pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
