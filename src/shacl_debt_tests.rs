@@ -228,3 +228,23 @@ fn a_repairing_write_clears_the_debt() {
     assert_eq!((v.violations, v.warnings), (0, 0), "{:?}", v.results);
     assert!(debt_events(&store).is_empty());
 }
+
+/// Logical and nested components are never admitted, even when the stored node
+/// already violates them: their pre-state depends on other nodes, and a bounded
+/// context could fabricate it (W3C qualifiedValueShape-001 written in halves).
+#[test]
+fn logical_component_debt_is_not_admitted() {
+    const OR_SHAPES: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:RuleShape a sh:NodeShape ;
+    sh:targetClass aegis:Rule ;
+    sh:or ( [ sh:path aegis:memberOf ; sh:minCount 1 ]
+            [ sh:path aegis:governedBy ; sh:minCount 1 ] ) .
+"#;
+    let rule = format!("<{A}rule> a <{A}Rule> .\n");
+    let store = store_with(&rule);
+    let v = validate_with_store_context(&store, OR_SHAPES, &rule).expect("validated");
+    assert!(!v.conforms, "sh:or debt was admitted: {:?}", v.results);
+    assert!(debt_events(&store).is_empty());
+}

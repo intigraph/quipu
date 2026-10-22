@@ -2200,7 +2200,7 @@ A write can reuse an existing node by name and type when that node was stored
 before its shape existed and still lacks a required value. That violation is
 pre-existing debt, not something the write introduced, so it does not refuse
 the write. The write is admitted, and the issue is returned as a `Warning`
-whose message starts with `pre-existing debt (admitted as Warning): `.
+whose message starts with `pre-existing debt (admitted as Warning):`.
 
 The match is exact. The node's pre-state (its stored types and its stored
 values on required paths) must report the same focus, constraint component,

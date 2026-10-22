@@ -443,9 +443,13 @@ pub const DEBT_MESSAGE_PREFIX: &str = "pre-existing debt (admitted as Warning): 
 ///
 /// # What is admitted, exactly
 ///
-/// The PRE-STATE of each remaining focus node, meaning its stored types and
-/// its stored values for every required path (the same bounded context as the
-/// repair), is validated on its own. A payload violation is admitted only
+/// The PRE-STATE of each remaining focus node, meaning its whole stored
+/// description plus the types of the nodes it references, is validated on its
+/// own. Only focus-local components are admitted ([`is_focus_local`]): for those
+/// that context is the complete pre-state, so a pre-state violation is real
+/// debt. Nested and logical components (`sh:node`, `sh:qualifiedValueShape`,
+/// `sh:or` and kin) depend on other nodes' descriptions; a bounded context could
+/// fabricate their pre-state violation, so they are never admitted. A payload violation is admitted only
 /// when that pre-state run reports the SAME issue: the same focus, component,
 /// path, value, message and, when the shape is named, source shape. Everything
 /// else is still refused:
@@ -474,19 +478,15 @@ fn admit_preexisting_debt(
         .collect();
     // Types first: a focus the store does not type cannot carry debt, and an
     // empty type context means every remaining violation is new.
-    let types = store_type_context_in_graph(store, &focuses, g)?;
-    if types.is_empty() {
+    if store_type_context_in_graph(store, &focuses, g)?.is_empty() {
         return Ok(feedback);
     }
-    let pre_state = format!(
-        "{types}{}",
-        store_property_context_in_graph(store, &focuses, &required_paths(shapes_turtle)?, g)?
-    );
+    let pre_state = store_description_in_graph(store, &focuses, g)?;
     let before = crate::shacl::validate_shapes(shapes_turtle, &pre_state)?;
     let debt: BTreeSet<String> = before
         .results
         .iter()
-        .filter(|r| is_violation(r))
+        .filter(|r| is_violation(r) && is_focus_local(r))
         .map(debt_key)
         .collect();
     if debt.is_empty() {
@@ -495,7 +495,7 @@ fn admit_preexisting_debt(
 
     let graph = store.graph_iri_of(g);
     for issue in &mut feedback.results {
-        if !is_violation(issue) || !debt.contains(&debt_key(issue)) {
+        if !is_violation(issue) || !is_focus_local(issue) || !debt.contains(&debt_key(issue)) {
             continue;
         }
         store.queue_write_event(crate::store::PendingWriteEvent {
@@ -595,7 +595,10 @@ pub fn retraction_violations_in_graph(
     feedback.results = after
         .results
         .into_iter()
+        // A delete can only take a value away, so only a floor can newly fail.
+        // Other components are not judged on this bounded post-state.
         .filter(|r| is_violation(r) && subjects.contains(&r.focus_node))
+        .filter(|r| r.component.ends_with("MinCountConstraintComponent"))
         .filter(|r| !debt.contains(&debt_key(r)))
         .collect();
     feedback.violations = feedback.results.len();
@@ -612,6 +615,65 @@ fn parse_triples(nt: &str) -> Result<Vec<oxrdf::Triple>> {
                 .map_err(|e| Error::InvalidValue(format!("RDF parse error: {e}")))
         })
         .collect()
+}
+
+/// Every current fact of `iris` in graph `g` and ROOT, plus the types of every
+/// IRI those facts reference, as N-Triples: the pre-state debt is judged on.
+#[cfg(feature = "shacl")]
+fn store_description_in_graph(store: &Store, iris: &BTreeSet<String>, g: i64) -> Result<String> {
+    let mut graphs = vec![crate::schema::ROOT_GRAPH];
+    if g != crate::schema::ROOT_GRAPH {
+        graphs.push(g);
+    }
+    let mut lines = BTreeSet::new();
+    let mut referenced = BTreeSet::new();
+    for iri in iris {
+        let Some(entity) = store.lookup(iri)? else {
+            continue;
+        };
+        for &scope in &graphs {
+            for fact in store.entity_facts_in_graph(entity, scope)? {
+                let attr = store.resolve(fact.attribute)?;
+                let Ok(term) = crate::rdf::value_to_term(store, &fact.value) else {
+                    continue;
+                };
+                if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
+                    referenced.insert(store.resolve(*id)?);
+                }
+                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+            }
+        }
+    }
+    let mut out: String = lines.into_iter().collect();
+    out.push_str(&store_type_context_in_graph(store, &referenced, g)?);
+    Ok(out)
+}
+
+/// Components a node's own description and its references' types decide
+/// completely, on a plain predicate path. Anything else is never debt.
+#[cfg(feature = "shacl")]
+fn is_focus_local(issue: &crate::shacl::ValidationIssue) -> bool {
+    const LOCAL: &[&str] = &[
+        "MinCountConstraintComponent",
+        "MaxCountConstraintComponent",
+        "HasValueConstraintComponent",
+        "InConstraintComponent",
+        "DatatypeConstraintComponent",
+        "NodeKindConstraintComponent",
+        "PatternConstraintComponent",
+        "MinLengthConstraintComponent",
+        "MaxLengthConstraintComponent",
+        "LanguageInConstraintComponent",
+        "ClassConstraintComponent",
+    ];
+    let component = issue
+        .component
+        .trim_matches(['<', '>'])
+        .trim_start_matches("http://www.w3.org/ns/shacl#");
+    let plain_path = issue.path.as_deref().is_some_and(|p| {
+        p.starts_with("http://") || p.starts_with("https://") || p.starts_with("urn:")
+    });
+    LOCAL.contains(&component) && plain_path
 }
 
 #[cfg(feature = "shacl")]
