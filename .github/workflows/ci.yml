@@ -427,6 +427,7 @@ jobs:
       - name: Verify the CI to Release contract
         run: |
           python3 scripts/test_release_ci_gate.py
+          python3 scripts/test_release_schedule.py
           python3 scripts/test_release_ci_gate_controls.py
           python3 scripts/test_wait_release_correctness.py
           python3 scripts/test_rearm_release_correctness.py
