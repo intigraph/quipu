@@ -298,3 +298,35 @@ fn an_import_past_its_deadline_rolls_back() {
         "the control must write what the refusal did not"
     );
 }
+
+fn plan(store: &Store, sql: &str) -> String {
+    let mut stmt = store
+        .conn
+        .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+        .unwrap();
+    stmt.query_map([], |r| r.get::<_, String>(3))
+        .unwrap()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap()
+        .join(" | ")
+}
+
+/// Both delta reads under the writer are bounded by the delta, not the label set.
+/// With no planner statistics, `a = ?` drew SQLite onto the label index: on a
+/// production-size copy that was 12.5 s and 49.8 s, under the writer, for a
+/// delta of zero rows (aegis-oa5).
+#[test]
+fn the_delta_reads_under_the_writer_use_the_transaction_indexes() {
+    let store = store_with(LOCAL);
+    let label = store.lookup(LABEL).unwrap().unwrap();
+    let asserted = plan(&store, &crate::resolution::delta_sql(1, label));
+    assert!(asserted.contains("USING INDEX idx_tx"), "{asserted}");
+    let retracted = RETRACTED_LABELS_SQL
+        .replace("?1", "1")
+        .replace("?2", &label.to_string());
+    let retracted = plan(&store, &retracted);
+    assert!(
+        retracted.contains("USING INDEX idx_retracted_tx"),
+        "{retracted}"
+    );
+}
