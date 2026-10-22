@@ -8,11 +8,25 @@
 //!
 //! A top-level conjunct whose variables one triple pattern always binds gives
 //! the same answer on that pattern's rows as on the joined rows: the other
-//! patterns only add bindings for variables it does not read. A conjunct that
-//! is false or an error eliminates the row either way, because `false && x` and
-//! `error && x` are never true. So the pattern is scanned on its own, the
-//! conjunct drops its rows there, and only the survivors probe the rest of the
-//! BGP. The caller still applies the whole filter to the joined rows.
+//! patterns only add bindings for variables it does not read. So the pattern is
+//! scanned on its own, the conjunct drops its rows there, and only the
+//! survivors probe the rest of the BGP. The caller still applies the whole
+//! filter to the joined rows.
+//!
+//! Dropping a row early must not hide an error the original would raise, and
+//! raising one early must not invent an error the original never reaches.
+//! `&&` evaluates left to right: a `false` stops it, a type error does not, and
+//! a hard error (an invalid `REGEX` pattern, say) fails the query. So:
+//!
+//! - only a PREFIX of the conjuncts judges early. A conjunct after one the
+//!   driver cannot judge might never run in the original, or run after a hard
+//!   error that the original raises first;
+//! - a `false` in that prefix drops the row, exactly where the original stops;
+//! - a hard error KEEPS the row. The original evaluates the filter only on rows
+//!   that survive the join, so the error surfaces there, on joined rows, or
+//!   not at all. Raising it here failed queries the original answers (review
+//!   of #733: an invalid pattern on a subject the join discards);
+//! - the query budget is not a property of the row, and still propagates.
 //!
 //! The rewrite has to beat the plan it replaces, not just be exact. Driving
 //! from an unselective pattern can scan far more than a small original driver
@@ -32,7 +46,7 @@ use std::collections::HashSet;
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
-use super::filter::eval_filter;
+use super::filter::eval_filter_tv;
 use super::pattern_util::{check_eval_budget, triple_pattern_vars};
 use super::triple::{eval_bgp, eval_triple_pattern_limited};
 use super::{Bindings, TemporalContext};
@@ -49,7 +63,8 @@ pub(super) const MAX_SCAN_ROWS: usize = 262_144;
 /// the whole expression.
 ///
 /// # Errors
-/// Any error from evaluating a pattern or a conjunct, and the query budget.
+/// Any error from evaluating a pattern, and the query budget. A conjunct's own
+/// error is deferred to the joined rows, where the original plan raises it.
 pub(super) fn try_eval(
     store: &Store,
     expr: &Expression,
@@ -103,14 +118,7 @@ pub(super) fn try_eval(
     let mut kept = Vec::new();
     for (i, row) in rows.into_iter().enumerate() {
         check_eval_budget(ctx, i, kept.len())?;
-        let mut pass = true;
-        for conjunct in &judged {
-            if !eval_filter(store, conjunct, &row, ctx)? {
-                pass = false;
-                break;
-            }
-        }
-        if pass {
+        if keeps(store, &judged, &row, ctx)? {
             kept.push(row);
         }
     }
@@ -143,6 +151,35 @@ pub(super) fn try_eval(
     Ok(Some((joined, vars)))
 }
 
+/// Whether a driver row survives the judged prefix, as the original would
+/// decide it on every row joined from it. See the module docs.
+fn keeps(
+    store: &Store,
+    prefix: &[&Expression],
+    row: &Bindings,
+    ctx: &TemporalContext,
+) -> Result<bool> {
+    for conjunct in prefix {
+        match eval_filter_tv(store, conjunct, row, ctx) {
+            Ok(Some(false)) => return Ok(false),
+            Ok(Some(true) | None) => {}
+            Err(error) if budget(&error) => return Err(error),
+            // Deferred to the joined rows, where the original raises it.
+            Err(_) => return Ok(true),
+        }
+    }
+    Ok(true)
+}
+
+/// Errors that belong to the query, not to the row being judged.
+fn budget(error: &crate::error::Error) -> bool {
+    use crate::error::Error;
+    matches!(
+        error,
+        Error::QueryTimeout { .. } | Error::RequestTimeout { .. } | Error::QueryComplexity { .. }
+    )
+}
+
 fn collect_conjuncts<'a>(expr: &'a Expression, out: &mut Vec<&'a Expression>) {
     if let Expression::And(left, right) = expr {
         collect_conjuncts(left, out);
@@ -152,9 +189,10 @@ fn collect_conjuncts<'a>(expr: &'a Expression, out: &mut Vec<&'a Expression>) {
     }
 }
 
-/// The first pattern that can judge a conjunct alone, with those conjuncts.
-/// Only `?s <p> ?o` with a non-type predicate: the shape whose size the
-/// estimate can bound and whose scan needs no entailment.
+/// The first pattern that can judge a leading run of conjuncts alone, with
+/// that run (in evaluation order; see the module docs). Only `?s <p> ?o` with
+/// a non-type predicate: the shape whose size the estimate can bound and whose
+/// scan needs no entailment.
 fn choose_driver<'a>(
     patterns: &[TriplePattern],
     conjuncts: &[&'a Expression],
@@ -171,7 +209,7 @@ fn choose_driver<'a>(
         let judged: Vec<&Expression> = conjuncts
             .iter()
             .copied()
-            .filter(|conjunct| {
+            .take_while(|conjunct| {
                 let mut vars = HashSet::new();
                 stable_vars(conjunct, &mut vars) && !vars.is_empty() && vars.is_subset(&bound)
             })

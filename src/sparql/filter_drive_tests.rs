@@ -278,3 +278,88 @@ fn a_filtered_count_drives_and_counts_the_same_rows() {
     assert_eq!(bag(new.rows()), bag(old.rows()));
     assert!(!new.rows().is_empty());
 }
+
+const FLAG: &str = "urn:review:flag";
+const RX: &str = "urn:review:regex";
+
+/// 5,000 flagged items, the first with a valid pattern, and `bad` on the
+/// subject `bad_on` (unflagged unless `bad_on` is a flagged item).
+fn regex_store(bad_on: &str) -> (Store, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("rx.db").to_str().unwrap()).unwrap();
+    let mut data = String::new();
+    for i in 0..5000 {
+        data.push_str(&format!("<urn:review:item/{i}> <{FLAG}> \"yes\" .\n"));
+    }
+    data.push_str(&format!("<urn:review:item/0> <{RX}> \"x\" .\n"));
+    data.push_str(&format!("<{bad_on}> <{RX}> \"[\" .\n"));
+    put(&mut store, BOARD, &data);
+    // The resident read model joins in memory and is never driven.
+    store.set_read_model_enabled(false);
+    (store, dir)
+}
+
+fn rx_select() -> String {
+    format!(
+        "SELECT ?item WHERE {{ GRAPH <{BOARD}> {{ ?item <{FLAG}> \"yes\" ; <{RX}> ?rx . \
+         FILTER(REGEX(\"x\", ?rx)) }} }}"
+    )
+}
+
+fn rx_count() -> String {
+    format!(
+        "SELECT (COUNT(DISTINCT ?item) AS ?n) WHERE {{ GRAPH <{BOARD}> {{ \
+         ?item <{FLAG}> \"yes\" ; <{RX}> ?rx . FILTER(REGEX(\"x\", ?rx)) }} }}"
+    )
+}
+
+/// Review of #733: a hard error on a row the join discards must not fail the
+/// query. The original plan never evaluates the filter on the unflagged
+/// subject; the driven plan judged it before the join and raised its invalid
+/// pattern. Now the error is deferred to joined rows, and both plans answer.
+#[test]
+fn an_error_on_a_row_the_join_discards_does_not_fail_the_query() {
+    let (store, _dir) = regex_store("urn:review:loner");
+    for text in [rx_select(), rx_count()] {
+        let expected = reference(|| query(&store, &text).unwrap());
+        let (actual, drove) = driven(&store, &text);
+        assert!(
+            drove > 0,
+            "the driven plan must run, or this proves nothing: {text}"
+        );
+        assert_eq!(bag(actual.rows()), bag(expected.rows()), "{text}");
+    }
+    assert_eq!(bag(query(&store, &rx_select()).unwrap().rows()).len(), 1);
+}
+
+/// The positive control: on a row that DOES join, the error is genuine and
+/// both plans refuse. Swallowing every pattern error is not the repair.
+#[test]
+fn an_error_on_a_joined_row_still_fails_both_plans() {
+    let (store, _dir) = regex_store("urn:review:item/1");
+    for text in [rx_select(), rx_count()] {
+        assert!(
+            reference(|| query(&store, &text)).is_err(),
+            "original: {text}"
+        );
+        DROVE.set(0);
+        assert!(query(&store, &text).is_err(), "driven: {text}");
+        assert!(DROVE.get() > 0, "the driven plan must have run: {text}");
+    }
+}
+
+/// Only a leading run of conjuncts judges early. Here the first conjunct
+/// needs both patterns, so no single pattern can judge the prefix and the
+/// original plan runs, even though the second conjunct alone could drive.
+#[test]
+fn a_conjunct_after_one_the_driver_cannot_judge_is_not_applied_early() {
+    let (store, _dir) = regex_store("urn:review:loner");
+    let text = format!(
+        "SELECT ?item WHERE {{ GRAPH <{BOARD}> {{ ?item <{FLAG}> ?f ; <{RX}> ?rx . \
+         FILTER(?f != ?rx && REGEX(\"x\", ?rx)) }} }}"
+    );
+    let expected = reference(|| query(&store, &text).unwrap());
+    let (actual, drove) = driven(&store, &text);
+    assert_eq!(drove, 0, "a non-prefix conjunct must not drive");
+    assert_eq!(bag(actual.rows()), bag(expected.rows()));
+}
