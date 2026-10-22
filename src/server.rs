@@ -413,6 +413,7 @@ async fn main() {
         .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
+        .route("/render", post(render_prepare))
         .route("/graph", post(graph_view))
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
@@ -526,7 +527,7 @@ async fn main() {
                         return response;
                     }
                     let (auth_header, authorization) = auth::authorize_request(
-                        &req, &auth_policy, is_write, read_only,
+                        &req, &auth_policy, read_only,
                     );
                     match authorization.decision {
                         quipu::http_auth::AccessDecision::Allow => {
