@@ -5,6 +5,7 @@
 //! ORDER BY/GROUP BY, aggregates, HAVING, EXTEND, RDFS, PROJECT, DISTINCT, REDUCED, LIMIT/OFFSET.
 
 pub mod aggregate;
+mod attach_scope;
 mod batch_absence;
 mod batch_star;
 mod casts;
@@ -59,6 +60,8 @@ pub(crate) mod count_mmap;
 mod count_optional;
 mod count_state;
 mod count_stream;
+#[cfg(test)]
+mod datetime_compare_tests;
 mod graph_filter;
 #[cfg(test)]
 mod graph_filter_tests;
@@ -583,7 +586,22 @@ pub fn query_temporal(store: &Store, sparql: &str, ctx: &TemporalContext) -> Res
         .transpose()?;
 
     let base_iri = parsed.base_iri().map(ToString::to_string);
-    let result = filter::with_base_iri(base_iri.as_deref(), || eval_parsed(store, parsed, &ctx));
+    let result = filter::with_base_iri(base_iri.as_deref(), || {
+        // A query that can read no attached graph answers as the unattached
+        // store does, so it keeps that store's fast paths (aegis-xacr). The
+        // decision reads the store, so it runs under the query's own budget
+        // and its errors are normalised like the evaluator's.
+        let dataset = match &parsed {
+            Query::Select { dataset, .. }
+            | Query::Construct { dataset, .. }
+            | Query::Describe { dataset, .. }
+            | Query::Ask { dataset, .. } => dataset.as_ref(),
+        };
+        let scoped = apply_dataset(store, dataset, &ctx)?;
+        let composes = attach_scope::composes(store, &parsed, &scoped.graph, &ctx)?;
+        let _composition = store.scope_composition(composes);
+        eval_parsed(store, parsed, &ctx)
+    });
     match result {
         // Any failure past the deadline is reported as the timeout it is: the
         // proximate error (a SQLITE_INTERRUPT, or the evaluator's own check)

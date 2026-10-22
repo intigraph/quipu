@@ -299,12 +299,24 @@ fn malformed_unrelated_relation_retains_selective_lookup() {
             .unwrap()
             .is_none()
     );
-    let result = super::super::query(&store,
-        "SELECT ?s ?v WHERE { GRAPH <urn:test:local> { ?s <urn:test:owner> <urn:test:principal>; <urn:test:status> ?v } } ORDER BY STR(?s)").unwrap();
+    let query = "SELECT ?s ?v WHERE { GRAPH <urn:test:local> { ?s <urn:test:owner> <urn:test:principal>; <urn:test:status> ?v } } ORDER BY STR(?s)";
+    // The composed path stays selective around the unrelated bad blob.
+    let composed_answer = {
+        let _view = store.scope_composition(true);
+        let parsed = super::super::sparql_parser().parse_query(query).unwrap();
+        super::super::eval_parsed(&store, parsed, &TemporalContext::default()).unwrap()
+    };
     assert_eq!(
-        result.rows().len(),
+        composed_answer.rows().len(),
         2,
         "unrelated bad blob must not break a selective query"
+    );
+    // urn:test:local is not an attached graph, so the query itself answers as
+    // the unattached store does (aegis-xacr), which refuses the same blob.
+    let local = super::super::query(&store, query);
+    assert!(
+        matches!(&local, Err(crate::Error::InvalidValue(m)) if m.contains("unknown tag")),
+        "{local:?}"
     );
 }
 
