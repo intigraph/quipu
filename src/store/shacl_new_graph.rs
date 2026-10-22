@@ -12,10 +12,37 @@ use std::collections::BTreeSet;
 
 use super::Store;
 #[cfg(feature = "shacl")]
-use super::shacl_poststate::{COMPONENTS, VALUE_SETS};
-#[cfg(feature = "shacl")]
 use crate::Error;
+#[cfg(feature = "shacl")]
 use crate::Result;
+
+// Value-set components (aegis-7ur8) are judged like maxCount: on the
+// written focuses, over base context, independent of the value closure.
+#[cfg(feature = "shacl")]
+pub(super) const VALUE_SETS: &[&str] = &[
+    "MaxCountConstraintComponent",
+    "UniqueLangConstraintComponent",
+    "DisjointConstraintComponent",
+    "LessThanConstraintComponent",
+    "LessThanOrEqualsConstraintComponent",
+];
+// Value components, judged once the value closure is complete.
+#[cfg(feature = "shacl")]
+pub(super) const COMPONENTS: &[&str] = &[
+    "DatatypeConstraintComponent",
+    "NodeKindConstraintComponent",
+    "ClassConstraintComponent",
+    "PatternConstraintComponent",
+    "MinLengthConstraintComponent",
+    "MaxLengthConstraintComponent",
+    "MinExclusiveConstraintComponent",
+    "MinInclusiveConstraintComponent",
+    "MaxExclusiveConstraintComponent",
+    "MaxInclusiveConstraintComponent",
+    "InConstraintComponent",
+    "LanguageInConstraintComponent",
+    "NodeConstraintComponent",
+];
 
 #[cfg(feature = "shacl")]
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -36,7 +63,7 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    /// Asserted facts selected by `sql` (columns e,a,v,tx,valid_from,valid_to).
+    /// Asserted facts selected by `sql` (columns `e, a, v, tx, valid_from, valid_to`).
     fn post_state_facts(&self, sql: &str, params: &[i64]) -> Result<Vec<crate::Fact>> {
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map(rusqlite::params_from_iter(params), |row| {

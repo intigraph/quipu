@@ -7,36 +7,10 @@
 #[cfg(feature = "shacl")]
 use std::collections::BTreeSet;
 
+#[cfg(feature = "shacl")]
+use super::shacl_new_graph::{COMPONENTS, VALUE_SETS};
 use super::{Datum, Store};
 use crate::{Error, Result};
-
-// Value-set components (aegis-7ur8) are judged like maxCount: on the
-// written focuses, over base context, independent of the value closure.
-#[cfg(feature = "shacl")]
-pub(super) const VALUE_SETS: &[&str] = &[
-    "MaxCountConstraintComponent",
-    "UniqueLangConstraintComponent",
-    "DisjointConstraintComponent",
-    "LessThanConstraintComponent",
-    "LessThanOrEqualsConstraintComponent",
-];
-// Value components, judged once the value closure is complete.
-#[cfg(feature = "shacl")]
-pub(super) const COMPONENTS: &[&str] = &[
-    "DatatypeConstraintComponent",
-    "NodeKindConstraintComponent",
-    "ClassConstraintComponent",
-    "PatternConstraintComponent",
-    "MinLengthConstraintComponent",
-    "MaxLengthConstraintComponent",
-    "MinExclusiveConstraintComponent",
-    "MinInclusiveConstraintComponent",
-    "MaxExclusiveConstraintComponent",
-    "MaxInclusiveConstraintComponent",
-    "InConstraintComponent",
-    "LanguageInConstraintComponent",
-    "NodeConstraintComponent",
-];
 
 impl Store {
     /// Supply explicit shapes to every transaction made by one operation.
