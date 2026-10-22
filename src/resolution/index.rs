@@ -175,6 +175,11 @@ impl LabelIndex {
         Ok(Self { entries })
     }
 
+    /// The canonical entity id of every label in this index.
+    pub(crate) fn entity_ids(&self) -> impl Iterator<Item = i64> + '_ {
+        self.entries.iter().map(|entry| entry.entity_id)
+    }
+
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
     pub(crate) fn candidates(
         &self,

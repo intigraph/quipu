@@ -98,6 +98,22 @@ pub fn import_share(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<ShareImportResult> {
+    import_share_prepared(store, request, timestamp, actor, None)
+}
+
+/// [`import_share`] with a resolution prepared on a read connection
+/// ([`crate::share_import_resolve::prepare`]), so the writer is held only to
+/// revalidate it, validate and stage (aegis-oa5).
+///
+/// # Errors
+/// The same refusals as [`import_share`], and the request deadline.
+pub fn import_share_prepared(
+    store: &mut Store,
+    request: &ShareImportRequest,
+    timestamp: &str,
+    actor: Option<&str>,
+    mut prepared: Option<crate::share_import_resolve::PreparedImport>,
+) -> Result<ShareImportResult> {
     // Review metadata and graph admission must not trigger the generic
     // write hook. Only eligible staged documents are indexed after commit.
     let automatic = store.embedding_config().auto_embed;
@@ -107,7 +123,8 @@ pub fn import_share(
         let old = state(store, &request.manifest.share_id)?;
         // Staging is not a ROOT write or permission to index quarantined data.
         // Collect selected-graph work only after admission has completed.
-        let result = crate::share_import::import_inner(store, request, timestamp, actor)?;
+        let result =
+            crate::share_import::import_inner(store, request, timestamp, actor, prepared.take())?;
         let next = if result.promotion.eligible {
             "staged"
         } else {
