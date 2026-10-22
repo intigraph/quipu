@@ -93,7 +93,7 @@
       "source": "scripts/build-repository-share.sh",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/scripts%2Fbuild-repository-share.sh",
       "summary": "The legacy trusted-host repository builder invokes the Bobbin indexer and Quipu share and quarantine checks. Private publication policy remains outside the public artifact.",
-      "source_sha256": "daca2ea4e1f7f31df591d039b3344686cff4445a0ea2dd3bbae3fbca2beee9da",
+      "source_sha256": "89e6a19cd92208acc18a89813adec4f510bb8b1b04ea2b636093425679a3e387",
       "properties": {
         "interfaceKind": "file-format",
         "publicName": "Trusted repository pendant builder"
