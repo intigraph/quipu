@@ -174,6 +174,19 @@ pub(super) fn visit(
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
             let seed = pushed.as_ref().unwrap_or(seed);
             let narrowed = super::string_pushdown::narrowed(expr, inner, seed, ctx);
+            // aegis-xacr: a count over a filtered BGP drives from the pattern
+            // the filter can judge, exactly as the row evaluator does.
+            let inner_ctx = narrowed.as_ref().unwrap_or(ctx);
+            if let Some((rows, _)) =
+                super::filter_drive::try_eval(store, expr, inner, inner_ctx, seed)?
+            {
+                for row in rows {
+                    if eval_filter(store, expr, &row, ctx)? {
+                        emit(row)?;
+                    }
+                }
+                return Ok(());
+            }
             visit(
                 store,
                 inner,
