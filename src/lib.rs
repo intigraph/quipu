@@ -165,9 +165,9 @@ pub const GIT_SHA: &str = env!("QUIPU_GIT_SHA");
 pub use rdf_export::{export_rdf_construct, export_rdf_group};
 
 pub use config::{
-    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig,
-    RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig, ShaclConfig, VectorBackend,
-    VectorConfig, open_with_configured_attachments,
+    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, ProjectionColumnConfig,
+    ProjectionConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig,
+    ShaclConfig, VectorBackend, VectorConfig, open_with_configured_attachments,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
@@ -264,7 +264,7 @@ pub use sparql::{
     query_temporal as sparql_query_temporal,
 };
 pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
-pub use store::{Datum, Store};
+pub use store::{Datum, ProjectionAggregate, ProjectionStatus, Store};
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};
 pub use types::{Fact, Op, Term, Transaction, Value};

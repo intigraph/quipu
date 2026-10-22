@@ -1570,6 +1570,27 @@ curl -s localhost:3030/ask -X POST \
   -d '{"name":"service_deps","params":{"entity":"http://example.org/traefik"}}'
 ```
 
+### `POST /projections`
+
+Read a current-state projection declared in `[[quipu.projections]]` (a key
+predicate plus column predicates, kept current by the writer). A read
+endpoint. Body `action`:
+
+- `"list"`: the declared projections and what is installed.
+- `"aggregate"` (default): `name`, optional `graph` (IRI; default graph if
+  omitted), `key_in` (key values to keep), `group_by` (`"key"` or a column),
+  `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`), `max_groups`.
+  Response: `total`, `groups` (`value`, `n`), `truncated`, `multi_valued_rows`,
+  `tx`.
+
+A projection that is not installed at its declared definition refuses rather
+than answer stale.
+
+```bash
+curl -s localhost:3030/projections -X POST \
+  -d '{"name":"board","graph":"http://example.org/board","key_in":["open"],"group_by":"priority"}'
+```
+
 ### `POST /search_nodes`
 
 Search entities by natural-language query (text matching). Body: `query`,
