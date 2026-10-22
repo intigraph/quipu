@@ -19,6 +19,7 @@ All notable changes to this project will be documented in this file.
 - *(server)* Re-land session-key auth (#687) with declared identity checked only when keys are required (#712)([9b78ab2](https://github.com/scbrown/quipu/commit/9b78ab21bbd9b66da785694a95a8c23f59f4fcc9))
 - *(acquisition)* Bounded physical scope measurement (#705)([462268c](https://github.com/scbrown/quipu/commit/462268cc605a096eacbe1feb93690c41627ae481))
 - *(skills)* Define opt-in pinned catalogue shapes (#717)([c98f18a](https://github.com/scbrown/quipu/commit/c98f18a4c37c4fb4baf66bef1d9600cfd4e9a5a0))
+- *(shacl)* [**breaking**] Validate writes against loaded shapes by default (#720)([9a2c879](https://github.com/scbrown/quipu/commit/9a2c8792071f17d7420cb0c91ec1c931a599b547))
 
 ### CI/CD
 
@@ -30,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Embed the repository pendant diagram in the README (#722)([89387d1](https://github.com/scbrown/quipu/commit/89387d1b9adc4d5d570ff748558ae0577ac4f84e))
 - Clarify Bobbin and Yupana stack descriptions (#724)([f7707dc](https://github.com/scbrown/quipu/commit/f7707dc07dfe7cf4c99cc40a280281833062a2d4))
 - Restore the centered README logo (#730)([9e79e98](https://github.com/scbrown/quipu/commit/9e79e98a1f268eaae5c4e932af82fe3c0fd337b4))
+- *(paper-merge)* Remove Dolt Memory study (#728)([a7ad384](https://github.com/scbrown/quipu/commit/a7ad384e1129b3df79c55b6f9ce7cab6be09b4bf))
 
 ### Fixed
 
@@ -40,6 +42,8 @@ All notable changes to this project will be documented in this file.
 - *(shacl)* Validate stored values when targets become applicable (#715)([063b48e](https://github.com/scbrown/quipu/commit/063b48e3507125de1dd4fc036cfbee11fafd1ec1))
 - *(store)* Enforce SHACL admission for SET replacements (#699)([55e08b7](https://github.com/scbrown/quipu/commit/55e08b73181af575e5366aaf423e1da26f332bf7))
 - *(shacl)* Judge value sets across writes, including through sh:node (supersedes #713) (#723)([9d55d37](https://github.com/scbrown/quipu/commit/9d55d37660cc685bbacfec15195a763e1911bb8f))
+
+
 
 ### Reverted
 
