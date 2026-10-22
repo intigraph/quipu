@@ -97,14 +97,18 @@ pub fn scope_of(payload_turtle: &str) -> Result<PayloadScope> {
                 typed_here.insert(s.as_str().to_string());
             }
         }
-        if let OxTerm::NamedNode(o) = &quad.object
-            && quad.predicate.as_str() != RDF_TYPE
-        {
-            referenced.insert(o.as_str().to_string());
+        if let OxTerm::NamedNode(o) = &quad.object {
+            // Every predicate, rdf:type included: `sh:targetObjectsOf rdf:type`
+            // makes the CLASS a focus node just like any other predicate does.
             objects
                 .entry(quad.predicate.as_str().to_string())
                 .or_default()
                 .insert(o.as_str().to_string());
+            // Type repair stays scoped to non-type references: a class named by
+            // rdf:type is not a value whose `sh:class` needs the store's type.
+            if quad.predicate.as_str() != RDF_TYPE {
+                referenced.insert(o.as_str().to_string());
+            }
         }
     }
 
