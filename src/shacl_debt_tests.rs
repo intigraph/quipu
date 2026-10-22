@@ -409,3 +409,92 @@ aegis:EitherShape a sh:NodeShape ; sh:targetClass aegis:Either ;
         v.results
     );
 }
+
+const CLASS_SHAPES: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:ArtifactShape a sh:NodeShape ; sh:targetClass aegis:Artifact ;
+    sh:property [ sh:path aegis:contains ; sh:class aegis:WorkItem ] .
+"#;
+
+/// A store whose Artifact already `contains` a non-WorkItem (stored before the
+/// shape existed), with write validation on and the shape loaded after.
+fn store_with_value_debt() -> Store {
+    let mut store = store_with(&format!(
+        "<{A}art> a <{A}Artifact> ; <{A}contains> <{A}thing> .\n<{A}thing> a <{A}Host> .\n"
+    ));
+    store.shacl_config_mut().validate_on_write = true;
+    store
+        .load_shapes("class", CLASS_SHAPES, "2026-10-22T00:30:00Z")
+        .expect("shapes");
+    store
+}
+
+fn write(store: &mut Store, turtle: &str) -> crate::Result<(i64, usize)> {
+    crate::rdf::ingest_rdf(
+        store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-10-22T01:00:00Z",
+        None,
+        Some("test"),
+    )
+}
+
+/// The savepoint gate's stored-VALUE debt (replay of #751 on the served shapes:
+/// Artifact/ConfigSetting/Host `contains`, Policy `targets`): a bare type reuse
+/// of the debt node is admitted, and counted.
+#[test]
+fn reuse_of_a_value_debt_node_passes_the_post_state_gate() {
+    let mut store = store_with_value_debt();
+    write(&mut store, &format!("<{A}art> a <{A}Artifact> .\n"))
+        .expect("a bare reuse of a value-debt node was refused");
+}
+
+/// The same bad value on a NEW node is refused by the post-state gate.
+#[test]
+fn the_same_bad_value_on_a_new_node_is_refused_post_state() {
+    let mut store = store_with_value_debt();
+    let err = write(
+        &mut store,
+        &format!("<{A}art2> a <{A}Artifact> ; <{A}contains> <{A}thing> .\n"),
+    );
+    assert!(err.is_err(), "a new node's class violation was admitted");
+}
+
+/// A NEW bad value on the debt node is refused; its old value stays debt.
+#[test]
+fn a_new_bad_value_on_a_value_debt_node_is_refused_post_state() {
+    let mut store = store_with_value_debt();
+    let err = write(
+        &mut store,
+        &format!("<{A}other> a <{A}Host> .\n<{A}art> <{A}contains> <{A}other> .\n"),
+    );
+    assert!(
+        err.is_err(),
+        "a new class violation on a debt node was admitted"
+    );
+}
+
+/// A node already over its `sh:maxCount` is not a licence to add more values:
+/// the count result carries no value, so MaxCount is never admitted as debt.
+#[test]
+fn adding_to_an_over_count_path_is_not_debt() {
+    const ONE_LABEL: &str = r#"
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+aegis:ModShape a sh:NodeShape ; sh:targetClass aegis:Mod ;
+    sh:property [ sh:path aegis:lang ; sh:maxCount 1 ] .
+"#;
+    let store = store_with(&format!(
+        "<{A}m> a <{A}Mod> ; <{A}lang> \"rust\" , \"Rust\" .\n"
+    ));
+    let more = format!("<{A}m> a <{A}Mod> ; <{A}lang> \"rust\" , \"Rust\" , \"rs\" .\n");
+    let v = validate_with_store_context(&store, ONE_LABEL, &more).expect("validated");
+    assert!(
+        !v.conforms,
+        "an over-count path grew and was admitted: {:?}",
+        v.results
+    );
+}

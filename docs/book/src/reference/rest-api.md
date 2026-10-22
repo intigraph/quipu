@@ -2207,7 +2207,9 @@ values on required paths) must report the same focus, constraint component,
 path, value and message, plus the source shape when that shape is named. A new
 node, a new type on an existing node, a new value, or a violation on another
 path is still refused. Admission covers only constraints a node's own data
-decides (counts, values, datatypes, classes). `sh:node`,
+decides (minimum counts, values, datatypes, classes; never `sh:maxCount`,
+whose result does not name a value). The same rule covers stored values judged
+by the write-savepoint gate. `sh:node`,
 `sh:qualifiedValueShape` and the logical components are never admitted.
 
 On `/update`, with `shacl.validate_on_write` on, a deletion is refused when it

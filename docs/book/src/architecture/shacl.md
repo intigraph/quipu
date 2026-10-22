@@ -65,6 +65,12 @@ whole-graph pending-post-state check:
   deletion that newly breaks a `sh:minCount` or `sh:hasValue` is refused.
   Known gap: a deletion that breaks a non-local constraint (`sh:or`/`and`/
   `xone`/`not`, `sh:node`, qualified counts) is not judged yet.
+- The write-savepoint value gate applies the same rule to stored values: a
+  value violation on a focus that existed before the transaction, and that its
+  pre-transaction facts already showed, is admitted as debt and counted.
+  `sh:maxCount` is never admitted, on either path: its result carries no
+  value, so adding values to an over-count path would otherwise look like the
+  old debt.
 - Write-savepoint admission also checks the stored values of touched focuses
   for maximum count, datatype, node kind, class, pattern, length, numeric bounds,
   enumeration, language, and nested-node constraints. This catches a value written

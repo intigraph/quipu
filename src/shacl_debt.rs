@@ -308,12 +308,15 @@ fn describe(store: &Store, iris: &BTreeSet<String>, graphs: &[i64]) -> Result<De
 }
 
 /// Components a node's own description and its references' types decide
-/// completely, on a plain predicate path. Anything else is never debt.
+/// completely, on a plain predicate path, AND whose key pins the offending
+/// value (or, for a floor, its absence). Anything else is never debt.
 #[cfg(feature = "shacl")]
 fn is_focus_local(issue: &crate::shacl::ValidationIssue) -> bool {
     const LOCAL: &[&str] = &[
+        // MaxCount is deliberately absent: its result carries no value, so a
+        // write that ADDS values to an over-count path would match the old
+        // debt key while making the debt worse.
         "MinCountConstraintComponent",
-        "MaxCountConstraintComponent",
         "HasValueConstraintComponent",
         "InConstraintComponent",
         "DatatypeConstraintComponent",
@@ -386,4 +389,137 @@ fn deletion_sensitive_paths(shapes_turtle: &str) -> Result<BTreeSet<String>> {
     let mut paths = required_paths(shapes_turtle)?;
     paths.extend(valued.into_iter().filter_map(|s| path_of.get(&s).cloned()));
     Ok(paths)
+}
+
+/// Identity of a post-state issue across two validations of one data set.
+#[cfg(feature = "shacl")]
+pub(crate) fn issue_identity(issue: &crate::shacl::ValidationIssue) -> String {
+    format!(
+        "{}|{}",
+        issue_key(issue),
+        issue.message.as_deref().unwrap_or("")
+    )
+}
+
+/// Post-state value issues the store already had before transaction `tx_id`.
+///
+/// The write-savepoint gate judges stored values of every touched focus, so a
+/// bare `{name, type}` reuse of a node whose stored value already breaks a
+/// `sh:class` or datatype rule was refused for it. The rule here is the one
+/// [`admit_preexisting_debt`] applies: the focus must have existed before this
+/// transaction, the component must be focus-local, and the same issue (shape
+/// included) must hold on the pre-state, here the focus's facts in `graph`
+/// minus this transaction's, plus ROOT types when `graph` is a named graph, as
+/// the gate itself reads them. Both runs use one compiled validator. An issue
+/// whose recomputed twins are not ALL debt is kept, so a collision refuses.
+/// Returns the [`issue_identity`] of each admitted issue.
+#[cfg(feature = "shacl")]
+pub(crate) fn poststate_preexisting(
+    store: &Store,
+    shapes_turtle: &str,
+    post_data: &str,
+    issues: &[&crate::shacl::ValidationIssue],
+    graph: i64,
+    tx_id: i64,
+) -> Result<BTreeSet<String>> {
+    let focuses: BTreeSet<String> = issues
+        .iter()
+        .filter(|i| is_focus_local(i))
+        .map(|i| i.focus_node.trim_matches(['<', '>']).to_string())
+        .collect();
+    let mut admitted = BTreeSet::new();
+    if focuses.is_empty() {
+        return Ok(admitted);
+    }
+    let rdf_type = store.lookup(RDF_TYPE)?;
+    let mut lines = BTreeSet::new();
+    let mut referenced = BTreeSet::new();
+    let mut existing = BTreeSet::new();
+    for iri in &focuses {
+        let Some(entity) = store.lookup(iri)? else {
+            continue;
+        };
+        let mut scopes = vec![(graph, None)];
+        if graph != crate::schema::ROOT_GRAPH {
+            scopes.push((crate::schema::ROOT_GRAPH, rdf_type));
+        }
+        for (scope, only) in scopes {
+            for fact in store.entity_facts_in_graph(entity, scope)? {
+                if fact.tx == tx_id || only.is_some_and(|t| fact.attribute != t) {
+                    continue;
+                }
+                let attr = store.resolve(fact.attribute)?;
+                let Ok(term) = crate::rdf::value_to_term(store, &fact.value) else {
+                    continue;
+                };
+                if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
+                    referenced.insert(store.resolve(*id)?);
+                }
+                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                existing.insert(iri.clone());
+            }
+        }
+    }
+    if existing.is_empty() {
+        return Ok(admitted);
+    }
+    let mut pre: String = lines.into_iter().collect();
+    pre.push_str(&store_type_context_in_graph(store, &referenced, graph)?);
+
+    let validator = crate::shacl::cached_validator(shapes_turtle)?;
+    let debt: BTreeSet<String> = validator
+        .validate(pre.as_bytes())?
+        .results
+        .iter()
+        .filter(|r| is_violation(r) && is_focus_local(r) && existing.contains(&r.focus_node))
+        .map(debt_key)
+        .collect();
+    let post = validator.validate(post_data.as_bytes())?;
+    let graph_iri = store.graph_iri_of(graph);
+    for issue in issues {
+        let focus = issue.focus_node.trim_matches(['<', '>']);
+        if !is_focus_local(issue) || !existing.contains(focus) {
+            continue;
+        }
+        let identity = issue_identity(issue);
+        let twins: Vec<_> = post
+            .results
+            .iter()
+            .filter(|r| is_violation(r) && issue_identity(r) == identity)
+            .collect();
+        if twins.is_empty() || !twins.iter().all(|r| debt.contains(&debt_key(r))) {
+            continue;
+        }
+        store.queue_write_event(crate::store::PendingWriteEvent {
+            event_type: "shacl.debt_admitted".to_string(),
+            subject: Some(focus.to_string()),
+            payload: serde_json::json!({
+                "shape": twins[0].source_shape,
+                "message": issue.message,
+                "component": issue.component,
+                "path": issue.path,
+                "graph": graph_iri,
+                "gate": "post-state",
+            }),
+        });
+        admitted.insert(identity);
+    }
+    Ok(admitted)
+}
+
+/// `issues` minus the pre-existing debt [`poststate_preexisting`] admits.
+#[cfg(feature = "shacl")]
+pub(crate) fn new_only<'a>(
+    store: &Store,
+    shapes_turtle: &str,
+    post_data: &str,
+    issues: Vec<&'a crate::shacl::ValidationIssue>,
+    graph: i64,
+    tx_id: i64,
+) -> Result<Vec<&'a crate::shacl::ValidationIssue>> {
+    let admitted = poststate_preexisting(store, shapes_turtle, post_data, &issues, graph, tx_id)?;
+    Ok(issues
+        .into_iter()
+        .filter(|issue| !admitted.contains(&issue_identity(issue)))
+        .collect())
 }
