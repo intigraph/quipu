@@ -20,6 +20,8 @@
 //!   quipu import delta <parent-share> <delta-share>  Verify a delta chain
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
+//!   quipu acquire scope --source-store-id <id> --graph <iri>... --max-vm-steps N --deadline-ms N
+//!                                        Bounded read-only row/byte scope of a direct-main acquisition
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
 //!   quipu gate shadow ...                 Judge a candidate policy set over recorded history (never writes)
 //!   quipu audit <trace.jsonl>|inventory|replay <trace.jsonl>  Check a trace against Σ
@@ -38,6 +40,7 @@
 //! Aliases: load=knot, query=read
 
 mod cli;
+mod cli_acquire;
 mod cli_alias;
 mod cli_align;
 mod cli_attest;
@@ -208,6 +211,7 @@ fn main() {
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "changes" => cli_changes::cmd_changes(&args, db_path),
+        "acquire" => cli_acquire::cmd_acquire(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_pack::cmd_unpack(&args, db_path),
@@ -390,6 +394,7 @@ COMMANDS:
     qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp acquire scope --source-store-id <id> --graph <iri>... [--tx <n>] --max-vm-steps <n> --deadline-ms <n> [--db <path>]
     qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]

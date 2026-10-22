@@ -628,10 +628,63 @@ jobs:
   # executes, or validates production behavior/invariants. Source size belongs
   # here because a violation blocks the release PR; leaving it out made push CI
   # report success for a main revision that could not be released.
+  # aegis-1c8q: the W3C SHACL Core suite validates WHOLE graphs, so it never
+  # exercised the write path, where the PR697 maxCount bug lived. This job runs
+  # every Core case through the real /knot handler in several splits and gates
+  # on a ratchet ledger: a new divergence, a stale ledger entry, a batch
+  # mismatch, an inventory change or a missing positive control fails.
+  shacl-write-path:
+    name: SHACL write-path conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-shacl-write-path-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Gate unit tests
+        run: |
+          # Actions runs `bash -e` WITHOUT pipefail, so without this line a failing
+          # test would exit through tee with status 0.
+          set -o pipefail
+          python3 -m unittest -v benchmark/public/test_shacl_write_path.py 2>&1 | tee /tmp/write-path-unit.log
+          grep -q '^Ran [1-9]' /tmp/write-path-unit.log || { echo "no gate unit test ran" >&2; exit 2; }
+      - name: Adapter unit tests (verdict versus operational error)
+        run: |
+          set -o pipefail
+          cargo test --bin quipu-shacl-conformance --features shacl,dev-tools 2>&1 | tee /tmp/write-path-adapter.log
+          grep -q '^test result: ok\. [1-9]' /tmp/write-path-adapter.log || { echo "no adapter unit test ran" >&2; exit 2; }
+      - name: Pinned W3C SHACL suite
+        run: |
+          rev="$(python3 -c 'import sys; sys.path.insert(0, "benchmark/public"); import shacl_core; print(shacl_core.PINNED_SUITE_REVISION)')"
+          git clone --quiet --filter=blob:none --no-checkout https://github.com/w3c/data-shapes /tmp/data-shapes
+          git -C /tmp/data-shapes sparse-checkout set data-shapes-test-suite
+          git -C /tmp/data-shapes checkout --quiet "$rev"
+      - run: cargo build --bin quipu-shacl-conformance --features shacl,dev-tools
+      - name: Write-path differential against the ledger
+        run: |
+          python3 benchmark/public/shacl_write_path.py \
+            --suite /tmp/data-shapes/data-shapes-test-suite/tests \
+            --quipu target/debug/quipu-shacl-conformance \
+            --output /tmp/shacl-write-path.json \
+            --ledger benchmark/public/results/shacl-write-path.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shacl-write-path
+          path: /tmp/shacl-write-path.json
+          if-no-files-found: warn
+
   release-correctness:
     name: Release correctness
     if: always()
-    needs: [clippy, test, build, check]
+    needs: [clippy, test, build, check, shacl-write-path]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

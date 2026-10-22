@@ -15,15 +15,23 @@ All notable changes to this project will be documented in this file.
 - *(server)* Default-off per-query SQLite statement totals (#702)([436a7d4](https://github.com/scbrown/quipu/commit/436a7d415e63a98d6f588deb403c16652fd79887))
 - *(metrics)* Expose in-flight requests and oldest write age (#609)([c010923](https://github.com/scbrown/quipu/commit/c01092389851f01053aeac2041167661366cbecf))
 - Require enrolled session keys with narrow onboarding reads (#687)([963fc16](https://github.com/scbrown/quipu/commit/963fc163b6f208c183830981a04419de752bde82))
+- *(server)* Re-land session-key auth (#687) with declared identity checked only when keys are required (#712)([9b78ab2](https://github.com/scbrown/quipu/commit/9b78ab21bbd9b66da785694a95a8c23f59f4fcc9))
+- *(acquisition)* Bounded physical scope measurement (#705)([462268c](https://github.com/scbrown/quipu/commit/462268cc605a096eacbe1feb93690c41627ae481))
 
+### CI/CD
 
+- *(shacl)* Required write-path conformance gate with a ratchet ledger (#707)([4ad5297](https://github.com/scbrown/quipu/commit/4ad5297c5acd45dca65c42d4899a7c5b5c4897d2))
 
+### Documentation
 
+- *(share)* [**breaking**] Document the public sharing API migration([b78cc89](https://github.com/scbrown/quipu/commit/b78cc898e24e07499cbb6e50ca4db1e2bd061583))
 
 ### Fixed
 
 - *(server)* Retain finite native read operation declarations (#688)([201076a](https://github.com/scbrown/quipu/commit/201076aac71becdb429ce74539f21ec689a891d5))
 - *(graph)* Exclude inferred companions before registration (#708)([630c980](https://github.com/scbrown/quipu/commit/630c9804719d0dd0bae169b9f8193b7aa23ffd2a))
+- *(shacl)* Enforce maxCount across staged writes (#697)([0e89d72](https://github.com/scbrown/quipu/commit/0e89d729e254430806853ade78f9a7287de9e921))
+- *(shacl)* Validate stored values when targets become applicable (#715)([063b48e](https://github.com/scbrown/quipu/commit/063b48e3507125de1dd4fc036cfbee11fafd1ec1))
 
 ### Reverted
 

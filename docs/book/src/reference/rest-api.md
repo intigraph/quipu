@@ -348,8 +348,12 @@ Response: `{"status": "ok"}`
 Requires an existing session-attestation signature. Returns the principal,
 public key ID and session selected from the protected binding, with
 `authenticated: true` and `auth_class: "attested_session"`. A bearer or unkeyed
-request returns 401. Agent/session declaration headers, if present, must match
-the verified binding. Replay, expired/revoked bindings and wrong keys refuse.
+request returns 401. Agent/session declaration headers (`X-Quipu-Agent`,
+`X-Quipu-Session`) are declared provenance. They must match the verified binding
+only when session keys are required (`[quipu.server.session_keys] required =
+true`); with it off, a differing declaration is admitted and the returned
+principal is still the binding's. Replay, expired/revoked bindings and wrong keys
+refuse.
 No private key is returned. Use `sd identity --json` with an enrolled own key;
 plain curl without a signed envelope cannot produce the authenticated result.
 
@@ -772,6 +776,13 @@ A supplied `graph` field, including `null` or ROOT's IRI, is refused with HTTP
   *literal*; an edge must be `{"iri": "..."}`. A bare IRI-shaped string aimed at a
   Ref-holding predicate is a loud 400, not a mis-shaped write. `{"str": "..."}`
   states that a literal is intended and disarms that heuristic.
+
+When write validation is enabled, SET validates the replacement against loaded
+SHACL shapes, including the existing subject's types. A tagged IRI does not
+bypass a string datatype constraint. Refusal preserves the previous value.
+Explicit operation shapes remain enforced when persistent validation is off.
+A concurrent change to the complete predicate slot produces a conditional-write
+conflict instead of silently overwriting a value the request did not observe.
 
 ### `POST /validate`
 
