@@ -56,6 +56,13 @@ whole-graph pending-post-state check:
   it cannot introduce new violations found only in that context. A conforming
   payload takes the fast path. This preserves incremental-write compatibility
   and is **not** whole-graph conformance certification.
+- A violation that remains after that pass, on a node that already exists,
+  is admitted as a `Warning` only if the node's stored pre-state (types plus
+  required-path values) reports the identical issue: same focus, component,
+  path, value, message, and named source shape. This is pre-existing debt, and
+  it is counted through `shacl.debt_admitted` events. New nodes, new types, new
+  values and other paths are refused. On `/update` under `validate_on_write`, a
+  deletion that empties a required path the pre-state satisfied is refused.
 - Write-savepoint admission also checks the stored values of touched focuses
   for maximum count, datatype, node kind, class, pattern, length, numeric bounds,
   enumeration, language, and nested-node constraints. This catches a value written

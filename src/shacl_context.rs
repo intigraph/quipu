@@ -408,7 +408,9 @@ pub fn validate_with_store_context_in_graph(
         g,
     )?);
     if context.is_empty() {
-        return Ok(baseline);
+        // Nothing to repair with; a node in pre-existing debt lands here, since
+        // it lacks the very values the repair would add.
+        return admit_preexisting_debt(store, shapes_turtle, baseline, g);
     }
 
     // Pass 2: the same payload with the store's type triples. Turtle and
@@ -416,7 +418,225 @@ pub fn validate_with_store_context_in_graph(
     // form precisely so it cannot depend on the payload's prefixes.
     let augmented =
         crate::shacl::validate_shapes(shapes_turtle, &format!("{data_turtle}\n{context}"))?;
-    Ok(repaired(baseline, &augmented))
+    let feedback = repaired(baseline, &augmented);
+    if feedback.conforms {
+        return Ok(feedback);
+    }
+    admit_preexisting_debt(store, shapes_turtle, feedback, g)
+}
+
+/// Prefix on the message of a violation admitted as pre-existing debt.
+pub const DEBT_MESSAGE_PREFIX: &str = "pre-existing debt (admitted as Warning): ";
+
+/// Demote to Warning each remaining violation the store ALREADY had (aegis-g51c C12).
+///
+/// # The defect
+///
+/// A writer reusing an existing node by name and type (`<s> a aegis:Session`,
+/// the graph-extract reuse form) is judged by the stored node's required
+/// fields, through the repair above. When the STORED node was written before
+/// its shape existed and lacks a required field, the write is refused for a
+/// violation it did not introduce and cannot fix without inventing provenance.
+/// Measured in production: a session-capture `/episode` refused for an old
+/// codex Session's missing `actor`/`sourceKind` (tx 722359), and 562 more such
+/// nodes in ROOT.
+///
+/// # What is admitted, exactly
+///
+/// The PRE-STATE of each remaining focus node, meaning its stored types and
+/// its stored values for every required path (the same bounded context as the
+/// repair), is validated on its own. A payload violation is admitted only
+/// when that pre-state run reports the SAME issue: the same focus, component,
+/// path, value, message and, when the shape is named, source shape. Everything
+/// else is still refused:
+///
+/// - a NEW node has no stored types, so its pre-state targets no shape;
+/// - a new TYPE on an existing node is not in the pre-state, so its shape's
+///   violations have no pre-state twin;
+/// - a new VALUE (`sh:class`, `sh:in`, datatype) differs in the key;
+/// - a different path on a debt node differs in the key.
+///
+/// Admitted issues stay visible: each is returned as a Warning with
+/// [`DEBT_MESSAGE_PREFIX`] and queued as a `shacl.debt_admitted` event, so the
+/// debt can be counted and burnt down rather than becoming permanent.
+#[cfg(feature = "shacl")]
+fn admit_preexisting_debt(
+    store: &Store,
+    shapes_turtle: &str,
+    mut feedback: crate::shacl::ValidationFeedback,
+    g: i64,
+) -> Result<crate::shacl::ValidationFeedback> {
+    let focuses: BTreeSet<String> = feedback
+        .results
+        .iter()
+        .filter(|r| is_violation(r))
+        .map(|r| r.focus_node.clone())
+        .collect();
+    // Types first: a focus the store does not type cannot carry debt, and an
+    // empty type context means every remaining violation is new.
+    let types = store_type_context_in_graph(store, &focuses, g)?;
+    if types.is_empty() {
+        return Ok(feedback);
+    }
+    let pre_state = format!(
+        "{types}{}",
+        store_property_context_in_graph(store, &focuses, &required_paths(shapes_turtle)?, g)?
+    );
+    let before = crate::shacl::validate_shapes(shapes_turtle, &pre_state)?;
+    let debt: BTreeSet<String> = before
+        .results
+        .iter()
+        .filter(|r| is_violation(r))
+        .map(debt_key)
+        .collect();
+    if debt.is_empty() {
+        return Ok(feedback);
+    }
+
+    let graph = store.graph_iri_of(g);
+    for issue in &mut feedback.results {
+        if !is_violation(issue) || !debt.contains(&debt_key(issue)) {
+            continue;
+        }
+        store.queue_write_event(crate::store::PendingWriteEvent {
+            event_type: "shacl.debt_admitted".to_string(),
+            subject: Some(issue.focus_node.clone()),
+            payload: serde_json::json!({
+                "shape": issue.source_shape,
+                "message": issue.message,
+                "component": issue.component,
+                "path": issue.path,
+                "graph": graph,
+            }),
+        });
+        issue.severity = "Warning".to_string();
+        issue.message = Some(format!(
+            "{DEBT_MESSAGE_PREFIX}{}",
+            issue.message.as_deref().unwrap_or("")
+        ));
+    }
+    feedback.violations = feedback.results.iter().filter(|r| is_violation(r)).count();
+    feedback.warnings = feedback
+        .results
+        .iter()
+        .filter(|r| r.severity.to_ascii_lowercase().contains("warning"))
+        .count();
+    feedback.conforms = feedback.violations == 0;
+    Ok(feedback)
+}
+
+/// Violations a RETRACTION introduces on the nodes it edits (aegis-g51c C12).
+///
+/// Write-time SHACL judges what a write asserts, so `/update` could delete a
+/// required field and leave a conforming node violating, unseen. Debt admission
+/// makes that gap matter: a node made non-conforming by a delete would look like
+/// pre-existing debt to every later write. So a delete is judged here against
+/// the same pre-state [`admit_preexisting_debt`] uses.
+///
+/// `removed_nt` and `asserted_nt` are the N-Triples the update deletes from and
+/// adds to graph `g`. Only subjects that lose a value on a REQUIRED path are
+/// judged; a delete elsewhere cannot fail a `minCount`, and the post-state is
+/// built from the same bounded context (stored types and required-path
+/// values), so other components are not judged here. A violation in that
+/// post-state is returned unless the pre-state already had it, keyed by
+/// [`debt_key`]. An empty result means the deletes introduce nothing.
+#[cfg(feature = "shacl")]
+pub fn retraction_violations_in_graph(
+    store: &Store,
+    shapes_turtle: &str,
+    removed_nt: &str,
+    asserted_nt: &str,
+    g: i64,
+) -> Result<crate::shacl::ValidationFeedback> {
+    let required = required_paths(shapes_turtle)?;
+    let removed = parse_triples(removed_nt)?;
+    let subjects: BTreeSet<String> = removed
+        .iter()
+        .filter(|t| required.contains(t.predicate.as_str()))
+        .filter_map(|t| match &t.subject {
+            NamedOrBlankNode::NamedNode(s) => Some(s.as_str().to_string()),
+            NamedOrBlankNode::BlankNode(_) => None,
+        })
+        .collect();
+    let mut feedback = crate::shacl::ValidationFeedback {
+        conforms: true,
+        violations: 0,
+        warnings: 0,
+        results: Vec::new(),
+        resolution_candidates: Default::default(),
+    };
+    if subjects.is_empty() {
+        return Ok(feedback);
+    }
+
+    let pre_nt = format!(
+        "{}{}",
+        store_type_context_in_graph(store, &subjects, g)?,
+        store_property_context_in_graph(store, &subjects, &required, g)?
+    );
+    let mut post: std::collections::HashSet<oxrdf::Triple> =
+        parse_triples(&pre_nt)?.into_iter().collect();
+    for triple in &removed {
+        post.remove(triple);
+    }
+    post.extend(parse_triples(asserted_nt)?.into_iter().filter(
+        |t| matches!(&t.subject, NamedOrBlankNode::NamedNode(s) if subjects.contains(s.as_str())),
+    ));
+    let post_nt: String = post.iter().map(|t| format!("{t} .\n")).collect();
+
+    let before = crate::shacl::validate_shapes(shapes_turtle, &pre_nt)?;
+    let debt: BTreeSet<String> = before
+        .results
+        .iter()
+        .filter(|r| is_violation(r))
+        .map(debt_key)
+        .collect();
+    let after = crate::shacl::validate_shapes(shapes_turtle, &post_nt)?;
+    feedback.results = after
+        .results
+        .into_iter()
+        .filter(|r| is_violation(r) && subjects.contains(&r.focus_node))
+        .filter(|r| !debt.contains(&debt_key(r)))
+        .collect();
+    feedback.violations = feedback.results.len();
+    feedback.conforms = feedback.violations == 0;
+    Ok(feedback)
+}
+
+#[cfg(feature = "shacl")]
+fn parse_triples(nt: &str) -> Result<Vec<oxrdf::Triple>> {
+    RdfParser::from_format(RdfFormat::NTriples)
+        .for_reader(nt.as_bytes())
+        .map(|quad| {
+            quad.map(oxrdf::Triple::from)
+                .map_err(|e| Error::InvalidValue(format!("RDF parse error: {e}")))
+        })
+        .collect()
+}
+
+#[cfg(feature = "shacl")]
+fn is_violation(issue: &crate::shacl::ValidationIssue) -> bool {
+    issue.severity.to_ascii_lowercase().contains("violation")
+}
+
+/// Identity of a violation for debt matching: stricter than [`issue_key`].
+///
+/// Adds the message, which names the constraint even when the property shape
+/// is anonymous, and the source shape when it is an IRI. A blank-node shape id
+/// is fresh per run (see [`issue_key`]), so it is left out; omitting it can only
+/// make two issues look different, which refuses rather than admits.
+#[cfg(feature = "shacl")]
+fn debt_key(issue: &crate::shacl::ValidationIssue) -> String {
+    let shape = issue
+        .source_shape
+        .as_deref()
+        .filter(|s| !s.starts_with("_:"))
+        .unwrap_or("");
+    format!(
+        "{}|{shape}|{}",
+        issue_key(issue),
+        issue.message.as_deref().unwrap_or("")
+    )
 }
 
 /// The baseline's violations MINUS the ones the store context resolved.
@@ -481,6 +701,10 @@ mod shacl_context_tests;
 #[cfg(all(test, feature = "shacl"))]
 #[path = "shacl_objects_of_tests.rs"]
 mod shacl_objects_of_tests;
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_debt_tests.rs"]
+mod shacl_debt_tests;
 
 /// Queue each result of an EMIT-mode validation as a `shacl.violation` event
 /// riding the next write's savepoint (event P3). One definition for every

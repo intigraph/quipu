@@ -347,6 +347,7 @@ pub(super) fn apply_update_attributed(
     update_gates::enforce(
         &store,
         after.difference(&before),
+        before.difference(&after),
         attribution.actor.as_deref(),
         &attribution.source,
     )?;
