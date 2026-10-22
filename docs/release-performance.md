@@ -7,6 +7,26 @@ package is 0.x and Release-plz publication is disabled (`publish = false`).
 This is not a claim that an API change is compatible. Reviewers must still mark
 breaking changes correctly in Conventional Commits.
 
+## Sharing API migration after 0.15.0
+
+The public, exhaustive sharing structs gained fields after 0.15.0:
+
+- `ShareFiles`: `alignments`.
+- `ShareManifest`: `embedding` and `alignments_hash`.
+
+Rust callers constructing these structs with literals must add the new fields,
+using `None` when the corresponding data is absent. Serde defaults let older
+JSON omit these optional members; they do not make an older Rust struct literal
+compile against the new API.
+
+The release containing these additions must be 0.16.0, rather than 0.15.1.
+Record this source compatibility break with a `BREAKING CHANGE:` footer and a
+breaking Conventional Commit subject, so the normal Release-plz workflow derives
+the next version. The migration note also lives in the packaged Rust API docs:
+the crate excludes this documentation directory from its release content.
+Regenerate the release PR through that workflow, then review its version and
+generated changelog. Do not edit the bot's release branch or existing tags.
+
 ## Why the cache alone was insufficient
 
 The historical cold check took 1,203 seconds. A dedicated Rust cache and ledger
