@@ -17,6 +17,15 @@ write-coverage metrics. Model and session values are not added to logs.
 
 The `quipu-server` binary exposes all Quipu operations over HTTP (Axum).
 
+## Entity namespaces
+
+`GET /namespaces` and `POST /namespaces` list the registered entity namespaces.
+The listing is read-only; configuration changes are applied with
+`qp namespaces apply`. See [entity namespaces](namespaces.md) for registry
+configuration and audience-bound publication. Authenticated `POST /entity_ref`
+accepts `action: "mint"` or `action: "resolve"` with the request fields described
+there; resolution returns a descriptor without fetching the resolver.
+
 ## Versioned file-memory RPCs
 
 These JSON operations are disabled by default. To use them, a deployment must

@@ -476,6 +476,10 @@ impl Default for VectorConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct QuipuConfig {
+    /// Registered stable identity namespaces, public by default.
+    pub namespaces: Vec<crate::entity_namespaces::Namespace>,
+    /// Operator-approved destination store IDs and audiences.
+    pub namespace_destinations: Vec<crate::entity_namespaces::DestinationBinding>,
     /// Versioned-file RPC; disabled until its explicit deployment scope is set.
     pub memory_files: MemoryFilesConfig,
     /// Path to the triple store database (default: `.bobbin/quipu/quipu.db`).
@@ -576,6 +580,8 @@ pub struct ProjectionColumnConfig {
 impl Default for QuipuConfig {
     fn default() -> Self {
         Self {
+            namespaces: Vec::new(),
+            namespace_destinations: Vec::new(),
             memory_files: MemoryFilesConfig::default(),
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),

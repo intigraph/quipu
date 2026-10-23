@@ -362,6 +362,9 @@ pub struct ShareManifest {
     /// refuses the share: it fails closed rather than silently ignoring pointers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pointers: Vec<SharePointer>,
+    /// Audience policy carried inside share identity; never grants membership.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub namespaces: Vec<crate::entity_namespaces::Namespace>,
 }
 
 /// The directory name a share uses when its manifest does not say.
@@ -563,8 +566,9 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         destination: opts
             .destination
             .is_internal()
-            .then_some(ShareDestination::Internal),
+            .then(|| opts.destination.clone()),
         pointers: opts.pointers.clone(),
+        namespaces: crate::namespace_publication::carried_namespaces(store, &opts.destination)?,
     };
     validate_pointers(&manifest.pointers)?;
     manifest.share_id = sha256(&manifest_bytes(&manifest, false)?);
@@ -609,13 +613,13 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
                 .map_err(|e| Error::Serialization(format!("share Turtle UTF-8: {e}")))?,
         );
     }
-    enforce_destination(store, &files, opts.destination, "share scrub")?;
+    enforce_destination(store, &files, opts.destination.clone(), "share scrub")?;
     if !manifest.pointers.is_empty() {
         let pointers = BTreeMap::from([(
             POINTERS_SCRUB_LABEL.to_string(),
             pointers::pointer_scrub_text(&manifest.pointers),
         )]);
-        enforce_destination(store, &pointers, opts.destination, "share scrub")?;
+        enforce_destination(store, &pointers, opts.destination.clone(), "share scrub")?;
     }
     Ok(SharePayload { manifest, files })
 }

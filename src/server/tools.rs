@@ -327,6 +327,8 @@ ro_handler!(
 // meta-graph mirror), so rw_handler! and a WRITE_ENDPOINTS entry — not the
 // ro_handler! that /overlay/create was mis-registered as (aegis-2f4n).
 rw_handler!(datasets, quipu::tool_datasets);
+ro_handler!(namespaces, quipu::entity_reference::tool_namespaces);
+rw_handler!(entity_ref, quipu::entity_reference::tool_entity_ref);
 
 // quipu #79: the stored named-query registry. `load`/`remove` MUTATE, so
 // rw_handler! and a WRITE_ENDPOINTS entry — "when unsure, it is a write".

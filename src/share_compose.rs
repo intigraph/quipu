@@ -248,6 +248,7 @@ pub(crate) fn compose_scoped(
     let mut attestations = Vec::new();
     for request in requests {
         crate::share_import::verify_share(request)?;
+        crate::namespace_publication::receive(store, request)?;
         if authority.is_none() && request.manifest.shapes_hash != chosen.manifest.shapes_hash {
             return Err(Error::InvalidValue(format!(
                 "shape conflict: {} has {}, {} has {}; select --shapes-from explicitly",
@@ -260,6 +261,7 @@ pub(crate) fn compose_scoped(
         if request
             .manifest
             .destination
+            .as_ref()
             .is_some_and(crate::share::ShareDestination::is_internal)
             && !request.destination.is_internal()
         {

@@ -148,12 +148,25 @@ pub use crate::pack_load::{LoadOptions, UnpackReport, unpack, unpack_verified};
 pub(crate) fn enforce_pack_destination(
     store: &Store,
     canonical: &str,
-    destination: crate::share_scrub::ShareDestination,
+    opts: &PackOptions,
+    graph_iri: &str,
 ) -> Result<()> {
     crate::share_scrub::enforce_destination(
         store,
-        &std::collections::BTreeMap::from([("pack content".to_string(), canonical.to_string())]),
-        destination,
+        &std::collections::BTreeMap::from([
+            ("pack content".to_string(), canonical.to_string()),
+            (
+                "pack manifest".to_string(),
+                serde_json::json!({
+                    "name":opts.name,"version":opts.version,"source_graph":graph_iri,
+                    "repository":opts.repository,"repository_sha":opts.repository_sha,
+                    "model_id":opts.model_id,"model_version":opts.model_version,
+                    "destination":opts.destination
+                })
+                .to_string(),
+            ),
+        ]),
+        opts.destination.clone(),
         "pack",
     )
 }
@@ -287,10 +300,11 @@ pub(crate) fn write_manifest(conn: &rusqlite::Connection, manifest: &Manifest) -
             manifest.source_graph,
             manifest.producer,
             manifest.counts,
-            manifest.destination.map(|d| if d.is_internal() {
-                "internal"
-            } else {
-                "outward"
+            manifest.destination.as_ref().map(|d| match d {
+                crate::share_scrub::ShareDestination::Internal => "internal".into(),
+                crate::share_scrub::ShareDestination::Outward => "outward".into(),
+                crate::share_scrub::ShareDestination::Audience(_) =>
+                    serde_json::to_string(d).expect("destination JSON"),
             }),
         ],
     )?;
@@ -465,7 +479,7 @@ fn pack_into(
 
     let canonical = canonical_content(store, graph_iri, &opts.shapes, &opts.queries)?;
 
-    enforce_pack_destination(store, &canonical, opts.destination)?;
+    enforce_pack_destination(store, &canonical, opts, graph_iri)?;
 
     let hash = content_hash(&canonical);
 
@@ -616,7 +630,7 @@ fn pack_into(
             .to_string(),
             // Recorded so a CONSUMER can check the scrub from the artifact,
             // rather than having to trust that the producer ran it (wu, #222).
-            destination: Some(opts.destination),
+            destination: Some(opts.destination.clone()),
         };
         write_manifest(&out.conn, &manifest)?;
 
@@ -650,11 +664,13 @@ pub fn read_manifest(path: &str) -> Result<Manifest> {
         )
         .ok()
         .flatten()
-        .and_then(|text| match text.as_str() {
-            "outward" => Some(crate::share_scrub::ShareDestination::Outward),
-            "internal" => Some(crate::share_scrub::ShareDestination::Internal),
-            _ => None,
-        });
+        .map(|text| match text.as_str() {
+            "outward" => Ok(crate::share_scrub::ShareDestination::Outward),
+            "internal" => Ok(crate::share_scrub::ShareDestination::Internal),
+            _ => serde_json::from_str(&text)
+                .map_err(|_| Error::InvalidValue("invalid pack destination declaration".into())),
+        })
+        .transpose()?;
     conn.query_row(
         "SELECT pack_format, name, version, term_space, content_hash, created_at, \
                 source_graph, producer, counts FROM pack_manifest WHERE id = 1",

@@ -83,7 +83,10 @@ pub fn pack_full(
     // held for the operator (aegis-9f899e). Refusing here means the full path
     // cannot acquire a publish route by convenience — which is the exact
     // wording of the constraint, and a comment would not have enforced it.
-    if !opts.destination.is_internal() {
+    if !matches!(
+        opts.destination,
+        crate::share_scrub::ShareDestination::Internal
+    ) {
         return Err(Error::PolicyDenied(format!(
             "pack --full is INTERNAL ONLY and this pack is bound outward. A full \
              pack is lossless: it carries the event log and every operational \

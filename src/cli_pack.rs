@@ -409,10 +409,10 @@ fn destination_flag(args: &[String]) -> quipu::share::ShareDestination {
     match flag_value(args, "--destination") {
         None | Some("outward") => quipu::share::ShareDestination::Outward,
         Some("internal") => quipu::share::ShareDestination::Internal,
-        Some(other) => {
-            eprintln!("--destination must be `outward` or `internal`, got {other:?}");
+        Some(other) => serde_json::from_str(other).unwrap_or_else(|_| {
+            eprintln!("--destination needs outward, internal or an audience/store_id JSON object");
             std::process::exit(2);
-        }
+        }),
     }
 }
 

@@ -1,0 +1,56 @@
+Script started on 2026-10-20 19:10:32-04:00 [COMMAND="stty -onlcr; bash run.sh" <not executed on terminal>]
+$ quipu namespaces list --db fixture.db
+{
+  "namespaces": [
+    {
+      "audience": "public",
+      "base_iri": "https://w3id.org/intigraph/",
+      "graphs": [],
+      "minting": "opaque",
+      "prefix": "public",
+      "resolver_url": null,
+      "types": [],
+      "visibility": "public"
+    }
+  ]
+}
+$ quipu namespaces apply --db fixture.db
+{
+  "count": 1,
+  "namespaces": [
+    {
+      "audience": "public",
+      "base_iri": "https://w3id.org/intigraph/",
+      "graphs": [],
+      "minting": "opaque",
+      "prefix": "public",
+      "resolver_url": null,
+      "types": [],
+      "visibility": "public"
+    }
+  ],
+  "tx_id": 1
+}
+$ quipu entity-ref mint request.json --db fixture.db
+{
+  "count": 2,
+  "iri": "https://w3id.org/intigraph/g7444lnl3mqdcsa7atn3lmbmby",
+  "namespace": "public",
+  "tx_id": 2
+}
+$ quipu entity-ref resolve reference.json --db fixture.db
+{
+  "asOf": "2026-10-20T00:00:00Z",
+  "audience": "public",
+  "historical_rendering": "use temporal query/history; /entity is current-state",
+  "iri": "https://w3id.org/intigraph/g7444lnl3mqdcsa7atn3lmbmby",
+  "known": true,
+  "namespace": "public",
+  "resolver_url": null,
+  "source": null
+}
+$ quipu entity-ref mint unknown.json --db fixture.db # expected refusal
+unregistered namespace
+Expected refusal verified; no network requests or installed-store writes.
+
+Script done on 2026-10-20 19:10:33-04:00 [COMMAND_EXIT_CODE="0"]

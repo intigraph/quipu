@@ -286,7 +286,12 @@ pub fn build_delta_with_limit(
     // through a result share that scrubs perfectly clean. The parent is
     // usually the very share that was allowed to carry it.
     let files = BTreeMap::from([("delta.ru".to_string(), update.clone())]);
-    crate::share_scrub::enforce_destination(store, &files, opts.destination, "delta scrub")?;
+    crate::share_scrub::enforce_destination(
+        store,
+        &files,
+        opts.destination.clone(),
+        "delta scrub",
+    )?;
     let payload = DeltaPayload {
         alignments,
         manifest,

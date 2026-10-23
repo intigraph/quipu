@@ -29,7 +29,8 @@ pub(crate) fn open_store(path: &str, config: &QuipuConfig) -> quipu::Result<quip
         {
             return Err(quipu::Error::InvalidValue("replica currently requires the SQLite backend and no attachments; refusing to drop configured providers".into()));
         }
-        let store = quipu::Store::open_read_only(path)?;
+        let mut store = quipu::Store::open_read_only(path)?;
+        quipu::entity_namespaces::configure(&mut store, config)?;
         store.set_busy_timeout(Duration::from_secs(1))?;
         Ok(store)
     } else {

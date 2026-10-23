@@ -49,6 +49,11 @@ mod handle;
 mod input_fields;
 #[path = "server/memory_files.rs"]
 mod memory_files;
+#[cfg(test)]
+#[path = "server/namespace_tests.rs"]
+mod namespace_tests;
+#[path = "server/namespaces.rs"]
+mod namespaces;
 #[cfg(feature = "owl")]
 #[path = "server/owl_materialize.rs"]
 mod owl_materialize;
@@ -103,6 +108,7 @@ mod event_cursor;
 #[path = "server/feed_stream.rs"]
 mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
+use namespaces::namespaces_get;
 #[cfg(test)]
 use query_endpoint::query;
 use reason::{explain, reason, shapes};
@@ -456,6 +462,8 @@ async fn main() {
         .route("/ontology", post(ontology))
         .route("/subscriptions", post(subscriptions))
         .route("/datasets", post(datasets))
+        .route("/namespaces", get(namespaces_get).post(namespaces))
+        .route("/entity_ref", post(entity_ref))
         .route("/queries", post(queries))
         .route("/propose", post(propose_schema_change))
         .route("/proposals", post(list_proposals))

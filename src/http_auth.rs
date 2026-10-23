@@ -71,6 +71,7 @@ impl SessionKeyPolicy {
 /// or the test fails. That forced decision is the whole point — write-ness cannot
 /// be inferred for you.
 pub const WRITE_ENDPOINTS: &[&str] = &[
+    "/entity_ref",
     "/memory/commit",
     "/knot",
     "/knot/stage",
@@ -137,6 +138,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    "/namespaces",
     // Current-state projection list/aggregate (aegis-tg5 F2): index reads of
     // a projection table; installs happen at startup, never over HTTP.
     "/projections",

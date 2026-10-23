@@ -14,6 +14,9 @@ use crate::store::Store;
 pub use crate::share_import_resolve::{PreparedImport, prepare as prepare_import};
 pub use crate::share_review::{import_share, import_share_prepared, promote_import};
 
+mod identity;
+pub(crate) use identity::{import_id, provenance_source, staging_graph};
+
 const SCHEMA_V1: &str = "https://github.com/scbrown/quipu/share-manifest/v1";
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -194,30 +197,6 @@ pub struct PromoteImportResult {
     /// Target facts of the moved subjects that the staged facts superseded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced: Option<usize>,
-}
-
-fn hash_suffix(value: &str) -> Result<&str> {
-    value
-        .strip_prefix("sha256:")
-        .filter(|v| v.len() == 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or_else(|| Error::InvalidValue(format!("invalid sha256 identifier: {value}")))
-}
-
-pub(crate) fn staging_graph(share_id: &str, quarantine: bool) -> Result<String> {
-    let hash = hash_suffix(share_id)?;
-    let kind = if quarantine { "quarantine" } else { "staging" };
-    Ok(format!("urn:quipu:import:{kind}:{hash}"))
-}
-
-fn import_id(share_id: &str) -> Result<String> {
-    Ok(format!("urn:quipu:import:event:{}", hash_suffix(share_id)?))
-}
-
-pub(crate) fn provenance_source(prefix: &str, id: &str, claim: Option<&str>) -> String {
-    claim.map_or_else(
-        || format!("{prefix}:{id}"),
-        |actor| format!("{prefix}:{id}:claimed-actor={actor}"),
-    )
 }
 
 pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
@@ -405,6 +384,7 @@ pub(crate) fn import_inner(
     // mismatch; attesting bytes that do not hash to what the manifest claims would
     // be signing the wrong thing.
     verify_share(request)?;
+    crate::namespace_publication::receive(store, request)?;
     crate::import_embedding::verify_recipe(store, request.manifest.embedding.as_ref())?;
     // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
     // staged (aegis-auw0o7). A share stamped `internal` was produced with the
@@ -425,6 +405,7 @@ pub(crate) fn import_inner(
     if request
         .manifest
         .destination
+        .as_ref()
         .is_some_and(ShareDestination::is_internal)
         && !request.destination.is_internal()
     {

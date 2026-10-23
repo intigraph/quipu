@@ -91,10 +91,7 @@ pub fn cmd_pack(args: &[String], db_path: &str) {
         allow_missing_embedding_recipe: args
             .iter()
             .any(|a| a == "--allow-missing-embedding-recipe"),
-        destination: match flag_value(args, "--destination") {
-            Some("internal") => quipu::share::ShareDestination::Internal,
-            _ => quipu::share::ShareDestination::Outward,
-        },
+        destination: super::destination_flag(args),
     };
 
     // `--format turtle` writes an interop BUNDLE (a directory of plain files)
@@ -192,6 +189,8 @@ pub fn cmd_unpack(args: &[String], db_path: &str) {
         into: flag_value(args, "--into"),
         expect_repository: flag_value(args, "--expect-repo"),
         head_sha: flag_value(args, "--head-sha"),
+        namespace_policy: Some(crate::cli_open::config()),
+        destination: super::destination_flag(args),
     };
     match quipu::pack::unpack_verified(pack, db_path, &opts, &chrono_now()) {
         Ok(r) => println!(

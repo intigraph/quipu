@@ -360,6 +360,7 @@ fn repo_pack_manifest_is_complete_and_incremental_load_is_idempotent() {
         into: None,
         expect_repository: Some("scbrown/example"),
         head_sha: Some("head456"),
+        ..Default::default()
     };
     let first = unpack_verified(&artifact, &destination, &load, TS).unwrap();
     assert_eq!(first.outcome, "loaded");
@@ -1363,6 +1364,9 @@ fn every_canonical_content_caller_scrubs_or_is_classified() {
     /// reads what IS in a pack; the producers decide what is allowed in.
     const NOT_A_PRODUCER: &[&str] = &[
         "verify",
+        // Receiver-side inspection of immutable pack bytes before admission;
+        // receive_pack enforces the independently configured receiver policy.
+        "unpack_verified",
         // The definition matches its own name. Named here rather than filtered
         // silently, so the list stays a record of every decision rather than of
         // the interesting ones.

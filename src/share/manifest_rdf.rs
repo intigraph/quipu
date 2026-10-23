@@ -33,10 +33,17 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
     let alignments = manifest.alignments_hash.as_ref().map_or_else(String::new, |hash| {
         format!(",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ; dcat:downloadURL <payload:alignments.ttl> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
     });
-    let destination = match manifest.destination {
-        Some(ShareDestination::Internal) => " ;\n  quipu:destination \"internal\"",
-        _ => "",
-    };
+    let destination = manifest.destination.as_ref().map_or_else(String::new, |d| {
+        let text = serde_json::to_string(d).expect("destination JSON");
+        format!(
+            " ;\n  quipu:destination {}",
+            literal(if d == &ShareDestination::Internal {
+                "internal"
+            } else {
+                &text
+            })
+        )
+    });
     format!(
         r#"@prefix dcat: <http://www.w3.org/ns/dcat#> .
 @prefix dct: <http://purl.org/dc/terms/> .

@@ -33,7 +33,7 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
     };
     let read = |path| -> quipu::Result<_> {
         let mut request = quipu::share_transport::read_local(path)?;
-        request.destination = destination;
+        request.destination = destination.clone();
         Ok(request)
     };
     let loader =

@@ -14,6 +14,8 @@ pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
+pub mod entity_namespaces;
+pub mod entity_reference;
 pub mod episode;
 pub mod error;
 pub mod governance;
@@ -34,6 +36,7 @@ pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
 pub mod namespace;
+mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;

@@ -189,6 +189,7 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
+    pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
     pub(crate) vector_delegate: Option<DelegatingVectorStore>,

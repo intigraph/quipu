@@ -76,7 +76,7 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
         .map(|reference| {
             crate::cli_pack::warn_deprecated_extension(reference);
             let mut request = quipu::share_transport::read_local(reference)?;
-            request.destination = destination;
+            request.destination = destination.clone();
             Ok(request)
         })
         .collect::<quipu::Result<Vec<_>>>()?;
@@ -208,7 +208,7 @@ fn run_repo(args: &[String], db_path: &str, repo: &str) -> quipu::Result<(String
         .map(|path| {
             crate::cli_pack::warn_deprecated_extension(path);
             let mut request = quipu::share_transport::read_local(path)?;
-            request.destination = destination;
+            request.destination = destination.clone();
             Ok(request)
         })
         .collect::<quipu::Result<Vec<_>>>()?;

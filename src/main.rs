@@ -64,6 +64,7 @@ mod cli_knot;
 mod cli_mcp;
 mod cli_memory_files;
 mod cli_merge;
+mod cli_namespaces;
 mod cli_open;
 mod cli_pack;
 mod cli_path;
@@ -199,6 +200,7 @@ fn main() {
         "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
+        "namespaces" | "entity-ref" => cli_namespaces::run(&args, db_path),
         "memory" => cli_memory_files::command(&args),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
@@ -389,6 +391,8 @@ COMMANDS:
     qp demotions [--graph <premise-IRI>] [--db <path>]
     qp episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     qp retract <entity-IRI> [--predicate <IRI>] [--db <path>]
+    qp namespaces list|apply [--db <path>]
+    qp entity-ref mint|resolve <request.json> [--db <path>]
     qp shapes load|list|remove [--db <path>]
     qp policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
     qp policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
