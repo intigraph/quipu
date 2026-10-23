@@ -87,7 +87,12 @@ pub(super) fn is_plain(blob: Option<&[u8]>) -> Result<bool> {
 fn bind_value(store: &Store, v: &JsonValue) -> Result<Option<Vec<u8>>> {
     Ok(match v {
         JsonValue::String(s) => Some(Value::Str(s.clone()).to_bytes()),
-        JsonValue::Number(n) => n.as_i64().map(|n| Value::Int(n).to_bytes()),
+        JsonValue::Number(n) => Some(
+            Value::Int(n.as_i64().ok_or_else(|| {
+                Error::InvalidValue(format!("filter number {n} is not a 64-bit integer"))
+            })?)
+            .to_bytes(),
+        ),
         JsonValue::Object(o) => match o.get("iri").and_then(JsonValue::as_str) {
             // An unknown IRI cannot match anything; it is not an error.
             Some(iri) => store.lookup(iri)?.map(|id| Value::Ref(id).to_bytes()),

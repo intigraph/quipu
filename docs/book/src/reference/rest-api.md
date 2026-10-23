@@ -1595,8 +1595,12 @@ endpoint. Body `action`:
   all by default) and `limit` (1 to 1000; the default is 1000). Response:
   `rows` (`entity`, `graph`, `key`, `key_plain`, `columns`, `plain` per
   column, `multi`), `truncated`, `multi_valued_rows`, `tx`, from one read
-  snapshot in a stable entity order. There is no paging: a selection larger
-  than `limit` answers `truncated` and should be narrowed.
+  snapshot in a stable store order (not lexical IRI order). There is no
+  paging: a selection larger than `limit` answers `truncated` and should be
+  narrowed. A malformed explicit field (a `graph` that is not an IRI, a
+  non-array `key_in`, a `since` without `column` and `at`, a non-integer number
+  in `key_in` or `where`, a `limit` outside 1 to 1000) is refused; it never
+  falls back to the default for an omitted field.
 
 A projection that is not installed at its declared definition refuses rather
 than answer stale.

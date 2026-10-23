@@ -107,7 +107,7 @@ pub(crate) async fn projections(
                     filters: &filters,
                     since: p.since,
                     columns: columns.as_deref(),
-                    limit: count(&i, "limit")?,
+                    limit: rows_limit(&i)?,
                 };
                 Ok(axum::Json(store.projection_rows(&def, &q)?))
             }
@@ -147,6 +147,30 @@ fn count(i: &JsonValue, field: &str) -> Result<usize, quipu::Error> {
     }
 }
 
+/// A graph IRI field: a string that parses as an absolute IRI.
+fn graph_iri<'a>(v: &'a JsonValue, field: &str) -> Result<&'a str, quipu::Error> {
+    v.as_str()
+        .filter(|g| oxrdf::NamedNode::new(*g).is_ok())
+        .ok_or_else(|| quipu::Error::InvalidValue(format!("{field} must be graph IRIs")))
+}
+
+/// The rows `limit`: absent = the maximum, otherwise `1..=PROJECTION_ROWS_MAX`.
+fn rows_limit(i: &JsonValue) -> Result<usize, quipu::Error> {
+    match i.get("limit") {
+        None | Some(JsonValue::Null) => Ok(0),
+        Some(v) => v
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| (1..=quipu::PROJECTION_ROWS_MAX).contains(n))
+            .ok_or_else(|| {
+                quipu::Error::InvalidValue(format!(
+                    "limit must be an integer from 1 to {}",
+                    quipu::PROJECTION_ROWS_MAX
+                ))
+            }),
+    }
+}
+
 /// The scoping fields aggregates and row listings share, parsed once.
 struct Scoped<'a> {
     graph: &'a str,
@@ -179,10 +203,7 @@ impl<'a> Scoped<'a> {
             None | Some(JsonValue::Null) => Vec::new(),
             Some(JsonValue::Array(a)) if !a.is_empty() => a
                 .iter()
-                .map(|g| {
-                    g.as_str()
-                        .ok_or_else(|| quipu::Error::InvalidValue("graphs are graph IRIs".into()))
-                })
+                .map(|g| graph_iri(g, "graphs entries"))
                 .collect::<Result<_, _>>()?,
             Some(_) => {
                 return Err(quipu::Error::InvalidValue(
@@ -190,24 +211,38 @@ impl<'a> Scoped<'a> {
                 ));
             }
         };
-        let since = i.get("since");
-        let since_col = since
-            .and_then(|v| v.get("column"))
-            .and_then(JsonValue::as_str);
-        let since_at = since.and_then(|v| v.get("at")).and_then(JsonValue::as_str);
+        // An explicit field that is malformed refuses; it never falls back to
+        // the default an omitted field gets.
+        let graph = match i.get("graph") {
+            None | Some(JsonValue::Null) => "",
+            Some(g) => graph_iri(g, "graph")?,
+        };
+        let key_in = match i.get("key_in") {
+            None | Some(JsonValue::Null) => Vec::new(),
+            Some(JsonValue::Array(a)) => a.clone(),
+            Some(_) => {
+                return Err(quipu::Error::InvalidValue(
+                    "key_in must be an array of key values".into(),
+                ));
+            }
+        };
+        let since = match i.get("since") {
+            None | Some(JsonValue::Null) => None,
+            Some(v) => {
+                let field = |f: &str| v.get(f).and_then(JsonValue::as_str);
+                Some(field("column").zip(field("at")).ok_or_else(|| {
+                    quipu::Error::InvalidValue(
+                        "since must be {\"column\": \"...\", \"at\": \"<RFC 3339>\"}".into(),
+                    )
+                })?)
+            }
+        };
         Ok(Self {
-            graph: i
-                .get("graph")
-                .and_then(JsonValue::as_str)
-                .unwrap_or_default(),
+            graph,
             graphs,
-            key_in: i
-                .get("key_in")
-                .and_then(JsonValue::as_array)
-                .cloned()
-                .unwrap_or_default(),
+            key_in,
             filters,
-            since: since_col.zip(since_at),
+            since,
         })
     }
 
@@ -370,11 +405,51 @@ mod tests {
             ),
             (
                 json!({"action": "rows", "name": "items", "limit": -1}),
-                "non-negative integer",
+                "limit must be an integer from 1 to 1000",
             ),
             (
                 json!({"action": "rows", "name": "items", "limit": 1001}),
-                "exceeds",
+                "limit must be an integer from 1 to 1000",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "limit": 0}),
+                "limit must be an integer from 1 to 1000",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "graph": 42}),
+                "graph must be graph IRIs",
+            ),
+            (
+                json!({"action": "aggregate", "name": "items", "graph": ""}),
+                "graph must be graph IRIs",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "graphs": [""]}),
+                "graphs entries must be graph IRIs",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "graphs": ["  "]}),
+                "graphs entries must be graph IRIs",
+            ),
+            (
+                json!({"action": "aggregate", "name": "items", "graphs": ["not an IRI"]}),
+                "graphs entries must be graph IRIs",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "where": {"priority": [1.5]}}),
+                "is not a 64-bit integer",
+            ),
+            (
+                json!({"action": "aggregate", "name": "items", "key_in": [18446744073709551615u64]}),
+                "is not a 64-bit integer",
+            ),
+            (
+                json!({"action": "rows", "name": "items", "key_in": "closed"}),
+                "key_in must be an array",
+            ),
+            (
+                json!({"action": "aggregate", "name": "items", "since": {"column": "priority"}}),
+                "since must be",
             ),
             (
                 json!({"action": "nope", "name": "items"}),
