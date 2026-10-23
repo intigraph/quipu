@@ -136,6 +136,7 @@ fn land(store: &mut Store, request: &ShareImportRequest, ts: &str) -> QueryImpor
         actor: None,
         target_graph: None,
         retire_from: None,
+        dry_run: false,
     };
     promote_import(store, &request, ts, None)
         .unwrap()
@@ -547,6 +548,7 @@ fn round_trip_share_import_ask_matches_the_producer() {
             actor: None,
             target_graph: None,
             retire_from: None,
+            dry_run: false,
         },
         "2026-09-02T00:00:01Z",
         None,
@@ -718,6 +720,7 @@ fn a_staged_import_installs_its_queries_only_on_promote() {
             actor: None,
             target_graph: None,
             retire_from: None,
+            dry_run: false,
         },
         "2026-09-02T00:00:01Z",
         None,
@@ -751,6 +754,7 @@ fn a_collision_made_after_import_is_reported_at_promote() {
             actor: None,
             target_graph: None,
             retire_from: None,
+            dry_run: false,
         },
         "2026-09-02T00:00:01Z",
         None,
@@ -780,6 +784,7 @@ fn promote_re_vets_the_vocabulary_and_keeps_the_hold_when_it_fails() {
         actor: None,
         target_graph: None,
         retire_from: None,
+        dry_run: false,
     };
     let held = promote_import(&mut target, &request, "2026-09-02T00:00:01Z", None)
         .unwrap()

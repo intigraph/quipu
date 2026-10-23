@@ -172,6 +172,11 @@ pub struct PromoteImportRequest {
     /// source graph in the same transaction (a move, never a whole-graph replace).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retire_from: Option<String>,
+    /// With `target_graph`: report what the move would assert, replace and retire,
+    /// and write nothing. `replaced` above zero means the move would retract target
+    /// facts of the moved subjects that the share does not carry.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dry_run: bool,
 }
 
 /// Result of explicitly promoting a staged graph into ROOT.
@@ -197,6 +202,9 @@ pub struct PromoteImportResult {
     /// Target facts of the moved subjects that the staged facts superseded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced: Option<usize>,
+    /// A dry run's caution, e.g. target facts the move would retract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 pub(crate) fn verify_share(request: &ShareImportRequest) -> Result<()> {
