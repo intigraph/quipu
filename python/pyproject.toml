@@ -16,8 +16,8 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/scbrown/quipu"
-Documentation = "https://github.com/scbrown/quipu/tree/main/docs/book/src/reference/python-client.md"
+Homepage = "https://github.com/intigraph/quipu"
+Documentation = "https://github.com/intigraph/quipu/tree/main/docs/book/src/reference/python-client.md"
 
 [tool.setuptools]
 packages = ["quipu_client"]

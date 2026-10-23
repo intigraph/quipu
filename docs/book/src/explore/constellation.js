@@ -290,7 +290,7 @@ SELECT ?subject ?predicate ?object WHERE {
       for (const row of files.rows ?? []) {
         const r = { s: row.subject, type: row.kind, path: row.path };
         if (targets.has(r.s) || (fallback && nodes.size < 60)) nodes.set(r.s,
-          { id: r.s, label: r.path, group: groupOf(r.type), source: `https://github.com/scbrown/quipu/blob/main/${r.path}` });
+          { id: r.s, label: r.path, group: groupOf(r.type), source: `https://github.com/intigraph/quipu/blob/main/${r.path}` });
       }
       edges = edges.filter((e) => nodes.has(e.from) && nodes.has(e.to));
       arrange();

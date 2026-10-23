@@ -82,6 +82,10 @@ runs:
       shell: bash
       run: node scripts/test-browser-federation.mjs
 
+    - name: Explorer entity source-link controls
+      shell: bash
+      run: node scripts/test-explorer-entity.mjs
+
     - name: Pinned W3C SHACL Core against the compiled wasm validator
       shell: bash
       env:

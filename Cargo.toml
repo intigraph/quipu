@@ -5,12 +5,12 @@ edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
 license = "Apache-2.0"
-repository = "https://github.com/scbrown/quipu"
+repository = "https://github.com/intigraph/quipu"
 keywords = ["knowledge-graph", "rdf", "sparql", "ontology", "ai"]
 categories = ["database", "data-structures"]
 # The published book. `repository` already carries the GitHub URL, so pointing
 # homepage at it too wasted one of the two links crates.io shows.
-homepage = "https://scbrown.github.io/quipu/"
+homepage = "https://intigraph.github.io/quipu/"
 documentation = "https://docs.rs/quipu-ai"
 exclude = [
     ".github/",

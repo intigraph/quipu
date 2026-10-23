@@ -4,13 +4,13 @@
   "title": "Quipu",
   "description": "Local knowledge graph memory for agents. SHACL rules refuse bad facts; SPARQL and time travel.",
   "repository": {
-    "url": "https://github.com/scbrown/quipu",
+    "url": "https://github.com/intigraph/quipu",
     "source": "github"
   },
-  "websiteUrl": "https://scbrown.github.io/quipu/",
+  "websiteUrl": "https://intigraph.github.io/quipu/",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/scbrown/quipu/main/assets/logo.svg",
+      "src": "https://raw.githubusercontent.com/intigraph/quipu/main/assets/logo.svg",
       "mimeType": "image/svg+xml"
     }
   ],
