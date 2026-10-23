@@ -118,7 +118,7 @@ pub(super) fn defs() -> Vec<Value> {
         }),
         serde_json::json!({
             "name": "quipu_import_promote",
-            "description": "Promote a staged share only when existing promotion gates permit it. Does not bypass quarantine or resolution review. With target_graph, promote into that named graph instead of ROOT, replacing only the share's subjects there; with retire_from too, move those subjects out of that source graph in the same transaction.",
+            "description": "Promote a staged share only when existing promotion gates permit it. Does not bypass quarantine or resolution review. With target_graph, promote into that named graph instead of ROOT, replacing only the share's subjects there; with retire_from too, move those subjects out of that source graph in the same transaction. With dry_run, report what the move would assert, replace and retire, and write nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -133,6 +133,9 @@ pub(super) fn defs() -> Vec<Value> {
                     },
                     "retire_from": {
                         "type": "string"
+                    },
+                    "dry_run": {
+                        "type": "boolean"
                     }
                 },
                 "required": [

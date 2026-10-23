@@ -75,6 +75,11 @@ pub(crate) fn promote_inner(
         request.actor.as_deref(),
     );
     let (tx_id, count, suppressed, moved) = match request.target_graph.as_deref() {
+        None if request.dry_run => {
+            return Err(Error::InvalidValue(
+                "dry_run requires target_graph: it previews a subject move".into(),
+            ));
+        }
         None if request.retire_from.is_some() => {
             return Err(Error::InvalidValue(
                 "retire_from requires target_graph: a ROOT promotion moves nothing".into(),
@@ -95,7 +100,7 @@ pub(crate) fn promote_inner(
                 store,
                 graph,
                 target,
-                request.retire_from.as_deref(),
+                request,
                 timestamp,
                 authenticated_actor,
                 &source,
@@ -110,10 +115,28 @@ pub(crate) fn promote_inner(
     };
     // AFTER the data: if installing fails, the hold survives and promoting
     // again retries it.
-    let queries = crate::share_queries::release(store, &request.share_id, timestamp)?;
+    let queries = if request.dry_run {
+        None
+    } else {
+        crate::share_queries::release(store, &request.share_id, timestamp)?
+    };
     let unchanged = moved.as_ref().is_some_and(|(_, m)| m.tx_id == 0);
+    let warning = moved
+        .as_ref()
+        .filter(|(_, m)| request.dry_run && m.replaced > 0)
+        .map(|(target, m)| {
+            format!(
+                "would retract {} facts of the moved subjects in {target} that the share does not carry",
+                m.replaced
+            )
+        });
+    let outcome = match (request.dry_run, unchanged) {
+        (true, _) => "dry_run",
+        (false, true) => "unchanged",
+        (false, false) => "promoted",
+    };
     Ok(PromoteImportResult {
-        outcome: if unchanged { "unchanged" } else { "promoted" }.into(),
+        outcome: outcome.into(),
         share_id: request.share_id.clone(),
         staging_graph: graph_iri,
         tx_id,
@@ -125,6 +148,7 @@ pub(crate) fn promote_inner(
             .and_then(|(_, m)| m.retire_from.as_ref().map(|_| m.retired)),
         replaced: moved.as_ref().map(|(_, m)| m.replaced),
         target_graph: moved.map(|(target, _)| target),
+        warning,
     })
 }
 
@@ -158,11 +182,12 @@ pub(crate) fn promote_subjects_into_graph(
     store: &mut Store,
     staging: i64,
     target: &str,
-    retire_from: Option<&str>,
+    request: &PromoteImportRequest,
     timestamp: &str,
     actor: Option<&str>,
     source: &str,
 ) -> Result<SubjectMove> {
+    let (retire_from, dry_run) = (request.retire_from.as_deref(), request.dry_run);
     if retire_from == Some(target) {
         return Err(crate::Error::InvalidValue(
             "retire_from must differ from target_graph: a graph cannot be moved into itself".into(),
@@ -180,12 +205,25 @@ pub(crate) fn promote_subjects_into_graph(
         op,
     };
     crate::time::check_request_deadline()?;
-    let g = store.graph_create(target)?;
-    let have: Vec<Fact> = store
-        .current_facts_in_graph(g)?
-        .into_iter()
-        .filter(|f| subjects.contains(&f.entity))
-        .collect();
+    // A dry run only looks: it never creates the target graph. It still
+    // refuses a target the real create refuses (a graph of another class).
+    let g = if dry_run {
+        let g = store.lookup(target)?;
+        if let Some(g) = g {
+            store.committed_graph_registered(g)?;
+        }
+        g
+    } else {
+        Some(store.graph_create(target)?)
+    };
+    let have: Vec<Fact> = match g {
+        Some(g) => store
+            .current_facts_in_graph(g)?
+            .into_iter()
+            .filter(|f| subjects.contains(&f.entity))
+            .collect(),
+        None => Vec::new(),
+    };
     let wanted_keys: HashSet<_> = wanted.iter().map(key).collect();
     let have_keys: HashSet<_> = have.iter().map(key).collect();
     let mut changes: Vec<Datum> = have
@@ -206,6 +244,25 @@ pub(crate) fn promote_subjects_into_graph(
         replaced,
         retire_from: retire_from.map(String::from),
         ..SubjectMove::default()
+    };
+    if dry_run {
+        if let Some(b) = retire_from
+            .map(|from| store.lookup(from))
+            .transpose()?
+            .flatten()
+        {
+            moved.retired = store
+                .current_facts_in_graph(b)?
+                .iter()
+                .filter(|f| subjects.contains(&f.entity))
+                .count();
+        }
+        return Ok(moved);
+    }
+    let Some(g) = g else {
+        return Err(crate::Error::InvalidValue(format!(
+            "target graph missing: {target}"
+        )));
     };
     crate::time::check_request_deadline()?;
     if !changes.is_empty() {

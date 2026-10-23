@@ -313,7 +313,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             .unwrap_or_else(|| {
                 eprintln!(
                     "usage: quipu import promote <share-id> [--actor <id>] \
-                     [--into <graph-iri> [--retire-from <graph-iri>]] [--db <path>]"
+                     [--into <graph-iri> [--retire-from <graph-iri>] [--dry-run]] [--db <path>]"
                 );
                 std::process::exit(1);
             });
@@ -322,6 +322,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             actor: flag_value(args, "--actor").map(String::from),
             target_graph: flag_value(args, "--into").map(String::from),
             retire_from: flag_value(args, "--retire-from").map(String::from),
+            dry_run: args.iter().any(|a| a == "--dry-run"),
         };
         match quipu::share_import::promote_import(&mut store, &request, &timestamp, None) {
             Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),

@@ -84,6 +84,7 @@ fn quarantine_replay_ages_once_then_adoption_and_promotion_resolve() {
                 actor: None,
                 target_graph: None,
                 retire_from: None,
+                dry_run: false,
             },
             TS,
             None
@@ -104,6 +105,7 @@ fn quarantine_replay_ages_once_then_adoption_and_promotion_resolve() {
         actor: Some("claim".into()),
         target_graph: None,
         retire_from: None,
+        dry_run: false,
     };
     promote_import(&mut store, &promote, TS, Some("reviewed-actor")).unwrap();
     promote_import(&mut store, &promote, TS, Some("reviewed-actor")).unwrap();
@@ -218,6 +220,7 @@ fn promotion_event_failure_leaves_root_unchanged_and_can_retry() {
         actor: Some("operator".into()),
         target_graph: None,
         retire_from: None,
+        dry_run: false,
     };
     store.conn.execute_batch("CREATE TRIGGER fail_promotion_event BEFORE INSERT ON events WHEN NEW.type='import.promoted' BEGIN SELECT RAISE(ABORT,'event failure'); END").unwrap();
     assert!(promote_import(&mut store, &promote, TS, None).is_err());
