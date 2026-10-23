@@ -85,6 +85,7 @@ pub mod shacl;
 mod shacl_admission;
 #[cfg(feature = "shacl")]
 pub mod shacl_context;
+pub mod shacl_cycles;
 #[cfg(feature = "shacl")]
 mod shacl_debt;
 pub mod share;
