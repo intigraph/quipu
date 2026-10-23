@@ -48,6 +48,8 @@ pub(crate) use index::LabelIndex;
 #[cfg(test)]
 pub(crate) use index::LabelProfile;
 #[cfg(test)]
+pub(crate) use index::delta_sql;
+#[cfg(test)]
 mod tests;
 
 pub use matching::{

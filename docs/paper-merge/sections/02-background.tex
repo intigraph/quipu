@@ -19,7 +19,8 @@ exercise blank-node canonicalization and is not evidence about it.
 the question. If both sides add a triple, the union holds both. That is correct
 for a person's email addresses and wrong for their date of birth, and nothing in
 the triples distinguishes the two cases. The distinction is in the schema: a
-SHACL shape with \texttt{sh:maxCount 1} on a property path states that the slot
+SHACL shape~\cite{knublauch2017shacl} with \texttt{sh:maxCount 1} on a property
+path states that the slot
 holds at most one value. A merge that unions into such a slot has not resolved
 the divergence; it has produced a graph that violates the very constraint the
 store enforces on ordinary writes.

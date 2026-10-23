@@ -333,3 +333,26 @@ fn headers_encode_arbitrary_field_names_and_omit_clean_requests() {
         serde_json::from_str(headers["x-quipu-ignored-fields"].to_str().unwrap()).unwrap();
     assert_eq!(names, vec!["é\n🦀"]);
 }
+
+#[tokio::test]
+async fn shacl_refusal_body_names_each_refused_focus() {
+    use axum::response::IntoResponse;
+    let messages: Vec<String> = (0..60)
+        .map(|i| format!("post-state sh:MaxCountConstraintComponent on urn:focus:{i}: MaxCount(1)"))
+        .collect();
+    let error = quipu::Error::ValidationFailed {
+        violations: messages.len(),
+        messages,
+    };
+    let response = super::super::base::AppError::from(error).into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "SHACL validation failed: 60 violation(s)");
+    let shown = body["violations"].as_array().unwrap();
+    assert_eq!(shown.len(), 50);
+    assert!(shown[0].as_str().unwrap().contains("urn:focus:0"));
+    assert_eq!(body["violations_truncated"], true);
+}

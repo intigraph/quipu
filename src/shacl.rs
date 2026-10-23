@@ -21,7 +21,7 @@ use shacl_engine::validator::store::ShaclDataManager;
 mod targets;
 
 #[path = "shacl_write_paths.rs"]
-mod write_paths;
+pub(crate) mod write_paths;
 
 use serde::{Deserialize, Serialize};
 
@@ -35,14 +35,13 @@ fn report_term(term: &Object) -> String {
     }
 }
 
-fn single_shape_message(shapes: &str) -> Option<String> {
-    let pattern = regex::Regex::new(r#"sh:message\s+(\"(?:\\.|[^\"])*\")"#).ok()?;
-    let mut matches = pattern.captures_iter(shapes);
-    let first = matches.next()?.get(1)?.as_str();
-    if matches.next().is_some() {
-        return None;
-    }
-    serde_json::from_str(first).ok()
+fn report_message(messages: &shacl_engine::types::MessageMap) -> Option<String> {
+    // Feedback carries one string: prefer an untagged message, otherwise the
+    // first normalized language tag, independent of HashMap iteration order.
+    messages
+        .iter()
+        .min_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, message)| message.clone())
 }
 
 fn report_severity(severity: &shacl_engine::types::Severity) -> String {
@@ -185,7 +184,6 @@ impl Validator {
         .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
 
         let mut issues = Vec::new();
-        let shape_message = single_shape_message(&self.shapes_turtle);
         for result in report.results() {
             let focus_node = report_term(result.focus_node());
             let component = report_term(result.constraint_component());
@@ -201,9 +199,15 @@ impl Validator {
                 path: result.path().map(|p| format!("{p}")),
                 value,
                 source_shape: result.source().map(report_term),
-                message: shape_message
-                    .clone()
-                    .or_else(|| result.message().get(None).cloned()),
+                // Resolve against the same compiled schema: this preserves
+                // anonymous property-shape identity and never borrows a
+                // message from an unrelated (or parent) shape.
+                message: result
+                    .source()
+                    .and_then(|source| schema.get_shape(source))
+                    .and_then(|shape| shape.message())
+                    .and_then(report_message)
+                    .or_else(|| report_message(result.message())),
             });
         }
 
@@ -338,67 +342,57 @@ pub struct ShapesSplit {
 /// Split a Turtle shapes document into reject-mode and emit-mode documents by
 /// the `quipu:onViolation` annotation on each top-level shape block.
 ///
-/// TEXTUAL, BY DESIGN, WITH ITS LIMITS STATED: this splits on the house style
-/// used by every shape set this deployment loads — top-level statements of the
-/// form `<subject> a sh:NodeShape ; … .` with inline `[ … ]` property shapes,
-/// where a statement ends with `.` at bracket depth 0 at end-of-line. It does
-/// not implement a full Turtle parser; a shapes document in a different style
-/// routes conservatively (unrecognised content stays in the REJECT document,
-/// which preserves the default-reject contract — never the other way around).
-/// Prefix lines are replicated into both documents so each stands alone; the
-/// emit document must declare the `quipu:` prefix itself, exactly as it must
-/// declare `sh:`.
+/// Two steps with different jobs:
+/// - BOUNDARIES are textual: a block is a top-level statement of the house
+///   style `<subject> a sh:NodeShape ; … .`, ending with `.` at bracket depth 0
+///   at end-of-line. The lexer knows literals, IRIs and comments, so a `#`,
+///   bracket or `.` inside a string is data.
+/// - MEMBERSHIP is parsed RDF (aegis-g51c C7): the block, with the prefixes
+///   declared before it, is parsed as Turtle, and it routes to emit only if
+///   every top-level subject (one that is not an object inside the block)
+///   carries exactly the policy `quipu:onViolation "emit"`. Text never decides,
+///   so the annotation quoted inside a `sh:message`, written in a comment, or
+///   set on a nested property shape cannot move a rejecting shape.
+///
+/// Everything uncertain fails closed to REJECT: a block that does not parse,
+/// a conflicting or non-string policy, and unterminated trailing content.
+/// Prefix lines are replicated into both documents so each stands alone.
 pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
     let mut prefixes = String::new();
-    let mut blocks: Vec<String> = Vec::new();
+    // (block text, the prefixes declared before it)
+    let mut blocks: Vec<(String, String)> = Vec::new();
     let mut current = String::new();
-    let mut depth: i32 = 0;
+    let mut lexer = TurtleLexer::default();
 
     for line in shapes_turtle.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("@prefix") || trimmed.to_lowercase().starts_with("prefix ") {
+        if !lexer.in_literal()
+            && (trimmed.starts_with("@prefix") || trimmed.to_lowercase().starts_with("prefix "))
+        {
             prefixes.push_str(line);
             prefixes.push('\n');
             continue;
         }
         // Comments and blank lines between blocks belong to no block.
-        if current.is_empty() && (trimmed.is_empty() || trimmed.starts_with('#')) {
+        if current.is_empty()
+            && !lexer.in_literal()
+            && (trimmed.is_empty() || trimmed.starts_with('#'))
+        {
             continue;
         }
         current.push_str(line);
         current.push('\n');
-        // Track bracket depth outside comments (house style has no strings
-        // containing brackets; a `#` starts a comment for the rest of the line).
-        let code = match line.find('#') {
-            Some(i) => &line[..i],
-            None => line,
-        };
-        for ch in code.chars() {
-            match ch {
-                '[' | '(' => depth += 1,
-                ']' | ')' => depth -= 1,
-                _ => {}
-            }
+        let code = lexer.scan_line(line);
+        if lexer.depth == 0 && !lexer.in_literal() && code.trim_end().ends_with('.') {
+            blocks.push((std::mem::take(&mut current), prefixes.clone()));
         }
-        if depth == 0 && code.trim_end().ends_with('.') {
-            blocks.push(std::mem::take(&mut current));
-        }
-    }
-    if !current.trim().is_empty() {
-        // Unterminated trailing content: conservative — reject document.
-        blocks.push(current);
     }
 
     let mut reject = prefixes.clone();
     let mut emit = prefixes;
     let mut has_emit = false;
-    for block in blocks {
-        let is_emit = block.contains("quipu:onViolation")
-            && block
-                .split("quipu:onViolation")
-                .nth(1)
-                .is_some_and(|rest| rest.trim_start().starts_with("\"emit\""));
-        if is_emit {
+    for (block, declared) in blocks {
+        if block_is_emit(&declared, &block) {
             emit.push_str(&block);
             emit.push('\n');
             has_emit = true;
@@ -407,12 +401,195 @@ pub fn split_shapes_by_policy(shapes_turtle: &str) -> ShapesSplit {
             reject.push('\n');
         }
     }
+    // Unterminated trailing content (unbalanced brackets, an open literal, a
+    // missing final '.') ALWAYS rejects, whatever annotation it contains: the
+    // splitter could not tell where its shapes begin and end (aegis-g51c).
+    if !current.trim().is_empty() {
+        reject.push_str(&current);
+        reject.push('\n');
+    }
     ShapesSplit {
         reject,
         emit,
         has_emit,
     }
 }
+
+/// The policy predicate, under both IRIs the admission path accepts.
+const ON_VIOLATION_IRIS: [&str; 2] = [
+    "http://quipu.dev/ontology/onViolation",
+    "http://quipu.dev/ns#onViolation",
+];
+
+/// Whether one block, parsed with the prefixes in force at its position, is
+/// entirely emit: every top-level subject, every declared `sh:NodeShape` and
+/// every targeted shape has the single policy `"emit"`. A shape another block
+/// member references (`sh:node`) is an object, not a root; without the last two
+/// it rode along with its emit referrer and stopped rejecting (ian, #726).
+fn block_is_emit(prefixes: &str, block: &str) -> bool {
+    use oxrdf::Term;
+    let document = format!("{prefixes}{block}");
+    let Ok(triples) = oxttl::TurtleParser::new()
+        .for_reader(document.as_bytes())
+        .collect::<std::result::Result<Vec<_>, _>>()
+    else {
+        return false;
+    };
+    let objects: std::collections::HashSet<Term> =
+        triples.iter().map(|t| t.object.clone()).collect();
+    const SH: &str = "http://www.w3.org/ns/shacl#";
+    let declared_shape = |t: &oxrdf::Triple| {
+        let predicate = t.predicate.as_str();
+        (predicate == oxrdf::vocab::rdf::TYPE.as_str()
+            && matches!(&t.object, Term::NamedNode(n) if n.as_str() == format!("{SH}NodeShape")))
+            || predicate
+                .strip_prefix(SH)
+                .is_some_and(|local| local.starts_with("target"))
+    };
+    let roots: std::collections::BTreeSet<String> = triples
+        .iter()
+        .filter(|t| !objects.contains(&Term::from(t.subject.clone())) || declared_shape(t))
+        .map(|t| t.subject.to_string())
+        .collect();
+    if roots.is_empty() {
+        return false;
+    }
+    let mut policies: HashMap<String, Vec<Option<&str>>> = HashMap::new();
+    for t in &triples {
+        if !ON_VIOLATION_IRIS.contains(&t.predicate.as_str()) {
+            continue;
+        }
+        let value = match &t.object {
+            // A plain string only: "emit"@en or a typed value is not the policy.
+            Term::Literal(l)
+                if l.language().is_none() && l.datatype() == oxrdf::vocab::xsd::STRING =>
+            {
+                Some(l.value())
+            }
+            _ => None,
+        };
+        policies
+            .entry(t.subject.to_string())
+            .or_default()
+            .push(value);
+    }
+    roots.iter().all(|root| {
+        policies
+            .get(root)
+            .is_some_and(|values| values.iter().all(|v| *v == Some("emit")))
+    })
+}
+
+/// Just enough Turtle lexing to find statement boundaries: string literals
+/// (short and long, single and double quoted, with escapes), IRIs and comments.
+/// A `#`, bracket or `.` inside a literal or IRI is data, not syntax. Before
+/// aegis-g51c the splitter cut every line at its first `#`, so a `sh:pattern`
+/// containing `#` (camayoc-core) lost its closing brackets and the rest of the
+/// combined document collapsed into one block that routed as a whole.
+#[derive(Default)]
+struct TurtleLexer {
+    depth: i32,
+    /// Open literal: (quote char, long form).
+    literal: Option<(char, bool)>,
+}
+
+impl TurtleLexer {
+    fn in_literal(&self) -> bool {
+        self.literal.is_some()
+    }
+
+    /// Scan one line, updating bracket depth and literal state; return the
+    /// line with any comment removed and every literal's CONTENT masked. Only
+    /// statement boundaries are read from it; routing is decided by parsing.
+    fn scan_line(&mut self, line: &str) -> String {
+        let chars: Vec<char> = line.chars().collect();
+        let mut code = String::with_capacity(line.len());
+        // Content of an open SHORT literal on this line (it cannot span lines).
+        let mut short = String::new();
+        let mask = |text: &str| -> String { "_".repeat(text.chars().count()) };
+        let mut i = 0;
+        while i < chars.len() {
+            let ch = chars[i];
+            if let Some((quote, long)) = self.literal {
+                if ch == '\\' {
+                    let escaped = if chars.get(i + 1).is_some() {
+                        "__"
+                    } else {
+                        "_"
+                    };
+                    if long {
+                        code.push_str(escaped);
+                    } else {
+                        short.push_str(escaped);
+                    }
+                    i += 2;
+                    continue;
+                }
+                if ch == quote && !long {
+                    code.push_str(&mask(&std::mem::take(&mut short)));
+                    code.push(quote);
+                    self.literal = None;
+                    i += 1;
+                    continue;
+                }
+                if ch == quote
+                    && chars.get(i + 1) == Some(&quote)
+                    && chars.get(i + 2) == Some(&quote)
+                {
+                    code.extend([quote; 3]);
+                    i += 3;
+                    self.literal = None;
+                    continue;
+                }
+                if long {
+                    code.push('_');
+                } else {
+                    short.push(ch);
+                }
+                i += 1;
+                continue;
+            }
+            match ch {
+                '#' => break,
+                '"' | '\'' => {
+                    let long = chars.get(i + 1) == Some(&ch) && chars.get(i + 2) == Some(&ch);
+                    if long {
+                        code.push(ch);
+                        code.push(ch);
+                        code.push(ch);
+                        i += 3;
+                    } else {
+                        code.push(ch);
+                        i += 1;
+                    }
+                    self.literal = Some((ch, long));
+                    continue;
+                }
+                '<' => {
+                    // An IRI reference: copy through '>' verbatim.
+                    let close = chars[i..].iter().position(|&c| c == '>');
+                    let stop = close.map_or(chars.len(), |p| i + p + 1);
+                    code.extend(&chars[i..stop]);
+                    i = stop;
+                    continue;
+                }
+                '[' | '(' => self.depth += 1,
+                ']' | ')' => self.depth -= 1,
+                _ => {}
+            }
+            code.push(ch);
+            i += 1;
+        }
+        // A short literal cannot span lines; leaving one open would swallow the
+        // rest of the document, so it stays open and the tail fails closed.
+        code.push_str(&mask(&short));
+        code
+    }
+}
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_split_tests.rs"]
+mod shacl_split_tests;
 
 #[cfg(test)]
 mod split_tests {
@@ -477,3 +654,7 @@ mod code_entity_tests;
 #[cfg(test)]
 #[path = "governance_tests.rs"]
 mod governance_tests;
+
+#[cfg(test)]
+#[path = "shacl_message_tests.rs"]
+mod message_tests;

@@ -3130,6 +3130,43 @@ fn warm_term_cache_respects_the_cap() {
 }
 
 #[test]
+fn entity_scoped_current_reads_use_the_current_entity_index() {
+    // aegis-wlf0. The post-state SHACL gate reads one entity's current facts
+    // per touched focus. Through `idx_geav` that walks the entity's WHOLE
+    // history: 298,050 rows for the write-probe marker, 87.8 ms per call and
+    // 672 ms per `/set` with write validation on.
+    //
+    // Pin the PLAN of the gate's own queries, not the index's existence.
+    let store = Store::open_in_memory().unwrap();
+    for sql in [
+        "SELECT COUNT(*) FROM (SELECT 1 FROM facts WHERE e=?1 AND g=?2 \
+         AND op=1 AND valid_to IS NULL LIMIT 100001)",
+        // `Store::entity_facts_in_graph`, the read that follows the count.
+        "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
+         WHERE e = ?1 AND op = 1 AND valid_to IS NULL AND g = ?2 \
+         ORDER BY a",
+    ] {
+        let mut stmt = store
+            .conn
+            .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+            .unwrap();
+        let details: Vec<String> = stmt
+            .query_map([1_i64, 0_i64], |row| row.get(3))
+            .unwrap()
+            .map(|row| row.unwrap())
+            .collect();
+        assert!(
+            details.iter().any(|d| d.contains("idx_current_gea")),
+            "an entity-scoped current read must use idx_current_gea, plan={details:?}"
+        );
+        assert!(
+            !details.iter().any(|d| d.contains("SCAN facts")),
+            "an entity-scoped current read must not scan facts, plan={details:?}"
+        );
+    }
+}
+
+#[test]
 fn label_index_scan_uses_the_current_fact_index() {
     // aegis-svtdyn. `resolution::LabelIndex::build` runs this scan on EVERY
     // episode write, BEFORE the per-node loop, so even a zero-node episode pays

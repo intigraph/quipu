@@ -118,18 +118,7 @@ jobs:
       - name: Install protobuf compiler for semver checks
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      # Separate credentials by operation: release events retain GITHUB_TOKEN
-      # and the inline artifact/publish jobs; PR events use a scoped PAT.
-      # This split is not a changelog-baseline fix (see docs/release-token.md).
-      - name: Require the release PR credential
-        env:
-          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-        run: |
-          if [ -z "$RELEASE_PLZ_TOKEN" ]; then
-            echo "::error::Configure RELEASE_PLZ_TOKEN; see docs/release-token.md"
-            exit 1
-          fi
-
+      # Publication keeps its existing credential and artifact outputs.
       - uses: MarcoIeni/release-plz-action@v0.5
         id: release
         with:
@@ -137,74 +126,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      # Replace checkout's git credential too: the correction below uses git
-      # push, which does not read the release-plz step's GITHUB_TOKEN variable.
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          persist-credentials: true
-
-      - uses: MarcoIeni/release-plz-action@v0.5
-        with:
-          command: release-pr
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: git-cliff
-
-      # Correct the section release-plz just wrote, in the same run that wrote it.
-      #
-      # This step exists because the two obvious alternatives do not work here:
-      #
-      #   Correcting by hand does not survive. release-plz ABANDONS a branch it did
-      #   not write — measured on #61, where a hand-correction was discarded three
-      #   seconds after the next push to main and a fresh PR opened carrying the
-      #   defect again (see the note at the top of changelog-check.yml).
-      #
-      # Correct inline after generation so the final PR head includes the fix.
-      # Both release-plz and the correction push now use RELEASE_PLZ_TOKEN;
-      # required checks must report on the final corrected head, not an earlier
-      # generated commit. fix-changelog.sh remains the baseline correction.
-      - name: Correct the release PR's changelog section
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
-        run: |
-          set -euo pipefail
-          BR="$(gh pr list --state open --json headRefName \
-                  --jq '[.[] | select(.headRefName | startswith("release-plz"))][0].headRefName // ""')"
-          if [ -z "$BR" ]; then
-            echo "No open release PR — nothing to correct."
-            exit 0
-          fi
-          echo "Correcting release PR branch: ${BR}"
-          git fetch --quiet origin "$BR"
-          git checkout --quiet -B "$BR" "origin/$BR"
-
-          # Unreleased can precede the pending version (even with content).
-          # Name the package version so both tools inspect the release artifact.
-          VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
-          ./scripts/fix-changelog.sh --version "$VERSION"
-
-          if git diff --quiet -- CHANGELOG.md; then
-            echo "Section was already correct; nothing pushed."
-          else
-            git config user.name  "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add CHANGELOG.md
-            git commit -m "chore: regenerate the release changelog section with git-cliff"
-            git push origin "$BR"
-            echo "Pushed a corrected section to ${BR}."
-          fi
-
-          # Fail loudly if the correction did not actually satisfy the verifier —
-          # a corrector that silently produces a still-wrong section is worse than
-          # no corrector, because the red check that used to catch it is gone.
-          ./scripts/verify-changelog.sh --version "$VERSION"
 
   # Keep the push-side guard as well as the PR guard. A credential change is
   # accepted only after checks report on the final release PR head; an old
@@ -242,8 +163,8 @@ jobs:
           ./scripts/verify-changelog.sh --version "$VERSION"
 
       # The pending release PR is the artifact that actually gets merged, and it is
-      # regenerated on every push — so it is worth re-checking every push, not just
-      # at creation.
+      # generated daily. Check its own release boundary without rewriting it
+      # when unrelated code merges.
       - name: Verify the pending release PR, if there is one
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -285,7 +206,9 @@ jobs:
       # asset has already uploaded, so the release is fine and the job is red,
       # which is the confusing shape. Measured on the v0.3.33 artifact re-run.
       actions: write
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
+    # install Chromium. Unpin together with a Playwright bump.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

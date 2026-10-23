@@ -122,8 +122,56 @@ fn with_no_shapes_loaded_the_gates_are_inactive() {
     assert_eq!(held(&shared, "http://ex.org/n"), 1);
 }
 
+/// A delete that empties a required path on a conforming node is refused
+/// (aegis-g51c C12): otherwise the node would carry a violation that later
+/// writes admit as pre-existing debt.
 #[test]
-fn a_pure_deletion_is_not_gated() {
+fn a_deletion_that_empties_a_required_path_is_refused() {
+    let shared = store(Some(PROFILE));
+    apply_update_as(
+        &shared,
+        &insert("http://ex.org/d", "http://ex.org/Action", true),
+        false,
+    )
+    .unwrap();
+    let before = held(&shared, "http://ex.org/d");
+    let refused = apply_update_as(
+        &shared,
+        "DELETE DATA { <http://ex.org/d> <http://ex.org/sourceKind> \"observed\" }",
+        false,
+    );
+    assert!(refused.is_err(), "the delete left a required path empty");
+    assert_eq!(
+        held(&shared, "http://ex.org/d"),
+        before,
+        "a refused delete removed facts"
+    );
+}
+
+/// The deletion check follows `shacl.validate_on_write`: off restores the
+/// previous behaviour, where a pure deletion is not gated.
+#[test]
+fn a_pure_deletion_is_not_gated_with_validation_off() {
+    let shared = store(Some(PROFILE));
+    apply_update_as(
+        &shared,
+        &insert("http://ex.org/d", "http://ex.org/Action", true),
+        false,
+    )
+    .unwrap();
+    shared.lock().shacl_config_mut().validate_on_write = false;
+    apply_update_as(
+        &shared,
+        "DELETE DATA { <http://ex.org/d> <http://ex.org/sourceKind> \"observed\" }",
+        false,
+    )
+    .unwrap();
+    assert_eq!(held(&shared, "http://ex.org/d"), 1);
+}
+
+/// Deleting a value no shape requires is not judged.
+#[test]
+fn deleting_an_optional_value_is_not_gated() {
     let shared = store(Some(PROFILE));
     apply_update_as(
         &shared,
@@ -133,9 +181,15 @@ fn a_pure_deletion_is_not_gated() {
     .unwrap();
     apply_update_as(
         &shared,
-        "DELETE DATA { <http://ex.org/d> <http://ex.org/sourceKind> \"observed\" }",
+        "INSERT DATA { <http://ex.org/d> <http://ex.org/note> \"x\" }",
         false,
     )
     .unwrap();
-    assert_eq!(held(&shared, "http://ex.org/d"), 1);
+    apply_update_as(
+        &shared,
+        "DELETE DATA { <http://ex.org/d> <http://ex.org/note> \"x\" }",
+        false,
+    )
+    .unwrap();
+    assert_eq!(held(&shared, "http://ex.org/d"), 2);
 }

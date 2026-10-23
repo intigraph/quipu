@@ -1,5 +1,9 @@
 PREFIX aegis: <http://aegis.gastown.local/ontology/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX sssom: <https://w3id.org/sssom/>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 # Public repository knowledge only. Bobbin publishes its replaceable snapshot
@@ -12,7 +16,8 @@ WHERE {
     ?s ?p ?o .
     FILTER(
       STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/code/quipu/") ||
-      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/quipu/")
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/doc/quipu/") ||
+      STRSTARTS(STR(?s), "http://aegis.gastown.local/ontology/chunk/quipu/")
     )
     VALUES ?p {
       rdf:type rdfs:label
@@ -20,6 +25,10 @@ WHERE {
       aegis:inDocument aegis:chunkOrder aegis:nextChunk aegis:mentions
       aegis:name aegis:definedIn aegis:symbolKind
       aegis:heading aegis:headingDepth
+      rdfs:comment rdfs:seeAlso prov:wasDerivedFrom dct:modified dct:isReplacedBy
+      aegis:knowledgeKind aegis:interfaceKind aegis:publicName aegis:status
+      aegis:supersessionStatus aegis:startHereOrder aegis:glossaryTerm
+      aegis:reviewAfter aegis:maxAge aegis:depends_on aegis:sourceHash
     }
     # Bobbin emits weak mention names as strings. Quipu may additionally
     # resolve those names to IRIs under the same predicate in its local store;
@@ -29,14 +38,22 @@ WHERE {
   UNION
   {
     ?s ?p ?o .
+    { ?s a sssom:MappingSet } UNION { ?s a owl:Axiom }
+    VALUES ?p {
+      rdf:type rdfs:label prov:wasDerivedFrom
+      sssom:mappings sssom:subject_id sssom:object_id sssom:predicate_id
+      sssom:subject_label sssom:object_label sssom:mapping_justification
+      sssom:predicate_modifier sssom:confidence sssom:author_id
+    }
+  }
+  UNION
+  {
+    ?s ?p ?o .
     FILTER(STRSTARTS(STR(?s), "https://quipu.dev/knowledge/"))
   }
   UNION
   {
-    VALUES ?s {
-      aegis:repo_quipu
-      aegis:repo-embedded-knowledge-databases-directive-2026-09-03
-    }
+    VALUES ?s { aegis:repo_quipu aegis:repo-embedded-knowledge-databases-directive-2026-09-03 }
     ?s ?p ?o .
   }
   # Versioned crew memory is internal source, including references attached to

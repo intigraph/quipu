@@ -85,7 +85,7 @@ stops being read.
 | `search.query_timeout_ms` | `30000` | SPARQL evaluation deadline |
 | `search.max_join_rows` | `1000000` | Abort a join once an intermediate exceeds this |
 | `search.oversample_factor` | `10` | Vector-search oversampling before filtering |
-| `shacl.validate_on_write` | `false` | Validate episode ingest against the stored shapes |
+| `shacl.validate_on_write` | `true` (`false` in builds without the `shacl` feature) | Validate writes against the stored shapes: full validation on episode ingest, and cardinality/value admission on the touched nodes of every write. Set false to accept non-conformant writes |
 | `owl.validate_on_write` | `true` | Enforce `owl:disjointWith` / `owl:FunctionalProperty` at write time (with functional-property supersede); set false for an explicitly informal deployment |
 | `governance.enforce_on_write` | `false` | Evaluate action-boundary policies against every write (the write-time gate) |
 | `governance.validate_placement` | `false` | Check SARC class↔placement rules when a write defines/amends a policy |

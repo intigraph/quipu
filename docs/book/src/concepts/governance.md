@@ -94,9 +94,8 @@ Enforcement is opt-in:
 enforce_on_write = false   # the default
 ```
 
-Default **off**, mirroring `shacl.validate_on_write`: existing deployments are
-unchanged, and turning the gate on is a deliberate configuration act, not a
-side effect of upgrading. `validate_placement` (definition-time class↔placement
+Default **off**: existing deployments are unchanged, and turning the gate on
+is a deliberate configuration act, not a side effect of upgrading. `validate_placement` (definition-time class↔placement
 conformance) and `enforce_authority` (below) are separate flags with the same
 opt-in posture.
 

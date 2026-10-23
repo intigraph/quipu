@@ -1,8 +1,8 @@
 # Release PR credential
 
-The release workflow uses two credentials. `release-plz release` retains
+The release workflows use two credentials. `release-plz release` retains
 `GITHUB_TOKEN`: its output drives the existing artifact and crates publishing
-jobs inside `release.yml`. `release-plz release-pr`, the following checkout,
+jobs inside `release.yml`. The daily proposal workflow runs `release-plz release-pr`; its checkout
 and changelog correction use `RELEASE_PLZ_TOKEN`, so the final PR head can
 trigger its required checks. The checkout persists that credential for the
 correction's `git push`; setting only the action environment is insufficient.
@@ -24,7 +24,7 @@ Store it as the repository **Actions secret `RELEASE_PLZ_TOKEN`** at
 `scbrown/quipu` → Settings → Secrets and variables → Actions. Enter the value
 there, never in a commit, issue, command argument, or log. A repository secret
 is used because this job has no environment configured. A missing secret
-fails explicitly before release-plz can create a release or PR; there is no
+fails explicitly before the daily workflow can create or update a PR; there is no
 silent fallback to `GITHUB_TOKEN`.
 
 This is the PAT implementation. An App is an alternative, not an additional
@@ -64,7 +64,7 @@ checks and contributor approval policy intact. Existing parked release PRs
 are handled by the existing approval automation; do not approve stale runs
 or disable the automation to make an acceptance result look cleaner.
 
-After the next normal main push creates or updates a release PR:
+After the next scheduled daily run creates or updates a release PR:
 
 1. Record the generating Release run and release PR number. Read the PR's
    current `headRefOid` after changelog correction finishes.
