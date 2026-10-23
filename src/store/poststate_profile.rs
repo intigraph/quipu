@@ -33,4 +33,17 @@ impl Store {
     pub fn take_poststate_profile(&mut self) -> PoststateProfile {
         std::mem::take(&mut self.poststate_profile)
     }
+
+    /// Run `f` and return the gate's time spent inside it alone. The profile
+    /// lives on the shared writer store, and `/knot` and `/episode` write
+    /// through it without draining it, so whatever an earlier write left
+    /// there is discarded first rather than attributed to `f`.
+    pub fn observe_poststate<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> (T, PoststateProfile) {
+        self.poststate_profile = PoststateProfile::default();
+        let out = f(self);
+        (out, self.take_poststate_profile())
+    }
 }

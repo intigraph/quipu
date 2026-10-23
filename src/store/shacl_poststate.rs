@@ -101,7 +101,9 @@ impl Store {
         // staged: judge it whole, in batch, rather than per focus under the
         // incremental context cap (aegis-t16).
         if self.graph_is_new(graph, tx_id)? {
-            return self.check_new_graph_in_batch(shapes, graph);
+            let result = self.check_new_graph_in_batch(shapes, graph);
+            self.poststate_profile.check += checking.elapsed();
+            return result;
         }
         let result = (|| {
             let subjects: BTreeSet<_> = datums

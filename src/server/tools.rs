@@ -53,15 +53,15 @@ macro_rules! ro_handler {
 /// (aegis-wlf0): the `quipu_store_{wait,held}_seconds_total` counters and one
 /// `write_observation` log line, the write-path twin of the query observation.
 pub(crate) fn observe_write(
-    store: &mut quipu::Store,
+    store: &quipu::Store,
     client: &str,
     endpoint: &str,
     wait: f64,
     acquired: std::time::Instant,
     ok: bool,
+    profile: quipu::store::PoststateProfile,
 ) {
     let held = acquired.elapsed().as_secs_f64();
-    let profile = store.take_poststate_profile();
     quipu::metrics::metrics().observe_store_counters(client, endpoint, wait, held);
     let ms = |seconds: f64| (seconds * 1_000_000.0).round() / 1_000.0;
     eprintln!(
@@ -171,12 +171,22 @@ macro_rules! rw_handler {
                     let acquired = std::time::Instant::now();
                     // A refused signed write stops here, before a tool that
                     // mutates outside a transaction can act (aegis-bys8d1).
-                    let out = quipu::transaction_auth::refuse_if_refused()
-                        .map_err(AppError::from)
-                        .and_then(|()| $tool(&mut st, &i).map_err(AppError::from));
+                    let (out, profile) = st.observe_poststate(|st| {
+                        quipu::transaction_auth::refuse_if_refused()
+                            .map_err(AppError::from)
+                            .and_then(|()| $tool(st, &i).map_err(AppError::from))
+                    });
                     // While the guard is alive, so `held` is the lock interval
                     // (aegis-wlf0: writes recorded no store time before).
-                    observe_write(&mut st, &client, &endpoint, wait, acquired, out.is_ok());
+                    observe_write(
+                        &st,
+                        &client,
+                        &endpoint,
+                        wait,
+                        acquired,
+                        out.is_ok(),
+                        profile,
+                    );
                     let out = out?;
                     (out, st.take_deferred_embed())
                 };

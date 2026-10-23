@@ -40,11 +40,11 @@ pub(super) fn apply_update_observed(
     let wait = waiting.elapsed().as_secs_f64();
     let acquired = Instant::now();
     let mut times = UpdateTimes::default();
-    let result = apply_locked(&mut store, &plan, update, attribution, &mut times);
+    let (result, profile) = store
+        .observe_poststate(|store| apply_locked(store, &plan, update, attribution, &mut times));
     // While the guard is still alive, as /query does, so `held` is the
     // lock-holding interval.
     let held = acquired.elapsed().as_secs_f64();
-    let profile = store.take_poststate_profile();
     quipu::metrics::metrics().observe_store_counters(client, "/update", wait, held);
     eprintln!(
         "{}",
