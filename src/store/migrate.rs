@@ -75,6 +75,34 @@ impl Store {
         Ok(())
     }
 
+    /// Index current facts by graph and entity (aegis-wlf0).
+    ///
+    /// `idx_geav (g, e, a, v)` can SEEK by graph and entity, but carries neither
+    /// `valid_to` nor `op`, so every entity-scoped read of CURRENT facts visits
+    /// the entity's whole history to discard it. An entity rewritten in place,
+    /// like the write-probe marker, accumulates that history without bound.
+    ///
+    /// MEASURED on a copy of the 2026-10-22 production store: the marker had 12
+    /// current facts and 298,050 historical rows. The post-state SHACL gate's
+    /// bounded-entity count over it took 87.8 ms through `idx_geav` and 0.01 ms
+    /// through this index, and one `/set` to it held the store 672 ms with
+    /// write validation on (37 ms with this index) and 315 ms with it off
+    /// (4.6 ms). A fresh entity was unaffected (26-29 ms on, about 5 ms off).
+    ///
+    /// The partial predicate matches `idx_current_aev`: only live rows are
+    /// indexed, so it tracks the working set rather than the history. One-time
+    /// build on that 25 GB copy was 47.7 s.
+    ///
+    /// Idempotent and purely additive: it changes no query's meaning, only its
+    /// plan.
+    pub(super) fn migrate_current_entity_index(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_current_gea ON facts(g, e, a, v)\
+               WHERE op = 1 AND valid_to IS NULL;",
+        )?;
+        Ok(())
+    }
+
     /// Index transactions by source tag (aegis-m6agjy).
     ///
     /// Snapshot replacement plans its retraction as "every current fact whose
