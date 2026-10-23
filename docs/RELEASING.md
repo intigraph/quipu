@@ -124,7 +124,7 @@ post-quantum cryptography library.
 ## The MCP Registry listing
 
 The last job of a release, `mcp-registry`, calls `.github/workflows/mcp-registry.yml`. It builds
-`ghcr.io/scbrown/quipu:<version>` from the release tarball, runs it the way VS Code does after an
+`ghcr.io/intigraph/quipu:<version>` from the release tarball, runs it the way VS Code does after an
 Install click, pushes it, then stamps `server.json` with the released version and validates it.
 It **publishes** to the [official MCP Registry](https://registry.modelcontextprotocol.io) only when
 the repository variable `MCP_REGISTRY_PUBLISH` is `true`. The registry reads the image's ownership
@@ -141,6 +141,6 @@ gh workflow run mcp-registry.yml --ref main -f tag=quipu-ai-v<version> -f publis
 Verify by the registry, not by the workflow:
 
 ```bash
-curl -s 'https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.scbrown/quipu' \
+curl -s 'https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.intigraph/quipu' \
   | jq -r '.servers[].server.version'
 ```

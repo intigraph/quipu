@@ -327,12 +327,13 @@ aliases, services or a global database. Do not use `cargo uninstall` for it.
 
 ## Container and MCP Registry
 
-`server.json` declares `ghcr.io/scbrown/quipu:0.8.1` for the MCP Registry; that
-explicit registry pin is independent of the latest native release. A compatible
+`server.json` declares `ghcr.io/intigraph/quipu:<version>` for the MCP Registry,
+stamped by the release that published it; that registry pin is independent of the
+latest native release. A compatible
 Docker runtime is required. For a deliberately selected image:
 
 ```sh
-docker run --name quipu-mcp -i -v quipu-data:/data ghcr.io/scbrown/quipu:0.8.1
+docker run --name quipu-mcp -i -v quipu-data:/data ghcr.io/intigraph/quipu:<version>
 ```
 
 Verify the image/version before configuring an agent; use the

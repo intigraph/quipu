@@ -59,7 +59,7 @@ a suitable first connection check.
 
 ## Registry and container clients
 
-The repository's `server.json` names `io.github.scbrown/quipu` in the MCP
+The repository's `server.json` names `io.github.intigraph/quipu` in the MCP
 Registry and pins an OCI image. A registry-aware client may install that
 entry; inspect its pinned version rather than assuming it matches the latest
 CLI release. The image requires a compatible container runtime.
