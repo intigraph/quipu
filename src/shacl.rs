@@ -35,14 +35,13 @@ fn report_term(term: &Object) -> String {
     }
 }
 
-fn single_shape_message(shapes: &str) -> Option<String> {
-    let pattern = regex::Regex::new(r#"sh:message\s+(\"(?:\\.|[^\"])*\")"#).ok()?;
-    let mut matches = pattern.captures_iter(shapes);
-    let first = matches.next()?.get(1)?.as_str();
-    if matches.next().is_some() {
-        return None;
-    }
-    serde_json::from_str(first).ok()
+fn report_message(messages: &shacl_engine::types::MessageMap) -> Option<String> {
+    // Feedback carries one string: prefer an untagged message, otherwise the
+    // first normalized language tag, independent of HashMap iteration order.
+    messages
+        .iter()
+        .min_by(|(left, _), (right, _)| left.cmp(right))
+        .map(|(_, message)| message.clone())
 }
 
 fn report_severity(severity: &shacl_engine::types::Severity) -> String {
@@ -181,7 +180,6 @@ impl Validator {
         .map_err(|e| Error::InvalidValue(format!("SHACL validation error: {e}")))?;
 
         let mut issues = Vec::new();
-        let shape_message = single_shape_message(&self.shapes_turtle);
         for result in report.results() {
             let focus_node = report_term(result.focus_node());
             let component = report_term(result.constraint_component());
@@ -197,9 +195,15 @@ impl Validator {
                 path: result.path().map(|p| format!("{p}")),
                 value,
                 source_shape: result.source().map(report_term),
-                message: shape_message
-                    .clone()
-                    .or_else(|| result.message().get(None).cloned()),
+                // Resolve against the same compiled schema: this preserves
+                // anonymous property-shape identity and never borrows a
+                // message from an unrelated (or parent) shape.
+                message: result
+                    .source()
+                    .and_then(|source| schema.get_shape(source))
+                    .and_then(|shape| shape.message())
+                    .and_then(report_message)
+                    .or_else(|| report_message(result.message())),
             });
         }
 
@@ -646,3 +650,7 @@ mod code_entity_tests;
 #[cfg(test)]
 #[path = "governance_tests.rs"]
 mod governance_tests;
+
+#[cfg(test)]
+#[path = "shacl_message_tests.rs"]
+mod message_tests;
