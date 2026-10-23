@@ -18,7 +18,7 @@ because a copied number rots silently while its source moves on.
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
 | [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
 | [WatDiv 1M diagnostic](#watdiv-1m-diagnostic-checkpoint) | one-off query latency and process memory on a pinned 1M dataset | this repository (`docs/design/persistence-evidence/watdiv-1m-20260914/`) | **MEASURED, CONTROL-INVALID** — diagnostic only |
-| [Separate-process memory](#separate-process-memory-comparison) | memory residency by phase, Quipu SQLite versus Oxigraph RocksDB | this repository, [published evidence](https://github.com/scbrown/quipu/tree/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4) | **published**, limited to the stated memory observations |
+| [Separate-process memory](#separate-process-memory-comparison) | memory residency by phase, Quipu SQLite versus Oxigraph RocksDB | this repository, [published evidence](https://github.com/intigraph/quipu/tree/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4) | **published**, limited to the stated memory observations |
 | [Performance](#performance-watdivlubm) | WatDiv / LUBM query latency against Oxigraph | — | **NOT RUN** |
 
 ## Extraction → ingress (Text2KGBench)
@@ -231,7 +231,7 @@ page applies to invalid results exactly as it applies to unrun ones: a class tha
 attempted and failed its own admission controls is published as such, never quietly
 dropped. **Do not quote any number in this section as a performance result.**
 
-Receipts: [`docs/design/persistence-evidence/watdiv-1m-20260914/`](https://github.com/scbrown/quipu/tree/main/docs/design/persistence-evidence/watdiv-1m-20260914)
+Receipts: [`docs/design/persistence-evidence/watdiv-1m-20260914/`](https://github.com/intigraph/quipu/tree/main/docs/design/persistence-evidence/watdiv-1m-20260914)
 — 140 per-request observations in `verified-requests.json`, plus cgroup, count-validation
 and provenance records.
 
@@ -301,8 +301,8 @@ one process there is no separate resident set to compare.
 
 ## Separate-process memory comparison
 
-The [September 16 run-4 evidence and phase table](https://github.com/scbrown/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/README.md)
-are published with [machine-readable results](https://github.com/scbrown/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/summary.json).
+The [September 16 run-4 evidence and phase table](https://github.com/intigraph/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/README.md)
+are published with [machine-readable results](https://github.com/intigraph/quipu/blob/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4/summary.json).
 Each engine ran in its own process on the pinned WatDiv artifact. Read the whole
 phase table, including the anonymous/file-backed split and the query-completion
 gap: raw RSS favours different engines at different phases, so no overall engine

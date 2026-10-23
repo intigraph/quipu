@@ -13,7 +13,7 @@
   <a class="mark" href="../">🪢 Quipu</a>
   <span id="build-chip" class="chip">Loading engine</span>
   <span id="pack-chip" class="chip">Waiting for a verified pack</span>
-  <nav aria-label="Resources"><a href="../">Docs</a><a href="https://arxiv.org/abs/2608.16813">Paper</a><a href="https://github.com/scbrown/quipu">GitHub</a>
+  <nav aria-label="Resources"><a href="../">Docs</a><a href="https://arxiv.org/abs/2608.16813">Paper</a><a href="https://github.com/intigraph/quipu">GitHub</a>
   <details id="load-menu"><summary>Load another pack</summary><section>
       <h2>Load a different pack</h2>
       <div class="body">
@@ -172,7 +172,7 @@
           An agent can query and edit this copy through <code class="mono">window.quipu</code>.
           It runs in your browser without a server or credentials.
         </p>
-<pre class="mono recipe">browser_navigate  https://scbrown.github.io/quipu/explore/
+<pre class="mono recipe">browser_navigate  https://intigraph.github.io/quipu/explore/
 browser_evaluate  await window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 5")
 browser_evaluate  await window.quipu.delta()
  </pre>
@@ -197,7 +197,7 @@ browser_evaluate  await window.quipu.delta()
       </article>
 </div>
 </main>
-<footer>Built from <a href="https://github.com/scbrown/quipu/tree/main/wasm/explorer">wasm/explorer</a>. The release pack contains public repository knowledge. <a href="../sharing/">Read how its manifest, shapes and lineage are verified.</a></footer>
+<footer>Built from <a href="https://github.com/intigraph/quipu/tree/main/wasm/explorer">wasm/explorer</a>. The release pack contains public repository knowledge. <a href="../sharing/">Read how its manifest, shapes and lineage are verified.</a></footer>
 </div>
 <script type="module" src="./explorer.js"></script>
 </body>

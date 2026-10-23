@@ -91,7 +91,7 @@ Add the `lancedb` feature flag:
 
 ```toml
 [dependencies]
-quipu = { git = "https://github.com/scbrown/quipu", features = ["lancedb"] }
+quipu = { git = "https://github.com/intigraph/quipu", features = ["lancedb"] }
 ```
 
 Or build from source:

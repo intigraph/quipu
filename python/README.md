@@ -1,6 +1,6 @@
 # quipu-client
 
-Thin, typed Python client for the [Quipu](https://github.com/scbrown/quipu)
+Thin, typed Python client for the [Quipu](https://github.com/intigraph/quipu)
 REST API. Standard library only — `urllib`, zero runtime dependencies,
 Python >= 3.11.
 
