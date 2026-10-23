@@ -370,6 +370,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/service_description.rs",
         "server/tests.rs",
         "server/namespace_tests.rs", // test-only handlers, no route registration
+        "server/namespaces.rs",      // handler only; route registered in server.rs
         "server/tools.rs",
         "server/update.rs",
         // SPARQL Update evaluator with spec DELETE/INSERT order
