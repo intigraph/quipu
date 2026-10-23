@@ -266,7 +266,9 @@ pub use sparql::{
     query_temporal as sparql_query_temporal,
 };
 pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
-pub use store::{Datum, ProjectionAggregate, ProjectionStatus, Store};
+pub use store::{
+    Datum, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, Store,
+};
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};
 pub use types::{Fact, Op, Term, Transaction, Value};
