@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
 - *(metrics)* Record writer store time and write-gate phase timing (#756)([05815c7](https://github.com/scbrown/quipu/commit/05815c72ca7e8ac02c548e1b5307cc73eb94c0e1))
 - Stable entity namespaces and audience-bound sharing (#693)([66acca0](https://github.com/scbrown/quipu/commit/66acca03dda7cbe8e636804a9efa44dfa1a35d3a))
 
+
+
 ### Documentation
 
 - Separate installation removal examples and agent setup (#721)([ff77bdb](https://github.com/scbrown/quipu/commit/ff77bdb96156e48dd30ff586132eb978fe00180e))
@@ -34,6 +36,8 @@ All notable changes to this project will be documented in this file.
 - *(shacl)* Attribute validation messages to their source shapes (#746)([0766ee9](https://github.com/scbrown/quipu/commit/0766ee9eb80787cfbb32cf9e497631c1446c2409))
 - *(shacl)* Refuse recursive shape graphs (#731)([280b90f](https://github.com/scbrown/quipu/commit/280b90f065d5a341fb11e575e1f9ac0f7267e5d3))
 - *(cli)* Make help and usage errors store-free (successor to #714) (#729)([2f4b416](https://github.com/scbrown/quipu/commit/2f4b4160bd57959de83b06071ce56322fe072c70))
+
+
 
 ### Testing
 
