@@ -1,0 +1,28 @@
+Script started on 2026-10-21 15:21:05-04:00 [COMMAND="bash demo.sh" <not executed on terminal>]
+Isolated CLI help probe: identical input, empty CWD and fake HOME.
+BASE 0e89d729 (clean installed binary); CANDIDATE 9b78ab21 plus CLI preflight source (dirty working-tree build).
+
+BEFORE
+$ quipu shapes --help
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+no shapes loaded
+database created: yes
+
+AFTER
+$ quipu shapes --help
+Usage: qp shapes [OPTIONS]
+    qp shapes
+    qp shapes list
+    qp shapes load <name> <file.ttl>
+    qp shapes remove <name>
+
+Local store: --db <path> (default: .bobbin/quipu/quipu.db; configuration may override it).
+Help (-h/--help or help <command>) never reads configuration or opens a store.
+Store commands operate on a local database, not the HTTP service; there is no --remote flag.
+import can fetch a share URL; read --federation uses configured remotes; mcp starts the local stdio companion.
+Git transport, hook(s) and install-alias operate on local files/configuration rather than a graph store.
+share --project [ID] takes an optional project ID. ontology/explain require the owl feature; reason --reactive requires reactive-reasoner.
+-h, --help  Print help and exit. Value options consume the following argument literally.
+database created: no
+
+Script done on 2026-10-21 15:21:05-04:00 [COMMAND_EXIT_CODE="0"]

@@ -59,6 +59,7 @@ mod cli_git_merge;
 mod cli_graph;
 mod cli_hooks;
 mod cli_ingest;
+mod cli_input;
 mod cli_knot;
 mod cli_mcp;
 mod cli_memory_files;
@@ -84,14 +85,25 @@ fn main() {
     quipu::write_kind::set_cli();
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() < 2 {
-        print_usage();
-        return;
+    match cli_input::check(&args) {
+        Ok(cli_input::Action::Help(path)) => {
+            if path.is_empty() {
+                print_usage();
+                cli_input::print_scope();
+            } else {
+                cli_input::print_help(&path);
+            }
+            return;
+        }
+        Ok(cli_input::Action::Run) => {}
+        Err(error) => {
+            eprintln!("{error}\nUse qp --help for usage.");
+            std::process::exit(2);
+        }
     }
 
-    // Asking the binary who it is is a pure read of a compiled-in constant --
-    // it must not load config or open a store (aegis-j0nq).
-    if args[1] == "--version" || args[1] == "-V" || args[1] == "version" {
+    // Identity aliases also pass syntax admission, without loading config.
+    if matches!(args[1].as_str(), "version" | "--version" | "-V") {
         println!("quipu {}", env!("CARGO_PKG_VERSION"));
         println!("git_sha: {}", env!("QUIPU_GIT_SHA"));
         println!("git_dirty: {}", env!("QUIPU_GIT_DIRTY"));
@@ -355,7 +367,7 @@ fn cmd_migrate_vectors(args: &[String], config: &quipu::QuipuConfig) {
 }
 
 fn print_usage() {
-    eprintln!(
+    println!(
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
@@ -401,7 +413,7 @@ COMMANDS:
     qp db respace --into <space> --out <file> [--db <path>]
     qp db attach --list [--db <path>]
     qp events refusals [--db <path>]
-    qp changes [--since-tx N] [--db <path>]
+    qp changes [--from N] [--capture new_values|old_and_new_values|new_row] [--limit N] [--graph IRI] [--db <path>]
     qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
     qp graph label <iri> --label '<JSON label fields>' [--db <path>]
     qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]
