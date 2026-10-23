@@ -216,3 +216,27 @@ fn unknown_capture_names_are_refused_not_defaulted() {
     assert!(Capture::parse("NEW_VALUES").is_none());
     assert!(Capture::parse("everything").is_none());
 }
+
+/// aegis-mus: the graph-filtered page must walk commit order, not the graph.
+/// `idx_geav` leads with `g`; picking it reads the whole graph per page.
+#[test]
+fn graph_filtered_page_walks_commit_order_not_the_graph() {
+    let store = Store::open_in_memory().unwrap();
+    for graph in [false, true] {
+        let mut stmt = store
+            .conn
+            .prepare(&format!("EXPLAIN QUERY PLAN {}", page_sql(graph)))
+            .unwrap();
+        let all: [&dyn rusqlite::ToSql; 3] = [&0_i64, &50_i64, &1_i64];
+        let bound = if graph { &all[..] } else { &all[..2] };
+        let plan: Vec<String> = stmt
+            .query_map(bound, |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        let plan = plan.join(" | ");
+        assert!(plan.contains("idx_tx (tx>?)"), "graph={graph}: {plan}");
+        assert!(!plan.contains("idx_geav"), "graph={graph}: {plan}");
+        assert!(!plan.contains("TEMP B-TREE"), "graph={graph}: {plan}");
+    }
+}
