@@ -26,6 +26,12 @@ pub struct ProjectionAggregate<'a> {
     pub graph: &'a str,
     /// Key values to keep (empty = all). Strings, integers, or `{"iri": ...}`.
     pub key_in: &'a [JsonValue],
+    /// Column filters: every column must match, and a column matches any of
+    /// its listed values (for example assignee and priority, grouped by
+    /// status; aegis-tg5). A `null`
+    /// value matches a row with no value for that column; an empty list
+    /// matches nothing. Columns are checked against the declaration.
+    pub filters: &'a [(&'a str, &'a [JsonValue])],
     /// A declared column (or `"key"`) to group by.
     pub group_by: Option<&'a str>,
     /// `(time column, RFC 3339 instant)`: keep rows whose column is at or after it.
@@ -56,11 +62,11 @@ fn bind_value(store: &Store, v: &JsonValue) -> Result<Option<Vec<u8>>> {
         JsonValue::Object(o) => match o.get("iri").and_then(JsonValue::as_str) {
             // An unknown IRI cannot match anything; it is not an error.
             Some(iri) => store.lookup(iri)?.map(|id| Value::Ref(id).to_bytes()),
-            None => return Err(Error::InvalidValue("key_in object needs \"iri\"".into())),
+            None => return Err(Error::InvalidValue("filter object needs \"iri\"".into())),
         },
         _ => {
             return Err(Error::InvalidValue(
-                "key_in values are strings, integers or {\"iri\"}".into(),
+                "filter values are strings, integers or {\"iri\"}".into(),
             ));
         }
     })
@@ -155,6 +161,25 @@ impl Store {
             }
             wh.push(format!("key IN ({})", vec!["?"; vals.len()].join(",")));
             binds.extend(vals.into_iter().map(rusqlite::types::Value::Blob));
+        }
+        for (c, values) in q.filters {
+            let c = column(c)?;
+            let mut alternatives = Vec::new();
+            for v in *values {
+                if v.is_null() {
+                    alternatives.push(format!("{c} IS NULL"));
+                } else if let Some(b) = bind_value(self, v)? {
+                    alternatives.push(format!("{c} = ?"));
+                    binds.push(rusqlite::types::Value::Blob(b));
+                }
+                // An unknown IRI binds nothing and so cannot match.
+            }
+            if alternatives.is_empty() {
+                return Ok(
+                    json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
+                );
+            }
+            wh.push(format!("({})", alternatives.join(" OR ")));
         }
         if let Some((c, at)) = q.since {
             let c = column(c)?;

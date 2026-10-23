@@ -1578,8 +1578,12 @@ endpoint. Body `action`:
 
 - `"list"`: the declared projections and what is installed.
 - `"aggregate"` (default): `name`, optional `graph` (IRI; default graph if
-  omitted), `key_in` (key values to keep), `group_by` (`"key"` or a column),
-  `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`), `max_groups`.
+  omitted), `key_in` (key values to keep), `where` (`{"<column or key>":
+  [values]}`: columns are ANDed, one column's values are ORed, `null` matches
+  a row with no value for that column, an empty list matches nothing),
+  `group_by` (`"key"` or a column), `since` (`{"column": "<time column>",
+  "at": "<RFC 3339>"}`), `max_groups`. Values are strings, integers or
+  `{"iri": "..."}`; a column that is not declared refuses.
   Response: `total`, `groups` (`value`, `n`), `truncated`, `multi_valued_rows`,
   `tx`.
 
@@ -1589,6 +1593,10 @@ than answer stale.
 ```bash
 curl -s localhost:3030/projections -X POST \
   -d '{"name":"board","graph":"http://example.org/board","key_in":["open"],"group_by":"priority"}'
+
+# Open items assigned to one person at priority 1 or 2, grouped by status
+curl -s localhost:3030/projections -X POST \
+  -d '{"name":"board","where":{"assignee":["alice"],"priority":[1,2]},"group_by":"key"}'
 ```
 
 ### `POST /search_nodes`

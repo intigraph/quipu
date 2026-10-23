@@ -63,6 +63,7 @@ fn count(
             &ProjectionAggregate {
                 graph: "",
                 key_in,
+                filters: &[],
                 group_by: group,
                 since,
                 max_groups: 0,
@@ -287,6 +288,7 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
     let q = ProjectionAggregate {
         graph: "",
         key_in: &[json!("open")],
+        filters: &[],
         group_by: Some("priority"),
         since: None,
         max_groups: 0,
@@ -308,4 +310,103 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
     // The write did land; a fresh aggregate sees it.
     let after = reader.aggregate_projection(&def(), &q).unwrap();
     assert_eq!(after["total"], 2, "{after}");
+}
+
+fn filtered(
+    store: &Store,
+    filters: &[(&str, &[serde_json::Value])],
+    group: Option<&str>,
+) -> serde_json::Value {
+    store
+        .aggregate_projection(
+            &def(),
+            &ProjectionAggregate {
+                filters,
+                group_by: group,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+}
+
+fn groups(a: &serde_json::Value) -> Vec<(serde_json::Value, i64)> {
+    let mut g: Vec<_> = a["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| (g["value"].clone(), g["n"].as_i64().unwrap()))
+        .collect();
+    g.sort_by_key(|(v, _)| v.to_string());
+    g
+}
+
+#[test]
+fn column_filters_and_across_columns_or_within_one() {
+    // aegis-tg5 7mm shape: two column conditions combined, grouped by a third.
+    let mut store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    let a = filtered(
+        &store,
+        &[("key", &[json!("open")]), ("priority", &[json!(2)])],
+        None,
+    );
+    assert_eq!(a["total"], 1, "{a}");
+    let a = filtered(&store, &[("priority", &[json!(2)])], Some("key"));
+    assert_eq!(a["total"], 2);
+    assert_eq!(groups(&a), vec![(json!("closed"), 1), (json!("open"), 1)]);
+    let a = filtered(&store, &[("priority", &[json!(1), json!(2)])], Some("key"));
+    assert_eq!(groups(&a), vec![(json!("closed"), 1), (json!("open"), 2)]);
+    // null = no value for the column: ex:d has no priority.
+    let a = filtered(
+        &store,
+        &[("priority", &[serde_json::Value::Null])],
+        Some("key"),
+    );
+    assert_eq!(groups(&a), vec![(json!("closed"), 1)]);
+    // An empty alternative list matches nothing; an unknown IRI cannot match.
+    assert_eq!(filtered(&store, &[("priority", &[])], None)["total"], 0);
+    let unknown = [json!({"iri": "http://ex.test/never"})];
+    assert_eq!(
+        filtered(&store, &[("priority", &unknown)], None)["total"],
+        0
+    );
+    // The projection stays maintained: a new write is counted by the filter.
+    knot(&mut store, r#"ex:e ex:status "open" ; ex:priority 2 ."#);
+    let a = filtered(
+        &store,
+        &[("key", &[json!("open")]), ("priority", &[json!(2)])],
+        None,
+    );
+    assert_eq!(a["total"], 2, "{a}");
+}
+
+#[test]
+fn column_filters_refuse_undeclared_columns_and_bad_values() {
+    let store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    for (filters, needle) in [
+        (vec![("assignee", vec![json!("wu")])], "has no column"),
+        (
+            vec![("priority; DROP TABLE facts", vec![json!(1)])],
+            "has no column",
+        ),
+        (vec![("priority", vec![json!(true)])], "filter values"),
+        (
+            vec![("priority", vec![json!({"not": "iri"})])],
+            "needs \"iri\"",
+        ),
+    ] {
+        let filters: Vec<(&str, &[serde_json::Value])> =
+            filters.iter().map(|(c, v)| (*c, v.as_slice())).collect();
+        let err = store
+            .aggregate_projection(
+                &def(),
+                &ProjectionAggregate {
+                    filters: &filters,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains(needle), "{err}");
+    }
 }
