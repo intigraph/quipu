@@ -64,7 +64,8 @@ export function renderEntity(card, id, entity, { short, navigate, inspect, relat
   const source = entity.properties.find((r) => r.predicate === "http://www.w3.org/ns/prov#wasDerivedFrom");
   const file = entity.properties.find((r) => r.predicate.endsWith("/filePath"));
   const sourceUrl = source?.value || (file && `https://github.com/intigraph/quipu/blob/main/${file.value}`);
-  if (sourceUrl && /^https:\/\/github\.com\/scbrown\/quipu\/blob\//.test(sourceUrl)) {
+  // Historical provenance and current repository links share the same restriction.
+  if (sourceUrl && /^https:\/\/github\.com\/(?:scbrown|intigraph)\/quipu\/blob\//.test(sourceUrl)) {
     const link = text(card, "a", "Read the source ↗"); link.href = sourceUrl;
     link.target = "_blank"; link.rel = "noopener noreferrer";
   }
