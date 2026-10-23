@@ -171,6 +171,8 @@ pub fn promote_import(
 ) -> Result<PromoteImportResult> {
     if request.dry_run {
         // A preview writes nothing: no move, no query release, no review transition.
+        // It still refuses a closed review, as the real promotion does.
+        open(store, &request.share_id)?;
         return crate::share_import::promote_inner(store, request, timestamp, actor);
     }
     atomic(store, |store| {

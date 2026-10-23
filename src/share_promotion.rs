@@ -205,9 +205,14 @@ pub(crate) fn promote_subjects_into_graph(
         op,
     };
     crate::time::check_request_deadline()?;
-    // A dry run only looks: it never creates the target graph.
+    // A dry run only looks: it never creates the target graph. It still
+    // refuses a target the real create refuses (a graph of another class).
     let g = if dry_run {
-        store.lookup(target)?
+        let g = store.lookup(target)?;
+        if let Some(g) = g {
+            store.committed_graph_registered(g)?;
+        }
+        g
     } else {
         Some(store.graph_create(target)?)
     };

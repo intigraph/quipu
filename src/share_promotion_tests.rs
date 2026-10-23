@@ -364,6 +364,46 @@ fn dry_run_warns_when_the_move_would_retract_target_facts() {
 }
 
 #[test]
+fn dry_run_refuses_a_closed_review_like_the_real_move() {
+    let (mut store, mut request, _) = move_setup();
+    store
+        .conn
+        .execute(
+            "INSERT INTO import_reviews(share_id,state,first_seen,updated_at,payload) \
+             VALUES(?1,'rejected',?2,?2,'{}')",
+            rusqlite::params![SHARE, TS],
+        )
+        .unwrap();
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap_err();
+    request.dry_run = false;
+    let real = promote_import(&mut store, &request, TS, None).unwrap_err();
+    assert_eq!(preview.to_string(), real.to_string());
+    assert!(
+        preview.to_string().contains("import review is closed"),
+        "{preview}"
+    );
+}
+
+#[test]
+fn dry_run_refuses_an_overlay_target_like_the_real_move() {
+    let (mut store, mut request, _) = move_setup();
+    let overlay = "https://tracker.example/overlay";
+    store.overlay_create(overlay, 0).unwrap();
+    request.target_graph = Some(overlay.into());
+    request.retire_from = None;
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap_err();
+    request.dry_run = false;
+    let real = promote_import(&mut store, &request, TS, None).unwrap_err();
+    assert_eq!(preview.to_string(), real.to_string());
+    assert!(
+        preview.to_string().contains("class is fixed at create"),
+        "{preview}"
+    );
+}
+
+#[test]
 fn dry_run_never_creates_the_target_graph_and_refuses_root() {
     let (mut store, mut request, _) = move_setup();
     request.dry_run = true;

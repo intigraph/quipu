@@ -41,19 +41,7 @@ impl Store {
     /// ROOT and the label meta-graph.
     pub fn graph_create(&self, graph_iri: &str) -> Result<i64> {
         let g = self.intern(graph_iri)?;
-        let existing: Option<String> = self
-            .conn
-            .query_row("SELECT class FROM graphs WHERE g = ?1", params![g], |r| {
-                r.get(0)
-            })
-            .optional()?;
-        if let Some(class) = existing {
-            if class != "committed" {
-                return Err(Error::InvalidValue(format!(
-                    "graph g={g} already exists as class '{class}'; a graph's \
-                     class is fixed at create"
-                )));
-            }
+        if self.committed_graph_registered(g)? {
             return Ok(g);
         }
         self.conn.execute(
@@ -62,6 +50,27 @@ impl Store {
             params![g, crate::time::now_iso()],
         )?;
         Ok(g)
+    }
+
+    /// The read-only half of [`Self::graph_create`]: `true` when `g` is already a
+    /// committed graph, `false` when it is unregistered, and the same refusal
+    /// when it is registered under any other class. A promotion dry run calls
+    /// this so its preview refuses exactly what the real create refuses.
+    pub fn committed_graph_registered(&self, g: i64) -> Result<bool> {
+        let existing: Option<String> = self
+            .conn
+            .query_row("SELECT class FROM graphs WHERE g = ?1", params![g], |r| {
+                r.get(0)
+            })
+            .optional()?;
+        match existing {
+            Some(class) if class != "committed" => Err(Error::InvalidValue(format!(
+                "graph g={g} already exists as class '{class}'; a graph's \
+                 class is fixed at create"
+            ))),
+            Some(_) => Ok(true),
+            None => Ok(false),
+        }
     }
 
     /// Register a named graph that has just been written, if it has no registry
