@@ -61,16 +61,16 @@ For a bulk load, a migration or a backfill, use **import + promote**, not
 thousands of `knot` or SPARQL Update writes. `import` validates the whole dataset
 in its own staging graph and never touches ROOT. `promote` then admits it in a
 single transaction, and one fork rollback undoes it. Walkthrough:
-[Bulk loads and migrations](https://github.com/scbrown/quipu/blob/main/docs/book/src/recipes/bulk-loads.md).
+[Bulk loads and migrations](https://github.com/intigraph/quipu/blob/main/docs/book/src/recipes/bulk-loads.md).
 
-Every command and flag: [CLI reference](https://github.com/scbrown/quipu/blob/main/docs/book/src/reference/cli.md). The HTTP
-endpoints: [REST API](https://github.com/scbrown/quipu/blob/main/docs/book/src/reference/rest-api.md).
+Every command and flag: [CLI reference](https://github.com/intigraph/quipu/blob/main/docs/book/src/reference/cli.md). The HTTP
+endpoints: [REST API](https://github.com/intigraph/quipu/blob/main/docs/book/src/reference/rest-api.md).
 
 New stores search all registered graphs minus configured `search.exclude_graphs`.
 Existing stores retain ROOT until `search.default_graph_scope = "all"` is set;
 SPARQL keeps its explicit dataset rules and ROOT default. Search responses report
 graph coverage. Existing named-only semantic vectors need bounded preparation
-before enabling them. See [named graphs, search, and promotion](https://github.com/scbrown/quipu/blob/main/docs/book/src/concepts/named-graphs.md#search-has-a-broader-default-than-sparql).
+before enabling them. See [named graphs, search, and promotion](https://github.com/intigraph/quipu/blob/main/docs/book/src/concepts/named-graphs.md#search-has-a-broader-default-than-sparql).
 
 ## Rust Library
 

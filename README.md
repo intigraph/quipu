@@ -24,7 +24,7 @@ mcp-name: io.github.scbrown/quipu
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/scbrown/quipu/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/intigraph/quipu/main/install.sh | sh
 ```
 
 Python 3.9+, curl, and a Linux or macOS shell. Downloads the latest published archive, verifies SHA-256 and the executable
@@ -34,7 +34,7 @@ Published targets: Linux and macOS, x86_64 and arm64.
 
 Set `STACK_INSTALL_ROOT` on the receiving shell for another prefix.
 Pinned releases, alternatives, configuration and removal are in the
-[installation, upgrades and removal](https://scbrown.github.io/quipu/getting-started/installation.html).
+[installation, upgrades and removal](https://intigraph.github.io/quipu/getting-started/installation.html).
 
 ## Try it
 
@@ -82,12 +82,12 @@ Quipu is for.
 
 - [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
-- [Quick Start examples](https://scbrown.github.io/quipu/getting-started/quick-start.html).
-- [Agent Setup](https://scbrown.github.io/quipu/getting-started/agent-setup.html).
+- [Quick Start examples](https://intigraph.github.io/quipu/getting-started/quick-start.html).
+- [Agent Setup](https://github.com/intigraph/quipu/blob/main/docs/book/src/getting-started/agent-setup.md).
 
 ![Repository pendants compose; dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
 
-**Load this repository’s graph:** the [latest release](https://github.com/scbrown/quipu/releases/latest) includes a repository pendant, checksum and provenance. Verify those together, extract the share directory, then use `quipu import SHARE_DIR --db repository.db`; import stages knowledge and leaves ROOT unchanged. See the [verified import workflow](https://scbrown.github.io/quipu/sharing/index.html).
+**Load this repository’s graph:** the [latest release](https://github.com/intigraph/quipu/releases/latest) includes a repository pendant, checksum and provenance. Verify those together, extract the share directory, then use `quipu import SHARE_DIR --db repository.db`; import stages knowledge and leaves ROOT unchanged. See the [verified import workflow](https://intigraph.github.io/quipu/sharing/index.html).
 
 ## The stack
 
@@ -101,7 +101,7 @@ when.
 | tool | what it gives your agents |
 |---|---|
 | [tambo](https://github.com/scbrown/tambo) | 🧰 Agent Platform Toolkit - installs and configures the quipu stack |
-| [quipu](https://github.com/scbrown/quipu) | stores shared facts with provenance and history; can check writes against your rules |
+| [quipu](https://github.com/intigraph/quipu) | stores shared facts with provenance and history; can check writes against your rules |
 | [camayoc](https://github.com/scbrown/camayoc) | prepares knowledge and vocabulary for Quipu, with checks before it is admitted |
 | [quechua](https://github.com/scbrown/quechua) | shared vocabulary and shapes for interoperable knowledge |
 | [chaski](https://github.com/scbrown/chaski) | reacts to graph changes and delivers governed notifications |

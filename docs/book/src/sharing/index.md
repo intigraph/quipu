@@ -24,7 +24,7 @@ Use the same released engine and repository pack in an iframe:
 
 ```html
 <iframe id="quipu-playground" title="Quipu playground"
-  src="https://scbrown.github.io/quipu/explore/?embed=1&amp;theme=intigraph"
+  src="https://intigraph.github.io/quipu/explore/?embed=1&amp;theme=intigraph"
   style="width:100%;height:860px;border:0"></iframe>
 ```
 
@@ -70,7 +70,7 @@ window.addEventListener("message", (event) => {
 ## One run, end to end
 
 This transcript is not illustrative output. It is
-[`examples/sharing-demo/expected.txt`](https://github.com/scbrown/quipu/blob/main/examples/sharing-demo/expected.txt),
+[`examples/sharing-demo/expected.txt`](https://github.com/intigraph/quipu/blob/main/examples/sharing-demo/expected.txt),
 included here verbatim. `just sharing-demo` creates two fresh stores and checks
 that a new run still matches it; the required CI `Build` job runs the same
 check.
@@ -90,7 +90,7 @@ and promotes with a named actor. After A and B make independent additions,
 The demo intentionally stops at the current boundary: provider federation
 unions labelled query results but does not merge store histories. The broader
 evaluation and claims belong to the
-[arXiv submission source for the shape-aware merge paper](https://github.com/scbrown/quipu/tree/main/docs/paper-merge),
+[arXiv submission source for the shape-aware merge paper](https://github.com/intigraph/quipu/tree/main/docs/paper-merge),
 not to this ten-line walkthrough.
 
 Every claim below names the command, symbol, or verbatim message that backs it,
@@ -260,7 +260,7 @@ copy the file's text into Quipu. For example:
 
 | Repository | Source pointer to inspect |
 |---|---|
-| Quipu | [Import verification and resolution](https://github.com/scbrown/quipu/blob/main/src/share_import.rs) |
+| Quipu | [Import verification and resolution](https://github.com/intigraph/quipu/blob/main/src/share_import.rs) |
 | Bobbin | [The knowledge import MCP handler](https://github.com/scbrown/bobbin/blob/main/src/mcp/knowledge_tools/handlers.rs) |
 | Yupana | [CLI entry point](https://github.com/scbrown/yupana/blob/main/src/main.rs) |
 | Camayoc | [Native WorkItem backfill adapter](https://github.com/scbrown/camayoc/blob/main/scripts/seed_work_item_backfill.py) |

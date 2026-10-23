@@ -18,7 +18,7 @@ const AEGIS = "http://aegis.gastown.local/ontology/";
 // The repository this page's graph belongs to. One definition, used by the
 // release-freshness check and by the PR flow below, so the two cannot drift
 // onto different repos (aegis-8fdp8d).
-const REPO = "scbrown/quipu";
+const REPO = "intigraph/quipu";
 
 // No URL-size limit constant here any more, and the reason is worth keeping.
 // An earlier draft carried the delta in a `/new?value=` URL and switched to the
@@ -771,7 +771,7 @@ async function boot() {
         + "carries it — nothing is broken, and your browser is fine. Meanwhile the pack itself is "
         + "here: see the repository for how to explore it with the quipu CLI.");
       const link = el("p", { style: "margin-top:10px" },
-        el("a", { href: "https://github.com/scbrown/quipu/releases/latest",
+        el("a", { href: "https://github.com/intigraph/quipu/releases/latest",
           text: "Latest release →" }));
       $("#status").append(link);
       return;

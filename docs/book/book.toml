@@ -14,8 +14,8 @@ command = "mdbook-mermaid"
 [output.html]
 default-theme = "coal"
 preferred-dark-theme = "coal"
-git-repository-url = "https://github.com/scbrown/quipu"
-edit-url-template = "https://github.com/scbrown/quipu/edit/main/docs/book/{path}"
+git-repository-url = "https://github.com/intigraph/quipu"
+edit-url-template = "https://github.com/intigraph/quipu/edit/main/docs/book/{path}"
 additional-css = ["custom/css/custom.css", "custom/css/quipu.css"]
 # Order matters: the library must load before the initialiser that calls
 # mermaid.initialize(). Both come from `mdbook-mermaid install docs/book`;

@@ -1,12 +1,12 @@
 # Contributing
 
-See [CONTRIBUTING.md](https://github.com/scbrown/quipu/blob/main/CONTRIBUTING.md)
+See [CONTRIBUTING.md](https://github.com/intigraph/quipu/blob/main/CONTRIBUTING.md)
 in the repository root for development setup and guidelines.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/scbrown/quipu
+git clone https://github.com/intigraph/quipu
 cd quipu
 just setup    # Install pre-commit hooks
 just check    # Run all quality checks

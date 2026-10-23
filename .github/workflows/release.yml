@@ -286,7 +286,7 @@ jobs:
           quipu, compiled to wasm32-unknown-unknown for the browser.
 
           This is the bundle behind "Explore this repository's graph" in the book
-          (https://scbrown.github.io/quipu/explore/). It opens an in-memory quipu
+          (https://intigraph.github.io/quipu/explore/). It opens an in-memory quipu
           store in a tab, imports a .pendant share through the same
           share_transport -> share_import -> promote path the `quipu import` CLI
           takes, and answers SPARQL through the same `tool_query` entry point the

@@ -91,7 +91,7 @@ harness.
 
 Pinned versions, the fairness rules, every competitor deviation checked by hand, and
 the per-case ledgers are in
-[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).
+[`benchmark/competitors`](https://github.com/intigraph/quipu/tree/main/benchmark/competitors).
 
 ## RDF syntax
 
@@ -131,8 +131,8 @@ The preservation fix is not implemented yet. Existing data cannot recover
 discarded spellings; a future compatibility plan must preserve legacy term
 identity, exact retraction and history without inventing missing lexical forms.
 
-Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
-and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
+Ledgers: [`rdf11-syntax.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)
+and [`rdf12-syntax.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).
 
 ## SPARQL 1.0 query tests
 
@@ -175,7 +175,7 @@ RDF/XML answers, which the runner does not read.
 Some failures are the lexical-form design choice described above (a number is stored
 by value, so `"01"` reads back as `1`); others are engine defects being fixed.
 Every case, with its diagnostic, is in
-[`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
+[`sparql10-evaluation.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).
 
 ### Named SPARQL 1.0 deviations
 
@@ -252,7 +252,7 @@ few cases that need nothing new are run by the same runner as everything above.
 | `syntax-triple-terms-positive` | 0 | 0 | 113 | 113 | needs RDF 1.2 triple terms: Quipu is built without rdf-12 (aegis-6l8hkk) |
 | `version` | 0 | 0 | 9 | 9 | the SPARQL 1.2 VERSION declaration is not implemented |
 
-Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).
+Ledger: [`sparql12.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql12.json).
 
 ## Query evaluation, by feature family
 
@@ -369,9 +369,9 @@ get worse.
 
 ## Full ledgers
 
-- [`benchmark/public/results/sparql11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)
-- [`benchmark/public/results/sparql11-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)
-- [`benchmark/public/results/sparql11-federated-query.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)
+- [`benchmark/public/results/sparql11-syntax.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)
+- [`benchmark/public/results/sparql11-evaluation.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)
+- [`benchmark/public/results/sparql11-federated-query.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)
 
 Each row records its class, test identifier, manifest, query and result paths,
 status, and diagnostic or unsupported reason.
@@ -433,7 +433,7 @@ A divergence is a case whose final graph violates (or conforms) while the write 
 | `sh:uniqueLang` | 3 | 2 | 1 | 0 |
 | `sh:xone` | 3 | 2 | 1 | 0 |
 
-Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json).
+Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/shacl-write-path.json).
 
 ## Entailment-regime commitments
 
@@ -452,4 +452,4 @@ Local RDFS and OWL extensions beyond a goal regime are not standards-regime clai
 | RDFS | 19 | 19 | goal |
 | RIF | 4 | 0 | deliberate non-goal |
 
-Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).
+Machine ledgers: [`shacl-core.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).
