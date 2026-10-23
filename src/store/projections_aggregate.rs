@@ -121,17 +121,19 @@ impl Store {
                 def.name
             )));
         }
+        // Some inputs can only match nothing (an unknown graph, an empty
+        // alternative list, only unknown IRIs). The answer is then zero, but
+        // only after EVERY other input has been validated: an empty filter
+        // must not turn a later undeclared column or bad value into a
+        // successful zero.
+        let mut matches_nothing = false;
         let g = if q.graph.trim().is_empty() || q.graph == crate::schema::ROOT_GRAPH_IRI {
             crate::schema::ROOT_GRAPH
+        } else if let Some(g) = self.lookup(q.graph)? {
+            g
         } else {
-            match self.lookup(q.graph)? {
-                Some(g) => g,
-                None => {
-                    return Ok(
-                        json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
-                    );
-                }
-            }
+            matches_nothing = true;
+            crate::schema::ROOT_GRAPH
         };
         let column = |c: &str| -> Result<String> {
             if c == "key" || def.columns.iter().any(|d| d.name == c) {
@@ -155,12 +157,11 @@ impl Store {
                 .flatten()
                 .collect();
             if vals.is_empty() {
-                return Ok(
-                    json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
-                );
+                matches_nothing = true;
+            } else {
+                wh.push(format!("key IN ({})", vec!["?"; vals.len()].join(",")));
+                binds.extend(vals.into_iter().map(rusqlite::types::Value::Blob));
             }
-            wh.push(format!("key IN ({})", vec!["?"; vals.len()].join(",")));
-            binds.extend(vals.into_iter().map(rusqlite::types::Value::Blob));
         }
         for (c, values) in q.filters {
             let c = column(c)?;
@@ -175,11 +176,10 @@ impl Store {
                 // An unknown IRI binds nothing and so cannot match.
             }
             if alternatives.is_empty() {
-                return Ok(
-                    json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
-                );
+                matches_nothing = true;
+            } else {
+                wh.push(format!("({})", alternatives.join(" OR ")));
             }
-            wh.push(format!("({})", alternatives.join(" OR ")));
         }
         if let Some((c, at)) = q.since {
             let c = column(c)?;
@@ -193,6 +193,12 @@ impl Store {
             })?;
             wh.push(format!("{c}_t >= ?"));
             binds.push(epoch.into());
+        }
+        let group_column = q.group_by.map(column).transpose()?;
+        if matches_nothing {
+            return Ok(
+                json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
+            );
         }
         let wh = wh.join(" AND ");
         let total: i64 = self.conn.query_row(
@@ -208,8 +214,7 @@ impl Store {
         });
         let mut groups = Vec::new();
         let mut truncated = false;
-        if let Some(c) = q.group_by {
-            let c = column(c)?;
+        if let Some(c) = group_column {
             let cap = if q.max_groups == 0 {
                 1000
             } else {

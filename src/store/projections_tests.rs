@@ -410,3 +410,84 @@ fn column_filters_refuse_undeclared_columns_and_bad_values() {
         assert!(err.to_string().contains(needle), "{err}");
     }
 }
+
+#[test]
+fn an_input_that_matches_nothing_does_not_hide_a_later_invalid_one() {
+    // Review finding on the filter change: an empty filter answered a
+    // successful zero before a later undeclared column was checked.
+    let store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    let unknown = [json!({"iri": "http://ex.test/never"})];
+    let empty: [serde_json::Value; 0] = [];
+    let one = [json!(1)];
+    let bad = [json!(true)];
+    let empty_then_undeclared = [("priority", &empty[..]), ("assignee", &one[..])];
+    let unknown_then_bad = [("priority", &unknown[..]), ("closed", &bad[..])];
+    let undeclared = [("assignee", &one[..])];
+    let only_empty = [("priority", &empty[..])];
+    let cases: Vec<(ProjectionAggregate<'_>, &str)> = vec![
+        (
+            ProjectionAggregate {
+                filters: &empty_then_undeclared,
+                ..Default::default()
+            },
+            "has no column",
+        ),
+        (
+            ProjectionAggregate {
+                filters: &unknown_then_bad,
+                ..Default::default()
+            },
+            "filter values",
+        ),
+        (
+            ProjectionAggregate {
+                key_in: &unknown,
+                group_by: Some("team"),
+                ..Default::default()
+            },
+            "has no column",
+        ),
+        (
+            ProjectionAggregate {
+                graph: "http://ex.test/no-such-graph",
+                since: Some(("priority", "2026-10-21T00:00:00Z")),
+                ..Default::default()
+            },
+            "not a time column",
+        ),
+        (
+            ProjectionAggregate {
+                graph: "http://ex.test/no-such-graph",
+                filters: &undeclared,
+                ..Default::default()
+            },
+            "has no column",
+        ),
+    ];
+    for (q, needle) in cases {
+        let err = store.aggregate_projection(&def(), &q).unwrap_err();
+        assert!(err.to_string().contains(needle), "{needle}: {err}");
+    }
+    // The valid nothing-matching forms still answer a plain zero.
+    for q in [
+        ProjectionAggregate {
+            filters: &only_empty,
+            group_by: Some("key"),
+            ..Default::default()
+        },
+        ProjectionAggregate {
+            key_in: &unknown,
+            ..Default::default()
+        },
+        ProjectionAggregate {
+            graph: "http://ex.test/no-such-graph",
+            group_by: Some("priority"),
+            ..Default::default()
+        },
+    ] {
+        let a = store.aggregate_projection(&def(), &q).unwrap();
+        assert_eq!(a["total"], 0, "{a}");
+        assert_eq!(a["groups"], json!([]));
+    }
+}
