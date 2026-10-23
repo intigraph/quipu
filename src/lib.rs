@@ -85,6 +85,8 @@ pub mod shacl;
 mod shacl_admission;
 #[cfg(feature = "shacl")]
 pub mod shacl_context;
+#[cfg(feature = "shacl")]
+mod shacl_debt;
 pub mod share;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
 // inside the module. The wasm explorer produces the same `share-delta/v1`
@@ -120,6 +122,7 @@ pub mod share_diff;
 pub mod promotion_control;
 pub mod share_alignments;
 pub mod share_import;
+pub(crate) mod share_import_resolve;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod share_merge;
 pub mod share_merge_decisions;
@@ -164,9 +167,9 @@ pub const GIT_SHA: &str = env!("QUIPU_GIT_SHA");
 pub use rdf_export::{export_rdf_construct, export_rdf_group};
 
 pub use config::{
-    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, QuipuConfig,
-    RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig, ShaclConfig, VectorBackend,
-    VectorConfig, open_with_configured_attachments,
+    AttachmentConfig, EmbeddingConfig, FederationConfig, GovernanceConfig, ProjectionColumnConfig,
+    ProjectionConfig, QuipuConfig, RemoteEndpoint, ResolutionConfig, SearchConfig, ServerConfig,
+    ShaclConfig, VectorBackend, VectorConfig, open_with_configured_attachments,
 };
 pub use context::{
     ContextPipeline, ContextPipelineConfig, KnowledgeContext, KnowledgeEntity, KnowledgeFact,
@@ -263,7 +266,7 @@ pub use sparql::{
     query_temporal as sparql_query_temporal,
 };
 pub use store::forks::{ForkDiff, ForkInfo, ForkPromotion};
-pub use store::{Datum, Store};
+pub use store::{Datum, ProjectionAggregate, ProjectionStatus, Store};
 #[cfg(feature = "reactive-reasoner")]
 pub use store::{Delta, TransactObserver};
 pub use types::{Fact, Op, Term, Transaction, Value};

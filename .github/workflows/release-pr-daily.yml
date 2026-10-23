@@ -1,0 +1,174 @@
+name: Daily release proposal
+
+# Prepare one reviewable release window daily; ordinary merges never rewrite it.
+on:
+  schedule:
+    - cron: "0 7 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-proposal-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci-correctness:
+    name: Wait for CI correctness
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    outputs:
+      ready: ${{ steps.correctness.outputs.ready }}
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install workflow contract parser
+        run: python3 -m pip install PyYAML==6.0.3
+      - name: Self-test the cross-workflow gate
+        run: |
+          python3 scripts/test_wait_release_correctness.py
+          python3 scripts/test_release_ci_gate.py
+      - name: Require CI correctness for this exact commit
+        id: correctness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/wait_release_correctness.py "$GITHUB_SHA"
+
+  release-pr:
+    name: Prepare daily release PR
+    needs: ci-correctness
+    if: github.event_name == 'schedule' && needs.ci-correctness.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # release-plz refuses a repository where a tracked path is also ignored,
+      # even when checkout itself is clean. Catch the repository invariant at
+      # the boundary instead of waiting through release-plz setup to discover it.
+      - name: Reject tracked files matched by .gitignore
+        run: |
+          set -euo pipefail
+          tracked_ignored="$(git ls-files -ci --exclude-standard)"
+          if [ -n "$tracked_ignored" ]; then
+            echo "Tracked files are also ignored:" >&2
+            printf '%s\n' "$tracked_ignored" >&2
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # cargo-semver-checks builds rustdoc for the baseline and the current
+      # crate. With no cache that took 20m03s of a 21 min job (aegis-hpe0lg,
+      # run 36848555661). A dedicated key keeps it apart from CI's caches.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-plz
+
+      # Inspect merged subjects across the package release window before the
+      # action can cut a release. A PR title lint cannot see final squash titles.
+      - name: Bound the private pre-1.0 semver exception
+        run: python3 scripts/check-semver-policy.py
+
+      - name: Require coverage for nonconventional commits in the release window
+        run: python3 scripts/check-release-window.py
+
+      # release-plz checks optional features too, including Lance's protobuf
+      # build. Match the prerequisite used by CI's extended feature job.
+      - name: Install protobuf compiler for semver checks
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Require the release PR credential
+        env:
+          RELEASE_PLZ_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_PLZ_TOKEN" ]; then
+            echo "::error::Configure RELEASE_PLZ_TOKEN; see docs/release-token.md"
+            exit 1
+          fi
+
+      - name: Require the measured main snapshot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          CURRENT="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          test "$CURRENT" = "$GITHUB_SHA"
+
+      # Replace checkout's git credential too: the correction below uses git
+      # push, which does not read the release-plz step's GITHUB_TOKEN variable.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          persist-credentials: true
+
+      - uses: MarcoIeni/release-plz-action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      # Correct the section release-plz just wrote, in the same run that wrote it.
+      #
+      # This step exists because the two obvious alternatives do not work here:
+      #
+      #   Correcting by hand does not survive. release-plz ABANDONS a branch it did
+      #   not write — measured on #61, where a hand-correction was discarded three
+      #   seconds after the next push to main and a fresh PR opened carrying the
+      #   defect again (see the note at the top of changelog-check.yml).
+      #
+      # Correct inline after generation so the final PR head includes the fix.
+      # Both release-plz and the correction push now use RELEASE_PLZ_TOKEN;
+      # required checks must report on the final corrected head, not an earlier
+      # generated commit. fix-changelog.sh remains the baseline correction.
+      - name: Correct the release PR's changelog section
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          set -euo pipefail
+          BR="$(gh pr list --state open --json headRefName \
+                  --jq '[.[] | select(.headRefName | startswith("release-plz"))][0].headRefName // ""')"
+          if [ -z "$BR" ]; then
+            echo "No open release PR — nothing to correct."
+            exit 0
+          fi
+          echo "Correcting release PR branch: ${BR}"
+          git fetch --quiet origin "$BR"
+          git checkout --quiet -B "$BR" "origin/$BR"
+
+          # Unreleased can precede the pending version (even with content).
+          # Name the package version so both tools inspect the release artifact.
+          VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          ./scripts/fix-changelog.sh --version "$VERSION"
+
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "Section was already correct; nothing pushed."
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md
+            git commit -m "chore: regenerate the release changelog section with git-cliff"
+            git push origin "$BR"
+            echo "Pushed a corrected section to ${BR}."
+          fi
+
+          # Fail loudly if the correction did not actually satisfy the verifier —
+          # a corrector that silently produces a still-wrong section is worse than
+          # no corrector, because the red check that used to catch it is gone.
+          ./scripts/verify-changelog.sh --version "$VERSION"

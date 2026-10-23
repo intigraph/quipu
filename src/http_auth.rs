@@ -137,6 +137,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
 /// completeness test. Parameterized paths keep their axum `{param}` form so they
 /// match the router source verbatim.
 pub const READ_ENDPOINTS: &[&str] = &[
+    // Current-state projection list/aggregate (aegis-tg5 F2): index reads of
+    // a projection table; installs happen at startup, never over HTTP.
+    "/projections",
     "/identity",
     // aegis-blh.2: exact receipt lookup by nonce; no write.
     "/deck/receipt",

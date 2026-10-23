@@ -12,9 +12,37 @@ enum Node<'a> {
     Expression(&'a Expression),
 }
 
+/// A place in the algebra that changes which graphs a pattern reads.
+pub(super) enum Scope<'a> {
+    /// `GRAPH <iri>` or `GRAPH ?g`.
+    Graph(&'a NamedNodePattern),
+    /// `SERVICE`: reads another endpoint, not this store's graphs.
+    Service,
+}
+
+pub(super) fn check(query: &Query) -> Result<()> {
+    visit_scopes(query, |scope| {
+        if let Scope::Graph(NamedNodePattern::NamedNode(iri)) = scope
+            && iri.as_str() == crate::schema::ROOT_GRAPH_IRI
+        {
+            return Err(Error::InvalidValue(
+                "urn:quipu:graph:root is the ROOT/default graph, not a named graph; \
+                 omit the GRAPH clause to read ROOT, or use FROM <urn:quipu:graph:root>."
+                    .into(),
+            ));
+        }
+        Ok(())
+    })
+}
+
+/// Call `visit` for every graph scope in the query, including inside
+/// `EXISTS`, and refuse algebra the evaluator does not support.
 // The LATERAL variant exists only when dependency features are unified by SHACL.
 #[allow(clippy::match_wildcard_for_single_variants)]
-pub(super) fn check(query: &Query) -> Result<()> {
+pub(super) fn visit_scopes<'a>(
+    query: &'a Query,
+    mut visit: impl FnMut(Scope<'a>) -> Result<()>,
+) -> Result<()> {
     let pattern = match query {
         Query::Select { pattern, .. }
         | Query::Ask { pattern, .. }
@@ -26,15 +54,11 @@ pub(super) fn check(query: &Query) -> Result<()> {
         match node {
             Node::Pattern(pattern) => match pattern {
                 GraphPattern::Graph { name, inner } => {
-                    if matches!(name, NamedNodePattern::NamedNode(iri)
-                        if iri.as_str() == crate::schema::ROOT_GRAPH_IRI)
-                    {
-                        return Err(Error::InvalidValue(
-                            "urn:quipu:graph:root is the ROOT/default graph, not a named graph; \
-                             omit the GRAPH clause to read ROOT, or use FROM <urn:quipu:graph:root>."
-                                .into(),
-                        ));
-                    }
+                    visit(Scope::Graph(name))?;
+                    pending.push(Node::Pattern(inner));
+                }
+                GraphPattern::Service { inner, .. } => {
+                    visit(Scope::Service)?;
                     pending.push(Node::Pattern(inner));
                 }
                 GraphPattern::Join { left, right }
@@ -79,8 +103,7 @@ pub(super) fn check(query: &Query) -> Result<()> {
                 GraphPattern::Project { inner, .. }
                 | GraphPattern::Distinct { inner }
                 | GraphPattern::Reduced { inner }
-                | GraphPattern::Slice { inner, .. }
-                | GraphPattern::Service { inner, .. } => pending.push(Node::Pattern(inner)),
+                | GraphPattern::Slice { inner, .. } => pending.push(Node::Pattern(inner)),
                 GraphPattern::Bgp { .. }
                 | GraphPattern::Path { .. }
                 | GraphPattern::Values { .. } => {}
