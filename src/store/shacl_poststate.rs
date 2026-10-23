@@ -7,41 +7,12 @@
 #[cfg(feature = "shacl")]
 use std::collections::BTreeSet;
 
-use std::time::{Duration, Instant};
+use crate::time::Stopwatch;
 
 use super::{Datum, Store};
 use crate::{Error, Result};
 
-/// Where the post-state SHACL write gate spends its time (aegis-wlf0).
-///
-/// Summed over every gated transaction since the last take, so one request
-/// that commits several graph batches reports their total.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PoststateProfile {
-    /// Gated transactions that reached the shapes lookup.
-    pub runs: u32,
-    /// Reading and joining the loaded shape sets.
-    pub load: Duration,
-    /// Splitting the loaded shapes into reject and emit sets.
-    pub split: Duration,
-    /// Compiling or fetching the validator and its cardinality plan.
-    pub plan: Duration,
-    /// Gathering touched-focus context and validating it.
-    pub check: Duration,
-    /// Conditional (SET) admission: vocabulary and type context.
-    pub conditional_prepare: Duration,
-    /// Conditional admission: validation against the reject shapes.
-    pub conditional_reject: Duration,
-    /// Conditional admission: validation against the emit (warning) shapes.
-    pub conditional_emit: Duration,
-}
-
 impl Store {
-    /// The gate's accumulated time since the last call, then reset.
-    pub fn take_poststate_profile(&mut self) -> PoststateProfile {
-        std::mem::take(&mut self.poststate_profile)
-    }
-
     /// Supply explicit shapes to every transaction made by one operation.
     /// Nested scopes and unwinding restore the prior context. This does not
     /// enable the persistent `validate_on_write` setting or load any shapes.
@@ -75,7 +46,7 @@ impl Store {
         if self.recording_verdicts {
             return Ok(());
         }
-        let started = Instant::now();
+        let started = Stopwatch::start();
         let loaded = if self.shacl_config.validate_on_write || conditional {
             self.get_combined_shapes()?
         } else {
@@ -84,7 +55,7 @@ impl Store {
         let load = started.elapsed();
         #[cfg(feature = "shacl")]
         let loaded = loaded.map(|shapes| crate::shacl::split_shapes_by_policy(&shapes).reject);
-        let split = started.elapsed() - load;
+        let split = started.elapsed().saturating_sub(load);
         let shapes = match (&self.write_shapes, loaded) {
             (Some(explicit), Some(loaded)) => format!("{loaded}\n{explicit}"),
             (Some(explicit), None) => explicit.clone(),
@@ -142,13 +113,13 @@ impl Store {
         // CLI --shapes and inline episode shapes remain strict, as before.
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
-        let planning = Instant::now();
+        let planning = Stopwatch::start();
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
         self.poststate_profile.plan += planning.elapsed();
         if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
-        let checking = Instant::now();
+        let checking = Stopwatch::start();
         let result = (|| {
             let subjects: BTreeSet<_> = datums
                 .iter()
@@ -512,7 +483,7 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    fn append_bounded_entity(
+    pub(super) fn append_bounded_entity(
         &self,
         facts: &mut Vec<crate::Fact>,
         entity: i64,
@@ -536,43 +507,6 @@ impl Store {
                 .into_iter()
                 .filter(|fact| attribute.is_none_or(|attribute| fact.attribute == attribute)),
         );
-        Ok(())
-    }
-
-    #[cfg(feature = "shacl")]
-    fn append_subclass_context(&self, facts: &mut Vec<crate::Fact>, graph: i64) -> Result<()> {
-        let Some(rdf_type) = self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")? else {
-            return Ok(());
-        };
-        let Some(subclass) = self.lookup("http://www.w3.org/2000/01/rdf-schema#subClassOf")? else {
-            return Ok(());
-        };
-        let mut pending: Vec<_> = facts
-            .iter()
-            .filter_map(|f| match f.value {
-                crate::Value::Ref(class) if f.attribute == rdf_type => Some(class),
-                _ => None,
-            })
-            .collect();
-        let mut seen = BTreeSet::new();
-        while let Some(class) = pending.pop() {
-            if !seen.insert(class) {
-                continue;
-            }
-            if seen.len() > 1024 {
-                return Err(Error::CannotVerify(
-                    "post-state SHACL type hierarchy exceeds 1024 classes".into(),
-                ));
-            }
-            let start = facts.len();
-            for g in BTreeSet::from([0, graph]) {
-                self.append_bounded_entity(facts, class, g, Some(subclass))?;
-            }
-            pending.extend(facts[start..].iter().filter_map(|f| match f.value {
-                crate::Value::Ref(parent) => Some(parent),
-                _ => None,
-            }));
-        }
         Ok(())
     }
 }

@@ -149,7 +149,7 @@ impl Store {
         datums: &[Datum],
         set: Option<&SetExpectation>,
     ) -> Result<()> {
-        let preparing = std::time::Instant::now();
+        let preparing = crate::time::Stopwatch::start();
         let assertions = datums
             .iter()
             .filter(|d| d.op == crate::Op::Assert)
@@ -193,7 +193,7 @@ impl Store {
         if let Some(shapes) = shapes {
             #[cfg(feature = "shacl")]
             {
-                let rejecting = std::time::Instant::now();
+                let rejecting = crate::time::Stopwatch::start();
                 let split = crate::shacl::split_shapes_by_policy(&shapes);
                 let feedback = crate::shacl_context::validate_with_store_context_in_graph(
                     self,
@@ -210,7 +210,7 @@ impl Store {
                     return Err(self.stash_refusal("shacl", error, datums.len()));
                 }
                 if split.has_emit {
-                    let emitting = std::time::Instant::now();
+                    let emitting = crate::time::Stopwatch::start();
                     let observed = crate::shacl_context::validate_with_store_context_in_graph(
                         self,
                         &split.emit,

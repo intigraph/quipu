@@ -62,7 +62,7 @@ pub(crate) fn observe_write(
 ) {
     let held = acquired.elapsed().as_secs_f64();
     let profile = store.take_poststate_profile();
-    quipu::metrics::metrics().observe_writer_time(client, endpoint, wait, held);
+    quipu::metrics::metrics().observe_store_counters(client, endpoint, wait, held);
     let ms = |seconds: f64| (seconds * 1_000_000.0).round() / 1_000.0;
     eprintln!(
         "{}",

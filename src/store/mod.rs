@@ -13,11 +13,14 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
 mod shacl_poststate;
+#[cfg(feature = "shacl")]
+mod shacl_subclass;
 pub use decision_nonces::DecisionNonceSpend;
-pub use shacl_poststate::PoststateProfile;
+pub use poststate_profile::PoststateProfile;
 pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
