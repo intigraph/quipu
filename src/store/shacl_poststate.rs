@@ -7,10 +7,41 @@
 #[cfg(feature = "shacl")]
 use std::collections::BTreeSet;
 
+use std::time::{Duration, Instant};
+
 use super::{Datum, Store};
 use crate::{Error, Result};
 
+/// Where the post-state SHACL write gate spends its time (aegis-wlf0).
+///
+/// Summed over every gated transaction since the last take, so one request
+/// that commits several graph batches reports their total.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PoststateProfile {
+    /// Gated transactions that reached the shapes lookup.
+    pub runs: u32,
+    /// Reading and joining the loaded shape sets.
+    pub load: Duration,
+    /// Splitting the loaded shapes into reject and emit sets.
+    pub split: Duration,
+    /// Compiling or fetching the validator and its cardinality plan.
+    pub plan: Duration,
+    /// Gathering touched-focus context and validating it.
+    pub check: Duration,
+    /// Conditional (SET) admission: vocabulary and type context.
+    pub conditional_prepare: Duration,
+    /// Conditional admission: validation against the reject shapes.
+    pub conditional_reject: Duration,
+    /// Conditional admission: validation against the emit (warning) shapes.
+    pub conditional_emit: Duration,
+}
+
 impl Store {
+    /// The gate's accumulated time since the last call, then reset.
+    pub fn take_poststate_profile(&mut self) -> PoststateProfile {
+        std::mem::take(&mut self.poststate_profile)
+    }
+
     /// Supply explicit shapes to every transaction made by one operation.
     /// Nested scopes and unwinding restore the prior context. This does not
     /// enable the persistent `validate_on_write` setting or load any shapes.
@@ -44,19 +75,25 @@ impl Store {
         if self.recording_verdicts {
             return Ok(());
         }
+        let started = Instant::now();
         let loaded = if self.shacl_config.validate_on_write || conditional {
             self.get_combined_shapes()?
         } else {
             None
         };
+        let load = started.elapsed();
         #[cfg(feature = "shacl")]
         let loaded = loaded.map(|shapes| crate::shacl::split_shapes_by_policy(&shapes).reject);
+        let split = started.elapsed() - load;
         let shapes = match (&self.write_shapes, loaded) {
             (Some(explicit), Some(loaded)) => format!("{loaded}\n{explicit}"),
             (Some(explicit), None) => explicit.clone(),
             (None, Some(loaded)) => loaded,
             (None, None) => return Ok(()),
         };
+        self.poststate_profile.runs += 1;
+        self.poststate_profile.load += load;
+        self.poststate_profile.split += split;
         #[cfg(feature = "shacl")]
         return self.check_poststate_cardinality(&shapes, datums, graph, tx_id);
         #[cfg(not(feature = "shacl"))]
@@ -70,7 +107,7 @@ impl Store {
 
     #[cfg(feature = "shacl")]
     fn check_poststate_cardinality(
-        &self,
+        &mut self,
         shapes: &str,
         datums: &[Datum],
         graph: i64,
@@ -105,10 +142,13 @@ impl Store {
         // CLI --shapes and inline episode shapes remain strict, as before.
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
+        let planning = Instant::now();
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
+        self.poststate_profile.plan += planning.elapsed();
         if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
+        let checking = Instant::now();
         let result = (|| {
             let subjects: BTreeSet<_> = datums
                 .iter()
@@ -240,6 +280,7 @@ impl Store {
                     .collect(),
             })
         })();
+        self.poststate_profile.check += checking.elapsed();
         match result {
             Err(Error::CannotVerify(message))
                 if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>

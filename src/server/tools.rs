@@ -49,6 +49,44 @@ macro_rules! ro_handler {
     };
 }
 
+/// Record one locked write's store time and post-state SHACL profile
+/// (aegis-wlf0): the `quipu_store_{wait,held}_seconds_total` counters and one
+/// `write_observation` log line, the write-path twin of the query observation.
+pub(crate) fn observe_write(
+    store: &mut quipu::Store,
+    client: &str,
+    endpoint: &str,
+    wait: f64,
+    acquired: std::time::Instant,
+    ok: bool,
+) {
+    let held = acquired.elapsed().as_secs_f64();
+    let profile = store.take_poststate_profile();
+    quipu::metrics::metrics().observe_writer_time(client, endpoint, wait, held);
+    let ms = |seconds: f64| (seconds * 1_000_000.0).round() / 1_000.0;
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "event": "write_observation",
+            "server_process_id": std::process::id(),
+            "client": client,
+            "endpoint": endpoint,
+            "outcome": if ok { "ok" } else { "error" },
+            "shacl_validate_on_write": store.shacl_config().validate_on_write,
+            "store_wait_ms": ms(wait),
+            "store_held_ms": ms(held),
+            "poststate_runs": profile.runs,
+            "poststate_load_ms": ms(profile.load.as_secs_f64()),
+            "poststate_split_ms": ms(profile.split.as_secs_f64()),
+            "poststate_plan_ms": ms(profile.plan.as_secs_f64()),
+            "poststate_check_ms": ms(profile.check.as_secs_f64()),
+            "conditional_prepare_ms": ms(profile.conditional_prepare.as_secs_f64()),
+            "conditional_reject_ms": ms(profile.conditional_reject.as_secs_f64()),
+            "conditional_emit_ms": ms(profile.conditional_emit.as_secs_f64()),
+        })
+    );
+}
+
 /// Finish deferred auto-embed work drained from a write handler: run the
 /// multi-second ONNX `embed_batch` OUTSIDE the store lock, then
 /// relock briefly to write the vectors. Entities whose text changed in the
@@ -112,19 +150,34 @@ macro_rules! rw_handler {
     ($name:ident, $tool:path) => {
         pub(crate) async fn $name(
             State(s): State<SharedStore>,
+            headers: axum::http::HeaderMap,
+            matched: Option<axum::extract::MatchedPath>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
+            let client = super::query_usage::client(&headers);
+            // The route template, not the raw path, bounds the label set, as
+            // request_middleware does. A direct call has no matched route.
+            let endpoint =
+                matched.map_or_else(|| "unmatched".to_owned(), |m| m.as_str().to_owned());
             write_blocking(move || {
                 // Phase 1 under the lock: the transaction itself (plus cheap
                 // embed-work collection). Phase 2 (ONNX embed) runs after the
                 // guard drops; phase 3 relocks to write vectors. See
                 // finish_deferred_embed.
                 let (out, work) = {
+                    let waiting = std::time::Instant::now();
                     let mut st = s.write_lock()?;
+                    let wait = waiting.elapsed().as_secs_f64();
+                    let acquired = std::time::Instant::now();
                     // A refused signed write stops here, before a tool that
                     // mutates outside a transaction can act (aegis-bys8d1).
-                    quipu::transaction_auth::refuse_if_refused()?;
-                    let out = $tool(&mut st, &i)?;
+                    let out = quipu::transaction_auth::refuse_if_refused()
+                        .map_err(AppError::from)
+                        .and_then(|()| $tool(&mut st, &i).map_err(AppError::from));
+                    // While the guard is alive, so `held` is the lock interval
+                    // (aegis-wlf0: writes recorded no store time before).
+                    observe_write(&mut st, &client, &endpoint, wait, acquired, out.is_ok());
+                    let out = out?;
                     (out, st.take_deferred_embed())
                 };
                 if let Some(work) = work {
@@ -283,12 +336,14 @@ rw_handler!(queries, quipu::tool_queries);
 #[cfg(feature = "owl")]
 pub(crate) async fn ontology(
     State(s): State<SharedStore>,
+    headers: axum::http::HeaderMap,
+    matched: Option<axum::extract::MatchedPath>,
     axum::Json(i): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     if i.get("action").and_then(JsonValue::as_str) == Some("materialize") {
         return super::owl_materialize::materialize(s, i).await;
     }
-    ontology_locked(State(s), axum::Json(i)).await
+    ontology_locked(State(s), headers, matched, axum::Json(i)).await
 }
 
 #[cfg(feature = "owl")]
@@ -641,3 +696,7 @@ pub(crate) async fn embed_backfill(
     })
     .await
 }
+
+#[cfg(test)]
+#[path = "write_store_time_tests.rs"]
+mod write_store_time_tests;

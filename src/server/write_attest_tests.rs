@@ -65,6 +65,8 @@ async fn a_refused_signed_graph_create_creates_no_graph() {
         Some(identity),
         crate::tools::graph_create(
             State(store.clone()),
+            axum::http::HeaderMap::new(),
+            None,
             axum::Json(serde_json::json!({ "graph": GRAPH })),
         ),
     )
@@ -90,6 +92,8 @@ async fn control_the_same_signed_graph_create_lands_when_not_refused() {
         Some(identity),
         crate::tools::graph_create(
             State(store.clone()),
+            axum::http::HeaderMap::new(),
+            None,
             axum::Json(serde_json::json!({ "graph": GRAPH })),
         ),
     )

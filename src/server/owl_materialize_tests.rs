@@ -69,6 +69,8 @@ async fn scheduled_handler_entails_and_leaves_ordinary_write_admission_free() {
     let task = tokio::spawn(async move {
         crate::tools::ontology(
             State(task_store),
+            axum::http::HeaderMap::new(),
+            None,
             axum::Json(json!({"action":"materialize"})),
         )
         .await

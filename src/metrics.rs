@@ -386,6 +386,21 @@ impl Metrics {
         e.1 += held;
     }
 
+    /// Attribute WRITER-mutex wait and held seconds to a caller and route
+    /// (aegis-wlf0, aegis-9hwdg4). Writes recorded no store time before, so a
+    /// slower write path was invisible to these counters.
+    ///
+    /// Counters only: the per-client held histogram has no endpoint label, and
+    /// a `/query` hold is a read-pool connection, not the writer mutex. Mixing
+    /// the two there would make one caller's distribution mean two things.
+    pub fn observe_writer_time(&self, client: &str, endpoint: &str, wait: f64, held: f64) {
+        let mut map = self.store_time.lock().unwrap();
+        let key = client_key(&map, client, endpoint);
+        let e = map.entry(key).or_insert((0.0, 0.0));
+        e.0 += wait;
+        e.1 += held;
+    }
+
     /// Count one request interrupted by the admission deadline (aegis-raq1ok).
     pub fn observe_deadline_interrupt(&self, client: &str) {
         *self

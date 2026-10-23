@@ -7,7 +7,7 @@
 use ring::rand::{SecureRandom, SystemRandom};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{Store, TermCache, alias, attach, local_term_space, read_model};
+use super::{PoststateProfile, Store, TermCache, alias, attach, local_term_space, read_model};
 use crate::config::{
     EmbeddingConfig, GovernanceConfig, OwlConfig, ResolutionConfig, SearchConfig, ShaclConfig,
 };
@@ -535,6 +535,7 @@ impl Store {
             shacl_config: ShaclConfig::default(),
             projection_defs: Vec::new(),
             write_shapes: None,
+            poststate_profile: PoststateProfile::default(),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
             owl_cache: None,

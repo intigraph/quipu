@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use axum::{
     body::Bytes,
@@ -128,8 +129,14 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
+    let client = super::query_usage::client(&headers);
     let report = blocking(move || {
-        apply_update_reported(&store, &format!("BASE <{base}>\n{update}"), &attribution)
+        apply_update_reported(
+            &store,
+            &format!("BASE <{base}>\n{update}"),
+            &attribution,
+            &client,
+        )
     })
     .await?;
     Ok(axum::Json(report).into_response())
@@ -268,15 +275,16 @@ impl Attribution {
 
 #[cfg_attr(not(test), allow(dead_code))]
 fn apply_update(shared: &SharedStore, update: &str) -> Result<serde_json::Value, AppError> {
-    apply_update_reported(shared, update, &Attribution::default())
+    apply_update_reported(shared, update, &Attribution::default(), "unknown")
 }
 
 fn apply_update_reported(
     shared: &SharedStore,
     update: &str,
     attribution: &Attribution,
+    client: &str,
 ) -> Result<serde_json::Value, AppError> {
-    let applied = apply_update_attributed(shared, update, false, attribution)?;
+    let applied = apply_update_observed(shared, update, false, attribution, client)?;
     let store = shared.lock();
     applied.report(&store)
 }
@@ -302,12 +310,95 @@ pub(super) fn apply_update_attributed(
     force_full: bool,
     attribution: &Attribution,
 ) -> Result<Applied, AppError> {
+    apply_update_observed(shared, update, force_full, attribution, "unknown")
+}
+
+/// Where one update spent its time under the store lock (aegis-wlf0). Writes
+/// recorded no store time at all, so a slower write path was invisible to
+/// `quipu_store_held_seconds` and unattributable in the log.
+#[derive(Default)]
+struct UpdateTimes {
+    dataset: f64,
+    eval: f64,
+    gates: f64,
+    prep: f64,
+    shapes: f64,
+    commit: f64,
+}
+
+fn ms(seconds: f64) -> f64 {
+    (seconds * 1_000_000.0).round() / 1_000.0
+}
+
+/// [`apply_update_attributed`], recording its store time for `client`.
+fn apply_update_observed(
+    shared: &SharedStore,
+    update: &str,
+    force_full: bool,
+    attribution: &Attribution,
+    client: &str,
+) -> Result<Applied, AppError> {
     let plan = if force_full {
         Plan::Full("forced")
     } else {
         update_slice::plan(update)
     };
+    let waiting = Instant::now();
     let mut store = shared.lock();
+    let wait = waiting.elapsed().as_secs_f64();
+    let acquired = Instant::now();
+    let mut times = UpdateTimes::default();
+    let result = apply_locked(&mut store, &plan, update, attribution, &mut times);
+    // While the guard is still alive, as /query does, so `held` is the
+    // lock-holding interval.
+    let held = acquired.elapsed().as_secs_f64();
+    let profile = store.take_poststate_profile();
+    quipu::metrics::metrics().observe_writer_time(client, "/update", wait, held);
+    eprintln!(
+        "{}",
+        serde_json::json!({
+            "event": "update_observation",
+            "server_process_id": std::process::id(),
+            "client": client,
+            "outcome": if result.is_ok() { "ok" } else { "error" },
+            "path": result.as_ref().ok().map(|a| match a.path {
+                UpdatePath::Sliced => "sliced",
+                UpdatePath::Full => "full",
+            }),
+            "shacl_validate_on_write": store.shacl_config().validate_on_write,
+            "store_wait_ms": ms(wait),
+            "store_held_ms": ms(held),
+            "dataset_ms": ms(times.dataset),
+            "eval_ms": ms(times.eval),
+            "gates_ms": ms(times.gates),
+            "prep_ms": ms(times.prep),
+            "explicit_shapes_ms": ms(times.shapes),
+            "commit_ms": ms(times.commit),
+            "poststate_runs": profile.runs,
+            "poststate_load_ms": ms(profile.load.as_secs_f64()),
+            "poststate_split_ms": ms(profile.split.as_secs_f64()),
+            "poststate_plan_ms": ms(profile.plan.as_secs_f64()),
+            "poststate_check_ms": ms(profile.check.as_secs_f64()),
+            "conditional_prepare_ms": ms(profile.conditional_prepare.as_secs_f64()),
+            "conditional_reject_ms": ms(profile.conditional_reject.as_secs_f64()),
+            "conditional_emit_ms": ms(profile.conditional_emit.as_secs_f64()),
+        })
+    );
+    result
+}
+
+fn apply_locked(
+    store: &mut quipu::Store,
+    plan: &Plan,
+    update: &str,
+    attribution: &Attribution,
+    times: &mut UpdateTimes,
+) -> Result<Applied, AppError> {
+    let mut phase = Instant::now();
+    let mut lap = |slot: &mut f64| {
+        *slot = phase.elapsed().as_secs_f64();
+        phase = Instant::now();
+    };
     let ox = OxStore::new().map_err(|e| quipu::Error::Store(e.to_string()))?;
     let mut graph_ids = HashMap::new();
     graph_ids.insert(GraphName::DefaultGraph, 0);
@@ -320,18 +411,19 @@ pub(super) fn apply_update_attributed(
         graph_ids.insert(name.clone(), graph_id);
         graphs.push((graph_id, name));
     }
-    let path = match &plan {
+    let path = match plan {
         Plan::Full(reason) => {
-            update_full::copy(&store, &ox, &graphs, reason, update_full::max_facts())?;
+            update_full::copy(store, &ox, &graphs, reason, update_full::max_facts())?;
             UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Full
         }
         Plan::Sliced(touched, whole) => {
-            load_slice(&store, &ox, &graphs, touched, whole)?;
+            load_slice(store, &ox, &graphs, touched, whole)?;
             UPDATES_SLICED.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Sliced
         }
     };
+    lap(&mut times.dataset);
     let before: HashSet<Quad> = ox
         .iter()
         .collect::<Result<_, _>>()
@@ -342,40 +434,42 @@ pub(super) fn apply_update_attributed(
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
+    lap(&mut times.eval);
     // The write gates /knot enforces, on what this update asserts, before any
     // term is interned or any transaction begins (aegis-1hfyk5).
     update_gates::enforce(
-        &store,
+        store,
         after.difference(&before),
         before.difference(&after),
         attribution.actor.as_deref(),
         &attribution.source,
     )?;
+    lap(&mut times.gates);
     let now = quipu::time::now_iso();
     let mut changes: HashMap<i64, Vec<quipu::store::Datum>> = HashMap::new();
     for quad in before.difference(&after) {
-        let graph_id = graph_id(&store, &mut graph_ids, &quad.graph_name)?;
+        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
         changes
             .entry(graph_id)
             .or_default()
             .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(&store, &quad.subject)?,
+                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
                 attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(&store, &quad.object)?,
+                value: quipu::rdf::term_to_value(store, &quad.object)?,
                 valid_from: now.clone(),
                 valid_to: Some(now.clone()),
                 op: quipu::Op::Retract,
             });
     }
     for quad in after.difference(&before) {
-        let graph_id = graph_id(&store, &mut graph_ids, &quad.graph_name)?;
+        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
         changes
             .entry(graph_id)
             .or_default()
             .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(&store, &quad.subject)?,
+                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
                 attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(&store, &quad.object)?,
+                value: quipu::rdf::term_to_value(store, &quad.object)?,
                 valid_from: now.clone(),
                 valid_to: None,
                 op: quipu::Op::Assert,
@@ -384,9 +478,11 @@ pub(super) fn apply_update_attributed(
     let mut batches: Vec<_> = changes.into_iter().collect();
     // Deterministic commit (and report) order across graphs; ROOT first.
     batches.sort_unstable_by_key(|(graph, _)| *graph);
+    lap(&mut times.prep);
     let shapes = store
         .get_combined_shapes()?
         .map(|s| quipu::shacl::split_shapes_by_policy(&s).reject);
+    lap(&mut times.shapes);
     let txs = store.with_write_shapes(shapes.as_deref(), |store| {
         store.transact_graph_batches_tx(
             &batches,
@@ -395,6 +491,7 @@ pub(super) fn apply_update_attributed(
             Some(&attribution.source),
         )
     })?;
+    lap(&mut times.commit);
     // Register every named graph this update asserted into, so the next
     // update's dataset includes it (aegis-e9o5ci). After the commit, so a
     // refused write leaves no empty registry row behind.
