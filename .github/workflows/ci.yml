@@ -317,7 +317,9 @@ jobs:
   wasm:
     name: Wasm (browser harness)
     if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
+    # install Chromium. Unpin together with a Playwright bump.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -391,7 +393,9 @@ jobs:
   wasm-explorer:
     name: Wasm (browser bundle)
     if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
+    # install Chromium. Unpin together with a Playwright bump.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
