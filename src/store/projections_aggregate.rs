@@ -26,6 +26,12 @@ pub struct ProjectionAggregate<'a> {
     pub graph: &'a str,
     /// Key values to keep (empty = all). Strings, integers, or `{"iri": ...}`.
     pub key_in: &'a [JsonValue],
+    /// Column filters: every column must match, and a column matches any of
+    /// its listed values (for example assignee and priority, grouped by
+    /// status; aegis-tg5). A `null`
+    /// value matches a row with no value for that column; an empty list
+    /// matches nothing. Columns are checked against the declaration.
+    pub filters: &'a [(&'a str, &'a [JsonValue])],
     /// A declared column (or `"key"`) to group by.
     pub group_by: Option<&'a str>,
     /// `(time column, RFC 3339 instant)`: keep rows whose column is at or after it.
@@ -56,11 +62,11 @@ fn bind_value(store: &Store, v: &JsonValue) -> Result<Option<Vec<u8>>> {
         JsonValue::Object(o) => match o.get("iri").and_then(JsonValue::as_str) {
             // An unknown IRI cannot match anything; it is not an error.
             Some(iri) => store.lookup(iri)?.map(|id| Value::Ref(id).to_bytes()),
-            None => return Err(Error::InvalidValue("key_in object needs \"iri\"".into())),
+            None => return Err(Error::InvalidValue("filter object needs \"iri\"".into())),
         },
         _ => {
             return Err(Error::InvalidValue(
-                "key_in values are strings, integers or {\"iri\"}".into(),
+                "filter values are strings, integers or {\"iri\"}".into(),
             ));
         }
     })
@@ -115,17 +121,19 @@ impl Store {
                 def.name
             )));
         }
+        // Some inputs can only match nothing (an unknown graph, an empty
+        // alternative list, only unknown IRIs). The answer is then zero, but
+        // only after EVERY other input has been validated: an empty filter
+        // must not turn a later undeclared column or bad value into a
+        // successful zero.
+        let mut matches_nothing = false;
         let g = if q.graph.trim().is_empty() || q.graph == crate::schema::ROOT_GRAPH_IRI {
             crate::schema::ROOT_GRAPH
+        } else if let Some(g) = self.lookup(q.graph)? {
+            g
         } else {
-            match self.lookup(q.graph)? {
-                Some(g) => g,
-                None => {
-                    return Ok(
-                        json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
-                    );
-                }
-            }
+            matches_nothing = true;
+            crate::schema::ROOT_GRAPH
         };
         let column = |c: &str| -> Result<String> {
             if c == "key" || def.columns.iter().any(|d| d.name == c) {
@@ -149,12 +157,29 @@ impl Store {
                 .flatten()
                 .collect();
             if vals.is_empty() {
-                return Ok(
-                    json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
-                );
+                matches_nothing = true;
+            } else {
+                wh.push(format!("key IN ({})", vec!["?"; vals.len()].join(",")));
+                binds.extend(vals.into_iter().map(rusqlite::types::Value::Blob));
             }
-            wh.push(format!("key IN ({})", vec!["?"; vals.len()].join(",")));
-            binds.extend(vals.into_iter().map(rusqlite::types::Value::Blob));
+        }
+        for (c, values) in q.filters {
+            let c = column(c)?;
+            let mut alternatives = Vec::new();
+            for v in *values {
+                if v.is_null() {
+                    alternatives.push(format!("{c} IS NULL"));
+                } else if let Some(b) = bind_value(self, v)? {
+                    alternatives.push(format!("{c} = ?"));
+                    binds.push(rusqlite::types::Value::Blob(b));
+                }
+                // An unknown IRI binds nothing and so cannot match.
+            }
+            if alternatives.is_empty() {
+                matches_nothing = true;
+            } else {
+                wh.push(format!("({})", alternatives.join(" OR ")));
+            }
         }
         if let Some((c, at)) = q.since {
             let c = column(c)?;
@@ -168,6 +193,12 @@ impl Store {
             })?;
             wh.push(format!("{c}_t >= ?"));
             binds.push(epoch.into());
+        }
+        let group_column = q.group_by.map(column).transpose()?;
+        if matches_nothing {
+            return Ok(
+                json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
+            );
         }
         let wh = wh.join(" AND ");
         let total: i64 = self.conn.query_row(
@@ -183,8 +214,7 @@ impl Store {
         });
         let mut groups = Vec::new();
         let mut truncated = false;
-        if let Some(c) = q.group_by {
-            let c = column(c)?;
+        if let Some(c) = group_column {
             let cap = if q.max_groups == 0 {
                 1000
             } else {
