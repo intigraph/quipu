@@ -4,6 +4,9 @@ name: Daily release proposal
 on:
   schedule:
     - cron: "0 7 * * *"
+  # A deliberate, named act when a scheduled run does not happen (measured: no
+  # scheduled run after the repository moved). Never triggered by a push.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,7 +18,7 @@ concurrency:
 jobs:
   ci-correctness:
     name: Wait for CI correctness
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     outputs:
@@ -43,7 +46,7 @@ jobs:
   release-pr:
     name: Prepare daily release PR
     needs: ci-correctness
-    if: github.event_name == 'schedule' && needs.ci-correctness.outputs.ready == 'true'
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && needs.ci-correctness.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
