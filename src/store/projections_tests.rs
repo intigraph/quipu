@@ -62,6 +62,7 @@ fn count(
             &def(),
             &ProjectionAggregate {
                 graph: "",
+                graphs: &[],
                 key_in,
                 filters: &[],
                 group_by: group,
@@ -82,14 +83,14 @@ fn install_builds_and_counts_by_key_and_group() {
     let by = count(&store, &[], Some("key"), None);
     assert_eq!(by["total"], 4);
     let groups = by["groups"].as_array().unwrap();
-    assert!(groups.contains(&json!({"value": "open", "n": 2})));
-    assert!(groups.contains(&json!({"value": "closed", "n": 2})));
+    assert!(groups.contains(&json!({"value": "open", "n": 2, "plain": true})));
+    assert!(groups.contains(&json!({"value": "closed", "n": 2, "plain": true})));
     let p = count(&store, &[json!("open")], Some("priority"), None);
     assert!(
         p["groups"]
             .as_array()
             .unwrap()
-            .contains(&json!({"value": 1, "n": 1}))
+            .contains(&json!({"value": 1, "n": 1, "plain": false}))
     );
 }
 
@@ -287,6 +288,7 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
     })));
     let q = ProjectionAggregate {
         graph: "",
+        graphs: &[],
         key_in: &[json!("open")],
         filters: &[],
         group_by: Some("priority"),

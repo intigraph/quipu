@@ -410,9 +410,16 @@ impl Store {
 #[path = "projections_aggregate.rs"]
 mod aggregate;
 pub use aggregate::ProjectionAggregate;
+#[path = "projections_rows.rs"]
+mod rows;
 #[cfg(test)]
 use aggregate::set_after_total;
+pub use rows::{PROJECTION_ROWS_MAX, ProjectionRows};
 
 #[cfg(test)]
 #[path = "projections_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "projections_rows_tests.rs"]
+mod rows_tests;
