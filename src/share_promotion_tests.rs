@@ -33,6 +33,7 @@ fn setup() -> (Store, i64, i64, i64, PromoteImportRequest) {
             actor: None,
             target_graph: None,
             retire_from: None,
+            dry_run: false,
         },
     )
 }
@@ -160,6 +161,7 @@ fn move_setup() -> (Store, PromoteImportRequest, [i64; 3]) {
         actor: None,
         target_graph: Some(INBOX.into()),
         retire_from: Some(BOARD.into()),
+        dry_run: false,
     };
     (store, request, [a, w, u])
 }
@@ -295,4 +297,126 @@ fn already_expired_deadline_refuses_before_any_write() {
     drop(_guard);
     assert_eq!(subjects_in(&store, BOARD), sorted(vec![a, w]));
     assert_eq!(subjects_in(&store, INBOX), vec![u]);
+}
+
+fn graph_facts(store: &Store, iri: &str) -> Vec<(i64, i64, Vec<u8>)> {
+    let g = store.lookup(iri).unwrap().unwrap();
+    let mut f: Vec<_> = store
+        .current_facts_in_graph(g)
+        .unwrap()
+        .iter()
+        .map(|f| (f.entity, f.attribute, f.value.to_bytes()))
+        .collect();
+    f.sort();
+    f
+}
+
+#[test]
+fn dry_run_predicts_the_move_and_writes_nothing() {
+    let (mut store, mut request, [a, w, u]) = move_setup();
+    let (board, inbox) = (graph_facts(&store, BOARD), graph_facts(&store, INBOX));
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(preview.outcome, "dry_run");
+    assert_eq!((preview.replaced, preview.retired), (Some(0), Some(1)));
+    assert_eq!(preview.warning, None);
+    assert_eq!((preview.tx_id, preview.queries.is_none()), (0, true));
+    assert_eq!(graph_facts(&store, BOARD), board);
+    assert_eq!(graph_facts(&store, INBOX), inbox);
+    assert_eq!(promoted_reviews(&store), 0);
+    // The real move then does exactly what the preview said.
+    request.dry_run = false;
+    let moved = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(
+        (moved.replaced, moved.retired, moved.triples),
+        (preview.replaced, preview.retired, preview.triples)
+    );
+    assert_eq!(subjects_in(&store, BOARD), vec![w]);
+    assert_eq!(subjects_in(&store, INBOX), sorted(vec![a, u]));
+}
+
+#[test]
+fn dry_run_warns_when_the_move_would_retract_target_facts() {
+    // The partial-attribute hazard: the target holds a fact of a moved subject
+    // that the share does not carry, so the move would retract it.
+    let (mut store, mut request, [a, _, _]) = move_setup();
+    let extra = fact(&mut store, a, "A-only-in-target");
+    let inbox = store.lookup(INBOX).unwrap().unwrap();
+    store
+        .transact_to_graph(&[extra], TS, None, Some("inbox"), inbox)
+        .unwrap();
+    let before = graph_facts(&store, INBOX);
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(preview.replaced, Some(1));
+    let warning = preview.warning.expect("a retracting move must warn");
+    assert!(warning.contains("would retract 1 facts"), "{warning}");
+    assert_eq!(
+        graph_facts(&store, INBOX),
+        before,
+        "a dry run writes nothing"
+    );
+    request.dry_run = false;
+    let moved = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(moved.replaced, Some(1));
+    assert_eq!(moved.warning, None);
+    assert_ne!(graph_facts(&store, INBOX), before);
+}
+
+#[test]
+fn dry_run_refuses_a_closed_review_like_the_real_move() {
+    let (mut store, mut request, _) = move_setup();
+    store
+        .conn
+        .execute(
+            "INSERT INTO import_reviews(share_id,state,first_seen,updated_at,payload) \
+             VALUES(?1,'rejected',?2,?2,'{}')",
+            rusqlite::params![SHARE, TS],
+        )
+        .unwrap();
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap_err();
+    request.dry_run = false;
+    let real = promote_import(&mut store, &request, TS, None).unwrap_err();
+    assert_eq!(preview.to_string(), real.to_string());
+    assert!(
+        preview.to_string().contains("import review is closed"),
+        "{preview}"
+    );
+}
+
+#[test]
+fn dry_run_refuses_an_overlay_target_like_the_real_move() {
+    let (mut store, mut request, _) = move_setup();
+    let overlay = "https://tracker.example/overlay";
+    store.overlay_create(overlay, 0).unwrap();
+    request.target_graph = Some(overlay.into());
+    request.retire_from = None;
+    request.dry_run = true;
+    let preview = promote_import(&mut store, &request, TS, None).unwrap_err();
+    request.dry_run = false;
+    let real = promote_import(&mut store, &request, TS, None).unwrap_err();
+    assert_eq!(preview.to_string(), real.to_string());
+    assert!(
+        preview.to_string().contains("class is fixed at create"),
+        "{preview}"
+    );
+}
+
+#[test]
+fn dry_run_never_creates_the_target_graph_and_refuses_root() {
+    let (mut store, mut request, _) = move_setup();
+    request.dry_run = true;
+    request.retire_from = None;
+    request.target_graph = Some("https://tracker.example/new".into());
+    let preview = promote_import(&mut store, &request, TS, None).unwrap();
+    assert_eq!(preview.outcome, "dry_run");
+    assert!(
+        store
+            .lookup("https://tracker.example/new")
+            .unwrap()
+            .is_none()
+    );
+    request.target_graph = None;
+    assert!(promote_import(&mut store, &request, TS, None).is_err());
 }
