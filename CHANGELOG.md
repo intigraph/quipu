@@ -9,7 +9,6 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
-- Add stable entity namespaces and audience-bound sharing([6e52158](https://github.com/scbrown/quipu/commit/6e5215818f3ce7986cbf52f6511a137c7ca75059))
 - *(embedding)* Index native writes and imports by default (#691)([1fdea50](https://github.com/scbrown/quipu/commit/1fdea5029b9eab7e259c50a27b458dbdd5c37b28))
 - *(server)* Serve the decision deck over HTTP, off by default (#701)([9e24565](https://github.com/scbrown/quipu/commit/9e24565f426a7ec902c11a897b2dbe55b1d43f6a))
 - *(acquisition)* Metadata-only eligibility observation (#704)([0638e63](https://github.com/scbrown/quipu/commit/0638e6381063132d94f5f5ab18763b56c575aafa))
@@ -38,7 +37,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- *(cli)* Preserve audience destinations when packing([41e8b1d](https://github.com/scbrown/quipu/commit/41e8b1db6075058639274b87b76b53d11a9a0e38))
 - *(server)* Retain finite native read operation declarations (#688)([201076a](https://github.com/scbrown/quipu/commit/201076aac71becdb429ce74539f21ec689a891d5))
 - *(graph)* Exclude inferred companions before registration (#708)([630c980](https://github.com/scbrown/quipu/commit/630c9804719d0dd0bae169b9f8193b7aa23ffd2a))
 - *(shacl)* Enforce maxCount across staged writes (#697)([0e89d72](https://github.com/scbrown/quipu/commit/0e89d729e254430806853ade78f9a7287de9e921))
