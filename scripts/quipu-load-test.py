@@ -16,6 +16,11 @@ import urllib.request
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+import importlib.util
+
+_spec = importlib.util.spec_from_file_location("load_strings", Path(__file__).with_name("quipu-load-string-filters.py"))
+strings = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(strings)
 
 
 @dataclass
@@ -65,7 +70,9 @@ def post(base_url: str, path: str, payload: dict, timeout: float, operation: str
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            response.read()
+            raw = response.read()
+            if operation.startswith("string_filter_") and not strings.validate_response(raw):
+                status = "invalid_query_response"
             if response.status != 200:
                 status = f"http_{response.status}"
     except urllib.error.HTTPError as error:
@@ -162,7 +169,17 @@ ex:LoadFixture rdfs:subClassOf ex:Thing .
         )
 
 
-def request_for(sequence: int) -> tuple[str, str, dict]:
+def request_for(sequence: int, string_filters: bool = False) -> tuple[str, str, dict]:
+    if string_filters:
+        group, slot = divmod(sequence, 16)
+        if slot >= 6:
+            return strings.request(slot - 6)
+        sequence = group * 6 + slot
+        if slot == 3:
+            # This fixture has named graphs; preserve the legacy ROOT search
+            # scope without enabling named-graph semantic backfill.
+            return "search", "/search", {"embedding": [0.0] * 384, "limit": 5,
+                                        "graph": "urn:quipu:graph:root"}
     kind = sequence % 6
     if kind == 5:
         # ASK over an unbounded pattern (aegis-yzn4vp). This is the shape the
@@ -267,6 +284,20 @@ def evaluate(report: dict, baseline: dict) -> tuple[list[str], list[str]]:
     error_rate = total_errors / max(1, report["requests"])
     if error_rate > limits["max_error_rate"]:
         failures.append(f"error rate {error_rate:.3f} > {limits['max_error_rate']:.3f}")
+    if report.get("profile") == "string-filters":
+        # The 200-node job still grades every legacy bound below. Its latency,
+        # throughput and RSS-growth limits are not calibrated for 2.4M triples.
+        # This additional profile gates the new string classes and comparable
+        # global invariants; legacy timings remain in its report as context.
+        result = report.get("string_filters")
+        if not isinstance(result, dict) or set(result.get("classes", {})) != set(strings.NAMES):
+            failures.append("missing string differential coverage")
+        else:
+            failures.extend(result["failures"])
+            failures.extend(result["mixed_failures"])
+        if report["read_progress_during_writes"] < limits["min_read_progress_during_writes"]:
+            failures.append("no successful read overlapped a write")
+        return failures, unmeasured
     if report["throughput_rps"] < limits["min_throughput_rps"]:
         failures.append(
             f"throughput {report['throughput_rps']:.3f} < {limits['min_throughput_rps']:.3f} rps"
@@ -305,7 +336,7 @@ def run(args: argparse.Namespace) -> dict:
     for concurrency in args.concurrency:
         jobs = []
         for _ in range(args.requests_per_level):
-            operation, path, payload = request_for(sequence)
+            operation, path, payload = request_for(sequence, bool(args.string_filter_budget))
             jobs.append((operation, path, payload))
             sequence += 1
         started = time.monotonic()
@@ -318,6 +349,7 @@ def run(args: argparse.Namespace) -> dict:
     elapsed = time.monotonic() - overall_start
     peak_rss = parse_peak_rss(get_text(args.url, "/metrics", args.timeout))
     report = summarize(all_samples, elapsed, peak_rss)
+    report["profile"] = "string-filters" if args.string_filter_budget else "standard"
     report["baseline_peak_rss_bytes"] = baseline_peak_rss
     report["peak_rss_growth_bytes"] = max(0, peak_rss - baseline_peak_rss)
     writes = [sample for sample in all_samples if sample.operation == "episode"]
@@ -326,6 +358,10 @@ def run(args: argparse.Namespace) -> dict:
         1 for read in reads if any(read.started < write.ended and write.started < read.ended for write in writes)
     )
     report["concurrency_levels"] = levels
+    if args.string_filter_budget:
+        budget = json.loads(args.string_filter_budget.read_text())
+        report["string_filters"] = strings.differential(args.url, budget, args.timeout)
+        report["string_filters"]["mixed_failures"] = strings.evaluate(report, budget)
     report["architecture"] = {
         "reads": "WAL read pool",
         "writes": "single fair writer",
@@ -395,6 +431,7 @@ def main() -> int:
     parser.add_argument("--url", default="http://127.0.0.1:3030")
     parser.add_argument("--concurrency", type=int, nargs="+", default=[1, 4, 8])
     parser.add_argument("--requests-per-level", type=int, default=24)
+    parser.add_argument("--string-filter-budget", type=Path, help="require Q1-Q9/C0 mixed samples and differential ratchet; load the query-perf fixture first")
     parser.add_argument("--seed-nodes", type=int, default=200)
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--baseline", type=Path)
@@ -413,6 +450,10 @@ def main() -> int:
     _AUTH_TOKEN = os.environ.get("QUIPU_AUTH_TOKEN") or (
         args.auth_token_file.read_text().strip() if args.auth_token_file else None
     )
+    if args.string_filter_budget and not args.baseline:
+        parser.error("string-filter mode requires --baseline so failures determine the exit status")
+    if args.string_filter_budget and args.requests_per_level * len(args.concurrency) < 48:
+        parser.error("string-filter mode requires at least 48 requests (three complete 16-request cycles)")
     report = run(args)
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.output:
