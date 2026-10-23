@@ -16,6 +16,7 @@ mod decision_nonces;
 mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
+mod shacl_new_graph;
 mod shacl_poststate;
 #[cfg(feature = "shacl")]
 mod shacl_subclass;
