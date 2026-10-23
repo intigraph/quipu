@@ -9,6 +9,10 @@ pub(crate) enum Boundary {
     Staged,
     /// The promotion is written; the savepoint is open.
     Promoted,
+    /// A subject move has written its target graph (aegis-27l).
+    TargetWritten,
+    /// A subject move has written its retirement (aegis-27l).
+    Retired,
 }
 /// A boundary and the function to run when it is reached.
 pub(crate) type Hook = Option<(Boundary, fn())>;

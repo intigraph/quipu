@@ -206,7 +206,7 @@ fn an_exact_match_retracted_between_the_phases_is_not_merged() {
     assert_eq!(retracted, 1);
 
     let result = import_share_prepared(&mut target, &request, TS, None, Some(prepared)).unwrap();
-    // The dropped candidate is REPORTED, not silently lost (wu's condition).
+    // The dropped candidate is REPORTED, not silently lost.
     let dropped = &result.resolution.revalidation_dropped;
     assert_eq!(dropped.len(), 1, "{:?}", result.resolution);
     assert_eq!(dropped[0].foreign, "urn:foreign:alice");
@@ -376,11 +376,11 @@ fn expiring_at<T>(
     outcome
 }
 
-/// wu's ruling on #736: past the bound, an explicit request timeout, a WHOLE
+/// Past the bound: an explicit request timeout, a WHOLE
 /// rollback and the writer released. A deadline that expires at any phase
 /// boundary leaves zero new facts and zero new review rows. Before this, one
 /// that expired while staging still committed: facts 4 -> 5, reviews 0 -> 1
-/// (grant's review).
+/// (found in review).
 #[test]
 fn a_deadline_expiring_at_any_import_boundary_rolls_back_whole() {
     use crate::share_import::test_hooks::Boundary;
@@ -464,6 +464,8 @@ fn a_deadline_expiring_at_promotion_rolls_back_whole() {
     let promote = crate::share_import::PromoteImportRequest {
         share_id: request.manifest.share_id.clone(),
         actor: None,
+        target_graph: None,
+        retire_from: None,
     };
     let error = expiring_at(Boundary::Promoted, || {
         crate::share_import::promote_import(&mut target, &promote, TS, None)

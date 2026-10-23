@@ -165,6 +165,9 @@ impl Store {
         // them (aegis-xi0), and serves `/resolve`; both must use the served
         // `[quipu.resolution]` policy, not the defaults.
         self.resolution_config.clone_from(&other.resolution_config);
+        // Readers answer projection aggregates (aegis-tg5 F2) and must know the
+        // same declarations the writer installed.
+        self.projection_defs.clone_from(&other.projection_defs);
         self.resolution_cache = other.resolution_cache.clone();
         self.embedding_provider
             .clone_from(&other.embedding_provider);
@@ -320,6 +323,7 @@ impl Store {
         store.pack_manifests = pack_manifests;
         store.facts_source = facts_source;
         store.resolve_sql = resolve_sql;
+        store.attached_graphs = attach::attached_graph_ids(&store.conn, attachments)?;
         Ok(store)
     }
 
@@ -370,6 +374,9 @@ impl Store {
     /// is deliberately ROOT-scoped cannot see an attached graph anyway, since
     /// attachments contribute only NAMED graphs.
     pub(crate) fn facts_source(&self) -> &str {
+        if self.composition_suspended.get() {
+            return "facts";
+        }
         &self.facts_source
     }
 
@@ -377,6 +384,26 @@ impl Store {
     #[must_use]
     pub fn attachments(&self) -> &[attach::Attachment] {
         &self.attachments
+    }
+
+    /// Graph ids the attachments contribute (aegis-xacr).
+    pub(crate) fn attached_graphs(&self) -> &[i64] {
+        &self.attached_graphs
+    }
+
+    /// Answer as an unattached store (`composes == false`) or as the composed
+    /// one until the guard drops, then restore the prior view (aegis-xacr).
+    ///
+    /// Only [`Self::has_attachments`] and [`Self::facts_source`] change:
+    /// dictionary lookups, aliases and resolution stay composed, so an
+    /// attached id that a local fact names still means what it meant. The
+    /// caller proves the query can read no attached row and names no alias
+    /// (see `sparql::attach_scope`); this only switches the view. Before this,
+    /// ONE attached frozen pack turned off every fast path gated on
+    /// [`Self::has_attachments`], for every query, whatever graph it read.
+    pub(crate) fn scope_composition(&self, composes: bool) -> CompositionGuard<'_> {
+        let prior = self.composition_suspended.replace(!composes);
+        CompositionGuard { store: self, prior }
     }
 
     /// Knowledge-pack manifests contributed by attachments, paired with alias.
@@ -503,6 +530,7 @@ impl Store {
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
             shacl_config: ShaclConfig::default(),
+            projection_defs: Vec::new(),
             write_shapes: None,
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
@@ -538,6 +566,8 @@ impl Store {
             read_model_max_triples: std::cell::Cell::new(
                 read_model::DEFAULT_READ_MODEL_MAX_TRIPLES,
             ),
+            attached_graphs: Vec::new(),
+            composition_suspended: std::cell::Cell::new(false),
             #[cfg(feature = "reactive-reasoner")]
             observers: Vec::new(),
         }
@@ -547,7 +577,20 @@ impl Store {
     /// `facts_source()` is a plain table and `canonical_id` is the identity.
     #[must_use]
     pub fn has_attachments(&self) -> bool {
-        !self.attachments.is_empty()
+        !self.composition_suspended.get() && !self.attachments.is_empty()
+    }
+}
+
+/// Restores the composed view when a suspended query ends. See
+/// [`Store::scope_composition`].
+pub(crate) struct CompositionGuard<'a> {
+    store: &'a Store,
+    prior: bool,
+}
+
+impl Drop for CompositionGuard<'_> {
+    fn drop(&mut self) {
+        self.store.composition_suspended.set(self.prior);
     }
 }
 

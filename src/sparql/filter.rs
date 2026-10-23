@@ -51,7 +51,7 @@ pub fn eval_filter(
 /// Three-valued FILTER evaluation: `Ok(None)` is a SPARQL type error, which
 /// propagates through `!` and through `&&`/`||` per the SPARQL truth tables.
 /// `Err` stays reserved for constructs quipu cannot evaluate at all.
-fn eval_filter_tv(
+pub(super) fn eval_filter_tv(
     store: &Store,
     expr: &Expression,
     row: &Bindings,

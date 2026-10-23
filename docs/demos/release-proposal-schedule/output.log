@@ -1,0 +1,16 @@
+Script started on 2026-10-22 06:07:04-04:00 [COMMAND="python3 docs/demos/release-proposal-schedule/demo.py" <not executed on terminal>]
+Effective source configuration only; no workflow or release is executed.
+
+revision: d66142d417a185597415010b4669e998bea27c6c
+push release action commands: release, release-pr
+separate proposal workflow: absent
+
+revision: 9c497d70f379b0fe399dedeb3f26ae6b1350e575
+push release action commands: release
+separate proposal workflow: present
+proposal triggers: {'schedule': [{'cron': '0 7 * * *'}]}
+proposal ready gate: github.event_name == 'schedule' && needs.ci-correctness.outputs.ready == 'true'
+proposal jobs: ci-correctness, release-pr
+
+
+Script done on 2026-10-22 06:07:04-04:00 [COMMAND_EXIT_CODE="0"]

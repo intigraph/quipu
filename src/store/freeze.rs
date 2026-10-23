@@ -564,6 +564,7 @@ impl Store {
         self.pack_manifests = attach::attached_pack_manifests(&self.conn, &all)?;
         self.facts_source = attach::build_facts_source(&self.conn, &all)?;
         self.resolve_sql = attach::build_resolve_sql(&all);
+        self.attached_graphs = attach::attached_graph_ids(&self.conn, &all)?;
         // The alias TEMP table is the one write a remount needs; a pooled
         // reader runs with query_only=ON, so toggle it off around exactly
         // this — and RESTORE the prior value, because when the pool is empty
@@ -595,6 +596,7 @@ impl Store {
         self.pack_manifests = attach::attached_pack_manifests(&self.conn, &all)?;
         self.facts_source = attach::build_facts_source(&self.conn, &all)?;
         self.resolve_sql = attach::build_resolve_sql(&all);
+        self.attached_graphs = attach::attached_graph_ids(&self.conn, &all)?;
         super::alias::build_term_alias(&self.conn, &all)?;
         self.attachments = all;
         Ok(())
@@ -617,6 +619,7 @@ impl Store {
         self.pack_manifests = attach::attached_pack_manifests(&self.conn, &all)?;
         self.facts_source = attach::build_facts_source(&self.conn, &all)?;
         self.resolve_sql = attach::build_resolve_sql(&all);
+        self.attached_graphs = attach::attached_graph_ids(&self.conn, &all)?;
         super::alias::build_term_alias(&self.conn, &all)?;
         self.attachments = all;
         Ok(())

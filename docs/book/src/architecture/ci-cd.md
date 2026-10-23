@@ -34,8 +34,11 @@ All jobs use cargo caching for fast iteration.
 Pushes to `main` trigger the release workflow (`.github/workflows/release.yml`).
 Before release-plz runs, it waits for CI's `Release correctness` check on the
 exact pushed SHA. Formatting and Markdown lint remain visible CI checks but do
-not block release. The workflow then uses
-[release-plz](https://release-plz.ieni.dev/) to:
+not block release. Publication uses
+[release-plz](https://release-plz.ieni.dev/) after a reviewed release PR merges.
+A separate daily workflow prepares the version and changelog candidate at
+07:00 UTC, so ordinary main merges do not rewrite that review window.
+The two commands together:
 
 1. Analyze conventional commits since the last release
 2. Bump the version in `Cargo.toml`

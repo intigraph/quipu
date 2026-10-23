@@ -114,6 +114,8 @@ impl Explorer {
                     &PromoteImportRequest {
                         share_id: import.share_id.clone(),
                         actor: None,
+                        target_graph: None,
+                        retire_from: None,
                     },
                     timestamp,
                     None,

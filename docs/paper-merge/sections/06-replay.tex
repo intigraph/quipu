@@ -92,8 +92,10 @@ identity.
 
 \subsection{Arm D: pairwise identity proposals}
 \label{sec:armD}
-A preregistered follow-up tests whether Jev~1.13.0 can propose identity decisions
-for the $93$ aliases missed by the triple-level operator. Given a pair, it
+A preregistered follow-up tests whether Jev~1.13.0, TypeSafe AI's hosted
+decision model that returns typed answers and probabilities rather than
+generated text~\cite{typesafe2026jev}, can propose identity decisions for the
+$93$ aliases missed by the triple-level operator. Given a pair, it
 returns \texttt{same}, \texttt{different}, or \texttt{cannot\_tell}; the latter
 and confidence below $.75$ abstain. A proposal never applies an identity merge.
 The free comparators use normalized label edit similarity, MiniLM cosine, their

@@ -103,6 +103,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("lexical_fts_content", Disposition::Regenerated),
     ("lexical_fts_docsize", Disposition::Regenerated),
     ("lexical_fts_config", Disposition::Regenerated),
+    // Current-state projections (aegis-tg5 F2): the installed definitions, plus
+    // one `qp_proj_<name>` table each, whose names come from config and so are
+    // not listed here. Both are derived from `facts` and rebuilt by the install
+    // at server startup from `[[quipu.projections]]`; never carried.
+    ("projection_defs", Disposition::Regenerated),
     // -- log ----------------------------------------------------------------
     ("events", Disposition::Log),
     // -- excluded -----------------------------------------------------------

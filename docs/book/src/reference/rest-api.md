@@ -1570,6 +1570,27 @@ curl -s localhost:3030/ask -X POST \
   -d '{"name":"service_deps","params":{"entity":"http://example.org/traefik"}}'
 ```
 
+### `POST /projections`
+
+Read a current-state projection declared in `[[quipu.projections]]` (a key
+predicate plus column predicates, kept current by the writer). A read
+endpoint. Body `action`:
+
+- `"list"`: the declared projections and what is installed.
+- `"aggregate"` (default): `name`, optional `graph` (IRI; default graph if
+  omitted), `key_in` (key values to keep), `group_by` (`"key"` or a column),
+  `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`), `max_groups`.
+  Response: `total`, `groups` (`value`, `n`), `truncated`, `multi_valued_rows`,
+  `tx`.
+
+A projection that is not installed at its declared definition refuses rather
+than answer stale.
+
+```bash
+curl -s localhost:3030/projections -X POST \
+  -d '{"name":"board","graph":"http://example.org/board","key_in":["open"],"group_by":"priority"}'
+```
+
 ### `POST /search_nodes`
 
 Search entities by natural-language query (text matching). Body: `query`,
@@ -2193,6 +2214,33 @@ not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
 `quipu events refusals`.
+
+### Admitted debt events (`shacl.debt_admitted`)
+
+A write can reuse an existing node by name and type when that node was stored
+before its shape existed and still lacks a required value. That violation is
+pre-existing debt, not something the write introduced, so it does not refuse
+the write. The write is admitted, and the issue is returned as a `Warning`
+whose message starts with `pre-existing debt (admitted as Warning):`.
+
+The match is exact. The node's pre-state (its stored types and its stored
+values on required paths) must report the same focus, constraint component,
+path, value and message, plus the source shape when that shape is named. A new
+node, a new type on an existing node, a new value, or a violation on another
+path is still refused. Admission covers only constraints a node's own data
+decides (minimum counts, values, datatypes, classes; never `sh:maxCount`,
+whose result does not name a value). The same rule covers stored values judged
+by the write-savepoint gate. `sh:node`,
+`sh:qualifiedValueShape` and the logical components are never admitted.
+
+On `/update`, with `shacl.validate_on_write` on, a deletion is refused when it
+leaves a node violating a `sh:minCount` or `sh:hasValue` that it satisfied
+before. **Known gap:** a deletion that breaks a non-local constraint (`sh:or`,
+`sh:and`, `sh:xone`, `sh:not`, `sh:node`, qualified counts) is not judged yet.
+
+Each admitted issue appends a `shacl.debt_admitted` event riding the write:
+`{shape, message, component, path, graph}`, with the focus node as subject.
+To count the debt still in use, query `GET /events?types=shacl.debt_admitted`.
 
 ## Linked-Data Surface
 

@@ -510,10 +510,9 @@ fn id_to_value(store: &Store, id: i64) -> Result<Value> {
     let iri = store.resolve(id)?;
     if iri.starts_with("_:") {
         Ok(Value::Str(iri))
-    } else if let Some(term_id) = store.lookup(&iri)? {
-        Ok(Value::Ref(term_id))
     } else {
-        Ok(Value::Str(iri))
+        // Local id when the IRI has one, else this (attached-layer) id (aegis-gwu).
+        Ok(Value::Ref(store.lookup(&iri)?.unwrap_or(id)))
     }
 }
 
