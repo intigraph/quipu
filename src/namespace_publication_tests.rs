@@ -163,6 +163,18 @@ fn actual_org_pendant_import_resolves_in_second_store_public_and_forged_exports_
     );
     let mut stranger = Store::open_in_memory().unwrap();
     policy(&mut stranger, &receiver_id);
+    // A resolution prepared off the writer (aegis-oa5) reaches the same
+    // receiver check before anything is staged.
+    let prepared = crate::share_import::prepare_import(&stranger, &incoming).unwrap();
+    let refused = crate::share_import::import_share_prepared(
+        &mut stranger,
+        &incoming,
+        "2026-10-20T00:00:00Z",
+        None,
+        Some(prepared),
+    )
+    .unwrap_err();
+    assert!(matches!(refused, Error::PolicyDenied(_)), "{refused}");
     assert!(
         crate::share_import::import_share(&mut stranger, &incoming, "2026-10-20T00:00:00Z", None)
             .is_err()
