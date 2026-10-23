@@ -5,7 +5,7 @@ name: MCP Registry
 # (aegis-gys8sx, aegis-ro425e). Two steps, in this order, because the registry
 # verifies ownership by pulling the image and reading its LABEL:
 #
-#   1. push ghcr.io/scbrown/quipu:<version>, built from the release binaries
+#   1. push ghcr.io/intigraph/quipu:<version>, built from the release binaries
 #   2. `mcp-publisher publish` server.json, stamped with that version
 #
 # WHY OCI AND NOTHING ELSE (yet). VS Code installs only npm, pypi, oci and nuget
@@ -48,7 +48,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/scbrown/quipu
+  IMAGE: ghcr.io/intigraph/quipu
 
 jobs:
   image:
@@ -142,13 +142,13 @@ jobs:
     permissions:
       contents: read
       # `mcp-publisher login github-oidc` trades this for a registry token
-      # scoped to io.github.scbrown/*; no secret is stored anywhere.
+      # scoped to io.github.intigraph/*; no secret is stored anywhere.
       id-token: write
     steps:
       - uses: actions/checkout@v4
 
       # Pinned and checksum-verified: this job holds a token that can publish
-      # every io.github.scbrown/* server, so "latest" from a curl is not good
+      # every io.github.intigraph/* server, so "latest" from a curl is not good
       # enough. Bump both lines together. If publish ever fails with "invalid
       # audience", the pin has fallen behind the registry.
       - name: Install mcp-publisher

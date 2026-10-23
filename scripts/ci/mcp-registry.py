@@ -32,8 +32,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-NAME = 'io.github.scbrown/quipu'
-IMAGE = 'ghcr.io/scbrown/quipu'
+NAME = 'io.github.intigraph/quipu'
+IMAGE = 'ghcr.io/intigraph/quipu'
 DOCKERFILE = Path('packaging/oci/Dockerfile')
 # `.svc` and `.lan` are private-network suffixes. Nothing under them is
 # reachable from a stranger's machine, so none of it may be a default.
