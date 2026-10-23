@@ -62,7 +62,9 @@ fn count(
             &def(),
             &ProjectionAggregate {
                 graph: "",
+                graphs: &[],
                 key_in,
+                filters: &[],
                 group_by: group,
                 since,
                 max_groups: 0,
@@ -81,14 +83,14 @@ fn install_builds_and_counts_by_key_and_group() {
     let by = count(&store, &[], Some("key"), None);
     assert_eq!(by["total"], 4);
     let groups = by["groups"].as_array().unwrap();
-    assert!(groups.contains(&json!({"value": "open", "n": 2})));
-    assert!(groups.contains(&json!({"value": "closed", "n": 2})));
+    assert!(groups.contains(&json!({"value": "open", "n": 2, "plain": true})));
+    assert!(groups.contains(&json!({"value": "closed", "n": 2, "plain": true})));
     let p = count(&store, &[json!("open")], Some("priority"), None);
     assert!(
         p["groups"]
             .as_array()
             .unwrap()
-            .contains(&json!({"value": 1, "n": 1}))
+            .contains(&json!({"value": 1, "n": 1, "plain": false}))
     );
 }
 
@@ -286,7 +288,9 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
     })));
     let q = ProjectionAggregate {
         graph: "",
+        graphs: &[],
         key_in: &[json!("open")],
+        filters: &[],
         group_by: Some("priority"),
         since: None,
         max_groups: 0,
@@ -308,4 +312,184 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
     // The write did land; a fresh aggregate sees it.
     let after = reader.aggregate_projection(&def(), &q).unwrap();
     assert_eq!(after["total"], 2, "{after}");
+}
+
+fn filtered(
+    store: &Store,
+    filters: &[(&str, &[serde_json::Value])],
+    group: Option<&str>,
+) -> serde_json::Value {
+    store
+        .aggregate_projection(
+            &def(),
+            &ProjectionAggregate {
+                filters,
+                group_by: group,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+}
+
+fn groups(a: &serde_json::Value) -> Vec<(serde_json::Value, i64)> {
+    let mut g: Vec<_> = a["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|g| (g["value"].clone(), g["n"].as_i64().unwrap()))
+        .collect();
+    g.sort_by_key(|(v, _)| v.to_string());
+    g
+}
+
+#[test]
+fn column_filters_and_across_columns_or_within_one() {
+    // aegis-tg5 7mm shape: two column conditions combined, grouped by a third.
+    let mut store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    let a = filtered(
+        &store,
+        &[("key", &[json!("open")]), ("priority", &[json!(2)])],
+        None,
+    );
+    assert_eq!(a["total"], 1, "{a}");
+    let a = filtered(&store, &[("priority", &[json!(2)])], Some("key"));
+    assert_eq!(a["total"], 2);
+    assert_eq!(groups(&a), vec![(json!("closed"), 1), (json!("open"), 1)]);
+    let a = filtered(&store, &[("priority", &[json!(1), json!(2)])], Some("key"));
+    assert_eq!(groups(&a), vec![(json!("closed"), 1), (json!("open"), 2)]);
+    // null = no value for the column: ex:d has no priority.
+    let a = filtered(
+        &store,
+        &[("priority", &[serde_json::Value::Null])],
+        Some("key"),
+    );
+    assert_eq!(groups(&a), vec![(json!("closed"), 1)]);
+    // An empty alternative list matches nothing; an unknown IRI cannot match.
+    assert_eq!(filtered(&store, &[("priority", &[])], None)["total"], 0);
+    let unknown = [json!({"iri": "http://ex.test/never"})];
+    assert_eq!(
+        filtered(&store, &[("priority", &unknown)], None)["total"],
+        0
+    );
+    // The projection stays maintained: a new write is counted by the filter.
+    knot(&mut store, r#"ex:e ex:status "open" ; ex:priority 2 ."#);
+    let a = filtered(
+        &store,
+        &[("key", &[json!("open")]), ("priority", &[json!(2)])],
+        None,
+    );
+    assert_eq!(a["total"], 2, "{a}");
+}
+
+#[test]
+fn column_filters_refuse_undeclared_columns_and_bad_values() {
+    let store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    for (filters, needle) in [
+        (vec![("assignee", vec![json!("wu")])], "has no column"),
+        (
+            vec![("priority; DROP TABLE facts", vec![json!(1)])],
+            "has no column",
+        ),
+        (vec![("priority", vec![json!(true)])], "filter values"),
+        (
+            vec![("priority", vec![json!({"not": "iri"})])],
+            "needs \"iri\"",
+        ),
+    ] {
+        let filters: Vec<(&str, &[serde_json::Value])> =
+            filters.iter().map(|(c, v)| (*c, v.as_slice())).collect();
+        let err = store
+            .aggregate_projection(
+                &def(),
+                &ProjectionAggregate {
+                    filters: &filters,
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains(needle), "{err}");
+    }
+}
+
+#[test]
+fn an_input_that_matches_nothing_does_not_hide_a_later_invalid_one() {
+    // Review finding on the filter change: an empty filter answered a
+    // successful zero before a later undeclared column was checked.
+    let store = seeded();
+    store.install_projections(&[def()]).unwrap();
+    let unknown = [json!({"iri": "http://ex.test/never"})];
+    let empty: [serde_json::Value; 0] = [];
+    let one = [json!(1)];
+    let bad = [json!(true)];
+    let empty_then_undeclared = [("priority", &empty[..]), ("assignee", &one[..])];
+    let unknown_then_bad = [("priority", &unknown[..]), ("closed", &bad[..])];
+    let undeclared = [("assignee", &one[..])];
+    let only_empty = [("priority", &empty[..])];
+    let cases: Vec<(ProjectionAggregate<'_>, &str)> = vec![
+        (
+            ProjectionAggregate {
+                filters: &empty_then_undeclared,
+                ..Default::default()
+            },
+            "has no column",
+        ),
+        (
+            ProjectionAggregate {
+                filters: &unknown_then_bad,
+                ..Default::default()
+            },
+            "filter values",
+        ),
+        (
+            ProjectionAggregate {
+                key_in: &unknown,
+                group_by: Some("team"),
+                ..Default::default()
+            },
+            "has no column",
+        ),
+        (
+            ProjectionAggregate {
+                graph: "http://ex.test/no-such-graph",
+                since: Some(("priority", "2026-10-21T00:00:00Z")),
+                ..Default::default()
+            },
+            "not a time column",
+        ),
+        (
+            ProjectionAggregate {
+                graph: "http://ex.test/no-such-graph",
+                filters: &undeclared,
+                ..Default::default()
+            },
+            "has no column",
+        ),
+    ];
+    for (q, needle) in cases {
+        let err = store.aggregate_projection(&def(), &q).unwrap_err();
+        assert!(err.to_string().contains(needle), "{needle}: {err}");
+    }
+    // The valid nothing-matching forms still answer a plain zero.
+    for q in [
+        ProjectionAggregate {
+            filters: &only_empty,
+            group_by: Some("key"),
+            ..Default::default()
+        },
+        ProjectionAggregate {
+            key_in: &unknown,
+            ..Default::default()
+        },
+        ProjectionAggregate {
+            graph: "http://ex.test/no-such-graph",
+            group_by: Some("priority"),
+            ..Default::default()
+        },
+    ] {
+        let a = store.aggregate_projection(&def(), &q).unwrap();
+        assert_eq!(a["total"], 0, "{a}");
+        assert_eq!(a["groups"], json!([]));
+    }
 }

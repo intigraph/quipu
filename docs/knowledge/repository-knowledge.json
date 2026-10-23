@@ -1,0 +1,138 @@
+{
+  "source_revision": "4f3f5493d347d97e9a0470faa8c5c1c087d68da6",
+  "reviewed_at": "2026-10-22T12:28:59.732949Z",
+  "max_age_seconds": 2592000,
+  "records": [
+    {
+      "kind": "idea",
+      "source": "README.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
+      "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
+      "source_sha256": "0e0aa901e588de0d55be0898a5f31ced01d0fdea1c165e49f457096c9aac9368",
+      "type": "Concept"
+    },
+    {
+      "kind": "idea",
+      "source": "docs/book/src/sharing/index.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
+      "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
+      "source_sha256": "e78cb69af88871048f1e98a2f053b72e5286ac656b88939d5eca3c39b029f3f7",
+      "type": "Concept"
+    },
+    {
+      "kind": "interface",
+      "source": "src/main.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
+      "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
+      "source_sha256": "b61a8c861c18e189e66688dabed71c80ed4e9fae95d08ac60251884f6b42d06e",
+      "properties": {
+        "interfaceKind": "CLI",
+        "publicName": "quipu"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/lib.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
+      "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
+      "source_sha256": "84b8ffa4773210583c124881fa1fc3c2a91f64d9eceabbd9683be044c561eab1",
+      "properties": {
+        "interfaceKind": "library",
+        "publicName": "quipu"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/getting-started/agent-setup.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-setup.md#local-stdio-mcp",
+      "summary": "Local agent clients run quipu mcp over stdio with explicit executable and database paths; it launches the matching sibling server without an HTTP listener.",
+      "source_sha256": "88c52c3e0d4005375e4f939ca7830421c27d14753d663c31184fc92aa8aa53aa",
+      "properties": {
+        "interfaceKind": "MCP",
+        "publicName": "quipu mcp"
+      }
+    },
+    {
+      "kind": "decision",
+      "source": "docs/book/src/sharing/index.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
+      "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
+      "source_sha256": "e78cb69af88871048f1e98a2f053b72e5286ac656b88939d5eca3c39b029f3f7",
+      "type": "DecisionRecord",
+      "properties": {
+        "status": "active",
+        "supersessionStatus": "not-recorded-in-source"
+      },
+      "see_also": [
+        "https://scbrown.github.io/quechua/ns#Decision"
+      ]
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/getting-started/quick-start.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fquick-start.md#a-checked-write-and-a-refused-write",
+      "summary": "Start with a local checked write and a refused write, then query the accepted facts.",
+      "source_sha256": "5df4c622c19c9b22e79ddf8e825d44ab8b3ecb1e9cdaf1c00d761e03ceea80e8",
+      "properties": {
+        "startHereOrder": 1,
+        "glossaryTerm": "https://scbrown.github.io/quechua/ns#Decision"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/getting-started/installation.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
+      "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
+      "source_sha256": "a6457f9c3e0928f266359760420e66836e2dd97b44077892437eef6bc9be55cb",
+      "properties": {
+        "startHereOrder": 2
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "scripts/build-repository-share.sh",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/scripts%2Fbuild-repository-share.sh",
+      "summary": "The legacy trusted-host repository builder invokes the Bobbin indexer and Quipu share and quarantine checks. Private publication policy remains outside the public artifact.",
+      "source_sha256": "89e6a19cd92208acc18a89813adec4f510bb8b1b04ea2b636093425679a3e387",
+      "properties": {
+        "interfaceKind": "file-format",
+        "publicName": "Trusted repository pendant builder"
+      },
+      "depends_on": [
+        "http://aegis.gastown.local/ontology/repo_bobbin"
+      ]
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/getting-started/quick-start.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fquick-start.md#on-your-own-data",
+      "summary": "Follow the documented source-data import and explicit promotion path, then query current or historical facts.",
+      "source_sha256": "5df4c622c19c9b22e79ddf8e825d44ab8b3ecb1e9cdaf1c00d761e03ceea80e8",
+      "properties": {
+        "startHereOrder": 3
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/reference/rest-api.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
+      "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
+      "source_sha256": "549b15c83268bd86a1cd3c2ea40e9ef3dcf6452fe4319481979a9382875b490d",
+      "properties": {
+        "interfaceKind": "REST",
+        "publicName": "quipu-server HTTP"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "src/config.rs",
+      "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
+      "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
+      "source_sha256": "335246937727142c18912e316ec6fcd6721f4f3ebb53a0a3051e22d987b3bc04",
+      "properties": {
+        "interfaceKind": "config",
+        "publicName": "QuipuConfig and TOML resolution"
+      }
+    }
+  ]
+}

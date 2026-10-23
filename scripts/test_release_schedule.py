@@ -10,12 +10,15 @@ import yaml
 
 
 def check(publication, proposal):
-    assert set(proposal["on"]) == {"schedule"}, "proposals must not chase pushes"
+    assert set(proposal["on"]) == {"schedule", "workflow_dispatch"}, "proposals must not chase pushes"
+    assert not proposal["on"]["workflow_dispatch"], "a manual proposal takes no inputs"
     assert proposal["on"]["schedule"] == [{"cron": "0 7 * * *"}]
     assert proposal["concurrency"]["cancel-in-progress"] is False
     jobs = proposal["jobs"]
     waiter = jobs["ci-correctness"]
-    assert waiter["if"] == "github.event_name == 'schedule'"
+    assert waiter["if"] == (
+        "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+    )
     assert waiter["outputs"]["ready"] == "${{ steps.correctness.outputs.ready }}"
     gate = next(s for s in waiter["steps"] if s.get("id") == "correctness")
     assert gate["run"] == 'python3 scripts/wait_release_correctness.py "$GITHUB_SHA"'
@@ -23,7 +26,8 @@ def check(publication, proposal):
     job = jobs["release-pr"]
     assert job["needs"] == "ci-correctness"
     assert job["if"] == (
-        "github.event_name == 'schedule' && needs.ci-correctness.outputs.ready == 'true'"
+        "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')"
+        " && needs.ci-correctness.outputs.ready == 'true'"
     )
     assert set(jobs) == {"ci-correctness", "release-pr"}
     actions = [s for s in job["steps"] if "release-plz-action@" in s.get("uses", "")]
@@ -53,14 +57,16 @@ def main():
     publication = load(".github/workflows/release.yml")
     proposal = load(".github/workflows/release-pr-daily.yml")
     check(publication, proposal)
-    for sabotage in ("push", "unready", "publish", "credential", "snapshot"):
+    for sabotage in ("push", "pull_request", "unready", "publish", "credential", "snapshot"):
         bad = copy.deepcopy(proposal)
         job = bad["jobs"]["release-pr"]
         action = next(s for s in job["steps"] if "release-plz-action@" in s.get("uses", ""))
         if sabotage == "push":
             bad["on"]["push"] = {"branches": ["main"]}
+        elif sabotage == "pull_request":
+            bad["on"]["pull_request"] = {}
         elif sabotage == "unready":
-            job["if"] = "github.event_name == 'schedule'"
+            job["if"] = "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
         elif sabotage == "publish":
             action["with"]["command"] = "release"
         elif sabotage == "credential":
@@ -73,7 +79,7 @@ def main():
             print("PASS: refused", sabotage)
         else:
             raise AssertionError("unsafe scheduling mutation survived: " + sabotage)
-    print("release scheduling: current positive and five unsafe-event controls pass")
+    print("release scheduling: current positive and six unsafe-event controls pass")
 
 
 if __name__ == "__main__":

@@ -272,6 +272,9 @@ impl Store {
         // Attribute-scoped current-fact index (aegis-svtdyn). Additive; no
         // ordering constraint beyond the `facts` table existing.
         Self::migrate_current_fact_index(&conn)?;
+        // Entity-scoped current-fact index (aegis-wlf0). AFTER
+        // migrate_named_graphs, which adds the `g` column it keys on.
+        Self::migrate_current_entity_index(&conn)?;
         // Source-scoped retraction index (aegis-m6agjy); INIT_SQL owns the table.
         Self::migrate_transaction_source_index(&conn)?;
         // BEFORE `migrate_graph_labels`, which interns the meta-graph IRI: that
