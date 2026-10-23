@@ -784,7 +784,7 @@ its falsifier-gated verified result depend on? Per-step verdicts are
 (mechanically prunable), or `cannot-evaluate` (no derivation edges recorded —
 never silently prunable). Refuses trajectories with no steps or no
 falsifier-gated verification. See the
-[golden-paths design](https://github.com/scbrown/quipu/blob/main/docs/design/golden-paths-blessing.md).
+[golden-paths design](https://github.com/intigraph/quipu/blob/main/docs/design/golden-paths-blessing.md).
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|

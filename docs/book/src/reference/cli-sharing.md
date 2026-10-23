@@ -132,7 +132,7 @@ byte-identical to one produced before the member existed.
 
 `quipu:targetsClass` lists every constant `rdf:type` object in the template's
 patterns. The vocabulary is governed by
-[`shapes/stored-queries.ttl`](https://github.com/scbrown/quipu/blob/main/shapes/stored-queries.ttl),
+[`shapes/stored-queries.ttl`](https://github.com/intigraph/quipu/blob/main/shapes/stored-queries.ttl),
 which the producer and the importer both apply.
 
 **Which queries a share carries by default.** A query is *registered against*

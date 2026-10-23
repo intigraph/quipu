@@ -874,7 +874,7 @@ signal (enforcement off then, an approval, or a reconstruction gap).
 Golden-path analysis over recorded trajectories: the provenance cone, the
 backtest, and a grammar draft. All three are reads; `draft` prints Turtle for a
 human to review and load. See the
-[golden paths design](https://github.com/scbrown/quipu/blob/main/docs/design/golden-paths-blessing.md).
+[golden paths design](https://github.com/intigraph/quipu/blob/main/docs/design/golden-paths-blessing.md).
 
 ```bash
 quipu path cone http://example.org/traj/42 --via http://example.org/derivedFrom --hops 6 --db my.db

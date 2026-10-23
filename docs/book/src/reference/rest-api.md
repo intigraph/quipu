@@ -1288,7 +1288,7 @@ curl -s localhost:3030/search -X POST \
 it narrows to entities whose facts trace (via `prov:wasGeneratedBy → episode →
 groupId`) to a listed group, and it **drops** ungrouped `/knot` facts (they have
 no episode to trace). `entity_type` restricts to an rdf:type IRI. See
-[group-isolation](https://github.com/scbrown/quipu/blob/main/docs/design/group-isolation.md).
+[group-isolation](https://github.com/intigraph/quipu/blob/main/docs/design/group-isolation.md).
 
 > ⚠️ **The `type: A, B` in a result's `text` is NOT valid as `/episode` input.** A
 > multi-typed entity renders as `... type: Feature, Tool, Concept`, and that string
@@ -2330,7 +2330,7 @@ Search first, then evaluate SELECT from at most100 distinct seed IRIs.
 Keyword mode defaults and needs no embeddings; hybrid fuses successful lexical
 and semantic retrieval with reciprocal rank fusion. Seed ranks and explicit
 bounded completeness accompany the ordinary query result. See
-[the request and scope contract](https://github.com/scbrown/quipu/blob/main/docs/design/search-rooted-sparql.md).
+[the request and scope contract](https://github.com/intigraph/quipu/blob/main/docs/design/search-rooted-sparql.md).
 
 ## `POST /graph/create`
 

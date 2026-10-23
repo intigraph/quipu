@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "0e0aa901e588de0d55be0898a5f31ced01d0fdea1c165e49f457096c9aac9368",
+      "source_sha256": "39971b770eef2b3d48dac769fbf0c129a3f5dd787dd25483c4ae685133ed8726",
       "type": "Concept"
     },
     {
@@ -16,7 +16,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
-      "source_sha256": "e78cb69af88871048f1e98a2f053b72e5286ac656b88939d5eca3c39b029f3f7",
+      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
       "type": "Concept"
     },
     {
@@ -57,7 +57,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
-      "source_sha256": "e78cb69af88871048f1e98a2f053b72e5286ac656b88939d5eca3c39b029f3f7",
+      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
       "type": "DecisionRecord",
       "properties": {
         "status": "active",
@@ -72,7 +72,7 @@
       "source": "docs/book/src/getting-started/quick-start.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fquick-start.md#a-checked-write-and-a-refused-write",
       "summary": "Start with a local checked write and a refused write, then query the accepted facts.",
-      "source_sha256": "5df4c622c19c9b22e79ddf8e825d44ab8b3ecb1e9cdaf1c00d761e03ceea80e8",
+      "source_sha256": "809e4c5299508f8e30ad8d0a02009e6fc94563b41416a02a98629845e8b1aeb6",
       "properties": {
         "startHereOrder": 1,
         "glossaryTerm": "https://scbrown.github.io/quechua/ns#Decision"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "a6457f9c3e0928f266359760420e66836e2dd97b44077892437eef6bc9be55cb",
+      "source_sha256": "f1b3c5bdad0991c062dffdd65e145595b3612d4fade24d2001ca06acf8b01e72",
       "properties": {
         "startHereOrder": 2
       }
@@ -107,7 +107,7 @@
       "source": "docs/book/src/getting-started/quick-start.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fquick-start.md#on-your-own-data",
       "summary": "Follow the documented source-data import and explicit promotion path, then query current or historical facts.",
-      "source_sha256": "5df4c622c19c9b22e79ddf8e825d44ab8b3ecb1e9cdaf1c00d761e03ceea80e8",
+      "source_sha256": "809e4c5299508f8e30ad8d0a02009e6fc94563b41416a02a98629845e8b1aeb6",
       "properties": {
         "startHereOrder": 3
       }
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "2f33090fe86820dbbf6938c4ac74b5fb4fde5c8580f9779884b0abfbe31e8a41",
+      "source_sha256": "4b135f2044a68c48cdcc10d31c99db9de908d025957df24bb184a9f0d8de440c",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

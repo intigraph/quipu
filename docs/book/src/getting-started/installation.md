@@ -42,7 +42,7 @@ Download the installer for inspection, then run it:
 
 ```sh
 curl --fail --show-error --location \
-  https://raw.githubusercontent.com/scbrown/quipu/main/install.sh -o install-quipu.sh
+  https://raw.githubusercontent.com/intigraph/quipu/main/install.sh -o install-quipu.sh
 sh install-quipu.sh
 ```
 
@@ -90,7 +90,7 @@ x86_64, with an explicit published version:
   V=0.15.0
   T=x86_64-unknown-linux-gnu
   A="quipu-quipu-ai-v$V-$T"
-  BASE="https://github.com/scbrown/quipu/releases/download/quipu-ai-v$V"
+  BASE="https://github.com/intigraph/quipu/releases/download/quipu-ai-v$V"
   download_dir=$(mktemp -d)
   trap 'rm -rf "$download_dir"' EXIT
   curl --fail --show-error --location "$BASE/$A.tar.gz" -o "$download_dir/$A.tar.gz"
@@ -256,7 +256,7 @@ installation. Do not remove other Cargo packages or the shared Cargo directory.
 ## Source checkout
 
 ```sh
-git clone https://github.com/scbrown/quipu.git
+git clone https://github.com/intigraph/quipu.git
 cd quipu
 just install
 quipu --version
