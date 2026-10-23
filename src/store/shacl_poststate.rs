@@ -7,6 +7,8 @@
 #[cfg(feature = "shacl")]
 use std::collections::BTreeSet;
 
+#[cfg(feature = "shacl")]
+use super::shacl_new_graph::{COMPONENTS, VALUE_SETS};
 use super::{Datum, Store};
 use crate::{Error, Result};
 
@@ -76,31 +78,6 @@ impl Store {
         graph: i64,
         tx_id: i64,
     ) -> Result<()> {
-        // Value-set components (aegis-7ur8) are judged like maxCount: on the
-        // written focuses, over base context, independent of the value closure.
-        const VALUE_SETS: &[&str] = &[
-            "MaxCountConstraintComponent",
-            "UniqueLangConstraintComponent",
-            "DisjointConstraintComponent",
-            "LessThanConstraintComponent",
-            "LessThanOrEqualsConstraintComponent",
-        ];
-        // Value components, judged once the value closure is complete.
-        const COMPONENTS: &[&str] = &[
-            "DatatypeConstraintComponent",
-            "NodeKindConstraintComponent",
-            "ClassConstraintComponent",
-            "PatternConstraintComponent",
-            "MinLengthConstraintComponent",
-            "MaxLengthConstraintComponent",
-            "MinExclusiveConstraintComponent",
-            "MinInclusiveConstraintComponent",
-            "MaxExclusiveConstraintComponent",
-            "MaxInclusiveConstraintComponent",
-            "InConstraintComponent",
-            "LanguageInConstraintComponent",
-            "NodeConstraintComponent",
-        ];
         // The caller selects reject shapes using its existing admission policy.
         // CLI --shapes and inline episode shapes remain strict, as before.
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
@@ -108,6 +85,12 @@ impl Store {
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
         if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
+        }
+        // A graph with no history before this write holds exactly what it
+        // staged: judge it whole, in batch, rather than per focus under the
+        // incremental context cap (aegis-t16).
+        if self.graph_is_new(graph, tx_id)? {
+            return self.check_new_graph_in_batch(shapes, graph);
         }
         let result = (|| {
             let subjects: BTreeSet<_> = datums
@@ -394,7 +377,7 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    fn cardinality_context(&self, facts: &[crate::Fact]) -> Result<String> {
+    pub(super) fn cardinality_context(&self, facts: &[crate::Fact]) -> Result<String> {
         use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Triple};
         use oxrdfio::{RdfFormat, RdfSerializer};
         // Export canonicalization renames blank nodes. Preserve their stored
