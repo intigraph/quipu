@@ -10,7 +10,7 @@ knowledge, without either one having to trust the other by default.** Every step
 explicit, hash-verified, and labelled with where it came from — so you never absorb
 someone else's knowledge by accident.
 
-Before exporting, [load an identifier-policy catalogue](https://scbrown.github.io/quipu/sharing/#prepare-an-outward-share)
+Before exporting, [load an identifier-policy catalogue](https://intigraph.github.io/quipu/sharing/#prepare-an-outward-share)
 and the shapes governing your data. Outward sharing is the default: a missing
 block-tier catalogue refuses with exit 2; a matched identifier refuses with exit 1.
 
@@ -31,7 +31,7 @@ variable endpoints are refused and unconfigured hosts are unreachable. That is n
 than SPARQL 1.1's open federation by design, and Quipu makes no `SERVICE` conformance
 claim.
 
-→ **[Sharing & Federation](https://scbrown.github.io/quipu/sharing/)** — the primitive in
+→ **[Sharing & Federation](https://intigraph.github.io/quipu/sharing/)** — the primitive in
 full, every claim citing the command or symbol that proves it.
 
 ### Explore this repository's graph, in your browser
@@ -42,11 +42,11 @@ itself compiled to WebAssembly**. GitHub cannot run scripts in a README, so here
 picture; the page is one click away.
 
 <p align="center">
-  <a href="https://scbrown.github.io/quipu/explore/"><img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
+  <a href="https://intigraph.github.io/quipu/explore/"><img src="https://raw.githubusercontent.com/intigraph/quipu/main/assets/explore-page.png" width="900" alt="The Explore page: a provenance table listing the pack's producer version, RDFC-1.0 graph hash, share id, import outcome staged, the triple count accepted with none quarantined, and promoted; below it a type distribution bar chart over Chunk, CodeSymbol, Section, CodeModule and Document"/></a>
 </p>
 
 <p align="center">
-  <em><strong><a href="https://scbrown.github.io/quipu/explore/">scbrown.github.io/quipu/explore</a></strong> — 61k triples imported and queried in a tab. No server.</em>
+  <em><strong><a href="https://intigraph.github.io/quipu/explore/">intigraph.github.io/quipu/explore</a></strong> — 61k triples imported and queried in a tab. No server.</em>
 </p>
 
 It is the **receiving half of the sharing story above, running rather than described**:
@@ -74,12 +74,12 @@ and the Pages build needs no Rust.
 ## See It In Action
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/scbrown/quipu/main/assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
+  <img src="https://raw.githubusercontent.com/intigraph/quipu/main/assets/graph-explorer.png" width="900" alt="Quipu's graph explorer: a force-directed node-link view of an infrastructure knowledge graph, with a type filter sidebar, an entity list, and a legend pairing each entity type with a colour and a shape"/>
 </p>
 
 <p align="center">
   <em>The built-in explorer at <code>/ui</code> — the whole graph in one request, drawn on canvas.<br/>
-  Run it yourself with <code>just demo</code> (<a href="https://github.com/scbrown/quipu/tree/main/examples/demo-graph">examples/demo-graph</a>).</em>
+  Run it yourself with <code>just demo</code> (<a href="https://github.com/intigraph/quipu/tree/main/examples/demo-graph">examples/demo-graph</a>).</em>
 </p>
 
 ```text
@@ -192,7 +192,7 @@ Quipu's thesis: **start strict, use agents to bear the cost of strictness.**
 
 ```toml
 [dependencies]
-quipu = { package = "quipu-ai", git = "https://github.com/scbrown/quipu" }
+quipu = { package = "quipu-ai", git = "https://github.com/intigraph/quipu" }
 ```
 
 ```rust
@@ -218,7 +218,7 @@ let result = sparql::query(&store,
 ### From the Command Line
 
 ```bash
-git clone https://github.com/scbrown/quipu && cd quipu
+git clone https://github.com/intigraph/quipu && cd quipu
 cargo build --release
 
 # Load, query, explore
@@ -411,7 +411,7 @@ primitive only, not reachable from the shipped binaries · 🔜 planned.
 | Temporal queries (valid_at, as_of_tx) | ✅ | |
 | RDFS subclass inference | ✅ | |
 | SPARQL UPDATE | 🔜 | Planned |
-| Named graphs (`GRAPH`/`FROM`/`FROM NAMED`) | ✅ | Query side; writes go via overlays or `/episode`. See [named-graphs.md](https://github.com/scbrown/quipu/blob/main/docs/design/named-graphs.md) |
+| Named graphs (`GRAPH`/`FROM`/`FROM NAMED`) | ✅ | Query side; writes go via overlays or `/episode`. See [named-graphs.md](https://github.com/intigraph/quipu/blob/main/docs/design/named-graphs.md) |
 | Full SPARQL federation (SERVICE) | 🔜 | Planned |
 | **Schema & Validation** | | |
 | SHACL write-time validation | ✅ | Optional `shacl` feature |

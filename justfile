@@ -25,6 +25,7 @@ check:
 test-query-perf:
     python3 scripts/quipu-query-perf.py self-test
     python3 scripts/ci/test-query-perf.py
+    python3 scripts/ci/test-load-string-filters.py
 
 
 

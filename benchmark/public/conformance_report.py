@@ -453,7 +453,7 @@ def render_competitors(data: dict) -> list[str]:
         "",
         "Pinned versions, the fairness rules, every competitor deviation checked by hand, and",
         "the per-case ledgers are in",
-        "[`benchmark/competitors`](https://github.com/scbrown/quipu/tree/main/benchmark/competitors).",
+        "[`benchmark/competitors`](https://github.com/intigraph/quipu/tree/main/benchmark/competitors).",
         "",
     ]
     return out
@@ -506,8 +506,8 @@ def render_rdf_syntax(data: dict) -> list[str]:
         "discarded spellings; a future compatibility plan must preserve legacy term",
         "identity, exact retraction and history without inventing missing lexical forms.",
         "",
-        "Ledgers: [`rdf11-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)",
-        "and [`rdf12-syntax.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).",
+        "Ledgers: [`rdf11-syntax.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/rdf11-syntax.json)",
+        "and [`rdf12-syntax.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/rdf12-syntax.json).",
         "",
     ]
     return out
@@ -546,7 +546,7 @@ def render_sparql10(data: dict) -> list[str]:
         "Some failures are the lexical-form design choice described above (a number is stored",
         "by value, so `\"01\"` reads back as `1`); others are engine defects being fixed.",
         "Every case, with its diagnostic, is in",
-        "[`sparql10-evaluation.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).",
+        "[`sparql10-evaluation.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql10-evaluation.json).",
         "",
     ]
     deviations = [row for row in rows if row["status"] != "passed"]
@@ -589,7 +589,7 @@ def render_sparql12(data: dict) -> list[str]:
     out += _table(["Part", "Passed", "Failed", "Not run", "Cases", "Why not run"], table, right={1, 2, 3, 4})
     out += [
         "",
-        "Ledger: [`sparql12.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql12.json).",
+        "Ledger: [`sparql12.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql12.json).",
         "",
     ]
     return out
@@ -829,11 +829,11 @@ def render_markdown(data: dict) -> str:
         "## Full ledgers",
         "",
         "- [`benchmark/public/results/sparql11-syntax.json`]"
-        "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)",
+        "(https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-syntax.json)",
         "- [`benchmark/public/results/sparql11-evaluation.json`]"
-        "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)",
+        "(https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-evaluation.json)",
         "- [`benchmark/public/results/sparql11-federated-query.json`]"
-        "(https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)",
+        "(https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-federated-query.json)",
         "",
         "Each row records its class, test identifier, manifest, query and result paths,",
         "status, and diagnostic or unsupported reason.",
@@ -886,7 +886,7 @@ def render_markdown(data: dict) -> str:
         unjudged_count = counts.get("write_error", 0)
         out.append(f"| `sh:{component}` | {agree + diverge + unjudged_count} | {agree} | {diverge} "
                    f"| {unjudged_count} |")
-    out += ["", "Ledger: [`shacl-write-path.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-write-path.json)."]
+    out += ["", "Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/shacl-write-path.json)."]
     entailment = classes["entailment"]["counts"]
     # Read the commitment from the LEDGER rather than printing a literal. The
     # previous version stated "All six regimes remain deliberate non-goals" and
@@ -961,7 +961,7 @@ def render_markdown(data: dict) -> str:
         )
         label = "goal" if commitment == "goal" else "deliberate non-goal"
         out.append(f"| {regime} | {count} | {passed} | {label} |")
-    out += ["", "Machine ledgers: [`shacl-core.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/scbrown/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).", ""]
+    out += ["", "Machine ledgers: [`shacl-core.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/shacl-core.json) and [`sparql11-entailment.json`](https://github.com/intigraph/quipu/blob/main/benchmark/public/results/sparql11-entailment.json).", ""]
     return "\n".join(out)
 
 
