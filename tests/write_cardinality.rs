@@ -4,6 +4,8 @@ use quipu::{Datum, Op, Store, Value};
 
 #[path = "write_cardinality/deactivation.rs"]
 mod deactivation;
+#[path = "write_cardinality/poststate_profile.rs"]
+mod poststate_profile;
 #[path = "write_cardinality/referenced_objects.rs"]
 mod referenced_objects;
 

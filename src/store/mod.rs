@@ -13,11 +13,15 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
 mod shacl_new_graph;
 mod shacl_poststate;
+#[cfg(feature = "shacl")]
+mod shacl_subclass;
 pub use decision_nonces::DecisionNonceSpend;
+pub use poststate_profile::PoststateProfile;
 pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
@@ -115,6 +119,10 @@ pub struct Store {
     pub(crate) projection_defs: Vec<crate::config::ProjectionConfig>,
     /// Explicit per-operation shapes, restored when the scoped operation ends.
     pub(crate) write_shapes: Option<String>,
+    /// Time spent in the post-state SHACL write gate since the last
+    /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
+    /// by the gate itself, so it cannot change a write decision.
+    pub(crate) poststate_profile: PoststateProfile,
     /// OWL write-time constraint policy (aegis-bmqup).
     pub(crate) owl_config: OwlConfig,
     /// Ontology built from the stored ontologies, cached because the write gate

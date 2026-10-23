@@ -131,6 +131,8 @@ async fn import_resolution_does_not_hold_the_writer() {
     }
     let _set = super::super::tools::set_predicate(
         axum::extract::State(shared.clone()),
+        axum::http::HeaderMap::new(),
+        None,
         axum::Json(serde_json::json!({"entity": "urn:oa5:concurrent",
             "predicate": "http://www.w3.org/2000/01/rdf-schema#label", "value": "concurrent"})),
     )

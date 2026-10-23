@@ -92,9 +92,21 @@ async fn root_mutations_reject_graph_with_http_400_and_preserve_both_graphs() {
             let input = json!({"entity":"https://example.org/item", "predicate":"https://example.org/value",
                 "value":"replacement", "graph":graph, "allow_orphan":true});
             let result = if operation == "set" {
-                super::super::tools::set_predicate(State(shared.clone()), Json(input)).await
+                super::super::tools::set_predicate(
+                    State(shared.clone()),
+                    axum::http::HeaderMap::new(),
+                    None,
+                    Json(input),
+                )
+                .await
             } else {
-                super::super::tools::retract(State(shared.clone()), Json(input)).await
+                super::super::tools::retract(
+                    State(shared.clone()),
+                    axum::http::HeaderMap::new(),
+                    None,
+                    Json(input),
+                )
+                .await
             };
             let response = result.unwrap_err().into_response();
             assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
@@ -232,6 +244,8 @@ async fn macro_read_and_write_handlers_report_fields() {
     assert_eq!(response["ignored_fields"], json!(["typo"]));
     let response = super::super::tools::datasets(
         State(shared),
+        axum::http::HeaderMap::new(),
+        None,
         Json(json!({
             "action":"list", "typo":true
         })),

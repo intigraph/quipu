@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "3b63b7bc8f147067f5fd9e4fe1442e53b30a8648974daf872147184ff7e7d047",
+      "source_sha256": "a78ddbe6635c50c2c8bc6d5a353471cdd5218ec793d4fcae99a8b225e135ce8c",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

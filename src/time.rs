@@ -159,6 +159,19 @@ impl Stopwatch {
             (js_sys::Date::now() - self.0).max(0.0) as u128
         }
     }
+
+    /// Time since [`Stopwatch::start`], at sub-millisecond resolution on native.
+    #[must_use]
+    pub fn elapsed(&self) -> std::time::Duration {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.0.elapsed()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            std::time::Duration::from_secs_f64((js_sys::Date::now() - self.0).max(0.0) / 1000.0)
+        }
+    }
 }
 
 /// Current UTC instant as `YYYY-MM-DDTHH:MM:SSZ`.
