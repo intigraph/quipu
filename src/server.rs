@@ -52,6 +52,8 @@ mod memory_files;
 #[cfg(test)]
 #[path = "server/namespace_tests.rs"]
 mod namespace_tests;
+#[path = "server/namespaces.rs"]
+mod namespaces;
 #[cfg(feature = "owl")]
 #[path = "server/owl_materialize.rs"]
 mod owl_materialize;
@@ -106,6 +108,7 @@ mod event_cursor;
 #[path = "server/feed_stream.rs"]
 mod feed_stream;
 pub(crate) use handle::{ReadPool, SharedStore, StoreHandle};
+use namespaces::namespaces_get;
 #[cfg(test)]
 use query_endpoint::query;
 use reason::{explain, reason, shapes};

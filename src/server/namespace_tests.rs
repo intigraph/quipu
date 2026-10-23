@@ -13,7 +13,7 @@ async fn namespace_list_and_authenticated_mint_surfaces_use_the_configured_regis
     });
     quipu::entity_namespaces::configure(&mut store, &config).unwrap();
     let shared: super::SharedStore = Arc::new(super::StoreHandle::writer_only(store));
-    let response = super::tools::namespaces_get(State(shared.clone()))
+    let response = super::namespaces::namespaces_get(State(shared.clone()))
         .await
         .unwrap()
         .0;
@@ -28,6 +28,8 @@ async fn namespace_list_and_authenticated_mint_surfaces_use_the_configured_regis
     quipu::entity_namespaces::apply(&mut shared.lock()).unwrap();
     let minted = super::tools::entity_ref(
         State(shared),
+        axum::http::HeaderMap::new(),
+        None,
         axum::Json(json!({
             "action":"mint","namespace":"p","type":"urn:example:Host"
         })),
