@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-23
+
+### Added
+
+- *(promote)* Move a staged share's subjects into a target named graph (#744)([c845885](https://github.com/scbrown/quipu/commit/c845885b2cda5aa35ba91dafc0ec4206388dcabf))
+- *(store)* Write-maintained current-state projections (#734)([4ecff41](https://github.com/scbrown/quipu/commit/4ecff41b74b5ea062a3585c5298510e99bfa6e6b))
+- Ship repository-owned pointer knowledge corpus (#695)([5fb93a0](https://github.com/scbrown/quipu/commit/5fb93a0fcf78def453d6094c8cde864743de82bc))
+- *(projections)* Filter aggregates by column values (#753)([f37ad16](https://github.com/scbrown/quipu/commit/f37ad16a655fde8ece165c67c6e2d2dd8d67b1fb))
+- *(projections)* List rows and answer several graphs from one snapshot (#757)([1371837](https://github.com/scbrown/quipu/commit/13718374aa84ce7e0e1d39e124a01402c1795e25))
+- *(metrics)* Record writer store time and write-gate phase timing (#756)([05815c7](https://github.com/scbrown/quipu/commit/05815c72ca7e8ac02c548e1b5307cc73eb94c0e1))
+- Stable entity namespaces and audience-bound sharing (#693)([66acca0](https://github.com/scbrown/quipu/commit/66acca03dda7cbe8e636804a9efa44dfa1a35d3a))
+
+
+
+### Documentation
+
+- Separate installation removal examples and agent setup (#721)([ff77bdb](https://github.com/scbrown/quipu/commit/ff77bdb96156e48dd30ff586132eb978fe00180e))
+- Repoint user-facing Quipu links to intigraph (#761)([5cf9521](https://github.com/scbrown/quipu/commit/5cf95213fcd515fe9ffa792f26915d968725e098))
+
+### Fixed
+
+- *(shacl)* Make split_shapes_by_policy literal-aware ( C7) (#726)([d66142d](https://github.com/scbrown/quipu/commit/d66142d417a185597415010b4669e998bea27c6c))
+- *(import)* Resolve off the writer, once per share, under a deadline (#736)([a7560dd](https://github.com/scbrown/quipu/commit/a7560dddbf1e1412ab9cf4b85d2c174cabab99a6))
+- *(shacl)* Repair stored properties for sh:targetObjectsOf focuses ( C1) (#727)([4f3f549](https://github.com/scbrown/quipu/commit/4f3f5493d347d97e9a0470faa8c5c1c087d68da6))
+- *(shapes)* Scope repository documents and isolate count debt (#725)([0375612](https://github.com/scbrown/quipu/commit/037561264849f8179ddcc2d90e26186b5967d1a7))
+- *(sparql)* Compare xsd:dateTime, date and time by value in FILTER (#740)([67584f7](https://github.com/scbrown/quipu/commit/67584f7f707f5c715d997fb0a924374afc1f068a))
+- *(store)* Keep a composed graph's local copy after a GRAPH ?g query (#750)([276d015](https://github.com/scbrown/quipu/commit/276d01504da4b9733c7c1d296d1797e58dc6519a))
+- *(shacl)* Admit exact pre-existing debt on reused nodes; judge required-path deletes (#751)([e997b5b](https://github.com/scbrown/quipu/commit/e997b5bb8eeee7dd5b0694616c9acf62a65d0423))
+- *(shacl)* Validate a write to a graph with no history in batch (#743)([deb439d](https://github.com/scbrown/quipu/commit/deb439dd2faa5e5faf7e022c6ba49a9e0818491b))
+- *(shacl)* Attribute validation messages to their source shapes (#746)([0766ee9](https://github.com/scbrown/quipu/commit/0766ee9eb80787cfbb32cf9e497631c1446c2409))
+- *(shacl)* Refuse recursive shape graphs (#731)([280b90f](https://github.com/scbrown/quipu/commit/280b90f065d5a341fb11e575e1f9ac0f7267e5d3))
+- *(cli)* Make help and usage errors store-free (successor to #714) (#729)([2f4b416](https://github.com/scbrown/quipu/commit/2f4b4160bd57959de83b06071ce56322fe072c70))
+
+
+
+### Testing
+
+- *(perf)* Ratchet string filters under mixed load (#738)([2dd887d](https://github.com/scbrown/quipu/commit/2dd887d849f842814b403bfdcbe8c5d1447db677))
+
+### Perf
+
+- *(sparql)* Drive a filtered BGP from the pattern its FILTER can judge (#733)([45b2333](https://github.com/scbrown/quipu/commit/45b2333e6f8a8d637e58916cb9e0fa07321560ea))
+- *(sparql)* Keep unattached fast paths for queries that read no attached graph (#748)([86a25be](https://github.com/scbrown/quipu/commit/86a25beede2e5e963e27550eabc2f62f58ff39c4))
+- *(store)* Index current facts by graph and entity (#754)([27ff700](https://github.com/scbrown/quipu/commit/27ff700d531dd379a02f30eade6287e9f03771f6))
+
 ## [0.16.0] - 2026-10-22
 
 ### Added
