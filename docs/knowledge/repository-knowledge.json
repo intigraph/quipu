@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "0008977215fc3435d4516c3086afa236917db697e536aae6c16d8b6fbebd22dd",
+      "source_sha256": "84b8ffa4773210583c124881fa1fc3c2a91f64d9eceabbd9683be044c561eab1",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "1b83f317f2d4e6eba6c5c62e2e92219f0ab2497686cd6a50f75b4cddfd1b8643",
+      "source_sha256": "3ae7d75ddd55383beaf9f8e4332ed178a2ed7a737c1c8b4642cf7ddf089199d3",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

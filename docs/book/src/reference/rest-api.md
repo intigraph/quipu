@@ -1576,16 +1576,27 @@ Read a current-state projection declared in `[[quipu.projections]]` (a key
 predicate plus column predicates, kept current by the writer). A read
 endpoint. Body `action`:
 
-- `"list"`: the declared projections and what is installed.
+- `"list"`: the declared projections, what is installed, and `actions` (the
+  actions this server supports).
 - `"aggregate"` (default): `name`, optional `graph` (IRI; default graph if
-  omitted), `key_in` (key values to keep), `where` (`{"<column or key>":
-  [values]}`: columns are ANDed, one column's values are ORed, `null` matches
-  a row with no value for that column, an empty list matches nothing),
-  `group_by` (`"key"` or a column), `since` (`{"column": "<time column>",
-  "at": "<RFC 3339>"}`), `max_groups`. Values are strings, integers or
-  `{"iri": "..."}`; a column that is not declared refuses.
-  Response: `total`, `groups` (`value`, `n`), `truncated`, `multi_valued_rows`,
-  `tx`.
+  omitted) or `graphs` (1 to 4 IRIs answered from one snapshot), `key_in`
+  (key values to keep), `where` (`{"<column or key>": [values]}`: columns are
+  ANDed, one column's values are ORed, `null` matches a row with no value for
+  that column, an empty list matches nothing), `group_by` (`"key"` or a
+  column), `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`),
+  `max_groups`. Values are strings, integers or `{"iri": "..."}`; a column
+  that is not declared refuses.
+  Response: `total`, `groups` (`value`, `n`, `plain`, and `graph` when
+  `graphs` was given), `truncated`, `multi_valued_rows`, `tx`. `plain` is true
+  only when the value is a plain string literal; a typed or language-tagged
+  literal is shown by its lexical form with `plain: false`.
+- `"rows"`: the entities the same scoping selects. Takes `name`, `graph` or
+  `graphs`, `key_in`, `where`, `since`, `columns` (declared columns to return;
+  all by default) and `limit` (1 to 1000; the default is 1000). Response:
+  `rows` (`entity`, `graph`, `key`, `key_plain`, `columns`, `plain` per
+  column, `multi`), `truncated`, `multi_valued_rows`, `tx`, from one read
+  snapshot in a stable entity order. There is no paging: a selection larger
+  than `limit` answers `truncated` and should be narrowed.
 
 A projection that is not installed at its declared definition refuses rather
 than answer stale.
@@ -1597,6 +1608,10 @@ curl -s localhost:3030/projections -X POST \
 # Open items assigned to one person at priority 1 or 2, grouped by status
 curl -s localhost:3030/projections -X POST \
   -d '{"name":"board","where":{"assignee":["alice"],"priority":[1,2]},"group_by":"key"}'
+
+# The open items themselves, in two graphs at once
+curl -s localhost:3030/projections -X POST \
+  -d '{"action":"rows","name":"board","graphs":["http://example.org/a","http://example.org/b"],"key_in":["open"],"columns":["priority"]}'
 ```
 
 ### `POST /search_nodes`

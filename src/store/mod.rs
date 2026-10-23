@@ -45,7 +45,7 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
-pub use projections::{ProjectionAggregate, ProjectionStatus};
+pub use projections::{PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus};
 mod registry;
 pub mod registry_list;
 pub mod respace;
