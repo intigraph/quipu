@@ -1812,6 +1812,14 @@ folds into `other` rather than creating unbounded Prometheus cardinality:
   store connection;
 - `quipu_store_held_seconds_total{client,endpoint}` — store capacity consumed.
 
+For reads the store is a read-pool connection. For writes (`/update` and the
+generic write tools such as `/set`, labelled by route template) it is the single
+writer mutex, so a write's `wait` is time spent behind other writers. Writes do
+not enter the per-client `quipu_store_held_seconds` histogram, which describes
+read-pool holds only. `/knot`, `/import/promote` and `/episode` record no writer
+time yet. Each write also logs one `write_observation` or `update_observation`
+line with its wait, held, and SHACL write-gate phase timings.
+
 `/query` load is also counted by the caller's DECLARED `X-Quipu-Agent`, so a
 read-heavy client such as `seeds` can be split by the crew member it acts for.
 The value is caller-declared and unauthenticated. It is normalised like the
