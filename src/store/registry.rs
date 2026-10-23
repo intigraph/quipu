@@ -21,6 +21,17 @@ impl Store {
     /// exactly one. Emits a `shapes.loaded` event carrying the tx watermark —
     /// before this, the audit spine had **no record that the rules changed**.
     pub fn load_shapes(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        // A recursive set must never reach the registry: every write validates
+        // against the combined loaded shapes, so it would refuse ALL writes
+        // (aegis-ahu0). Checked against the sets it will be combined with, since
+        // a cycle can cross sets; the version it replaces is left out.
+        let others: Vec<_> = self
+            .list_shapes()?
+            .into_iter()
+            .filter(|(n, _, _)| n != name)
+            .map(|(_, t, _)| t)
+            .collect();
+        crate::shacl_cycles::refuse_cyclic_shapes(&format!("{}\n{turtle}", others.join("\n")))?;
         self.load_versioned("shapes", name, turtle, timestamp)?;
         self.emit_registry_event("shapes.loaded", name, timestamp)
     }

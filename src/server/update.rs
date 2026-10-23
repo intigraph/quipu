@@ -3,6 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use axum::{
     body::Bytes,
@@ -128,8 +129,14 @@ pub(crate) async fn update_post(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("localhost");
     let base = format!("http://{host}{}", uri.path());
+    let client = super::query_usage::client(&headers);
     let report = blocking(move || {
-        apply_update_reported(&store, &format!("BASE <{base}>\n{update}"), &attribution)
+        apply_update_reported(
+            &store,
+            &format!("BASE <{base}>\n{update}"),
+            &attribution,
+            &client,
+        )
     })
     .await?;
     Ok(axum::Json(report).into_response())
@@ -268,15 +275,17 @@ impl Attribution {
 
 #[cfg_attr(not(test), allow(dead_code))]
 fn apply_update(shared: &SharedStore, update: &str) -> Result<serde_json::Value, AppError> {
-    apply_update_reported(shared, update, &Attribution::default())
+    apply_update_reported(shared, update, &Attribution::default(), "unknown")
 }
 
 fn apply_update_reported(
     shared: &SharedStore,
     update: &str,
     attribution: &Attribution,
+    client: &str,
 ) -> Result<serde_json::Value, AppError> {
-    let applied = apply_update_attributed(shared, update, false, attribution)?;
+    let applied =
+        update_observe::apply_update_observed(shared, update, false, attribution, client)?;
     let store = shared.lock();
     applied.report(&store)
 }
@@ -302,12 +311,21 @@ pub(super) fn apply_update_attributed(
     force_full: bool,
     attribution: &Attribution,
 ) -> Result<Applied, AppError> {
-    let plan = if force_full {
-        Plan::Full("forced")
-    } else {
-        update_slice::plan(update)
+    update_observe::apply_update_observed(shared, update, force_full, attribution, "unknown")
+}
+
+fn apply_locked(
+    store: &mut quipu::Store,
+    plan: &Plan,
+    update: &str,
+    attribution: &Attribution,
+    times: &mut update_observe::UpdateTimes,
+) -> Result<Applied, AppError> {
+    let mut phase = Instant::now();
+    let mut lap = |slot: &mut f64| {
+        *slot = phase.elapsed().as_secs_f64();
+        phase = Instant::now();
     };
-    let mut store = shared.lock();
     let ox = OxStore::new().map_err(|e| quipu::Error::Store(e.to_string()))?;
     let mut graph_ids = HashMap::new();
     graph_ids.insert(GraphName::DefaultGraph, 0);
@@ -320,18 +338,19 @@ pub(super) fn apply_update_attributed(
         graph_ids.insert(name.clone(), graph_id);
         graphs.push((graph_id, name));
     }
-    let path = match &plan {
+    let path = match plan {
         Plan::Full(reason) => {
-            update_full::copy(&store, &ox, &graphs, reason, update_full::max_facts())?;
+            update_full::copy(store, &ox, &graphs, reason, update_full::max_facts())?;
             UPDATES_FULL.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Full
         }
         Plan::Sliced(touched, whole) => {
-            load_slice(&store, &ox, &graphs, touched, whole)?;
+            load_slice(store, &ox, &graphs, touched, whole)?;
             UPDATES_SLICED.fetch_add(1, Ordering::Relaxed);
             UpdatePath::Sliced
         }
     };
+    lap(&mut times.dataset);
     let before: HashSet<Quad> = ox
         .iter()
         .collect::<Result<_, _>>()
@@ -342,40 +361,42 @@ pub(super) fn apply_update_attributed(
         .iter()
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
+    lap(&mut times.eval);
     // The write gates /knot enforces, on what this update asserts, before any
     // term is interned or any transaction begins (aegis-1hfyk5).
     update_gates::enforce(
-        &store,
+        store,
         after.difference(&before),
         before.difference(&after),
         attribution.actor.as_deref(),
         &attribution.source,
     )?;
+    lap(&mut times.gates);
     let now = quipu::time::now_iso();
     let mut changes: HashMap<i64, Vec<quipu::store::Datum>> = HashMap::new();
     for quad in before.difference(&after) {
-        let graph_id = graph_id(&store, &mut graph_ids, &quad.graph_name)?;
+        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
         changes
             .entry(graph_id)
             .or_default()
             .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(&store, &quad.subject)?,
+                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
                 attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(&store, &quad.object)?,
+                value: quipu::rdf::term_to_value(store, &quad.object)?,
                 valid_from: now.clone(),
                 valid_to: Some(now.clone()),
                 op: quipu::Op::Retract,
             });
     }
     for quad in after.difference(&before) {
-        let graph_id = graph_id(&store, &mut graph_ids, &quad.graph_name)?;
+        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
         changes
             .entry(graph_id)
             .or_default()
             .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(&store, &quad.subject)?,
+                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
                 attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(&store, &quad.object)?,
+                value: quipu::rdf::term_to_value(store, &quad.object)?,
                 valid_from: now.clone(),
                 valid_to: None,
                 op: quipu::Op::Assert,
@@ -384,9 +405,11 @@ pub(super) fn apply_update_attributed(
     let mut batches: Vec<_> = changes.into_iter().collect();
     // Deterministic commit (and report) order across graphs; ROOT first.
     batches.sort_unstable_by_key(|(graph, _)| *graph);
+    lap(&mut times.prep);
     let shapes = store
         .get_combined_shapes()?
         .map(|s| quipu::shacl::split_shapes_by_policy(&s).reject);
+    lap(&mut times.shapes);
     let txs = store.with_write_shapes(shapes.as_deref(), |store| {
         store.transact_graph_batches_tx(
             &batches,
@@ -395,6 +418,7 @@ pub(super) fn apply_update_attributed(
             Some(&attribution.source),
         )
     })?;
+    lap(&mut times.commit);
     // Register every named graph this update asserted into, so the next
     // update's dataset includes it (aegis-e9o5ci). After the commit, so a
     // refused write leaves no empty registry row behind.
@@ -517,6 +541,8 @@ fn graph_id(
 pub(crate) mod update_full;
 #[path = "update_gates.rs"]
 mod update_gates;
+#[path = "update_observe.rs"]
+mod update_observe;
 
 #[cfg(test)]
 #[path = "update_bench.rs"]

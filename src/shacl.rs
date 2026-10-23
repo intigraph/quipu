@@ -119,6 +119,10 @@ pub struct Validator {
 impl Validator {
     /// Create a new validator from SHACL shapes in Turtle format.
     pub fn from_turtle(shapes: &str) -> Result<Self> {
+        // Every validation, per-request shapes included, is built here, so this
+        // is where a recursive shape graph is refused before it can recurse
+        // (aegis-ahu0: a stack overflow aborts the process).
+        crate::shacl_cycles::refuse_cyclic_shapes(shapes)?;
         let mut reader = std::io::BufReader::new(shapes.as_bytes());
         let schema = ShaclDataManager::load(
             &mut reader,

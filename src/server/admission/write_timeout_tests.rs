@@ -113,6 +113,8 @@ async fn actual_write_handler_refuses_before_creating_a_graph() {
         200,
         super::super::tools::graph_create(
             axum::extract::State(other),
+            axum::http::HeaderMap::new(),
+            None,
             axum::Json(serde_json::json!({ "graph": "urn:timeout:control" })),
         ),
     ));
@@ -125,6 +127,8 @@ async fn actual_write_handler_refuses_before_creating_a_graph() {
     // Control: exactly the same real handler creates the graph without a budget.
     let _created = super::super::tools::graph_create(
         axum::extract::State(shared.clone()),
+        axum::http::HeaderMap::new(),
+        None,
         axum::Json(serde_json::json!({ "graph": "urn:timeout:control" })),
     )
     .await

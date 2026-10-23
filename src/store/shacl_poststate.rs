@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 
 #[cfg(feature = "shacl")]
 use super::shacl_new_graph::{COMPONENTS, VALUE_SETS};
+use crate::time::Stopwatch;
+
 use super::{Datum, Store};
 use crate::{Error, Result};
 
@@ -46,19 +48,25 @@ impl Store {
         if self.recording_verdicts {
             return Ok(());
         }
+        let started = Stopwatch::start();
         let loaded = if self.shacl_config.validate_on_write || conditional {
             self.get_combined_shapes()?
         } else {
             None
         };
+        let load = started.elapsed();
         #[cfg(feature = "shacl")]
         let loaded = loaded.map(|shapes| crate::shacl::split_shapes_by_policy(&shapes).reject);
+        let split = started.elapsed().saturating_sub(load);
         let shapes = match (&self.write_shapes, loaded) {
             (Some(explicit), Some(loaded)) => format!("{loaded}\n{explicit}"),
             (Some(explicit), None) => explicit.clone(),
             (None, Some(loaded)) => loaded,
             (None, None) => return Ok(()),
         };
+        self.poststate_profile.runs += 1;
+        self.poststate_profile.load += load;
+        self.poststate_profile.split += split;
         #[cfg(feature = "shacl")]
         return self.check_poststate_cardinality(&shapes, datums, graph, tx_id);
         #[cfg(not(feature = "shacl"))]
@@ -72,7 +80,7 @@ impl Store {
 
     #[cfg(feature = "shacl")]
     fn check_poststate_cardinality(
-        &self,
+        &mut self,
         shapes: &str,
         datums: &[Datum],
         graph: i64,
@@ -82,15 +90,20 @@ impl Store {
         // CLI --shapes and inline episode shapes remain strict, as before.
         // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
         // must not impose unsupported-path or context-gathering obligations.
+        let planning = Stopwatch::start();
         let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
+        self.poststate_profile.plan += planning.elapsed();
         if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
             return Ok(());
         }
+        let checking = Stopwatch::start();
         // A graph with no history before this write holds exactly what it
         // staged: judge it whole, in batch, rather than per focus under the
         // incremental context cap (aegis-t16).
         if self.graph_is_new(graph, tx_id)? {
-            return self.check_new_graph_in_batch(shapes, graph);
+            let result = self.check_new_graph_in_batch(shapes, graph);
+            self.poststate_profile.check += checking.elapsed();
+            return result;
         }
         let result = (|| {
             let subjects: BTreeSet<_> = datums
@@ -223,6 +236,7 @@ impl Store {
                     .collect(),
             })
         })();
+        self.poststate_profile.check += checking.elapsed();
         match result {
             Err(Error::CannotVerify(message))
                 if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
@@ -454,7 +468,7 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    fn append_bounded_entity(
+    pub(super) fn append_bounded_entity(
         &self,
         facts: &mut Vec<crate::Fact>,
         entity: i64,
@@ -478,43 +492,6 @@ impl Store {
                 .into_iter()
                 .filter(|fact| attribute.is_none_or(|attribute| fact.attribute == attribute)),
         );
-        Ok(())
-    }
-
-    #[cfg(feature = "shacl")]
-    fn append_subclass_context(&self, facts: &mut Vec<crate::Fact>, graph: i64) -> Result<()> {
-        let Some(rdf_type) = self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")? else {
-            return Ok(());
-        };
-        let Some(subclass) = self.lookup("http://www.w3.org/2000/01/rdf-schema#subClassOf")? else {
-            return Ok(());
-        };
-        let mut pending: Vec<_> = facts
-            .iter()
-            .filter_map(|f| match f.value {
-                crate::Value::Ref(class) if f.attribute == rdf_type => Some(class),
-                _ => None,
-            })
-            .collect();
-        let mut seen = BTreeSet::new();
-        while let Some(class) = pending.pop() {
-            if !seen.insert(class) {
-                continue;
-            }
-            if seen.len() > 1024 {
-                return Err(Error::CannotVerify(
-                    "post-state SHACL type hierarchy exceeds 1024 classes".into(),
-                ));
-            }
-            let start = facts.len();
-            for g in BTreeSet::from([0, graph]) {
-                self.append_bounded_entity(facts, class, g, Some(subclass))?;
-            }
-            pending.extend(facts[start..].iter().filter_map(|f| match f.value {
-                crate::Value::Ref(parent) => Some(parent),
-                _ => None,
-            }));
-        }
         Ok(())
     }
 }

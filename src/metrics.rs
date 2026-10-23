@@ -379,6 +379,18 @@ impl Metrics {
             }
             e.1 += 1;
         }
+        self.observe_store_counters(client, endpoint, wait, held);
+    }
+
+    /// Add wait and held seconds to the endpoint-labelled counters only.
+    ///
+    /// Writes call this directly for the WRITER mutex (aegis-wlf0, aegis-9hwdg4):
+    /// before, they recorded no store time, so a slow write path was invisible
+    /// here. They skip the per-client held histogram, which has no endpoint
+    /// label and describes read-pool holds; mixing the two there would make one
+    /// caller's distribution mean two things. [`Self::observe_store_time`]
+    /// records the histogram and then calls this.
+    pub fn observe_store_counters(&self, client: &str, endpoint: &str, wait: f64, held: f64) {
         let mut map = self.store_time.lock().unwrap();
         let key = client_key(&map, client, endpoint);
         let e = map.entry(key).or_insert((0.0, 0.0));

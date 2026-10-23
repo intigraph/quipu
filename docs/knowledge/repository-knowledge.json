@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "876f14f69608504ee778ac8411d588129dc2630c7de1acf056569740ed9af07a",
+      "source_sha256": "f1d4b1fb45fb525a01477ef2f5cedb6209a4c4258661447280ec39d01ea21203",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "c8b89f13f09e2a522a289bbe3307249bc84d5355099ed4bbe868fde366c8f58e",
+      "source_sha256": "14927c98b7edc319ad3ee40d4829b2752ade3d593266d8acaf1663ee7831214c",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "4b135f2044a68c48cdcc10d31c99db9de908d025957df24bb184a9f0d8de440c",
+      "source_sha256": "c3791da1d6b8bd46eed228ad9a603cfce4570bbeada550e54c7a5017594fa420",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

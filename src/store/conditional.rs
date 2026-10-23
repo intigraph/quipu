@@ -149,6 +149,7 @@ impl Store {
         datums: &[Datum],
         set: Option<&SetExpectation>,
     ) -> Result<()> {
+        let preparing = crate::time::Stopwatch::start();
         let assertions = datums
             .iter()
             .filter(|d| d.op == crate::Op::Assert)
@@ -179,6 +180,7 @@ impl Store {
         };
         crate::vocabulary::enforce_turtle(self, &turtle)
             .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
+        self.poststate_profile.conditional_prepare += preparing.elapsed();
         let loaded = if set.is_none() || self.shacl_config.validate_on_write {
             self.get_combined_shapes()?
         } else {
@@ -191,6 +193,7 @@ impl Store {
         if let Some(shapes) = shapes {
             #[cfg(feature = "shacl")]
             {
+                let rejecting = crate::time::Stopwatch::start();
                 let split = crate::shacl::split_shapes_by_policy(&shapes);
                 let feedback = crate::shacl_context::validate_with_store_context_in_graph(
                     self,
@@ -198,6 +201,7 @@ impl Store {
                     &turtle,
                     graph,
                 )?;
+                self.poststate_profile.conditional_reject += rejecting.elapsed();
                 if !feedback.conforms {
                     let error = Error::ValidationFailed {
                         violations: feedback.violations,
@@ -206,6 +210,7 @@ impl Store {
                     return Err(self.stash_refusal("shacl", error, datums.len()));
                 }
                 if split.has_emit {
+                    let emitting = crate::time::Stopwatch::start();
                     let observed = crate::shacl_context::validate_with_store_context_in_graph(
                         self,
                         &split.emit,
@@ -213,6 +218,7 @@ impl Store {
                         graph,
                     )?;
                     crate::shacl_context::queue_emit_violations(self, &observed);
+                    self.poststate_profile.conditional_emit += emitting.elapsed();
                 }
             }
             #[cfg(not(feature = "shacl"))]
