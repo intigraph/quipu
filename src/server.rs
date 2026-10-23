@@ -62,6 +62,8 @@ mod parse_guard_tests;
 mod point_reads;
 #[path = "server/process_pool.rs"]
 mod process_pool;
+#[path = "server/projections.rs"]
+mod projections;
 #[path = "server/publication.rs"]
 mod publication;
 #[path = "server/query_capture.rs"]
@@ -212,6 +214,9 @@ async fn main() {
     if !is_replica {
         base::apply_owl(&mut store, &config);
     }
+
+    // Current-state projections (aegis-tg5 F2) — see projections::install_at_startup.
+    projections::install_at_startup(&mut store, &config, is_replica);
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
     // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
@@ -416,6 +421,7 @@ async fn main() {
         .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
+        .route("/render", post(render_prepare))
         .route("/graph", post(graph_view))
         .route("/unravel", post(unravel))
         .route("/validate", post(validate))
@@ -447,6 +453,7 @@ async fn main() {
         .route("/episode/retract", post(retract_episode))
         .route("/retract/source", post(retract_source))
         .route("/shapes", post(shapes))
+        .route("/projections", post(projections::projections))
         .route("/reason", post(reason))
         .route("/explain", post(explain))
         .route("/ontology", post(ontology))
@@ -531,7 +538,7 @@ async fn main() {
                         return response;
                     }
                     let (auth_header, authorization) = auth::authorize_request(
-                        &req, &auth_policy, is_write, read_only,
+                        &req, &auth_policy, read_only,
                     );
                     match authorization.decision {
                         quipu::http_auth::AccessDecision::Allow => {

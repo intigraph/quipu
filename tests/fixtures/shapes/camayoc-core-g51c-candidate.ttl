@@ -1,0 +1,554 @@
+# camayoc core shapes — the gate (slice 1: work + decisions)
+#
+# Posture (inherited, deliberate): PERMISSIVE on domain shape, STRICT on the
+# provenance tag. sourceKind is the reader's only signal of trust, so it is
+# closed-vocabulary and mandatory from the first load; domain properties
+# start permissive and tighten deliberately.
+#
+# Same base-namespace note as ontology/core.ttl: targets are declared in the
+# store's default base_ns so /episode writes and these shapes agree out of
+# the box.
+
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix quipu: <http://quipu.dev/ontology/> .
+
+aegis:CamayocWorkItemShape a sh:NodeShape ;
+    sh:targetClass aegis:WorkItem ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every WorkItem carries exactly one sourceKind of observed|declared|inferred — the tag is the reader's only signal of trust" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a WorkItem needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:outcome ;
+        sh:maxCount 1 ;
+        sh:in ("done" "abandoned" "superseded" "failed") ;
+        sh:message "camayoc: outcome, when set, is one of done|abandoned|superseded|failed — absence means open; never store a decaying 'in progress'" ;
+    ] ;
+    sh:property [
+        sh:path aegis:blockedOn ;
+        sh:or ( [ sh:class aegis:WorkItem ] [ sh:class aegis:Blocker ] ) ;
+        sh:message "camayoc: blockedOn must point at a WorkItem or a Blocker the graph actually holds — an unresolvable target is a blocker nobody can clear" ;
+    ] ;
+    sh:property [
+        sh:path aegis:inWorkflowRun ;
+        sh:maxCount 1 ;
+        sh:class aegis:WorkflowRun ;
+        sh:message "camayoc: inWorkflowRun, when set, names exactly one WorkflowRun the graph holds — a work item that cannot find its run cannot advance it" ;
+    ] .
+
+# A declared review age must be machine-readable, or the reactor can never
+# tell due from not-due (aegis-kxjack). Any subject that declares one is
+# checked; months and years are refused, because their length is ambiguous.
+aegis:CamayocReviewAgeShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:reviewAfter , aegis:maxAge , aegis:idleLimit ;
+    sh:property [
+        sh:path aegis:reviewAfter ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?(Z|[+-][0-9]{2}:[0-9]{2}))?$" ;
+        sh:message "camayoc: reviewAfter is one ISO-8601 date or UTC-offset instant" ;
+    ] ;
+    sh:property [
+        sh:path aegis:maxAge ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^P([0-9]+W|[0-9]+D|([0-9]+D)?T([0-9]+H([0-9]+M)?|[0-9]+M))$" ;
+        sh:message "camayoc: maxAge is one ISO-8601 duration in weeks, days, hours or minutes (no months or years)" ;
+    ] ;
+    # No maxCount: a WorkItem is re-emitted byte-identically, so a kind change APPENDS
+    # a second limit and a maxCount would refuse that item's every later write. Each
+    # value is its own basis instead; the earliest lapse wins (aegis-qx96wr).
+    sh:property [
+        sh:path aegis:idleLimit ;
+        sh:datatype xsd:string ;
+        sh:pattern "^P([0-9]+W|[0-9]+D|([0-9]+D)?T([0-9]+H([0-9]+M)?|[0-9]+M))$" ;
+        sh:message "camayoc: idleLimit is an ISO-8601 duration in weeks, days, hours or minutes (no months or years)" ;
+    ] ;
+    sh:property [
+        sh:path aegis:workKind ;
+        sh:datatype xsd:string ;
+        sh:in ("Directive" "Design" "Plan" "DreamCycle" "DreamLane") ;
+        sh:message "camayoc: workKind is one of Directive|Design|Plan|DreamCycle|DreamLane" ;
+    ] .
+
+aegis:CamayocDecisionShape a sh:NodeShape ;
+    sh:targetClass aegis:Decision ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every Decision carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Decision needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:chose ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Decision without 'chose' is not a decision — record what was chosen" ;
+    ] .
+
+# Verification is deliberately stricter than the founding WorkItem/Decision
+# shapes: its whole claim to trust is that it names the result that could have
+# proved it wrong.  This is an ingress obligation, not a convention for a
+# reader to remember.
+aegis:CamayocVerificationShape a sh:NodeShape ;
+    sh:targetClass aegis:Verification ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every Verification carries exactly one sourceKind of observed|declared|inferred — the tag is the reader's only signal of trust" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Verification needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:falsifier ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Verification without a falsifier is an assertion, not verification — record the result that would have proved it wrong" ;
+    ] ;
+    sh:property [
+        sh:path aegis:adversariallyProvenBy ;
+        sh:class aegis:Verification ;
+        sh:message "camayoc: an adversarial proof must itself be a Verification — sabotage that cannot name what flipping looks like proves nothing" ;
+    ] .
+
+# An execution path makes the running artifact and refresh chain queryable.
+# It intentionally has no `isLive` field: live is a read-time verdict, while
+# each property here is an observed or declared fact that remains true later.
+aegis:CamayocExecutionPathShape a sh:NodeShape ;
+    sh:targetClass aegis:ExecutionPath ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every ExecutionPath carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: an ExecutionPath needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:executesArtifact ;
+        sh:minCount 1 ;
+        sh:message "camayoc: an ExecutionPath must name the artifact that actually executes" ;
+    ] ;
+    sh:property [
+        sh:path aegis:repositorySource ;
+        sh:minCount 1 ;
+        sh:message "camayoc: an ExecutionPath must name the repository source to compare with its executed artifact" ;
+    ] ;
+    sh:property [
+        sh:path aegis:refreshedBy ;
+        sh:minCount 1 ;
+        sh:message "camayoc: an ExecutionPath must name what refreshes its artifact" ;
+    ] .
+
+# The type-level distinction is deliberately mandatory. A stated ticket claim
+# can be useful, but it must never read as a built reproduction. The optional
+# demonstration link is type-checked when present; the producer integration
+# that emits it belongs with hank/quipu, not a made-up write-time liveness rule.
+aegis:CamayocBlockerShape a sh:NodeShape ;
+    sh:targetClass aegis:Blocker ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every Blocker carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Blocker needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:blockerEvidence ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("stated" "built") ;
+        sh:message "camayoc: a Blocker must say whether its evidence is stated or built" ;
+    ] ;
+    sh:property [
+        sh:path aegis:demonstratedBy ;
+        sh:class aegis:Verification ;
+        sh:message "camayoc: blocker demonstration must be a Verification" ;
+    ] ;
+    sh:property [
+        sh:path aegis:blockerKind ;
+        sh:maxCount 1 ;
+        sh:in ("release-installed" "pr-merged" "ci-green" "human-action" "date") ;
+        sh:message "camayoc: blockerKind is one of release-installed|pr-merged|ci-green|human-action|date" ;
+    ] ;
+    sh:property [
+        sh:path aegis:resolutionQuery ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Blocker carries at most one resolutionQuery (a SPARQL ASK)" ;
+    ] ;
+    sh:property [
+        sh:path aegis:resolvesOn ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:date ;
+        sh:message "camayoc: resolvesOn is one xsd:date" ;
+    ] ;
+    # A KINDED blocker (a condition work waits on) must be checkable: the
+    # parameters its kind's probe needs. An unkinded one is a stated reason, as
+    # before (aegis-c0awwp). The probe CODE lives in camayoc, never in the graph.
+    sh:or (
+        [ sh:path aegis:blockerKind ; sh:maxCount 0 ]
+        [ sh:and (
+            [ sh:path aegis:blockerKind ; sh:hasValue "pr-merged" ]
+            [ sh:path aegis:prRef ; sh:minCount 1 ; sh:maxCount 1 ;
+              sh:pattern "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+$" ] ) ]
+        [ sh:and (
+            [ sh:path aegis:blockerKind ; sh:hasValue "release-installed" ]
+            [ sh:path aegis:tool ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[A-Za-z0-9_.-]+$" ]
+            [ sh:path aegis:minVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "^[0-9]+(\\.[0-9]+)*$" ] ) ]
+        [ sh:and (
+            [ sh:path aegis:blockerKind ; sh:hasValue "ci-green" ]
+            [ sh:path aegis:repoRef ; sh:minCount 1 ; sh:maxCount 1 ;
+              sh:pattern "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_./-]+$" ] ) ]
+        [ sh:and (
+            [ sh:path aegis:blockerKind ; sh:hasValue "human-action" ]
+            [ sh:path aegis:resolutionQuery ; sh:minCount 1 ] ) ]
+        [ sh:and (
+            [ sh:path aegis:blockerKind ; sh:hasValue "date" ]
+            [ sh:path aegis:resolvesOn ; sh:minCount 1 ] ) ]
+    ) ;
+    sh:message "camayoc: a kinded Blocker must carry its kind's probe parameters (pr-merged: prRef owner/repo#N; release-installed: tool + minVersion; ci-green: repoRef owner/repo@branch; human-action: resolutionQuery; date: resolvesOn)" .
+
+aegis:CamayocTrackerObservationStatusShape a sh:NodeShape ;
+    sh:targetClass aegis:Observation ;
+    sh:property [
+        sh:path aegis:observedStatus ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: an Observation records at most one observedStatus" ;
+    ] ;
+    sh:property [
+        sh:path aegis:observedClosedAt ;
+        sh:maxCount 1 ;
+        sh:message "camayoc: an Observation records at most one observedClosedAt" ;
+    ] ;
+    sh:property [
+        sh:path aegis:observedBlockedOn ;
+        sh:nodeKind sh:IRI ;
+        sh:message "camayoc: observedBlockedOn points at a work item IRI (it may be projected before its target is)" ;
+    ] .
+
+aegis:CamayocNonFunctionalRequirementShape a sh:NodeShape ;
+    sh:targetClass aegis:NonFunctionalRequirement ;
+    sh:property [ sh:path aegis:sourceKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ("declared") ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:about ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:threshold ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:unit ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:measurementWindow ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:ownedBy ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:createdAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+aegis:CamayocMetricShape a sh:NodeShape ;
+    sh:targetClass aegis:Metric ;
+    sh:property [ sh:path aegis:sourceKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ("declared") ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:unit ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:meaning ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:ownedBy ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path aegis:probe ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:measuresRequirement ; sh:minCount 1 ; sh:maxCount 1 ; sh:class aegis:NonFunctionalRequirement ] ;
+    sh:property [ sh:path quipu:derivedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path aegis:contentHash ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+aegis:CamayocObservationShape a sh:NodeShape ;
+    sh:targetClass aegis:Observation ;
+    sh:property [ sh:path aegis:sourceKind ; sh:maxCount 1 ; sh:in ("observed") ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:observedAt ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path aegis:observedValue ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+# Write-validation debt (aegis-g51c option A, condition 2; burn-down item to follow).
+# The four Observation minCount constraints below moved here from
+# CamayocObservationShape so that, with validate_on_write ON, a missing value is
+# EMITTED as a shacl.violation event instead of refusing the write. Measured on
+# the 2026-10-21 prod copy: 2,655 ROOT Observations miss at least one of them
+# (10,555 violations of these four constraints).
+# Every other Observation constraint still rejects. Keep this block's own text
+# free of comments: quipu routes a block to emit by the literal annotation in it.
+aegis:CamayocObservationProvenanceDebtShape a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:severity sh:Warning ;
+    sh:targetClass aegis:Observation ;
+    sh:property [ sh:path aegis:sourceKind ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:about ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:observedAt ; sh:minCount 1 ] ;
+    sh:property [ sh:path aegis:observedValue ; sh:minCount 1 ] .
+
+aegis:CamayocMetricDerivationShape a sh:NodeShape ;
+    sh:targetSubjectsOf quipu:derivationSystem ;
+    sh:property [ sh:path quipu:derivationSystem ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path quipu:derivationQuery ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path quipu:derivationParams ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] .
+
+# ---- Golden paths (slice: trajectories, blessing, conformance) ----------
+# Same posture: strict on the provenance tag and on the properties whose
+# absence makes the node a lie (a path without its exemplar, an omission
+# without its authority, a promotion without its promoter); permissive on
+# everything else, tightened deliberately.
+
+aegis:CamayocTrajectoryShape a sh:NodeShape ;
+    sh:targetClass aegis:Trajectory ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every Trajectory carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Trajectory needs exactly one rdfs:label" ;
+    ] .
+
+aegis:CamayocStepShape a sh:NodeShape ;
+    sh:targetClass aegis:Step ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every Step carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Step needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:stepOf ;
+        sh:minCount 1 ;
+        sh:message "camayoc: a Step must name its Trajectory — a step with no trajectory is an anecdote" ;
+    ] .
+
+aegis:CamayocGoldenPathShape a sh:NodeShape ;
+    sh:targetClass aegis:GoldenPath ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every GoldenPath carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a GoldenPath needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:prunedFrom ;
+        sh:minCount 1 ;
+        sh:message "camayoc: a GoldenPath must cite the exemplar Trajectory it was pruned from — a path that cannot cite the concrete success justifying it is an opinion" ;
+    ] .
+
+aegis:CamayocPathOmissionShape a sh:NodeShape ;
+    sh:targetClass aegis:PathOmission ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every PathOmission carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a PathOmission needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:omittedStep ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "camayoc: a PathOmission names exactly one omitted Step" ;
+    ] ;
+    sh:property [
+        sh:path aegis:omissionAuthority ;
+        sh:minCount 1 ;
+        sh:in ("cone-analysis" "human-decision") ;
+        sh:message "camayoc: an omission must carry its authority — cone-analysis or human-decision. An omission that cannot say who cut it is a silent edit of history" ;
+    ] .
+
+aegis:CamayocPathPromotionShape a sh:NodeShape ;
+    sh:targetClass aegis:PathPromotion ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed" "declared" "inferred") ;
+        sh:message "camayoc: every PathPromotion carries exactly one sourceKind of observed|declared|inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a PathPromotion needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:promotes ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "camayoc: a PathPromotion names exactly one GoldenPath it promotes" ;
+    ] ;
+    sh:property [
+        sh:path aegis:blessingLevel ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("candidate" "advisory" "blessed" "constraint-backing") ;
+        sh:message "camayoc: a promotion's level is one of candidate|advisory|blessed|constraint-backing — recorded and verified are mechanical read-time states, not promotions" ;
+    ] ;
+    sh:property [
+        sh:path aegis:promotedBy ;
+        sh:minCount 1 ;
+        sh:message "camayoc: a promotion without its promoting principal is not a human act — nothing above verified happens without one" ;
+    ] ;
+    sh:property [
+        sh:path aegis:promotedAt ;
+        sh:minCount 1 ;
+        sh:message "camayoc: a promotion carries when it happened" ;
+    ] .
+
+# ---- Cost and effort accounting (verification-and-liveness §D) -----------
+# Deterministic-parser facts, so the posture is the Observation shape's:
+# sourceKind is pinned to "observed" — a declared or inferred usage number
+# is not an account of consumption, it is an estimate wearing one's clothes.
+# No gate-probe arm: like the metrics-slice shapes (Metric, Observation),
+# these carry no suite-stated proof obligation; the probe arms stay the
+# M1/M3/M4 + golden-paths set the suite itself demands.
+
+aegis:CamayocSessionShape a sh:NodeShape ;
+    sh:targetClass aegis:Session ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed") ;
+        sh:message "camayoc: a Session is parsed from the harness's own record and enters as observed — Q19's denominator cannot be hand-declared" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a Session needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:actor ;
+        sh:minCount 1 ;
+        sh:message "camayoc: a Session names the principal that ran it — per-principal consumption (Q17, Q18) joins on this" ;
+    ] .
+
+aegis:CamayocUsageRecordShape a sh:NodeShape ;
+    sh:targetClass aegis:UsageRecord ;
+    sh:property [
+        sh:path aegis:sourceKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ("observed") ;
+        sh:message "camayoc: a UsageRecord is a deterministic-parser fact and enters as observed — never declared, never inferred" ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a UsageRecord needs exactly one rdfs:label" ;
+    ] ;
+    sh:property [
+        sh:path aegis:inSession ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class aegis:Session ;
+        sh:message "camayoc: a UsageRecord is anchored to exactly one Session — an unattached record can join against nothing" ;
+    ] ;
+    sh:property [
+        sh:path aegis:provider ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a UsageRecord names its provider — Q17 and Q20 group by it" ;
+    ] ;
+    sh:property [
+        sh:path aegis:tokensConsumed ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:message "camayoc: a UsageRecord carries exactly one consumption count — a record without its measurement is nothing, and a missing measurement must stay missing, never aggregate as zero" ;
+    ] ;
+    sh:property [
+        sh:path aegis:observedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:message "camayoc: a UsageRecord carries when the consumption happened — burn rate (Q20) is a read-time judgment over these timestamps" ;
+    ] ;
+    sh:property [
+        sh:path aegis:attributedTo ;
+        sh:class aegis:WorkItem ;
+        sh:message "camayoc: usage attribution, when present, points at a WorkItem — cost as a property of work, not of a window" ;
+    ] .
+
+# aegis:ownedBy names a PRINCIPAL, so its object is an IRI on every subject, not
+# only on the classes shaped above. One literal ("aegis-crew") among 591 IRI
+# owners was invisible to every reader that joins the owner to a principal or
+# crew node: owner routing and the ownership views silently skipped it
+# (aegis-j32oup). Targeted by subject, so a new class that uses ownedBy is
+# covered without anyone remembering to add it here.
+aegis:CamayocOwnedByIsIriShape a sh:NodeShape ;
+    sh:targetSubjectsOf aegis:ownedBy ;
+    sh:property [
+        sh:path aegis:ownedBy ;
+        sh:nodeKind sh:IRI ;
+        sh:message "camayoc: aegis:ownedBy names a principal by IRI, never a string" ;
+    ] .

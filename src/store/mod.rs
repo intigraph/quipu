@@ -13,6 +13,8 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+#[cfg(feature = "shacl")]
+mod shacl_focus;
 mod shacl_poststate;
 pub use decision_nonces::DecisionNonceSpend;
 pub mod demotions;
@@ -38,10 +40,12 @@ mod graph_creation;
 mod graph_metadata;
 pub mod ops;
 pub mod overlays;
+mod projections;
 pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
+pub use projections::{ProjectionAggregate, ProjectionStatus};
 mod registry;
 pub mod registry_list;
 pub mod respace;
@@ -105,6 +109,9 @@ pub struct Store {
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
+    /// Declared current-state projections (aegis-tg5 F2), set from
+    /// `[[quipu.projections]]` at startup and copied to pooled readers.
+    pub(crate) projection_defs: Vec<crate::config::ProjectionConfig>,
     /// Explicit per-operation shapes, restored when the scoped operation ends.
     pub(crate) write_shapes: Option<String>,
     /// OWL write-time constraint policy (aegis-bmqup).
@@ -249,6 +256,14 @@ pub struct Store {
     /// Ceiling on the resident read model's size — see
     /// [`Store::set_read_model_max_triples`].
     pub(crate) read_model_max_triples: std::cell::Cell<usize>,
+    /// Graph ids the attachments contribute, as registered in `main.graphs`
+    /// (aegis-xacr). Recomputed wherever `facts_source` is, so the two cannot
+    /// disagree. Empty on an unattached store.
+    pub(crate) attached_graphs: Vec<i64>,
+    /// Set for the length of one query that can read no attached graph — see
+    /// [`Store::scope_composition`]. While set, the store answers as if it
+    /// had no attachments.
+    pub(crate) composition_suspended: std::cell::Cell<bool>,
 }
 
 /// An advisory event observed before a write and appended with it (P3).

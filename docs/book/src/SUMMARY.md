@@ -7,6 +7,7 @@
 
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
+- [Agent Setup](getting-started/agent-setup.md)
 - [Configuration](getting-started/configuration.md)
 - [Stable Entity References](reference/namespaces.md)
 
@@ -43,6 +44,7 @@
 
 - [CLI Commands](reference/cli.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
+- [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
   - [Versioned file memory](reference/memory-files.md)
 - [Atomic source acquisition](reference/acquisition.md)

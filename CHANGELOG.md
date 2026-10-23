@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-22
+
 ### Added
 
 - Add bounded registered graph metadata lookup (#689)([ccbf48b](https://github.com/scbrown/quipu/commit/ccbf48b4ef4ec8558305fdee4932d63c14258b8e))
@@ -20,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - *(acquisition)* Bounded physical scope measurement (#705)([462268c](https://github.com/scbrown/quipu/commit/462268cc605a096eacbe1feb93690c41627ae481))
 - *(skills)* Define opt-in pinned catalogue shapes (#717)([c98f18a](https://github.com/scbrown/quipu/commit/c98f18a4c37c4fb4baf66bef1d9600cfd4e9a5a0))
 - *(shacl)* [**breaking**] Validate writes against loaded shapes by default (#720)([9a2c879](https://github.com/scbrown/quipu/commit/9a2c8792071f17d7420cb0c91ec1c931a599b547))
+- Render graph snapshots into owned local files (#559)([6dcba68](https://github.com/scbrown/quipu/commit/6dcba683af649e774e52bf1fd39133545efc6503))
 
 ### CI/CD
 
@@ -42,6 +45,7 @@ All notable changes to this project will be documented in this file.
 - *(shacl)* Validate stored values when targets become applicable (#715)([063b48e](https://github.com/scbrown/quipu/commit/063b48e3507125de1dd4fc036cfbee11fafd1ec1))
 - *(store)* Enforce SHACL admission for SET replacements (#699)([55e08b7](https://github.com/scbrown/quipu/commit/55e08b73181af575e5366aaf423e1da26f332bf7))
 - *(shacl)* Judge value sets across writes, including through sh:node (supersedes #713) (#723)([9d55d37](https://github.com/scbrown/quipu/commit/9d55d37660cc685bbacfec15195a763e1911bb8f))
+- *(shacl)* Own only the value-set verdicts a write can change (#732)([3f98f4e](https://github.com/scbrown/quipu/commit/3f98f4efb0f015aa59e35d100a6c80edb5ad7660))
 
 
 

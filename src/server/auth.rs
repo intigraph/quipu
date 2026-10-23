@@ -60,7 +60,6 @@ pub(super) fn session_key_refusal(
 pub(super) fn authorize_request(
     req: &axum::extract::Request,
     policy: &quipu::http_auth::BearerPolicy,
-    is_write: bool,
     read_only: bool,
 ) -> (Option<String>, quipu::http_auth::Authorization) {
     let header = req
@@ -68,9 +67,12 @@ pub(super) fn authorize_request(
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
-    let authorization = quipu::http_auth::authorize_bearers(
-        is_write || quipu::http_auth::requires_read_identity(req.uri().path()),
-        read_only && is_write,
+    // The render-aware policy: classifies writes from path and method itself and
+    // treats POST /render as a protected read (never satisfied by open writes).
+    let authorization = quipu::http_auth::authorize_http_bearers(
+        req.uri().path(),
+        req.method().as_str(),
+        read_only,
         policy,
         header.as_deref(),
         quipu::time::epoch_secs(),

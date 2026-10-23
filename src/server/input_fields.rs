@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 pub(crate) const HTTP_ONLY_FIELDS: &[(&str, &[&str])] = &[
+    ("quipu_prepare", &["spec", "adhoc", "valid_at", "graph"]),
     (
         "quipu_search_query",
         &[

@@ -34,7 +34,7 @@ Published targets: Linux and macOS, x86_64 and arm64.
 
 Set `STACK_INSTALL_ROOT` on the receiving shell for another prefix.
 Pinned releases, alternatives, configuration and removal are in the
-[installation and usage reference](docs/installation-reference.md).
+[installation, upgrades and removal](https://scbrown.github.io/quipu/getting-started/installation.html).
 
 ## Try it
 
@@ -82,7 +82,8 @@ Quipu is for.
 
 - [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
 - [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
-- [Detailed examples and agent setup](docs/installation-reference.md).
+- [Quick Start examples](https://scbrown.github.io/quipu/getting-started/quick-start.html).
+- [Agent Setup](https://scbrown.github.io/quipu/getting-started/agent-setup.html).
 
 ![Repository pendants compose; dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
 
