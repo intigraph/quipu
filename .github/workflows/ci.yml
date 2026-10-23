@@ -439,6 +439,12 @@ jobs:
       - name: Prove the crates publish guard still refuses
         run: scripts/ci/crates-publish-guard.sh --selftest
 
+      # The release's book restage skips a disabled docs.yml and fails on
+      # anything else (scripts/ci/restage-docs.sh). Both directions are
+      # behavioural, so they are observed here rather than assumed.
+      - name: Prove the docs restage skips only a disabled workflow
+        run: scripts/ci/restage-docs.sh --selftest
+
       # The agent-arm harness behind `just bench agents` (aegis-xfuch4.4): its
       # scoring oracle (true / FALSE / evasion-caught / abstained) is what turns
       # model runs into the paper's table, so it is pinned here. Pure Python,
