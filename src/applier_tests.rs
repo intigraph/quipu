@@ -524,10 +524,21 @@ fn outcomes_serialize_tagged_by_kind() {
     let fresh = Freshness {
         source_tx: Some(9),
         last_frame_age_ms: None,
+        coverage: Some(11),
+        staleness_bound_ms: None,
         bounded: false,
     };
     assert_eq!(
         serde_json::to_value(fresh).unwrap(),
-        json!({"source_tx": 9, "last_frame_age_ms": null, "bounded": false})
+        json!({"source_tx": 9, "last_frame_age_ms": null, "coverage": 11,
+               "staleness_bound_ms": null, "bounded": false})
+    );
+    assert_eq!(
+        serde_json::to_value(Outcome::ProofAccepted { t_send_ms: 5 }).unwrap(),
+        json!({"kind": "proof_accepted", "t_send_ms": 5})
+    );
+    assert_eq!(
+        serde_json::to_value(Outcome::CoverageAdvanced { watermark: 8 }).unwrap(),
+        json!({"kind": "coverage_advanced", "watermark": 8})
     );
 }

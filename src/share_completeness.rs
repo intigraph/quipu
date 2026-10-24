@@ -145,6 +145,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Why that cursor stopped (a history that disagreed with its source). It
     // belongs to the same replica and cursor: excluded with them.
     ("replica_stop", Disposition::Excluded),
+    // The source-signed coverage watermark that cursor verified on the
+    // replication stream. A claim about the same cursor: excluded with it.
+    ("replica_coverage", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.
