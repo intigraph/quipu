@@ -78,6 +78,18 @@ vector stays unchanged. A new frozen v2 vector is added. The comment is
 inside the signed message, so the signature covers the exact text that is
 recorded.
 
+**Times.** Every time in v2 is the same as in v1:
+- an `i64` of Unix epoch **seconds**;
+- read from the server clock and never from the browser.
+This covers `Request.expires_at`, `Challenge.expires_at` and
+`Receipt.recorded_at`.
+
+**Golden vector.** The v2 vector is committed with the implementation, in
+`golden_tests.rs` next to v1, and is then frozen. It pins the exact serialized
+challenge bytes (compact JSON in field order), the derived WebAuthn challenge,
+and a serialized receipt. Clients must reproduce those bytes. They must never
+encode a v2 challenge with the v1 codec.
+
 ### 2. Live preconditions (stale-card refusal)
 
 `Request` gains `expect`: up to 16 `{graph, s, p, o | null}` entries, each
