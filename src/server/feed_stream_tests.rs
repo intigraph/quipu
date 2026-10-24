@@ -176,3 +176,154 @@ async fn inner_savepoint_hint_cannot_publish_speculative_rows() {
         0
     );
 }
+
+/// One parsed SSE frame: `(event, id, data)`.
+type Frame = (String, Option<String>, String);
+
+/// Read frames until `stop` matches one (inclusive), or fail after 10 s.
+async fn read_frames(response: Response, stop: impl Fn(&Frame) -> bool) -> Vec<Frame> {
+    let mut bytes = response.into_body().into_data_stream();
+    let (mut buffer, mut frames) = (String::new(), Vec::new());
+    loop {
+        while let Some(end) = buffer.find("\n\n") {
+            let block: String = buffer.drain(..end + 2).collect();
+            let (mut event, mut id, mut data) = (String::new(), None, String::new());
+            for line in block.lines() {
+                if let Some(v) = line.strip_prefix("event: ") {
+                    event = v.into();
+                } else if let Some(v) = line.strip_prefix("id: ") {
+                    id = Some(v.into());
+                } else if let Some(v) = line.strip_prefix("data: ") {
+                    data = v.into();
+                }
+            }
+            if event.is_empty() {
+                continue; // keep-alive comment
+            }
+            let frame = (event, id, data);
+            let done = stop(&frame);
+            frames.push(frame);
+            if done {
+                return frames;
+            }
+        }
+        let chunk = tokio::time::timeout(Duration::from_secs(10), bytes.next())
+            .await
+            .expect("stream stalled")
+            .expect("stream ended")
+            .unwrap();
+        buffer.push_str(std::str::from_utf8(&chunk).unwrap());
+    }
+}
+
+fn wide_datum(store: &mut Store, name: &str, width: usize) -> Datum {
+    Datum {
+        value: FactValue::Str("x".repeat(width)),
+        ..datum(store, name)
+    }
+}
+
+/// F6 (local-sync-mode.md §6): a transaction larger than one frame used to end
+/// the stream with the cursor unmoved, so every reconnect hit the same dead
+/// end. It now arrives as begin, parts and a commit barrier that alone carries
+/// the id, and the stream continues with the next transaction.
+#[tokio::test]
+async fn oversized_transaction_streams_as_parts_then_continues() {
+    let mut store = Store::open_in_memory().unwrap();
+    let big: Vec<Datum> = (0..2500)
+        .map(|i| wide_datum(&mut store, &format!("urn:test:wide-{i}"), 600))
+        .collect();
+    let tx1 = store.transact(&big, "2026-01-01", None, None).unwrap();
+    let small = datum(&mut store, "urn:test:after");
+    let tx2 = store.transact(&[small], "2026-01-02", None, None).unwrap();
+    let expected = store
+        .changes_after(0, 1, quipu::store::changes::Capture::OldAndNewValues, None)
+        .unwrap()
+        .records;
+    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
+
+    let open = |since: i64| {
+        changes_stream(
+            State(shared.clone()),
+            HeaderMap::new(),
+            params(json!({"since": since})),
+        )
+    };
+    let frames = read_frames(open(0).await, |f| f.0 == "quipu.changes").await;
+    let names: Vec<&str> = frames.iter().map(|f| f.0.as_str()).collect();
+    let parts: Vec<&Frame> = frames
+        .iter()
+        .filter(|f| f.0 == "quipu.changes.part")
+        .collect();
+    assert_eq!(names.first(), Some(&"quipu.changes.begin"), "{names:?}");
+    assert!(parts.len() >= 2, "expected a split, got {names:?}");
+    assert_eq!(names[names.len() - 2], "quipu.changes.commit", "{names:?}");
+    // Only the barrier and the next whole transaction carry ids.
+    let ids: Vec<Option<&str>> = frames.iter().map(|f| f.1.as_deref()).collect();
+    assert!(ids[..ids.len() - 2].iter().all(Option::is_none), "{ids:?}");
+    assert_eq!(ids[ids.len() - 2], Some(tx1.to_string().as_str()));
+    assert_eq!(ids[ids.len() - 1], Some(tx2.to_string().as_str()));
+
+    // Every part fits; the digests chain over the parts exactly as sent.
+    let mut hasher = Sha256::new();
+    let mut records = Vec::new();
+    for (index, part) in parts.iter().enumerate() {
+        assert!(
+            fits_frame(&part.2),
+            "part {index} is {} bytes",
+            part.2.len()
+        );
+        let body: Value = serde_json::from_str(&part.2).unwrap();
+        assert_eq!(body["index"], index);
+        assert_eq!(body["source_tx"], tx1);
+        assert_eq!(
+            body["digest_before"],
+            hex::encode(hasher.clone().finalize())
+        );
+        hasher.update(part.2.as_bytes());
+        records.extend(body["records"].as_array().unwrap().iter().cloned());
+    }
+    let digest = hex::encode(hasher.finalize());
+    let begin: Value = serde_json::from_str(&frames[0].2).unwrap();
+    let commit: Value = serde_json::from_str(&frames[frames.len() - 2].2).unwrap();
+    assert_eq!(begin["digest"], digest);
+    assert_eq!(commit["digest"], digest);
+    assert_eq!(commit["parts"], parts.len());
+    assert_eq!(records, expected, "reassembled parts differ from the page");
+
+    // A reconnect before the barrier resumes from the previous transaction and
+    // replays this one from its first part; one after it skips straight on.
+    let again = read_frames(open(0).await, |f| f.0 == "quipu.changes.begin").await;
+    assert_eq!(again.len(), 1);
+    let mut headers = HeaderMap::new();
+    headers.insert("last-event-id", tx1.to_string().parse().unwrap());
+    let resumed = changes_stream(State(shared.clone()), headers, params(json!({}))).await;
+    let next = read_frames(resumed, |_| true).await;
+    assert_eq!(next[0].0, "quipu.changes");
+    assert_eq!(next[0].1.as_deref(), Some(tx2.to_string().as_str()));
+}
+
+/// One record larger than a frame cannot be split. It is refused with no id,
+/// so the consumer's cursor stays put, and the stream ends.
+#[tokio::test]
+async fn a_record_larger_than_a_frame_is_refused_without_advancing() {
+    let mut store = Store::open_in_memory().unwrap();
+    let huge = wide_datum(&mut store, "urn:test:huge", 1_200_000);
+    store.transact(&[huge], "2026-01-01", None, None).unwrap();
+    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
+    let response =
+        changes_stream(State(shared), HeaderMap::new(), params(json!({"since": 0}))).await;
+    let mut bytes = response.into_body().into_data_stream();
+    let first = tokio::time::timeout(Duration::from_secs(10), bytes.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = String::from_utf8(first.to_vec()).unwrap();
+    assert!(text.contains("event: quipu.changes.tx_too_large"), "{text}");
+    assert!(!text.contains("id:"), "{text}");
+    let end = tokio::time::timeout(Duration::from_secs(5), bytes.next())
+        .await
+        .unwrap();
+    assert!(end.is_none(), "stream should end after the refusal");
+}

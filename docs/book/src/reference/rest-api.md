@@ -2222,11 +2222,29 @@ ID is not an event offset and must never be sent to `/events/commit`.
 Fifteen-second heartbeat comments do not read the store; commit hints are
 checked against the durable feed after crossing the writer barrier. An hourly
 backstop covers writes from other connections. A `quipu.error` event has no ID
-and terminates a failed or oversized page; keep the prior applied cursor.
+and terminates a failed page; keep the prior applied cursor.
+
+A change transaction too large for one frame arrives as a sequence:
+
+1. `quipu.changes.begin`: `{source_tx, parts, records, bytes, digest}`.
+2. `parts` frames of type `quipu.changes.part`: `{source_tx, index,
+   digest_before, records}`, in index order.
+3. `quipu.changes.commit`: `{source_tx, parts, records, digest, next_tx,
+   watermark_tx, watermark_timestamp, capture}`. This is the only frame of the
+   sequence with an ID, the transaction ID.
+
+`digest` is SHA-256 (hex) over the concatenated `data` of every part, exactly
+as received; `digest_before` is the same hash over the parts before that one.
+Stage the parts and apply the transaction only after the commit frame's digest
+verifies. Because only the commit frame carries an ID, a reconnect after a
+partial sequence resumes from the previous transaction and receives this one
+again from its first part. A single record larger than a frame cannot be split:
+the stream sends `quipu.changes.tx_too_large` with no ID and ends, and the
+cursor is unchanged.
 
 The process admits up to 64 streams, reads one transaction/event per page and
-limits output frames to 1 MiB. One large transaction may require more memory
-before the output check; this is not a total heap bound. See the
+limits output frames to 1 MiB. A large transaction is still read whole before
+it is split into parts, so this is not a total heap bound. See the
 [committed-feed protocol](../architecture/event-stream.md).
 
 ### `POST /events/commit`
