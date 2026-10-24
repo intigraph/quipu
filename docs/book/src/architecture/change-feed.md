@@ -17,6 +17,11 @@ mirror exactly which facts did.
 - **Records** are `(tx, sequence, op, graph, entity, attribute, value)`,
   derived directly from fact rows — never a second log that can drift from
   the first. `op` is `assert`, `retract`, or `tombstone`.
+- **Valid time rides each record** as `valid_from` and `valid_to`, so a
+  replica keeps the interval a fact was written with rather than its commit
+  time. An assert reports the bound it was written with; when a later
+  transaction closes the fact, that closing arrives as its own `retract`
+  record, and the assert's record reads the same before and after.
 - **The cursor is a transaction id, and pages end on transaction
   boundaries.** Every cursor is therefore a consistent prefix of commit
   history: a reader never observes half a transaction.
@@ -64,7 +69,8 @@ Both return one page:
       "tx": 43, "sequence": 0, "timestamp": "2026-04-03", "actor": "ingest",
       "source": "episode:...", "op": "assert", "graph": "ROOT",
       "entity": "http://example.org/korimako",
-      "attribute": "http://example.org/cpuCores", "value": 8
+      "attribute": "http://example.org/cpuCores", "value": 8,
+      "valid_from": "2026-04-03", "valid_to": null
     }
   ],
   "next_tx": 43,
@@ -77,8 +83,8 @@ Both return one page:
 Pass `next_tx` back as the cursor (`--from` / `since`). On an empty page it
 stays put, so polling is a fixpoint, not a rewind. `Ref` values resolve to
 `{"ref": "<iri>"}` so a consumer can tell an edge from a string that happens
-to look like one; bytes report a length, not a body — the feed is a
-notification surface, and blob bodies belong on the entity read path.
+to look like one. Bytes arrive as `{"bytes_len": n, "base64": "..."}` — the
+whole body, so a replica built from the feed holds the same value.
 
 ## First consumers
 

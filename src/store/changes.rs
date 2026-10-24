@@ -7,7 +7,14 @@
 //! - **Records** are `(tx, sequence, op, graph, entity, attribute, value)`,
 //!   derived from rows — never a second log to drift from the first. A
 //!   retract's op=0 row carries the retracted value, so the old value rides
-//!   the record without a lookup.
+//!   the record without a lookup. Each record also carries the row's valid
+//!   time (`valid_from`, `valid_to`): without it a replica can only guess the
+//!   commit time, and a fact valid since last year replays as valid since today.
+//!   An assert's `valid_to` is the bound it was written with. A later retract
+//!   closes the row in place, so a row a later transaction closed reports
+//!   `valid_to: null` here and the closing arrives as that retract's record —
+//!   otherwise a record would change after the fact and a replica would assert
+//!   an already-closed fact that its retract then cannot find.
 //! - **Cursor = transaction id, whole transactions only.** A page always ends
 //!   on a tx boundary, so every cursor is a consistent prefix of commit
 //!   history — a reader never observes half a transaction, which is the same
@@ -30,6 +37,7 @@
 //! - **The log is permanent.** Unlike Spanner's 1–30 day retention, the fact
 //!   log never garbage-collects, so a cursor never expires.
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use rusqlite::params;
 use serde_json::{Value as Json, json};
 
@@ -191,7 +199,11 @@ impl Store {
             )
             .unwrap_or((None, None, None));
 
-        let mut sql = String::from("SELECT e, a, v, g, op FROM facts WHERE tx = ?1");
+        let mut sql = String::from(
+            "SELECT e, a, v, g, op, valid_from, \
+                          CASE WHEN retracted_tx IS NULL THEN valid_to END \
+                          FROM facts WHERE tx = ?1",
+        );
         if graph.is_some() {
             sql.push_str(" AND g = ?2");
         }
@@ -199,9 +211,19 @@ impl Store {
         // ordering promise rides on it.
         sql.push_str(" ORDER BY rowid");
         let mut stmt = self.conn.prepare(&sql)?;
-        let rows: Vec<(i64, i64, Vec<u8>, i64, i32)> = {
-            let map =
-                |r: &rusqlite::Row<'_>| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?));
+        type Row = (i64, i64, Vec<u8>, i64, i32, String, Option<String>);
+        let rows: Vec<Row> = {
+            let map = |r: &rusqlite::Row<'_>| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                ))
+            };
             match graph {
                 Some(g) => stmt
                     .query_map(params![tx, g], map)?
@@ -212,7 +234,7 @@ impl Store {
             }
         };
 
-        for (sequence, (e, a, v, g, op)) in rows.into_iter().enumerate() {
+        for (sequence, (e, a, v, g, op, valid_from, valid_to)) in rows.into_iter().enumerate() {
             let value = Value::from_bytes(&v)?;
             let op_name = match op {
                 0 => "retract",
@@ -229,6 +251,8 @@ impl Store {
                 "graph": if g == 0 { "ROOT".to_string() } else { self.resolve(g)? },
                 "entity": self.resolve(e)?,
                 "attribute": self.resolve(a)?,
+                "valid_from": valid_from,
+                "valid_to": valid_to,
             });
             match (op_name, capture) {
                 // A retract under new_values identifies the fact but not the
@@ -290,9 +314,9 @@ impl Store {
             Value::Int(i) => json!(i),
             Value::Float(f) => json!(f),
             Value::Bool(b) => json!(b),
-            // Length, not bytes: the feed is a notification surface, and blob
-            // bodies belong on the entity read path.
-            Value::Bytes(b) => json!({"bytes_len": b.len()}),
+            // The body rides along so a replica built from the feed can hold
+            // the value; a length alone replays as a different fact.
+            Value::Bytes(b) => json!({"bytes_len": b.len(), "base64": STANDARD.encode(b)}),
             Value::Lang { lexical, lang } => json!({"value": lexical, "lang": lang}),
             Value::Typed { lexical, datatype } => json!({"value": lexical, "datatype": datatype}),
         })
@@ -302,3 +326,7 @@ impl Store {
 #[cfg(test)]
 #[path = "changes_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "changes_replay_tests.rs"]
+mod replay_tests;

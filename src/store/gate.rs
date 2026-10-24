@@ -145,6 +145,14 @@ impl Store {
             "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
              WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
         )?;
+        // The close needs the same immutable op=0 row an explicit retract
+        // writes. Without it the change feed shows the new value and never the
+        // end of the old one, so a replica built from the feed keeps both
+        // (local-sync-mode.md F1).
+        let mut retract_row = self.conn.prepare(
+            "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7) ON CONFLICT(e, a, v, tx) DO NOTHING",
+        )?;
         for ((entity, attribute), values) in &proposed {
             // AMBIGUOUS BATCH: two distinct values for one functional property in
             // a single write. Superseding here would silently pick whichever the
@@ -162,8 +170,20 @@ impl Store {
             )?.query_map(params![entity, attribute, graph], |row| row.get(0))?.collect::<std::result::Result<_,_>>()?;
             for bytes in existing {
                 if crate::Value::from_bytes(&bytes)?.term_key() != *new_value {
-                    closed += close_other
+                    let count = close_other
                         .execute(params![timestamp, entity, attribute, bytes, graph, tx_id])?;
+                    if count > 0 {
+                        retract_row.execute(params![
+                            entity,
+                            attribute,
+                            bytes,
+                            graph,
+                            tx_id,
+                            timestamp,
+                            Op::Retract as i32
+                        ])?;
+                    }
+                    closed += count;
                 }
             }
         }
