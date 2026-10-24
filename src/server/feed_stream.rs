@@ -45,7 +45,7 @@ struct Cursor {
     wait: bool,
     terminal: bool,
     /// Frames of one chunked transaction still to send, in order.
-    pending: VecDeque<Event>,
+    pending: VecDeque<FeedFrame>,
     _slot: OwnedSemaphorePermit,
 }
 
@@ -112,8 +112,8 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         _slot: slot,
     };
     let output = unfold(cursor, |mut cursor| async move {
-        if let Some(event) = cursor.pending.pop_front() {
-            return Some((Ok::<_, Infallible>(event), cursor));
+        if let Some(frame) = cursor.pending.pop_front() {
+            return Some((Ok::<_, Infallible>(frame.into_sse()), cursor));
         }
         if cursor.terminal {
             return None;
@@ -229,7 +229,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                     }
                 }
                 let first = cursor.pending.pop_front();
-                return first.map(|event| (Ok::<_, Infallible>(event), cursor));
+                return first.map(|frame| (Ok::<_, Infallible>(frame.into_sse()), cursor));
             }
             if validate_frame(cursor.offset, next, &data).is_err() {
                 cursor.terminal = true;
@@ -262,6 +262,28 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         .into_response()
 }
 
+/// One feed frame, independent of transport: the event name, the cursor id
+/// it acknowledges (if any) and its data, byte-for-byte as sent. SSE builds an
+/// `Event` from it only at the edge, so another transport can send the same
+/// frames and digests unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FeedFrame {
+    pub(crate) event: &'static str,
+    pub(crate) id: Option<i64>,
+    pub(crate) data: String,
+}
+
+impl FeedFrame {
+    fn into_sse(self) -> Event {
+        let event = Event::default().event(self.event);
+        let event = match self.id {
+            Some(id) => event.id(id.to_string()),
+            None => event,
+        };
+        event.data(self.data)
+    }
+}
+
 /// Split one change page (a single transaction) that exceeds the frame budget
 /// into `quipu.changes.begin`, numbered `quipu.changes.part` frames and a
 /// `quipu.changes.commit` barrier (local-sync-mode.md §6, F6).
@@ -278,7 +300,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
 ///
 /// A single record larger than a frame cannot be split; it is refused with
 /// `quipu.changes.tx_too_large` and the cursor is not advanced.
-fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Event>, Event> {
+pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<FeedFrame>, FeedFrame> {
     let records = page
         .get("records")
         .and_then(Value::as_array)
@@ -304,13 +326,15 @@ fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Event>, Event> 
         }
         let len = text + usize::from(!chunk.is_empty());
         if !fits_frame_len(size + len) {
-            return Err(Event::default().event("quipu.changes.tx_too_large").data(
-                json!({
+            return Err(FeedFrame {
+                event: "quipu.changes.tx_too_large",
+                id: None,
+                data: json!({
                     "source_tx": next,
                     "reason": "one record exceeds the transport frame budget; cursor not advanced",
                 })
                 .to_string(),
-            ));
+            });
         }
         size += len;
         chunk.push(record.clone());
@@ -337,27 +361,30 @@ fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Event>, Event> 
     for key in ["next_tx", "watermark_tx", "watermark_timestamp", "capture"] {
         commit[key] = page.get(key).cloned().unwrap_or(Value::Null);
     }
-    frames.push_back(
-        Event::default().event("quipu.changes.begin").data(
-            json!({
-                "source_tx": next,
-                "parts": parts.len(),
-                "records": records.len(),
-                "bytes": parts.iter().map(String::len).sum::<usize>(),
-                "digest": digest,
-            })
-            .to_string(),
-        ),
-    );
+    frames.push_back(FeedFrame {
+        event: "quipu.changes.begin",
+        id: None,
+        data: json!({
+            "source_tx": next,
+            "parts": parts.len(),
+            "records": records.len(),
+            "bytes": parts.iter().map(String::len).sum::<usize>(),
+            "digest": digest,
+        })
+        .to_string(),
+    });
     for part in parts {
-        frames.push_back(Event::default().event("quipu.changes.part").data(part));
+        frames.push_back(FeedFrame {
+            event: "quipu.changes.part",
+            id: None,
+            data: part,
+        });
     }
-    frames.push_back(
-        Event::default()
-            .event("quipu.changes.commit")
-            .id(next.to_string())
-            .data(commit.to_string()),
-    );
+    frames.push_back(FeedFrame {
+        event: "quipu.changes.commit",
+        id: Some(next),
+        data: commit.to_string(),
+    });
     Ok(frames)
 }
 
