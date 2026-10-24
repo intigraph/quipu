@@ -103,6 +103,12 @@ pub enum Outcome {
         /// Why the frame cannot be applied exactly.
         reason: String,
     },
+    /// An as-of share was applied to an empty replica: it now holds the
+    /// source as of `source_tx`, and the tail continues from there.
+    Bootstrapped {
+        /// The share's watermark: the last source transaction it contains.
+        source_tx: i64,
+    },
     /// An event this slice does not act on (heartbeats, newer frame kinds).
     Ignored,
 }
@@ -129,10 +135,44 @@ struct Chunk {
     buffered: Vec<Json>,
 }
 
+impl Chunk {
+    /// Accept the next part if it continues the chain: same source
+    /// transaction, the next index, and a `digest_before` equal to the hash
+    /// of every part so far. `false` breaks the chunk.
+    fn accept(&mut self, part: &Json, data: &str) -> bool {
+        let expected_before = hex::encode(self.hasher.clone().finalize());
+        let in_order = part["source_tx"].as_i64() == Some(self.source_tx)
+            && part["index"].as_u64() == u64::try_from(self.seen).ok()
+            && part["digest_before"].as_str() == Some(expected_before.as_str());
+        if !in_order {
+            return false;
+        }
+        // The digest covers the part EXACTLY as sent, so it is hashed as text.
+        self.hasher.update(data.as_bytes());
+        self.seen += 1;
+        self.buffered
+            .extend(part["records"].as_array().cloned().unwrap_or_default());
+        true
+    }
+
+    /// Whether the commit closes this chunk exactly: every part seen, the
+    /// chained digest and record count as announced.
+    fn complete(&self, commit: &Json) -> bool {
+        let digest = hex::encode(self.hasher.clone().finalize());
+        commit["source_tx"].as_i64() == Some(self.source_tx)
+            && commit["digest"].as_str() == Some(self.digest.as_str())
+            && digest == self.digest
+            && self.seen == self.parts
+            && self.buffered.len() == self.records
+    }
+}
+
 /// The applier for one replica store.
 pub struct Applier {
     progress: Option<Progress>,
     chunk: Option<Chunk>,
+    /// A chunked as-of share being assembled, with its manifest.
+    share: Option<(Chunk, Json)>,
     last_frame_ms: Option<u64>,
 }
 
@@ -166,6 +206,7 @@ impl Applier {
         Ok(Self {
             progress,
             chunk: None,
+            share: None,
             last_frame_ms: None,
         })
     }
@@ -204,6 +245,9 @@ impl Applier {
             "quipu.changes.begin" => Ok(self.begin_chunk(data)),
             "quipu.changes.part" => Ok(self.chunk_part(data)),
             "quipu.changes.commit" => self.commit_chunk(store, data),
+            "quipu.asof" | "quipu.asof.begin" | "quipu.asof.part" | "quipu.asof.commit" => {
+                self.bootstrap_frame(store, event, data)
+            }
             "quipu.changes.tx_too_large" => Ok(Outcome::Refused {
                 reason: "the source cannot send this transaction in frames".into(),
             }),
@@ -277,20 +321,10 @@ impl Applier {
             self.chunk = None;
             return Outcome::Resume { from: resume };
         };
-        let expected_before = hex::encode(chunk.hasher.clone().finalize());
-        let in_order = part["source_tx"].as_i64() == Some(chunk.source_tx)
-            && part["index"].as_u64() == u64::try_from(chunk.seen).ok()
-            && part["digest_before"].as_str() == Some(expected_before.as_str());
-        if !in_order {
+        if !chunk.accept(&part, data) {
             self.chunk = None;
             return Outcome::Resume { from: resume };
         }
-        // The digest covers the part EXACTLY as sent, so it is hashed as text.
-        chunk.hasher.update(data.as_bytes());
-        chunk.seen += 1;
-        chunk
-            .buffered
-            .extend(part["records"].as_array().cloned().unwrap_or_default());
         Outcome::Buffered {
             source_tx: chunk.source_tx,
         }
@@ -304,13 +338,7 @@ impl Applier {
         let Ok(commit) = serde_json::from_str::<Json>(data) else {
             return Ok(Outcome::Resume { from: resume });
         };
-        let digest = hex::encode(chunk.hasher.clone().finalize());
-        let complete = commit["source_tx"].as_i64() == Some(chunk.source_tx)
-            && commit["digest"].as_str() == Some(chunk.digest.as_str())
-            && digest == chunk.digest
-            && chunk.seen == chunk.parts
-            && chunk.buffered.len() == chunk.records;
-        if !complete {
+        if !chunk.complete(&commit) {
             return Ok(Outcome::Resume { from: resume });
         }
         let Some(source) = source_of(&commit) else {
@@ -599,6 +627,10 @@ pub(crate) fn live_digest(store: &Store) -> std::collections::BTreeSet<String> {
         })
         .collect()
 }
+
+#[path = "applier_bootstrap.rs"]
+mod bootstrap;
+pub use bootstrap::share_graph_digest;
 
 #[cfg(test)]
 #[path = "applier_tests.rs"]
