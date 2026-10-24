@@ -489,3 +489,30 @@ fn a_share_is_streamed_never_held_and_a_reopen_mid_share_discards_it() {
     );
     assert!(reopened.progress().is_none());
 }
+
+#[test]
+fn a_store_error_mid_share_leaves_no_fact_visible_even_on_the_same_connection() {
+    let src = source();
+    let (manifest, records) = cut(&src);
+    let (mut replica, mut applier) = empty();
+    // The progress write is the last step before the release: make it fail.
+    replica
+        .conn
+        .execute_batch("DROP TABLE replica_progress")
+        .unwrap();
+    let frame = one_frame(&manifest, &records);
+    assert!(
+        applier
+            .apply_frame(&mut replica, "quipu.asof", &frame, 1)
+            .is_err()
+    );
+    assert!(
+        replica.conn.is_autocommit(),
+        "the share's savepoint is still open"
+    );
+    assert!(
+        live_digest(&replica).is_empty(),
+        "facts of the failed share are visible"
+    );
+    assert!(applier.progress().is_none());
+}
