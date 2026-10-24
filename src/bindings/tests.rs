@@ -285,6 +285,43 @@ fn a_replica_applies_its_source_feed_and_refuses_local_writes() {
     assert_eq!(refused.commit_state, "not_started");
 }
 
+/// A store with local facts is never promoted: the frame is refused, nothing is
+/// applied, and the store stays writable.
+#[test]
+fn a_store_holding_local_facts_is_not_promoted_to_a_replica() {
+    let source = record_source();
+    let mut engine = Engine::open_in_memory().unwrap();
+    let local = crate::store::Datum {
+        entity: engine.store.intern("urn:local").unwrap(),
+        attribute: engine.store.intern("urn:title").unwrap(),
+        value: crate::types::Value::Str("mine".into()),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: crate::types::Op::Assert,
+    };
+    engine.store.transact(&[local], TS, None, None).unwrap();
+    for page in feed_of(&source) {
+        let outcome = engine
+            .replica_apply_frame("quipu.changes", &page, 1)
+            .unwrap();
+        assert_eq!(outcome["kind"], "refused", "{outcome}");
+    }
+    assert_eq!(engine.replica_progress(), Value::Null);
+    assert!(engine.store.lookup("urn:r1").unwrap().is_none());
+    // Still an ordinary store: a local write is not refused as a replica's.
+    let write = engine.invoke(
+        "quipu_set",
+        &json!({"entity": "urn:local", "attribute": "urn:title", "value": "again"}),
+    );
+    assert!(
+        write
+            .as_ref()
+            .err()
+            .is_none_or(|e| e.code != "read_only_replica"),
+        "{write:?}"
+    );
+}
+
 /// The source already judged what it accepted: a replica that re-judged it
 /// against its own shapes could refuse it and silently fork.
 #[cfg(feature = "shacl")]

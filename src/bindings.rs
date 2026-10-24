@@ -242,7 +242,8 @@ impl Engine {
     }
 
     /// Apply one feed frame through the shared applier, making this store a
-    /// read-only replica on first use. Returns the `Outcome` JSON (tagged by
+    /// read-only replica on first use. Only a store with no facts (or one that
+    /// already follows a source) is promoted; any other is refused unchanged. Returns the `Outcome` JSON (tagged by
     /// `kind`); a protocol refusal is a returned outcome, never an error.
     ///
     /// The source already validated what it accepted, so the replica applies
@@ -260,6 +261,15 @@ impl Engine {
     ) -> std::result::Result<Value, BindingError> {
         const OP: &str = "replica_apply_frame";
         if self.replica.is_none() {
+            // A store holding local facts is not promoted: it stays writable,
+            // and the frame is refused with nothing applied.
+            if let Some(reason) = crate::applier::Applier::new_replica_refusal(&self.store)
+                .map_err(|error| BindingError::native(OP, error))?
+            {
+                return serde_json::to_value(crate::applier::Outcome::Refused { reason }).map_err(
+                    |error| BindingError::new("internal", OP, "unknown", error.to_string()),
+                );
+            }
             let applier = crate::applier::Applier::open(&self.store)
                 .map_err(|error| BindingError::native(OP, error))?;
             self.replica = Some(applier);
