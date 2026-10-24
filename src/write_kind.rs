@@ -102,8 +102,16 @@ impl WriteKind {
             "/retract" | "/retract/source" => Self::Retract,
             "/propose" | "/proposal/accept" | "/proposal/reject" => Self::Proposal,
             "/overlay/write" | "/overlay/create" => Self::Overlay,
-            "/graph/create" | "/graph/label" | "/graph/freeze" | "/graph/thaw" | "/datasets"
-            | "/queries" | "/shapes" | "/subscriptions" | "/events/commit" => Self::GraphAdmin,
+            "/graph/create"
+            | "/graph/label"
+            | "/graph/freeze"
+            | "/graph/thaw"
+            | "/datasets"
+            | "/queries"
+            | "/shapes"
+            | "/subscriptions"
+            | "/events/commit"
+            | "/events/graph/commit" => Self::GraphAdmin,
             "/project"
             | "/impact"
             | "/embed_backfill"

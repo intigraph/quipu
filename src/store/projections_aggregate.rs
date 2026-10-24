@@ -38,12 +38,47 @@ pub struct ProjectionAggregate<'a> {
     /// value matches a row with no value for that column; an empty list
     /// matches nothing. Columns are checked against the declaration.
     pub filters: &'a [(&'a str, &'a [JsonValue])],
-    /// A declared column (or `"key"`) to group by.
-    pub group_by: Option<&'a str>,
+    /// At most two dimensions to group by. With one, groups carry `value`;
+    /// with two, they carry `values` in dimension order.
+    pub group_by: &'a [GroupBy<'a>],
     /// `(time column, RFC 3339 instant)`: keep rows whose column is at or after it.
     pub since: Option<(&'a str, &'a str)>,
+    /// `(time column, RFC 3339 instant)`: keep rows whose column is strictly before it.
+    pub until: Option<(&'a str, &'a str)>,
     /// Cap on returned groups; the answer says `truncated` rather than going partial silently.
     pub max_groups: usize,
+}
+
+/// One grouping dimension: a declared column (or `"key"`), or the UTC
+/// calendar day of a time column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GroupBy<'a> {
+    Column(&'a str),
+    Day(&'a str),
+}
+
+/// Whether an RFC 3339 instant names a whole second: no fraction, or only
+/// zeros after the point. The seconds field ends at byte 19 in RFC 3339.
+fn whole_second(at: &str) -> bool {
+    match at.as_bytes().split_at_checked(19) {
+        Some((_, [b'.', rest @ ..])) => rest
+            .iter()
+            .take_while(|c| c.is_ascii_digit())
+            .all(|c| *c == b'0'),
+        _ => true,
+    }
+}
+
+/// A time column's name, or a refusal naming the field that asked for it.
+fn time_column(def: &ProjectionConfig, c: &str, field: &str) -> Result<String> {
+    let c = column(def, c)?;
+    if def.columns.iter().any(|d| d.name == c && d.time) {
+        Ok(c)
+    } else {
+        Err(Error::InvalidValue(format!(
+            "{field}: column {c:?} is not a time column"
+        )))
+    }
 }
 
 /// The validated, bound WHERE clause shared by aggregates and row listings.
@@ -125,6 +160,7 @@ pub(super) struct ScopeInput<'a> {
     pub(super) key_in: &'a [JsonValue],
     pub(super) filters: &'a [(&'a str, &'a [JsonValue])],
     pub(super) since: Option<(&'a str, &'a str)>,
+    pub(super) until: Option<(&'a str, &'a str)>,
 }
 
 impl Store {
@@ -222,17 +258,22 @@ impl Store {
                 wh.push(format!("({})", alternatives.join(" OR ")));
             }
         }
-        if let Some((c, at)) = s.since {
-            let c = column(def, c)?;
-            if !def.columns.iter().any(|d| d.name == c && d.time) {
+        // `[since, until)`: inclusive start, exclusive end, on epoch seconds.
+        for (field, bound, op) in [("since", s.since, ">="), ("until", s.until, "<")] {
+            let Some((c, at)) = bound else { continue };
+            let c = time_column(def, c, field)?;
+            let epoch = crate::time::epoch_of_rfc3339(at).ok_or_else(|| {
+                Error::InvalidValue(format!("{field}: {at:?} is not an RFC 3339 instant"))
+            })?;
+            // Time columns hold whole epoch seconds. A whole-second bound
+            // compares exactly with a truncated stored fraction; a fractional
+            // bound cannot, so it is refused rather than silently floored.
+            if !whole_second(at) {
                 return Err(Error::InvalidValue(format!(
-                    "column {c:?} is not a time column"
+                    "{field}: {at:?} has a fractional second; window bounds are whole seconds"
                 )));
             }
-            let epoch = crate::time::epoch_of_rfc3339(at).ok_or_else(|| {
-                Error::InvalidValue(format!("since: {at:?} is not an RFC 3339 instant"))
-            })?;
-            wh.push(format!("{c}_t >= ?"));
+            wh.push(format!("{c}_t {op} ?"));
             binds.push(epoch.into());
         }
         Ok(Scope {
@@ -285,9 +326,28 @@ impl Store {
                 key_in: q.key_in,
                 filters: q.filters,
                 since: q.since,
+                until: q.until,
             },
         )?;
-        let group_column = q.group_by.map(|c| column(def, c)).transpose()?;
+        if q.group_by.len() > 2 {
+            return Err(Error::InvalidValue(
+                "group_by takes at most 2 dimensions".into(),
+            ));
+        }
+        // Each dimension as a SQL expression from declared names only. A day
+        // is computed from epoch seconds, never by slicing the stored string,
+        // so offsets and fractional seconds land on the right UTC day.
+        let dims: Vec<(String, bool)> = q
+            .group_by
+            .iter()
+            .map(|d| match d {
+                GroupBy::Column(c) => Ok((column(def, c)?, false)),
+                GroupBy::Day(c) => Ok((
+                    format!("date({}_t, 'unixepoch')", time_column(def, c, "group_by")?),
+                    true,
+                )),
+            })
+            .collect::<Result<_>>()?;
         if scope.matches_nothing {
             return Ok(
                 json!({ "total": 0, "groups": [], "truncated": false, "tx": self.latest_tx_id()? }),
@@ -314,32 +374,60 @@ impl Store {
         });
         let mut groups = Vec::new();
         let mut truncated = false;
-        if let Some(c) = group_column {
+        if !dims.is_empty() {
             let cap = if q.max_groups == 0 {
                 1000
             } else {
                 q.max_groups
             };
+            let exprs: Vec<&str> = dims.iter().map(|(e, _)| e.as_str()).collect();
+            let sel = exprs.join(", ");
             // Per-graph answers group by (graph, value): the same value in two
             // graphs is two groups, which is what lets a caller see a shadow.
             let by = if per_graph {
-                format!("g, {c}")
+                format!("g, {sel}")
             } else {
-                c.clone()
+                sel.clone()
             };
+            // Ties order by the dimensions, so a truncated answer is stable.
             let mut st = self.conn.prepare(&format!(
-                "SELECT g, {c}, count(*) FROM {t} WHERE {wh} GROUP BY {by} ORDER BY count(*) DESC LIMIT {}",
+                "SELECT g, {sel}, count(*) FROM {t} WHERE {wh} GROUP BY {by} ORDER BY count(*) DESC, {by} LIMIT {}",
                 cap + 1
             ))?;
-            let rows: Vec<(i64, Option<Vec<u8>>, i64)> = st
+            let n_dims = dims.len();
+            let rows: Vec<(i64, Vec<rusqlite::types::Value>, i64)> = st
                 .query_map(rusqlite::params_from_iter(binds.iter()), |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                    let vals = (0..n_dims)
+                        .map(|i| r.get(1 + i))
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    Ok((r.get(0)?, vals, r.get(1 + n_dims)?))
                 })?
                 .collect::<rusqlite::Result<_>>()?;
             truncated = rows.len() > cap;
-            for (g, v, n) in rows.into_iter().take(cap) {
-                let plain = is_plain(v.as_deref())?;
-                let mut group = json!({ "value": value_json(self, v)?, "n": n, "plain": plain });
+            for (g, vals, n) in rows.into_iter().take(cap) {
+                let mut values = Vec::with_capacity(n_dims);
+                let mut plains = Vec::with_capacity(n_dims);
+                for ((_, day), v) in dims.iter().zip(vals) {
+                    let (value, plain) = match (day, v) {
+                        (_, rusqlite::types::Value::Null) => (JsonValue::Null, false),
+                        (true, rusqlite::types::Value::Text(d)) => (json!(d), true),
+                        (false, rusqlite::types::Value::Blob(b)) => {
+                            (value_json(self, Some(b.clone()))?, is_plain(Some(&b))?)
+                        }
+                        (_, other) => {
+                            return Err(Error::InvalidValue(format!(
+                                "unexpected projected value {other:?}"
+                            )));
+                        }
+                    };
+                    values.push(value);
+                    plains.push(plain);
+                }
+                let mut group = if n_dims == 1 {
+                    json!({ "value": values[0], "n": n, "plain": plains[0] })
+                } else {
+                    json!({ "values": values, "n": n, "plain": plains })
+                };
                 if per_graph {
                     group["graph"] = json!(graph_iris.get(&g));
                 }

@@ -509,6 +509,8 @@ async fn main() {
         .route("/events/stream", get(feed_stream::events_stream))
         .route("/changes/stream", get(feed_stream::changes_stream))
         .route("/events/commit", post(events_commit))
+        .route("/events/graph", get(feed::events_graph_get))
+        .route("/events/graph/commit", post(feed::events_graph_commit))
         // Semantic web APIs (Phase 4)
         .route("/spotlight", post(spotlight_handler))
         .route("/fragments", get(fragments_handler))

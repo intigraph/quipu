@@ -50,7 +50,7 @@ pub(super) fn defs() -> Vec<Value> {
         }),
         serde_json::json!({
             "name": "quipu_events",
-            "description": "Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector.",
+            "description": "Read a bounded batch of ROOT's events without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector. A named graph's events are quipu_graph_events.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -75,6 +75,37 @@ pub(super) fn defs() -> Vec<Value> {
             }
         }),
         serde_json::json!({
+            "name": "quipu_graph_events",
+            "description": "Read a bounded batch of ONE registered committed named graph's events (its own log and offsets) without committing a cursor. Same filters as quipu_events.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "graph": {
+                        "type": "string"
+                    },
+                    "since": {
+                        "type": "integer"
+                    },
+                    "limit": {
+                        "type": "integer"
+                    },
+                    "types": {
+                        "type": "string"
+                    },
+                    "group": {
+                        "type": "string"
+                    },
+                    "consumer": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "graph"
+                ],
+                "additionalProperties": false
+            }
+        }),
+        serde_json::json!({
             "name": "quipu_events_commit",
             "description": "Durably set a consumer cursor. Lower offsets explicitly rewind; delivery alone never commits.",
             "inputSchema": {
@@ -90,6 +121,31 @@ pub(super) fn defs() -> Vec<Value> {
                 },
                 "required": [
                     "consumer_id",
+                    "offset"
+                ],
+                "additionalProperties": false
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_graph_events_commit",
+            "description": "Durably set a consumer cursor in one registered committed named graph's event log. Lower offsets explicitly rewind.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "consumer_id": {
+                        "type": "string"
+                    },
+                    "graph": {
+                        "type": "string"
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "consumer_id",
+                    "graph",
                     "offset"
                 ],
                 "additionalProperties": false

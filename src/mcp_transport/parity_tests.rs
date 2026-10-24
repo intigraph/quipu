@@ -241,6 +241,8 @@ fn write_annotations_cover_new_workflows_and_reads_stay_read_only() {
         ("quipu_reason", true),
         ("quipu_events", false),
         ("quipu_events_commit", true),
+        ("quipu_graph_events", false),
+        ("quipu_graph_events_commit", true),
         ("quipu_changes", false),
         ("quipu_subscriptions", true),
         ("quipu_embed_backfill", true),
