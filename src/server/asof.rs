@@ -164,7 +164,7 @@ fn single_frame(cut: &Cut) -> Option<FeedFrame> {
         None => json!([]),
     };
     let data = json!({"manifest": cut.manifest, "records": records}).to_string();
-    quipu::feed_parts::fits_frame_len(data.len()).then(|| FeedFrame {
+    quipu::feed_parts::fits_frame_len(data.len()).then_some(FeedFrame {
         event: "quipu.asof",
         id: Some(cut.manifest.watermark_tx),
         data,

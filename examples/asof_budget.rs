@@ -55,8 +55,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         [],
         |r| r.get(0),
     )?;
-    let mut graphs = Vec::new();
-    let mut selected_facts = 0;
+    // ROOT first: the default graph is cut only when named.
+    let root: i64 = counter.query_row(
+        "SELECT COUNT(*) FROM facts WHERE op = 1 AND retracted_tx IS NULL AND g = 0",
+        [],
+        |r| r.get(0),
+    )?;
+    let mut graphs = vec!["ROOT".to_string()];
+    let mut selected_facts = root;
     for (iri, n) in &counted {
         if graphs.len() == max_graphs {
             break;
@@ -65,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         };
         if store.graph_class(id)?.as_deref() != Some("committed") || store.is_dataset(iri)? {
+            println!("skipped {iri} ({n} facts): not a committed graph");
             continue;
         }
         graphs.push(iri.clone());
