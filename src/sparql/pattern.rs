@@ -148,6 +148,11 @@ pub fn eval_pattern_seeded(
         }
 
         GraphPattern::Filter { expr, inner } => {
+            // Copy the filter down beside the BGP it can judge, through
+            // UNION / GRAPH / BIND / OPTIONAL, so the BGP-level pushdowns
+            // below can fire there. The original still runs on these rows.
+            let placed = super::filter_place::placed(expr, inner);
+            let inner = placed.as_ref().unwrap_or(inner);
             // aegis-o3l46b: seed `?v` from a top-level `FILTER(?v = <iri>)`.
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
             let inner_seed = pushed.as_ref().unwrap_or(seed);

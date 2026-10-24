@@ -14,6 +14,7 @@ pub mod exists;
 pub mod filter;
 mod filter_drive;
 mod filter_join;
+mod filter_place;
 pub mod filter_pushdown;
 #[cfg(test)]
 mod filter_pushdown_tests;

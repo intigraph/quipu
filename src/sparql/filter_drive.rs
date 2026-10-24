@@ -37,7 +37,8 @@
 //! rows as that proved lower bound. Anything else keeps the original plan.
 //!
 //! Deliberately excluded: `EXISTS` (it sees the whole row), volatile functions
-//! (`RAND`, `NOW`, `UUID`, `STRUUID`, `BNODE`) and custom functions, history
+//! (`RAND`, `NOW`, `UUID`, `STRUUID`, `BNODE`) and custom functions other than
+//! the XSD constructor casts (`xsd:dateTime('…')` is pure), history
 //! and as-of reads, a LIMIT pushed into the BGP, and graphs the resident read
 //! model already joins in memory.
 
@@ -231,7 +232,7 @@ fn drivable(pattern: &TriplePattern, seed: &Bindings) -> bool {
 }
 
 /// Collect the variables `expr` reads; `false` if it cannot be judged early.
-fn stable_vars(expr: &Expression, vars: &mut HashSet<String>) -> bool {
+pub(super) fn stable_vars(expr: &Expression, vars: &mut HashSet<String>) -> bool {
     match expr {
         Expression::NamedNode(_) | Expression::Literal(_) => true,
         Expression::Variable(v) | Expression::Bound(v) => {
@@ -260,6 +261,12 @@ fn stable_vars(expr: &Expression, vars: &mut HashSet<String>) -> bool {
             stable_vars(a, vars) && list.iter().all(|e| stable_vars(e, vars))
         }
         Expression::Coalesce(list) => list.iter().all(|e| stable_vars(e, vars)),
+        // An XSD constructor cast (`xsd:dateTime('…')`) is a pure built-in: a
+        // value it cannot cast is a type error, never a hard one. Any other
+        // custom function stays excluded.
+        Expression::FunctionCall(Function::Custom(function), args) => {
+            super::casts::is_cast(function.as_str()) && args.iter().all(|e| stable_vars(e, vars))
+        }
         Expression::FunctionCall(function, args) => {
             !matches!(
                 function,
@@ -268,7 +275,6 @@ fn stable_vars(expr: &Expression, vars: &mut HashSet<String>) -> bool {
                     | Function::Uuid
                     | Function::StrUuid
                     | Function::BNode
-                    | Function::Custom(_)
             ) && args.iter().all(|e| stable_vars(e, vars))
         }
         Expression::Exists(_) => false,

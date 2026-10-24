@@ -171,6 +171,10 @@ pub(super) fn visit(
             })
         }
         GraphPattern::Filter { expr, inner } => {
+            // Copy the filter down beside the BGP it can judge (filter_place),
+            // as the row evaluator does; the original still runs here.
+            let placed = super::filter_place::placed(expr, inner);
+            let inner = placed.as_ref().unwrap_or(inner);
             let pushed = super::filter_pushdown::seed_iri_equalities(store, expr, inner, seed)?;
             let seed = pushed.as_ref().unwrap_or(seed);
             let narrowed = super::string_pushdown::narrowed(expr, inner, seed, ctx);
