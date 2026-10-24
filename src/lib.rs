@@ -68,6 +68,8 @@ pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
+/// Oversized-transaction parts shared by the change stream and the as-of share.
+pub mod feed_parts;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_pin;
