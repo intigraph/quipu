@@ -295,3 +295,36 @@ fn an_assert_record_reads_the_same_before_and_after_a_later_retract() {
     assert_eq!(before, after);
     assert!(after[0]["valid_to"].is_null(), "{after:#?}");
 }
+
+/// F1: a functional-property supersede closes the old value with an UPDATE and
+/// writes no retract record, so the replica keeps both values.
+#[cfg(feature = "owl")]
+#[test]
+fn f1_functional_supersede_replays_as_one_current_value() {
+    const ONT: &str = "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+                       @prefix ex: <http://example.org/> .\n\
+                       ex:contentHash a owl:DatatypeProperty, owl:FunctionalProperty .\n";
+    let mut source = Store::open_in_memory().unwrap();
+    source.owl_config_mut().validate_on_write = true;
+    source.load_ontology("t", ONT, TS1).unwrap();
+    source.invalidate_owl_cache();
+    let e = source.intern("http://example.org/doc1").unwrap();
+    let a = source.intern("http://example.org/contentHash").unwrap();
+    source
+        .transact(
+            &[datum(e, a, Value::Str("aaa".into()), TS1, Op::Assert)],
+            TS1,
+            None,
+            None,
+        )
+        .unwrap();
+    source
+        .transact(
+            &[datum(e, a, Value::Str("bbb".into()), TS2, Op::Assert)],
+            TS2,
+            None,
+            None,
+        )
+        .unwrap();
+    assert_replica_equals_source(&source);
+}
