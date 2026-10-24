@@ -167,9 +167,8 @@ async fn produce(
             })
             .await
         };
-        let (returned, result) = match polled {
-            Ok(polled) => polled,
-            Err(_) => return,
+        let Ok((returned, result)) = polled else {
+            return;
         };
         session = returned;
         let Ok((batch, answered)) = result else {

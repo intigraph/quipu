@@ -86,7 +86,7 @@ impl Events {
             let left = deadline.checked_duration_since(Instant::now())?;
             let chunk = tokio::time::timeout(left, self.bytes.next()).await.ok()??;
             self.buffer
-                .push_str(&String::from_utf8(chunk.ok()?.to_vec()).unwrap());
+                .push_str(std::str::from_utf8(&chunk.ok()?).unwrap());
         }
     }
 }
