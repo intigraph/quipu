@@ -27,6 +27,12 @@ mirror exactly which facts did.
   history: a reader never observes half a transaction.
 - **Ordering**: per entity, records arrive in commit order (transaction,
   then write order within it). Across entities there is no ordering promise.
+- **Every page names its source**: `source.store_id` is the store, and
+  `source.log_epoch` is the epoch of its change log, minted when the store is
+  created and minted again by any operation that removes served history. A
+  follower that sees either value change is reading a different history and
+  must re-bootstrap rather than keep its cursor. A store reconstructed from a
+  share mints its own epoch.
 - **Watermark instead of heartbeat**: every page carries `watermark_tx` and
   `watermark_timestamp` — the newest committed transaction. An empty page
   with an advancing watermark means the store is idle (or your graph scope
@@ -73,15 +79,22 @@ Both return one page:
       "valid_from": "2026-04-03", "valid_to": null
     }
   ],
+  "since": 42,
   "next_tx": 43,
   "watermark_tx": 43,
   "watermark_timestamp": "2026-04-03",
-  "capture": "new_values"
+  "capture": "new_values",
+  "source": {"store_id": "urn:uuid:…", "log_epoch": "urn:uuid:…"}
 }
 ```
 
 Pass `next_tx` back as the cursor (`--from` / `since`). On an empty page it
-stays put, so polling is a fixpoint, not a rewind. `Ref` values resolve to
+stays put, so polling is a fixpoint, not a rewind. `since` echoes the cursor
+the page answers: the page holds every transaction in scope in
+`(since, next_tx]`. A follower whose own cursor is below `since` has missed
+the transactions between them and must resume from its cursor rather than
+apply the page. The chunked `begin` and `commit` frames carry the same
+`since`. `Ref` values resolve to
 `{"ref": "<iri>"}` so a consumer can tell an edge from a string that happens
 to look like one. Bytes arrive as `{"bytes_len": n, "base64": "..."}` — the
 whole body, so a replica built from the feed holds the same value.

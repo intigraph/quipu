@@ -50,6 +50,10 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "auth_class", TermIdKind::None),
     ("store_identity", "id", TermIdKind::None),
     ("store_identity", "store_id", TermIdKind::None),
+    ("log_epoch", "id", TermIdKind::None),
+    ("log_epoch", "epoch", TermIdKind::None),
+    ("log_epoch", "minted_at", TermIdKind::None),
+    ("log_epoch", "reason", TermIdKind::None),
     // Local search-default intent contains no interned term identifiers.
     ("search_default_policy", "id", TermIdKind::None),
     ("search_default_policy", "policy", TermIdKind::None),

@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS store_identity (
     store_id TEXT NOT NULL UNIQUE
 );
 
+-- The change log's epoch (local-sync-mode.md §5, F5). Minted when the store
+-- is created and re-minted by any operation that removes served history, so a
+-- follower holding a cursor from another epoch knows to re-bootstrap.
+CREATE TABLE IF NOT EXISTS log_epoch (
+    id        INTEGER PRIMARY KEY CHECK (id = 1),
+    epoch     TEXT NOT NULL,
+    minted_at TEXT NOT NULL,
+    reason    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS facts (
     e         INTEGER NOT NULL,
     a         INTEGER NOT NULL,

@@ -86,10 +86,19 @@ impl Capture {
 #[derive(Debug)]
 pub struct ChangePage {
     pub records: Vec<Json>,
+    /// The cursor this page answers: it covers every transaction in scope in
+    /// `(since, next_tx]`. A follower whose cursor is below `since` would skip
+    /// transactions by applying it, so it must resume instead.
+    pub since: i64,
     pub next_tx: i64,
     pub watermark_tx: i64,
     pub watermark_timestamp: Option<String>,
     pub capture: Capture,
+    /// The store these records came from, and its log epoch. A follower that
+    /// sees either change is reading a different history (a restore, a clone
+    /// or removed records) and must re-bootstrap rather than keep its cursor.
+    pub store_id: String,
+    pub log_epoch: String,
 }
 
 impl ChangePage {
@@ -97,10 +106,12 @@ impl ChangePage {
     pub fn to_json(&self) -> Json {
         json!({
             "records": self.records,
+            "since": self.since,
             "next_tx": self.next_tx,
             "watermark_tx": self.watermark_tx,
             "watermark_timestamp": self.watermark_timestamp,
             "capture": self.capture.as_str(),
+            "source": {"store_id": self.store_id, "log_epoch": self.log_epoch},
         })
     }
 }
@@ -158,10 +169,13 @@ impl Store {
         }
         Ok(ChangePage {
             records,
+            since: since_tx,
             next_tx: tx_ids.last().copied().unwrap_or(since_tx),
             watermark_tx,
             watermark_timestamp,
             capture,
+            store_id: self.store_id()?,
+            log_epoch: self.log_epoch()?,
         })
     }
 
