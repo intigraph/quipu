@@ -104,6 +104,66 @@ transport carry them unchanged. A follower stages every part and applies
 nothing until the barrier digest matches. A disconnect mid-cut discards the
 stage and restarts the cut; it never resumes half-way.
 
+### Budget
+
+A whole-board cut is one SQLite read transaction over the production store
+(about 9.3M current facts). While it is open it pins the WAL: checkpoints
+cannot complete past it, and the WAL grows with every write that lands during
+the cut. The cut is therefore bounded in four ways.
+
+**(b) The transaction is open only while reading, never while sending.**
+- Under the read transaction, the producer streams records into an on-disk
+  **spool**: one file of canonical JSON lines per cut, in the scratch
+  directory.
+- It computes the per-graph and whole-cut digests as it writes.
+- It closes the transaction as soon as the spool is complete and its digests
+  are final.
+- Frames are then sent from the spool with no transaction open.
+- So a slow or stalled follower holds a file on disk, never the source's
+  snapshot. The WAL is pinned only for the read phase, which is bounded by the
+  source's own disk and CPU, not by any network.
+- The spool is named by the manifest hash. A follower that disconnects and
+  re-requests the same cut (same scope and `T`) within the spool's lifetime is
+  served from it, with no new read transaction.
+- Spools expire after one hour. They count against a disk quota (default
+  8 GiB); a cut that would exceed it is refused before the transaction opens.
+
+**(a) Targets at production size**, to be measured on a scratch copy of a
+production-sized store in the source PR, never against production:
+- Read phase: at most **120 s** wall time for a whole-board cut.
+- Peak RSS growth: at most **256 MiB** over the idle process, independent of
+  board size. Records are streamed to the spool, never collected in memory.
+- Spool size: reported, expected to be a few GiB at production size. The PR
+  states the measured figure and the per-fact cost.
+
+The PR records the build profile (release), the store size, the fact count,
+and all three numbers. A target that is missed is a design defect to fix or a
+ceiling to re-rule; the budget is never loosened silently.
+
+**(c) The WAL ceiling: refuse or abort, never partial.** During the read
+phase the producer checks its elapsed time and the WAL file's growth since the
+cut began, every 10,000 records. Either ceiling aborts the cut:
+- wall time over `asof_read_timeout_secs` (default 300);
+- WAL growth over `asof_wal_growth_max_mib` (default 1024).
+
+An abort:
+- rolls back the read transaction, so checkpoints resume;
+- deletes the partial spool;
+- answers `503` with `{"error":"cut_aborted","reason":"wal_ceiling|time_ceiling","retry_after_secs":...}`.
+
+No manifest and no frame of an aborted cut is ever sent. A follower treats it
+as "no bootstrap yet" and retries later; it never applies part of a cut.
+
+**(d) Admission.**
+- At most **one** read phase runs per source at a time. A second request
+  while one is reading gets `503` with `Retry-After`. It is not queued behind
+  the open transaction, because queued cuts would extend the pinned window
+  back-to-back.
+- Sending from finished spools is limited by the existing stream slots, not
+  by this lock.
+- The route is write-class, so only authenticated writers can start a cut at
+  all.
+
 ### Frozen graphs (the bootstrap must equal the source)
 
 A frozen graph's rows live in its mounted pack. Freezing respaces term ids
@@ -151,6 +211,13 @@ second principal is served before the read model's ruling exists. Making the
 route read-class is a change for the read-authorization work, not for this
 one.
 
+The new route also needs the same classification every route gets:
+- an entry in `http_auth`'s endpoint lists (write-class here), which the
+  route-completeness test checks;
+- a `share_completeness` classification for anything it persists (the spool
+  is scratch, not store state);
+- a `rest-api.md` reference entry.
+
 ## Verification plan
 
 - **Equality:**
@@ -175,6 +242,16 @@ one.
   3. It refuses to splice, re-bootstraps, and equals the source again.
   4. Control: with no epoch check, splicing would leave the follower unequal.
   5. A no-op freeze does not bump, and the follower keeps tailing.
+- **Budget, on a scratch copy of a production-sized store:**
+  - Measure and report the wall time and peak RSS of the read phase against
+    the targets.
+  - Abort controls:
+    1. a write load during the cut that pushes the WAL past a lowered ceiling
+       aborts the cut, sends no manifest, and lets checkpoints resume;
+    2. a lowered time ceiling aborts the same way;
+    3. a slow follower reading from the spool does not hold a read transaction
+       open (checked via the WAL checkpointing during the send).
+  - A second concurrent cut is refused with `Retry-After`.
 - **Chunking:** a cut over the frame budget arrives as begin, parts and
   commit. A dropped part refuses the commit and records nothing. A
   disconnect restarts the cut.
