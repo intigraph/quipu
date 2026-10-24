@@ -450,7 +450,7 @@ pub(crate) fn cut_with_control(
             digests.insert(*g, (iri.clone(), GraphDigest::new(spool_dir)?, 0));
         }
         let mut in_memory = 0usize;
-        let mut meta: Option<(i64, Option<String>, Option<String>, Option<String>)> = None;
+        let mut meta: Option<(i64, TxMeta)> = None;
         let mut rows = stmt.query(params![watermark_tx])?;
         while let Some(row) = rows.next()? {
             let (g, e, a, v, tx, valid_from, valid_to): (
@@ -471,16 +471,16 @@ pub(crate) fn cut_with_control(
                 row.get(6)?,
             );
             if meta.as_ref().is_none_or(|m| m.0 != tx) {
-                let (timestamp, actor, source) = tx_meta.query_row(params![tx], |r| {
+                let fields = tx_meta.query_row(params![tx], |r| {
                     Ok((
                         r.get::<_, Option<String>>(0)?,
                         r.get::<_, Option<String>>(1)?,
                         r.get::<_, Option<String>>(2)?,
                     ))
                 })?;
-                meta = Some((tx, timestamp, actor, source));
+                meta = Some((tx, fields));
             }
-            let (_, timestamp, actor, source) = meta.as_ref().expect("set above");
+            let (_, (timestamp, actor, source)) = meta.as_ref().expect("set above");
             let (iri, digest, records) = digests.get_mut(&g).expect("selected graph");
             // The /changes assert record. A later retract closes the row in
             // place, so a row retracted after T reports `valid_to: null`
@@ -604,6 +604,9 @@ pub(crate) fn cut_with_control(
         read_phase,
     })
 }
+
+/// A transaction's `timestamp`, `actor` and `source`.
+type TxMeta = (Option<String>, Option<String>, Option<String>);
 
 /// VM steps between two ceiling checks inside SQLite.
 const PROGRESS_STRIDE: i32 = 1000;
