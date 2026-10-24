@@ -70,7 +70,6 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
     };
     if changes && (params.types.is_some() || params.group.is_some())
-        || !changes && params.graph.is_some()
         || params
             .graph
             .as_ref()
@@ -158,7 +157,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 }
             } else {
                 let params = serde_json::from_value(
-                    json!({"since": cursor.offset, "limit": 1, "types": cursor.params.types, "group": cursor.params.group}),
+                    json!({"since": cursor.offset, "limit": 1, "types": cursor.params.types, "group": cursor.params.group, "graph": cursor.params.graph}),
                 );
                 match params {
                     Ok(params) => {

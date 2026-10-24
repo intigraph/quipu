@@ -263,6 +263,25 @@ impl Store {
         Ok(())
     }
 
+    /// The registered named graph an event belongs to (event-push design §4).
+    ///
+    /// The graph IRI as TEXT, not a term id (the #74 respace rule, like
+    /// `subject`). Additive and nullable, with NULL meaning ROOT, so every
+    /// existing row stays a ROOT event and no backfill is needed.
+    pub(super) fn migrate_events_graph(conn: &Connection) -> Result<()> {
+        let present: bool = conn
+            .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'graph'")?
+            .exists([])?;
+        if !present {
+            conn.execute_batch("ALTER TABLE events ADD COLUMN graph TEXT;")?;
+        }
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_events_graph ON events(graph, \"offset\") \
+             WHERE graph IS NOT NULL;",
+        )?;
+        Ok(())
+    }
+
     /// Stored named-query registry (quipu #79).
     ///
     /// Versioned in #71's close-don't-overwrite style **from day one** rather

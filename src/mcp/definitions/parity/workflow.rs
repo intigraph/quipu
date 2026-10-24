@@ -50,7 +50,7 @@ pub(super) fn defs() -> Vec<Value> {
         }),
         serde_json::json!({
             "name": "quipu_events",
-            "description": "Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector.",
+            "description": "Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector. graph selects one registered committed named graph's events; without it the batch is ROOT's events.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -64,6 +64,9 @@ pub(super) fn defs() -> Vec<Value> {
                         "type": "string"
                     },
                     "group": {
+                        "type": "string"
+                    },
+                    "graph": {
                         "type": "string"
                     },
                     "consumer": {

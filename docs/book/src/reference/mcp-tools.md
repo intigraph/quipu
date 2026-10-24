@@ -1075,9 +1075,9 @@ Fields: `update` (required), `actor`, `source`.
 
 ### `quipu_events`
 
-Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector.
+Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector. graph selects one registered committed named graph's events; without it the batch is ROOT's events.
 
-Fields: `since`, `limit`, `types`, `group`, `consumer`.
+Fields: `since`, `limit`, `types`, `group`, `graph`, `consumer`.
 
 ### `quipu_events_commit`
 

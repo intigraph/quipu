@@ -2199,10 +2199,20 @@ Pull a batch of events in offset order.
 | `limit=<n>` | batch size, clamped to `1..=10_000` (default 100) |
 | `types=<a,b>` | filter by event type |
 | `group=<g>` | filter by provenance group |
+| `graph=<iri>` | one registered committed named graph's events instead of ROOT's |
 
 Returns `{events, next_offset, lag, committed_offset?}`; pass `next_offset`
 back as `since` (or commit it) to page forward — polling is a fixpoint, not a
 rewind.
+
+Without `graph`, a read returns ROOT's events, as it always has. A commit to
+a registered committed named graph emits `episode.ingested` and
+`entity.added` / `entity.updated` (one per entity per transaction, "added"
+judged within that graph). These events carry a `graph` key and are returned
+only to a read that names that graph. Overlays and unregistered graphs emit
+nothing, and an unregistered or overlay `graph` returns HTTP 400. `types` and
+`group` combine with `graph` by AND, and `lag` counts only the named graph's
+events (ROOT's when `graph` is absent).
 
 ### `GET /events/stream` and `GET /changes/stream`
 
@@ -2212,8 +2222,9 @@ frames have event type `quipu.events`, a delivered event-offset ID, and the
 ordinary `/events` page as JSON data. Change frames use `quipu.changes`, a
 transaction-ID cursor and the ordinary `/changes` page as JSON data.
 
-Event streams accept `types` and `group`; change streams accept `graph`,
-including a registered named graph. Unrelated filter kinds and invalid resume
+Event streams accept `types`, `group` and `graph` (one registered committed
+named graph, as on `/events`); change streams accept `graph`, including a
+registered named graph. Unrelated filter kinds and invalid resume
 cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor

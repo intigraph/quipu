@@ -58,6 +58,9 @@ pub(crate) struct EventParams {
     types: Option<String>,
     /// Filter to a single `group_id` (episode grouping, e.g. `aegis-ontology`).
     group: Option<String>,
+    /// One registered named graph's events; absent means ROOT's, as before
+    /// graphs could emit. Combines with `types` and `group` by AND.
+    graph: Option<String>,
     /// Resume from this consumer's durable committed offset.
     consumer: Option<String>,
 }
@@ -147,13 +150,28 @@ pub(crate) async fn events_get(
                 .map(String::from)
                 .collect()
         });
-        let rows = store.events_after(since, limit, types.as_deref(), p.group.as_deref())?;
+        if let Some(iri) = p.graph.as_deref()
+            && store.committed_graph_id(iri)?.is_none()
+        {
+            return Err(quipu::Error::InvalidValue(format!(
+                "not a registered committed named graph: {iri}"
+            ))
+            .into());
+        }
+        let rows = store.events_after_in(
+            since,
+            limit,
+            types.as_deref(),
+            p.group.as_deref(),
+            p.graph.as_deref(),
+        )?;
         // next_offset is the cursor for the NEXT call; when the batch is empty
         // it stays at `since` so polling is a fixpoint, not a rewind.
         let next_offset = rows.last().map_or(since, |r| r.offset);
-        // Lag counts ALL events beyond the cursor, unfiltered — it answers
-        // "how far behind the log am I", not "how many match my filter".
-        let latest = store.latest_event_offset()?;
+        // Lag counts ALL events of the reader's graph scope beyond the cursor,
+        // unfiltered by type or group — "how far behind my log am I", not "how
+        // many match my filter". Other graphs' events are not this log.
+        let latest = store.latest_event_offset_in(p.graph.as_deref())?;
         let lag = (latest - next_offset).max(0);
         let events: Vec<JsonValue> = rows
             .iter()

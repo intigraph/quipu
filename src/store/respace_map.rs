@@ -232,6 +232,9 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("pending_share_queries", "staged_at", TermIdKind::None),
     // -- Store::migrate_retraction_tx (quipu #83) --
     ("facts", "retracted_tx", TermIdKind::None),
+    // -- Store::migrate_events_graph (event-push design §4) --
+    // The graph IRI as TEXT, like `events.subject`; never a term id.
+    ("events", "graph", TermIdKind::None),
     // -- Store::migrate_forks (quipu-gp5) --
     // `g` is the fork graph's term id; `parent_branch` matches
     // `graphs.parent_branch` (v1 only writes ROOT `0`, the exempt sentinel).

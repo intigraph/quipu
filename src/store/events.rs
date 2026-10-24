@@ -33,8 +33,16 @@
 //! compose-only staging (#36); announcing their writes as graph-change events
 //! would double-fire when the content is promoted to ROOT. Recorded here so
 //! nobody reads the silence as a bug: only ROOT (g=0) commits are events.
+//!
+//! REGISTERED named graphs are the exception (event-push design §4): they are
+//! durable, not staging, and their consumers otherwise poll. A commit to one
+//! emits `episode.ingested` and `entity.added` / `entity.updated` — entity
+//! level only, judged within that graph — tagged with the graph IRI in the
+//! `graph` column. No `edge.*` (the facts are on the change feed), no
+//! `type.new` / `predicate.new` (store-wide, ROOT only). An untagged reader
+//! (`events_after`) sees exactly the ROOT log it always saw.
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
 
@@ -95,6 +103,8 @@ pub struct EventRow {
     pub tx_id: i64,
     /// Type-specific payload, stored as a JSON object string.
     pub payload: String,
+    /// The registered named graph this event belongs to; `None` for ROOT.
+    pub graph: Option<String>,
 }
 
 impl EventRow {
@@ -102,7 +112,7 @@ impl EventRow {
     pub fn to_json(&self) -> serde_json::Value {
         let payload: serde_json::Value =
             serde_json::from_str(&self.payload).unwrap_or_else(|_| json!({}));
-        json!({
+        let mut json = json!({
             "schema": EVENT_SCHEMA,
             "offset": self.offset,
             "type": self.event_type,
@@ -111,7 +121,13 @@ impl EventRow {
             "group_id": self.group_id,
             "tx_id": self.tx_id,
             "payload": payload,
-        })
+        });
+        // Only named-graph events carry the key, so a ROOT event's wire form
+        // is byte-for-byte what it was before graphs could emit.
+        if let Some(graph) = &self.graph {
+            json["graph"] = json!(graph);
+        }
+        json
     }
 }
 
@@ -149,10 +165,15 @@ impl Store {
         // even when this tx emits no semantic events (early returns below).
         let pending = std::mem::take(&mut *self.pending_write_events.borrow_mut());
 
-        // ROOT-graph commits only (see module docs). Advisory events follow the
-        // same rule: an overlay write discards them (compose-only staging).
-        if graph != 0 || (asserts.is_empty() && retracts.is_empty() && pending.is_empty()) {
+        // ROOT and registered named graphs only (see module docs). Advisory
+        // events stay ROOT-only: a named-graph write discards them, as an
+        // overlay write always has.
+        if asserts.is_empty() && retracts.is_empty() && (graph != 0 || pending.is_empty()) {
             return Ok(());
+        }
+        if graph != 0 {
+            return self
+                .emit_named_graph_events(asserts, retracts, tx_id, timestamp, source, graph);
         }
 
         let rdf_type_id: Option<i64> = self.lookup(RDF_TYPE)?;
@@ -495,6 +516,67 @@ impl Store {
 
     // -- Pull API ---------------------------------------------------------
 
+    /// Entity-level events for a commit to a registered COMMITTED named graph;
+    /// a write to an overlay or an unregistered graph emits nothing. Same savepoint,
+    /// same atomicity as the ROOT events.
+    fn emit_named_graph_events(
+        &self,
+        asserts: &[&Datum],
+        retracts: &[&Datum],
+        tx_id: i64,
+        timestamp: &str,
+        source: Option<&str>,
+        graph: i64,
+    ) -> Result<()> {
+        let graph_iri = self.resolve(graph)?;
+        if self.committed_graph_id(&graph_iri)? != Some(graph) {
+            return Ok(());
+        }
+        let insert_event =
+            |event_type: &str, subject: Option<&str>, payload: &serde_json::Value| {
+                self.conn.execute(
+                    "INSERT INTO events (type, ts, subject, group_id, tx_id, payload, graph) \
+                 VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6)",
+                    params![
+                        event_type,
+                        timestamp,
+                        subject,
+                        tx_id,
+                        payload.to_string(),
+                        graph_iri
+                    ],
+                )
+            };
+        if let Some(name) = source.and_then(|s| s.strip_prefix("episode:")) {
+            let payload = json!({ "name": name, "facts": asserts.len() + retracts.len() });
+            insert_event("episode.ingested", None, &payload)?;
+        }
+        // "Added" is judged within THIS graph: an item's first facts in the
+        // board are an addition to the board even if ROOT already knew the IRI.
+        let mut seen: HashSet<i64> = HashSet::new();
+        for d in asserts.iter().chain(retracts.iter()) {
+            if !seen.insert(d.entity) {
+                continue;
+            }
+            let preexisting = self
+                .conn
+                .query_row(
+                    "SELECT 1 FROM facts WHERE g = ?1 AND e = ?2 AND tx < ?3 LIMIT 1",
+                    params![graph, d.entity, tx_id],
+                    |_| Ok(true),
+                )
+                .optional()?
+                .is_some();
+            let event_type = if preexisting {
+                "entity.updated"
+            } else {
+                "entity.added"
+            };
+            insert_event(event_type, Some(&self.resolve(d.entity)?), &json!({}))?;
+        }
+        Ok(())
+    }
+
     /// Events with offset strictly AFTER `since`, in offset order, capped at
     /// `limit`, optionally filtered by type set and/or `group_id`.
     pub fn events_after(
@@ -504,12 +586,47 @@ impl Store {
         types: Option<&[String]>,
         group: Option<&str>,
     ) -> Result<Vec<EventRow>> {
+        self.events_after_in(since, limit, types, group, None)
+    }
+
+    /// [`Self::events_after`] for one graph's events: `None` is ROOT (the log
+    /// every untagged reader has always seen), `Some(iri)` one registered
+    /// named graph's. There is no all-graphs form; a reader names each graph.
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the read fails.
+    pub fn events_after_in(
+        &self,
+        since: i64,
+        limit: usize,
+        types: Option<&[String]>,
+        group: Option<&str>,
+        graph: Option<&str>,
+    ) -> Result<Vec<EventRow>> {
+        // A read-only handle on a store no writer has migrated yet has no
+        // `graph` column: every row there is ROOT, and no graph has events.
+        let tagged = self
+            .conn
+            .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'graph'")?
+            .exists([])?;
+        if !tagged && graph.is_some() {
+            return Ok(Vec::new());
+        }
         // Filters are dynamic; build the WHERE clause with positional params.
-        let mut sql = String::from(
-            "SELECT \"offset\", type, ts, subject, group_id, tx_id, payload \
+        let mut sql = format!(
+            "SELECT \"offset\", type, ts, subject, group_id, tx_id, payload, {} \
              FROM events WHERE \"offset\" > ?1",
+            if tagged { "graph" } else { "NULL" }
         );
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(since)];
+        match graph {
+            Some(g) => {
+                sql.push_str(&format!(" AND graph = ?{}", bind.len() + 1));
+                bind.push(Box::new(g.to_string()));
+            }
+            None if tagged => sql.push_str(" AND graph IS NULL"),
+            None => {}
+        }
         if let Some(ts) = types
             && !ts.is_empty()
         {
@@ -541,6 +658,7 @@ impl Store {
                 group_id: r.get(4)?,
                 tx_id: r.get(5)?,
                 payload: r.get(6)?,
+                graph: r.get(7)?,
             })
         })?;
         let mut out = Vec::new();
@@ -548,6 +666,34 @@ impl Store {
             out.push(row?);
         }
         Ok(out)
+    }
+
+    /// Highest offset among ONE graph's events (`None` = ROOT), 0 when there
+    /// are none. A reader's lag is measured against its own scope: board
+    /// events share the offset space, and counting them would make an
+    /// unfiltered ROOT consumer's lag climb with writes it never receives.
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the read fails.
+    pub fn latest_event_offset_in(&self, graph: Option<&str>) -> Result<i64> {
+        let tagged = self
+            .conn
+            .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'graph'")?
+            .exists([])?;
+        Ok(match (tagged, graph) {
+            (false, None) => self.latest_event_offset()?,
+            (false, Some(_)) => 0,
+            (true, None) => self.conn.query_row(
+                "SELECT COALESCE(MAX(\"offset\"), 0) FROM events WHERE graph IS NULL",
+                [],
+                |r| r.get(0),
+            )?,
+            (true, Some(g)) => self.conn.query_row(
+                "SELECT COALESCE(MAX(\"offset\"), 0) FROM events WHERE graph = ?1",
+                params![g],
+                |r| r.get(0),
+            )?,
+        })
     }
 
     /// Highest offset currently in the log (0 when empty). With `events_after`
