@@ -79,8 +79,10 @@ inside the signed message, so the signature covers the exact text that is
 recorded.
 
 **Times.** Every time in v2 is the same as in v1:
+
 - an `i64` of Unix epoch **seconds**;
 - read from the server clock and never from the browser.
+
 This covers `Request.expires_at`, `Challenge.expires_at` and
 `Receipt.recorded_at`.
 
@@ -180,7 +182,7 @@ The operator's single step:
 The page displays the credential ID, the COSE public key and the fingerprint.
 The operator enrolls them with native file access:
 
-```
+```sh
 quipu deck configure --origin https://<origin> --rp-id <host> --actor <who> --author <curator>
 quipu deck enroll --credential-id <b64url> --cose-key <b64url> --scheme webauthn-es256 --expires-at <epoch>
 quipu deck enable
