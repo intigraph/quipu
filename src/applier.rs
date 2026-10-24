@@ -58,7 +58,12 @@ pub struct Progress {
 }
 
 /// What one frame did, and what the caller must do next.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Serialized (for the browser bridge) as an object tagged by `kind`, in
+/// snake case: `{"kind": "applied", "source_txs": [..]}`, `{"kind": "resume",
+/// "from": N}`, `{"kind": "duplicate"}`, and so on.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Outcome {
     /// These source transactions are now visible, with the cursor moved past them.
     Applied {
@@ -94,7 +99,7 @@ pub enum Outcome {
 }
 
 /// What a reader may say about how current the replica is.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Freshness {
     /// The last source transaction applied, if any.
     pub source_tx: Option<i64>,

@@ -306,3 +306,81 @@ fn the_cursor_survives_reopening_and_freshness_is_never_bounded() {
         Outcome::Ignored
     ));
 }
+
+/// The oracle the replica tests rely on: stores that differ ONLY in valid
+/// time, only in byte content, or only in graph must digest differently, and
+/// identically built stores the same. Without this, an equality assertion
+/// could pass because the digest is blind to the difference under test.
+#[test]
+fn the_digest_sees_valid_time_bytes_and_graph() {
+    let build = |valid_to: Option<&str>, bytes: Vec<u8>, graph: Option<&str>| {
+        let mut s = Store::open_in_memory().unwrap();
+        let mut a = d(
+            &s,
+            "urn:item:1",
+            "urn:p:status",
+            Value::Str("open".into()),
+            Op::Assert,
+        );
+        a.valid_to = valid_to.map(String::from);
+        let b = d(
+            &s,
+            "urn:item:1",
+            "urn:p:blob",
+            Value::Bytes(bytes),
+            Op::Assert,
+        );
+        match graph {
+            None => s.transact(&[a, b], T, None, None).unwrap(),
+            Some(g) => {
+                let g = s.graph_create(g).unwrap();
+                s.transact_to_graph(&[a, b], T, None, None, g).unwrap()
+            }
+        };
+        live_digest(&s)
+    };
+    let base = build(None, vec![1, 2, 3], None);
+    assert_eq!(
+        base,
+        build(None, vec![1, 2, 3], None),
+        "same content, same digest"
+    );
+    assert_ne!(
+        base,
+        build(Some("2027-01-01T00:00:00Z"), vec![1, 2, 3], None),
+        "valid_to"
+    );
+    assert_ne!(base, build(None, vec![1, 2, 4], None), "byte content");
+    assert_ne!(
+        base,
+        build(None, vec![1, 2, 3], Some("urn:graph:other")),
+        "graph"
+    );
+}
+
+/// The browser bridge's contract: outcomes serialize tagged by `kind`.
+#[test]
+fn outcomes_serialize_tagged_by_kind() {
+    let applied = serde_json::to_value(Outcome::Applied {
+        source_txs: vec![3, 4],
+    })
+    .unwrap();
+    assert_eq!(applied, json!({"kind": "applied", "source_txs": [3, 4]}));
+    assert_eq!(
+        serde_json::to_value(Outcome::Duplicate).unwrap(),
+        json!({"kind": "duplicate"})
+    );
+    assert_eq!(
+        serde_json::to_value(Outcome::Resume { from: 7 }).unwrap(),
+        json!({"kind": "resume", "from": 7})
+    );
+    let fresh = Freshness {
+        source_tx: Some(9),
+        last_frame_age_ms: None,
+        bounded: false,
+    };
+    assert_eq!(
+        serde_json::to_value(fresh).unwrap(),
+        json!({"source_tx": 9, "last_frame_age_ms": null, "bounded": false})
+    );
+}
