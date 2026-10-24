@@ -9,7 +9,7 @@
 //! a caller can write them to disk as they are made: memory holds one part,
 //! never the whole transaction or cut.
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 /// Transport frame ceiling. A frame's data must fit with room for the SSE
@@ -49,7 +49,8 @@ pub struct PartBuilder {
     source_tx: i64,
     max_len: usize,
     hasher: Sha256,
-    chunk: Vec<Value>,
+    /// The waiting records, each already serialized as compact JSON.
+    chunk: Vec<String>,
     size: usize,
     index: usize,
     records: usize,
@@ -81,9 +82,28 @@ impl PartBuilder {
         builder
     }
 
-    fn part_data(&self, chunk: &[Value], before: &str) -> String {
-        json!({"source_tx": self.source_tx, "index": self.index, "digest_before": before, "records": chunk})
-            .to_string()
+    /// The part's JSON text, byte for byte what `serde_json` writes for
+    /// `{"source_tx", "index", "digest_before", "records"}`: keys sorted, compact,
+    /// each record exactly as given. `before` is lowercase hex and needs no
+    /// escaping. Writing it directly spares re-serializing every record.
+    fn part_data(&self, chunk: &[String], before: &str) -> String {
+        let records: usize = chunk.iter().map(|r| r.len() + 1).sum();
+        let mut out = String::with_capacity(records + 128);
+        out.push_str("{\"digest_before\":\"");
+        out.push_str(before);
+        out.push_str("\",\"index\":");
+        out.push_str(&self.index.to_string());
+        out.push_str(",\"records\":[");
+        for (i, record) in chunk.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(record);
+        }
+        out.push_str("],\"source_tx\":");
+        out.push_str(&self.source_tx.to_string());
+        out.push('}');
+        out
     }
 
     /// The empty part, sized with a placeholder digest of the final length,
@@ -98,11 +118,21 @@ impl PartBuilder {
     /// # Errors
     ///
     /// [`RecordTooLarge`] when the record alone exceeds a part.
-    pub fn push(&mut self, record: Value) -> Result<Option<String>, RecordTooLarge> {
+    pub fn push(&mut self, record: &Value) -> Result<Option<String>, RecordTooLarge> {
+        self.push_line(record.to_string())
+    }
+
+    /// [`Self::push`] for a record already serialized as compact JSON, so a
+    /// caller that also needs the line (for a digest) serializes it once.
+    ///
+    /// # Errors
+    ///
+    /// [`RecordTooLarge`] when the record alone exceeds a part.
+    pub fn push_line(&mut self, record: String) -> Result<Option<String>, RecordTooLarge> {
         // Sizes add exactly: an array serializes as `[`, the items joined by
         // `,`, and `]`, so a part is its empty frame plus each record plus a
         // comma.
-        let text = record.to_string().len();
+        let text = record.len();
         let mut closed = None;
         if !self.chunk.is_empty() && self.size + text + 1 > self.max_len {
             closed = Some(self.close());
@@ -139,5 +169,74 @@ impl PartBuilder {
             digest: hex::encode(self.hasher.finalize()),
         };
         (last, summary)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// The former construction: parts built from `Value`s by `serde_json`.
+    fn reference_parts(source_tx: i64, max_len: usize, records: &[Value]) -> Vec<String> {
+        let part = |index: usize, chunk: &[Value], before: &str| {
+            json!({"source_tx": source_tx, "index": index, "digest_before": before, "records": chunk})
+                .to_string()
+        };
+        let empty = |index: usize| part(index, &[], &"0".repeat(64)).len();
+        let (mut chunks, mut chunk): (Vec<Vec<Value>>, Vec<Value>) = (Vec::new(), Vec::new());
+        let mut size = empty(0);
+        for record in records {
+            let text = record.to_string().len();
+            if !chunk.is_empty() && size + text + 1 > max_len {
+                chunks.push(std::mem::take(&mut chunk));
+                size = empty(chunks.len());
+            }
+            size += text + usize::from(!chunk.is_empty());
+            chunk.push(record.clone());
+        }
+        if !chunk.is_empty() {
+            chunks.push(chunk);
+        }
+        let mut hasher = Sha256::new();
+        chunks
+            .iter()
+            .enumerate()
+            .map(|(index, chunk)| {
+                let before = hex::encode(hasher.clone().finalize());
+                let data = part(index, chunk, &before);
+                hasher.update(data.as_bytes());
+                data
+            })
+            .collect()
+    }
+
+    /// Writing the part text directly is byte-identical to `serde_json`'s
+    /// output, for escapes, Unicode, nesting and every split point.
+    #[test]
+    fn direct_parts_equal_the_serde_json_parts() {
+        let records: Vec<Value> = (0..40)
+            .map(|i| {
+                json!({
+                    "entity": format!("urn:e:{i}"),
+                    "value": {"base64": "AJ/u", "bytes_len": 3},
+                    "note": format!("quote \" backslash \\ tab \t é ✓ {i}"),
+                    "valid_to": null,
+                    "tx": i,
+                })
+            })
+            .collect();
+        for max_len in [300, 500, 1_000, 10_000] {
+            let mut builder = PartBuilder::with_max_len(7, max_len);
+            let mut parts = Vec::new();
+            for record in &records {
+                parts.extend(builder.push(record).unwrap());
+            }
+            let (last, summary) = builder.finish();
+            parts.extend(last);
+            let want = reference_parts(7, max_len, &records);
+            assert_eq!(parts, want, "max_len {max_len}");
+            assert_eq!(summary.parts, want.len());
+        }
     }
 }

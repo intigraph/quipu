@@ -128,6 +128,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         spool_bytes as f64 / cut.parts.records.max(1) as f64,
         secs * 1e6 / cut.parts.records.max(1) as f64,
     );
+    let p = &cut.profile;
+    let n = cut.parts.records.max(1) as f64;
+    println!("per-record split (us/record, % of read phase):");
+    for (name, d) in [
+        ("sql_step", p.sql_step),
+        ("decode", p.decode),
+        ("tx_meta", p.tx_meta),
+        ("terms", p.terms),
+        ("value_json", p.value_json),
+        ("serialize", p.serialize),
+        ("digest", p.digest),
+        ("frame", p.frame),
+        ("other", p.other),
+        ("finish", p.finish),
+    ] {
+        println!(
+            "  {name:<11} {:>7.2} us  {:>5.1}%",
+            d.as_secs_f64() * 1e6 / n,
+            100.0 * d.as_secs_f64() / secs
+        );
+    }
     std::fs::remove_file(&cut.spool)?;
     Ok(())
 }

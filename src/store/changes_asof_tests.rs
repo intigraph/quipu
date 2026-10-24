@@ -783,3 +783,97 @@ fn each_record_carries_its_own_transactions_time() {
         assert_eq!(record["timestamp"], want, "{record}");
     }
 }
+
+/// The record struct serializes to exactly the canonical line a `Value`
+/// with sorted keys gives, including null fields and nested values.
+#[test]
+fn an_assert_record_serializes_as_the_canonical_line() {
+    use crate::asof_share::AssertRecord;
+    let value = serde_json::json!({"bytes_len": 3, "base64": "AJ/u"});
+    for (actor, valid_to) in [
+        (None, None),
+        (
+            Some("malcolm".to_string()),
+            Some("2026-12-31T00:00:00Z".to_string()),
+        ),
+    ] {
+        let record = AssertRecord {
+            actor: &actor,
+            attribute: "http://example.org/body",
+            entity: "http://example.org/\"quoted\" é",
+            graph: "ROOT",
+            op: "assert",
+            source: &None,
+            timestamp: &Some(TS1.to_string()),
+            tx: 42,
+            valid_from: TS1,
+            valid_to: &valid_to,
+            value: &value,
+        };
+        let want = serde_json::json!({
+            "op": "assert",
+            "tx": 42,
+            "timestamp": TS1,
+            "actor": actor,
+            "source": null,
+            "graph": "ROOT",
+            "entity": "http://example.org/\"quoted\" é",
+            "attribute": "http://example.org/body",
+            "value": value,
+            "valid_from": TS1,
+            "valid_to": valid_to,
+        })
+        .to_string();
+        assert_eq!(serde_json::to_string(&record).unwrap(), want);
+    }
+}
+
+/// grant's R2: merging digest runs and writing the last part happen after
+/// the read transaction closes, so they never pin the WAL. At that point a
+/// TRUNCATE checkpoint from another connection completes.
+#[test]
+fn digest_merging_runs_after_the_read_transaction_closes() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, path) = file_store(dir.path());
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    let limits = Limits {
+        digest_run_bytes: 64,
+        ..Limits::default()
+    };
+    let mut checked = None;
+    let mut inside = None;
+    cut_with_control(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &limits,
+        |seen| {
+            let other = rusqlite::Connection::open(&path).unwrap();
+            // Write so the WAL has frames a checkpoint must move past the reader.
+            other
+                .execute_batch("CREATE TABLE IF NOT EXISTS t(x); INSERT INTO t VALUES (1);")
+                .unwrap();
+            let busy: i64 = other
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))
+                .unwrap();
+            if seen == crate::asof_share::AFTER_READ {
+                checked = Some(busy);
+            } else if inside.is_none() {
+                inside = Some(busy);
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        inside,
+        Some(1),
+        "control: while reading, the snapshot blocks it"
+    );
+    assert_eq!(
+        checked,
+        Some(0),
+        "after the read closed, nothing pins the WAL"
+    );
+}

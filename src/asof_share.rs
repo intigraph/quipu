@@ -36,6 +36,9 @@ pub const POLICY: &str = "quipu-asof-policy/write-class-principal/v1";
 /// The default graph's name in a request, a record and the manifest.
 pub const ROOT: &str = "ROOT";
 
+/// What the test hook is passed once the read transaction has closed.
+pub(crate) const AFTER_READ: usize = usize::MAX;
+
 /// Records between two ceiling checks during the read phase.
 const CHECK_EVERY: usize = 10_000;
 
@@ -187,6 +190,33 @@ pub struct Cut {
     pub parts: PartsSummary,
     /// How long the read transaction was open.
     pub read_phase: Duration,
+    /// Where the read phase's time went.
+    pub profile: CutProfile,
+}
+
+/// Wall time per phase of the read phase, summed over every record.
+#[derive(Debug, Clone, Default)]
+pub struct CutProfile {
+    /// SQLite stepping the scan: read, filter and row decode inside SQLite.
+    pub sql_step: Duration,
+    /// Copying the row out and decoding the value bytes.
+    pub decode: Duration,
+    /// The transaction's timestamp, actor and source.
+    pub tx_meta: Duration,
+    /// Entity and attribute IRIs.
+    pub terms: Duration,
+    /// The value's JSON form, including ref resolution.
+    pub value_json: Duration,
+    /// Building the record and serializing its canonical line.
+    pub serialize: Duration,
+    /// Holding the line for the graph digest, and spilling sorted runs.
+    pub digest: Duration,
+    /// Building parts and writing them to the spool.
+    pub frame: Duration,
+    /// Ceiling checks and the test hook.
+    pub other: Duration,
+    /// After the scan: merging digest runs and the last part.
+    pub finish: Duration,
 }
 
 /// Why a cut was not produced.
@@ -290,9 +320,9 @@ pub fn cut(
     cut_with_control(store, request, spool_dir, limits, |_| Ok(()))
 }
 
-/// [`cut`] with a hook called after the head is read and at every ceiling
-/// check (with the records written so far), so tests can commit writes
-/// while the read transaction is open.
+/// [`cut`] with a hook called after the head is read, at every ceiling check
+/// (with the records written so far), and with [`AFTER_READ`] once the read
+/// transaction has closed, so tests can act while it is open and after.
 pub(crate) fn cut_with_control(
     store: &Store,
     request: &Request,
@@ -346,7 +376,8 @@ pub(crate) fn cut_with_control(
         wal_start,
         Arc::clone(&interrupted),
     )?;
-    let read = store.conn.unchecked_transaction()?;
+    let mut read = Some(store.conn.unchecked_transaction()?);
+    let mut read_phase = None;
 
     let store_id = store.store_id()?;
     if store_id != request.expected_store_id {
@@ -450,9 +481,18 @@ pub(crate) fn cut_with_control(
             digests.insert(*g, (iri.clone(), GraphDigest::new(spool_dir)?, 0));
         }
         let mut in_memory = 0usize;
+        let mut profile = CutProfile::default();
         let mut meta: Option<(i64, TxMeta)> = None;
         let mut rows = stmt.query(params![watermark_tx])?;
+        let mut clock = Instant::now();
+        // Charge the time since the previous mark to one phase.
+        let mut lap = |slot: &mut Duration| {
+            let now = Instant::now();
+            *slot += now - clock;
+            clock = now;
+        };
         while let Some(row) = rows.next()? {
+            lap(&mut profile.sql_step);
             let (g, e, a, v, tx, valid_from, valid_to): (
                 i64,
                 i64,
@@ -470,6 +510,8 @@ pub(crate) fn cut_with_control(
                 row.get(5)?,
                 row.get(6)?,
             );
+            let value = Value::from_bytes(&v)?;
+            lap(&mut profile.decode);
             if meta.as_ref().is_none_or(|m| m.0 != tx) {
                 let fields = tx_meta.query_row(params![tx], |r| {
                     Ok((
@@ -481,31 +523,37 @@ pub(crate) fn cut_with_control(
                 meta = Some((tx, fields));
             }
             let (_, (timestamp, actor, source)) = meta.as_ref().expect("set above");
+            lap(&mut profile.tx_meta);
+            let (entity, attribute) = (store.resolve(e)?, store.resolve(a)?);
+            lap(&mut profile.terms);
+            let value = store.value_json(&value)?;
+            lap(&mut profile.value_json);
             let (iri, digest, records) = digests.get_mut(&g).expect("selected graph");
             // The /changes assert record. A later retract closes the row in
             // place, so a row retracted after T reports `valid_to: null`
-            // exactly as the feed's assert record does.
-            let record = json!({
-                "op": "assert",
-                "tx": tx,
-                "timestamp": timestamp,
-                "actor": actor,
-                "source": source,
-                "graph": iri,
-                "entity": store.resolve(e)?,
-                "attribute": store.resolve(a)?,
-                "value": store.value_json(&Value::from_bytes(&v)?)?,
-                "valid_from": valid_from,
-                "valid_to": valid_to,
-            });
-            // serde_json writes object keys sorted at every level, so this is
-            // the canonical line the applier digests.
-            let line = record.to_string();
+            // exactly as the feed's assert record does. Serialized once: the
+            // same line feeds the graph digest and the part.
+            let line = serde_json::to_string(&AssertRecord {
+                actor,
+                attribute: &attribute,
+                entity: &entity,
+                graph: iri,
+                op: "assert",
+                source,
+                timestamp,
+                tx,
+                valid_from: &valid_from,
+                valid_to: &valid_to,
+                value: &value,
+            })
+            .map_err(|e| invalid(e.to_string()))?;
+            lap(&mut profile.serialize);
             in_memory += line.len();
-            digest.push(line);
+            digest.push(line.clone());
             *records += 1;
             total += 1;
-            match builder.push(record) {
+            lap(&mut profile.digest);
+            match builder.push_line(line) {
                 Ok(Some(part)) => write_part(part)?,
                 Ok(None) => {}
                 Err(RecordTooLarge) => {
@@ -514,6 +562,7 @@ pub(crate) fn cut_with_control(
                     )));
                 }
             }
+            lap(&mut profile.frame);
             // Every graph's run shares one memory budget: past it, the
             // largest run is spilled to disk.
             if in_memory >= limits.digest_run_bytes {
@@ -523,13 +572,28 @@ pub(crate) fn cut_with_control(
                     .expect("at least one graph");
                 in_memory -= largest.pending();
                 charge(largest.spill()?)?;
+                // A spill sorts and writes at most one run while the snapshot
+                // is held; the ceilings are checked again after it.
+                check_ceilings(started, limits, wal.as_deref(), wal_start)?;
             }
+            lap(&mut profile.digest);
             if total.is_multiple_of(CHECK_EVERY) {
                 check_ceilings(started, limits, wal.as_deref(), wal_start)?;
                 during(total)?;
             }
+            lap(&mut profile.other);
         }
         drop(rows);
+        // The last word before a manifest exists: a cut of any size, even an
+        // empty one, ends its read inside the ceilings or is aborted.
+        check_ceilings(started, limits, wal.as_deref(), wal_start)?;
+        // The scan is the only part that needs the snapshot. Close the read
+        // transaction now, so merging digest runs and writing the last part
+        // never pin the WAL, however long they take.
+        drop(read.take());
+        read_phase = Some(started.elapsed());
+        during(AFTER_READ)?;
+        let finishing = Instant::now();
         for (_, (iri, digest, records)) in digests {
             graphs.insert(
                 iri,
@@ -545,16 +609,15 @@ pub(crate) fn cut_with_control(
             write_part(part)?;
         }
         file.flush()?;
-        // The last word before a manifest exists: a cut of any size, even an
-        // empty one, ends inside its ceilings or is aborted.
-        check_ceilings(started, limits, wal.as_deref(), wal_start)?;
-        Ok((graphs, summary))
+        profile.finish = finishing.elapsed();
+        Ok((graphs, summary, profile))
     })();
-    // Closing the read transaction ends the pinned window, success or not.
+    // On an error path the read transaction may still be open: closing it
+    // ends the pinned window, success or not.
     drop(read);
     drop(_guard);
-    let read_phase = started.elapsed();
-    let (graphs, parts) = match written {
+    let read_phase = read_phase.unwrap_or_else(|| started.elapsed());
+    let (graphs, parts, profile) = match written {
         Ok(done) => done,
         Err(error) => {
             let _ = std::fs::remove_file(&spool);
@@ -602,7 +665,26 @@ pub(crate) fn cut_with_control(
         spool: named,
         parts,
         read_phase,
+        profile,
     })
+}
+
+/// One cut record in the `/changes` assert form. Fields are declared in
+/// alphabetical order, so `serde_json` writes the same canonical line as a
+/// `Value` with sorted keys, without building a map per record.
+#[derive(Serialize)]
+pub(crate) struct AssertRecord<'a> {
+    pub(crate) actor: &'a Option<String>,
+    pub(crate) attribute: &'a str,
+    pub(crate) entity: &'a str,
+    pub(crate) graph: &'a str,
+    pub(crate) op: &'static str,
+    pub(crate) source: &'a Option<String>,
+    pub(crate) timestamp: &'a Option<String>,
+    pub(crate) tx: i64,
+    pub(crate) valid_from: &'a str,
+    pub(crate) valid_to: &'a Option<String>,
+    pub(crate) value: &'a serde_json::Value,
 }
 
 /// A transaction's `timestamp`, `actor` and `source`.

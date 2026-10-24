@@ -317,7 +317,7 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
     let mut builder = quipu::feed_parts::PartBuilder::new(next);
     let mut parts = Vec::new();
     for record in records {
-        match builder.push(record) {
+        match builder.push(&record) {
             Ok(closed) => parts.extend(closed),
             Err(quipu::feed_parts::RecordTooLarge) => {
                 return Err(FeedFrame {
