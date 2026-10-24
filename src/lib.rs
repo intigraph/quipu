@@ -64,6 +64,7 @@ pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
+mod private_7ek_profile;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_pin;

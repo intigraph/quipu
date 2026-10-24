@@ -184,6 +184,7 @@ impl Store {
     /// result row per pattern, so the same few thousand terms were being
     /// re-fetched millions of times.
     pub fn resolve(&self, id: i64) -> Result<String> {
+        crate::private_7ek_profile::add("resolve_calls", 1);
         // Scoped borrow: the SQL fetch below must not run while the cache is
         // borrowed, or a re-entrant resolve would panic.
         if let Some(iri) = self.term_cache.borrow().id_to_iri.get(&id) {
@@ -192,6 +193,7 @@ impl Store {
         if let Some(iri) = self.term_cache.borrow().transient_id_to_iri.get(&id) {
             return Ok(iri.clone());
         }
+        let _sql_timer = crate::private_7ek_profile::timer("resolve_sql_miss");
         let iri: String = self
             .conn
             .query_row(&self.resolve_sql, params![id], |row| row.get(0))
@@ -254,12 +256,14 @@ impl Store {
     /// # Errors
     /// [`Error::Sqlite`] if the lookup fails.
     pub fn lookup_all(&self, iri: &str) -> Result<Vec<i64>> {
+        let _timer = crate::private_7ek_profile::timer("lookup_all_total");
         let local = self.lookup(iri)?;
         if self.attachments.is_empty() {
             return Ok(local.into_iter().collect());
         }
         let mut ids: Vec<i64> = local.into_iter().collect();
         for a in &self.attachments {
+            let _timer = crate::private_7ek_profile::timer("lookup_pack_sql");
             let mut stmt = self
                 .conn
                 .prepare(&format!("SELECT id FROM {}.terms WHERE iri = ?1", a.alias))?;
@@ -289,9 +293,11 @@ impl Store {
     /// # Errors
     /// [`Error::Sqlite`] if the lookup fails.
     pub fn canonical_id(&self, id: i64) -> Result<i64> {
+        crate::private_7ek_profile::add("canonical_id_calls", 1);
         if self.attachments.is_empty() {
             return Ok(id);
         }
+        let _timer = crate::private_7ek_profile::timer("canonical_id_sql");
         Ok(self
             .conn
             // Cache the compiled statement, never the row or a negative lookup.
@@ -307,9 +313,11 @@ impl Store {
     /// Memoized via [`TermCache`], but **only on a hit**: an absent IRI can be
     /// interned by the next write, so caching the `None` would hide it.
     pub fn lookup(&self, iri: &str) -> Result<Option<i64>> {
+        crate::private_7ek_profile::add("lookup_calls", 1);
         if let Some(id) = self.term_cache.borrow().iri_to_id.get(iri) {
             return Ok(Some(*id));
         }
+        let _timer = crate::private_7ek_profile::timer("lookup_main_sql_miss");
         let mut stmt = self.conn.prepare("SELECT id FROM terms WHERE iri = ?1")?;
         let mut rows = stmt.query(params![iri])?;
         let found = match rows.next()? {

@@ -62,12 +62,16 @@ impl Store {
         // Each query's squared norm once, not once per stored row.
         let query_norms: Vec<f64> = queries.iter().map(|q| squared_norm(q)).collect();
         let mut seq = 0usize;
-        while let Some(row) = rows.next()? {
+        while let Some(row) = {
+            let _timer = crate::private_7ek_profile::timer("vector_sql_next");
+            rows.next()?
+        } {
             // The scan is the long phase of a write's resolution pass; honour the
             // request deadline inside it, not only around it (aegis-xi0).
             if seq.is_multiple_of(64) {
                 crate::time::check_request_deadline()?;
             }
+            let _decode_timer = crate::private_7ek_profile::timer("vector_decode_norm");
             let entity_id: i64 = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
             let stored = bytes_to_f32_slice(&blob);
@@ -91,6 +95,8 @@ impl Store {
             } else {
                 seq
             };
+            drop(_decode_timer);
+            let _score_timer = crate::private_7ek_profile::timer("vector_score_topk");
             for (query_index, ((query, top), query_norm)) in queries
                 .iter()
                 .zip(tops.iter_mut())
@@ -118,6 +124,9 @@ impl Store {
             }
             seq += 1;
         }
+        crate::private_7ek_profile::add("vector_rows", seq);
+        crate::private_7ek_profile::add("vector_queries", queries.len());
+        crate::private_7ek_profile::add("vector_score_pairs", seq * queries.len());
         drop(scan_trace);
 
         let _metadata_trace = crate::search_trace::phase(crate::search_trace::Phase::Metadata);

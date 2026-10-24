@@ -192,12 +192,16 @@ pub(crate) fn batch_vector_matches(
     top_k: usize,
 ) -> Result<Vec<Option<Vec<VectorMatch>>>> {
     let mut embeddings = Vec::with_capacity(texts.len());
-    for text in texts {
+    for (profile_node, text) in texts.iter().enumerate() {
+        let _node = crate::private_7ek_profile::node(profile_node);
+        let _timer = crate::private_7ek_profile::timer("onnx_embed_query");
+        crate::private_7ek_profile::add("embed_query_calls", 1);
         crate::time::check_request_deadline()?;
         embeddings.push(store.embed_query(text)?);
     }
     crate::time::check_request_deadline()?;
     let queries: Vec<&[f32]> = embeddings.iter().flatten().map(Vec::as_slice).collect();
+    let _scan_timer = crate::private_7ek_profile::timer("vector_search_total");
     let mut searched = store
         .vector_store()
         .vector_search_batch(&queries, top_k * 3, None)?
@@ -236,8 +240,14 @@ pub(crate) fn resolve_with_matches(
 
     // Phase 2: Canonical name matching (Jaro-Winkler), over the whole
     // composition rather than the local store alone.
-    candidates.extend(index.candidates(name, threshold)?);
-    let candidates = selection::select(store, candidates, excluded, top_k, selection::Ties::Iri)?;
+    {
+        let _timer = crate::private_7ek_profile::timer("name_scoring_total");
+        candidates.extend(index.candidates(name, threshold)?);
+    }
+    let candidates = {
+        let _timer = crate::private_7ek_profile::timer("selection_total");
+        selection::select(store, candidates, excluded, top_k, selection::Ties::Iri)?
+    };
 
     Ok(ResolutionResult {
         has_matches: !candidates.is_empty(),

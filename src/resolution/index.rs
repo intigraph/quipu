@@ -154,14 +154,20 @@ impl LabelIndex {
         );
         let mut stmt = store.conn.prepare(&sql)?;
 
-        let rows = stmt.query_map([], |row| {
+        let mut rows = stmt.query_map([], |row| {
             let entity_id: i64 = row.get(0)?;
             let v_bytes: Vec<u8> = row.get(1)?;
             Ok((entity_id, v_bytes))
         })?;
 
         let mut entries = Vec::new();
-        for row in rows {
+        loop {
+            let next = {
+                let _timer = crate::private_7ek_profile::timer("label_sql_next_decode");
+                rows.next()
+            };
+            let Some(row) = next else { break };
+            crate::private_7ek_profile::add("label_rows", 1);
             crate::time::check_request_deadline()?;
             let (entity_id, v_bytes) = row?;
             // Only string values are labels.
@@ -184,11 +190,13 @@ impl LabelIndex {
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
     pub(super) fn candidates(&self, name: &str, threshold: f64) -> Result<Vec<Candidate>> {
+        crate::private_7ek_profile::add("label_entries_visited", self.entries.len());
         let name_lower = name.to_lowercase();
         let name_profile = LabelProfile::of(&name_lower);
         let name_is_commit = is_slash_qualified_commit_id(&name_lower);
         let mut matcher = super::jaro::Matcher::new(&name_lower);
         let mut candidates = Vec::new();
+        let mut profile_jw_calls = 0usize;
         for entry in &self.entries {
             crate::time::check_request_deadline()?;
             let (entity_id, label_lower) = (&entry.entity_id, &entry.lower);
@@ -230,6 +238,7 @@ impl LabelIndex {
             }
 
             // Jaro-Winkler similarity.
+            profile_jw_calls += 1;
             let Some(jw) = matcher.score(label_lower, threshold) else {
                 continue;
             };
@@ -241,6 +250,8 @@ impl LabelIndex {
                 });
             }
         }
+        crate::private_7ek_profile::add("jaro_calls", profile_jw_calls);
+        crate::private_7ek_profile::add("name_candidates", candidates.len());
         Ok(candidates)
     }
 }

@@ -93,7 +93,11 @@ pub fn resolve_nodes(
     strict_mode: bool,
 ) -> Result<EpisodeResolution> {
     crate::time::check_request_deadline()?;
-    let index = LabelIndex::build(store)?;
+    let _profile = crate::private_7ek_profile::start(nodes.len());
+    let index = {
+        let _timer = crate::private_7ek_profile::timer("label_index_total");
+        LabelIndex::build(store)?
+    };
     let mut hints = Vec::new();
     let mut refusal = None;
     // (contested iri, claiming node, score) — accumulated across nodes.
@@ -103,14 +107,22 @@ pub fn resolve_nodes(
         .iter()
         .map(|n| super::build_resolution_text(n.name, &n.properties))
         .collect();
-    let vector_matches = super::batch_vector_matches(store, &texts, top_k)?;
+    let vector_matches = {
+        let _timer = crate::private_7ek_profile::timer("batch_vector_total");
+        super::batch_vector_matches(store, &texts, top_k)?
+    };
 
-    for (node, matches) in nodes.iter().zip(vector_matches.iter()) {
+    for (profile_node, (node, matches)) in nodes.iter().zip(vector_matches.iter()).enumerate() {
+        let _node = crate::private_7ek_profile::node(profile_node);
+        let _timer = crate::private_7ek_profile::timer("node_loop_total");
         crate::time::check_request_deadline()?;
         // A write may declare a pairing distinct inline; the graph may already
         // record it from an earlier write. Both excuse the same pairing, and
         // the durable one is what stops a strict refusal from recurring.
-        let mut excused = recorded_distinct_from(store, &node.iri)?;
+        let mut excused = {
+            let _timer = crate::private_7ek_profile::timer("distinct_lookup_total");
+            recorded_distinct_from(store, &node.iri)?
+        };
         excused.extend(node.declared_distinct.iter().cloned());
 
         let result = super::resolve_with_matches(
@@ -123,6 +135,7 @@ pub fn resolve_nodes(
             matches.as_deref(),
         )?;
 
+        let _hint_timer = crate::private_7ek_profile::timer("hint_assembly");
         if !result.has_matches {
             continue;
         }
