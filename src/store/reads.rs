@@ -453,25 +453,6 @@ impl Store {
         Self::collect_visible_facts(&mut stmt, params![entity])
     }
 
-    /// The graph id of a registered COMMITTED named graph, or `None` for an
-    /// unregistered IRI and for an overlay (compose-only staging).
-    ///
-    /// # Errors
-    /// [`crate::Error::Sqlite`] if the lookup fails.
-    pub fn committed_graph_id(&self, graph_iri: &str) -> Result<Option<i64>> {
-        let Some(g) = self.lookup(graph_iri)? else {
-            return Ok(None);
-        };
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT g FROM graphs WHERE g = ?1 AND class = 'committed'",
-                params![g],
-                |r| r.get(0),
-            )
-            .optional()?)
-    }
-
     /// The graph id of a REGISTERED named graph, or `None`. Scoped reads
     /// refuse an unregistered IRI rather than falling back to ROOT.
     pub fn registered_graph_id(&self, graph_iri: &str) -> Result<Option<i64>> {
