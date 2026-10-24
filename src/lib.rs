@@ -5,6 +5,8 @@
 
 pub mod acquisition;
 pub mod align;
+/// As-of scoped share: a replica bootstrap cut at one transaction.
+pub mod asof_share;
 pub mod bindings;
 pub mod compact;
 pub mod config;
