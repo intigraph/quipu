@@ -2199,30 +2199,30 @@ Pull a batch of events in offset order.
 | `limit=<n>` | batch size, clamped to `1..=10_000` (default 100) |
 | `types=<a,b>` | filter by event type |
 | `group=<g>` | filter by provenance group |
-| `graph=<iri>` | one registered committed named graph's events instead of ROOT's |
 
 Returns `{events, next_offset, lag, committed_offset?}`; pass `next_offset`
 back as `since` (or commit it) to page forward — polling is a fixpoint, not a
 rewind.
 
-Without `graph`, a read returns ROOT's events, as it always has. A commit to
-a registered committed named graph emits `episode.ingested` and
-`entity.added` / `entity.updated` (one per entity per transaction, "added"
-judged within that graph). These events carry a `graph` key and are returned
-only to a read that names that graph. Overlays and unregistered graphs emit
-nothing, and an unregistered or overlay `graph` returns HTTP 400. `types` and
-`group` combine with `graph` by AND, and `lag` counts only the named graph's
-events (ROOT's when `graph` is absent).
+`/events` serves ROOT's events, as it always has, and refuses a `graph`
+parameter (HTTP 400).
 
-A named graph's events are a separate log with its own offsets. `since`,
-`next_offset` and `consumer` resume are offsets in that graph's log, and
-`POST /events/commit` takes `graph` to commit one (the response echoes
-`graph`). ROOT's offsets and cursors are untouched by board writes.
+### `GET /events/graph`
 
-A graph consumer must discard any event whose `graph` is not its graph. A
-server that predates named-graph events ignores the `graph` parameter and
-serves ROOT events (which carry no `graph` key). Do not commit a cursor when
-the commit response does not echo `graph`.
+`graph=<iri>` (required) plus the `/events` parameters: one registered
+committed named graph's events. A commit to such a graph emits
+`episode.ingested` and `entity.added` / `entity.updated` (one per entity per
+transaction, "added" judged within that graph), each carrying a `graph` key.
+Overlays and unregistered graphs emit nothing, and an unregistered or overlay
+`graph` returns HTTP 400. The graph's events are a separate log with its own
+offsets: `since`, `next_offset`, `consumer` resume and `lag` are all in that
+log, and ROOT's offsets and cursors are untouched by board writes.
+
+Named graphs have their own routes, not a `graph` parameter on `/events`,
+so that an older server cannot misread them. A server that predates
+named-graph events ignores an unknown query parameter and would serve ROOT's
+events; it answers an unknown route 404. So against an older server a graph
+consumer gets a 404, never ROOT's events and never a ROOT cursor write.
 
 ### `GET /events/stream` and `GET /changes/stream`
 
@@ -2233,7 +2233,9 @@ ordinary `/events` page as JSON data. Change frames use `quipu.changes`, a
 transaction-ID cursor and the ordinary `/changes` page as JSON data.
 
 Event streams accept `types`, `group` and `graph` (one registered committed
-named graph, as on `/events`); change streams accept `graph`, including a
+named graph, read from its own log as on `/events/graph`; a server that
+predates named-graph events refuses `graph` on an event stream with HTTP
+400); change streams accept `graph`, including a
 registered named graph. Unrelated filter kinds and invalid resume
 cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
@@ -2252,11 +2254,18 @@ before the output check; this is not a total heap bound. See the
 
 ### `POST /events/commit`
 
-`{"consumer_id", "offset", "graph"?}` — durably record a consumer's cursor.
-With `graph` (a registered committed named graph) the offset is in that
-graph's event log and the response echoes `graph`; an unregistered or overlay
-graph returns HTTP 400. Any offset ≥ 0 is accepted, including a **lower** one:
-that is the explicit replay knob.
+`{"consumer_id", "offset"}` — durably record a ROOT consumer's cursor. Any
+offset ≥ 0 is accepted, including a **lower** one: that is the explicit replay
+knob. A `graph` field is refused (HTTP 400): a server that predates
+named-graph events would ignore it and upsert this consumer's ROOT cursor
+before answering.
+
+### `POST /events/graph/commit`
+
+`{"consumer_id", "graph", "offset"}` — durably record a consumer's cursor in
+one registered committed named graph's event log (the response echoes
+`graph`). The same `consumer_id` may also hold a ROOT cursor; the two never
+touch. An older server answers this route 404 and writes nothing.
 
 ### Refusal events (`write.refused`)
 
