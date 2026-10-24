@@ -27,26 +27,14 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use base64::Engine as _;
-use quipu::session_attestation::{
-    ATTESTATION_SKEW_SECS, AttestationEnvelope, Refusal, SignedBinding, WRITE_V2, WriteBinding,
-};
+use quipu::session_attestation::{AttestationEnvelope, Refusal};
 use quipu::transaction_auth::{AttestState, AttestationSlot, Identity, PendingAttestation};
+use quipu::verified_write::{ATTESTED_PATHS, MAX_SIGNED_BODY as MAX_BODY, SignedRequest};
 
 use crate::SharedStore;
 
 /// The header carrying `base64url(JSON AttestationEnvelope)`, unpadded.
 pub(crate) const HEADER: &str = "x-quipu-attestation";
-
-/// Endpoints that accept a signed write, each audited for its barrier:
-/// /knot, /update and /episode mutate ONLY through store transactions, so
-/// `transaction_auth::record` refuses a refused request. /graph/create writes
-/// the graphs registry WITHOUT a transaction; it is an `rw_handler!`, which
-/// calls `refuse_if_refused` right after the writer lock is taken. Any other
-/// endpoint is added only after the same audit names its barrier.
-const ATTESTED_PATHS: [&str; 4] = ["/knot", "/update", "/episode", "/graph/create"];
-
-/// The largest body a signed write may carry (the server's own body limit).
-const MAX_BODY: usize = 64 * 1024 * 1024;
 
 pub(crate) async fn handle(
     store: SharedStore,
@@ -154,49 +142,29 @@ async fn verify(
     let bytes = axum::body::to_bytes(body, MAX_BODY)
         .await
         .map_err(|_| invalid("the request body could not be read within the size limit"))?;
-    let body_sha256 = quipu::session_attestation::body_sha256(&bytes);
 
+    // The one canonical check of these exact bytes, shared with in-process
+    // callers (quipu::verified_write), run against a READ connection.
     let checked = {
         let store = store.clone();
         let envelope = envelope.clone();
         let (method, path, content_type) = (method.clone(), path.clone(), content_type.clone());
+        let bytes = bytes.clone();
         crate::base::spawn_tracked(move || {
             let reader = store.read();
-            // v2 signs THIS store's id. Taken from the store, never from the
-            // envelope: the envelope's claim is only compared against it.
-            let audience = if envelope.version == WRITE_V2 {
-                Some(reader.store_id().map_err(|e| Refusal {
-                    verdict: "error",
-                    message: format!("this store's id could not be read: {e}"),
-                })?)
-            } else {
-                None
-            };
-            let write = WriteBinding {
+            let request = SignedRequest {
                 method: &method,
                 path: &path,
                 content_type: &content_type,
-                body_sha256: &body_sha256,
-                audience: audience.as_deref(),
+                body: &bytes,
             };
-            let principal = quipu::session_attestation::check_binding_deferred(
-                &*reader,
+            quipu::verified_write::check_signed_request(
+                &reader,
                 &envelope,
-                &SignedBinding::Write(write),
+                request,
                 quipu::time::epoch_secs(),
-                ATTESTATION_SKEW_SECS,
-            )?;
-            match reader.attestation_nonce_spent(&envelope.session, &envelope.nonce) {
-                Ok(false) => Ok(principal),
-                Ok(true) => Err(Refusal {
-                    verdict: "replay",
-                    message: "the nonce was already spent".to_owned(),
-                }),
-                Err(e) => Err(Refusal {
-                    verdict: "error",
-                    message: e.to_string(),
-                }),
-            }
+            )
+            .map(|(principal, _)| principal)
         })
         .await
         .map_err(|e| Refusal {
