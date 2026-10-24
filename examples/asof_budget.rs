@@ -129,6 +129,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         secs * 1e6 / cut.parts.records.max(1) as f64,
     );
     let p = &cut.profile;
+    // The baselines' boundary: the read plus the digest-run merge after it.
+    let with_merge = secs + p.finish.as_secs_f64();
+    println!(
+        "read phase + digest merge: {with_merge:.1} s (target <= 120 s, the baseline boundary)"
+    );
     let n = cut.parts.records.max(1) as f64;
     println!("per-record split (us/record, % of read phase):");
     for (name, d) in [

@@ -117,8 +117,10 @@ pub struct Source {
 pub struct GraphCompleteness {
     /// Live facts at `T`, one record each.
     pub records: usize,
-    /// SHA-256 over the graph's record lines, each followed by `\n`, in the
-    /// order they were sent.
+    /// The applier's `share_graph_digest`: SHA-256 over the graph's records
+    /// as canonical compact JSON lines, sorted and joined by `\n` (no
+    /// trailing newline), with a `sha256:` prefix. Send order does not reach
+    /// it.
     pub digest: String,
     /// The frozen pack the records were read from; always null until frozen
     /// graphs can be cut (aegis-s24.1.1).
@@ -808,9 +810,10 @@ fn free_bytes(_dir: &Path) -> Option<u64> {
 /// SHA-256 over the graph's canonical record lines, sorted, joined by `\n`.
 ///
 /// The applier sorts in memory. A producer cutting millions of records cannot,
-/// so lines are sorted in runs of at most `run_bytes`, spilled to a temporary
-/// directory beside the spool, and merged into the hash. The bytes hashed are
-/// the same.
+/// so each graph's lines are held in a run. When all graphs' runs together
+/// pass [`Limits::digest_run_bytes`], the largest is sorted and spilled to a
+/// temporary directory beside the spool; at the end the runs are merged into
+/// the hash. The bytes hashed are the same.
 struct GraphDigest {
     dir: tempfile::TempDir,
     run: Vec<String>,
