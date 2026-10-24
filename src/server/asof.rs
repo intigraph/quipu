@@ -26,7 +26,7 @@ use quipu::asof_share::{Cut, CutError, Limits, Request};
 use serde_json::json;
 use tokio::io::AsyncBufReadExt;
 
-use super::{
+use crate::{
     SharedStore,
     base::AppError,
     feed_stream::{FeedFrame, stream_slot},
@@ -90,7 +90,7 @@ pub(crate) async fn share_asof(
     }
     let phase = ReadPhase(&READING);
     let dir = spool_dir();
-    let result = super::admission::read_blocking(move || {
+    let result = crate::admission::read_blocking(move || {
         let _phase = phase;
         sweep_expired(&dir);
         let store = store.read();

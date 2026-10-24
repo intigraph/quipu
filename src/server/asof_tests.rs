@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tower::ServiceExt;
 
-use super::super::{SharedStore, StoreHandle};
 use super::{READING, share_asof, spool_dir};
+use crate::{SharedStore, StoreHandle};
 
 const G: &str = "https://example.org/project/board";
 
