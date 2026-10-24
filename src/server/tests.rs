@@ -1039,6 +1039,7 @@ pub(super) fn pooled_handle_with_provider(
     }
     let handle = super::StoreHandle {
         commit_wake: super::StoreHandle::commit_wake_for(&store),
+        changes_hub: std::sync::OnceLock::new(),
         graph_metrics: super::graph_metrics::GraphMetrics::new(&path),
         embedding_provider: store.embedding_provider(),
         search_config: store.search_config().clone(),

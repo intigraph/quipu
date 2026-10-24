@@ -26,6 +26,9 @@ use super::{
     feed,
 };
 
+#[path = "feed_hub.rs"]
+pub(crate) mod feed_hub;
+
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Params {
@@ -45,6 +48,12 @@ struct Cursor {
     terminal: bool,
     /// Frames of one chunked transaction still to send, in order.
     pending: VecDeque<FeedFrame>,
+    /// A change stream is served from the shared reader (`feed_hub`) once
+    /// its first page has been read from the store (which validates the
+    /// graph); it then waits on the hub's head instead of its own hint.
+    hub: Option<(Arc<feed_hub::Hub>, watch::Receiver<i64>)>,
+    /// How far the hub's ring has been searched for this stream's graph.
+    scanned: i64,
     _slot: OwnedSemaphorePermit,
 }
 
@@ -106,6 +115,8 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         wait: false,
         terminal: false,
         pending: VecDeque::new(),
+        hub: None,
+        scanned: 0,
         _slot: slot,
     };
     let output = unfold(cursor, |mut cursor| async move {
@@ -116,7 +127,13 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
             return None;
         }
         loop {
-            if cursor.wait {
+            if cursor.wait
+                && let Some((_, head)) = cursor.hub.as_mut()
+            {
+                // The hub crosses the writer barrier and reads once for every
+                // stream; this one only waits for the ring's head to move.
+                let _ = tokio::time::timeout(Duration::from_secs(3600), head.changed()).await;
+            } else if cursor.wait {
                 // Hourly metadata reconcile covers external writers that did
                 // not install this serving connection's hook. Heartbeats do
                 // not query the store. No per-connection polling loop.
@@ -145,7 +162,23 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                     cursor,
                 ));
             }
-            let page = if cursor.changes {
+            if let Some((_, head)) = cursor.hub.as_mut() {
+                head.borrow_and_update();
+            }
+            let served = match &cursor.hub {
+                Some((hub, _)) if cursor.changes => hub.serve(
+                    cursor.offset,
+                    cursor.params.graph.as_deref(),
+                    &mut cursor.scanned,
+                ),
+                _ => feed_hub::Serve::CatchUp,
+            };
+            let page = if let feed_hub::Serve::Page(body) = served {
+                Ok(axum::Json(body))
+            } else if matches!(served, feed_hub::Serve::Wait) {
+                cursor.wait = true;
+                continue;
+            } else if cursor.changes {
                 let params = serde_json::from_value(
                     json!({"since": cursor.offset, "limit": 1, "capture": "old_and_new_values", "graph": cursor.params.graph}),
                 );
@@ -199,6 +232,14 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                     ));
                 }
             };
+            // The first store page validated this stream's graph: from here
+            // on it is served from the shared reader.
+            let attached = cursor.changes && cursor.hub.is_none();
+            if attached {
+                let hub = feed_hub::Hub::of(&cursor.store);
+                let head = hub.watch();
+                cursor.hub = Some((hub, head));
+            }
             let key = if cursor.changes {
                 "next_tx"
             } else {
@@ -209,7 +250,9 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 .and_then(Value::as_i64)
                 .unwrap_or(cursor.offset);
             if next <= cursor.offset {
-                cursor.wait = true;
+                // A stream that just attached asks the hub before it waits, so
+                // a commit the hub read meanwhile is not slept through.
+                cursor.wait = !attached;
                 continue;
             }
             let data = body.to_string();
