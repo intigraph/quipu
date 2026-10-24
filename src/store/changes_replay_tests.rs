@@ -12,7 +12,7 @@ use crate::applier::live_digest;
 use crate::store::{Datum, Store};
 use crate::types::Op;
 
-fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
+pub(super) fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
     Datum {
         entity: e,
         attribute: a,
@@ -27,9 +27,14 @@ fn datum(e: i64, a: i64, value: Value, valid_from: &str, op: Op) -> Datum {
 /// Valid time comes from the record when the feed carries it, else from the
 /// record's commit timestamp, which is all a consumer has today.
 fn replay(source: &Store) -> Store {
-    let mut replica = Store::open_in_memory().unwrap();
+    replay_onto(source, 0, Store::open_in_memory().unwrap())
+}
+
+/// Replay the feed after `since` onto an existing replica (the as-of share's
+/// tail, aegis-s24.1).
+pub(super) fn replay_onto(source: &Store, since: i64, mut replica: Store) -> Store {
     let page = source
-        .changes_after(0, usize::MAX >> 1, Capture::OldAndNewValues, None)
+        .changes_after(since, usize::MAX >> 1, Capture::OldAndNewValues, None)
         .unwrap();
     let mut by_tx: Vec<(i64, Vec<&Json>)> = Vec::new();
     for record in &page.records {
@@ -41,27 +46,32 @@ fn replay(source: &Store) -> Store {
     }
     for (_, records) in by_tx {
         let timestamp = records[0]["timestamp"].as_str().unwrap().to_string();
-        let graph_name = records[0]["graph"].as_str().unwrap().to_string();
-        // The applier's conversion, so the conformance tests and every
-        // replica share one record -> datum mapping (aegis-s24.2).
-        let datums: Vec<Datum> = records
-            .iter()
-            .map(|r| {
-                crate::applier::record_to_datum(&replica, r, &timestamp)
-                    .unwrap()
-                    .expect("every post-F4 record is reproducible")
-            })
-            .collect();
-        if graph_name == "ROOT" {
-            replica.transact(&datums, &timestamp, None, None).unwrap();
-        } else {
-            let g = replica.graph_create(&graph_name).unwrap();
-            replica
-                .transact_to_graph(&datums, &timestamp, None, None, g)
-                .unwrap();
-        }
+        apply_tx(&mut replica, &records, &timestamp);
     }
     replica
+}
+
+/// Apply one group of records as one replica transaction.
+pub(super) fn apply_tx(replica: &mut Store, records: &[&Json], timestamp: &str) {
+    let graph_name = records[0]["graph"].as_str().unwrap().to_string();
+    // The applier's conversion, so the conformance tests and every
+    // replica share one record -> datum mapping (aegis-s24.2).
+    let datums: Vec<Datum> = records
+        .iter()
+        .map(|r| {
+            crate::applier::record_to_datum(replica, r, timestamp)
+                .unwrap()
+                .expect("every post-F4 record is reproducible")
+        })
+        .collect();
+    if graph_name == "ROOT" {
+        replica.transact(&datums, timestamp, None, None).unwrap();
+    } else {
+        let g = replica.graph_create(&graph_name).unwrap();
+        replica
+            .transact_to_graph(&datums, timestamp, None, None, g)
+            .unwrap();
+    }
 }
 
 fn assert_replica_equals_source(source: &Store) {
