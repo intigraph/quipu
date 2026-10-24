@@ -1591,28 +1591,45 @@ endpoint. Body `action`:
   omitted) or `graphs` (1 to 4 IRIs answered from one snapshot), `key_in`
   (key values to keep), `where` (`{"<column or key>": [values]}`: columns are
   ANDed, one column's values are ORed, `null` matches a row with no value for
-  that column, an empty list matches nothing), `group_by` (`"key"` or a
-  column), `since` (`{"column": "<time column>", "at": "<RFC 3339>"}`),
-  `max_groups`. Values are strings, integers or `{"iri": "..."}`; a column
-  that is not declared refuses.
+  that column, an empty list matches nothing), `group_by`, `since` and
+  `until` (each `{"column": "<time column>", "at": "<RFC 3339>"}`; the window
+  is `[since, until)`, inclusive at the start and exclusive at the end), and
+  `max_groups`. `group_by` is one dimension or a list of at most two; a
+  dimension is `"key"`, a column, or `{"column": "<time column>", "bucket":
+  "day"}`, the UTC calendar day computed from the instant (so offsets and
+  fractional seconds land on the right day). Values are strings, integers or
+  `{"iri": "..."}`; a column that is not declared refuses.
   Response: `total`, `groups` (`value`, `n`, `plain`, and `graph` when
-  `graphs` was given), `truncated`, `multi_valued_rows`, `tx`. `plain` is true
-  only when the value is a plain string literal; a typed or language-tagged
-  literal is shown by its lexical form with `plain: false`.
+  `graphs` was given), `truncated`, `multi_valued_rows`, `tx`. With two
+  dimensions each group carries `values` and `plain` as lists in dimension
+  order instead. `plain` is true only when the value is a plain string
+  literal; a typed or language-tagged literal is shown by its lexical form
+  with `plain: false`. A day is shown as `"YYYY-MM-DD"`.
 - `"rows"`: the entities the same scoping selects. Takes `name`, `graph` or
-  `graphs`, `key_in`, `where`, `since`, `columns` (declared columns to return;
-  all by default) and `limit` (1 to 1000; the default is 1000). Response:
-  `rows` (`entity`, `graph`, `key`, `key_plain`, `columns`, `plain` per
-  column, `multi`), `truncated`, `multi_valued_rows`, `tx`, from one read
-  snapshot in a stable store order (not lexical IRI order). There is no
-  paging: a selection larger than `limit` answers `truncated` and should be
-  narrowed. A malformed explicit field (a `graph` that is not an IRI, a
-  non-array `key_in`, a `since` without `column` and `at`, a non-integer number
-  in `key_in` or `where`, a `limit` outside 1 to 1000) is refused; it never
-  falls back to the default for an omitted field.
+  `graphs`, `key_in`, `where`, `since`, `until`, `columns` (declared columns
+  to return; all by default), `limit` (1 to 1000; the default is 1000) and
+  `after`. Response: `rows` (`entity`, `graph`, `key`, `key_plain`, `columns`,
+  `plain` per column, `multi`), `truncated`, `next_after` (only when
+  truncated), `multi_valued_rows`, `tx`, from one read snapshot in a stable
+  store order (not lexical IRI order). To page, send a truncated answer's
+  `next_after` back as `after`; the next page starts strictly after that row.
+  Each page is its own snapshot: when a page's `tx` differs from the first
+  page's, the store changed in between, and the client restarts rather than
+  splicing. A malformed explicit field (a `graph` that is not an IRI, a
+  non-array `key_in`, a `since` or `until` without `column` and `at`, a
+  non-integer number in `key_in` or `where`, a `limit` outside 1 to 1000, an
+  `after` that is not a `next_after`) is refused; it never falls back to the
+  default for an omitted field.
 
 A projection that is not installed at its declared definition refuses rather
 than answer stale.
+
+A declared column with `equals = "<string>"` is a presence column: it holds
+`1` when the entity currently has exactly that plain string for the column's
+predicate, among however many values, and no value otherwise. An ordinary
+column holds only the latest value, so it cannot answer "has this keyword";
+filter a presence column with `[1]` or `[null]`. Equality is exact (no case
+folding), and a presence column cannot also be a time column.
 
 ```bash
 curl -s localhost:3030/projections -X POST \
@@ -1621,6 +1638,10 @@ curl -s localhost:3030/projections -X POST \
 # Open items assigned to one person at priority 1 or 2, grouped by status
 curl -s localhost:3030/projections -X POST \
   -d '{"name":"board","where":{"assignee":["alice"],"priority":[1,2]},"group_by":"key"}'
+
+# Items closed per UTC day in October, by priority
+curl -s localhost:3030/projections -X POST \
+  -d '{"name":"board","since":{"column":"closed","at":"2026-10-01T00:00:00Z"},"until":{"column":"closed","at":"2026-11-01T00:00:00Z"},"group_by":[{"column":"closed","bucket":"day"},"priority"]}'
 
 # The open items themselves, in two graphs at once
 curl -s localhost:3030/projections -X POST \
