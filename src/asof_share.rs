@@ -232,6 +232,77 @@ pub fn scope_digest(scope: &[String], context: &[String]) -> String {
     crate::share::sha256(text.as_bytes())
 }
 
+/// The scope and context lists of a request, each sorted and duplicate-free:
+/// 1..=64 graphs in all, none in both. Shared with the replication stream.
+///
+/// # Errors
+/// [`CutError::Refused`] for a list that breaks those rules.
+pub fn scope_lists(
+    graphs: &[String],
+    context_graphs: &[String],
+) -> std::result::Result<(Vec<String>, Vec<String>), CutError> {
+    let scope = sorted_unique(graphs, "graphs")?;
+    let context = sorted_unique(context_graphs, "context_graphs")?;
+    if scope.is_empty() || scope.len() + context.len() > 64 {
+        return Err(invalid(
+            "as-of share requires 1..=64 explicit named graphs, context included",
+        ));
+    }
+    if scope.iter().any(|iri| context.contains(iri)) {
+        return Err(invalid("a graph is both in scope and in context"));
+    }
+    Ok((scope, context))
+}
+
+/// Each scope and context graph with its id, or why one cannot be served:
+/// registered, committed, not a dataset, read from main (not an attached or
+/// frozen pack) and within the label floor. ROOT is served only when named.
+/// Shared with the replication stream, so both serve exactly the same graphs.
+///
+/// # Errors
+/// [`CutError::Refused`] naming the graph that cannot be served.
+pub fn resolve_graphs(
+    store: &Store,
+    scope: &[String],
+    context: &[String],
+) -> std::result::Result<Vec<(String, i64)>, CutError> {
+    let mut selected = Vec::new();
+    for iri in scope.iter().chain(context) {
+        // ROOT is never implied; a caller names it explicitly to cut it.
+        if iri == ROOT {
+            store.check_label_floor(&[0])?;
+            selected.push((iri.clone(), 0));
+            continue;
+        }
+        oxrdf::NamedNode::new(iri.clone()).map_err(|e| invalid(format!("graph IRI: {e}")))?;
+        let Some(graph) = store.registered_graph_id(iri)? else {
+            return Err(invalid(format!("unregistered graph: {iri}")));
+        };
+        if store.is_dataset(iri)? {
+            return Err(invalid(format!("dataset IRI, not a graph: {iri}")));
+        }
+        if store.graph_class(graph)?.as_deref() != Some("committed") {
+            return Err(invalid(format!(
+                "as-of share requires a committed graph, not an overlay or fork: {iri}"
+            )));
+        }
+        // Two different things live in packs. A graph CONTRIBUTED by an
+        // attachment is registered with that attachment as its source. A
+        // FROZEN graph is still a local graph, but its rows moved into its own
+        // pack, so it is not in `attached_graphs`; reading main for it would
+        // cut it as empty. Both are refused until frozen packs can be read.
+        if store.attached_graphs().contains(&graph) || is_frozen(store, iri)? {
+            return Err(invalid(format!(
+                "graph is served from an attached or frozen pack, which this \
+             producer cannot cut yet (aegis-s24.1.1): {iri}"
+            )));
+        }
+        store.check_label_floor(&[graph])?;
+        selected.push((iri.clone(), graph));
+    }
+    Ok(selected)
+}
+
 /// Take a cut into a new spool under `spool_dir`.
 ///
 /// # Errors
@@ -257,16 +328,7 @@ pub(crate) fn cut_with_control(
     limits: &Limits,
     mut during: impl FnMut(usize) -> Result<()>,
 ) -> std::result::Result<Cut, CutError> {
-    let scope = sorted_unique(&request.graphs, "graphs")?;
-    let context = sorted_unique(&request.context_graphs, "context_graphs")?;
-    if scope.is_empty() || scope.len() + context.len() > 64 {
-        return Err(invalid(
-            "as-of share requires 1..=64 explicit named graphs, context included",
-        ));
-    }
-    if scope.iter().any(|iri| context.contains(iri)) {
-        return Err(invalid("a graph is both in scope and in context"));
-    }
+    let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
     std::fs::create_dir_all(spool_dir)?;
     // The cut's disk allowance, fixed before the transaction opens: what the
     // quota leaves after every spool, run and cache already in the directory,
@@ -322,40 +384,7 @@ pub(crate) fn cut_with_control(
         return Err(invalid("as-of share source has no committed transaction"));
     }
 
-    let mut selected = Vec::new();
-    for iri in scope.iter().chain(&context) {
-        // ROOT is never implied; a caller names it explicitly to cut it.
-        if iri == ROOT {
-            store.check_label_floor(&[0])?;
-            selected.push((iri.clone(), 0));
-            continue;
-        }
-        oxrdf::NamedNode::new(iri.clone()).map_err(|e| invalid(format!("graph IRI: {e}")))?;
-        let Some(graph) = store.registered_graph_id(iri)? else {
-            return Err(invalid(format!("unregistered graph: {iri}")));
-        };
-        if store.is_dataset(iri)? {
-            return Err(invalid(format!("dataset IRI, not a graph: {iri}")));
-        }
-        if store.graph_class(graph)?.as_deref() != Some("committed") {
-            return Err(invalid(format!(
-                "as-of share requires a committed graph, not an overlay or fork: {iri}"
-            )));
-        }
-        // Two different things live in packs. A graph CONTRIBUTED by an
-        // attachment is registered with that attachment as its source. A
-        // FROZEN graph is still a local graph, but its rows moved into its own
-        // pack, so it is not in `attached_graphs`; reading main for it would
-        // cut it as empty. Both are refused until frozen packs can be read.
-        if store.attached_graphs().contains(&graph) || is_frozen(store, iri)? {
-            return Err(invalid(format!(
-                "graph is served from an attached or frozen pack, which this \
-                 producer cannot cut yet (aegis-s24.1.1): {iri}"
-            )));
-        }
-        store.check_label_floor(&[graph])?;
-        selected.push((iri.clone(), graph));
-    }
+    let selected = resolve_graphs(store, &scope, &context)?;
     let shapes_hash = shapes_hash(store, watermark_tx)?;
 
     // Each cut owns its spool for its whole life. Two cuts can share a

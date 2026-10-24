@@ -55,6 +55,8 @@ pub struct PartBuilder {
     index: usize,
     records: usize,
     bytes: usize,
+    /// On the replication stream: the session, and the `frame_seq` of part 0.
+    session: Option<(String, u64)>,
 }
 
 impl PartBuilder {
@@ -77,9 +79,20 @@ impl PartBuilder {
             index: 0,
             records: 0,
             bytes: 0,
+            session: None,
         };
         builder.size = builder.empty_len();
         builder
+    }
+
+    /// Parts for the replication stream (`replicate_wire`): each also names
+    /// its `session` and its `frame_seq`, counted from `first_seq` for part 0,
+    /// inside the text the digest chain covers.
+    #[must_use]
+    pub fn in_session(mut self, session: &str, first_seq: u64) -> Self {
+        self.session = Some((session.to_string(), first_seq));
+        self.size = self.empty_len();
+        self
     }
 
     /// The part's JSON text, byte for byte what `serde_json` writes for
@@ -91,7 +104,12 @@ impl PartBuilder {
         let mut out = String::with_capacity(records + 128);
         out.push_str("{\"digest_before\":\"");
         out.push_str(before);
-        out.push_str("\",\"index\":");
+        out.push('"');
+        if let Some((_, first)) = &self.session {
+            out.push_str(",\"frame_seq\":");
+            out.push_str(&(first + self.index as u64).to_string());
+        }
+        out.push_str(",\"index\":");
         out.push_str(&self.index.to_string());
         out.push_str(",\"records\":[");
         for (i, record) in chunk.iter().enumerate() {
@@ -100,7 +118,14 @@ impl PartBuilder {
             }
             out.push_str(record);
         }
-        out.push_str("],\"source_tx\":");
+        out.push(']');
+        if let Some((session, _)) = &self.session {
+            // A session id is the hex of random bytes and needs no escaping.
+            out.push_str(",\"session\":\"");
+            out.push_str(session);
+            out.push('"');
+        }
+        out.push_str(",\"source_tx\":");
         out.push_str(&self.source_tx.to_string());
         out.push('}');
         out
@@ -109,7 +134,11 @@ impl PartBuilder {
     /// The empty part, sized with a placeholder digest of the final length,
     /// so the real part can never be larger than the one that was measured.
     fn empty_len(&self) -> usize {
-        self.part_data(&[], &"0".repeat(64)).len()
+        // With a session, the frame_seq is sized at its widest (u64::MAX).
+        let widest = self.session.as_ref().map_or(0, |(_, first)| {
+            u64::MAX.to_string().len() - (first + self.index as u64).to_string().len()
+        });
+        self.part_data(&[], &"0".repeat(64)).len() + widest
     }
 
     /// Add one record. Returns the part this record closed, if the record did
@@ -237,6 +266,31 @@ mod tests {
             let want = reference_parts(7, max_len, &records);
             assert_eq!(parts, want, "max_len {max_len}");
             assert_eq!(summary.parts, want.len());
+        }
+    }
+
+    /// A stream part also names its session and frame sequence, still exactly
+    /// as `serde_json` writes it, and never larger than the budget.
+    #[test]
+    fn session_parts_equal_the_serde_json_parts_and_fit() {
+        let records: Vec<Value> = (0..30)
+            .map(|i| json!({"entity": format!("urn:e:{i}"), "note": "é ✓ \"q\"", "tx": 3}))
+            .collect();
+        for (max_len, first) in [(400, 9), (400, 99_999), (2_000, 5)] {
+            let mut builder = PartBuilder::with_max_len(3, max_len).in_session("ab12", first);
+            let mut parts = Vec::new();
+            for record in &records {
+                parts.extend(builder.push(record).unwrap());
+            }
+            parts.extend(builder.finish().0);
+            assert!(parts.len() > 1 || max_len == 2_000);
+            for (index, part) in parts.iter().enumerate() {
+                assert!(part.len() <= max_len, "{} > {max_len}", part.len());
+                let value: Value = serde_json::from_str(part).unwrap();
+                assert_eq!(value.to_string(), *part);
+                assert_eq!(value["frame_seq"], json!(first + index as u64));
+                assert_eq!(value["session"], json!("ab12"));
+            }
         }
     }
 }

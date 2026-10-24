@@ -2342,6 +2342,35 @@ then tails `/changes?since=<watermark_tx>` (design: `docs/design/as-of-share.md`
   at most the 8 GiB quota less what the spool directory already holds, and
   never the last 1 GiB of free disk.
 
+### `POST /replicate/stream`
+
+The scoped replication stream (design: `docs/design/local-sync-mode.md` §5). It carries, for one stream session, every change in its scope after the follower's cursor. The shared applier (`quipu::applier`) consumes it.
+
+```json
+{"graphs": ["https://example.org/graph/hosts"], "context_graphs": [],
+ "since": 742611, "expected_store_id": "urn:uuid:..."}
+```
+
+- **Request.** The scope is chosen as for `POST /share/asof`, by the same rules, and has the same `scope_digest`. `since` is the follower's cursor, usually the share's `watermark_tx`. Unknown fields are refused.
+- **Authorization.** The route is write-class: it requires an authenticated writer, until per-graph read authorization exists.
+- **Response.** Server-Sent Events, one session. Every frame's data carries `session` and `frame_seq`, which starts at 0 and rises by exactly 1. The frames are:
+  - `quipu.replicate.session` (signed): `source`, `scope`, `since`;
+  - `quipu.replicate.tx`: `source_tx` and the transaction's in-scope `records`, which may span graphs. A transaction too large for one frame is sent as `quipu.replicate.tx.begin`, then parts, then `quipu.replicate.tx.commit`, in the layout of an oversized change transaction. Each part also carries `session` and `frame_seq` inside the text its digest covers;
+  - `quipu.replicate.coverage` (signed): `watermark` W. Every in-scope transaction up to W has been sent in this session. It follows each batch, and repeats as a heartbeat every 15 s while idle. A coverage frame proves completeness, never freshness;
+  - `quipu.replicate.control` (signed): `kind` (`epoch_end` or `tx_too_large`) and `reason`. The session then ends; the follower rebuilds from a new as-of share.
+- **Signatures.** They are hex ed25519 by the server's signing key (the verdict key, `QUIPU_SIGNING_KEY`), over `quipu::replicate_wire::message`. That is the domain tag `quipu-replicate/v1`, then length-prefixed fields. A follower pins the public key out of band.
+- **Refusals** are sent before any frame:
+  - `400` for a scope the source does not serve, a store identity mismatch, or a `since` that is not a transaction of this source;
+  - `503` with `Retry-After` for `stream_capacity_exhausted` (the 64 shared stream slots), or `stream_signing_unavailable` (the server has no signing key, so it serves no unsigned stream).
+
+### `POST /replicate/challenge`
+
+`{"session": "<id>", "nonce": "<32 hex>"}` delivers a freshness challenge to an open stream session.
+
+- The session answers with a signed `quipu.replicate.coverage` frame that echoes the nonce. Its W is read after the challenge arrived. The follower's staleness is then at most `now - t_send` on its own clock.
+- Answers: `202` when the challenge is delivered; `404` for an unknown or ended session; `400` for a nonce that is not 16 bytes; `429` when 8 challenges are already unanswered.
+- The route is write-class, like the stream.
+
 ### `POST /events/commit`
 
 `{"consumer_id", "offset"}` — durably record a ROOT consumer's cursor. Any
