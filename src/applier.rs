@@ -569,3 +569,7 @@ pub use bootstrap::share_graph_digest;
 #[cfg(test)]
 #[path = "applier_tests.rs"]
 mod tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "applier_seam_tests.rs"]
+mod seam_tests;
