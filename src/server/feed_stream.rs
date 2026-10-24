@@ -1,6 +1,7 @@
 //! Commit-driven transport over existing logs; no shadow log or implicit ACK.
 
 use std::{
+    collections::VecDeque,
     convert::Infallible,
     sync::{Arc, OnceLock},
     time::Duration,
@@ -16,12 +17,13 @@ use axum::{
 };
 use futures::stream::unfold;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 
 use super::{
     SharedStore,
     base::blocking,
-    event_cursor::{resume_offset, validate_frame},
+    event_cursor::{fits_frame, fits_frame_len, resume_offset, validate_frame},
     feed,
 };
 
@@ -42,6 +44,8 @@ struct Cursor {
     changes: bool,
     wait: bool,
     terminal: bool,
+    /// Frames of one chunked transaction still to send, in order.
+    pending: VecDeque<FeedFrame>,
     _slot: OwnedSemaphorePermit,
 }
 
@@ -104,9 +108,13 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         changes,
         wait: false,
         terminal: false,
+        pending: VecDeque::new(),
         _slot: slot,
     };
     let output = unfold(cursor, |mut cursor| async move {
+        if let Some(frame) = cursor.pending.pop_front() {
+            return Some((Ok::<_, Infallible>(frame.into_sse()), cursor));
+        }
         if cursor.terminal {
             return None;
         }
@@ -208,6 +216,21 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 continue;
             }
             let data = body.to_string();
+            if cursor.changes && !fits_frame(&data) {
+                match chunk_transaction(&body, next) {
+                    Ok(frames) => {
+                        cursor.offset = next;
+                        cursor.wait = false;
+                        cursor.pending = frames;
+                    }
+                    Err(refusal) => {
+                        cursor.terminal = true;
+                        cursor.pending.push_back(refusal);
+                    }
+                }
+                let first = cursor.pending.pop_front();
+                return first.map(|frame| (Ok::<_, Infallible>(frame.into_sse()), cursor));
+            }
             if validate_frame(cursor.offset, next, &data).is_err() {
                 cursor.terminal = true;
                 return Some((
@@ -237,6 +260,132 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
     Sse::new(output)
         .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
         .into_response()
+}
+
+/// One feed frame, independent of transport: the event name, the cursor id
+/// it acknowledges (if any) and its data, byte-for-byte as sent. SSE builds an
+/// `Event` from it only at the edge, so another transport can send the same
+/// frames and digests unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FeedFrame {
+    pub(crate) event: &'static str,
+    pub(crate) id: Option<i64>,
+    pub(crate) data: String,
+}
+
+impl FeedFrame {
+    fn into_sse(self) -> Event {
+        let event = Event::default().event(self.event);
+        let event = match self.id {
+            Some(id) => event.id(id.to_string()),
+            None => event,
+        };
+        event.data(self.data)
+    }
+}
+
+/// Split one change page (a single transaction) that exceeds the frame budget
+/// into `quipu.changes.begin`, numbered `quipu.changes.part` frames and a
+/// `quipu.changes.commit` barrier (local-sync-mode.md §6, F6).
+///
+/// Only the barrier carries the SSE id, so `Last-Event-ID` never lands inside a
+/// transaction: a consumer that disconnects mid-transaction resumes from the
+/// previous one and replays this transaction from its first part. `digest` is
+/// SHA-256 over the concatenated `data` of every part, in order, exactly as
+/// sent. Each part's `digest_before` is the same hash over the parts before it,
+/// so a consumer can check the stream as it arrives without a part hashing
+/// itself.
+/// Before this, an oversized transaction ended the stream without advancing
+/// the cursor, and every reconnect hit the same dead end.
+///
+/// A single record larger than a frame cannot be split; it is refused with
+/// `quipu.changes.tx_too_large` and the cursor is not advanced.
+pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<FeedFrame>, FeedFrame> {
+    let records = page
+        .get("records")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    // Sized with a placeholder digest of the final length, so the real part
+    // can never be larger than the one that was measured.
+    let placeholder = "0".repeat(64);
+    let part_data = |index: usize, chunk: &[Value], before: &str| {
+        json!({"source_tx": next, "index": index, "digest_before": before, "records": chunk})
+            .to_string()
+    };
+    // Sizes add exactly: an array serializes as `[`, the items joined by `,`,
+    // and `]`, so a part is its empty frame plus each record plus a comma.
+    let mut chunks: Vec<Vec<Value>> = Vec::new();
+    let mut chunk: Vec<Value> = Vec::new();
+    let mut size = part_data(0, &[], &placeholder).len();
+    for record in &records {
+        let text = record.to_string().len();
+        if !chunk.is_empty() && !fits_frame_len(size + text + 1) {
+            chunks.push(std::mem::take(&mut chunk));
+            size = part_data(chunks.len(), &[], &placeholder).len();
+        }
+        let len = text + usize::from(!chunk.is_empty());
+        if !fits_frame_len(size + len) {
+            return Err(FeedFrame {
+                event: "quipu.changes.tx_too_large",
+                id: None,
+                data: json!({
+                    "source_tx": next,
+                    "reason": "one record exceeds the transport frame budget; cursor not advanced",
+                })
+                .to_string(),
+            });
+        }
+        size += len;
+        chunk.push(record.clone());
+    }
+    if !chunk.is_empty() {
+        chunks.push(chunk);
+    }
+    let mut hasher = Sha256::new();
+    let mut parts = Vec::with_capacity(chunks.len());
+    for (index, chunk) in chunks.iter().enumerate() {
+        let before = hex::encode(hasher.clone().finalize());
+        let data = part_data(index, chunk, &before);
+        hasher.update(data.as_bytes());
+        parts.push(data);
+    }
+    let digest = hex::encode(hasher.finalize());
+    let mut frames = VecDeque::new();
+    let mut commit = json!({
+        "source_tx": next,
+        "parts": parts.len(),
+        "records": records.len(),
+        "digest": digest,
+    });
+    for key in ["next_tx", "watermark_tx", "watermark_timestamp", "capture"] {
+        commit[key] = page.get(key).cloned().unwrap_or(Value::Null);
+    }
+    frames.push_back(FeedFrame {
+        event: "quipu.changes.begin",
+        id: None,
+        data: json!({
+            "source_tx": next,
+            "parts": parts.len(),
+            "records": records.len(),
+            "bytes": parts.iter().map(String::len).sum::<usize>(),
+            "digest": digest,
+        })
+        .to_string(),
+    });
+    for part in parts {
+        frames.push_back(FeedFrame {
+            event: "quipu.changes.part",
+            id: None,
+            data: part,
+        });
+    }
+    frames.push_back(FeedFrame {
+        event: "quipu.changes.commit",
+        id: Some(next),
+        data: commit.to_string(),
+    });
+    Ok(frames)
 }
 
 fn headers_for_feed() -> HeaderMap {
