@@ -344,3 +344,7 @@ mod tests;
 #[cfg(test)]
 #[path = "changes_replay_tests.rs"]
 mod replay_tests;
+
+#[cfg(test)]
+#[path = "changes_asof_tests.rs"]
+mod asof_tests;
