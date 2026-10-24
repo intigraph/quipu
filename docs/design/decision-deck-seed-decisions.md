@@ -115,15 +115,37 @@ request.
 ### 3. One signed action per request revision
 
 `UNIQUE(request, revision)` stays. Any action (choose, later or comment)
-consumes the current revision. Afterwards the curator re-projects the item as
-revision `N+1`:
+consumes the current revision, so a replayed or second submission is still
+refused and there is exactly one decision per question revision.
 
-- after a comment, the question is still open;
-- after Later, it is still owed;
-- after a choice, it is not re-projected unless the item still asks.
+A request IRI names one **question** on one item. The curator keeps the same
+request IRI while the item asks the same question with the same labels, and
+re-projects it as revision `N+1` whenever the item's version moves or an
+action consumes revision `N`. A re-projection only renews the live
+preconditions (section 2); it never changes the disposition (section 4).
 
-This keeps "exactly one decision per question revision", and a replayed or
-second submission is still refused.
+The curator puts a **new** request IRI only when:
+
+- the item's question text or its labels change; or
+- the operator explicitly reopens the question in the work-item tool (for
+  example, a Later item they want back in Needs-you). The reopen is a recorded
+  item event that the curator reads; an ordinary edit or comment that only
+  moves the item's version is not a reopen.
+
+Request IRIs for an item are `<item IRI>/question/<g>`, where `g` is a
+positive integer generation. The item's **current request** is the one with
+the highest `g` whose `forTarget` is the item. Reopening is an edit to the
+item, so it moves the item's version. Generation `g`'s live precondition
+(section 2) then refuses the old card, and the curator never re-projects `g`
+again; it puts generation `g+1` instead. A Decision that lands on `g` in a
+race stays readable, but it no longer affects the disposition, because `g` is
+no longer the current request. Quipu itself still learns no work-item
+vocabulary: the generation is part of the curated IRI, and only the curator
+and the disposition projection read it.
+
+A new request IRI starts with no decisions, so its disposition is waiting.
+That is the only way a disposition returns to waiting without an operator
+action on the card.
 
 ### 4. The Decision record and the item's disposition
 
@@ -137,18 +159,31 @@ The Decision facts in `urn:quipu:decision-deck` gain three fields:
 `forTarget` is the item IRI.
 
 The item's disposition is a **read projection** of these signed facts, not a
-second write:
+second write. It is computed over **every revision** of the item's current
+request IRI, not only the current revision. The Decisions are taken in
+revision order, which is a total order because each revision has at most one
+Decision. Starting from waiting, each Decision applies:
 
-- **answered:** the latest Decision for the item's current request has
-  `deckAction = choose`. The item leaves Needs-you. Its work status is
-  unchanged, because answering the question does not close the work.
-- **later:** the latest Decision has `deckAction = later`. The item shows in
-  the visible Later list.
-- **waiting:** there is no Decision for the current request, or the latest one
-  is `comment`. A comment never resolves a question.
-- **Comments:** every `deckComment`, together with its verified actor and
-  time, is a visible comment on the item. The work-item client renders it
-  alongside ordinary comments.
+- `choose`: the disposition becomes **answered**;
+- `later`: the disposition becomes **later**;
+- `comment`: the disposition is unchanged. A comment never resolves a
+  question, and it never takes an item out of Later.
+
+The result means:
+
+- **answered:** the item leaves Needs-you. Its work status is unchanged,
+  because answering the question does not close the work.
+- **later:** the item shows in the visible Later list, and it stays there
+  across any number of re-projections until the operator chooses an answer or
+  the question is reopened under a new request IRI.
+- **waiting:** no Decision on this request IRI has set a disposition yet.
+
+A closed item is shown in neither Needs-you nor Later, whatever its
+disposition, and its live preconditions refuse any further action.
+
+Every `deckComment`, on any revision and with any action, is a visible comment
+on the item, together with its verified actor and time. The work-item client
+renders it alongside ordinary comments.
 
 Because there is one signed write, the decision, the comment and the
 disposition can never disagree, and a partial answer cannot exist. This
@@ -260,8 +295,22 @@ challenges and deck facts before and after.
   refused.
 - `/deck/request` admits only when the authenticated principal equals the
   configured author. A body `author` alone is refused.
-- Disposition projection fixtures: answered, later, waiting after a comment,
-  and re-projection to `N+1`.
+- Disposition projection fixtures, each counting the Needs-you and Later
+  lists before and after:
+
+  - answered; later; waiting after a comment;
+  - Later at revision `N`, then an automatic re-projection to `N+1` (and an
+    unrelated item edit that forces `N+2`): still Later, and not in Needs-you;
+  - Later, then a comment at `N+1`: still Later;
+  - Later, then choose at `N+1`: answered;
+  - answered, then re-projection to `N+1`: still answered;
+  - control: an explicit reopen under a new request IRI is waiting and back in
+    Needs-you, while the old request's Decisions stay readable;
+  - after a reopen, a card for the old generation is refused as stale, and a
+    Decision written on it in a race leaves the new generation waiting.
+
+  Sabotage: computing the disposition from the current revision alone must
+  turn the Later re-projection fixtures red.
 
 ## Rollback
 
