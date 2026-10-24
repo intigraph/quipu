@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "a2afc44b2ba91403a828b5f0bcfe3609135e91bbaf8511a95d9725341efed047",
+      "source_sha256": "cd848f4c684d088c93b310a5c1037c9fcb5cda9ff82016a9ff3ffdecff43d572",
       "type": "Concept"
     },
     {
@@ -46,7 +46,7 @@
       "source": "docs/book/src/getting-started/agent-setup.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-setup.md#local-stdio-mcp",
       "summary": "Local agent clients run quipu mcp over stdio with explicit executable and database paths; it launches the matching sibling server without an HTTP listener.",
-      "source_sha256": "88c52c3e0d4005375e4f939ca7830421c27d14753d663c31184fc92aa8aa53aa",
+      "source_sha256": "0b9cba098e5a785d2f82029c09e5ef15b357bbdc3b06fd13e25a076cf13ef3eb",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "quipu mcp"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "f1b3c5bdad0991c062dffdd65e145595b3612d4fade24d2001ca06acf8b01e72",
+      "source_sha256": "ba70b50ed387df53982cf471d2b3d3ed5e0c1152bea3996e5b76a9c84531e314",
       "properties": {
         "startHereOrder": 2
       }

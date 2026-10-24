@@ -573,6 +573,7 @@ impl Store {
             read_model_max_triples: std::cell::Cell::new(
                 read_model::DEFAULT_READ_MODEL_MAX_TRIPLES,
             ),
+            affordability_counts: std::cell::RefCell::new(std::collections::HashMap::new()),
             attached_graphs: Vec::new(),
             composition_suspended: std::cell::Cell::new(false),
             #[cfg(feature = "reactive-reasoner")]

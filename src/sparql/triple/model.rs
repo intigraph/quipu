@@ -27,21 +27,9 @@ pub(in crate::sparql) fn eval_triple_pattern_from_model(
     bindings: &Bindings,
     graph: i64,
 ) -> Result<Vec<Bindings>> {
-    let subject = match resolve_subject_pattern(store, &tp.subject, bindings)? {
-        Some(iri) => match store.lookup(&iri)? {
-            Some(id) => Some(id),
-            None => return Ok(vec![]), // not in the dictionary -> no matches
-        },
-        None => None,
+    let Some((subject, predicate, object)) = resolve_positions(store, tp, bindings)? else {
+        return Ok(vec![]);
     };
-    let predicate = match resolve_predicate_pattern(store, &tp.predicate, bindings)? {
-        Some(iri) => match store.lookup(&iri)? {
-            Some(id) => Some(id),
-            None => return Ok(vec![]),
-        },
-        None => None,
-    };
-    let object = resolve_object_pattern(store, &tp.object, bindings)?;
 
     let model = store.read_model_for(graph)?;
     let mut candidates: Vec<(i64, i64, Value)> = match (subject, predicate, &object) {
@@ -101,4 +89,48 @@ pub(in crate::sparql) fn eval_triple_pattern_from_model(
         }
     }
     Ok(results)
+}
+
+/// A pattern's bound subject and predicate IDs and bound object value.
+type Positions = (Option<i64>, Option<i64>, Option<Value>);
+
+/// The pattern's bound positions, or `None` when a bound IRI is not in the
+/// dictionary (so nothing can match).
+fn resolve_positions(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+) -> Result<Option<Positions>> {
+    let subject = match resolve_subject_pattern(store, &tp.subject, bindings)? {
+        Some(iri) => match store.lookup(&iri)? {
+            Some(id) => Some(id),
+            None => return Ok(None), // not in the dictionary -> no matches
+        },
+        None => None,
+    };
+    let predicate = match resolve_predicate_pattern(store, &tp.predicate, bindings)? {
+        Some(iri) => match store.lookup(&iri)? {
+            Some(id) => Some(id),
+            None => return Ok(None),
+        },
+        None => None,
+    };
+    let object = resolve_object_pattern(store, &tp.object, bindings)?;
+    Ok(Some((subject, predicate, object)))
+}
+
+/// An upper bound on the rows [`eval_triple_pattern_from_model`] would return
+/// for this pattern under `bindings`, from index lengths alone (see
+/// [`crate::store::read_model::ReadModel::estimate`]). Zero is exact.
+pub(in crate::sparql) fn estimate_triple_pattern_from_model(
+    store: &Store,
+    tp: &TriplePattern,
+    bindings: &Bindings,
+    graph: i64,
+) -> Result<usize> {
+    let Some((subject, predicate, object)) = resolve_positions(store, tp, bindings)? else {
+        return Ok(0);
+    };
+    let model = store.read_model_for(graph)?;
+    Ok(model.estimate(subject, predicate, object.as_ref()))
 }

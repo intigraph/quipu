@@ -246,7 +246,9 @@ mod applicability;
 // Re-exported so the split is invisible to callers: every existing path
 // `crate::store::read_model::{read_model_applicable, DEFAULT_READ_MODEL_MAX_TRIPLES}`
 // keeps working.
-pub use applicability::{DEFAULT_READ_MODEL_MAX_TRIPLES, read_model_applicable};
+pub use applicability::{
+    AFFORDABILITY_COUNT_TTL, DEFAULT_READ_MODEL_MAX_TRIPLES, read_model_applicable,
+};
 
 #[cfg(test)]
 mod tests;

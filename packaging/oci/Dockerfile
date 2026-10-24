@@ -1,6 +1,6 @@
 # The image the MCP Registry's Install button runs (aegis-gys8sx):
 #
-#   docker run -i --rm -v quipu-data:/data ghcr.io/scbrown/quipu:<version>
+#   docker run -i --rm -v quipu-data:/data ghcr.io/intigraph/quipu:<version>
 #
 # It packages the RELEASE binaries rather than compiling. The image is then the
 # exact bytes the release smoke-tested and checksummed, and it builds in seconds
@@ -33,8 +33,8 @@ FROM ${BASE_IMAGE}
 
 # The registry refuses to list the image unless this equals server.json `name`.
 # scripts/ci/mcp-registry.py check keeps the two in step.
-LABEL io.modelcontextprotocol.server.name="io.github.scbrown/quipu"
-LABEL org.opencontainers.image.source="https://github.com/scbrown/quipu"
+LABEL io.modelcontextprotocol.server.name="io.github.intigraph/quipu"
+LABEL org.opencontainers.image.source="https://github.com/intigraph/quipu"
 LABEL org.opencontainers.image.description="Quipu knowledge graph as a local MCP server over stdio"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 

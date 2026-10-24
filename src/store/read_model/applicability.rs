@@ -20,6 +20,19 @@ use crate::store::read_model::ReadModel;
 /// million episodes.
 pub const DEFAULT_READ_MODEL_MAX_TRIPLES: usize = 1_000_000;
 
+/// How long a graph's fact count stays good enough to judge affordability.
+///
+/// The count only chooses between two paths that return the same rows, so a
+/// count a few minutes old decides as well as an exact one. Recounting on
+/// every check did not: `read_model_applicable` runs once per evaluated BGP,
+/// so a NOT EXISTS evaluated per outer row recounted per row. On a 1.7M-fact
+/// board graph, past the default budget and so never resident, each count took
+/// 713 ms, and a 250-item unblocked query took 20 s against 0.5 s with the read
+/// model off (aegis-xdvg.3). Only a "too big" answer is reused: a graph that
+/// shrinks under the budget keeps the SQL path for at most this long, while a
+/// graph that fits is always counted afresh (see `read_model_affordable`).
+pub const AFFORDABILITY_COUNT_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
 /// Whether a read answered from a [`ReadModel`] would be identical to one
 /// answered from SQL.
 ///
@@ -103,8 +116,25 @@ impl Store {
         // graph's model is affordable only if it fits alongside what is
         // already held, so per-graph models cannot multiply past the ceiling.
         let resident: usize = models.values().map(ReadModel::len).sum();
-        self.current_fact_count(graph)
-            .is_ok_and(|n| n.saturating_add(resident) <= self.read_model_max_triples.get())
+        let fits = |n: usize| n.saturating_add(resident) <= self.read_model_max_triples.get();
+        // Only a recent "too big" is reused. A stale "fits" could build a model
+        // past the budget for a graph that grew meanwhile; a stale "too big"
+        // only keeps the SQL path, which answers the same rows. A graph that
+        // fits is counted again, and stops being counted once its model is
+        // resident (the early return above).
+        if let Some((taken, n)) = self.affordability_counts.borrow().get(&graph)
+            && taken.elapsed() < AFFORDABILITY_COUNT_TTL
+            && !fits(*n)
+        {
+            return false;
+        }
+        let Ok(n) = self.current_fact_count(graph) else {
+            return false;
+        };
+        self.affordability_counts
+            .borrow_mut()
+            .insert(graph, (crate::time::Stopwatch::start(), n));
+        fits(n)
     }
 
     /// Ceiling on how many triples a resident read model may hold.

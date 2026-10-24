@@ -201,6 +201,38 @@ impl ReadModel {
         )
     }
 
+    /// An upper bound on the facts a pattern with these bound positions
+    /// matches, read from index lengths alone: no value is decoded and no
+    /// lazy row is fetched. Exact except for a fingerprint collision and the
+    /// subject-object shape, where it counts the whole subject.
+    ///
+    /// Zero is exact: a pattern estimated at zero has no matches.
+    #[must_use]
+    pub fn estimate(
+        &self,
+        entity: Option<i64>,
+        attribute: Option<i64>,
+        value: Option<&Value>,
+    ) -> usize {
+        let fp = value.map(|v| fingerprint(&v.term_key()));
+        let len = |ids: Option<&Vec<FactId>>| ids.map_or(0, Vec::len);
+        match (entity, attribute, fp) {
+            (Some(e), Some(a), fp) => self.spo.get(&e).map_or(0, |ids| {
+                ids.iter()
+                    .filter(|id| {
+                        let fact = self.fact(**id);
+                        fact.attribute == a && fp.is_none_or(|fp| fact.value_fingerprint == fp)
+                    })
+                    .count()
+            }),
+            (Some(e), None, _) => len(self.spo.get(&e)),
+            (None, Some(a), Some(fp)) => len(self.pos.get(&(a, fp))),
+            (None, Some(a), None) => len(self.pso.get(&a)),
+            (None, None, Some(fp)) => len(self.osp.get(&fp)),
+            (None, None, None) => self.triples,
+        }
+    }
+
     pub fn triples(&self, store: &Store) -> Result<Vec<(i64, i64, Value)>> {
         self.facts
             .iter()

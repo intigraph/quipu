@@ -69,6 +69,69 @@ fn build_indexes_every_permutation() {
     assert!(model.contains(&s, e, a, &v).unwrap());
 }
 
+/// The join planner trusts `estimate` for its fold order and for a zero
+/// short-circuit, so it must never undercount and zero must be exact.
+#[test]
+fn estimate_bounds_every_access_path_and_zero_is_exact() {
+    let mut s = store();
+    let ds = vec![
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/p",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/a",
+            "http://example.org/q",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/c",
+            "http://example.org/p",
+            "http://example.org/b",
+            Op::Assert,
+        ),
+        datum(
+            &s,
+            "http://example.org/c",
+            "http://example.org/p",
+            "http://example.org/d",
+            Op::Assert,
+        ),
+    ];
+    s.transact(&ds, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    let id = |iri: &str| s.lookup(iri).unwrap().unwrap();
+    let (a, c, p, q) = (
+        id("http://example.org/a"),
+        id("http://example.org/c"),
+        id("http://example.org/p"),
+        id("http://example.org/q"),
+    );
+    let b = Value::Ref(id("http://example.org/b"));
+    let missing = Value::Ref(id("http://example.org/d") + 1000);
+    let model = ReadModel::build(&s, crate::schema::ROOT_GRAPH).unwrap();
+
+    assert_eq!(model.estimate(None, None, None), 4);
+    assert_eq!(model.estimate(Some(a), None, None), 2);
+    assert_eq!(model.estimate(Some(c), Some(p), None), 2);
+    assert_eq!(model.estimate(Some(a), Some(q), Some(&b)), 1);
+    assert_eq!(model.estimate(None, Some(p), None), 3);
+    assert_eq!(model.estimate(None, Some(p), Some(&b)), 2);
+    assert_eq!(model.estimate(None, None, Some(&b)), 3);
+    // subject-object counts the whole subject: an upper bound
+    assert!(model.estimate(Some(c), None, Some(&b)) >= 1);
+    // zero is exact
+    assert_eq!(model.estimate(Some(a), Some(q), Some(&missing)), 0);
+    assert_eq!(model.estimate(None, Some(q), Some(&missing)), 0);
+    assert_eq!(model.estimate(Some(c), Some(q), None), 0);
+}
+
 #[test]
 fn heap_backed_literals_are_lazy_but_still_queryable() {
     let mut s = store();
@@ -719,6 +782,20 @@ fn the_model_path_answers_identically_to_sql() {
     ];
     s.transact(&ds, "2026-01-01T00:00:00Z", Some("test"), None)
         .unwrap();
+    let label = s.intern("http://example.org/label").unwrap();
+    let labels: Vec<Datum> = ["http://example.org/a", "http://example.org/d"]
+        .iter()
+        .map(|e| Datum {
+            entity: s.intern(e).unwrap(),
+            attribute: label,
+            value: Value::Str("shared".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    s.transact(&labels, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
 
     // Every query here has TWO patterns, because a single-pattern BGP is routed
     // to SQL in both modes now (the model is only worth building for a join) —
@@ -747,6 +824,20 @@ fn the_model_path_answers_identically_to_sql() {
         "SELECT ?s ?d WHERE { ?s <http://example.org/q> ?o . ?d <http://example.org/p> ?e }",
         // three patterns, so the join folds more than once
         "SELECT ?s WHERE { ?s <http://example.org/p> ?o . ?s <http://example.org/q> ?c . ?o ?p3 ?o3 }",
+        // Correlated absence and optional joins: the inner BGP is evaluated
+        // per outer row with that row as its seed, so its patterns that share
+        // nothing with the seed are the ones the bind join probes per row.
+        "SELECT ?s WHERE { ?s <http://example.org/p> ?o . ?s ?p2 ?o2 \
+         FILTER NOT EXISTS { ?s <http://example.org/q> ?c . ?c ?cp ?co } }",
+        "SELECT ?s WHERE { ?s <http://example.org/p> ?o . ?s ?p2 ?o2 \
+         FILTER NOT EXISTS { ?d <http://example.org/p> ?o . ?d <http://example.org/q> ?c } }",
+        "SELECT ?s ?c WHERE { ?s <http://example.org/p> ?o . ?o ?p2 ?o2 \
+         OPTIONAL { ?s <http://example.org/q> ?c . ?d <http://example.org/p> ?o } }",
+        "SELECT ?s WHERE { ?s <http://example.org/p> ?o . ?s ?p2 ?o2 \
+         MINUS { ?s <http://example.org/q> ?c . ?x <http://example.org/p> ?o } }",
+        // a join through a literal object, so the per-row probe resolves a
+        // bound literal rather than an IRI
+        "SELECT ?s ?t WHERE { ?s <http://example.org/label> ?l . ?t <http://example.org/label> ?l }",
     ];
 
     for q in queries {
@@ -1428,4 +1519,71 @@ fn reopening_an_existing_store_adds_the_current_graph_index() {
         ).unwrap();
         assert!(plan.contains("idx_current_g"), "count plan: {plan}");
     }
+}
+
+/// A recent "too big" is reused (aegis-xdvg.3). Without the reuse,
+/// `read_model_applicable` recounted an over-budget graph on every BGP it
+/// judged: 713 ms per check on a 1.7M-fact board, 20 s for one 250-item query.
+/// Asserting the ANSWER alone would pass whether or not the count is reused,
+/// so this shrinks the graph under the budget and requires the stale "too big"
+/// to stand until the reuse is cleared.
+#[test]
+fn over_budget_count_is_reused_until_cleared() {
+    let mut s = store();
+    let facts: Vec<Datum> = (0..3)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Assert))
+        .collect();
+    s.transact(&facts, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    s.set_read_model_max_triples(1);
+    let g = crate::schema::ROOT_GRAPH;
+    assert!(
+        !s.read_model_affordable(g),
+        "3 facts must not fit a budget of 1"
+    );
+
+    let retract: Vec<Datum> = (1..3)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Retract))
+        .collect();
+    s.transact(&retract, "2026-01-01T00:00:01Z", Some("test"), None)
+        .unwrap();
+    assert_eq!(
+        s.current_fact_count(g).unwrap(),
+        1,
+        "control: the graph now fits"
+    );
+    assert!(
+        !s.read_model_affordable(g),
+        "the recent too-big count must be reused, not recounted"
+    );
+
+    s.affordability_counts.borrow_mut().clear();
+    assert!(
+        s.read_model_affordable(g),
+        "a fresh count sees the graph fits"
+    );
+}
+
+/// A "fits" is never reused (aegis-xdvg.3): a graph that grows past the budget
+/// must be judged too big on the very next check, or a stale answer could
+/// build a model larger than the budget allows.
+#[test]
+fn fitting_count_is_never_reused() {
+    let mut s = store();
+    let one = [datum(&s, "urn:s0", "urn:p", "urn:o", Op::Assert)];
+    s.transact(&one, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    s.set_read_model_max_triples(2);
+    let g = crate::schema::ROOT_GRAPH;
+    assert!(s.read_model_affordable(g), "1 fact fits a budget of 2");
+
+    let more: Vec<Datum> = (1..4)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Assert))
+        .collect();
+    s.transact(&more, "2026-01-01T00:00:01Z", Some("test"), None)
+        .unwrap();
+    assert!(
+        !s.read_model_affordable(g),
+        "4 facts must be judged too big at once, not from a stale fit"
+    );
 }

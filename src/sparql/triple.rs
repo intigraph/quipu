@@ -13,7 +13,7 @@ mod limited_tests;
 #[cfg(test)]
 mod named_limit_tests;
 
-pub(super) use model::eval_triple_pattern_from_model;
+pub(super) use model::{estimate_triple_pattern_from_model, eval_triple_pattern_from_model};
 
 use scan::{ScanMode, collect_triple_pattern};
 pub(super) use scan::{binding_bytes, eval_complete_relation, selected_relation, subject_relation};

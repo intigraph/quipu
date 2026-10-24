@@ -19,7 +19,7 @@ load-before-remove transition from bundled domain examples.
 
 A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
 
-mcp-name: io.github.scbrown/quipu
+mcp-name: io.github.intigraph/quipu
 
 ## Install
 

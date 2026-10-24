@@ -410,10 +410,14 @@ jobs:
       # page only picks up a new release when the docs workflow next runs, and
       # nothing else would trigger it: a release-merge push touches CHANGELOG.md
       # and Cargo.toml, neither of which is in docs.yml's path filter.
+      #
+      # A side effect, not part of the release: an operator-disabled docs.yml is
+      # skipped with a notice instead of failing this job (v0.16.1: the 422
+      # turned Wasm red and so skipped crates). Any other failure still fails.
       - name: Restage the book so it serves this release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run docs.yml --ref main
+        run: scripts/ci/restage-docs.sh "${{ github.repository }}" docs.yml main
 
   # Attach release binaries built with the `full` feature bundle (Cargo.toml):
   # every feature the shipped binaries can actually use. NOT `--all-features` —
