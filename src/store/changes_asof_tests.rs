@@ -436,7 +436,7 @@ fn invalid_selections_are_refused() {
     assert!(spool_is_empty(spool.path()));
 }
 
-/// The scan rides idx_geav and needs no sort, so it holds no temporary
+/// The scan rides `idx_geav` and needs no sort, so it holds no temporary
 /// B-tree however large the graph is.
 #[test]
 fn the_cut_scan_needs_no_sort() {

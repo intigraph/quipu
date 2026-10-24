@@ -143,14 +143,8 @@ pub(super) fn apply_tx(replica: &mut Store, records: &[&Json], timestamp: &str) 
             let a = replica.intern(r["attribute"].as_str().unwrap()).unwrap();
             let from = r["valid_from"].as_str().unwrap_or(timestamp).to_string();
             let mut d = match r["op"].as_str().unwrap() {
-                "retract" => datum(
-                    e,
-                    a,
-                    value_of(&replica, &r["old_value"]),
-                    &from,
-                    Op::Retract,
-                ),
-                _ => datum(e, a, value_of(&replica, &r["value"]), &from, Op::Assert),
+                "retract" => datum(e, a, value_of(replica, &r["old_value"]), &from, Op::Retract),
+                _ => datum(e, a, value_of(replica, &r["value"]), &from, Op::Assert),
             };
             // A retract names the fact it closes; its own row's valid time
             // describes the closing, not an interval to replay.

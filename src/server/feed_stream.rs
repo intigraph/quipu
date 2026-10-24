@@ -86,9 +86,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         )
             .into_response();
     }
-    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
-    let slots = SLOTS.get_or_init(|| Arc::new(Semaphore::new(64))).clone();
-    let Ok(slot) = slots.try_acquire_owned() else {
+    let Some(slot) = stream_slot() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             "stream capacity exhausted; reconnect later",
@@ -261,6 +259,17 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         .into_response()
 }
 
+/// One of the 64 slots every long-lived feed stream holds while it sends,
+/// or `None` when all are taken.
+pub(crate) fn stream_slot() -> Option<OwnedSemaphorePermit> {
+    static SLOTS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SLOTS
+        .get_or_init(|| Arc::new(Semaphore::new(64)))
+        .clone()
+        .try_acquire_owned()
+        .ok()
+}
+
 /// One feed frame, independent of transport: the event name, the cursor id
 /// it acknowledges (if any) and its data, byte-for-byte as sent. SSE builds an
 /// `Event` from it only at the edge, so another transport can send the same
@@ -273,7 +282,7 @@ pub(crate) struct FeedFrame {
 }
 
 impl FeedFrame {
-    fn into_sse(self) -> Event {
+    pub(crate) fn into_sse(self) -> Event {
         let event = Event::default().event(self.event);
         let event = match self.id {
             Some(id) => event.id(id.to_string()),

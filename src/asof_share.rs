@@ -433,7 +433,7 @@ pub(crate) fn cut_with_control(
                         )));
                     }
                 }
-                if total % CHECK_EVERY == 0 {
+                if total.is_multiple_of(CHECK_EVERY) {
                     check_ceilings(started, limits, wal.as_deref(), wal_start)?;
                     during(total)?;
                 }

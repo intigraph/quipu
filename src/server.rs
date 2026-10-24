@@ -103,6 +103,8 @@ use entity::{
     entity_turtle_suffix, fragments_handler, preview_handler, reconcile_handler, spotlight_handler,
 };
 use feed::{changes_get, events_commit, events_get, transactions};
+#[path = "server/asof.rs"]
+mod asof;
 #[path = "server/event_cursor.rs"]
 mod event_cursor;
 #[path = "server/feed_stream.rs"]
@@ -421,6 +423,7 @@ async fn main() {
         .merge(graph_store::routes())
         .route("/share", post(publication::share_payload))
         .merge(publication::acquisition_routes())
+        .route("/share/asof", post(asof::share_asof))
         .merge(align::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
