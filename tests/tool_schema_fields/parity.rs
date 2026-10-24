@@ -42,6 +42,11 @@ pub(super) fn handler(name: &str) -> Option<(&'static str, Option<(&'static str,
         "quipu_reason" => ("reason", None),
         "quipu_update" => ("update_post", None),
         "quipu_events_commit" => ("events_commit", None),
+        "quipu_graph_events" => (
+            "events_graph_get",
+            Some(("src/server/feed.rs", "EventParams")),
+        ),
+        "quipu_graph_events_commit" => ("events_graph_commit", None),
         "quipu_entity_history" => ("entity_history", None),
         "quipu_embed_backfill" => ("embed_backfill", None),
         "quipu_embed_backfill_graph" => ("embed_backfill_graph", None),
@@ -51,6 +56,19 @@ pub(super) fn handler(name: &str) -> Option<(&'static str, Option<(&'static str,
         "quipu_workflow_capabilities" => ("workflow_capabilities", None),
         _ => return None,
     })
+}
+
+/// Fields a handler reads ONLY to refuse them, so its tool must NOT declare
+/// them. `/events` and `/events/commit` refuse `graph`: a server that predates
+/// named-graph events would ignore it (serving ROOT's events, or upserting the
+/// ROOT cursor before answering), so named graphs have their own routes and
+/// tools (quipu_graph_events, quipu_graph_events_commit). Declaring `graph` on
+/// the ROOT tools would advertise exactly the form that is refused.
+pub(super) fn refused_fields(name: &str) -> &'static [&'static str] {
+    match name {
+        "quipu_events" | "quipu_events_commit" => &["graph"],
+        _ => &[],
+    }
 }
 
 pub(super) fn wire_fields(file: &str, name: &str) -> BTreeSet<String> {
