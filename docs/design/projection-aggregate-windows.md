@@ -2,8 +2,8 @@
 
 **Status:** proposed (2026-10-24). Extends the write-maintained projections
 (`src/store/projections.rs`, `projections_aggregate.rs`, `POST /projections`).
-It adds no new storage and no new maintenance path, only three read-side
-parameters.
+It adds no new storage and no new maintenance path: three read-side
+parameters and one kind of declared column.
 
 ## 1. Problem, measured
 
@@ -50,6 +50,16 @@ today.
   carries `tx`. A page whose `tx` differs from the first page's is a different
   snapshot, and the client restarts rather than splicing.
 
+- **Presence columns in the declaration**:
+  `{"name": "inbox", "predicate": "<IRI>", "equals": <value>}` projects 1
+  when the entity currently has that exact value for the predicate and NULL
+  otherwise, computed as an `EXISTS` over current facts by the same
+  recompute and triggers as every other column. It is needed because an
+  ordinary column holds only the LATEST value of its predicate (plus a
+  row-level `multi` flag), so for a multi-valued predicate such as keywords
+  no filter on that column can answer "has this value". Exact equality only:
+  no regular expressions and no case folding.
+
 Validation stays where it is: every name is checked against the declaration
 before it reaches SQL, and values are bound.
 
@@ -63,11 +73,16 @@ before it reaches SQL, and values are bound.
 | validity | `rows` paged with `after`, columns identifier, title, priority, created, closed; the client applies the validity rule |
 
 **Inbox exclusion.** The SPARQL treats an item as inbox when it carries the
-`inbox` keyword or its title starts with `inbox:` or `mail:`. On the measured
-board, only 3 items match the title rule without the keyword. A projection
-cannot evaluate a regular expression, so the brief defines inbox by the
-keyword (`where: {keywords: [null]}` keeps items without it). Writers keep the
-keyword authoritative, and the 3 items get it. No derived column is added.
+`inbox` keyword (compared case-insensitively) or its title starts with
+`inbox:` or `mail:`. On the measured board, every case-insensitive match is
+exactly the plain string `"inbox"` (68,158 facts), and only 3 items match the
+title rule without the keyword. A projection cannot evaluate a regular
+expression, so the brief defines inbox by the keyword, through a presence
+column: `{name: "inbox", predicate: schema:keywords, equals: "inbox"}`.
+Non-inbox items are `where: {inbox: [null]}`. A `keywords` column filtered by
+`null` would be wrong: it keeps only items with no keyword at all, and a
+latest-value column cannot see one keyword among several. Writers keep the
+keyword authoritative, and the 3 items get it.
 
 ## 4. Tests
 
