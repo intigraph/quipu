@@ -343,6 +343,32 @@ async fn sse_sends_the_transport_neutral_frames_unchanged() {
     assert_eq!(sent, neutral);
 }
 
+/// A chunked transaction names its source on the frames a follower checks
+/// before and after the parts: begin and the commit barrier. Without it a
+/// follower cannot tell an epoch change inside a chunked transaction, and the
+/// contract is "a changed epoch means re-bootstrap, never splice".
+#[tokio::test]
+async fn a_chunked_transaction_names_its_source_on_begin_and_commit() {
+    let mut store = Store::open_in_memory().unwrap();
+    let big: Vec<Datum> = (0..2500)
+        .map(|i| wide_datum(&mut store, &format!("urn:test:wide-{i}"), 600))
+        .collect();
+    store.transact(&big, "2026-01-01", None, None).unwrap();
+    let expected = json!({
+        "store_id": store.store_id().unwrap(),
+        "log_epoch": store.log_epoch().unwrap(),
+    });
+    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
+    let response =
+        changes_stream(State(shared), HeaderMap::new(), params(json!({"since": 0}))).await;
+    let frames = read_frames(response, |f| f.0 == "quipu.changes.commit").await;
+    for name in ["quipu.changes.begin", "quipu.changes.commit"] {
+        let frame = frames.iter().find(|f| f.0 == name).unwrap();
+        let body: Value = serde_json::from_str(&frame.2).unwrap();
+        assert_eq!(body["source"], expected, "{name}: {body}");
+    }
+}
+
 /// One record larger than a frame cannot be split. It is refused with no id,
 /// so the consumer's cursor stays put, and the stream ends.
 #[tokio::test]
