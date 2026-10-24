@@ -4,7 +4,7 @@
 
 use serde_json::json;
 
-use super::{ProjectionAggregate, validate};
+use super::{GroupBy, ProjectionAggregate, validate};
 use crate::Store;
 use crate::config::{ProjectionColumnConfig, ProjectionConfig};
 use crate::types::Value;
@@ -20,11 +20,13 @@ fn def() -> ProjectionConfig {
                 name: "priority".into(),
                 predicate: format!("{EX}priority"),
                 time: false,
+                equals: None,
             },
             ProjectionColumnConfig {
                 name: "closed".into(),
                 predicate: format!("{EX}endTime"),
                 time: true,
+                equals: None,
             },
         ],
     }
@@ -65,8 +67,9 @@ fn count(
                 graphs: &[],
                 key_in,
                 filters: &[],
-                group_by: group,
+                group_by: &group.map(GroupBy::Column).into_iter().collect::<Vec<_>>(),
                 since,
+                until: None,
                 max_groups: 0,
             },
         )
@@ -291,8 +294,9 @@ fn an_aggregate_reads_one_snapshot_while_writes_land() {
         graphs: &[],
         key_in: &[json!("open")],
         filters: &[],
-        group_by: Some("priority"),
+        group_by: &[GroupBy::Column("priority")],
         since: None,
+        until: None,
         max_groups: 0,
     };
     let a = reader.aggregate_projection(&def(), &q);
@@ -324,7 +328,7 @@ fn filtered(
             &def(),
             &ProjectionAggregate {
                 filters,
-                group_by: group,
+                group_by: &group.map(GroupBy::Column).into_iter().collect::<Vec<_>>(),
                 ..Default::default()
             },
         )
@@ -445,7 +449,7 @@ fn an_input_that_matches_nothing_does_not_hide_a_later_invalid_one() {
         (
             ProjectionAggregate {
                 key_in: &unknown,
-                group_by: Some("team"),
+                group_by: &[GroupBy::Column("team")],
                 ..Default::default()
             },
             "has no column",
@@ -475,7 +479,7 @@ fn an_input_that_matches_nothing_does_not_hide_a_later_invalid_one() {
     for q in [
         ProjectionAggregate {
             filters: &only_empty,
-            group_by: Some("key"),
+            group_by: &[GroupBy::Column("key")],
             ..Default::default()
         },
         ProjectionAggregate {
@@ -484,7 +488,7 @@ fn an_input_that_matches_nothing_does_not_hide_a_later_invalid_one() {
         },
         ProjectionAggregate {
             graph: "http://ex.test/no-such-graph",
-            group_by: Some("priority"),
+            group_by: &[GroupBy::Column("priority")],
             ..Default::default()
         },
     ] {
