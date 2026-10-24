@@ -1,0 +1,59 @@
+{
+  "theme": "stack-terminal-24",
+  "versions": {
+    "quipu": "quipu 0.16.1\ngit_sha: af452206a37997f31c4d6141b09aab45c717ca33\ngit_dirty: false"
+  },
+  "binary_sha256": {
+    "quipu": "d9b65d36d1f00e0212e5ed812550db6d53abb4739d3ce7d00c65fcd7068c08cc"
+  },
+  "version_args": {
+    "quipu": [
+      "--version"
+    ]
+  },
+  "inputs_sha256": {
+    "render.py": "67a98242a3a841415d0bc91d64a81aaa71bbf29e33ef6865075ecc3dfbd04122",
+    "tape": "277ca8cb23bf453f2e9201548c6ea41861ea05d0244fbe75072b4a43ae82d340",
+    "episode.json": "ea4e89ac6607c8f8244f879512cdccfcee47ae2d2ed3afc0105e98f2f7156d6b"
+  },
+  "duration_seconds": 20.0,
+  "timeline": "deliberate reading holds; execution times recorded separately",
+  "frames_checked": 2,
+  "commands": [
+    {
+      "tool": "quipu",
+      "args": [
+        "episode",
+        "episode.json",
+        "--base-ns",
+        "urn:demo:",
+        "--timestamp",
+        "2026-01-01T00:00:00Z",
+        "--db",
+        "demo.db"
+      ],
+      "exit": 0,
+      "seconds": 0.556394,
+      "stdout": "ingested episode \"demo\" -- 14 facts (tx 1)\n",
+      "stderr": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\n"
+    },
+    {
+      "tool": "quipu",
+      "args": [
+        "read",
+        "SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }",
+        "--db",
+        "demo.db"
+      ],
+      "exit": 0,
+      "seconds": 0.003104,
+      "stdout": "person\tthing\n----------------------------------------\nurn:demo:Ada\turn:demo:Engine\n\n1 results\n",
+      "stderr": ""
+    }
+  ],
+  "sha256": {
+    "demo.svg": "008d0d8f43381e4d11c287cddca2a6b7b305c09f7e80e66119311f00460ffd53",
+    "transcript.txt": "cc37351b3e268ea7cca16db142751704f20a39ed8ade00adc84365b00fd618a7",
+    "demo.cast": "0bad3bf09e9f193fabdc140e035e01885ec3e311e056bb29724fe7a6f310483e"
+  }
+}
