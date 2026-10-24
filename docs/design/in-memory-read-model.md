@@ -350,6 +350,15 @@ open adds this index after the named-graph migration, including on existing
 stores; the first open pays the index build cost. The count remains linear in
 the graph's current facts, even when it declines to build a read model.
 
+Because it is linear, a "too big" answer is reused for
+`AFFORDABILITY_COUNT_TTL` (5 minutes) instead of recounted. The guard runs once
+per evaluated BGP, so a `FILTER NOT EXISTS` evaluated per outer row recounted
+per row: on a 1.71M-fact board graph past the budget, each count took 713 ms
+and a 250-item unblocked-items query took 20 s, against 0.5 s with the model
+off. With the reuse it takes 0.41 s, the same rows either way
+(`examples/absence_join_cost.rs`). A "fits" answer is never reused, so a graph
+that grows past the budget is never built from a stale count.
+
 Binding is shared with the SQL path through one extracted `bind_row`, so the two
 cannot drift on the subtle part: a subject resolving to a blank node binds as
 `Value::Str`, everything else re-looks-up its IRI to choose between `Ref` and

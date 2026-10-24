@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **79 tools** in a default build, or
-**81** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **81 tools** in a default build, or
+**83** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -1075,15 +1075,27 @@ Fields: `update` (required), `actor`, `source`.
 
 ### `quipu_events`
 
-Read a bounded event batch without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector.
+Read a bounded batch of ROOT's events without committing a consumer cursor. since overrides consumer. types is a comma-separated event-type filter; group is an episode group, not a graph selector. A named graph's events are quipu_graph_events.
 
 Fields: `since`, `limit`, `types`, `group`, `consumer`.
+
+### `quipu_graph_events`
+
+Read a bounded batch of ONE registered committed named graph's events (its own log and offsets) without committing a cursor. Same filters as quipu_events.
+
+Fields: `graph` (required), `since`, `limit`, `types`, `group`, `consumer`.
 
 ### `quipu_events_commit`
 
 Durably set a consumer cursor. Lower offsets explicitly rewind; delivery alone never commits.
 
 Fields: `consumer_id` (required), `offset` (required).
+
+### `quipu_graph_events_commit`
+
+Durably set a consumer cursor in one registered committed named graph's event log. Lower offsets explicitly rewind.
+
+Fields: `consumer_id` (required), `graph` (required), `offset` (required).
 
 ### `quipu_changes`
 

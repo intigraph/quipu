@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use super::{PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows};
+use super::{GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows};
 use crate::Store;
 use crate::config::{ProjectionColumnConfig, ProjectionConfig};
 
@@ -19,11 +19,13 @@ fn def() -> ProjectionConfig {
                 name: "priority".into(),
                 predicate: format!("{EX}priority"),
                 time: false,
+                equals: None,
             },
             ProjectionColumnConfig {
                 name: "title".into(),
                 predicate: format!("{EX}title"),
                 time: false,
+                equals: None,
             },
         ],
     }
@@ -118,7 +120,7 @@ fn rows_over_two_graphs_show_a_shadow_as_two_rows() {
             &def(),
             &ProjectionAggregate {
                 graphs: &graphs,
-                group_by: Some("key"),
+                group_by: &[GroupBy::Column("key")],
                 ..Default::default()
             },
         )

@@ -297,6 +297,7 @@ impl Store {
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
+        Self::migrate_graph_events(&conn)?;
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
         Self::migrate_frozen_packs(&conn)?;
@@ -570,6 +571,7 @@ impl Store {
             read_model_max_triples: std::cell::Cell::new(
                 read_model::DEFAULT_READ_MODEL_MAX_TRIPLES,
             ),
+            affordability_counts: std::cell::RefCell::new(std::collections::HashMap::new()),
             attached_graphs: Vec::new(),
             composition_suspended: std::cell::Cell::new(false),
             #[cfg(feature = "reactive-reasoner")]

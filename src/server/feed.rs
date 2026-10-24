@@ -58,6 +58,9 @@ pub(crate) struct EventParams {
     types: Option<String>,
     /// Filter to a single `group_id` (episode grouping, e.g. `aegis-ontology`).
     group: Option<String>,
+    /// One registered named graph's events; absent means ROOT's, as before
+    /// graphs could emit. Combines with `types` and `group` by AND.
+    graph: Option<String>,
     /// Resume from this consumer's durable committed offset.
     consumer: Option<String>,
 }
@@ -117,13 +120,46 @@ pub(crate) async fn changes_get(
     .await
 }
 
-/// GET /events — pull a batch of graph-change events in offset order.
+/// GET /events — pull a batch of ROOT's graph-change events in offset order.
 /// Response: `{events, next_offset, lag, committed_offset?}`; pass
 /// `next_offset` back as `since` (or POST /events/commit it) to page forward.
+///
+/// A named graph's events are read at `/events/graph`, never here: a server
+/// that predates named-graph events ignores an unknown `graph` parameter and
+/// would answer with ROOT's events, while it answers an unknown route 404.
+/// So `graph` is refused here, and a client never learns to depend on it.
 pub(crate) async fn events_get(
     State(store): State<SharedStore>,
     headers: HeaderMap,
     Query(p): Query<EventParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    if p.graph.is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "/events serves ROOT's events; read a named graph's at /events/graph".into(),
+        )
+        .into());
+    }
+    events_batch(store, headers, p, None).await
+}
+
+/// GET /events/graph?graph=<IRI> — one registered committed named graph's
+/// events, its own log and offsets. Same parameters and response as `/events`.
+pub(crate) async fn events_graph_get(
+    State(store): State<SharedStore>,
+    headers: HeaderMap,
+    Query(mut p): Query<EventParams>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    let Some(graph) = p.graph.take() else {
+        return Err(quipu::Error::InvalidValue("/events/graph requires graph".into()).into());
+    };
+    events_batch(store, headers, p, Some(graph)).await
+}
+
+async fn events_batch(
+    store: SharedStore,
+    headers: HeaderMap,
+    p: EventParams,
+    graph: Option<String>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     let client = super::query_usage::client(&headers);
     blocking(move || {
@@ -135,7 +171,7 @@ pub(crate) async fn events_get(
         let store = store.read();
         let _timing = StoreTiming::acquired(client, "/events", waiting.elapsed());
         let committed: Option<i64> = match (&p.since, &p.consumer) {
-            (None, Some(c)) => Some(store.consumer_committed(c)?),
+            (None, Some(c)) => Some(store.consumer_committed_in(c, graph.as_deref())?),
             _ => None,
         };
         let since = p.since.unwrap_or_else(|| committed.unwrap_or(0));
@@ -147,13 +183,28 @@ pub(crate) async fn events_get(
                 .map(String::from)
                 .collect()
         });
-        let rows = store.events_after(since, limit, types.as_deref(), p.group.as_deref())?;
+        if let Some(iri) = graph.as_deref()
+            && store.committed_graph_id(iri)?.is_none()
+        {
+            return Err(quipu::Error::InvalidValue(format!(
+                "not a registered committed named graph: {iri}"
+            ))
+            .into());
+        }
+        let rows = store.events_after_in(
+            since,
+            limit,
+            types.as_deref(),
+            p.group.as_deref(),
+            graph.as_deref(),
+        )?;
         // next_offset is the cursor for the NEXT call; when the batch is empty
         // it stays at `since` so polling is a fixpoint, not a rewind.
         let next_offset = rows.last().map_or(since, |r| r.offset);
-        // Lag counts ALL events beyond the cursor, unfiltered — it answers
-        // "how far behind the log am I", not "how many match my filter".
-        let latest = store.latest_event_offset()?;
+        // Lag counts ALL events of the reader's graph scope beyond the cursor,
+        // unfiltered by type or group — "how far behind my log am I", not "how
+        // many match my filter". Other graphs' events are not this log.
+        let latest = store.latest_event_offset_in(graph.as_deref())?;
         let lag = (latest - next_offset).max(0);
         let events: Vec<JsonValue> = rows
             .iter()
@@ -172,12 +223,43 @@ pub(crate) async fn events_get(
     .await
 }
 
-/// POST /events/commit `{consumer_id, offset}` — durably record a consumer's
-/// cursor. Any offset >= 0 is accepted, including a LOWER one (the explicit
-/// replay knob; delivery is at-least-once and consumers dedup by offset).
+/// POST /events/commit `{consumer_id, offset}` — durably record a ROOT
+/// consumer's cursor. Any offset >= 0 is accepted, including a LOWER one (the
+/// explicit replay knob; delivery is at-least-once and consumers dedup by
+/// offset).
+///
+/// A named graph's cursor is committed at `/events/graph/commit`, never here.
+/// A server that predates named-graph events would ignore `graph` and upsert
+/// the ROOT cursor of that `consumer_id` BEFORE answering, moving a ROOT
+/// consumer past events it never received. It answers an unknown route 404 and
+/// writes nothing. So `graph` is refused here.
 pub(crate) async fn events_commit(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    if input.get("graph").is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "/events/commit records ROOT cursors; commit a named graph's at /events/graph/commit"
+                .into(),
+        )
+        .into());
+    }
+    commit(store, input, false).await
+}
+
+/// POST /events/graph/commit `{consumer_id, graph, offset}` — durably record a
+/// consumer's cursor in one registered committed named graph's log.
+pub(crate) async fn events_graph_commit(
+    State(store): State<SharedStore>,
+    axum::Json(input): axum::Json<JsonValue>,
+) -> Result<axum::Json<JsonValue>, AppError> {
+    commit(store, input, true).await
+}
+
+async fn commit(
+    store: SharedStore,
+    input: JsonValue,
+    named: bool,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
         let consumer_id = input
@@ -194,13 +276,35 @@ pub(crate) async fn events_commit(
         if offset < 0 {
             return Err(quipu::Error::InvalidValue("offset must be >= 0".into()).into());
         }
+        let graph = match (named, input.get("graph")) {
+            (false, _) => None,
+            (true, Some(JsonValue::String(g))) => Some(g.clone()),
+            (true, _) => {
+                return Err(quipu::Error::InvalidValue(
+                    "/events/graph/commit requires graph (a graph IRI)".into(),
+                )
+                .into());
+            }
+        };
         let store = store.lock();
+        if let Some(iri) = graph.as_deref()
+            && store.committed_graph_id(iri)?.is_none()
+        {
+            return Err(quipu::Error::InvalidValue(format!(
+                "not a registered committed named graph: {iri}"
+            ))
+            .into());
+        }
         let now = quipu::time::now_iso();
-        store.commit_consumer(&consumer_id, offset, &now)?;
-        Ok(axum::Json(json!({
+        store.commit_consumer_in(&consumer_id, graph.as_deref(), offset, &now)?;
+        let mut answer = json!({
             "consumer_id": consumer_id,
             "committed_offset": offset,
-        })))
+        });
+        if let Some(g) = graph {
+            answer["graph"] = json!(g);
+        }
+        Ok(axum::Json(answer))
     })
     .await
 }
@@ -243,6 +347,9 @@ pub(crate) async fn transactions(
     .await
 }
 
+#[cfg(test)]
+#[path = "feed_graph_events_tests.rs"]
+mod feed_graph_events_tests;
 #[cfg(test)]
 #[path = "feed_read_pool_tests.rs"]
 mod feed_read_pool_tests;

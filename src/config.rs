@@ -575,6 +575,12 @@ pub struct ProjectionColumnConfig {
     pub predicate: String,
     #[serde(default)]
     pub time: bool,
+    /// A presence column: 1 when the entity currently has exactly this plain
+    /// string for `predicate`, NULL otherwise. An ordinary column holds only
+    /// the latest value, so it cannot answer "has this value" for a
+    /// multi-valued predicate such as keywords. Exact equality only.
+    #[serde(default)]
+    pub equals: Option<String>,
 }
 
 impl Default for QuipuConfig {

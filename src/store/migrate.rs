@@ -263,6 +263,43 @@ impl Store {
         Ok(())
     }
 
+    /// Named-graph events and their consumers' cursors (event-push design §4).
+    ///
+    /// SEPARATE TABLES, deliberately, not a `graph` column on `events`. quipu
+    /// opens a store whatever its schema, so an older binary reads a newer
+    /// store, and its `events_after` has no graph predicate: a column would
+    /// hand board events to every ROOT consumer after a rollback. Older code
+    /// never reads these tables, so `events`, `consumers` and their pruning
+    /// stay exactly what every older binary expects, and the graph rows and
+    /// cursors survive a revert for re-upgrade.
+    ///
+    /// `graph` is the IRI as TEXT, never a term id (the #74 respace rule, like
+    /// `subject`). AUTOINCREMENT for the same never-reused-offset guarantee as
+    /// `events`; the offsets are their own sequence.
+    pub(super) fn migrate_graph_events(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS graph_events (
+                 \"offset\"  INTEGER PRIMARY KEY AUTOINCREMENT,
+                 graph     TEXT    NOT NULL,
+                 type      TEXT    NOT NULL,
+                 ts        TEXT    NOT NULL,
+                 subject   TEXT,
+                 group_id  TEXT,
+                 tx_id     INTEGER NOT NULL,
+                 payload   TEXT    NOT NULL DEFAULT '{}'
+             );
+             CREATE INDEX IF NOT EXISTS idx_graph_events_graph ON graph_events(graph, \"offset\");
+             CREATE TABLE IF NOT EXISTS graph_consumers (
+                 consumer_id      TEXT    NOT NULL,
+                 graph            TEXT    NOT NULL,
+                 committed_offset INTEGER NOT NULL DEFAULT 0,
+                 updated_at       TEXT,
+                 PRIMARY KEY (consumer_id, graph)
+             );",
+        )?;
+        Ok(())
+    }
+
     /// Stored named-query registry (quipu #79).
     ///
     /// Versioned in #71's close-don't-overwrite style **from day one** rather

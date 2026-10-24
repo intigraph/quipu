@@ -236,6 +236,20 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("pending_share_queries", "staged_at", TermIdKind::None),
     // -- Store::migrate_retraction_tx (quipu #83) --
     ("facts", "retracted_tx", TermIdKind::None),
+    // -- Store::migrate_graph_events (event-push design §4) --
+    // `graph` is the IRI as TEXT, like `events.subject`; never a term id.
+    ("graph_events", "offset", TermIdKind::None),
+    ("graph_events", "graph", TermIdKind::None),
+    ("graph_events", "type", TermIdKind::None),
+    ("graph_events", "ts", TermIdKind::None),
+    ("graph_events", "subject", TermIdKind::None),
+    ("graph_events", "group_id", TermIdKind::None),
+    ("graph_events", "tx_id", TermIdKind::None),
+    ("graph_events", "payload", TermIdKind::None),
+    ("graph_consumers", "consumer_id", TermIdKind::None),
+    ("graph_consumers", "graph", TermIdKind::None),
+    ("graph_consumers", "committed_offset", TermIdKind::None),
+    ("graph_consumers", "updated_at", TermIdKind::None),
     // -- Store::migrate_forks (quipu-gp5) --
     // `g` is the fork graph's term id; `parent_branch` matches
     // `graphs.parent_branch` (v1 only writes ROOT `0`, the exempt sentinel).

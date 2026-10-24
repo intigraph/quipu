@@ -116,6 +116,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/graph/freeze",  // deep freeze: relocates rows, mutates registry + attachments
     "/graph/thaw",    // restores rows, mutates registry + attachments
     "/events/commit", // durable consumer cursor upsert (event-log P1)
+    "/events/graph/commit", // a named graph's consumer cursor upsert (event-push §4)
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets",      // named-dataset registry create/remove (quipu #69) + meta-graph mirror
     "/update",        // SPARQL 1.1 Update mutates default and named graphs
@@ -213,10 +214,11 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/entity/{iri}/html",
     "/entity_history",
     "/transactions",
-    "/events", // pull-batch event log read (event-log P1); the commit half is a write
+    "/events",       // pull-batch event log read (event-log P1); the commit half is a write
+    "/events/graph", // one named graph's event log read (event-push §4)
     "/events/stream", // read-only replay; delivery never commits a consumer ACK
     "/changes/stream", // read-only transaction replay, including named graphs
-    "/changes", // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
+    "/changes",      // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
     "/spotlight",
     "/fragments",
     "/reconcile",

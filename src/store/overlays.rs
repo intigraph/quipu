@@ -52,6 +52,25 @@ impl Store {
         Ok(g)
     }
 
+    /// The graph id of a registered COMMITTED named graph, or `None` for an
+    /// unregistered IRI and for an overlay (compose-only staging).
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the lookup fails.
+    pub fn committed_graph_id(&self, graph_iri: &str) -> Result<Option<i64>> {
+        let Some(g) = self.lookup(graph_iri)? else {
+            return Ok(None);
+        };
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT g FROM graphs WHERE g = ?1 AND class = 'committed'",
+                params![g],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
     /// The read-only half of [`Self::graph_create`]: `true` when `g` is already a
     /// committed graph, `false` when it is unregistered, and the same refusal
     /// when it is registered under any other class. A promotion dry run calls

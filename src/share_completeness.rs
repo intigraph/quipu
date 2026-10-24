@@ -110,6 +110,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("projection_defs", Disposition::Regenerated),
     // -- log ----------------------------------------------------------------
     ("events", Disposition::Log),
+    // Named-graph events (event-push design §4), the same kind of log.
+    ("graph_events", Disposition::Log),
     // -- excluded -----------------------------------------------------------
     // A TRUST REGISTRY. Carrying it would undo aegis-tadzdf by the back door:
     // `share_attestation.rs` refuses to let a bundle register its own producer
@@ -157,6 +159,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("deck_receipts", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
+    // The same, for named-graph event readers.
+    ("graph_consumers", Disposition::Excluded),
     // Receiver-local review decisions and notice routes. A foreign pack must
     // not install its producer's review position or silence local notices.
     ("import_reviews", Disposition::Excluded),
