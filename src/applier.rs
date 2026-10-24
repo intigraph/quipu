@@ -163,6 +163,7 @@ impl Applier {
     pub fn open(store: &Store) -> Result<Self> {
         store.conn.execute_batch(PROGRESS_DDL)?;
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
+        store.conn.execute_batch(digest::STOP_DDL)?;
         bootstrap::discard_open_share(store)?;
         let progress = store
             .conn
@@ -185,7 +186,7 @@ impl Applier {
             chunk: None,
             share: None,
             last_frame_ms: None,
-            stopped: None,
+            stopped: digest::load_stop(store)?,
         })
     }
 
@@ -503,7 +504,10 @@ pub fn record_to_datum(
     ) else {
         return Ok(Err("record lacks entity, attribute or op".into()));
     };
-    let retract = op == "retract";
+    let retract = match digest::op_is_retract(op) {
+        Ok(r) => r,
+        Err(reason) => return Ok(Err(reason)),
+    };
     let value_field = if retract { "old_value" } else { "value" };
     let value = match value_of(store, &record[value_field])? {
         Ok(v) => v,
