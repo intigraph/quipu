@@ -356,3 +356,217 @@ fn a_freeze_committed_during_the_open_ends_the_session_instead_of_covering_nothi
         "{outcomes:?}"
     );
 }
+
+/// master -> relay -> leaf, all through the one applier and producer.
+struct Tree {
+    master: Store,
+    relay: Store,
+    relay_applier: Applier,
+    upstream: Session,
+    leaf: Store,
+    leaf_applier: Applier,
+    downstream: Session,
+}
+
+fn graphs_of(scope: &[&str]) -> Vec<String> {
+    scope.iter().map(|g| (*g).to_string()).collect()
+}
+
+impl Tree {
+    fn new(master: Store, scope: &[&str]) -> Self {
+        Self::with_parts(master, scope, None)
+    }
+
+    fn with_parts(master: Store, scope: &[&str], part_max_len: Option<usize>) -> Self {
+        let master_key = identity();
+        let relay_key = identity();
+        let mut req = request(&master, 0);
+        req.graphs = graphs_of(scope);
+        let (mut upstream, open) =
+            Session::open(&master, &req, "up".into(), master_key.clone()).unwrap();
+        let (mut relay, mut relay_applier) = follower(&master_key, upstream.scope());
+        feed(&mut relay, &mut relay_applier, &[open], 1);
+        let (frames, _) = upstream.poll(&master, 100, None).unwrap();
+        feed(&mut relay, &mut relay_applier, &frames, 1);
+        let allowed = graphs_of(scope);
+        let (downstream, open) = Session::open_relay(
+            &relay,
+            &req,
+            (&allowed, &[]),
+            "down".into(),
+            relay_key.clone(),
+        )
+        .unwrap();
+        let downstream = match part_max_len {
+            Some(n) => downstream.with_part_max_len(n),
+            None => downstream,
+        };
+        let (mut leaf, mut leaf_applier) = follower(&relay_key, downstream.scope());
+        assert!(matches!(
+            feed(&mut leaf, &mut leaf_applier, &[open], 1)[0],
+            Outcome::SessionOpened { .. }
+        ));
+        Self {
+            master,
+            relay,
+            relay_applier,
+            upstream,
+            leaf,
+            leaf_applier,
+            downstream,
+        }
+    }
+
+    /// Move everything one hop at a time, in pages of `page` transactions.
+    fn sync(&mut self, page: usize) {
+        loop {
+            let (frames, _) = self.upstream.poll(&self.master, page, None).unwrap();
+            feed(&mut self.relay, &mut self.relay_applier, &frames, 2);
+            let (down, _) = self.downstream.poll(&self.relay, page, None).unwrap();
+            for o in feed(&mut self.leaf, &mut self.leaf_applier, &down, 2) {
+                assert!(
+                    matches!(
+                        o,
+                        Outcome::Applied { .. }
+                            | Outcome::CoverageAdvanced { .. }
+                            | Outcome::Buffered { .. }
+                    ),
+                    "{o:?}"
+                );
+            }
+            if frames.is_empty() && down.is_empty() {
+                return;
+            }
+        }
+    }
+}
+
+#[test]
+fn a_leaf_behind_a_relay_equals_the_master_in_scope() {
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    assert_eq!(in_graph(&tree.leaf, BOARD), in_graph(&tree.master, BOARD));
+    assert!(in_graph(&tree.leaf, OTHER).is_empty());
+    // The leaf follows the master's numbering and coverage, not the relay's.
+    assert_eq!(
+        tree.leaf_applier.progress().unwrap().source_tx,
+        tree.relay_applier.progress().unwrap().source_tx
+    );
+    assert_eq!(tree.leaf_applier.coverage(), tree.relay_applier.coverage());
+    // A new master commit crosses both hops.
+    write(&mut tree.master, BOARD, "urn:item:late", "late");
+    tree.sync(100);
+    assert_eq!(in_graph(&tree.leaf, BOARD), in_graph(&tree.master, BOARD));
+}
+
+#[test]
+fn a_relay_pages_a_two_graph_scope_without_splitting_a_source_transaction() {
+    let mut tree = Tree::new(source(), &[BOARD, OTHER]);
+    tree.sync(1);
+    for graph in [BOARD, OTHER] {
+        assert_eq!(in_graph(&tree.leaf, graph), in_graph(&tree.master, graph));
+    }
+}
+
+#[test]
+fn a_relay_never_covers_past_what_it_verified_upstream() {
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    let relay_w = tree.relay_applier.coverage().unwrap();
+    // The master moves on, but the relay has not polled upstream.
+    write(&mut tree.master, OTHER, "urn:x:new", "elsewhere");
+    let (down, _) = tree.downstream.poll(&tree.relay, 100, None).unwrap();
+    feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 3);
+    assert_eq!(tree.leaf_applier.coverage(), Some(relay_w));
+    assert!(relay_w < tree.master.latest_tx_id().unwrap());
+}
+
+#[test]
+fn a_large_transaction_crosses_the_relay_in_parts() {
+    let mut master = Store::open_in_memory().unwrap();
+    let g = master.graph_create(BOARD).unwrap();
+    let datums: Vec<Datum> = (0..40)
+        .map(|i| Datum {
+            entity: master.intern(&format!("urn:item:{i}")).unwrap(),
+            attribute: master.intern("urn:p:title").unwrap(),
+            value: Value::Str(format!("a long enough title to need parts {i}")),
+            valid_from: T.into(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    master.transact_to_graph(&datums, T, None, None, g).unwrap();
+    let mut tree = Tree::with_parts(master, &[BOARD], Some(2_000));
+    let (down, _) = tree.downstream.poll(&tree.relay, 100, None).unwrap();
+    assert!(down.iter().filter(|f| f.event == event::TX_PART).count() > 1);
+    let outcomes = feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 2);
+    assert!(
+        outcomes
+            .iter()
+            .any(|o| matches!(o, Outcome::Applied { .. }))
+    );
+    assert_eq!(in_graph(&tree.leaf, BOARD), in_graph(&tree.master, BOARD));
+}
+
+#[test]
+fn a_leaf_challenge_is_answered_through_the_relay() {
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    tree.leaf_applier.challenge("down", [8; 16], 1_000).unwrap();
+    // The caller passes the nonce only after a fresh upstream proof (§6).
+    let (down, answered) = tree
+        .downstream
+        .poll(&tree.relay, 100, Some([8; 16]))
+        .unwrap();
+    assert!(answered);
+    let outcomes = feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 1_020);
+    assert_eq!(
+        outcomes.last(),
+        Some(&Outcome::ProofAccepted { t_send_ms: 1_000 })
+    );
+    assert!(tree.leaf_applier.freshness(1_030).within(100));
+}
+
+#[test]
+fn a_relay_serves_only_inside_its_declared_scope_even_for_graphs_it_holds() {
+    // The relay holds both graphs, but declares only the board as its scope.
+    let tree = Tree::new(source(), &[BOARD, OTHER]);
+    let board = graphs_of(&[BOARD]);
+    let mut both = request(&tree.master, 0);
+    both.graphs = graphs_of(&[BOARD, OTHER]);
+    assert!(
+        Session::open_relay(&tree.relay, &both, (&board, &[]), "w".into(), identity()).is_err()
+    );
+    let mut only_board = request(&tree.master, 0);
+    only_board.graphs = board.clone();
+    assert!(
+        Session::open_relay(
+            &tree.relay,
+            &only_board,
+            (&board, &[]),
+            "b".into(),
+            identity()
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn a_relay_refuses_a_wider_scope_a_non_replica_and_an_unheld_cursor() {
+    let tree = Tree::new(source(), &[BOARD]);
+    let board = graphs_of(&[BOARD]);
+    let mut wider = request(&tree.master, 0);
+    wider.graphs = graphs_of(&[BOARD, OTHER]);
+    assert!(
+        Session::open_relay(&tree.relay, &wider, (&board, &[]), "w".into(), identity()).is_err()
+    );
+    let plain = request(&tree.master, 0);
+    assert!(
+        Session::open_relay(&tree.master, &plain, (&board, &[]), "m".into(), identity()).is_err(),
+        "a source store is not a replica"
+    );
+    let ahead = request(&tree.master, tree.master.latest_tx_id().unwrap() + 5);
+    assert!(
+        Session::open_relay(&tree.relay, &ahead, (&board, &[]), "a".into(), identity()).is_err()
+    );
+}

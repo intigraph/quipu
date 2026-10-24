@@ -148,6 +148,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // The source-signed coverage watermark that cursor verified on the
     // replication stream. A claim about the same cursor: excluded with it.
     ("replica_coverage", Disposition::Excluded),
+    // Which source transaction each local transaction of the replica holds:
+    // the same cursor's numbering, excluded with it.
+    ("replica_tx_map", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.

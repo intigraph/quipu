@@ -221,9 +221,11 @@ second frame format.
 **Source numbering.** A replica commits each source transaction as a new LOCAL
 transaction, so its own change log is numbered locally. Children follow the
 SOURCE: their cursor, duplicate digests and coverage are all in source
-transaction ids. So the applier records the local transaction id beside each
-applied source transaction (`replica_applied_tx.local_tx`, written in the same
-savepoint). A relay's producer reads its local log and states each frame's
+transaction ids. So the applier records which source transaction each local
+transaction it commits belongs to (`replica_tx_map(local_tx, source_tx)`,
+written in the same savepoint). A source transaction that spans graphs is
+several local transactions, and a bootstrap's local transactions all map to its
+watermark. A relay's producer reads its local log and states each frame's
 `source_tx` through that map. A local transaction with no map row (one the
 relay wrote itself) is never served. A relay refuses local writes anyway, so
 such a row means corruption: the session ends with a signed `control` frame
