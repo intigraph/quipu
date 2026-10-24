@@ -41,6 +41,7 @@ impl Store {
             {
                 return Err(refuse("stale, expired request or undeclared choice"));
             }
+            store.deck_check_expect(&request)?;
             let answered: bool = store.conn.query_row(
                 "SELECT EXISTS(SELECT 1 FROM deck_receipts WHERE request=?1 AND revision=?2)",
                 params![request.id, revision],
@@ -128,6 +129,9 @@ impl Store {
             {
                 return Err(refuse("expired challenge, scope mismatch or stale request"));
             }
+            // The item may have changed since present: check again under the
+            // writer, before the assertion is verified or anything consumed.
+            store.deck_check_expect(&challenge.request)?;
             let (credential, count) = store.deck_credential(&challenge.credential)?;
             // Typed deserialization rejects duplicate fields and malformed
             // crossOrigin rather than letting Value::as_bool treat them as false.

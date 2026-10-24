@@ -826,6 +826,11 @@ operator has configured and enabled the store's deck, which no route can do.
   but no other control characters. It is inside the signed challenge, so the
   signature covers the exact text that is recorded. A v1 request refuses
   `action` and `comment`. Any refused selection records nothing.
+- A v2 request can also carry up to 16 live preconditions, which the curator
+  takes from the item it asks about. Each is the single current value of one
+  slot in one graph (or no value). Both present and attest re-read them, and
+  if any no longer holds, the call is refused with `stale request: the item
+  changed` and records nothing: no challenge, receipt or decision.
 - `/deck/attest` (write): `{"nonce", "client_data_json", "authenticator_data",
   "signature"}`, each byte field base64url, returns `{"decision", "nonce",
   "recorded_at"}`. A challenge settles once: a replayed, expired or stale

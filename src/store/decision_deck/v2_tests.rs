@@ -4,9 +4,9 @@ use super::tests::{config, refused, signed};
 use super::*;
 use crate::verdict_schemes::webauthn_tests::{Authenticator, Ceremony};
 
-const ID: &str = "urn:test:item-question";
+pub(super) const ID: &str = "urn:test:item-question";
 
-fn v2(revision: u32, actions: &[&str]) -> Request {
+pub(super) fn v2(revision: u32, actions: &[&str]) -> Request {
     Request {
         id: ID.into(),
         revision,
@@ -18,12 +18,13 @@ fn v2(revision: u32, actions: &[&str]) -> Request {
         author: "test-curator".into(),
         labels: vec!["Tonight".into(), "This weekend".into()],
         actions: actions.iter().map(|a| (*a).to_string()).collect(),
+        expect: Vec::new(),
     }
 }
 
-const ALL: [&str; 3] = ["choose", "later", "comment"];
+pub(super) const ALL: [&str; 3] = ["choose", "later", "comment"];
 
-fn prepare(store: &mut Store, auth: &Authenticator) {
+pub(super) fn prepare(store: &mut Store, auth: &Authenticator) {
     store.deck_configure(&config()).unwrap();
     store
         .deck_enroll(&Credential {
@@ -38,7 +39,7 @@ fn prepare(store: &mut Store, auth: &Authenticator) {
 }
 
 /// Receipts, challenges and deck-graph facts: a refusal changes none of them.
-fn footprint(store: &Store) -> (i64, i64, usize) {
+pub(super) fn footprint(store: &Store) -> (i64, i64, usize) {
     let count = |table: &str| -> i64 {
         store
             .conn

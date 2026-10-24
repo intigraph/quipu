@@ -44,8 +44,35 @@ pub(super) fn is_v2(request: &Request) -> bool {
     !request.labels.is_empty() || !request.actions.is_empty()
 }
 
+const MAX_EXPECT: usize = 16;
+
+fn iri(text: &str) -> bool {
+    oxrdf::NamedNode::new(text).is_ok()
+}
+
+/// Up to 16 preconditions over IRIs, each slot named once. Only a v2 request
+/// carries them, so a v1 message never changes shape.
+fn valid_expect(request: &Request) -> bool {
+    let slots: std::collections::BTreeSet<_> = request
+        .expect
+        .iter()
+        .map(|e| (&e.graph, &e.s, &e.p))
+        .collect();
+    request.expect.len() <= MAX_EXPECT
+        && slots.len() == request.expect.len()
+        && request.expect.iter().all(|e| {
+            iri(&e.graph)
+                && iri(&e.s)
+                && iri(&e.p)
+                && !matches!(&e.o, Some(super::ExpectValue::Iri(o)) if !iri(o))
+        })
+}
+
 /// The request's declared choice set is well formed for exactly one wire.
 pub(super) fn valid_request(request: &Request) -> bool {
+    if !valid_expect(request) {
+        return false;
+    }
     if is_v2(request) {
         request.choices.is_empty()
             && (1..=MAX_LABELS).contains(&request.labels.len())
@@ -58,7 +85,8 @@ pub(super) fn valid_request(request: &Request) -> bool {
                 .all(|a| ACTIONS.contains(&a.as_str()))
             && unique(&request.actions)
     } else {
-        !request.choices.is_empty()
+        request.expect.is_empty()
+            && !request.choices.is_empty()
             && request.choices.len() <= V1_CHOICES.len()
             && request
                 .choices

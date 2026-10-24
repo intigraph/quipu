@@ -15,6 +15,9 @@ use crate::types::{Op, Value};
 use crate::verdict_schemes::{Scheme, webauthn};
 
 mod admission;
+mod expect;
+#[cfg(test)]
+mod expect_tests;
 #[cfg(test)]
 mod golden_tests;
 mod operator;
@@ -81,6 +84,38 @@ pub struct Request {
     /// Wire v2: the allowed subset of `choose`, `later` and `comment`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actions: Vec<String>,
+    /// Wire v2: up to 16 live preconditions, checked at present and attest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub expect: Vec<Expect>,
+}
+
+/// One live precondition (decision-deck-seed-decisions.md §2): the single
+/// current value of `(s, p)` in `graph`, or no value when `o` is `None`. The
+/// curator takes it from the item at curation, so a changed or closed item
+/// no longer matches. Quipu reads it and learns no item vocabulary.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Expect {
+    /// Named graph that holds the slot.
+    pub graph: String,
+    /// Subject IRI.
+    pub s: String,
+    /// Predicate IRI.
+    pub p: String,
+    /// Expected current value; `None` expects no asserted value.
+    pub o: Option<ExpectValue>,
+}
+
+/// An expected value, typed so that a string never matches an IRI.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+pub enum ExpectValue {
+    /// An integer literal.
+    Int(i64),
+    /// A plain string literal.
+    Str(String),
+    /// A reference to an IRI.
+    Iri(String),
 }
 
 /// Public credential, independently enrolled by an operator. No private key.

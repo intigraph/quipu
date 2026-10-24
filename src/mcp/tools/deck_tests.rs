@@ -45,6 +45,7 @@ fn store(auth: &Authenticator, enabled: bool) -> Store {
             author: "test-curator".into(),
             labels: Vec::new(),
             actions: Vec::new(),
+            expect: Vec::new(),
         })
         .unwrap();
     store.deck_set_enabled(enabled).unwrap();
@@ -189,6 +190,7 @@ fn a_v2_later_with_a_comment_round_trips_through_the_transport() {
             author: "test-curator".into(),
             labels: vec!["Tonight".into()],
             actions: vec!["choose".into(), "later".into()],
+            expect: Vec::new(),
         })
         .unwrap();
     let presented = tool_deck_present(

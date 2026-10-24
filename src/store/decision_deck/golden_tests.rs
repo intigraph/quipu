@@ -41,6 +41,7 @@ fn golden() -> Challenge {
             author: "curator@example.org".into(),
             labels: Vec::new(),
             actions: Vec::new(),
+            expect: Vec::new(),
         },
         choice: "approve".into(),
         action: None,

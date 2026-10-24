@@ -23,6 +23,7 @@ fn request() -> Request {
         author: "test-curator".into(),
         labels: Vec::new(),
         actions: Vec::new(),
+        expect: Vec::new(),
     }
 }
 
