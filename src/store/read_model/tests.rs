@@ -1429,3 +1429,70 @@ fn reopening_an_existing_store_adds_the_current_graph_index() {
         assert!(plan.contains("idx_current_g"), "count plan: {plan}");
     }
 }
+
+/// A recent "too big" is reused (aegis-xdvg.3). Without the reuse,
+/// `read_model_applicable` recounted an over-budget graph on every BGP it
+/// judged: 713 ms per check on a 1.7M-fact board, 20 s for one 250-item query.
+/// Asserting the ANSWER alone would pass whether or not the count is reused,
+/// so this shrinks the graph under the budget and requires the stale "too big"
+/// to stand until the reuse is cleared.
+#[test]
+fn over_budget_count_is_reused_until_cleared() {
+    let mut s = store();
+    let facts: Vec<Datum> = (0..3)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Assert))
+        .collect();
+    s.transact(&facts, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    s.set_read_model_max_triples(1);
+    let g = crate::schema::ROOT_GRAPH;
+    assert!(
+        !s.read_model_affordable(g),
+        "3 facts must not fit a budget of 1"
+    );
+
+    let retract: Vec<Datum> = (1..3)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Retract))
+        .collect();
+    s.transact(&retract, "2026-01-01T00:00:01Z", Some("test"), None)
+        .unwrap();
+    assert_eq!(
+        s.current_fact_count(g).unwrap(),
+        1,
+        "control: the graph now fits"
+    );
+    assert!(
+        !s.read_model_affordable(g),
+        "the recent too-big count must be reused, not recounted"
+    );
+
+    s.affordability_counts.borrow_mut().clear();
+    assert!(
+        s.read_model_affordable(g),
+        "a fresh count sees the graph fits"
+    );
+}
+
+/// A "fits" is never reused (aegis-xdvg.3): a graph that grows past the budget
+/// must be judged too big on the very next check, or a stale answer could
+/// build a model larger than the budget allows.
+#[test]
+fn fitting_count_is_never_reused() {
+    let mut s = store();
+    let one = [datum(&s, "urn:s0", "urn:p", "urn:o", Op::Assert)];
+    s.transact(&one, "2026-01-01T00:00:00Z", Some("test"), None)
+        .unwrap();
+    s.set_read_model_max_triples(2);
+    let g = crate::schema::ROOT_GRAPH;
+    assert!(s.read_model_affordable(g), "1 fact fits a budget of 2");
+
+    let more: Vec<Datum> = (1..4)
+        .map(|i| datum(&s, &format!("urn:s{i}"), "urn:p", "urn:o", Op::Assert))
+        .collect();
+    s.transact(&more, "2026-01-01T00:00:01Z", Some("test"), None)
+        .unwrap();
+    assert!(
+        !s.read_model_affordable(g),
+        "4 facts must be judged too big at once, not from a stale fit"
+    );
+}
