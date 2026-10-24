@@ -66,7 +66,7 @@ fn encode_record(record: &Json, tx_timestamp: &str) -> std::result::Result<Vec<u
     ) else {
         return Err("record lacks entity, attribute or op".into());
     };
-    let retract = op == "retract";
+    let retract = op_is_retract(op)?;
     let value = encode_value(&record[if retract { "old_value" } else { "value" }])?;
     let mut out = Vec::new();
     put(
@@ -147,6 +147,49 @@ fn encode_value(json: &Json) -> std::result::Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// The feed's two ops. Anything else is refused, never read as an assert.
+pub(super) fn op_is_retract(op: &str) -> std::result::Result<bool, String> {
+    match op {
+        "retract" => Ok(true),
+        "assert" => Ok(false),
+        other => Err(format!("unknown op {other:?}")),
+    }
+}
+
+/// A replica's stop, persisted so a reopened applier stays stopped: a history
+/// that disagreed with its source once is not trusted again by reopening.
+pub(super) const STOP_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_stop (\
+     id INTEGER PRIMARY KEY CHECK (id = 1), reason TEXT NOT NULL)";
+
+/// Record why the replica stopped (the first stop wins; it is never cleared
+/// by the applier, only by rebuilding the replica).
+pub(super) fn persist_stop(store: &Store, reason: &Stop) -> Result<()> {
+    let text =
+        serde_json::to_string(reason).map_err(|e| crate::Error::InvalidValue(e.to_string()))?;
+    store.conn.execute(
+        "INSERT OR IGNORE INTO replica_stop (id, reason) VALUES (1, ?1)",
+        params![text],
+    )?;
+    Ok(())
+}
+
+/// The persisted stop, if this replica stopped before.
+pub(super) fn load_stop(store: &Store) -> Result<Option<Outcome>> {
+    let text: Option<String> = store
+        .conn
+        .query_row("SELECT reason FROM replica_stop WHERE id = 1", [], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    Ok(match text {
+        Some(t) => Some(Outcome::Stopped {
+            reason: serde_json::from_str(&t)
+                .map_err(|e| crate::Error::InvalidValue(e.to_string()))?,
+        }),
+        None => None,
+    })
+}
+
 /// Keep the digest of a transaction just applied (inside its savepoint).
 pub(super) fn retain(store: &Store, source: &Source, tx: i64, digest: &str) -> Result<()> {
     store.conn.execute(
@@ -171,7 +214,7 @@ pub(super) fn retained(store: &Store, source: &Source, tx: i64) -> Result<Option
 }
 
 /// Why a replica stopped.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Stop {
     /// The redelivered transaction's content differs from the applied one.
@@ -209,6 +252,7 @@ pub(super) fn check_duplicate(
         },
         None => Stop::DigestUnverifiable { source_tx: tx },
     };
+    persist_stop(store, &reason)?;
     Ok(Some(Outcome::Stopped { reason }))
 }
 

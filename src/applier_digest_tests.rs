@@ -176,3 +176,44 @@ fn a_stop_serializes_tagged_by_kind() {
         json!({"kind": "stopped", "reason": {"kind": "digest_unverifiable", "source_tx": 5}})
     );
 }
+
+#[test]
+fn a_stop_survives_reopening_so_a_diverged_replica_never_resumes() {
+    let feed = pages(&source());
+    let (mut replica, mut applier) = replica_of(&feed[..2]);
+    let stop = applier
+        .apply_frame(&mut replica, "quipu.changes", &tampered(&feed[0]), 2)
+        .unwrap();
+    assert!(matches!(stop, Outcome::Stopped { .. }), "{stop:?}");
+    drop(applier);
+    // A fresh applier on the same replica must not tail on past the stop.
+    let mut reopened = Applier::open(&replica).unwrap();
+    let before = live_digest(&replica);
+    let next = reopened
+        .apply_frame(&mut replica, "quipu.changes", &feed[2], 3)
+        .unwrap();
+    assert_eq!(next, stop, "the persisted stop answers after reopening");
+    assert_eq!(
+        before,
+        live_digest(&replica),
+        "nothing applied after the stop"
+    );
+}
+
+#[test]
+fn an_unknown_op_is_refused_never_read_as_an_assert() {
+    let feed = pages(&source());
+    let mut page: Json = serde_json::from_str(&feed[0]).unwrap();
+    page["records"][0]["op"] = json!("Assert");
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let outcome = applier
+        .apply_frame(&mut replica, "quipu.changes", &page.to_string(), 1)
+        .unwrap();
+    assert!(
+        matches!(&outcome, Outcome::Refused { reason } if reason.contains("unknown op")),
+        "{outcome:?}"
+    );
+    assert!(live_digest(&replica).is_empty(), "nothing written");
+    assert!(applier.progress().is_none());
+}
