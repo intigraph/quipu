@@ -59,13 +59,13 @@ async fn named_graph_changes_replay_without_event_offset_ack() {
         .transact_to_graph(&[first], "2026-01-01", None, None, graph)
         .unwrap();
     assert_eq!(
-        store.latest_event_offset().unwrap(),
+        store.latest_event_offset_in(None).unwrap(),
         0,
         "legacy ROOT event scope unchanged"
     );
     println!(
         "DEMO legacy ROOT event offset: {}",
-        store.latest_event_offset().unwrap()
+        store.latest_event_offset_in(None).unwrap()
     );
     let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
     for replay in 0..2 {
@@ -174,6 +174,50 @@ async fn inner_savepoint_hint_cannot_publish_speculative_rows() {
             .records
             .len(),
         0
+    );
+}
+
+#[tokio::test]
+async fn an_event_stream_filtered_to_a_named_graph_carries_only_that_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    let board = store.graph_create("urn:test:seeds-board").unwrap();
+    let other = store.graph_create("urn:test:other-board").unwrap();
+    let mut item = datum(&mut store, "urn:test:item-other");
+    store
+        .transact_to_graph(&[item], "2026-01-01", None, None, other)
+        .unwrap();
+    item = datum(&mut store, "urn:test:item-board");
+    store
+        .transact_to_graph(&[item], "2026-01-01", None, None, board)
+        .unwrap();
+    assert_eq!(
+        store.latest_event_offset_in(None).unwrap(),
+        0,
+        "ROOT log untouched"
+    );
+    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
+    let response = events_stream(
+        State(shared),
+        HeaderMap::new(),
+        params(json!({"since":0,"graph":"urn:test:seeds-board"})),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut bytes = response.into_body().into_data_stream();
+    let frame = tokio::time::timeout(Duration::from_secs(2), bytes.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let text = String::from_utf8(frame.to_vec()).unwrap();
+    assert!(
+        text.contains("quipu.events") && text.contains("entity.added"),
+        "{text}"
+    );
+    assert!(text.contains("urn:test:item-board"), "{text}");
+    assert!(
+        !text.contains("urn:test:item-other"),
+        "other graph leaked: {text}"
     );
 }
 
@@ -392,48 +436,4 @@ async fn a_record_larger_than_a_frame_is_refused_without_advancing() {
         .await
         .unwrap();
     assert!(end.is_none(), "stream should end after the refusal");
-}
-
-#[tokio::test]
-async fn an_event_stream_filtered_to_a_named_graph_carries_only_that_graph() {
-    let mut store = Store::open_in_memory().unwrap();
-    let board = store.graph_create("urn:test:seeds-board").unwrap();
-    let other = store.graph_create("urn:test:other-board").unwrap();
-    let mut item = datum(&mut store, "urn:test:item-other");
-    store
-        .transact_to_graph(&[item], "2026-01-01", None, None, other)
-        .unwrap();
-    item = datum(&mut store, "urn:test:item-board");
-    store
-        .transact_to_graph(&[item], "2026-01-01", None, None, board)
-        .unwrap();
-    assert_eq!(
-        store.latest_event_offset_in(None).unwrap(),
-        0,
-        "ROOT log untouched"
-    );
-    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
-    let response = events_stream(
-        State(shared),
-        HeaderMap::new(),
-        params(json!({"since":0,"graph":"urn:test:seeds-board"})),
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let mut bytes = response.into_body().into_data_stream();
-    let frame = tokio::time::timeout(Duration::from_secs(2), bytes.next())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    let text = String::from_utf8(frame.to_vec()).unwrap();
-    assert!(
-        text.contains("quipu.events") && text.contains("entity.added"),
-        "{text}"
-    );
-    assert!(text.contains("urn:test:item-board"), "{text}");
-    assert!(
-        !text.contains("urn:test:item-other"),
-        "other graph leaked: {text}"
-    );
 }
