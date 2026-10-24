@@ -103,6 +103,8 @@ pub struct Session {
     limits: Limits,
     /// A relay: the store is a replica, served in its source's numbering.
     relay: bool,
+    /// A relay's fresh upstream proof (`W_up`), not yet spent on a nonce.
+    upstream_proof: Option<i64>,
 }
 
 /// Local transactions a relay reads beyond a page, so the page's last source
@@ -176,6 +178,7 @@ impl Session {
             part_max_len: None,
             limits: Limits::default(),
             relay: false,
+            upstream_proof: None,
         };
         let frame = session.session_frame();
         Ok((session, frame))
@@ -238,6 +241,7 @@ impl Session {
             part_max_len: None,
             limits: Limits::default(),
             relay: true,
+            upstream_proof: None,
         };
         let frame = session.session_frame();
         Ok((session, frame))
@@ -262,6 +266,15 @@ impl Session {
         self.ended
     }
 
+    /// A relay's upstream proof: the relay's own challenge, sent AFTER the
+    /// child's challenge arrived, was accepted upstream at coverage
+    /// `watermark` (§6, "Freshness, per hop"). The next child nonce may then
+    /// be answered once the relay holds that coverage; one proof answers one
+    /// nonce. A relay answers no nonce without one.
+    pub fn upstream_proof(&mut self, watermark: i64) {
+        self.upstream_proof = Some(watermark);
+    }
+
     /// Split parts at `max_len` bytes instead of the frame budget (tests).
     #[must_use]
     pub fn with_part_max_len(mut self, max_len: usize) -> Self {
@@ -278,8 +291,9 @@ impl Session {
 
     /// Read at most `max_txs` new transactions and the coverage they reach.
     /// `nonce` is an unanswered challenge: it is answered if this poll reaches
-    /// the head, and returned unanswered (`false`) otherwise. A poll that adds
-    /// nothing sends nothing unless it answers a nonce.
+    /// the head, and returned unanswered (`false`) otherwise. On a relay it is
+    /// answered only after [`Self::upstream_proof`]. A poll that adds nothing
+    /// sends nothing unless it answers a nonce.
     ///
     /// # Errors
     /// A store error; nothing was sent and the session may be polled again.
@@ -333,7 +347,11 @@ impl Session {
         } else {
             self.cursor
         };
-        let answer = nonce.filter(|_| full);
+        let proven = !self.relay || self.upstream_proof.is_some_and(|w| watermark >= w);
+        let answer = nonce.filter(|_| full && proven);
+        if answer.is_some() && self.relay {
+            self.upstream_proof = None;
+        }
         if answer.is_some() || self.coverage.is_none_or(|c| watermark > c) {
             frames.push(self.coverage_frame(watermark, answer));
         }

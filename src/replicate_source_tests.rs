@@ -513,7 +513,9 @@ fn a_leaf_challenge_is_answered_through_the_relay() {
     let mut tree = Tree::new(source(), &[BOARD]);
     tree.sync(100);
     tree.leaf_applier.challenge("down", [8; 16], 1_000).unwrap();
-    // The caller passes the nonce only after a fresh upstream proof (§6).
+    // A fresh upstream proof at the relay's coverage, after the challenge (§6).
+    let held = tree.relay_applier.coverage().unwrap();
+    tree.downstream.upstream_proof(held);
     let (down, answered) = tree
         .downstream
         .poll(&tree.relay, 100, Some([8; 16]))
@@ -525,6 +527,39 @@ fn a_leaf_challenge_is_answered_through_the_relay() {
         Some(&Outcome::ProofAccepted { t_send_ms: 1_000 })
     );
     assert!(tree.leaf_applier.freshness(1_030).within(100));
+}
+
+#[test]
+fn a_relay_answers_a_leaf_challenge_only_from_a_fresh_upstream_proof() {
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    // The relay holds coverage already, but no proof was requested upstream
+    // after this challenge: its stored coverage is not freshness.
+    let (down, answered) = tree
+        .downstream
+        .poll(&tree.relay, 100, Some([8; 16]))
+        .unwrap();
+    assert!(!answered);
+    assert!(down.iter().all(|f| !f.data.contains(&hex::encode([8u8; 16]))));
+    // A proof the relay does not yet hold answers nothing either.
+    let held = tree.relay_applier.coverage().unwrap();
+    tree.downstream.upstream_proof(held + 1);
+    let (_, answered) = tree
+        .downstream
+        .poll(&tree.relay, 100, Some([8; 16]))
+        .unwrap();
+    assert!(!answered);
+    // One proof answers one nonce.
+    tree.downstream.upstream_proof(held);
+    let (_, first) = tree
+        .downstream
+        .poll(&tree.relay, 100, Some([8; 16]))
+        .unwrap();
+    let (_, second) = tree
+        .downstream
+        .poll(&tree.relay, 100, Some([9; 16]))
+        .unwrap();
+    assert!(first && !second);
 }
 
 #[test]
