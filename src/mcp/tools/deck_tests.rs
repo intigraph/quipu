@@ -43,6 +43,8 @@ fn store(auth: &Authenticator, enabled: bool) -> Store {
             expires_at: now() + 3600,
             choices: vec!["approve".into(), "reject".into()],
             author: "test-curator".into(),
+            labels: Vec::new(),
+            actions: Vec::new(),
         })
         .unwrap();
     store.deck_set_enabled(enabled).unwrap();
@@ -166,5 +168,52 @@ fn disabled_deck_issues_nothing() {
             &json!({"request": REQUEST, "revision": 1, "credential": CREDENTIAL, "choice": "approve"}),
         ),
         "disabled",
+    );
+}
+
+/// Wire v2 through the transport: the action and comment reach the signed
+/// challenge, and the browser signs exactly what the server returned.
+#[test]
+fn a_v2_later_with_a_comment_round_trips_through_the_transport() {
+    let auth = Authenticator::es256();
+    let mut store = store(&auth, true);
+    store
+        .deck_put_request(&Request {
+            id: "urn:test:v2".into(),
+            revision: 1,
+            policy: "test-only-policy".into(),
+            target: "urn:test:item".into(),
+            summary: "Which window?".into(),
+            expires_at: now() + 3600,
+            choices: Vec::new(),
+            author: "test-curator".into(),
+            labels: vec!["Tonight".into()],
+            actions: vec!["choose".into(), "later".into()],
+        })
+        .unwrap();
+    let presented = tool_deck_present(
+        &mut store,
+        &json!({"request": "urn:test:v2", "revision": 1, "credential": CREDENTIAL,
+                "action": "later", "comment": "after the backup"}),
+    )
+    .unwrap();
+    assert_eq!(presented["challenge"]["domain"], "quipu-decision-deck-v2");
+    assert_eq!(presented["challenge"]["action"], "later");
+    assert_eq!(presented["challenge"]["comment"], "after the backup");
+    let settled = tool_deck_attest(&mut store, &attest_body(&auth, &presented)).unwrap();
+    assert!(
+        settled["decision"]
+            .as_str()
+            .unwrap()
+            .starts_with("urn:quipu:decision:")
+    );
+    // Unknown fields are still refused.
+    refused(
+        tool_deck_present(
+            &mut store,
+            &json!({"request": "urn:test:v2", "revision": 1, "credential": CREDENTIAL,
+                    "action": "later", "note": "x"}),
+        ),
+        "unknown field",
     );
 }

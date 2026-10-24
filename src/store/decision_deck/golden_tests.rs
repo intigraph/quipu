@@ -1,4 +1,4 @@
-//! Frozen v1 wire vector for client codecs (aegis-blh.2).
+//! Frozen v1 and v2 wire vectors for client codecs (aegis-blh.2, aegis-7nz).
 //!
 //! The Brief signs `Challenge::webauthn_challenge()` and never builds its own
 //! envelope, so a client codec must reproduce these bytes exactly. The expected
@@ -39,8 +39,12 @@ fn golden() -> Challenge {
             expires_at: 1_792_600_000,
             choices: vec!["approve".into(), "reject".into(), "changes".into()],
             author: "curator@example.org".into(),
+            labels: Vec::new(),
+            actions: Vec::new(),
         },
         choice: "approve".into(),
+        action: None,
+        comment: None,
         expires_at: 1_792_599_700,
     }
 }
@@ -65,4 +69,66 @@ fn v1_webauthn_challenge_is_frozen() {
 fn the_vector_decodes_back_to_the_same_challenge() {
     let decoded: Challenge = serde_json::from_str(MESSAGE).unwrap();
     assert_eq!(decoded, golden());
+}
+
+/// Wire v2 (aegis-7nz): labelled choose with a signed comment. The comment
+/// carries a newline and a non-ASCII letter, so a codec must reproduce JSON
+/// escaping and raw UTF-8 exactly. Computed independently (compact JSON in
+/// field order, `ensure_ascii` off, then SHA-256 over the verifier domain and
+/// the message), not by this code.
+const MESSAGE_V2: &str = concat!(
+    r#"{"domain":"quipu-decision-deck-v2","audience":"store-golden-0001","#,
+    r#""nonce":"0000000000000000000000000000000000000000000000000000000000000002","#,
+    r#""origin":"https://deck.example.org","rp_id":"deck.example.org","#,
+    r#""actor":"actor@example.org","credential":"Z29sZGVuLWNyZWRlbnRpYWw","#, // gitleaks:allow (base64 of "golden-credential")
+    r#""request":{"id":"https://example.org/decision/request/golden-2","revision":4,"#,
+    r#""policy":"https://example.org/policy/brief","target":"https://example.org/item/golden","#,
+    r#""summary":"Which window should the golden upgrade use?","expires_at":1792600000,"#,
+    r#""choices":[],"author":"curator@example.org","#,
+    r#""labels":["Tonight","This weekend"],"actions":["choose","later","comment"]},"#,
+    r#""choice":"This weekend","action":"choose","comment":"Après la sauvegarde\nmerci","#,
+    r#""expires_at":1792599700}"#,
+);
+const CHALLENGE_V2_HEX: &str = "1415da71c13ff49158a15fdccee5951029ef73d7cd8e83a78484bbb6af8aebc7";
+
+fn golden_v2() -> Challenge {
+    Challenge {
+        domain: "quipu-decision-deck-v2".into(),
+        nonce: format!("{}02", "00".repeat(31)),
+        request: Request {
+            id: "https://example.org/decision/request/golden-2".into(),
+            revision: 4,
+            summary: "Which window should the golden upgrade use?".into(),
+            choices: Vec::new(),
+            labels: vec!["Tonight".into(), "This weekend".into()],
+            actions: vec!["choose".into(), "later".into(), "comment".into()],
+            ..golden().request
+        },
+        choice: "This weekend".into(),
+        action: Some("choose".into()),
+        comment: Some("Après la sauvegarde\nmerci".into()),
+        ..golden()
+    }
+}
+
+#[test]
+fn v2_message_bytes_are_frozen() {
+    assert_eq!(
+        String::from_utf8(golden_v2().message().unwrap()).unwrap(),
+        MESSAGE_V2
+    );
+}
+
+#[test]
+fn v2_webauthn_challenge_is_frozen() {
+    assert_eq!(
+        hex::encode(golden_v2().webauthn_challenge().unwrap()),
+        CHALLENGE_V2_HEX
+    );
+}
+
+#[test]
+fn the_v2_vector_decodes_back_to_the_same_challenge() {
+    let decoded: Challenge = serde_json::from_str(MESSAGE_V2).unwrap();
+    assert_eq!(decoded, golden_v2());
 }

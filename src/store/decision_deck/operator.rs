@@ -169,18 +169,7 @@ impl Store {
             || request.policy.is_empty()
             || request.target.is_empty()
             || request.summary.is_empty()
-            || request.choices.is_empty()
-            || request.choices.len() > 3
-            || request
-                .choices
-                .iter()
-                .any(|c| !["approve", "reject", "changes"].contains(&c.as_str()))
-            || request
-                .choices
-                .iter()
-                .collect::<std::collections::BTreeSet<_>>()
-                .len()
-                != request.choices.len()
+            || !wire::valid_request(request)
             || encode(request)?.len() > 32768
             || oxrdf::NamedNode::new(request.id.clone()).is_err()
             || request.id.starts_with("urn:quipu:decision:")

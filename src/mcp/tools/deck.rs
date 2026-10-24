@@ -33,17 +33,32 @@ struct Present {
     request: String,
     revision: u32,
     credential: String,
+    #[serde(default)]
     choice: String,
+    #[serde(default)]
+    action: Option<String>,
+    #[serde(default)]
+    comment: Option<String>,
 }
 
-/// Issue one challenge: `{request, revision, credential, choice}` ->
-/// `{challenge, webauthn_challenge}`, the latter unpadded base64url.
+/// Issue one challenge: `{request, revision, credential, choice?, action?,
+/// comment?}` -> `{challenge, webauthn_challenge}`, the latter unpadded
+/// base64url. A v1 request takes `choice` only; a v2 request takes `action`,
+/// with `choice` for `choose` and an optional (for `comment`, required)
+/// `comment`.
 ///
 /// # Errors
-/// Malformed input, or any refusal of `Store::deck_present`.
+/// Malformed input, or any refusal of `Store::deck_present_action`.
 pub fn tool_deck_present(store: &mut Store, value: &JsonValue) -> Result<JsonValue> {
     let p: Present = input(value)?;
-    let challenge = store.deck_present(&p.request, p.revision, &p.credential, &p.choice)?;
+    let challenge = store.deck_present_action(
+        &p.request,
+        p.revision,
+        &p.credential,
+        p.action.as_deref(),
+        &p.choice,
+        p.comment.as_deref(),
+    )?;
     Ok(json!({
         "webauthn_challenge": b64url(&challenge.webauthn_challenge()?),
         "challenge": challenge,

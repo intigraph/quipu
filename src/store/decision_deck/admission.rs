@@ -7,12 +7,27 @@ use super::*;
 impl Store {
     /// Issue one random, expiring challenge for one exact request revision,
     /// declared choice and active credential. Uses only the server clock.
+    /// Wire v1 only; a v2 request needs [`Store::deck_present_action`].
     pub fn deck_present(
         &mut self,
         request: &str,
         revision: u32,
         credential: &str,
         choice: &str,
+    ) -> Result<Challenge> {
+        self.deck_present_action(request, revision, credential, None, choice, None)
+    }
+
+    /// [`Store::deck_present`] for either wire. A v2 request takes an
+    /// `action`, and `comment` is signed with it; a v1 request takes neither.
+    pub fn deck_present_action(
+        &mut self,
+        request: &str,
+        revision: u32,
+        credential: &str,
+        action: Option<&str>,
+        choice: &str,
+        comment: Option<&str>,
     ) -> Result<Challenge> {
         let actor = self.deck_scope(true)?.actor;
         self.deck_atomic(&actor, |store, _| {
@@ -22,7 +37,7 @@ impl Store {
             let time = now()?;
             if request.revision != revision
                 || request.expires_at <= time
-                || !request.choices.iter().any(|c| c == choice)
+                || !wire::valid_selection(&request, action, choice, comment)
             {
                 return Err(refuse("stale, expired request or undeclared choice"));
             }
@@ -38,8 +53,13 @@ impl Store {
             SystemRandom::new()
                 .fill(&mut bytes)
                 .map_err(|_| refuse("nonce entropy unavailable"))?;
+            let domain = if wire::is_v2(&request) {
+                wire::DOMAIN_V2
+            } else {
+                wire::DOMAIN_V1
+            };
             let challenge = Challenge {
-                domain: "quipu-decision-deck-v1".into(),
+                domain: domain.into(),
                 audience: store.store_id()?,
                 nonce: hex::encode(bytes),
                 origin: config.origin,
@@ -47,6 +67,8 @@ impl Store {
                 actor: config.actor,
                 credential: credential.into(),
                 choice: choice.into(),
+                action: action.map(Into::into),
+                comment: comment.map(Into::into),
                 expires_at: time
                     .checked_add(300)
                     .ok_or_else(|| refuse("clock overflow"))?
@@ -173,8 +195,40 @@ impl Store {
                 params![receipt.challenge.credential, verified.sign_count],
             )?;
             let mut datums = vec![typed(store, &receipt.decision, "Decision", ts)?];
+            // v1 records its choice as the outcome. v2 records its action as
+            // the outcome and in deckAction, the chosen label in deckLabel,
+            // and the signed comment in deckComment.
+            let signed = &receipt.challenge;
+            let outcome = signed.action.as_ref().unwrap_or(&signed.choice);
+            if let Some(action) = &signed.action {
+                datums.push(datum(
+                    store,
+                    &receipt.decision,
+                    "deckAction",
+                    Value::Str(action.clone()),
+                    ts,
+                )?);
+                if action == "choose" {
+                    datums.push(datum(
+                        store,
+                        &receipt.decision,
+                        "deckLabel",
+                        Value::Str(signed.choice.clone()),
+                        ts,
+                    )?);
+                }
+            }
+            if let Some(comment) = &signed.comment {
+                datums.push(datum(
+                    store,
+                    &receipt.decision,
+                    "deckComment",
+                    Value::Str(comment.clone()),
+                    ts,
+                )?);
+            }
             for (field, value) in [
-                ("outcome", Value::Str(receipt.challenge.choice.clone())),
+                ("outcome", Value::Str(outcome.clone())),
                 ("by", Value::Str(receipt.challenge.actor.clone())),
                 (
                     "evidenceHash",

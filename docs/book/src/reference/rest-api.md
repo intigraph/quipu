@@ -814,6 +814,18 @@ operator has configured and enabled the store's deck, which no route can do.
   returns `{"challenge", "webauthn_challenge"}`. Sign `webauthn_challenge`
   (unpadded base64url) exactly as returned. Never rebuild the challenge
   client-side: the server verifies against the challenge it stored.
+- A request with curated `labels` uses wire v2 (domain
+  `quipu-decision-deck-v2`). Its present body adds `"action"`, which is one
+  of the request's allowed `choose`, `later` or `comment`, and an optional
+  `"comment"`:
+  - `choose`: `choice` is one of the request's labels exactly;
+  - `later`: no `choice`;
+  - `comment`: no `choice`, and `comment` is required and nonempty.
+
+  A comment is plain text of at most 4,000 bytes, with line breaks and tabs
+  but no other control characters. It is inside the signed challenge, so the
+  signature covers the exact text that is recorded. A v1 request refuses
+  `action` and `comment`. Any refused selection records nothing.
 - `/deck/attest` (write): `{"nonce", "client_data_json", "authenticator_data",
   "signature"}`, each byte field base64url, returns `{"decision", "nonce",
   "recorded_at"}`. A challenge settles once: a replayed, expired or stale

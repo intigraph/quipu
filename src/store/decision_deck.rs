@@ -21,6 +21,9 @@ mod operator;
 #[cfg(test)]
 mod tests;
 mod transaction;
+#[cfg(test)]
+mod v2_tests;
+mod wire;
 
 /// Reserved, protected request and receipt projection. Explicit dataset only.
 pub const GRAPH: &str = "urn:quipu:decision-deck";
@@ -71,6 +74,13 @@ pub struct Request {
     pub choices: Vec<String>,
     /// Curator identity; checked against the operator-installed author.
     pub author: String,
+    /// Wire v2: 1 to 8 curated option labels, unique and in display order.
+    /// Absent (and not serialized) on a v1 request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<String>,
+    /// Wire v2: the allowed subset of `choose`, `later` and `comment`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<String>,
 }
 
 /// Public credential, independently enrolled by an operator. No private key.
@@ -155,8 +165,15 @@ pub struct Challenge {
     pub credential: String,
     /// Full curated request including its version, scope and proposition.
     pub request: Request,
-    /// One declared choice, selected before signing.
+    /// One declared choice, selected before signing. Empty for a v2 `later`
+    /// or `comment`.
     pub choice: String,
+    /// Wire v2 action: `choose`, `later` or `comment`. Absent on v1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    /// Wire v2 plain-text comment, inside the signed message. Absent on v1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
     /// Server-issued challenge deadline, at most 300 seconds.
     pub expires_at: i64,
 }

@@ -2,7 +2,7 @@
 use super::*;
 use crate::verdict_schemes::webauthn_tests::{Authenticator, Ceremony, ORIGIN, RP_ID, Signed};
 
-fn config() -> Config {
+pub(super) fn config() -> Config {
     Config {
         origin: ORIGIN.into(),
         rp_id: RP_ID.into(),
@@ -21,6 +21,8 @@ fn request() -> Request {
         expires_at: now().unwrap() + 3600,
         choices: vec!["approve".into(), "reject".into()],
         author: "test-curator".into(),
+        labels: Vec::new(),
+        actions: Vec::new(),
     }
 }
 
@@ -44,11 +46,11 @@ fn present(store: &mut Store) -> Challenge {
         .unwrap()
 }
 
-fn signed(auth: &Authenticator, c: &Challenge) -> Signed {
+pub(super) fn signed(auth: &Authenticator, c: &Challenge) -> Signed {
     auth.sign(&Ceremony::for_message(&c.message().unwrap()))
 }
 
-fn refused<T: std::fmt::Debug>(r: Result<T>, fragment: &str) {
+pub(super) fn refused<T: std::fmt::Debug>(r: Result<T>, fragment: &str) {
     let e = r.unwrap_err().to_string();
     assert!(e.contains(fragment), "{e} lacks {fragment}");
 }
