@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(feature = "shacl")]
 const TS: &str = "2026-10-20T00:00:00Z";
 
 #[test]
@@ -208,4 +207,115 @@ fn binding_and_direct_native_operations_return_the_same_results() {
         facade.invoke("quipu_query", &input).unwrap(),
         crate::tool_query(&direct.store, &input).unwrap()
     );
+}
+
+/// The source's feed, one transaction per page, as frame text.
+fn feed_of(source: &Store) -> Vec<String> {
+    let mut pages = Vec::new();
+    let mut cursor = 0;
+    loop {
+        let page = source
+            .changes_after(
+                cursor,
+                1,
+                crate::store::changes::Capture::OldAndNewValues,
+                None,
+            )
+            .unwrap();
+        if page.records.is_empty() {
+            return pages;
+        }
+        cursor = page.next_tx;
+        pages.push(page.to_json().to_string());
+    }
+}
+
+fn record_source() -> Store {
+    let mut source = Store::open_in_memory().unwrap();
+    let typ = source
+        .intern("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .unwrap();
+    let r = source.intern("urn:r1").unwrap();
+    let class = source.intern("urn:Record").unwrap();
+    let datum = crate::store::Datum {
+        entity: r,
+        attribute: typ,
+        value: crate::types::Value::Ref(class),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: crate::types::Op::Assert,
+    };
+    source.transact(&[datum], TS, None, None).unwrap();
+    source
+}
+
+#[test]
+fn a_replica_applies_its_source_feed_and_refuses_local_writes() {
+    let source = record_source();
+    let mut engine = Engine::open_in_memory().unwrap();
+    assert_eq!(engine.replica_progress(), Value::Null);
+    for page in feed_of(&source) {
+        let outcome = engine
+            .replica_apply_frame("quipu.changes", &page, 10)
+            .unwrap();
+        assert_eq!(outcome["kind"], "applied", "{outcome}");
+    }
+    assert_eq!(
+        engine.replica_progress()["source_tx"],
+        json!(source.latest_tx_id().unwrap())
+    );
+    assert_eq!(engine.replica_freshness(15)["last_frame_age_ms"], json!(5));
+    assert_eq!(engine.replica_freshness(15)["bounded"], json!(false));
+    // Reads still work.
+    let read = engine
+        .invoke(
+            "quipu_query",
+            &json!({"query": "SELECT ?s WHERE { ?s a <urn:Record> }"}),
+        )
+        .unwrap();
+    assert!(read.to_string().contains("urn:r1"), "{read}");
+    // Local writes are refused before dispatch: only the feed writes here.
+    let refused = engine
+        .invoke(
+            "quipu_set",
+            &json!({"entity": "urn:r1", "attribute": "urn:title", "value": "x"}),
+        )
+        .unwrap_err();
+    assert_eq!(refused.code, "read_only_replica");
+    assert_eq!(refused.commit_state, "not_started");
+}
+
+/// The source already judged what it accepted: a replica that re-judged it
+/// against its own shapes could refuse it and silently fork.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_replica_applies_source_data_its_local_shapes_would_refuse() {
+    // Control: the same data written locally IS refused by the adopted shape.
+    let mut local = Engine::open_in_memory().unwrap();
+    load_shape(&mut local);
+    let control = local.invoke(
+        "quipu_knot",
+        &json!({"turtle": "<urn:r1> a <urn:Record> .", "timestamp": TS}),
+    );
+    let refused = match control {
+        Err(_) => true,
+        Ok(v) => v.get("conforms") == Some(&json!(false)),
+    };
+    assert!(
+        refused,
+        "control: the shape must refuse an untitled record locally"
+    );
+
+    let source = record_source();
+    let mut replica = Engine::open_in_memory().unwrap();
+    load_shape(&mut replica);
+    for page in feed_of(&source) {
+        let outcome = replica
+            .replica_apply_frame("quipu.changes", &page, 1)
+            .unwrap();
+        assert_eq!(outcome["kind"], "applied", "{outcome}");
+    }
+    assert!(replica.store.lookup("urn:r1").unwrap().is_some());
+    // Validation is restored for anything that is not the applier.
+    assert!(replica.store.shacl_config_mut().validate_on_write);
 }

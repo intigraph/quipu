@@ -142,6 +142,10 @@ impl BindingError {
 /// A local engine owns its store; adapters cannot mutate it around validation.
 pub struct Engine {
     store: Store,
+    /// Set once this store becomes a replica (the first `replica_*` call).
+    /// From then on it is read-only to local callers: only the applier
+    /// writes, and it writes what the source already accepted.
+    replica: Option<crate::applier::Applier>,
 }
 
 impl Engine {
@@ -154,7 +158,10 @@ impl Engine {
         {
             store.shacl_config_mut().validate_on_write = true;
         }
-        Ok(Self { store })
+        Ok(Self {
+            store,
+            replica: None,
+        })
     }
 
     /// Report this build and actual dispatch availability, not global parity.
@@ -201,6 +208,14 @@ impl Engine {
                     "operation is not available in this binding".into(),
                 )
             })?;
+        if self.replica.is_some() && writes(operation, input) {
+            return Err(BindingError::new(
+                "read_only_replica",
+                operation,
+                "not_started",
+                "this store is a replica: only its source's feed writes to it".into(),
+            ));
+        }
         if op.requires_shacl && !cfg!(feature = "shacl") {
             return Err(BindingError::new(
                 "unsupported_capability",
@@ -226,6 +241,75 @@ impl Engine {
         })
     }
 
+    /// Apply one feed frame through the shared applier, making this store a
+    /// read-only replica on first use. Returns the `Outcome` JSON (tagged by
+    /// `kind`); a protocol refusal is a returned outcome, never an error.
+    ///
+    /// The source already validated what it accepted, so the replica applies
+    /// it verbatim: local write validation is suspended for the applier's own
+    /// writes and restored afterwards. Re-judging source data against local
+    /// shapes could refuse it and silently fork the replica.
+    ///
+    /// # Errors
+    /// [`BindingError`] if the local store fails; the frame is not applied.
+    pub fn replica_apply_frame(
+        &mut self,
+        event: &str,
+        data: &str,
+        now_ms: u64,
+    ) -> std::result::Result<Value, BindingError> {
+        const OP: &str = "replica_apply_frame";
+        if self.replica.is_none() {
+            let applier = crate::applier::Applier::open(&self.store)
+                .map_err(|error| BindingError::native(OP, error))?;
+            self.replica = Some(applier);
+        }
+        let applier = self.replica.as_mut().expect("opened above");
+        #[cfg(feature = "shacl")]
+        let validate =
+            std::mem::replace(&mut self.store.shacl_config_mut().validate_on_write, false);
+        let outcome = applier.apply_frame(&mut self.store, event, data, now_ms);
+        #[cfg(feature = "shacl")]
+        {
+            self.store.shacl_config_mut().validate_on_write = validate;
+        }
+        let outcome = outcome.map_err(|error| BindingError::native(OP, error))?;
+        serde_json::to_value(outcome)
+            .map_err(|error| BindingError::new("internal", OP, "unknown", error.to_string()))
+    }
+
+    /// The replica cursor `{store_id, log_epoch, source_tx}`, or `null` when
+    /// this store is not (yet) a replica.
+    #[must_use]
+    pub fn replica_progress(&self) -> Value {
+        match self
+            .replica
+            .as_ref()
+            .and_then(crate::applier::Applier::progress)
+        {
+            Some(p) => json!({
+                "store_id": p.source.store_id,
+                "log_epoch": p.source.log_epoch,
+                "source_tx": p.source_tx,
+            }),
+            None => Value::Null,
+        }
+    }
+
+    /// `{source_tx, last_frame_age_ms, bounded}`; `bounded` is always false.
+    #[must_use]
+    pub fn replica_freshness(&self, now_ms: u64) -> Value {
+        let freshness = match &self.replica {
+            Some(applier) => applier.freshness(now_ms),
+            None => crate::applier::Freshness {
+                source_tx: None,
+                last_frame_age_ms: None,
+                bounded: false,
+            },
+        };
+        serde_json::to_value(freshness).unwrap_or(Value::Null)
+    }
+
     /// JSON-text transport preserves native integer lexemes. JS adapters must
     /// not parse this into lossy Numbers without an explicit conversion policy.
     pub fn invoke_json(
@@ -245,6 +329,19 @@ impl Engine {
                 error.to_string(),
             )
         })
+    }
+}
+
+/// Whether `operation` with `input` writes to the store. A replica refuses
+/// these: its only writer is the applier.
+fn writes(operation: &str, input: &Value) -> bool {
+    match operation {
+        "quipu_knot" | "quipu_episode" | "quipu_set" | "quipu_retract" => true,
+        "quipu_shapes" => matches!(
+            input.get("action").and_then(Value::as_str),
+            Some("load" | "remove")
+        ),
+        _ => false,
     }
 }
 
