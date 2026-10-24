@@ -1,6 +1,7 @@
 # Decision Deck native backend
 
 Status: native implementation, disabled by default.
+
 - The HTTP routes `/deck/present`, `/deck/attest` and `/deck/receipt` exist
   behind `[quipu.server] deck_http`.
 - The operator CLI `quipu deck` configures, enrolls, enables, revokes and
@@ -98,7 +99,7 @@ application is disabled or the credential has been revoked.
 acts on the store file, so file access remains the authority, and it has no
 HTTP route:
 
-```
+```text
 quipu deck configure --origin https://HOST --rp-id HOST --actor WHO --author CURATOR
 quipu deck enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-es256|webauthn-eddsa --expires-at EPOCH
 quipu deck enable | disable
