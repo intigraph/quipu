@@ -2225,6 +2225,26 @@ Returns `{events, next_offset, lag, committed_offset?}`; pass `next_offset`
 back as `since` (or commit it) to page forward — polling is a fixpoint, not a
 rewind.
 
+`/events` serves ROOT's events, as it always has, and refuses a `graph`
+parameter (HTTP 400).
+
+### `GET /events/graph`
+
+`graph=<iri>` (required) plus the `/events` parameters: one registered
+committed named graph's events. A commit to such a graph emits
+`episode.ingested` and `entity.added` / `entity.updated` (one per entity per
+transaction, "added" judged within that graph), each carrying a `graph` key.
+Overlays and unregistered graphs emit nothing, and an unregistered or overlay
+`graph` returns HTTP 400. The graph's events are a separate log with its own
+offsets: `since`, `next_offset`, `consumer` resume and `lag` are all in that
+log, and ROOT's offsets and cursors are untouched by board writes.
+
+Named graphs have their own routes, not a `graph` parameter on `/events`,
+so that an older server cannot misread them. A server that predates
+named-graph events ignores an unknown query parameter and would serve ROOT's
+events; it answers an unknown route 404. So against an older server a graph
+consumer gets a 404, never ROOT's events and never a ROOT cursor write.
+
 ### `GET /events/stream` and `GET /changes/stream`
 
 Read-only Server-Sent Events replay of the corresponding durable feed. Supply a
@@ -2233,8 +2253,11 @@ frames have event type `quipu.events`, a delivered event-offset ID, and the
 ordinary `/events` page as JSON data. Change frames use `quipu.changes`, a
 transaction-ID cursor and the ordinary `/changes` page as JSON data.
 
-Event streams accept `types` and `group`; change streams accept `graph`,
-including a registered named graph. Unrelated filter kinds and invalid resume
+Event streams accept `types`, `group` and `graph` (one registered committed
+named graph, read from its own log as on `/events/graph`; a server that
+predates named-graph events refuses `graph` on an event stream with HTTP
+400); change streams accept `graph`, including a
+registered named graph. Unrelated filter kinds and invalid resume
 cursors return HTTP 400. Exhausted stream capacity returns HTTP 503.
 
 Delivery does not acknowledge a consumer. Commit applied data and its cursor
@@ -2252,8 +2275,18 @@ before the output check; this is not a total heap bound. See the
 
 ### `POST /events/commit`
 
-`{"consumer_id", "offset"}` — durably record a consumer's cursor. Any offset
-≥ 0 is accepted, including a **lower** one: that is the explicit replay knob.
+`{"consumer_id", "offset"}` — durably record a ROOT consumer's cursor. Any
+offset ≥ 0 is accepted, including a **lower** one: that is the explicit replay
+knob. A `graph` field is refused (HTTP 400): a server that predates
+named-graph events would ignore it and upsert this consumer's ROOT cursor
+before answering.
+
+### `POST /events/graph/commit`
+
+`{"consumer_id", "graph", "offset"}` — durably record a consumer's cursor in
+one registered committed named graph's event log (the response echoes
+`graph`). The same `consumer_id` may also hold a ROOT cursor; the two never
+touch. An older server answers this route 404 and writes nothing.
 
 ### Refusal events (`write.refused`)
 

@@ -296,6 +296,7 @@ impl Store {
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
+        Self::migrate_graph_events(&conn)?;
         // AFTER migrate_named_graphs: the fork registry references graphs(g).
         Self::migrate_forks(&conn)?;
         Self::migrate_frozen_packs(&conn)?;

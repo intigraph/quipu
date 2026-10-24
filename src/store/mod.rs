@@ -30,6 +30,7 @@ pub mod forks;
 pub mod freeze;
 mod freeze_io;
 mod gate;
+mod graph_events;
 mod identity;
 pub mod import;
 pub mod inferred;
