@@ -76,6 +76,12 @@ pub(crate) fn validate(def: &ProjectionConfig) -> Result<()> {
         if c.predicate.is_empty() {
             return bad(format!("column {:?} needs a predicate", c.name));
         }
+        if c.equals.is_some() && c.time {
+            return bad(format!(
+                "column {:?} is a presence column (equals); it cannot also be a time column",
+                c.name
+            ));
+        }
     }
     Ok(())
 }
@@ -87,6 +93,11 @@ fn def_hash(def: &ProjectionConfig) -> String {
     def.key.hash(&mut h);
     for c in &def.columns {
         (&c.name, &c.predicate, c.time).hash(&mut h);
+        // Only presence columns hash `equals`, so every existing declaration
+        // keeps its hash and is not rebuilt by this field existing.
+        if let Some(eq) = &c.equals {
+            eq.hash(&mut h);
+        }
     }
     // The trigger body is part of the definition: bump when it changes.
     "v1".hash(&mut h);
@@ -139,6 +150,21 @@ fn recompute_select(
     let mut flags = vec![multi(attrs["key"])];
     for c in &def.columns {
         let a = attrs[&c.name];
+        if let Some(eq) = &c.equals {
+            // Presence: has this exact current value, among however many.
+            // Never multi: being one value among several is what it is for.
+            // Stored as an encoded integer 1, so filters and answers treat it
+            // like any other column value.
+            let hex =
+                |v: Value| -> String { v.to_bytes().iter().map(|b| format!("{b:02X}")).collect() };
+            cols.push(format!(
+                "(SELECT X'{one}' FROM facts WHERE g = {g} AND e = {e} AND a = {a} AND op = 1 AND valid_to IS NULL AND v = X'{want}' LIMIT 1) AS {}",
+                c.name,
+                one = hex(Value::Int(1)),
+                want = hex(Value::Str(eq.clone())),
+            ));
+            continue;
+        }
         cols.push(format!("{} AS {}", cur(a), c.name));
         if c.time {
             cols.push(format!("{} AS {}_t", epoch_sql(&cur(a)), c.name));
@@ -409,12 +435,12 @@ impl Store {
 
 #[path = "projections_aggregate.rs"]
 mod aggregate;
-pub use aggregate::ProjectionAggregate;
+pub use aggregate::{GroupBy, ProjectionAggregate};
 #[path = "projections_rows.rs"]
 mod rows;
 #[cfg(test)]
 use aggregate::set_after_total;
-pub use rows::{PROJECTION_ROWS_MAX, ProjectionRows};
+pub use rows::{PROJECTION_ROWS_MAX, ProjectionRows, RowsAfter};
 
 #[cfg(test)]
 #[path = "projections_tests.rs"]
@@ -423,3 +449,7 @@ mod tests;
 #[cfg(test)]
 #[path = "projections_rows_tests.rs"]
 mod rows_tests;
+
+#[cfg(test)]
+#[path = "projections_windows_tests.rs"]
+mod windows_tests;

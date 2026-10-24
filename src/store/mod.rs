@@ -30,6 +30,7 @@ pub mod forks;
 pub mod freeze;
 mod freeze_io;
 mod gate;
+mod graph_events;
 mod identity;
 pub mod import;
 pub mod inferred;
@@ -50,7 +51,9 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
-pub use projections::{PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus};
+pub use projections::{
+    GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
+};
 mod registry;
 pub mod registry_list;
 pub mod respace;
@@ -265,6 +268,11 @@ pub struct Store {
     /// Ceiling on the resident read model's size — see
     /// [`Store::set_read_model_max_triples`].
     pub(crate) read_model_max_triples: std::cell::Cell<usize>,
+    /// Graph fact counts behind [`Store::read_model_affordable`], each with
+    /// the stopwatch started when it was taken (aegis-xdvg.3). See
+    /// [`read_model::AFFORDABILITY_COUNT_TTL`].
+    pub(crate) affordability_counts:
+        std::cell::RefCell<std::collections::HashMap<i64, (crate::time::Stopwatch, usize)>>,
     /// Graph ids the attachments contribute, as registered in `main.graphs`
     /// (aegis-xacr). Recomputed wherever `facts_source` is, so the two cannot
     /// disagree. Empty on an unattached store.

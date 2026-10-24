@@ -165,6 +165,18 @@ fn audit_schema_fields() {
             if name == "quipu_update" {
                 read.extend(["update", "actor", "source"].map(String::from));
             }
+            for refused in parity::refused_fields(name) {
+                // A refused field must stay undeclared and must really be read
+                // (to be refused); otherwise the exemption is stale.
+                assert!(
+                    !declared.contains(*refused),
+                    "{name} declares refused {refused}"
+                );
+                assert!(
+                    read.remove(*refused),
+                    "{name} no longer reads refused {refused}"
+                );
+            }
             let missing: Vec<_> = read.difference(&declared).collect();
             if !missing.is_empty() {
                 gaps.insert(name.to_string(), serde_json::json!(missing));

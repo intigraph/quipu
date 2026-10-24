@@ -33,6 +33,15 @@
 //! compose-only staging (#36); announcing their writes as graph-change events
 //! would double-fire when the content is promoted to ROOT. Recorded here so
 //! nobody reads the silence as a bug: only ROOT (g=0) commits are events.
+//!
+//! REGISTERED named graphs are the exception (event-push design §4): they are
+//! durable, not staging, and their consumers otherwise poll. A commit to one
+//! emits `episode.ingested` and `entity.added` / `entity.updated` — entity
+//! level only, judged within that graph — into the separate `graph_events`
+//! log, tagged with the graph IRI. No `edge.*` (the facts are on the change
+//! feed), no `type.new` / `predicate.new` (store-wide, ROOT only). `events`
+//! stays the ROOT log, byte for byte, so `events_after` and every older
+//! binary see exactly what they always saw (see `migrate_graph_events`).
 
 use rusqlite::params;
 use serde_json::json;
@@ -95,6 +104,8 @@ pub struct EventRow {
     pub tx_id: i64,
     /// Type-specific payload, stored as a JSON object string.
     pub payload: String,
+    /// The registered named graph this event belongs to; `None` for ROOT.
+    pub graph: Option<String>,
 }
 
 impl EventRow {
@@ -102,7 +113,7 @@ impl EventRow {
     pub fn to_json(&self) -> serde_json::Value {
         let payload: serde_json::Value =
             serde_json::from_str(&self.payload).unwrap_or_else(|_| json!({}));
-        json!({
+        let mut json = json!({
             "schema": EVENT_SCHEMA,
             "offset": self.offset,
             "type": self.event_type,
@@ -111,7 +122,13 @@ impl EventRow {
             "group_id": self.group_id,
             "tx_id": self.tx_id,
             "payload": payload,
-        })
+        });
+        // Only named-graph events carry the key, so a ROOT event's wire form
+        // is byte-for-byte what it was before graphs could emit.
+        if let Some(graph) = &self.graph {
+            json["graph"] = json!(graph);
+        }
+        json
     }
 }
 
@@ -149,10 +166,15 @@ impl Store {
         // even when this tx emits no semantic events (early returns below).
         let pending = std::mem::take(&mut *self.pending_write_events.borrow_mut());
 
-        // ROOT-graph commits only (see module docs). Advisory events follow the
-        // same rule: an overlay write discards them (compose-only staging).
-        if graph != 0 || (asserts.is_empty() && retracts.is_empty() && pending.is_empty()) {
+        // ROOT and registered named graphs only (see module docs). Advisory
+        // events stay ROOT-only: a named-graph write discards them, as an
+        // overlay write always has.
+        if asserts.is_empty() && retracts.is_empty() && (graph != 0 || pending.is_empty()) {
             return Ok(());
+        }
+        if graph != 0 {
+            return self
+                .emit_named_graph_events(asserts, retracts, tx_id, timestamp, source, graph);
         }
 
         let rdf_type_id: Option<i64> = self.lookup(RDF_TYPE)?;
@@ -490,7 +512,18 @@ impl Store {
             "DELETE FROM events WHERE ts < ?1 AND \"offset\" <= ?2",
             params![older_than, safe],
         )?;
-        Ok(deleted as u64)
+        // Each graph's log is held back only by that graph's consumers.
+        let graph_deleted = if self.has_graph_events()? {
+            self.conn.execute(
+                "DELETE FROM graph_events WHERE ts < ?1 AND \"offset\" <= COALESCE(\
+                     (SELECT MIN(c.committed_offset) FROM graph_consumers c \
+                      WHERE c.graph = graph_events.graph), ?2)",
+                params![older_than, i64::MAX],
+            )?
+        } else {
+            0
+        };
+        Ok((deleted + graph_deleted) as u64)
     }
 
     // -- Pull API ---------------------------------------------------------
@@ -504,12 +537,43 @@ impl Store {
         types: Option<&[String]>,
         group: Option<&str>,
     ) -> Result<Vec<EventRow>> {
-        // Filters are dynamic; build the WHERE clause with positional params.
-        let mut sql = String::from(
-            "SELECT \"offset\", type, ts, subject, group_id, tx_id, payload \
-             FROM events WHERE \"offset\" > ?1",
-        );
+        self.events_after_in(since, limit, types, group, None)
+    }
+
+    /// [`Self::events_after`] for one graph's events: `None` is ROOT (the log
+    /// every untagged reader has always seen), `Some(iri)` one registered
+    /// named graph's. There is no all-graphs form; a reader names each graph.
+    ///
+    /// # Errors
+    /// [`crate::Error::Sqlite`] if the read fails.
+    pub fn events_after_in(
+        &self,
+        since: i64,
+        limit: usize,
+        types: Option<&[String]>,
+        group: Option<&str>,
+        graph: Option<&str>,
+    ) -> Result<Vec<EventRow>> {
+        // ROOT reads `events` exactly as before named graphs could emit; one
+        // graph reads its rows of `graph_events`. A read-only handle on a store
+        // no writer has migrated has no `graph_events`: no graph has events.
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(since)];
+        let mut sql = match graph {
+            None => String::from(
+                "SELECT \"offset\", type, ts, subject, group_id, tx_id, payload, NULL \
+                 FROM events WHERE \"offset\" > ?1",
+            ),
+            Some(g) => {
+                if !self.has_graph_events()? {
+                    return Ok(Vec::new());
+                }
+                bind.push(Box::new(g.to_string()));
+                String::from(
+                    "SELECT \"offset\", type, ts, subject, group_id, tx_id, payload, graph \
+                     FROM graph_events WHERE \"offset\" > ?1 AND graph = ?2",
+                )
+            }
+        };
         if let Some(ts) = types
             && !ts.is_empty()
         {
@@ -541,6 +605,7 @@ impl Store {
                 group_id: r.get(4)?,
                 tx_id: r.get(5)?,
                 payload: r.get(6)?,
+                graph: r.get(7)?,
             })
         })?;
         let mut out = Vec::new();
@@ -592,3 +657,7 @@ impl Store {
 #[cfg(test)]
 #[path = "events_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "events_rollback_tests.rs"]
+mod rollback_tests;

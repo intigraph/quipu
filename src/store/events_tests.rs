@@ -1072,3 +1072,207 @@ fn write_provenance_counts_committed_request_writes_only() {
     assert_eq!(provenance_series(CLIENT, "/knot", "complete"), 1);
     assert_eq!(provenance_series(CLIENT, "/knot", "absent"), 1);
 }
+
+// -- Named-graph events (event-push design §4) --
+
+const BOARD: &str = "https://example.org/graph/board";
+const OTHER: &str = "https://example.org/graph/other";
+const TS: &str = "2026-10-24T00:00:00Z";
+
+fn ref_datum(store: &Store, s: &str, p: &str, o: &str) -> Datum {
+    Datum {
+        entity: store.intern(s).unwrap(),
+        attribute: store.intern(p).unwrap(),
+        value: Value::Ref(store.intern(o).unwrap()),
+        valid_from: TS.to_string(),
+        valid_to: None,
+        op: crate::types::Op::Assert,
+    }
+}
+
+fn graph_events(store: &Store, graph: &str) -> Vec<EventRow> {
+    store
+        .events_after_in(0, 10_000, None, None, Some(graph))
+        .unwrap()
+}
+
+#[test]
+fn a_committed_named_graph_emits_entity_events_tagged_with_its_iri() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.graph_create_recorded(BOARD, TS, None).unwrap();
+    let g = store.committed_graph_id(BOARD).unwrap().unwrap();
+    let root_before = all_events(&store).len();
+
+    let first = [ref_datum(
+        &store,
+        "urn:item:1",
+        "urn:p:status",
+        "urn:s:open",
+    )];
+    store.transact_to_graph(&first, TS, None, None, g).unwrap();
+    let second = [ref_datum(
+        &store,
+        "urn:item:1",
+        "urn:p:status",
+        "urn:s:closed",
+    )];
+    store.transact_to_graph(&second, TS, None, None, g).unwrap();
+
+    let evs = graph_events(&store, BOARD);
+    let kinds: Vec<&str> = evs.iter().map(|e| e.event_type.as_str()).collect();
+    assert_eq!(kinds, ["entity.added", "entity.updated"]);
+    assert!(evs.iter().all(|e| e.graph.as_deref() == Some(BOARD)));
+    assert!(
+        evs.iter()
+            .all(|e| e.subject.as_deref() == Some("urn:item:1"))
+    );
+    // Entity level only: a Ref assertion in a named graph is not an edge event.
+    assert!(!kinds.iter().any(|k| k.starts_with("edge.")));
+    // The untagged reader sees exactly the ROOT log it saw before.
+    assert_eq!(all_events(&store).len(), root_before);
+    assert!(all_events(&store).iter().all(|e| e.graph.is_none()));
+}
+
+#[test]
+fn added_is_judged_within_the_graph_not_the_store() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .transact(
+            &[ref_datum(&store, "urn:item:1", "urn:p:x", "urn:o:1")],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.graph_create_recorded(BOARD, TS, None).unwrap();
+    let g = store.committed_graph_id(BOARD).unwrap().unwrap();
+    store
+        .transact_to_graph(
+            &[ref_datum(
+                &store,
+                "urn:item:1",
+                "urn:p:status",
+                "urn:s:open",
+            )],
+            TS,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    let kinds: Vec<String> = graph_events(&store, BOARD)
+        .into_iter()
+        .map(|e| e.event_type)
+        .collect();
+    assert_eq!(kinds, ["entity.added"]);
+}
+
+#[test]
+fn overlays_and_unregistered_graphs_stay_silent() {
+    let mut store = Store::open_in_memory().unwrap();
+    let overlay = store
+        .overlay_create("https://example.org/overlay/o", 0)
+        .unwrap();
+    let unregistered = store
+        .intern("https://example.org/graph/unregistered")
+        .unwrap();
+    let before = store.latest_event_offset().unwrap();
+    for g in [overlay, unregistered] {
+        let d = [ref_datum(
+            &store,
+            "urn:item:2",
+            "urn:p:status",
+            "urn:s:open",
+        )];
+        // An unregistered target may itself be refused; either way no event.
+        let _ = store.transact_to_graph(&d, TS, None, None, g);
+    }
+    assert_eq!(store.latest_event_offset().unwrap(), before);
+    assert!(graph_events(&store, "https://example.org/overlay/o").is_empty());
+}
+
+#[test]
+fn one_graphs_reader_never_sees_another_graphs_events() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.graph_create_recorded(BOARD, TS, None).unwrap();
+    store.graph_create_recorded(OTHER, TS, None).unwrap();
+    for (iri, item) in [(BOARD, "urn:item:b"), (OTHER, "urn:item:o")] {
+        let g = store.committed_graph_id(iri).unwrap().unwrap();
+        let d = [ref_datum(&store, item, "urn:p:status", "urn:s:open")];
+        store.transact_to_graph(&d, TS, None, None, g).unwrap();
+    }
+    let board = graph_events(&store, BOARD);
+    let other = graph_events(&store, OTHER);
+    assert_eq!(board.len(), 1);
+    assert_eq!(other.len(), 1);
+    assert_eq!(board[0].subject.as_deref(), Some("urn:item:b"));
+    assert_eq!(other[0].subject.as_deref(), Some("urn:item:o"));
+    // Filters combine by AND.
+    let typed = store
+        .events_after_in(0, 100, Some(&["entity.updated".into()]), None, Some(BOARD))
+        .unwrap();
+    assert!(typed.is_empty());
+}
+
+#[test]
+fn only_named_graph_events_carry_the_graph_key_on_the_wire() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .transact(
+            &[ref_datum(&store, "urn:item:r", "urn:p:x", "urn:o:1")],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.graph_create_recorded(BOARD, TS, None).unwrap();
+    let g = store.committed_graph_id(BOARD).unwrap().unwrap();
+    store
+        .transact_to_graph(
+            &[ref_datum(&store, "urn:item:b", "urn:p:x", "urn:o:1")],
+            TS,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    let root = all_events(&store);
+    assert!(!root.is_empty());
+    assert!(root.iter().all(|e| e.to_json().get("graph").is_none()));
+    let named = graph_events(&store, BOARD);
+    assert_eq!(named[0].to_json()["graph"], BOARD);
+}
+
+#[test]
+fn lag_is_measured_within_the_readers_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .transact(
+            &[ref_datum(&store, "urn:item:r", "urn:p:x", "urn:o:1")],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    let root_head = store.latest_event_offset_in(None).unwrap();
+    assert!(root_head > 0);
+    store.graph_create_recorded(BOARD, TS, None).unwrap();
+    let root_head = store.latest_event_offset_in(None).unwrap(); // graph.created is ROOT
+    let g = store.committed_graph_id(BOARD).unwrap().unwrap();
+    store
+        .transact_to_graph(
+            &[ref_datum(&store, "urn:item:b", "urn:p:x", "urn:o:1")],
+            TS,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    // A ROOT reader caught up before the board write is still caught up.
+    assert_eq!(store.latest_event_offset_in(None).unwrap(), root_head);
+    // ROOT's log did not move at all: the board's events are their own log.
+    assert_eq!(store.latest_event_offset().unwrap(), root_head);
+    let board_head = store.latest_event_offset_in(Some(BOARD)).unwrap();
+    assert!(board_head > 0);
+    assert_eq!(store.latest_event_offset_in(Some(OTHER)).unwrap(), 0);
+}
