@@ -198,16 +198,159 @@ fn chunk_frames(page: &str, per_part: usize, with_source: bool) -> Vec<(&'static
     let digest = hex::encode(hasher.finalize());
     let mut frames = vec![(
         "quipu.changes.begin",
-        json!({"source_tx": tx, "parts": parts.len(), "records": records.len(), "digest": digest})
+        json!({"source_tx": tx, "parts": parts.len(), "records": records.len(), "digest": digest, "since": page["since"]})
             .to_string(),
     )];
     frames.extend(parts.into_iter().map(|p| ("quipu.changes.part", p)));
-    let mut commit = json!({"source_tx": tx, "parts": frames.len() - 1, "records": records.len(), "digest": digest});
+    let mut commit = json!({"source_tx": tx, "parts": frames.len() - 1, "records": records.len(), "digest": digest, "since": page["since"]});
     if with_source {
         commit["source"] = page["source"].clone();
     }
     frames.push(("quipu.changes.commit", commit.to_string()));
     frames
+}
+
+fn apply(replica: &mut Store, applier: &mut Applier, frames: &[(&str, String)]) -> Vec<Outcome> {
+    frames
+        .iter()
+        .map(|(e, data)| applier.apply_frame(replica, e, data, 1).unwrap())
+        .collect()
+}
+
+#[test]
+fn a_dropped_page_resumes_with_nothing_applied() {
+    let src = source();
+    let feed = pages(&src);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..1]);
+    let cursor = applier.progress().unwrap().source_tx;
+    let before = live_digest(&replica);
+    // Page 1 is lost in transit; page 2 answers a cursor ahead of ours.
+    let o = applier
+        .apply_frame(&mut replica, "quipu.changes", &feed[2], 2)
+        .unwrap();
+    assert_eq!(o, Outcome::Resume { from: cursor });
+    assert_eq!(before, live_digest(&replica), "nothing may be spliced in");
+    assert_eq!(applier.progress().unwrap().source_tx, cursor);
+    // Resuming from the cursor converges.
+    replay(&mut replica, &mut applier, &feed[1..]);
+    assert_eq!(live_digest(&src), live_digest(&replica));
+}
+
+#[test]
+fn a_new_replica_starts_at_transaction_zero() {
+    let src = source();
+    let feed = pages(&src);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let o = applier
+        .apply_frame(&mut replica, "quipu.changes", &feed[1], 1)
+        .unwrap();
+    assert_eq!(o, Outcome::Resume { from: 0 });
+    assert!(applier.progress().is_none());
+}
+
+#[test]
+fn a_page_that_does_not_name_its_cursor_is_refused() {
+    let src = source();
+    let mut page: Json = serde_json::from_str(&pages(&src)[0]).unwrap();
+    page.as_object_mut().unwrap().remove("since");
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let o = applier
+        .apply_frame(&mut replica, "quipu.changes", &page.to_string(), 1)
+        .unwrap();
+    assert!(matches!(o, Outcome::Refused { .. }), "{o:?}");
+    assert!(applier.progress().is_none());
+}
+
+#[test]
+fn a_page_inside_an_open_chunk_discards_it_and_resumes() {
+    let src = source();
+    let feed = pages(&src);
+    let last = feed.last().unwrap();
+    let frames = chunk_frames(last, 1, true);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    let cursor = applier.progress().unwrap().source_tx;
+    let before = live_digest(&replica);
+    apply(&mut replica, &mut applier, &frames[..2]);
+    // Without this rule the page would apply the chunk's transaction, move
+    // the cursor past it, and the commit would be dropped as a duplicate.
+    let o = applier
+        .apply_frame(&mut replica, "quipu.changes", last, 2)
+        .unwrap();
+    assert_eq!(o, Outcome::Resume { from: cursor });
+    assert_eq!(before, live_digest(&replica));
+    let rest = apply(&mut replica, &mut applier, &frames[2..]);
+    assert!(
+        rest.iter().all(|o| *o == Outcome::Resume { from: cursor }),
+        "{rest:?}"
+    );
+    assert_eq!(before, live_digest(&replica));
+    replay(&mut replica, &mut applier, &feed[feed.len() - 1..]);
+    assert_eq!(live_digest(&src), live_digest(&replica));
+}
+
+#[test]
+fn an_interrupted_chunk_restarts_from_a_new_begin() {
+    let src = source();
+    let feed = pages(&src);
+    let frames = chunk_frames(feed.last().unwrap(), 1, true);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    // begin, part 0, then the reconnect replays from begin.
+    apply(&mut replica, &mut applier, &frames[..2]);
+    let outcomes = apply(&mut replica, &mut applier, &frames);
+    assert!(
+        matches!(outcomes.last(), Some(Outcome::Applied { .. })),
+        "{outcomes:?}"
+    );
+    assert_eq!(live_digest(&src), live_digest(&replica));
+}
+
+#[test]
+fn a_reopened_applier_holds_no_staged_parts() {
+    let src = source();
+    let feed = pages(&src);
+    let frames = chunk_frames(feed.last().unwrap(), 1, true);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    let cursor = applier.progress().unwrap().source_tx;
+    let before = live_digest(&replica);
+    apply(&mut replica, &mut applier, &frames[..2]);
+    // The page restarts: the staged part was memory only.
+    let mut applier = Applier::open(&replica).unwrap();
+    let rest = apply(&mut replica, &mut applier, &frames[2..]);
+    assert!(
+        rest.iter().all(|o| *o == Outcome::Resume { from: cursor }),
+        "{rest:?}"
+    );
+    assert_eq!(before, live_digest(&replica));
+}
+
+#[test]
+fn a_chunk_that_skips_a_transaction_resumes_at_its_begin() {
+    let src = source();
+    let feed = pages(&src);
+    let frames = chunk_frames(feed.last().unwrap(), 1, true);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 2]);
+    let cursor = applier.progress().unwrap().source_tx;
+    let before = live_digest(&replica);
+    let outcomes = apply(&mut replica, &mut applier, &frames);
+    assert!(
+        outcomes
+            .iter()
+            .all(|o| *o == Outcome::Resume { from: cursor }),
+        "{outcomes:?}"
+    );
+    assert_eq!(before, live_digest(&replica));
 }
 
 #[test]

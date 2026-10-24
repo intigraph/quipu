@@ -20,6 +20,12 @@
 //!   buffered, its digest chain checked part by part, and nothing is visible
 //!   until the commit verifies.
 //! - **Idempotent.** A transaction at or below the cursor is a duplicate.
+//! - **No gaps.** A page covers every transaction in scope after the `since`
+//!   it names, so a page (or a chunked transaction) whose `since` is above
+//!   the cursor would skip whatever lies between: resume from the cursor.
+//!   Until a bootstrap exists, a new replica starts at transaction 0. A page
+//!   arriving while a chunked transaction is still open breaks the sequence
+//!   the same way: the chunk is discarded and the caller resumes.
 //! - **Refuse rather than guess.** A record the replica cannot reproduce
 //!   exactly (a byte value sent as its length only, an unknown value shape)
 //!   refuses the whole transaction. Writing an approximation would make the
@@ -79,7 +85,8 @@ pub enum Outcome {
     Duplicate,
     /// A page with no records: the feed has nothing new.
     Idle,
-    /// The chunk sequence broke: nothing was applied; reconnect from `from`.
+    /// The frame does not continue from the cursor (a dropped page, or a
+    /// broken or interrupted chunk): nothing was applied; reconnect from `from`.
     Resume {
         /// The cursor to reconnect from (the last applied source transaction).
         from: i64,
@@ -89,7 +96,9 @@ pub enum Outcome {
         /// Why the replica cannot continue from its cursor.
         reason: String,
     },
-    /// The frame cannot be applied exactly; nothing was applied.
+    /// The frame cannot be applied exactly. Nothing from the refused source
+    /// transaction was written; earlier whole transactions in the same page
+    /// may have been, and [`Applier::progress`] says where the cursor is.
     Refused {
         /// Why the frame cannot be applied exactly.
         reason: String,
@@ -203,6 +212,13 @@ impl Applier {
     }
 
     fn apply_page(&mut self, store: &mut Store, data: &str) -> Result<Outcome> {
+        // A page never arrives inside a chunked transaction; if one does, the
+        // chunk can no longer complete in order.
+        if self.chunk.take().is_some() {
+            return Ok(Outcome::Resume {
+                from: self.resume_point(),
+            });
+        }
         let Ok(page) = serde_json::from_str::<Json>(data) else {
             return Ok(refused("page is not JSON"));
         };
@@ -210,6 +226,9 @@ impl Applier {
             return Ok(refused("page does not name its source store and log epoch"));
         };
         if let Some(outcome) = self.check_source(&source) {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.check_since(&page) {
             return Ok(outcome);
         }
         let records = page["records"].as_array().cloned().unwrap_or_default();
@@ -231,6 +250,12 @@ impl Applier {
         ) else {
             return refused("begin frame is incomplete");
         };
+        if let Some(outcome) = self.check_since(&begin) {
+            self.chunk = None;
+            return outcome;
+        }
+        // A new begin replaces any chunk in progress: a reconnect replays an
+        // interrupted transaction from its first part.
         self.chunk = Some(Chunk {
             source_tx,
             parts: usize::try_from(parts).unwrap_or(usize::MAX),
@@ -296,11 +321,24 @@ impl Applier {
         if let Some(outcome) = self.check_source(&source) {
             return Ok(outcome);
         }
+        if let Some(outcome) = self.check_since(&commit) {
+            return Ok(outcome);
+        }
         self.apply_records(store, &source, &chunk.buffered)
     }
 
     fn resume_point(&self) -> i64 {
         self.progress.as_ref().map_or(0, |p| p.source_tx)
+    }
+
+    /// `None` when the frame continues from the cursor: its `since` is at or
+    /// below it (the overlap is skipped as duplicates).
+    fn check_since(&self, frame: &Json) -> Option<Outcome> {
+        let Some(since) = frame["since"].as_i64() else {
+            return Some(refused("frame does not name the cursor it answers (since)"));
+        };
+        let from = self.resume_point();
+        (since > from).then_some(Outcome::Resume { from })
     }
 
     /// `None` when the frame's source is this replica's (or the first one).
