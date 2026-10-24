@@ -62,7 +62,7 @@ pub(super) fn handler(name: &str) -> Option<(&'static str, Option<(&'static str,
 /// them. `/events` and `/events/commit` refuse `graph`: a server that predates
 /// named-graph events would ignore it (serving ROOT's events, or upserting the
 /// ROOT cursor before answering), so named graphs have their own routes and
-/// tools (quipu_graph_events, quipu_graph_events_commit). Declaring `graph` on
+/// tools (`quipu_graph_events`, `quipu_graph_events_commit`). Declaring `graph` on
 /// the ROOT tools would advertise exactly the form that is refused.
 pub(super) fn refused_fields(name: &str) -> &'static [&'static str] {
     match name {
