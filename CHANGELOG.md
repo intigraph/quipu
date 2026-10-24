@@ -22,6 +22,8 @@ All notable changes to this project will be documented in this file.
 - *(changes)* Carry valid time and byte bodies so a feed replica equals its source (#780)([b8ebe7e](https://github.com/scbrown/quipu/commit/b8ebe7e365ae07665c4f55a033e01c99b88132d7))
 - *(owl)* Write a retract row when a functional value is superseded (#787)([472faae](https://github.com/scbrown/quipu/commit/472faae212c932bcba5fa1ef543093dfa19c3caf))
 
+
+
 ### Perf
 
 - *(changes)* Page a graph-filtered feed in commit order (#776)([ec08d9f](https://github.com/scbrown/quipu/commit/ec08d9fd89c40beb3858e4576162548e8954593b))
