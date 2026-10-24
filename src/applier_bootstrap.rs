@@ -80,12 +80,26 @@ pub(super) struct ShareStream {
 
 impl Applier {
     /// One frame of an as-of share. Only an empty replica can be bootstrapped.
+    ///
+    /// A store error while a share is open rolls the WHOLE share back before
+    /// it is returned, so no fact of a half-applied share is ever visible,
+    /// not even on this connection (review 6388 P2: a failed progress write
+    /// after the share was taken left its savepoint open).
     pub(super) fn bootstrap_frame(
         &mut self,
         store: &mut Store,
         event: &str,
         data: &str,
     ) -> Result<Outcome> {
+        let result = self.share_frame(store, event, data);
+        if result.is_err() {
+            self.share = None;
+            discard_open_share(store)?;
+        }
+        result
+    }
+
+    fn share_frame(&mut self, store: &mut Store, event: &str, data: &str) -> Result<Outcome> {
         let Ok(frame) = serde_json::from_str::<Json>(data) else {
             self.abort_share(store)?;
             return Ok(refused("share frame is not JSON"));
