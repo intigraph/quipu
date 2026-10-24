@@ -250,6 +250,7 @@ impl Store {
         )?;
         super::search_scope_policy::initialize_schema(&conn)?;
         Self::ensure_store_identity(&conn)?;
+        Self::ensure_log_epoch(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
         // Frozen packs re-attach on every open (deep freeze): read the
         // registry BEFORE attach_all so the caller's attachments and the
@@ -340,26 +341,22 @@ impl Store {
             |row| row.get(0),
         )?;
         if !exists {
-            let mut bytes = [0_u8; 16];
-            SystemRandom::new()
-                .fill(&mut bytes)
-                .map_err(|_| Error::Store("cannot generate store identity".into()))?;
-            bytes[6] = (bytes[6] & 0x0f) | 0x40;
-            bytes[8] = (bytes[8] & 0x3f) | 0x80;
-            let hex = hex::encode(bytes);
-            let store_id = format!(
-                "urn:uuid:{}-{}-{}-{}-{}",
-                &hex[0..8],
-                &hex[8..12],
-                &hex[12..16],
-                &hex[16..20],
-                &hex[20..32]
-            );
             conn.execute(
                 "INSERT INTO store_identity (id, store_id) VALUES (1, ?1)",
-                params![store_id],
+                params![new_urn_uuid("store identity")?],
             )?;
         }
+        Ok(())
+    }
+
+    /// A store opened for the first time, or first opened by a version that
+    /// predates the epoch, gets one now; its earlier history had none.
+    fn ensure_log_epoch(conn: &Connection) -> Result<()> {
+        conn.execute(
+            "INSERT OR IGNORE INTO log_epoch (id, epoch, minted_at, reason) \
+             VALUES (1, ?1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 'created')",
+            params![new_urn_uuid("log epoch")?],
+        )?;
         Ok(())
     }
 
@@ -625,3 +622,22 @@ pub(crate) fn open_file_immutable(path: &str) -> Result<Connection> {
 #[cfg(test)]
 #[path = "open_memory_tests.rs"]
 mod memory_tests;
+
+/// A random version-4 UUID as a `urn:uuid:` IRI. `what` names the failure.
+pub(super) fn new_urn_uuid(what: &str) -> Result<String> {
+    let mut bytes = [0_u8; 16];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| Error::Store(format!("cannot generate {what}")))?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let hex = hex::encode(bytes);
+    Ok(format!(
+        "urn:uuid:{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    ))
+}

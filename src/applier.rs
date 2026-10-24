@@ -1,0 +1,563 @@
+//! The shared applier, slice 1 (`docs/design/shared-applier-api.md`).
+//!
+//! ONE component turns the committed feed into a read-only replica, so the
+//! HA follower, a scoped follower and the in-page browser store never write
+//! their own projection logic. This slice consumes the feed frames that ship
+//! today (`/changes` pages and the chunked `begin`/`part`/`commit` frames of an
+//! oversized transaction) as `(event, data)` text pairs, exactly as SSE or a
+//! WebSocket delivers them. It does no I/O of its own, so it builds for the
+//! native server and for `wasm32` alike.
+//!
+//! The rules are the contract's, in the order [`Applier::apply_frame`] checks
+//! them:
+//!
+//! - **One source, one epoch.** The first frame binds the replica to its source
+//!   `(store_id, log_epoch)`. A frame from any other source means a restore, a
+//!   clone or removed history: re-bootstrap, never splice.
+//! - **Whole transactions only.** Each source transaction is applied in ONE
+//!   local savepoint together with the progress record, so the replica is
+//!   always at a source transaction boundary. A chunked transaction is
+//!   buffered, its digest chain checked part by part, and nothing is visible
+//!   until the commit verifies.
+//! - **Idempotent, and checked.** A transaction at or below the cursor is a
+//!   duplicate only when its content digest equals the one retained when it
+//!   was applied. A different digest, or none retained, stops the replica:
+//!   its history and the source's disagree, and nothing more is applied.
+//! - **No gaps.** A page covers every transaction in scope after the `since`
+//!   it names, so a page (or a chunked transaction) whose `since` is above
+//!   the cursor would skip whatever lies between: resume from the cursor.
+//!   Until a bootstrap exists, a new replica starts at transaction 0. A page
+//!   arriving while a chunked transaction is still open breaks the sequence
+//!   the same way: the chunk is discarded and the caller resumes.
+//! - **Refuse rather than guess.** A record the replica cannot reproduce
+//!   exactly (a byte value sent as its length only, an unknown value shape)
+//!   refuses the whole transaction. Writing an approximation would make the
+//!   replica disagree with its source without saying so.
+//!
+//! Freshness is reported as (last applied transaction, time since the last
+//! frame) and never claims a bound: a bounded claim needs the source's
+//! freshness challenge, which a later slice adds.
+
+use std::collections::BTreeMap;
+
+use rusqlite::{OptionalExtension, params};
+use serde_json::Value as Json;
+
+use crate::error::Result;
+#[cfg(test)]
+use crate::store::Datum;
+use crate::store::Store;
+#[cfg(test)]
+use crate::types::{Op, Value};
+
+#[path = "applier_chunk.rs"]
+mod chunk;
+#[path = "applier_digest.rs"]
+mod digest;
+#[path = "applier_record.rs"]
+mod record;
+#[path = "applier_start.rs"]
+mod start;
+use chunk::Chunk;
+pub use digest::Stop;
+pub use record::record_to_datum;
+
+/// The source log a replica follows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Source {
+    /// The source store's identity, minted at its creation.
+    pub store_id: String,
+    /// The source log's epoch; re-minted by any history-removing operation.
+    pub log_epoch: String,
+}
+
+/// The replica's cursor, persisted with every applied transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Progress {
+    /// The source this replica follows.
+    pub source: Source,
+    /// The last source transaction applied in full.
+    pub source_tx: i64,
+}
+
+/// What one frame did, and what the caller must do next.
+///
+/// Serialized (for the browser bridge) as an object tagged by `kind`, in
+/// snake case: `{"kind": "applied", "source_txs": [..]}`, `{"kind": "resume",
+/// "from": N}`, `{"kind": "duplicate"}`, and so on.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Outcome {
+    /// These source transactions are now visible, with the cursor moved past them.
+    Applied {
+        /// The source transactions applied, in commit order.
+        source_txs: Vec<i64>,
+    },
+    /// A part of a chunked transaction is held; nothing is visible yet.
+    Buffered {
+        /// The chunked source transaction being assembled.
+        source_tx: i64,
+    },
+    /// Everything in the frame was at or below the cursor.
+    Duplicate,
+    /// A page with no records: the feed has nothing new.
+    Idle,
+    /// The frame does not continue from the cursor (a dropped page, or a
+    /// broken or interrupted chunk): nothing was applied; reconnect from `from`.
+    Resume {
+        /// The cursor to reconnect from (the last applied source transaction).
+        from: i64,
+    },
+    /// The source changed: build a new replica from a fresh bootstrap.
+    Rebootstrap {
+        /// Why the replica cannot continue from its cursor.
+        reason: String,
+    },
+    /// The frame cannot be applied exactly. Nothing from the refused source
+    /// transaction was written; earlier whole transactions in the same page
+    /// may have been, and [`Applier::progress`] says where the cursor is.
+    Refused {
+        /// Why the frame cannot be applied exactly.
+        reason: String,
+    },
+    /// An as-of share was applied to an empty replica: it now holds the
+    /// source as of `source_tx`, and the tail continues from there.
+    Bootstrapped {
+        /// The share's watermark: the last source transaction it contains.
+        source_tx: i64,
+    },
+    /// An event this slice does not act on (heartbeats, newer frame kinds).
+    Ignored,
+    /// A redelivered transaction does not match the one applied, or cannot
+    /// be checked. Nothing from it was written, and every later frame answers
+    /// the same until the replica is rebuilt (a new source still answers
+    /// [`Outcome::Rebootstrap`]).
+    Stopped {
+        /// Which check failed.
+        reason: Stop,
+    },
+}
+
+/// What a reader may say about how current the replica is.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Freshness {
+    /// The last source transaction applied, if any.
+    pub source_tx: Option<i64>,
+    /// Milliseconds since the last frame of any kind; `None` before the first.
+    pub last_frame_age_ms: Option<u64>,
+    /// Always `false` in this slice: no freshness challenge has been answered.
+    pub bounded: bool,
+}
+
+/// The applier for one replica store.
+pub struct Applier {
+    progress: Option<Progress>,
+    chunk: Option<Chunk>,
+    /// An as-of share being streamed into the store, inside its savepoint.
+    share: Option<bootstrap::ShareStream>,
+    last_frame_ms: Option<u64>,
+    stopped: Option<Outcome>,
+}
+
+const PROGRESS_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_progress (\
+     id INTEGER PRIMARY KEY CHECK (id = 1), \
+     store_id TEXT NOT NULL, log_epoch TEXT NOT NULL, source_tx INTEGER NOT NULL)";
+
+impl Applier {
+    /// Open the applier for `store`, resuming its persisted cursor if any.
+    ///
+    /// # Errors
+    /// [`Error::Sqlite`] if the progress record cannot be read.
+    pub fn open(store: &Store) -> Result<Self> {
+        store.conn.execute_batch(PROGRESS_DDL)?;
+        store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
+        store.conn.execute_batch(digest::STOP_DDL)?;
+        bootstrap::discard_open_share(store)?;
+        let progress = store
+            .conn
+            .query_row(
+                "SELECT store_id, log_epoch, source_tx FROM replica_progress WHERE id = 1",
+                [],
+                |r| {
+                    Ok(Progress {
+                        source: Source {
+                            store_id: r.get(0)?,
+                            log_epoch: r.get(1)?,
+                        },
+                        source_tx: r.get(2)?,
+                    })
+                },
+            )
+            .optional()?;
+        Ok(Self {
+            progress,
+            chunk: None,
+            share: None,
+            last_frame_ms: None,
+            stopped: digest::load_stop(store)?,
+        })
+    }
+
+    /// The persisted cursor, or `None` before the first applied transaction.
+    #[must_use]
+    pub fn progress(&self) -> Option<&Progress> {
+        self.progress.as_ref()
+    }
+
+    /// What may be said about freshness at `now_ms` (never a bound here).
+    #[must_use]
+    pub fn freshness(&self, now_ms: u64) -> Freshness {
+        Freshness {
+            source_tx: self.progress.as_ref().map(|p| p.source_tx),
+            last_frame_age_ms: self.last_frame_ms.map(|t| now_ms.saturating_sub(t)),
+            bounded: false,
+        }
+    }
+
+    /// Apply one feed frame, given as the transport delivered it.
+    ///
+    /// # Errors
+    /// [`Error::Sqlite`] or a write error if the local store fails; the frame
+    /// is then not applied and the cursor has not moved.
+    pub fn apply_frame(
+        &mut self,
+        store: &mut Store,
+        event: &str,
+        data: &str,
+        now_ms: u64,
+    ) -> Result<Outcome> {
+        self.last_frame_ms = Some(now_ms);
+        if let Some(stopped) = self.stopped.clone() {
+            // A new source still comes first: it means a new replica.
+            let changed = serde_json::from_str::<Json>(data)
+                .ok()
+                .as_ref()
+                .and_then(source_of)
+                .and_then(|source| self.check_source(&source));
+            return Ok(changed.unwrap_or(stopped));
+        }
+        if self.share.is_some() && !event.starts_with("quipu.asof") {
+            // A share is one cut; anything else arriving mid-share breaks it.
+            self.abort_share(store)?;
+        }
+        match event {
+            "quipu.changes" => self.apply_page(store, data),
+            "quipu.changes.begin" => Ok(self.begin_chunk(data)),
+            "quipu.changes.part" => Ok(self.chunk_part(data)),
+            "quipu.changes.commit" => self.commit_chunk(store, data),
+            "quipu.asof" | "quipu.asof.begin" | "quipu.asof.part" | "quipu.asof.commit" => {
+                self.bootstrap_frame(store, event, data)
+            }
+            "quipu.changes.tx_too_large" => Ok(Outcome::Refused {
+                reason: "the source cannot send this transaction in frames".into(),
+            }),
+            _ => Ok(Outcome::Ignored),
+        }
+    }
+
+    fn apply_page(&mut self, store: &mut Store, data: &str) -> Result<Outcome> {
+        // A page never arrives inside a chunked transaction; if one does, the
+        // chunk can no longer complete in order.
+        if self.chunk.take().is_some() {
+            return Ok(Outcome::Resume {
+                from: self.resume_point(),
+            });
+        }
+        let Ok(page) = serde_json::from_str::<Json>(data) else {
+            return Ok(refused("page is not JSON"));
+        };
+        let Some(source) = source_of(&page) else {
+            return Ok(refused("page does not name its source store and log epoch"));
+        };
+        if let Some(outcome) = self.check_source(&source) {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.check_since(&page) {
+            return Ok(outcome);
+        }
+        let records = page["records"].as_array().cloned().unwrap_or_default();
+        if records.is_empty() {
+            return Ok(Outcome::Idle);
+        }
+        self.apply_records(store, &source, &records)
+    }
+
+    fn begin_chunk(&mut self, data: &str) -> Outcome {
+        let Ok(begin) = serde_json::from_str::<Json>(data) else {
+            return refused("begin frame is not JSON");
+        };
+        let (Some(source_tx), Some(parts), Some(records), Some(digest)) = (
+            begin["source_tx"].as_i64(),
+            begin["parts"].as_u64(),
+            begin["records"].as_u64(),
+            begin["digest"].as_str(),
+        ) else {
+            return refused("begin frame is incomplete");
+        };
+        if let Some(outcome) = self.check_since(&begin) {
+            self.chunk = None;
+            return outcome;
+        }
+        // A new begin replaces any chunk in progress: a reconnect replays an
+        // interrupted transaction from its first part.
+        self.chunk = Some(Chunk::new(source_tx, parts, records, digest, true));
+        Outcome::Buffered { source_tx }
+    }
+
+    fn chunk_part(&mut self, data: &str) -> Outcome {
+        let resume = self.resume_point();
+        let Some(chunk) = self.chunk.as_mut() else {
+            return Outcome::Resume { from: resume };
+        };
+        let Ok(part) = serde_json::from_str::<Json>(data) else {
+            self.chunk = None;
+            return Outcome::Resume { from: resume };
+        };
+        if !chunk.accept(&part, data) {
+            self.chunk = None;
+            return Outcome::Resume { from: resume };
+        }
+        Outcome::Buffered {
+            source_tx: chunk.source_tx,
+        }
+    }
+
+    fn commit_chunk(&mut self, store: &mut Store, data: &str) -> Result<Outcome> {
+        let resume = self.resume_point();
+        let Some(chunk) = self.chunk.take() else {
+            return Ok(Outcome::Resume { from: resume });
+        };
+        let Ok(commit) = serde_json::from_str::<Json>(data) else {
+            return Ok(Outcome::Resume { from: resume });
+        };
+        if !chunk.complete(&commit) {
+            return Ok(Outcome::Resume { from: resume });
+        }
+        let Some(source) = source_of(&commit) else {
+            return Ok(refused(
+                "chunked transaction does not name its source store and log epoch",
+            ));
+        };
+        if let Some(outcome) = self.check_source(&source) {
+            return Ok(outcome);
+        }
+        if let Some(outcome) = self.check_since(&commit) {
+            return Ok(outcome);
+        }
+        self.apply_records(store, &source, &chunk.buffered)
+    }
+
+    fn resume_point(&self) -> i64 {
+        self.progress.as_ref().map_or(0, |p| p.source_tx)
+    }
+
+    /// `None` when the frame continues from the cursor: its `since` is at or
+    /// below it (the overlap is skipped as duplicates).
+    fn check_since(&self, frame: &Json) -> Option<Outcome> {
+        let Some(since) = frame["since"].as_i64() else {
+            return Some(refused("frame does not name the cursor it answers (since)"));
+        };
+        let from = self.resume_point();
+        (since > from).then_some(Outcome::Resume { from })
+    }
+
+    /// `None` when the frame's source is this replica's (or the first one).
+    fn check_source(&self, source: &Source) -> Option<Outcome> {
+        match &self.progress {
+            Some(p) if p.source != *source => Some(Outcome::Rebootstrap {
+                reason: format!(
+                    "source changed from {}/{} to {}/{}",
+                    p.source.store_id, p.source.log_epoch, source.store_id, source.log_epoch
+                ),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Apply whole source transactions in commit order, each in one local
+    /// savepoint with its progress record.
+    fn apply_records(
+        &mut self,
+        store: &mut Store,
+        source: &Source,
+        records: &[Json],
+    ) -> Result<Outcome> {
+        let mut by_tx: BTreeMap<i64, Vec<&Json>> = BTreeMap::new();
+        for record in records {
+            let Some(tx) = record["tx"].as_i64() else {
+                return Ok(refused("record without a source transaction"));
+            };
+            by_tx.entry(tx).or_default().push(record);
+        }
+        if self.progress.is_none()
+            && let Some(reason) = Self::new_replica_refusal(store)?
+        {
+            return Ok(Outcome::Refused { reason });
+        }
+        let mut applied = Vec::new();
+        for (tx, records) in by_tx {
+            if self.progress.as_ref().is_some_and(|p| tx <= p.source_tx) {
+                if let Some(stop) = digest::check_duplicate(store, source, tx, &records)? {
+                    self.stopped = Some(stop.clone());
+                    return Ok(stop);
+                }
+                continue;
+            }
+            match apply_one_tx(store, source, tx, &records)? {
+                None => {
+                    self.progress = Some(Progress {
+                        source: source.clone(),
+                        source_tx: tx,
+                    });
+                    applied.push(tx);
+                }
+                Some(reason) => return Ok(Outcome::Refused { reason }),
+            }
+        }
+        Ok(if applied.is_empty() {
+            Outcome::Duplicate
+        } else {
+            Outcome::Applied {
+                source_txs: applied,
+            }
+        })
+    }
+}
+
+fn refused(reason: &str) -> Outcome {
+    Outcome::Refused {
+        reason: reason.to_string(),
+    }
+}
+
+fn source_of(frame: &Json) -> Option<Source> {
+    Some(Source {
+        store_id: frame["source"]["store_id"].as_str()?.to_string(),
+        log_epoch: frame["source"]["log_epoch"].as_str()?.to_string(),
+    })
+}
+
+/// One source transaction, all-or-nothing. `Ok(Some(reason))` refuses it with
+/// nothing written; `Ok(None)` committed it and the cursor.
+fn apply_one_tx(
+    store: &mut Store,
+    source: &Source,
+    tx: i64,
+    records: &[&Json],
+) -> Result<Option<String>> {
+    let timestamp = records[0]["timestamp"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    // A transaction may touch several graphs: one local write per graph, all
+    // inside the same savepoint.
+    let mut by_graph: BTreeMap<String, Vec<&Json>> = BTreeMap::new();
+    for record in records {
+        let graph = record["graph"].as_str().unwrap_or("ROOT").to_string();
+        by_graph.entry(graph).or_default().push(record);
+    }
+    store.conn.execute_batch("SAVEPOINT replica_apply")?;
+    let result = (|| -> Result<Option<String>> {
+        for (graph, records) in &by_graph {
+            let mut datums = Vec::with_capacity(records.len());
+            for record in records {
+                match record_to_datum(store, record, &timestamp)? {
+                    Ok(d) => datums.push(d),
+                    Err(reason) => return Ok(Some(format!("source tx {tx}: {reason}"))),
+                }
+            }
+            if graph == "ROOT" {
+                store.transact(&datums, &timestamp, None, None)?;
+            } else {
+                let g = store.graph_create(graph)?;
+                store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+            }
+        }
+        // Every record decoded above, so its exact encoding exists.
+        let tx_digest = match digest::tx_digest(source, tx, records) {
+            Ok(d) => d,
+            Err(reason) => return Ok(Some(format!("source tx {tx}: {reason}"))),
+        };
+        store.conn.execute(
+            "INSERT INTO replica_progress (id, store_id, log_epoch, source_tx) VALUES (1, ?1, ?2, ?3) \
+             ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
+            params![source.store_id, source.log_epoch, tx],
+        )?;
+        digest::retain(store, source, tx, &tx_digest)?;
+        Ok(None)
+    })();
+    match result {
+        Ok(None) => {
+            store.conn.execute_batch("RELEASE replica_apply")?;
+            Ok(None)
+        }
+        other => {
+            store
+                .conn
+                .execute_batch("ROLLBACK TO replica_apply; RELEASE replica_apply")?;
+            other
+        }
+    }
+}
+
+/// Live facts of a store as resolved strings, so two stores with different
+/// term ids compare by meaning; valid time is part of a fact's identity here.
+/// Shared by the applier and feed-replay conformance tests.
+#[cfg(test)]
+type FactRow = (i64, i64, Vec<u8>, i64, String, Option<String>);
+
+#[cfg(test)]
+pub(crate) fn live_digest(store: &Store) -> std::collections::BTreeSet<String> {
+    let mut stmt = store
+        .conn
+        .prepare(
+            "SELECT e, a, v, g, valid_from, valid_to FROM facts \
+             WHERE op = 1 AND retracted_tx IS NULL",
+        )
+        .unwrap();
+    let rows: Vec<FactRow> = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    rows.into_iter()
+        .map(|(e, a, v, g, from, to)| {
+            let value = match Value::from_bytes(&v).unwrap() {
+                Value::Ref(id) => format!("ref:{}", store.resolve(id).unwrap()),
+                Value::Bytes(b) => format!("bytes:{b:?}"),
+                other => format!("{other:?}"),
+            };
+            let graph = if g == 0 {
+                "ROOT".to_string()
+            } else {
+                store.resolve(g).unwrap()
+            };
+            format!(
+                "{graph} {} {} {value} [{from}, {to:?})",
+                store.resolve(e).unwrap(),
+                store.resolve(a).unwrap()
+            )
+        })
+        .collect()
+}
+
+#[path = "applier_bootstrap.rs"]
+mod bootstrap;
+pub use bootstrap::share_graph_digest;
+
+#[cfg(test)]
+#[path = "applier_tests.rs"]
+mod tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "applier_seam_tests.rs"]
+mod seam_tests;
