@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(feature = "shacl")]
 const TS: &str = "2026-10-20T00:00:00Z";
 
 #[test]
