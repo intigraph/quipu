@@ -37,10 +37,21 @@ pub(super) fn validate_frame(previous: i64, offset: i64, json: &str) -> Result<(
     if json.contains(['\r', '\n']) {
         return Err("event data must be single-line JSON");
     }
-    if json.len() > MAX_FRAME_BYTES.saturating_sub(64) {
+    if !fits_frame(json) {
         return Err("event exceeds transport frame budget");
     }
     Ok(())
+}
+
+/// Whether one serialized event body fits the transport frame budget, with
+/// room for the SSE `id:`/`event:` lines around it.
+pub(super) fn fits_frame(json: &str) -> bool {
+    fits_frame_len(json.len())
+}
+
+/// [`fits_frame`] for a body whose length is already known.
+pub(super) fn fits_frame_len(len: usize) -> bool {
+    len <= MAX_FRAME_BYTES.saturating_sub(64)
 }
 
 #[cfg(test)]
