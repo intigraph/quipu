@@ -90,6 +90,11 @@ pub struct ChangePage {
     pub watermark_tx: i64,
     pub watermark_timestamp: Option<String>,
     pub capture: Capture,
+    /// The store these records came from, and its log epoch. A follower that
+    /// sees either change is reading a different history (a restore, a clone
+    /// or removed records) and must re-bootstrap rather than keep its cursor.
+    pub store_id: String,
+    pub log_epoch: String,
 }
 
 impl ChangePage {
@@ -101,6 +106,7 @@ impl ChangePage {
             "watermark_tx": self.watermark_tx,
             "watermark_timestamp": self.watermark_timestamp,
             "capture": self.capture.as_str(),
+            "source": {"store_id": self.store_id, "log_epoch": self.log_epoch},
         })
     }
 }
@@ -162,6 +168,8 @@ impl Store {
             watermark_tx,
             watermark_timestamp,
             capture,
+            store_id: self.store_id()?,
+            log_epoch: self.log_epoch()?,
         })
     }
 

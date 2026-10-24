@@ -328,3 +328,56 @@ fn f1_functional_supersede_replays_as_one_current_value() {
         .unwrap();
     assert_replica_equals_source(&source);
 }
+
+/// F5: a page must name its source store and log epoch, so a follower can
+/// detect a restored or cloned primary.
+#[test]
+fn f5_pages_carry_source_identity() {
+    let source = Store::open_in_memory().unwrap();
+    let page = source
+        .changes_after(0, 10, Capture::NewValues, None)
+        .unwrap()
+        .to_json();
+    assert!(page["source"]["store_id"].is_string(), "{page}");
+    assert!(page["source"]["log_epoch"].is_string(), "{page}");
+}
+
+/// The epoch is minted once and kept across reopen; a store that predates it
+/// gets one on its first open; minting a new one changes what pages report.
+#[test]
+fn f5_log_epoch_is_stable_until_minted_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.db");
+    let path = path.to_str().unwrap();
+    let (store_id, first) = {
+        let store = Store::open(path).unwrap();
+        (store.store_id().unwrap(), store.log_epoch().unwrap())
+    };
+    let store = Store::open(path).unwrap();
+    assert_eq!(store.log_epoch().unwrap(), first, "epoch changed on reopen");
+    let page = store
+        .changes_after(0, 1, Capture::NewValues, None)
+        .unwrap()
+        .to_json();
+    assert_eq!(page["source"]["store_id"], store_id);
+    assert_eq!(page["source"]["log_epoch"], first);
+
+    let minted = store.mint_log_epoch("test").unwrap();
+    assert_ne!(minted, first);
+    let page = store
+        .changes_after(0, 1, Capture::NewValues, None)
+        .unwrap()
+        .to_json();
+    assert_eq!(page["source"]["log_epoch"], minted);
+    assert_eq!(
+        page["source"]["store_id"], store_id,
+        "store identity is not the epoch"
+    );
+
+    store.conn.execute("DELETE FROM log_epoch", []).unwrap();
+    drop(store);
+    let upgraded = Store::open(path).unwrap();
+    let late = upgraded.log_epoch().unwrap();
+    assert!(late.starts_with("urn:uuid:"), "{late}");
+    assert_ne!(late, minted);
+}
