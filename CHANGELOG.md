@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-10-24
+
+### Added
+
+- *(promote)* Dry-run a subject move and warn before it retracts target facts (#747)([b3b70f1](https://github.com/scbrown/quipu/commit/b3b70f1f255fb89aa86ea618cebce6d64c0765d7))
+- *(projections)* Until, two-dimension day buckets, a rows cursor, presence columns (#800)([186565a](https://github.com/scbrown/quipu/commit/186565af20cf0fba623e9f177420b350a10df639))
+
+### Documentation
+
+- Synchronize the canonical stack overview (#773)([d7ccd4a](https://github.com/scbrown/quipu/commit/d7ccd4a2e123132e854c5be4292bc27fca22a105))
+
+### Fixed
+
+- *(mcp)* Publish the image and registry entry under intigraph (#774)([af45220](https://github.com/scbrown/quipu/commit/af452206a37997f31c4d6141b09aab45c717ca33))
+- *(read-model)* Reuse a recent "too big" affordability count (#781)([bdd3b6e](https://github.com/scbrown/quipu/commit/bdd3b6e2334fb07b409eec530f7bf3d441fac51d))
+- *(changes)* Carry valid time and byte bodies so a feed replica equals its source (#780)([b8ebe7e](https://github.com/scbrown/quipu/commit/b8ebe7e365ae07665c4f55a033e01c99b88132d7))
+- *(owl)* Write a retract row when a functional value is superseded (#787)([472faae](https://github.com/scbrown/quipu/commit/472faae212c932bcba5fa1ef543093dfa19c3caf))
+
+### Perf
+
+- *(changes)* Page a graph-filtered feed in commit order (#776)([ec08d9f](https://github.com/scbrown/quipu/commit/ec08d9fd89c40beb3858e4576162548e8954593b))
+- *(read-model)* Bind-join a pattern when the rows so far are fewer than its facts (#782)([8d62e33](https://github.com/scbrown/quipu/commit/8d62e3325dddf52332ea395a865482a8016c7fd1))
+
 ## [0.16.1] - 2026-10-23
 
 ### Added
