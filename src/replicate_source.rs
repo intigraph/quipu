@@ -94,7 +94,7 @@ impl Session {
             .into_iter()
             .map(|(_, id)| id)
             .collect();
-        let mut session = Self {
+        let session = Self {
             id,
             identity,
             store_id,
@@ -181,7 +181,7 @@ impl Session {
         }
         let full = by_tx.len() < max_txs.max(1);
         for (tx, records) in by_tx {
-            if !self.tx_frames(tx, records, &mut frames) {
+            if !self.tx_frames(tx, &records, &mut frames) {
                 self.ended = true;
                 frames.push(self.control(
                     "tx_too_large",
@@ -238,7 +238,7 @@ impl Session {
 
     /// One transaction's frames: one `tx` frame, or begin/parts/commit when
     /// it does not fit. `false` when a single record exceeds a part.
-    fn tx_frames(&mut self, tx: i64, records: Vec<Json>, out: &mut Vec<Frame>) -> bool {
+    fn tx_frames(&mut self, tx: i64, records: &[Json], out: &mut Vec<Frame>) -> bool {
         let seq = self.seq + 1;
         let data = json!({"session": self.id, "frame_seq": seq, "source": self.source(),
                           "source_tx": tx, "records": records})
@@ -257,7 +257,7 @@ impl Session {
         };
         let mut builder = builder.in_session(&self.id, seq + 1);
         let mut parts = Vec::new();
-        for record in &records {
+        for record in records {
             match builder.push(record) {
                 Ok(closed) => parts.extend(closed),
                 Err(RecordTooLarge) => return false,
