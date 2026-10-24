@@ -110,11 +110,18 @@ Server to client:
   `/changes`. This bounds volume by entities touched, not datums written.
   `type.new` and `predicate.new` stay store-wide and are emitted only from ROOT,
   unchanged.
-- **Graph tag.** A nullable `graph TEXT` column on `events` holding the graph
-  IRI, like `subject`, never a term id (so respacing never rewrites it). NULL
-  means ROOT, so every existing row and consumer reads the same. A partial
-  index `(graph, "offset") WHERE graph IS NOT NULL`. Additive migration; no
-  backfill.
+- **Separate tables, so no older binary can see them.** Named-graph events
+  go in their own table, `graph_events`: the `events` columns plus `graph
+  TEXT NOT NULL`, the graph IRI, never a term id (so respacing never rewrites
+  it). Its own `offset` sequence, indexed `(graph, "offset")`. A graph
+  consumer's committed cursor goes in `graph_consumers (consumer, graph,
+  committed_offset)`, never in `consumers`. `events` and `consumers` are
+  untouched: a ROOT event's offset, wire form and pruning are byte-for-byte
+  what they were. Additive migration; no backfill.
+  A nullable `graph` column on `events` was rejected (review of this design):
+  quipu has no schema-version refusal, so an older binary opens a newer store,
+  and its `events_after`, which has no graph predicate, would deliver board
+  events to every ROOT consumer after a rollback.
 - **Committed graphs only.** "Registered" means a `committed`-class row in
   `graphs`; overlay-class rows are registered too, and stay silent.
 - **Lag.** A reader's `lag` counts only its own graph's events (ROOT's when
@@ -126,7 +133,9 @@ Server to client:
   receiving board events unasked. `types` and `group` combine with `graph` by
   AND. There is no "all graphs" wildcard: a consumer names each graph, and
   each name is authorized.
-- **Retention** is the existing `prune_events` cutoff. Volume is re-measured
+- **Retention** is the existing `prune_events` cutoff, applied to each table
+  against its own consumers: `consumers` holds back `events`, and
+  `graph_consumers` holds back `graph_events` for that graph. Volume is re-measured
   on a production copy before rollout, and the measurement is recorded beside
   this design.
 
@@ -157,7 +166,30 @@ Server to client:
 
 ## 7. Rollback
 
-Each step reverts independently. The `graph` column is nullable and unused
-by older code, so a revert after the migration is safe. The hub sits behind
-the existing SSE handlers, so reverting it restores per-connection reads. The
-WebSocket route is additive.
+Each step reverts independently, and every revert is to plain older code.
+There is no rollback floor and no deployment order, because none can be
+enforced: quipu opens a store whatever its schema, so the guarantee has to
+hold for any older binary.
+
+- **Named-graph events.** Older code never reads `graph_events` or
+  `graph_consumers`. After a revert, ROOT consumers receive exactly the ROOT
+  log, at the same offsets, from their committed cursors in `consumers`, and
+  pruning sees only `events`. The graph rows and cursors stay on disk
+  untouched, so re-upgrading resumes each graph consumer from its committed
+  cursor. Nothing is migrated back and nothing is deleted.
+- **Hub.** It sits behind the existing SSE handlers, so reverting it restores
+  per-connection reads.
+- **WebSocket.** The route is additive.
+
+**Acceptance pair (rollback).**
+
+1. On one store: commit ROOT and named-graph writes; commit a ROOT consumer's
+   cursor and a graph consumer's cursor.
+2. Read with the PRE-CHANGE reader. Use its exact `events_after` SQL and the
+   `consumers` resume, against the post-change store. It returns only the
+   ROOT events, at their original offsets, resuming from the ROOT cursor.
+   Prune with the pre-change `prune_events`: no `graph_events` row is touched.
+3. Read again with the new reader: the graph consumer resumes from its own
+   cursor and receives only its graph's events.
+4. Control: the rejected design, a `graph` column on `events`, fails step 2.
+   The pre-change reader returns the named-graph event too.
