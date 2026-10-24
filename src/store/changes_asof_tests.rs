@@ -877,3 +877,38 @@ fn digest_merging_runs_after_the_read_transaction_closes() {
         "after the read closed, nothing pins the WAL"
     );
 }
+
+/// A frozen graph's rows live in its pack, not in main, and it is not one of
+/// the attachment-contributed graphs. Until frozen packs can be read
+/// (s24.1.1) the cut must refuse it, never cut it as an empty graph.
+#[test]
+fn a_frozen_graph_is_refused_not_cut_empty() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    fixture(&mut source);
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let spool = tempfile::tempdir().unwrap();
+    let result = cut(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &Limits::default(),
+    );
+    assert!(
+        matches!(&result, Err(CutError::Refused(e)) if e.to_string().contains("frozen")),
+        "{result:?}"
+    );
+    assert!(spool_is_empty(spool.path()));
+    // The same after reopening, when the pack is mounted from the registry.
+    drop(source);
+    let reopened = Store::open(&_path).unwrap();
+    let result = cut(
+        &reopened,
+        &request(&reopened, None),
+        spool.path(),
+        &Limits::default(),
+    );
+    assert!(matches!(result, Err(CutError::Refused(_))), "{result:?}");
+}

@@ -417,7 +417,12 @@ pub(crate) fn cut_with_control(
                 "as-of share requires a committed graph, not an overlay or fork: {iri}"
             )));
         }
-        if store.attached_graphs().contains(&graph) {
+        // Two different things live in packs. A graph CONTRIBUTED by an
+        // attachment is registered with that attachment as its source. A
+        // FROZEN graph is still a local graph, but its rows moved into its own
+        // pack, so it is not in `attached_graphs`; reading main for it would
+        // cut it as empty. Both are refused until frozen packs can be read.
+        if store.attached_graphs().contains(&graph) || is_frozen(store, iri)? {
             return Err(invalid(format!(
                 "graph is served from an attached or frozen pack, which this \
                  producer cannot cut yet (aegis-s24.1.1): {iri}"
@@ -738,6 +743,26 @@ impl Drop for ReadPhaseGuard<'_> {
     fn drop(&mut self) {
         let _ = self.store.conn.progress_handler(0, None::<fn() -> bool>);
     }
+}
+
+/// Whether `iri` is a frozen graph whose pack is mounted (not thawed). A store
+/// that never froze anything has no registry table.
+fn is_frozen(store: &Store, iri: &str) -> Result<bool> {
+    let registry: bool = store.conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM main.sqlite_master \
+                        WHERE type = 'table' AND name = 'frozen_packs')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !registry {
+        return Ok(false);
+    }
+    Ok(store.conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM main.frozen_packs \
+                        WHERE graph_iri = ?1 AND thawed_at IS NULL)",
+        params![iri],
+        |r| r.get(0),
+    )?)
 }
 
 fn sorted_unique(iris: &[String], field: &str) -> std::result::Result<Vec<String>, CutError> {
