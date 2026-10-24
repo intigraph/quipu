@@ -30,6 +30,7 @@ pub mod forks;
 pub mod freeze;
 mod freeze_io;
 mod gate;
+mod graph_events;
 mod identity;
 pub mod import;
 pub mod inferred;
@@ -50,7 +51,9 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
-pub use projections::{PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus};
+pub use projections::{
+    GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
+};
 mod registry;
 pub mod registry_list;
 pub mod respace;
