@@ -126,9 +126,14 @@ the cut. The cut is therefore bounded in four ways.
 - Under the read transaction, the producer streams records into an on-disk
   **spool**: one file of canonical JSON lines per cut, in the scratch
   directory.
-- It computes the per-graph and whole-cut digests as it writes.
-- It closes the transaction as soon as the spool is complete and its digests
-  are final.
+- It feeds each record to the whole-cut part digest and to its graph's
+  digest runs as it writes. Spilling a sorted run holds at most one run's
+  memory (32 MiB, shared by all graphs), and the ceilings are checked after
+  every spill.
+- It closes the transaction as soon as the scan ends and passes its final
+  ceiling check. Merging the digest runs and writing the last part happen
+  after that and hold no snapshot, so no non-SQLite work can pin the WAL
+  past the read.
 - Frames are then sent from the spool with no transaction open.
 - So a slow or stalled follower holds a file on disk, never the source's
   snapshot. The WAL is pinned only for the read phase, which is bounded by the
@@ -168,8 +173,9 @@ cut began:
   (the WAL file at most once a second), so even one slow statement is
   interrupted mid-step;
 - every 10,000 records;
-- once more after the spool is flushed and before any manifest exists, so a
-  short or empty cut cannot finish past a ceiling.
+- after every spilled digest run;
+- once more when the scan ends, just before the transaction closes and before
+  any manifest exists, so a short or empty cut cannot finish past a ceiling.
 
 Either ceiling aborts the cut:
 
@@ -291,6 +297,9 @@ The new route also needs the same classification every route gets:
   - One slow statement is interrupted by the time ceiling mid-step; an empty
     cut past its ceiling is aborted by the final check; neither leaves a
     spool or sends a frame.
+  - After the scan, a TRUNCATE checkpoint from another connection completes
+    (the snapshot is released before digest runs are merged). While the
+    scan runs, the same checkpoint is blocked (the control).
   - No disk allowance refuses the cut before it reads. Bytes in nested run
     directories count against the quota.
 - **Scope digest:** moving an IRI between scope and context changes the
