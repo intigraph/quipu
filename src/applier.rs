@@ -19,7 +19,10 @@
 //!   always at a source transaction boundary. A chunked transaction is
 //!   buffered, its digest chain checked part by part, and nothing is visible
 //!   until the commit verifies.
-//! - **Idempotent.** A transaction at or below the cursor is a duplicate.
+//! - **Idempotent, and checked.** A transaction at or below the cursor is a
+//!   duplicate only when its content digest equals the one retained when it
+//!   was applied. A different digest, or none retained, stops the replica:
+//!   its history and the source's disagree, and nothing more is applied.
 //! - **No gaps.** A page covers every transaction in scope after the `since`
 //!   it names, so a page (or a chunked transaction) whose `since` is above
 //!   the cursor would skip whatever lies between: resume from the cursor.
@@ -44,6 +47,10 @@ use sha2::{Digest, Sha256};
 use crate::error::Result;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
+
+#[path = "applier_digest.rs"]
+mod digest;
+pub use digest::Stop;
 
 /// The source log a replica follows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +112,14 @@ pub enum Outcome {
     },
     /// An event this slice does not act on (heartbeats, newer frame kinds).
     Ignored,
+    /// A redelivered transaction does not match the one applied, or cannot
+    /// be checked. Nothing from it was written, and every later frame answers
+    /// the same until the replica is rebuilt (a new source still answers
+    /// [`Outcome::Rebootstrap`]).
+    Stopped {
+        /// Which check failed.
+        reason: Stop,
+    },
 }
 
 /// What a reader may say about how current the replica is.
@@ -134,6 +149,7 @@ pub struct Applier {
     progress: Option<Progress>,
     chunk: Option<Chunk>,
     last_frame_ms: Option<u64>,
+    stopped: Option<Outcome>,
 }
 
 const PROGRESS_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_progress (\
@@ -147,6 +163,7 @@ impl Applier {
     /// [`Error::Sqlite`] if the progress record cannot be read.
     pub fn open(store: &Store) -> Result<Self> {
         store.conn.execute_batch(PROGRESS_DDL)?;
+        store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
         let progress = store
             .conn
             .query_row(
@@ -167,6 +184,7 @@ impl Applier {
             progress,
             chunk: None,
             last_frame_ms: None,
+            stopped: None,
         })
     }
 
@@ -199,6 +217,15 @@ impl Applier {
         now_ms: u64,
     ) -> Result<Outcome> {
         self.last_frame_ms = Some(now_ms);
+        if let Some(stopped) = self.stopped.clone() {
+            // A new source still comes first: it means a new replica.
+            let changed = serde_json::from_str::<Json>(data)
+                .ok()
+                .as_ref()
+                .and_then(source_of)
+                .and_then(|source| self.check_source(&source));
+            return Ok(changed.unwrap_or(stopped));
+        }
         match event {
             "quipu.changes" => self.apply_page(store, data),
             "quipu.changes.begin" => Ok(self.begin_chunk(data)),
@@ -372,6 +399,10 @@ impl Applier {
         let mut applied = Vec::new();
         for (tx, records) in by_tx {
             if self.progress.as_ref().is_some_and(|p| tx <= p.source_tx) {
+                if let Some(stop) = digest::check_duplicate(store, source, tx, &records)? {
+                    self.stopped = Some(stop.clone());
+                    return Ok(stop);
+                }
                 continue;
             }
             match apply_one_tx(store, source, tx, &records)? {
@@ -444,11 +475,17 @@ fn apply_one_tx(
                 store.transact_to_graph(&datums, &timestamp, None, None, g)?;
             }
         }
+        // Every record decoded above, so its exact encoding exists.
+        let tx_digest = match digest::tx_digest(source, tx, records) {
+            Ok(d) => d,
+            Err(reason) => return Ok(Some(format!("source tx {tx}: {reason}"))),
+        };
         store.conn.execute(
             "INSERT INTO replica_progress (id, store_id, log_epoch, source_tx) VALUES (1, ?1, ?2, ?3) \
              ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
             params![source.store_id, source.log_epoch, tx],
         )?;
+        digest::retain(store, source, tx, &tx_digest)?;
         Ok(None)
     })();
     match result {
