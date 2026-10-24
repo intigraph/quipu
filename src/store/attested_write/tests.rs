@@ -3,13 +3,13 @@ use super::*;
 use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
 use crate::verdict_schemes::webauthn_tests::{Authenticator, Ceremony, ORIGIN, RP_ID};
 
-const OUT: &str = "https://example.org/graph/answers";
+pub(super) const OUT: &str = "https://example.org/graph/answers";
 const SIDE: &str = "https://example.org/graph/items";
 const ID: &str = "dGVzdA";
 const ITEM: &str = "https://example.org/item/1";
 const STATUS: &str = "https://example.org/status";
-const SLOT: &str = "https://example.org/answer/1";
-const SAID: &str = "https://example.org/said";
+pub(super) const SLOT: &str = "https://example.org/answer/1";
+pub(super) const SAID: &str = "https://example.org/said";
 
 fn signer(auth: &Authenticator) -> Signer {
     Signer {
@@ -24,7 +24,7 @@ fn signer(auth: &Authenticator) -> Signer {
     }
 }
 
-fn ready(auth: &Authenticator) -> Store {
+pub(super) fn ready(auth: &Authenticator) -> Store {
     let mut s = Store::open_in_memory().unwrap();
     s.attest_protect_graph(OUT).unwrap();
     s.attest_enroll_signer(&signer(auth)).unwrap();
@@ -56,7 +56,7 @@ fn set(s: &mut Store, graph: &str, e: &str, p: &str, old: Option<Value>, new: Va
     s.transact_to_graph(&datums, &ts, None, None, g).unwrap();
 }
 
-fn proposal(text: &str) -> Proposal {
+pub(super) fn proposal(text: &str) -> Proposal {
     Proposal {
         signer: ID.into(),
         graph: OUT.into(),
@@ -82,7 +82,7 @@ fn proposal(text: &str) -> Proposal {
     }
 }
 
-fn sign(
+pub(super) fn sign(
     auth: &Authenticator,
     c: &Challenge,
     count: u32,
@@ -93,7 +93,7 @@ fn sign(
 }
 
 /// Receipts, consumed challenges and facts in the answers graph.
-fn footprint(s: &Store) -> (i64, i64, usize) {
+pub(super) fn footprint(s: &Store) -> (i64, i64, usize) {
     let n = |sql: &str| -> i64 { s.conn.query_row(sql, [], |r| r.get(0)).unwrap() };
     let facts = match s.registered_graph_id(OUT).unwrap() {
         Some(g) => s.current_facts_in_graph(g).unwrap().len(),
@@ -106,7 +106,7 @@ fn footprint(s: &Store) -> (i64, i64, usize) {
     )
 }
 
-fn refused<T: std::fmt::Debug>(r: Result<T>, fragment: &str) {
+pub(super) fn refused<T: std::fmt::Debug>(r: Result<T>, fragment: &str) {
     let e = r.unwrap_err().to_string();
     assert!(e.contains(fragment), "{e} lacks {fragment}");
 }
@@ -512,4 +512,57 @@ fn a_gate_refusal_at_commit_records_nothing_but_keeps_its_audit() {
     assert_eq!(payload["graph"], OUT);
     assert_eq!(payload["source"], SOURCE);
     assert_eq!(payload["actor"], "test-human");
+}
+
+#[cfg(feature = "shacl")]
+const NAME_SHAPE: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .
+<https://example.org/shape/Said> a sh:NodeShape ;
+    sh:targetSubjectsOf <https://example.org/said> ;
+    sh:property [ sh:path <https://example.org/said> ; sh:maxLength 8 ] .";
+
+/// Post-state SHACL admission applies to attested writes exactly as to
+/// ordinary ones: a violating write is refused with zero accepted mutation
+/// and a `shacl` refusal event; a conforming one is admitted. Paired for
+/// loaded shapes and for explicit write shapes.
+#[cfg(feature = "shacl")]
+#[test]
+fn shacl_poststate_admission_applies_to_attested_writes() {
+    let refusals = |s: &Store| {
+        s.events_after(0, 10_000, Some(&["write.refused".to_string()]), None)
+            .unwrap()
+    };
+    for explicit in [false, true] {
+        let a = Authenticator::es256();
+        let mut s = ready(&a);
+        if !explicit {
+            s.load_shapes("said", NAME_SHAPE, "2026-10-24T00:00:00Z")
+                .unwrap();
+        }
+        let bad = s.attest_challenge(&proposal("much too long")).unwrap();
+        let before = footprint(&s);
+        let commit = |s: &mut Store, c: &Challenge, n: u32| {
+            if explicit {
+                s.with_write_shapes(Some(NAME_SHAPE), |s| {
+                    s.attest_commit(&c.nonce, &sign(&a, c, n).as_assertion())
+                })
+            } else {
+                s.attest_commit(&c.nonce, &sign(&a, c, n).as_assertion())
+            }
+        };
+        assert!(commit(&mut s, &bad, 8).is_err(), "explicit={explicit}");
+        assert_eq!(
+            footprint(&s),
+            before,
+            "zero accepted mutation, explicit={explicit}"
+        );
+        let events = refusals(&s);
+        assert_eq!(events.len(), 1, "explicit={explicit}");
+        let payload: serde_json::Value = serde_json::from_str(&events[0].payload).unwrap();
+        assert_eq!(payload["gate"], "shacl", "explicit={explicit}");
+        assert_eq!(payload["source"], SOURCE);
+        // Control: a conforming value is admitted under the same shapes.
+        let good = s.attest_challenge(&proposal("short")).unwrap();
+        commit(&mut s, &good, 9).unwrap();
+        assert_eq!(value(&s, SLOT, SAID), Some(Value::Str("short".into())));
+    }
 }

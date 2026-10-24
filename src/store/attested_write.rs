@@ -22,6 +22,8 @@ use crate::verdict_schemes::{Scheme, webauthn};
 
 mod admission;
 mod expect;
+#[cfg(test)]
+mod gate_tests;
 mod operator;
 #[cfg(test)]
 mod tests;

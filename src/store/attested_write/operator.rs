@@ -44,7 +44,10 @@ impl Store {
     /// if needed so that a precondition can read it before its first write.
     /// Ordinary writes to it are refused from then on. Irreversible by design.
     pub fn attest_protect_graph(&mut self, graph: &str) -> Result<()> {
-        if !iri(graph) || graph.starts_with("urn:quipu:") {
+        if !iri(graph)
+            || graph.starts_with("urn:quipu:")
+            || super::super::inferred::is_inferred_graph_iri(graph)
+        {
             return Err(refuse("invalid or reserved graph IRI"));
         }
         self.graph_create(graph)?;

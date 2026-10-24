@@ -2,6 +2,19 @@
 //! share ONE writer savepoint. The normal staging/guard pipeline runs, but
 //! observers wait until the commit is final, so none of them can see a write
 //! that is later rolled back.
+//!
+//! Gate by gate against the ordinary write (`ops.rs`, transact):
+//! - target check: writable graph here; the attested-only refusal of the
+//!   ordinary check is what this path exists to pass, and its inferred and
+//!   reserved-graph refusals apply when the operator protects a graph;
+//! - authority: same check, and its refusal is audited the same way;
+//! - preconditions, staging and guard, SHACL post-state, promotion claim:
+//!   the same calls, inside the savepoint;
+//! - after commit: the same hooks, policy-registry invalidation and verdict
+//!   flush; on refusal, the same refusal record and denial verdicts.
+//!
+//! Deliberate differences: the read model is dropped rather than patched
+//! (conservative), and per-commit write-count telemetry is not recorded.
 
 use super::*;
 
@@ -32,13 +45,21 @@ impl Store {
             let graph = self.graph_create(&graph_iri)?;
             self.assert_graph_is_writable(graph)?;
             audit = Some((graph, actor.clone()));
-            self.enforce_graph_authority(graph)?;
+            self.enforce_graph_authority(graph)
+                .map_err(|e| self.stash_refusal("authority", e, datums.len()))?;
             let staged =
                 self.stage_and_guard(&datums, &ts, Some(&actor), Some(SOURCE), graph, None)?;
+            // The same SHACL post-state admission as every ordinary write,
+            // inside the savepoint and before RELEASE. Attested writes always
+            // admit against the loaded shapes, as conditional writes do.
+            // `stage_and_guard` opened this write's transaction; it is the latest.
             let tx = self.latest_tx_id()?;
+            self.enforce_shacl_poststate(&datums, graph, tx, true)
+                .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
+            crate::promotion_control::claim_commit(Some(SOURCE))?;
             self.conn
                 .execute("UPDATE attest_receipts SET tx=?1 WHERE tx IS NULL", [tx])?;
-            Ok((value, Some((datums, staged, graph))))
+            Ok((value, Some((datums, staged, graph, actor))))
         })();
         match result {
             Ok((value, written)) => {
@@ -51,11 +72,16 @@ impl Store {
                     return Err(error.into());
                 }
                 self.set_write_in_progress(false);
-                if let Some((datums, staged, graph)) = written {
+                if let Some((datums, staged, graph, actor)) = written {
                     self.invalidate_read_model();
                     // A post-commit hook error is indeterminate to the caller;
                     // the receipt lookup recovers the committed write.
                     self.after_commit_hooks(&datums, staged, &ts, Some(SOURCE), graph)?;
+                    // A write that defined or amended a policy makes the cached
+                    // registry stale.
+                    self.invalidate_policy_registry_if_governance(&datums)?;
+                    // Outside the savepoint, as for an ordinary accepted write.
+                    self.flush_pending_verdicts(&ts, Some(&actor));
                 }
                 Ok(value)
             }
