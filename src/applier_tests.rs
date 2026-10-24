@@ -542,3 +542,31 @@ fn outcomes_serialize_tagged_by_kind() {
         json!({"kind": "coverage_advanced", "watermark": 8})
     );
 }
+
+#[test]
+fn a_store_holding_local_facts_cannot_start_a_replica() {
+    let src = source();
+    let feed = pages(&src);
+    let mut replica = Store::open_in_memory().unwrap();
+    let local = d(
+        &replica,
+        "urn:local",
+        "urn:p:title",
+        Value::Str("mine".into()),
+        Op::Assert,
+    );
+    replica.transact(&[local], T, None, None).unwrap();
+    let before = live_digest(&replica);
+    let mut applier = Applier::open(&replica).unwrap();
+    let o = applier
+        .apply_frame(&mut replica, "quipu.changes", &feed[0], 1)
+        .unwrap();
+    assert!(matches!(o, Outcome::Refused { .. }), "{o:?}");
+    assert!(applier.progress().is_none());
+    assert_eq!(live_digest(&replica), before);
+    // Once a replica follows a source, its own facts are the source's.
+    let mut empty = Store::open_in_memory().unwrap();
+    let mut follower = Applier::open(&empty).unwrap();
+    replay(&mut empty, &mut follower, &feed[..1]);
+    assert_eq!(Applier::new_replica_refusal(&empty).unwrap(), None);
+}
