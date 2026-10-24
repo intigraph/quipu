@@ -21,7 +21,7 @@ fn d(store: &Store, e: &str, a: &str, v: Value, op: Op) -> Datum {
 }
 
 /// A source with ROOT and named-graph writes, a retraction and bytes.
-fn source() -> Store {
+pub(super) fn source() -> Store {
     let mut s = Store::open_in_memory().unwrap();
     let r = |s: &Store, iri: &str| Value::Ref(s.intern(iri).unwrap());
     let a = d(
@@ -63,7 +63,7 @@ fn source() -> Store {
 }
 
 /// The feed one transaction per page, as `/changes/stream` sends it.
-fn pages(source: &Store) -> Vec<String> {
+pub(super) fn pages(source: &Store) -> Vec<String> {
     let mut out = Vec::new();
     let mut cursor = 0;
     loop {
@@ -181,7 +181,11 @@ fn a_length_only_byte_value_is_refused_and_nothing_is_written() {
 /// (begin, parts with a running digest of the parts as sent, commit). The
 /// server builds these in `feed_stream::chunk_transaction`; this mirrors its
 /// output format for a library test.
-fn chunk_frames(page: &str, per_part: usize, with_source: bool) -> Vec<(&'static str, String)> {
+pub(super) fn chunk_frames(
+    page: &str,
+    per_part: usize,
+    with_source: bool,
+) -> Vec<(&'static str, String)> {
     let page: Json = serde_json::from_str(page).unwrap();
     let records = page["records"].as_array().unwrap().clone();
     let tx = page["next_tx"].as_i64().unwrap();
