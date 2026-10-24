@@ -127,12 +127,20 @@ Server to client:
 - **Lag.** A reader's `lag` counts only its own graph's events (ROOT's when
   `graph` is absent), or an unfiltered ROOT consumer's lag would climb with
   board writes it never receives.
-- **Filter rule.** On `/events`, `/events/stream` and WebSocket `events`
-  subscriptions, `graph` selects exactly one graph's events. Absent `graph`
-  means ROOT only, which is today's behaviour, so no existing consumer starts
-  receiving board events unasked. `types` and `group` combine with `graph` by
-  AND. There is no "all graphs" wildcard: a consumer names each graph, and
-  each name is authorized.
+- **Routes, not a parameter.** A named graph is read at `GET /events/graph`
+  and its cursor is committed at `POST /events/graph/commit`. `/events` and
+  `/events/commit` stay ROOT-only and refuse `graph`. The reason is the
+  rollback (review of this design): older code ignores an unknown parameter,
+  so `/events?graph=G` would answer with ROOT's events, and
+  `/events/commit {graph}` would upsert that consumer id's ROOT cursor BEFORE
+  answering, which no later check can undo. Older code answers an unknown
+  route 404 and writes nothing.
+  `/events/stream` and WebSocket `events` subscriptions accept `graph`, and
+  older code already refuses `graph` on an event stream. Absent `graph`
+  means ROOT only, today's behaviour, so no existing consumer starts
+  receiving board events unasked. `types` and `group` combine with `graph`
+  by AND. There is no "all graphs" wildcard: a consumer names each graph,
+  and each name is authorized.
 - **Retention** is the existing `prune_events` cutoff, applied to each table
   against its own consumers: `consumers` holds back `events`, and
   `graph_consumers` holds back `graph_events` for that graph. Volume is re-measured
@@ -177,13 +185,11 @@ hold for any older binary.
   pruning sees only `events`. The graph rows and cursors stay on disk
   untouched, so re-upgrading resumes each graph consumer from its committed
   cursor. Nothing is migrated back and nothing is deleted.
-  A graph consumer that reaches older code is the one reader that changes.
-  Older code ignores the `graph` parameter, so `/events?graph=G` returns ROOT
-  events, and a commit naming `graph` lands in `consumers`. The consumer
-  contract covers both:
-  - Discard any event whose `graph` is not G. ROOT events carry no `graph`
-    key.
-  - Commit only when the response echoes `graph`.
+  A graph consumer that reaches older code gets a 404 on `/events/graph` and
+  `/events/graph/commit` and a 400 on a `graph` event stream. It is never
+  served ROOT's events, and it never writes a ROOT cursor. (A check of the
+  commit response alone would not have been enough: an older commit handler
+  writes before it answers.)
 - **Hub.** It sits behind the existing SSE handlers, so reverting it restores
   per-connection reads.
 - **WebSocket.** The route is additive.
@@ -198,5 +204,8 @@ hold for any older binary.
    Prune with the pre-change `prune_events`: no `graph_events` row is touched.
 3. Read again with the new reader: the graph consumer resumes from its own
    cursor and receives only its graph's events.
-4. Control: the rejected design, a `graph` column on `events`, fails step 2.
+4. A graph commit under the SAME consumer id as a ROOT reader leaves that
+   ROOT cursor where it was. Against older code it cannot even be sent: the
+   route does not exist there.
+5. Control: the rejected design, a `graph` column on `events`, fails step 2.
    The pre-change reader returns the named-graph event too.
