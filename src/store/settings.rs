@@ -30,6 +30,28 @@ impl Store {
             .map_err(Into::into)
     }
 
+    /// The change log's current epoch (local-sync-mode.md §5). A follower that
+    /// sees it change must re-bootstrap: history it already read may be gone.
+    pub fn log_epoch(&self) -> Result<String> {
+        self.conn
+            .query_row("SELECT epoch FROM log_epoch WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .map_err(Into::into)
+    }
+
+    /// Mint a new epoch, for an operation that removes served history or makes
+    /// this a different copy of it. Returns the new epoch.
+    pub fn mint_log_epoch(&self, reason: &str) -> Result<String> {
+        let epoch = super::open::new_urn_uuid("log epoch")?;
+        self.conn.execute(
+            "UPDATE log_epoch SET epoch = ?1, reason = ?2, \
+             minted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = 1",
+            rusqlite::params![epoch, reason],
+        )?;
+        Ok(epoch)
+    }
+
     /// Defer auto-embedding: writes collect embed work instead of running the
     /// ONNX embed under the caller's lock. The caller MUST drain with
     /// [`Self::take_deferred_embed`] after each write and finish via
