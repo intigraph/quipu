@@ -303,6 +303,46 @@ async fn oversized_transaction_streams_as_parts_then_continues() {
     assert_eq!(next[0].1.as_deref(), Some(tx2.to_string().as_str()));
 }
 
+/// The split is transport-neutral: `chunk_transaction` returns the frames
+/// and SSE only renders them, so another transport (the E2 hub) can send the
+/// same names, ids and data bytes, and so the same digests.
+#[tokio::test]
+async fn sse_sends_the_transport_neutral_frames_unchanged() {
+    let mut store = Store::open_in_memory().unwrap();
+    let big: Vec<Datum> = (0..2500)
+        .map(|i| wide_datum(&mut store, &format!("urn:test:wide-{i}"), 600))
+        .collect();
+    let tx = store.transact(&big, "2026-01-01", None, None).unwrap();
+    let shared = Arc::new(super::super::handle::StoreHandle::writer_only(store));
+    let page = feed::changes_get(
+        State(shared.clone()),
+        headers_for_feed(),
+        Query(
+            serde_json::from_value(
+                json!({"since": 0, "limit": 1, "capture": "old_and_new_values"}),
+            )
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap()
+    .0;
+    let neutral: Vec<Frame> = chunk_transaction(&page, tx)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.event.to_string(), f.id.map(|id| id.to_string()), f.data))
+        .collect();
+    let response =
+        changes_stream(State(shared), HeaderMap::new(), params(json!({"since": 0}))).await;
+    let sent = read_frames(response, |f| f.0 == "quipu.changes.commit").await;
+    assert!(
+        neutral.len() >= 4,
+        "expected a split, got {}",
+        neutral.len()
+    );
+    assert_eq!(sent, neutral);
+}
+
 /// One record larger than a frame cannot be split. It is refused with no id,
 /// so the consumer's cursor stays put, and the stream ends.
 #[tokio::test]
