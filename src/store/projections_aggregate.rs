@@ -57,6 +57,18 @@ pub enum GroupBy<'a> {
     Day(&'a str),
 }
 
+/// Whether an RFC 3339 instant names a whole second: no fraction, or only
+/// zeros after the point. The seconds field ends at byte 19 in RFC 3339.
+fn whole_second(at: &str) -> bool {
+    match at.as_bytes().split_at_checked(19) {
+        Some((_, [b'.', rest @ ..])) => rest
+            .iter()
+            .take_while(|c| c.is_ascii_digit())
+            .all(|c| *c == b'0'),
+        _ => true,
+    }
+}
+
 /// A time column's name, or a refusal naming the field that asked for it.
 fn time_column(def: &ProjectionConfig, c: &str, field: &str) -> Result<String> {
     let c = column(def, c)?;
@@ -253,6 +265,14 @@ impl Store {
             let epoch = crate::time::epoch_of_rfc3339(at).ok_or_else(|| {
                 Error::InvalidValue(format!("{field}: {at:?} is not an RFC 3339 instant"))
             })?;
+            // Time columns hold whole epoch seconds. A whole-second bound
+            // compares exactly with a truncated stored fraction; a fractional
+            // bound cannot, so it is refused rather than silently floored.
+            if !whole_second(at) {
+                return Err(Error::InvalidValue(format!(
+                    "{field}: {at:?} has a fractional second; window bounds are whole seconds"
+                )));
+            }
             wh.push(format!("{c}_t {op} ?"));
             binds.push(epoch.into());
         }

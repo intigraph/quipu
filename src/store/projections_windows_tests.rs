@@ -120,6 +120,28 @@ fn since_is_inclusive_and_until_exclusive_on_offset_and_fractional_instants() {
         )
         .unwrap_err();
     assert!(err.to_string().contains("not an RFC 3339 instant"), "{err}");
+    // Bounds are whole seconds: zeros after the point are fine, a real
+    // fraction is refused, on either bound.
+    assert_eq!(n("2026-10-21T00:00:00.000Z", "2026-10-22T00:00:00Z"), 1);
+    for (since, until) in [
+        ("2026-10-21T00:00:00.5Z", "2026-10-22T00:00:00Z"),
+        ("2026-10-21T00:00:00Z", "2026-10-22T00:00:00.001+02:00"),
+    ] {
+        let err = store
+            .aggregate_projection(
+                &def(),
+                &ProjectionAggregate {
+                    since: Some(("closed", since)),
+                    until: Some(("closed", until)),
+                    ..Default::default()
+                },
+            )
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("window bounds are whole seconds"),
+            "{err}"
+        );
+    }
 }
 
 /// The UTC day of each closure, computed without SQLite (Hinnant's
