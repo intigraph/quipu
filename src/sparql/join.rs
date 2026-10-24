@@ -12,7 +12,7 @@ use crate::store::Store;
 use crate::types::Value;
 
 use super::pattern_util::{check_eval_budget, triple_pattern_vars};
-use super::triple::eval_triple_pattern_from_model;
+use super::triple::{estimate_triple_pattern_from_model, eval_triple_pattern_from_model};
 use super::{Bindings, TemporalContext};
 
 /// Evaluate a BGP by hash-joining each pattern's rows, rather than re-evaluating
@@ -24,7 +24,8 @@ use super::{Bindings, TemporalContext};
 /// shape. This changes the shape.
 ///
 /// Each pattern is evaluated ONCE against the seed, then joined to the
-/// accumulated rows on whatever variables they share. Only used when the read
+/// accumulated rows on whatever variables they share — unless the rows so far
+/// are fewer than the pattern's facts, when it is probed once per row instead. Only used when the read
 /// model is applicable, because there an unbound evaluation is a hash lookup;
 /// against SQL it would trade a selective indexed query for a table scan.
 pub(super) fn eval_bgp_hash_join(
@@ -33,12 +34,11 @@ pub(super) fn eval_bgp_hash_join(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
-    // Every pattern is evaluated exactly once either way, so ORDERING the
-    // joins by measured cardinality is free (quipu-0lr): the counts are not
-    // estimates from index statistics, they are the actual row sets. Source
-    // order stops mattering — a pathological ordering folds the same joins as
-    // a good one. Variables are still collected in SOURCE order so the
-    // projection header does not depend on the plan.
+    // ORDERING the joins by cardinality is nearly free (quipu-0lr): the
+    // counts are index lengths, not statistics. Source order stops mattering
+    // — a pathological ordering folds the same joins as a good one. Variables
+    // are still collected in SOURCE order so the projection header does not
+    // depend on the plan.
     let mut all_vars: Vec<String> = Vec::new();
     for tp in patterns {
         for var in triple_pattern_vars(tp) {
@@ -54,26 +54,41 @@ pub(super) fn eval_bgp_hash_join(
         .graph
         .single_graph()
         .unwrap_or(crate::schema::ROOT_GRAPH);
-    let mut evaluated: Vec<Vec<Bindings>> = Vec::with_capacity(patterns.len());
+
+    // Plan on index-length estimates: they cost no value
+    // decode and are exact for every access path but one, so the fold order
+    // is the one measured row sets would give. Materializing every pattern up
+    // front to measure it was the cost: inside a correlated NOT EXISTS a
+    // pattern sharing no variable with the outer row (`?blocker status ?s`)
+    // materialized every fact of its predicate once PER OUTER ROW.
+    let mut estimates: Vec<usize> = Vec::with_capacity(patterns.len());
     for (i, tp) in patterns.iter().enumerate() {
         check_eval_budget(ctx, i, 0)?;
-        let rows = eval_triple_pattern_from_model(store, tp, seed, graph)?;
-        // An empty pattern empties every join it participates in.
-        if rows.is_empty() {
+        let estimate = estimate_triple_pattern_from_model(store, tp, seed, graph)?;
+        // Zero is exact: an empty pattern empties every join it is in.
+        if estimate == 0 {
             return Ok((Vec::new(), all_vars));
         }
-        evaluated.push(rows);
+        estimates.push(estimate);
     }
 
     let pattern_vars: Vec<Vec<String>> = patterns.iter().map(triple_pattern_vars).collect();
-    let cardinalities: Vec<usize> = evaluated.iter().map(Vec::len).collect();
     let bound: HashSet<String> = seed.keys().cloned().collect();
-    let plan = join_plan(&pattern_vars, &cardinalities, &bound);
+    let plan = join_plan(&pattern_vars, &estimates, &bound);
 
     let mut result_rows: Vec<Bindings> = vec![seed.clone()];
     for (step, idx) in plan.into_iter().enumerate() {
         check_eval_budget(ctx, step, result_rows.len())?;
-        result_rows = hash_join_bindings(&result_rows, &evaluated[idx], ctx)?;
+        let shares_bound = result_rows[0].keys().any(|k| pattern_vars[idx].contains(k));
+        result_rows = if shares_bound && result_rows.len() < estimates[idx] {
+            // Fewer accumulated rows than the pattern has facts: probe the
+            // model once per row with the shared variables bound, an index
+            // hit each, instead of materializing the whole pattern to join.
+            bind_join(store, &patterns[idx], &result_rows, graph, ctx)?
+        } else {
+            let rows = eval_triple_pattern_from_model(store, &patterns[idx], seed, graph)?;
+            hash_join_bindings(&result_rows, &rows, ctx)?
+        };
         // An empty intermediate can never grow again, so stop rather than
         // joining the remaining patterns for nothing.
         if result_rows.is_empty() {
@@ -90,7 +105,26 @@ pub(super) fn eval_bgp_hash_join(
     Ok((result_rows, all_vars))
 }
 
-/// Choose the hash-join fold order (quipu-0lr): smallest measured row set
+/// Extend each row by the pattern evaluated with that row's bindings: the
+/// nested loop, but over model index lookups, and only for the step where it
+/// is cheaper than a hash join. [`super::triple_bind::bind_row`] carries each
+/// row's bindings through, so the output rows are already merged.
+fn bind_join(
+    store: &Store,
+    tp: &TriplePattern,
+    rows: &[Bindings],
+    graph: i64,
+    ctx: &TemporalContext,
+) -> Result<Vec<Bindings>> {
+    let mut out = Vec::new();
+    for (i, row) in rows.iter().enumerate() {
+        check_eval_budget(ctx, i, out.len())?;
+        out.extend(eval_triple_pattern_from_model(store, tp, row, graph)?);
+    }
+    Ok(out)
+}
+
+/// Choose the hash-join fold order (quipu-0lr): smallest row set
 /// first, then greedily the smallest pattern CONNECTED to a variable already
 /// bound, falling back to the smallest disconnected pattern only when nothing
 /// connects (that cartesian is then genuinely in the query). Ties break on
