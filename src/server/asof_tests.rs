@@ -114,8 +114,7 @@ async fn a_small_cut_is_one_frame_and_refusals_come_first() {
         frames[0].1.as_deref(),
         Some(single["manifest"]["watermark_tx"].to_string().as_str())
     );
-    let spool = spool_dir().join(format!("{}.parts", sha256_of_manifest(&single["manifest"])));
-    assert!(!spool.exists(), "{}", spool.display());
+    assert_no_spool(&sha256_of_manifest(&single["manifest"]));
 
     // A refusal is an ordinary error response, never a started stream.
     let wrong = json!({"graphs": [G], "expected_store_id": "urn:uuid:another-store"});
@@ -130,11 +129,8 @@ fn sha256_of_manifest(manifest: &Value) -> String {
     hex::encode(Sha256::digest(serde_json::to_vec(manifest).unwrap()))
 }
 
-/// A cut over one frame streams begin, parts and a commit barrier whose
-/// digests chain exactly as F6's do.
-#[tokio::test]
-async fn a_large_cut_streams_begin_parts_and_a_commit_barrier() {
-    let _serial = SERIAL.lock().await;
+/// A store whose cut needs more than one frame.
+fn large_app() -> (Router, String) {
     let mut store = quipu::Store::open_in_memory().unwrap();
     let graph = store.graph_create(G).unwrap();
     let mut doc = String::new();
@@ -159,6 +155,106 @@ async fn a_large_cut_streams_begin_parts_and_a_commit_barrier() {
     let app = Router::new()
         .route("/share/asof", post(share_asof))
         .with_state(shared);
+    (app, identity)
+}
+
+/// Every spool file a cut with this manifest left behind.
+fn spools_for(manifest_hex: &str) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(spool_dir()).map_or_else(
+        |_| Vec::new(),
+        |entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with(manifest_hex))
+                })
+                .collect()
+        },
+    )
+}
+
+fn assert_no_spool(manifest_hex: &str) {
+    let left = spools_for(manifest_hex);
+    assert!(left.is_empty(), "{left:?}");
+}
+
+fn manifest_hex(begin: &Value) -> &str {
+    begin["manifest_sha256"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("sha256:")
+}
+
+async fn respond(app: Router, input: Value) -> axum::response::Response {
+    let response = app
+        .oneshot(
+            Request::post("/share/asof")
+                .header("content-type", "application/json")
+                .body(Body::from(input.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    response
+}
+
+async fn read_all(response: axum::response::Response) -> Vec<(String, Option<String>, String)> {
+    let bytes = to_bytes(response.into_body(), 64 * 1024 * 1024)
+        .await
+        .unwrap();
+    events(std::str::from_utf8(&bytes).unwrap())
+}
+
+/// A whole multipart cut: begin first, the commit barrier last.
+fn assert_whole(frames: &[(String, Option<String>, String)]) -> Value {
+    assert_eq!(frames.first().unwrap().0, "quipu.asof.begin");
+    assert_eq!(
+        frames.last().unwrap().0,
+        "quipu.asof.commit",
+        "{:?}",
+        frames.last()
+    );
+    serde_json::from_str(&frames[0].2).unwrap()
+}
+
+/// Two identical cuts share a manifest and must not share a spool: the first
+/// response, abandoned or completed, leaves the second whole.
+#[tokio::test]
+async fn identical_cuts_own_their_spools() {
+    let _serial = SERIAL.lock().await;
+    let (app, identity) = large_app();
+    let input = json!({"graphs": [G], "expected_store_id": identity});
+
+    // Abandon the first before the second has opened its spool.
+    let first = respond(app.clone(), input.clone()).await;
+    let second = respond(app.clone(), input.clone()).await;
+    drop(first);
+    let begin = assert_whole(&read_all(second).await);
+    let hex = manifest_hex(&begin).to_string();
+    assert_no_spool(&hex);
+
+    // Complete the first, then read the second.
+    let first = respond(app.clone(), input.clone()).await;
+    let second = respond(app.clone(), input.clone()).await;
+    assert_eq!(spools_for(&hex).len(), 2, "one spool per response");
+    let one = assert_whole(&read_all(first).await);
+    let two = assert_whole(&read_all(second).await);
+    // Control: both cuts really share the manifest, so the names would collide.
+    assert_eq!(one["manifest_sha256"], two["manifest_sha256"]);
+    assert_eq!(manifest_hex(&one), hex);
+    assert_no_spool(&hex);
+}
+
+/// A cut over one frame streams begin, parts and a commit barrier whose
+/// digests chain exactly as F6's do.
+#[tokio::test]
+async fn a_large_cut_streams_begin_parts_and_a_commit_barrier() {
+    let _serial = SERIAL.lock().await;
+    let (app, identity) = large_app();
     let input = json!({"graphs": [G], "expected_store_id": identity});
     let (status, _, body) = post_cut(app, input).await;
     assert_eq!(status, StatusCode::OK);
@@ -195,14 +291,7 @@ async fn a_large_cut_streams_begin_parts_and_a_commit_barrier() {
     assert_eq!(begin["digest"], digest);
     assert_eq!(commit["digest"], digest);
     assert_eq!(records, 4000);
-    let spool = spool_dir().join(format!(
-        "{}.parts",
-        begin["manifest_sha256"]
-            .as_str()
-            .unwrap()
-            .trim_start_matches("sha256:")
-    ));
-    assert!(!spool.exists(), "{}", spool.display());
+    assert_no_spool(manifest_hex(&begin));
 }
 
 #[test]

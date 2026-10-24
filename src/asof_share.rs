@@ -358,12 +358,16 @@ pub(crate) fn cut_with_control(
     }
     let shapes_hash = shapes_hash(store, watermark_tx)?;
 
+    // Each cut owns its spool for its whole life. Two cuts can share a
+    // manifest (the same source at the same T), and the response that drops
+    // its spool must never delete the other's.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let spool = spool_dir.join(format!(
-        "cut-{}-{}.parts.tmp",
+    let owner = format!(
+        "{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
+    );
+    let spool = spool_dir.join(format!("cut-{owner}.parts.tmp"));
     let written = (|| {
         let mut file = std::io::BufWriter::new(std::fs::File::create(&spool)?);
         let quota = allowance;
@@ -587,7 +591,7 @@ pub(crate) fn cut_with_control(
     };
     let manifest_sha256 = crate::share::sha256(&manifest_bytes(&manifest)?);
     let named = spool_dir.join(format!(
-        "{}.parts",
+        "{}-{owner}.parts",
         manifest_sha256.trim_start_matches("sha256:")
     ));
     std::fs::rename(&spool, &named)?;
