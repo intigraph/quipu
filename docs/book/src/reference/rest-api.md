@@ -2214,6 +2214,16 @@ nothing, and an unregistered or overlay `graph` returns HTTP 400. `types` and
 `group` combine with `graph` by AND, and `lag` counts only the named graph's
 events (ROOT's when `graph` is absent).
 
+A named graph's events are a separate log with its own offsets. `since`,
+`next_offset` and `consumer` resume are offsets in that graph's log, and
+`POST /events/commit` takes `graph` to commit one (the response echoes
+`graph`). ROOT's offsets and cursors are untouched by board writes.
+
+A graph consumer must discard any event whose `graph` is not its graph. A
+server that predates named-graph events ignores the `graph` parameter and
+serves ROOT events (which carry no `graph` key). Do not commit a cursor when
+the commit response does not echo `graph`.
+
 ### `GET /events/stream` and `GET /changes/stream`
 
 Read-only Server-Sent Events replay of the corresponding durable feed. Supply a
@@ -2242,8 +2252,11 @@ before the output check; this is not a total heap bound. See the
 
 ### `POST /events/commit`
 
-`{"consumer_id", "offset"}` — durably record a consumer's cursor. Any offset
-≥ 0 is accepted, including a **lower** one: that is the explicit replay knob.
+`{"consumer_id", "offset", "graph"?}` — durably record a consumer's cursor.
+With `graph` (a registered committed named graph) the offset is in that
+graph's event log and the response echoes `graph`; an unregistered or overlay
+graph returns HTTP 400. Any offset ≥ 0 is accepted, including a **lower** one:
+that is the explicit replay knob.
 
 ### Refusal events (`write.refused`)
 

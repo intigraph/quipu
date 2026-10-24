@@ -1083,7 +1083,7 @@ Fields: `since`, `limit`, `types`, `group`, `graph`, `consumer`.
 
 Durably set a consumer cursor. Lower offsets explicitly rewind; delivery alone never commits.
 
-Fields: `consumer_id` (required), `offset` (required).
+Fields: `consumer_id` (required), `offset` (required), `graph` (an offset in that registered named graph's event log).
 
 ### `quipu_changes`
 

@@ -89,6 +89,9 @@ pub(super) fn defs() -> Vec<Value> {
                     "offset": {
                         "type": "integer",
                         "minimum": 0
+                    },
+                    "graph": {
+                        "type": "string"
                     }
                 },
                 "required": [

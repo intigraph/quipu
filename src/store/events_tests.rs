@@ -1270,8 +1270,9 @@ fn lag_is_measured_within_the_readers_graph() {
         .unwrap();
     // A ROOT reader caught up before the board write is still caught up.
     assert_eq!(store.latest_event_offset_in(None).unwrap(), root_head);
+    // ROOT's log did not move at all: the board's events are their own log.
+    assert_eq!(store.latest_event_offset().unwrap(), root_head);
     let board_head = store.latest_event_offset_in(Some(BOARD)).unwrap();
-    assert_eq!(board_head, store.latest_event_offset().unwrap());
-    assert!(board_head > root_head);
+    assert!(board_head > 0);
     assert_eq!(store.latest_event_offset_in(Some(OTHER)).unwrap(), 0);
 }

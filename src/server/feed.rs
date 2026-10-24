@@ -138,7 +138,7 @@ pub(crate) async fn events_get(
         let store = store.read();
         let _timing = StoreTiming::acquired(client, "/events", waiting.elapsed());
         let committed: Option<i64> = match (&p.since, &p.consumer) {
-            (None, Some(c)) => Some(store.consumer_committed(c)?),
+            (None, Some(c)) => Some(store.consumer_committed_in(c, p.graph.as_deref())?),
             _ => None,
         };
         let since = p.since.unwrap_or_else(|| committed.unwrap_or(0));
@@ -190,9 +190,11 @@ pub(crate) async fn events_get(
     .await
 }
 
-/// POST /events/commit `{consumer_id, offset}` — durably record a consumer's
-/// cursor. Any offset >= 0 is accepted, including a LOWER one (the explicit
-/// replay knob; delivery is at-least-once and consumers dedup by offset).
+/// POST /events/commit `{consumer_id, offset, graph?}` — durably record a
+/// consumer's cursor, in one named graph's log when `graph` is given (its
+/// offsets are that log's, not ROOT's). Any offset >= 0 is accepted, including
+/// a LOWER one (the explicit replay knob; delivery is at-least-once and
+/// consumers dedup by offset).
 pub(crate) async fn events_commit(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
@@ -212,13 +214,32 @@ pub(crate) async fn events_commit(
         if offset < 0 {
             return Err(quipu::Error::InvalidValue("offset must be >= 0".into()).into());
         }
+        let graph = match input.get("graph") {
+            None | Some(JsonValue::Null) => None,
+            Some(JsonValue::String(g)) => Some(g.clone()),
+            Some(_) => {
+                return Err(quipu::Error::InvalidValue("graph must be a graph IRI".into()).into());
+            }
+        };
         let store = store.lock();
+        if let Some(iri) = graph.as_deref()
+            && store.committed_graph_id(iri)?.is_none()
+        {
+            return Err(quipu::Error::InvalidValue(format!(
+                "not a registered committed named graph: {iri}"
+            ))
+            .into());
+        }
         let now = quipu::time::now_iso();
-        store.commit_consumer(&consumer_id, offset, &now)?;
-        Ok(axum::Json(json!({
+        store.commit_consumer_in(&consumer_id, graph.as_deref(), offset, &now)?;
+        let mut answer = json!({
             "consumer_id": consumer_id,
             "committed_offset": offset,
-        })))
+        });
+        if let Some(g) = graph {
+            answer["graph"] = json!(g);
+        }
+        Ok(axum::Json(answer))
     })
     .await
 }
