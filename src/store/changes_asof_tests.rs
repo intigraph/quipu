@@ -1012,3 +1012,163 @@ fn a_freeze_after_bootstrap_changes_the_epoch_and_a_fresh_cut_reequals() {
     );
     assert_eq!(graph_digest(&bootstrap(&second), G), before);
 }
+
+const G2: &str = "http://example.org/graph/notes";
+
+/// A frozen graph's live facts, read from its mounted pack in the same
+/// canonical form as `live_digest`. The pack keeps its own term ids, so every
+/// id resolves through the pack's terms, never main's.
+fn pack_digest(store: &Store, alias: &str, graph: &str) -> std::collections::BTreeSet<String> {
+    let term = |id: i64| -> String {
+        store
+            .conn
+            .query_row(
+                &format!("SELECT iri FROM {alias}.terms WHERE id = ?1"),
+                [id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let mut stmt = store
+        .conn
+        .prepare(&format!(
+            "SELECT e, a, v, valid_from, valid_to FROM {alias}.facts \
+             WHERE op = 1 AND retracted_tx IS NULL \
+               AND g = (SELECT id FROM {alias}.terms WHERE iri = ?1)"
+        ))
+        .unwrap();
+    let rows: Vec<(i64, i64, Vec<u8>, String, Option<String>)> = stmt
+        .query_map([graph], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })
+        .unwrap()
+        .collect::<std::result::Result<_, _>>()
+        .unwrap();
+    rows.into_iter()
+        .map(|(e, a, v, from, to)| {
+            let value = match Value::from_bytes(&v).unwrap() {
+                Value::Ref(id) => format!("ref:{}", term(id)),
+                Value::Bytes(b) => format!("bytes:{b:?}"),
+                other => format!("{other:?}"),
+            };
+            format!("{graph} {} {} {value} [{from}, {to:?})", term(e), term(a))
+        })
+        .collect()
+}
+
+fn note(store: &mut Store, text: &str, timestamp: &str) {
+    let g = store.graph_create(G2).unwrap();
+    let subject = store.intern("http://example.org/note").unwrap();
+    let body = store.intern("http://example.org/text").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(
+                subject,
+                body,
+                Value::Str(text.into()),
+                timestamp,
+                Op::Assert,
+            )],
+            timestamp,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+}
+
+fn both(store: &Store) -> Request {
+    Request {
+        graphs: vec![G.into(), G2.into()],
+        ..request(store, None)
+    }
+}
+
+/// s24.1.1 DELIVER 2, the whole sequence: source freeze, the epoch change on
+/// the follower's next page, a refusal to splice, a re-bootstrap from the cut
+/// at N, the tail resumed from N, and a follower equal to the source in every
+/// named graph, the frozen one included (read from its pack, since main no longer holds
+/// it). Control: with no freeze, the first bootstrap already equals.
+#[test]
+fn a_follower_rebootstraps_across_a_freeze_and_equals_every_named_graph() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    fixture(&mut source);
+    note(&mut source, "before the freeze", TS2);
+    let spool = tempfile::tempdir().unwrap();
+
+    let first = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    assert_equal(&source, &bootstrap(&first), "control: no freeze");
+    let held_epoch = first.manifest.source.log_epoch.clone();
+
+    let report = source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    assert!(
+        graph_digest(&source, G).is_empty(),
+        "the freeze emptied main of G"
+    );
+    let page = source
+        .changes_after(
+            first.manifest.watermark_tx,
+            10,
+            Capture::OldAndNewValues,
+            None,
+        )
+        .unwrap()
+        .to_json();
+    // The follower compares the page's epoch with the one it holds; on a
+    // mismatch it refuses to splice and bootstraps again.
+    assert_ne!(page["source"]["log_epoch"], held_epoch);
+
+    let second = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    assert_eq!(
+        second.manifest.source.log_epoch,
+        page["source"]["log_epoch"]
+    );
+    let n = second.manifest.watermark_tx;
+    note(&mut source, "after N", TS3);
+    let follower = replay_onto(&source, n, bootstrap(&second));
+
+    let frozen = pack_digest(&source, &report.alias, G);
+    assert!(!frozen.is_empty(), "instrument: the pack digest sees G");
+    let mut whole = live_digest(&source);
+    whole.extend(frozen);
+    let got = live_digest(&follower);
+    // The cut carries the graphs it names. The source's own record of the
+    // freeze lives in its graph-metadata graph, which no cut names; the
+    // follower learns the freeze from the manifest's `frozen` field instead.
+    // Pin that this is the ONLY difference outside the named graphs.
+    let named = |line: &&String| [G, G2].iter().any(|g| line.starts_with(&format!("{g} ")));
+    let (want, outside): (std::collections::BTreeSet<String>, Vec<String>) = {
+        let (named_lines, rest): (Vec<_>, Vec<_>) = whole.iter().partition(named);
+        (
+            named_lines.into_iter().cloned().collect(),
+            rest.into_iter().cloned().collect(),
+        )
+    };
+    assert!(
+        !outside.is_empty(),
+        "control: the freeze wrote its metadata"
+    );
+    assert!(
+        outside
+            .iter()
+            .all(|line| line.starts_with("urn:quipu:graph:meta ")),
+        "only graph metadata lies outside the cut: {outside:#?}"
+    );
+    assert!(
+        got.iter().all(|line| named(&line)),
+        "the follower holds only named graphs"
+    );
+    let missing: Vec<_> = want.difference(&got).collect();
+    let extra: Vec<_> = got.difference(&want).collect();
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "follower diverges from the whole source\n  missing: {missing:#?}\n  extra: {extra:#?}"
+    );
+    assert!(
+        got.iter().any(|line| line.contains("after N")),
+        "the tail arrived"
+    );
+}
