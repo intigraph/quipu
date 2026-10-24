@@ -115,7 +115,8 @@ def main() -> None:
            "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
            "XDG_CACHE_HOME": str(home / ".cache"),
            "XDG_STATE_HOME": str(home / ".state"), "TMPDIR": str(root),
-           "LANG": "C.UTF-8", "TERM": "dumb", "NO_COLOR": "1", "RUST_LOG": "off"}
+           "LANG": "C.UTF-8", "TERM": "dumb", "NO_COLOR": "1", "RUST_LOG": "off",
+           "BOBBIN_GPU": "0"}
     binary_hashes = {name: digest(path) for name, path in binaries.items()}
     version_args = {name: tape.get("version_args", {}).get(name, ["--version"])
                     for name in binaries}

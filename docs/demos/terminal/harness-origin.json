@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/intigraph/tambo",
-  "commit": "6bd33733f84b9699d1d5c41cd2af98c22087c9a1",
+  "commit": "b0765b5d8f16a6a26acb3595552f17826d965b44",
   "path": "docs/demos/terminal-harness/render.py",
-  "sha256": "67a98242a3a841415d0bc91d64a81aaa71bbf29e33ef6865075ecc3dfbd04122"
+  "sha256": "bebbe000565314f18a58731f2a1a4690577db127b3673fa10a45ce74eef0f23c"
 }

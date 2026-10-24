@@ -12,7 +12,7 @@
     ]
   },
   "inputs_sha256": {
-    "render.py": "67a98242a3a841415d0bc91d64a81aaa71bbf29e33ef6865075ecc3dfbd04122",
+    "render.py": "bebbe000565314f18a58731f2a1a4690577db127b3673fa10a45ce74eef0f23c",
     "tape": "277ca8cb23bf453f2e9201548c6ea41861ea05d0244fbe75072b4a43ae82d340",
     "episode.json": "ea4e89ac6607c8f8244f879512cdccfcee47ae2d2ed3afc0105e98f2f7156d6b"
   },
@@ -33,7 +33,7 @@
         "demo.db"
       ],
       "exit": 0,
-      "seconds": 0.556394,
+      "seconds": 0.286422,
       "stdout": "ingested episode \"demo\" -- 14 facts (tx 1)\n",
       "stderr": "automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness\n"
     },
@@ -46,7 +46,7 @@
         "demo.db"
       ],
       "exit": 0,
-      "seconds": 0.003104,
+      "seconds": 0.00293,
       "stdout": "person\tthing\n----------------------------------------\nurn:demo:Ada\turn:demo:Engine\n\n1 results\n",
       "stderr": ""
     }
