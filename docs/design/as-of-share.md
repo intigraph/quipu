@@ -29,6 +29,7 @@ A follower must start from a state equal to its source at some transaction
 ### The cut reuses acquisition; the payload is change records
 
 The as-of share is produced exactly as an acquisition is:
+
 - one SQLite read transaction;
 - the store identity, head and epoch read inside it;
 - every selected graph read at one validated transaction `T`;
@@ -36,12 +37,14 @@ The as-of share is produced exactly as an acquisition is:
 
 What changes is the payload. Each live fact at `T` is emitted as an `assert`
 record in **the same JSON record form as `/changes`**:
+
 - `entity`, `attribute`, `graph`;
 - the typed `value`, with bytes as base64;
 - `valid_from` and `valid_to`.
 
 A follower converts bootstrap records and tail records with **one**
 record-to-datum conversion, the shared applier's. A fact is live at `T` when:
+
 - it was asserted at or before `T`;
 - it was not retracted at or before `T`;
 - its valid interval is whatever the source stores for it at `T`.
@@ -94,6 +97,7 @@ hash.
 
 A cut that fits one frame is one `quipu.asof` frame. A larger cut uses the
 change stream's oversized-transaction frames:
+
 - `begin` with `source_tx = watermark_tx`, the part count, totals, the digest
   and the source;
 - numbered `part` frames with a running `digest_before`;
@@ -112,6 +116,7 @@ cannot complete past it, and the WAL grows with every write that lands during
 the cut. The cut is therefore bounded in four ways.
 
 **(b) The transaction is open only while reading, never while sending.**
+
 - Under the read transaction, the producer streams records into an on-disk
   **spool**: one file of canonical JSON lines per cut, in the scratch
   directory.
@@ -130,6 +135,7 @@ the cut. The cut is therefore bounded in four ways.
 
 **(a) Targets at production size**, to be measured on a scratch copy of a
 production-sized store in the source PR, never against production:
+
 - Read phase: at most **120 s** wall time for a whole-board cut.
 - Peak RSS growth: at most **256 MiB** over the idle process, independent of
   board size. Records are streamed to the spool, never collected in memory.
@@ -143,10 +149,12 @@ ceiling to re-rule; the budget is never loosened silently.
 **(c) The WAL ceiling: refuse or abort, never partial.** During the read
 phase the producer checks its elapsed time and the WAL file's growth since the
 cut began, every 10,000 records. Either ceiling aborts the cut:
+
 - wall time over `asof_read_timeout_secs` (default 300);
 - WAL growth over `asof_wal_growth_max_mib` (default 1024).
 
 An abort:
+
 - rolls back the read transaction, so checkpoints resume;
 - deletes the partial spool;
 - answers `503` with `{"error":"cut_aborted","reason":"wal_ceiling|time_ceiling","retry_after_secs":...}`.
@@ -155,6 +163,7 @@ No manifest and no frame of an aborted cut is ever sent. A follower treats it
 as "no bootstrap yet" and retries later; it never applies part of a cut.
 
 **(d) Admission.**
+
 - At most **one** read phase runs per source at a time. A second request
   while one is reading gets `503` with `Retry-After`. It is not queued behind
   the open transaction, because queued cuts would extend the pinned window
@@ -170,6 +179,7 @@ A frozen graph's rows live in its mounted pack. Freezing respaces term ids
 but not transaction ids: `facts.tx`, `facts.retracted_tx` and
 `transactions.id` are not remapped. So the pack can be read as of `T` exactly
 like main:
+
 - The cut reads the frozen graph's live facts at `T` from the pack.
 - It emits them as ordinary records.
 - It names the pack's `content_hash` and freeze transaction in `completeness`.
@@ -186,6 +196,7 @@ The follower records `(store_id, log_epoch, watermark_tx)` and tails
 `/changes?since=watermark_tx`. Every page and every chunk frame names its
 source. On any page whose `log_epoch` differs from the recorded one, the
 follower:
+
 1. stops;
 2. refuses to splice;
 3. discards its state;
@@ -197,6 +208,7 @@ not.
 ### Route
 
 `POST /share/asof` with `{graphs, context_graphs?, tx?, expected_store_id}`.
+
 - `tx` absent means "now": the cut is taken at the head read inside the
   transaction.
 - The same validation as `/acquire` applies: 1–64 registered committed graphs
@@ -212,6 +224,7 @@ route read-class is a change for the read-authorization work, not for this
 one.
 
 The new route also needs the same classification every route gets:
+
 - an entry in `http_auth`'s endpoint lists (write-class here), which the
   route-completeness test checks;
 - a `share_completeness` classification for anything it persists (the spool
