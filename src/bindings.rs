@@ -306,7 +306,8 @@ impl Engine {
         }
     }
 
-    /// `{source_tx, last_frame_age_ms, bounded}`; `bounded` is always false.
+    /// `{source_tx, last_frame_age_ms, coverage, staleness_bound_ms, bounded}`;
+    /// `bounded` only from an answered freshness challenge on the replication stream.
     #[must_use]
     pub fn replica_freshness(&self, now_ms: u64) -> Value {
         let freshness = match &self.replica {
@@ -314,6 +315,8 @@ impl Engine {
             None => crate::applier::Freshness {
                 source_tx: None,
                 last_frame_age_ms: None,
+                coverage: None,
+                staleness_bound_ms: None,
                 bounded: false,
             },
         };
