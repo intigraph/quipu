@@ -177,6 +177,13 @@ hold for any older binary.
   pruning sees only `events`. The graph rows and cursors stay on disk
   untouched, so re-upgrading resumes each graph consumer from its committed
   cursor. Nothing is migrated back and nothing is deleted.
+  A graph consumer that reaches older code is the one reader that changes.
+  Older code ignores the `graph` parameter, so `/events?graph=G` returns ROOT
+  events, and a commit naming `graph` lands in `consumers`. The consumer
+  contract covers both:
+  - Discard any event whose `graph` is not G. ROOT events carry no `graph`
+    key.
+  - Commit only when the response echoes `graph`.
 - **Hub.** It sits behind the existing SSE handlers, so reverting it restores
   per-connection reads.
 - **WebSocket.** The route is additive.
