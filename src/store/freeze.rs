@@ -210,6 +210,12 @@ impl Store {
             self.write_lifecycle_facts(g, timestamp, actor, &content_hash)?;
             self.conn
                 .execute("DELETE FROM main.facts WHERE g = ?1", params![g])?;
+            // The graph still reads the same (from the pack), so a following
+            // replica needs no record. But the change feed no longer serves
+            // these rows, so a replay from an older cursor would silently
+            // return fewer records. A new epoch tells every follower its
+            // cursor is into a history that has changed (local-sync-mode F2).
+            self.mint_log_epoch("deep freeze")?;
             self.conn.execute(
                 "UPDATE main.graphs SET lifecycle = 'frozen' WHERE g = ?1",
                 params![g],
@@ -295,6 +301,8 @@ impl Store {
         self.conn.execute_batch("SAVEPOINT quipu_thaw")?;
         let result = (|| -> Result<(usize, usize)> {
             let (facts, vectors) = super::freeze_io::import_graph_history(self, &path, graph_iri)?;
+            // The rows return to the change feed behind every follower's cursor.
+            self.mint_log_epoch("thaw")?;
             self.conn.execute(
                 "UPDATE main.graphs SET lifecycle = NULL, data_kind = ?2 WHERE g = ?1",
                 params![g, KIND_OPERATIONAL],
