@@ -38,9 +38,11 @@ The as-of share is produced exactly as an acquisition is:
 What changes is the payload. Each live fact at `T` is emitted as an `assert`
 record in **the same JSON record form as `/changes`**:
 
-- `entity`, `attribute`, `graph`;
+- `entity`, `attribute`, `graph` (`"ROOT"` for the default graph, which is cut
+  only when named);
 - the typed `value`, with bytes as base64;
-- `valid_from` and `valid_to`.
+- `valid_from` and `valid_to`;
+- the asserting transaction's `tx`, `timestamp`, `actor` and `source`.
 
 A follower converts bootstrap records and tail records with **one**
 record-to-datum conversion, the shared applier's. A fact is live at `T` when:
@@ -81,27 +83,31 @@ or bytes is refused, not offered as a degraded bootstrap.
 
 - `watermark_tx` is the last source transaction included. The follower tails
   from it.
-- `scope_digest` is SHA-256 over the sorted scope IRIs, then the sorted
-  context IRIs, newline-separated.
+- `scope_digest` is SHA-256 over the compact JSON
+  `{"context_graphs": [...], "scope": [...]}`, each list sorted. The lists are
+  tagged, so moving an IRI from one to the other always changes the digest.
 - `policy_digest` binds the read authorization the cut was served under.
   Until per-graph read authorization exists, it names the single rule in
   force: an authenticated write-class principal is required.
-- Each graph's `digest` is SHA-256 over its records' canonical JSON lines,
-  sorted. Following the share-manifest encoding, that is compact UTF-8 JSON
-  with recursively sorted keys.
+- Each graph's `digest` is the shared applier's `share_graph_digest`: SHA-256
+  over its records as compact UTF-8 JSON with keys sorted at every level,
+  the lines sorted and joined by `\n`. A `sha256:` prefix is allowed. The
+  producer cannot sort millions of lines in memory, so it sorts runs of at
+  most 32 MiB, spills them beside the spool and merges them into the hash;
+  the bytes hashed are the same.
 
 The manifest's own hash is computed the same way as the acquisition receipt
 hash.
 
 ### Size: the feed's chunk frames, not a second scheme
 
-A cut that fits one frame is one `quipu.asof` frame. A larger cut uses the
-change stream's oversized-transaction frames:
+A cut that fits one frame is one `quipu.asof` frame, `{manifest, records}`. A
+larger cut uses the change stream's oversized-transaction frames:
 
-- `begin` with `source_tx = watermark_tx`, the part count, totals, the digest
-  and the source;
-- numbered `part` frames with a running `digest_before`;
-- a `commit` barrier repeating the digest and the source.
+- `quipu.asof.begin` with the manifest, `source_tx = watermark_tx`, the part
+  count, totals, the digest and the source;
+- numbered `quipu.asof.part` frames with a running `digest_before`;
+- a `quipu.asof.commit` barrier repeating the digest and the source.
 
 These are the same transport-neutral `FeedFrame`s, so the hub and any
 transport carry them unchanged. A follower stages every part and applies
@@ -127,11 +133,19 @@ the cut. The cut is therefore bounded in four ways.
 - So a slow or stalled follower holds a file on disk, never the source's
   snapshot. The WAL is pinned only for the read phase, which is bounded by the
   source's own disk and CPU, not by any network.
-- The spool is named by the manifest hash. A follower that disconnects and
-  re-requests the same cut (same scope and `T`) within the spool's lifetime is
-  served from it, with no new read transaction.
-- Spools expire after one hour. They count against a disk quota (default
-  8 GiB); a cut that would exceed it is refused before the transaction opens.
+- The spool is named by the manifest hash and deleted when its stream ends.
+  Serving a re-request of the same cut from its spool is a later
+  optimization; until then a re-request takes a new cut. Spools a crashed
+  send left behind are swept after one hour.
+- **Disk allowance.** Before the transaction opens, the cut fixes its
+  allowance: the quota (default 8 GiB) minus every byte already under the
+  spool directory (spools being sent, digest runs, a partial spool), and
+  never more than the free disk above a floor (default 1 GiB). One read
+  phase runs at a time, so no other cut draws on it. With no allowance the
+  cut is refused and never pins the WAL. Each part and each sorted run is
+  charged against the allowance before it is written; passing it aborts as
+  `spool_quota`. A write that still fails for lack of disk (ENOSPC) aborts as
+  `disk_full`. Either way the partial spool and runs are deleted.
 
 **(a) Targets at production size**, to be measured on a scratch copy of a
 production-sized store in the source PR, never against production:
@@ -148,7 +162,16 @@ ceiling to re-rule; the budget is never loosened silently.
 
 **(c) The WAL ceiling: refuse or abort, never partial.** During the read
 phase the producer checks its elapsed time and the WAL file's growth since the
-cut began, every 10,000 records. Either ceiling aborts the cut:
+cut began:
+
+- inside SQLite, as the connection's progress handler, every 1,000 VM steps
+  (the WAL file at most once a second), so even one slow statement is
+  interrupted mid-step;
+- every 10,000 records;
+- once more after the spool is flushed and before any manifest exists, so a
+  short or empty cut cannot finish past a ceiling.
+
+Either ceiling aborts the cut:
 
 - wall time over `asof_read_timeout_secs` (default 300);
 - WAL growth over `asof_wal_growth_max_mib` (default 1024).
@@ -157,7 +180,7 @@ An abort:
 
 - rolls back the read transaction, so checkpoints resume;
 - deletes the partial spool;
-- answers `503` with `{"error":"cut_aborted","reason":"wal_ceiling|time_ceiling","retry_after_secs":...}`.
+- answers `503` with `{"error":"cut_aborted","reason":"wal_ceiling|time_ceiling|spool_quota|disk_full","retry_after_secs":...}`.
 
 No manifest and no frame of an aborted cut is ever sent. A follower treats it
 as "no bootstrap yet" and retries later; it never applies part of a cut.
@@ -265,6 +288,13 @@ The new route also needs the same classification every route gets:
     3. a slow follower reading from the spool does not hold a read transaction
        open (checked via the WAL checkpointing during the send).
   - A second concurrent cut is refused with `Retry-After`.
+  - One slow statement is interrupted by the time ceiling mid-step; an empty
+    cut past its ceiling is aborted by the final check; neither leaves a
+    spool or sends a frame.
+  - No disk allowance refuses the cut before it reads. Bytes in nested run
+    directories count against the quota.
+- **Scope digest:** moving an IRI between scope and context changes the
+  digest; reordering a list does not.
 - **Chunking:** a cut over the frame budget arrives as begin, parts and
   commit. A dropped part refuses the commit and records nothing. A
   disconnect restarts the cut.
