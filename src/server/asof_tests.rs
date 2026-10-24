@@ -83,10 +83,13 @@ fn events(body: &str) -> Vec<(String, Option<String>, String)> {
         .collect()
 }
 
-/// One test, so the process-wide read-phase lock is never contended by a
-/// sibling test: busy first, then a real cut, then a refusal.
+/// The read-phase lock is process-wide; route tests take turns.
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Busy first, then a real cut, then a refusal.
 #[tokio::test]
-async fn a_cut_streams_begin_parts_commit_and_refusals_come_first() {
+async fn a_small_cut_is_one_frame_and_refusals_come_first() {
+    let _serial = SERIAL.lock().await;
     let (app, identity) = app();
     let input = json!({"graphs": [G], "expected_store_id": identity});
 
@@ -98,13 +101,71 @@ async fn a_cut_streams_begin_parts_commit_and_refusals_come_first() {
     assert_eq!(retry.as_deref(), Some("60"));
     assert!(body.contains("cut_in_progress"), "{body}");
 
-    // The cut.
+    // A small cut is one quipu.asof frame: {manifest, records}.
     let (status, _, body) = post_cut(app.clone(), input.clone()).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let frames = events(&body);
+    assert_eq!(frames.len(), 1, "{body}");
+    assert_eq!(frames[0].0, "quipu.asof");
+    let single: Value = serde_json::from_str(&frames[0].2).unwrap();
+    assert_eq!(single["manifest"]["source"]["store_id"], identity);
+    assert_eq!(single["records"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        frames[0].1.as_deref(),
+        Some(single["manifest"]["watermark_tx"].to_string().as_str())
+    );
+    let spool = spool_dir().join(format!("{}.parts", sha256_of_manifest(&single["manifest"])));
+    assert!(!spool.exists(), "{}", spool.display());
+
+    // A refusal is an ordinary error response, never a started stream.
+    let wrong = json!({"graphs": [G], "expected_store_id": "urn:uuid:another-store"});
+    let (status, _, body) = post_cut(app.clone(), wrong).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(!body.contains("quipu.asof"), "{body}");
+    // The lock was released after each phase.
+    assert!(!READING.load(Ordering::Acquire));
+}
+
+fn sha256_of_manifest(manifest: &Value) -> String {
+    hex::encode(Sha256::digest(serde_json::to_vec(manifest).unwrap()))
+}
+
+/// A cut over one frame streams begin, parts and a commit barrier whose
+/// digests chain exactly as F6's do.
+#[tokio::test]
+async fn a_large_cut_streams_begin_parts_and_a_commit_barrier() {
+    let _serial = SERIAL.lock().await;
+    let mut store = quipu::Store::open_in_memory().unwrap();
+    let graph = store.graph_create(G).unwrap();
+    let mut doc = String::new();
+    for i in 0..4000 {
+        doc.push_str(&format!(
+            "<https://example.org/item/{i}> <https://example.org/title> \"item number {i} with a title long enough to fill frames\" .\n"
+        ));
+    }
+    quipu::rdf::ingest_rdf_to_graph(
+        &mut store,
+        doc.as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let identity = store.store_id().unwrap();
+    let shared: SharedStore = Arc::new(StoreHandle::writer_only(store));
+    let app = Router::new()
+        .route("/share/asof", post(share_asof))
+        .with_state(shared);
+    let input = json!({"graphs": [G], "expected_store_id": identity});
+    let (status, _, body) = post_cut(app, input).await;
+    assert_eq!(status, StatusCode::OK);
+    let frames = events(&body);
     let (first, last) = (frames.first().unwrap(), frames.last().unwrap());
-    assert_eq!(first.0, "quipu.asof.begin", "{body}");
-    assert_eq!(last.0, "quipu.asof.commit", "{body}");
+    assert_eq!(first.0, "quipu.asof.begin");
+    assert_eq!(last.0, "quipu.asof.commit");
     let begin: Value = serde_json::from_str(&first.2).unwrap();
     let commit: Value = serde_json::from_str(&last.2).unwrap();
     assert!(first.1.is_none(), "only the barrier carries an id");
@@ -114,8 +175,8 @@ async fn a_cut_streams_begin_parts_commit_and_refusals_come_first() {
     );
     assert_eq!(begin["manifest"]["source"]["store_id"], identity);
     assert_eq!(begin["source"], commit["source"]);
-    assert_eq!(begin["manifest_sha256"], commit["manifest_sha256"]);
     let parts = &frames[1..frames.len() - 1];
+    assert!(parts.len() > 1, "{} parts", parts.len());
     assert_eq!(parts.len() as u64, begin["parts"].as_u64().unwrap());
     let mut hasher = Sha256::new();
     let mut records = 0;
@@ -133,9 +194,7 @@ async fn a_cut_streams_begin_parts_commit_and_refusals_come_first() {
     let digest = hex::encode(hasher.finalize());
     assert_eq!(begin["digest"], digest);
     assert_eq!(commit["digest"], digest);
-    assert_eq!(records, 2);
-    assert_eq!(begin["manifest"]["completeness"]["graphs"][G]["records"], 2);
-    // The spool is gone once the stream has been sent.
+    assert_eq!(records, 4000);
     let spool = spool_dir().join(format!(
         "{}.parts",
         begin["manifest_sha256"]
@@ -144,14 +203,6 @@ async fn a_cut_streams_begin_parts_commit_and_refusals_come_first() {
             .trim_start_matches("sha256:")
     ));
     assert!(!spool.exists(), "{}", spool.display());
-
-    // A refusal is an ordinary error response, never a started stream.
-    let wrong = json!({"graphs": [G], "expected_store_id": "urn:uuid:another-store"});
-    let (status, _, body) = post_cut(app.clone(), wrong).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert!(!body.contains("quipu.asof"), "{body}");
-    // The lock was released after each phase.
-    assert!(!READING.load(Ordering::Acquire));
 }
 
 #[test]

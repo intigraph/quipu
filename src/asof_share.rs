@@ -14,6 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 use rusqlite::params;
@@ -30,6 +32,9 @@ pub const SCHEMA: &str = "quipu-asof-share/v1";
 
 /// The single read rule in force until per-graph read authorization exists.
 pub const POLICY: &str = "quipu-asof-policy/write-class-principal/v1";
+
+/// The default graph's name in a request, a record and the manifest.
+pub const ROOT: &str = "ROOT";
 
 /// Records between two ceiling checks during the read phase.
 const CHECK_EVERY: usize = 10_000;
@@ -73,6 +78,9 @@ pub struct Limits {
     pub spool_quota_bytes: u64,
     /// Largest part, in bytes. Tests lower it to exercise splitting.
     pub part_max_len: usize,
+    /// Canonical record lines held in memory before a sorted run is spilled
+    /// to disk while computing a graph digest.
+    pub digest_run_bytes: usize,
 }
 
 impl Default for Limits {
@@ -82,6 +90,7 @@ impl Default for Limits {
             wal_growth_max_bytes: 1024 * 1024 * 1024,
             spool_quota_bytes: 8 * 1024 * 1024 * 1024,
             part_max_len: crate::feed_parts::MAX_FRAME_BYTES.saturating_sub(64),
+            digest_run_bytes: 32 * 1024 * 1024,
         }
     }
 }
@@ -308,6 +317,18 @@ pub(crate) fn cut_with_control(
     let started = Instant::now();
     let wal = wal_path(store)?;
     let wal_start = wal_len(wal.as_deref());
+    // The record-count checks below cannot interrupt one slow SQLite step, so
+    // the same ceilings also run inside SQLite, every PROGRESS_STRIDE VM steps.
+    // An interrupted step fails, and `interrupted` says which ceiling did it.
+    let interrupted = Arc::new(AtomicU8::new(0));
+    let _guard = ReadPhaseGuard::install(
+        store,
+        started,
+        limits,
+        wal.clone(),
+        wal_start,
+        Arc::clone(&interrupted),
+    )?;
     let read = store.conn.unchecked_transaction()?;
 
     let store_id = store.store_id()?;
@@ -328,6 +349,12 @@ pub(crate) fn cut_with_control(
 
     let mut selected = Vec::new();
     for iri in scope.iter().chain(&context) {
+        // ROOT is never implied; a caller names it explicitly to cut it.
+        if iri == ROOT {
+            store.check_label_floor(&[0])?;
+            selected.push((iri.clone(), 0));
+            continue;
+        }
         oxrdf::NamedNode::new(iri.clone()).map_err(|e| invalid(format!("graph IRI: {e}")))?;
         let Some(graph) = store.registered_graph_id(iri)? else {
             return Err(invalid(format!("unregistered graph: {iri}")));
@@ -362,21 +389,32 @@ pub(crate) fn cut_with_control(
         let quota = limits
             .spool_quota_bytes
             .saturating_sub(spool_usage(spool_dir)?);
-        let mut spooled: u64 = 0;
-        let mut write_part = |part: String| -> std::result::Result<(), CutError> {
-            spooled += part.len() as u64 + 1;
-            if spooled > quota {
+        // Spool parts and spilled digest runs both count against the quota,
+        // as they are written.
+        let spooled = std::cell::Cell::new(0u64);
+        let charge = |bytes: u64| -> std::result::Result<(), CutError> {
+            spooled.set(spooled.get() + bytes);
+            if spooled.get() > quota {
                 return Err(CutError::Aborted(AbortReason::SpoolQuota));
             }
+            Ok(())
+        };
+        let mut write_part = |part: String| -> std::result::Result<(), CutError> {
+            charge(part.len() as u64 + 1)?;
             file.write_all(part.as_bytes())?;
             file.write_all(b"\n")?;
             Ok(())
         };
         let mut builder = PartBuilder::with_max_len(watermark_tx, limits.part_max_len);
+        // One primary-key read per record: the /changes record names its
+        // transaction's time, actor and source.
+        let mut tx_meta = store
+            .conn
+            .prepare("SELECT timestamp, actor, source FROM transactions WHERE id = ?1")?;
         let mut graphs = BTreeMap::new();
         let mut total = 0usize;
         for (iri, graph) in &selected {
-            let mut hasher = Sha256::new();
+            let mut digest = GraphDigest::new(spool_dir, limits.digest_run_bytes)?;
             let mut records = 0usize;
             // idx_geav (g, e, a, v) gives this order without a sort, so the
             // read holds no temporary B-tree, and the same source at the same
@@ -410,9 +448,19 @@ pub(crate) fn cut_with_control(
                 // state cannot have: a later retract closes the row in place,
                 // so a row retracted after T reports `valid_to: null` exactly
                 // as the feed's assert record does.
+                let (timestamp, actor, source) = tx_meta.query_row(params![tx], |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                    ))
+                })?;
                 let record = json!({
                     "op": "assert",
                     "tx": tx,
+                    "timestamp": timestamp,
+                    "actor": actor,
+                    "source": source,
                     "graph": iri,
                     "entity": store.resolve(e)?,
                     "attribute": store.resolve(a)?,
@@ -420,8 +468,9 @@ pub(crate) fn cut_with_control(
                     "valid_from": valid_from,
                     "valid_to": valid_to,
                 });
-                hasher.update(record.to_string().as_bytes());
-                hasher.update(b"\n");
+                // serde_json writes object keys sorted at every level, so this
+                // is the canonical line the applier digests.
+                charge(digest.push(record.to_string())?)?;
                 records += 1;
                 total += 1;
                 match builder.push(record) {
@@ -442,7 +491,7 @@ pub(crate) fn cut_with_control(
                 iri.clone(),
                 GraphCompleteness {
                     records,
-                    digest: format!("sha256:{}", hex::encode(hasher.finalize())),
+                    digest: format!("sha256:{}", digest.finish()?),
                     frozen: None,
                 },
             );
@@ -457,12 +506,17 @@ pub(crate) fn cut_with_control(
     })();
     // Closing the read transaction ends the pinned window, success or not.
     drop(read);
+    drop(_guard);
     let read_phase = started.elapsed();
     let (graphs, parts) = match written {
         Ok(done) => done,
         Err(error) => {
             let _ = std::fs::remove_file(&spool);
-            return Err(error);
+            return Err(match interrupted.load(Ordering::Acquire) {
+                1 => CutError::Aborted(AbortReason::TimeCeiling),
+                2 => CutError::Aborted(AbortReason::WalCeiling),
+                _ => error,
+            });
         }
     };
 
@@ -503,6 +557,54 @@ pub(crate) fn cut_with_control(
         parts,
         read_phase,
     })
+}
+
+/// VM steps between two ceiling checks inside SQLite.
+const PROGRESS_STRIDE: i32 = 1000;
+
+/// The read phase's ceilings, installed as the connection's progress handler
+/// for as long as the cut reads, and removed on drop.
+pub(crate) struct ReadPhaseGuard<'s> {
+    store: &'s Store,
+}
+
+impl<'s> ReadPhaseGuard<'s> {
+    pub(crate) fn install(
+        store: &'s Store,
+        started: Instant,
+        limits: &Limits,
+        wal: Option<PathBuf>,
+        wal_start: u64,
+        interrupted: Arc<AtomicU8>,
+    ) -> Result<Self> {
+        let (timeout, wal_max) = (limits.read_timeout, limits.wal_growth_max_bytes);
+        // The WAL is a file stat: at most once a second, not every stride.
+        let mut wal_checked = started;
+        store.conn.progress_handler(
+            PROGRESS_STRIDE,
+            Some(move || {
+                if started.elapsed() > timeout {
+                    interrupted.store(1, Ordering::Release);
+                    return true;
+                }
+                if wal_checked.elapsed() >= Duration::from_secs(1) {
+                    wal_checked = Instant::now();
+                    if wal_len(wal.as_deref()).saturating_sub(wal_start) > wal_max {
+                        interrupted.store(2, Ordering::Release);
+                        return true;
+                    }
+                }
+                false
+            }),
+        )?;
+        Ok(Self { store })
+    }
+}
+
+impl Drop for ReadPhaseGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self.store.conn.progress_handler(0, None::<fn() -> bool>);
+    }
 }
 
 fn sorted_unique(iris: &[String], field: &str) -> std::result::Result<Vec<String>, CutError> {
@@ -552,6 +654,104 @@ fn spool_usage(dir: &Path) -> std::io::Result<u64> {
         }
     }
     Ok(total)
+}
+
+/// The applier's per-graph share digest (`applier::share_graph_digest`):
+/// SHA-256 over the graph's canonical record lines, sorted, joined by `\n`.
+///
+/// The applier sorts in memory. A producer cutting millions of records cannot,
+/// so lines are sorted in runs of at most `run_bytes`, spilled to a temporary
+/// directory beside the spool, and merged into the hash. The bytes hashed are
+/// the same.
+struct GraphDigest {
+    dir: tempfile::TempDir,
+    run: Vec<String>,
+    run_len: usize,
+    run_bytes: usize,
+    runs: Vec<PathBuf>,
+}
+
+impl GraphDigest {
+    fn new(spool_dir: &Path, run_bytes: usize) -> std::io::Result<Self> {
+        Ok(Self {
+            dir: tempfile::Builder::new()
+                .prefix("digest-runs-")
+                .tempdir_in(spool_dir)?,
+            run: Vec::new(),
+            run_len: 0,
+            run_bytes,
+            runs: Vec::new(),
+        })
+    }
+
+    /// Add one line; returns the bytes spilled to disk, if this filled a run.
+    fn push(&mut self, line: String) -> std::io::Result<u64> {
+        self.run_len += line.len();
+        self.run.push(line);
+        if self.run_len >= self.run_bytes {
+            return self.spill();
+        }
+        Ok(0)
+    }
+
+    fn spill(&mut self) -> std::io::Result<u64> {
+        let bytes = (self.run_len + self.run.len()) as u64;
+        self.run.sort_unstable();
+        let path = self.dir.path().join(format!("run-{}", self.runs.len()));
+        let mut file = std::io::BufWriter::new(std::fs::File::create(&path)?);
+        for line in self.run.drain(..) {
+            file.write_all(line.as_bytes())?;
+            file.write_all(b"\n")?;
+        }
+        file.flush()?;
+        self.runs.push(path);
+        self.run_len = 0;
+        Ok(bytes)
+    }
+
+    /// Lowercase hex of the digest. The run directory is removed on drop.
+    fn finish(mut self) -> std::io::Result<String> {
+        use std::cmp::Reverse;
+        use std::collections::BinaryHeap;
+        use std::io::BufRead;
+        let mut hasher = Sha256::new();
+        let mut first = true;
+        let mut emit = |line: &str| {
+            if !first {
+                hasher.update(b"\n");
+            }
+            first = false;
+            hasher.update(line.as_bytes());
+        };
+        if self.runs.is_empty() {
+            self.run.sort_unstable();
+            for line in &self.run {
+                emit(line);
+            }
+        } else {
+            if !self.run.is_empty() {
+                self.spill()?;
+            }
+            let mut readers = self
+                .runs
+                .iter()
+                .map(|path| std::fs::File::open(path).map(|f| std::io::BufReader::new(f).lines()))
+                .collect::<std::io::Result<Vec<_>>>()?;
+            let mut heap = BinaryHeap::new();
+            for (index, reader) in readers.iter_mut().enumerate() {
+                if let Some(line) = reader.next().transpose()? {
+                    heap.push(Reverse((line, index)));
+                }
+            }
+            while let Some(Reverse((line, index))) = heap.pop() {
+                emit(&line);
+                if let Some(next) = readers[index].next().transpose()? {
+                    heap.push(Reverse((next, index)));
+                }
+            }
+        }
+        Ok(hex::encode(hasher.finalize()))
+    }
 }
 
 /// The shape sets in force at `tx`, in the share's encoding.

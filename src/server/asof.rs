@@ -2,9 +2,11 @@
 //!
 //! The cut is spooled to disk under one read transaction, which closes before
 //! the first byte is sent. The response is then an SSE stream read from the
-//! spool: `quipu.asof.begin` (manifest, totals, digest, source), numbered
-//! `quipu.asof.part` frames and a `quipu.asof.commit` barrier, built by the
-//! same part builder as the change stream's oversized transactions.
+//! spool. A cut that fits one frame is a single `quipu.asof` {manifest,
+//! records}. A larger one is `quipu.asof.begin` (manifest, totals, digest,
+//! source), numbered `quipu.asof.part` frames and a `quipu.asof.commit`
+//! barrier, built by the same part builder as the change stream's oversized
+//! transactions.
 //!
 //! Every refusal and every abort is answered before the stream starts, so a
 //! follower never receives part of a cut it should not apply.
@@ -152,7 +154,33 @@ struct Sending {
     _slot: tokio::sync::OwnedSemaphorePermit,
 }
 
+/// A cut small enough for one frame: `quipu.asof` {manifest, records}.
+fn single_frame(cut: &Cut) -> Option<FeedFrame> {
+    if cut.parts.parts > 1 {
+        return None;
+    }
+    let records = match std::fs::read_to_string(&cut.spool).ok()?.lines().next() {
+        Some(line) => serde_json::from_str::<serde_json::Value>(line).ok()?["records"].clone(),
+        None => json!([]),
+    };
+    let data = json!({"manifest": cut.manifest, "records": records}).to_string();
+    quipu::feed_parts::fits_frame_len(data.len()).then(|| FeedFrame {
+        event: "quipu.asof",
+        id: Some(cut.manifest.watermark_tx),
+        data,
+    })
+}
+
 fn stream_cut(cut: Cut, slot: tokio::sync::OwnedSemaphorePermit) -> Response {
+    if let Some(frame) = single_frame(&cut) {
+        let spool = Spool(cut.spool);
+        let output = futures::stream::once(async move {
+            let _spool = spool;
+            let _slot = slot;
+            Ok::<_, Infallible>(frame.into_sse())
+        });
+        return Sse::new(output).into_response();
+    }
     let source = json!(cut.manifest.source);
     let source_tx = cut.manifest.watermark_tx;
     let begin = FeedFrame {

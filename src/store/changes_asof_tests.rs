@@ -272,7 +272,7 @@ fn a_cut_over_the_part_budget_splits_and_reassembles() {
     fixture(&mut source);
     let spool = tempfile::tempdir().unwrap();
     let limits = Limits {
-        part_max_len: 400,
+        part_max_len: 900,
         ..Limits::default()
     };
     let cut = cut(&source, &request(&source, None), spool.path(), &limits).unwrap();
@@ -498,4 +498,153 @@ fn a_pinned_cut_leaves_out_later_asserts_for_the_tail() {
     );
     let replica = replay_onto(&source, cut.manifest.watermark_tx, bootstrap(&cut));
     assert_equal(&source, &replica, "after the tail");
+}
+
+/// The applier's digest, verbatim from quipu #803
+/// (`applier::share_graph_digest`). It is the oracle here until that PR
+/// lands; then this test calls the applier's function directly.
+fn applier_share_graph_digest(records: &[&Json]) -> String {
+    use sha2::{Digest, Sha256};
+    fn canonical(v: &Json) -> String {
+        match v {
+            Json::Object(map) => {
+                let mut keys: Vec<&String> = map.keys().collect();
+                keys.sort();
+                let body: Vec<String> = keys
+                    .into_iter()
+                    .map(|k| format!("{}:{}", Json::String(k.clone()), canonical(&map[k])))
+                    .collect();
+                format!("{{{}}}", body.join(","))
+            }
+            Json::Array(items) => {
+                let body: Vec<String> = items.iter().map(canonical).collect();
+                format!("[{}]", body.join(","))
+            }
+            other => other.to_string(),
+        }
+    }
+    let mut lines: Vec<String> = records.iter().map(|r| canonical(r)).collect();
+    lines.sort();
+    hex::encode(Sha256::digest(lines.join("\n").as_bytes()))
+}
+
+/// The producer's per-graph digest equals the applier's, both when it sorts
+/// in memory and when it spills sorted runs to disk and merges them.
+#[test]
+fn the_graph_digest_is_the_appliers_with_and_without_spilled_runs() {
+    let mut source = Store::open_in_memory().unwrap();
+    fixture(&mut source);
+    for run_bytes in [usize::MAX, 64, 700] {
+        let spool = tempfile::tempdir().unwrap();
+        let limits = Limits {
+            digest_run_bytes: run_bytes,
+            ..Limits::default()
+        };
+        let cut = cut(&source, &request(&source, None), spool.path(), &limits).unwrap();
+        let records = spooled_records(&cut);
+        let refs: Vec<&Json> = records.iter().collect();
+        assert_eq!(
+            cut.manifest.completeness.graphs[G].digest,
+            format!("sha256:{}", applier_share_graph_digest(&refs)),
+            "run_bytes {run_bytes}"
+        );
+        // The run directory is gone; only the spool remains.
+        let left: Vec<_> = std::fs::read_dir(spool.path()).unwrap().collect();
+        assert_eq!(left.len(), 1, "{left:?}");
+    }
+}
+
+/// Records carry the /changes transaction fields the applier reads.
+#[test]
+fn records_carry_their_transaction_time_actor_and_source() {
+    let mut source = Store::open_in_memory().unwrap();
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    let cut = cut(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &Limits::default(),
+    )
+    .unwrap();
+    for record in spooled_records(&cut) {
+        assert_eq!(record["timestamp"], TS1, "{record}");
+        assert!(record.get("actor").is_some() && record.get("source").is_some());
+    }
+}
+
+/// ROOT is cut only when named, and then equals the source with the tail.
+#[test]
+fn root_is_cut_when_named_and_tails_to_equality() {
+    let mut source = Store::open_in_memory().unwrap();
+    let e = source.intern("http://example.org/korimako").unwrap();
+    let a = source.intern("http://example.org/name").unwrap();
+    source
+        .transact(
+            &[datum(e, a, Value::Str("korimako".into()), TS1, Op::Assert)],
+            TS1,
+            None,
+            None,
+        )
+        .unwrap();
+    let spool = tempfile::tempdir().unwrap();
+    let mut r = request(&source, None);
+    r.graphs = vec!["ROOT".into()];
+    let cut = cut(&source, &r, spool.path(), &Limits::default()).unwrap();
+    assert_eq!(cut.manifest.completeness.graphs["ROOT"].records, 1);
+    let records = spooled_records(&cut);
+    assert_eq!(records[0]["graph"], "ROOT");
+    let b = source.intern("http://example.org/cpuCores").unwrap();
+    source
+        .transact(
+            &[datum(e, b, Value::Int(8), TS2, Op::Assert)],
+            TS2,
+            None,
+            None,
+        )
+        .unwrap();
+    let replica = replay_onto(&source, cut.manifest.watermark_tx, bootstrap(&cut));
+    assert_equal(&source, &replica, "ROOT after the tail");
+}
+
+/// One slow SQLite step cannot outrun the time ceiling: the progress handler
+/// interrupts it mid-statement, without waiting for a 10,000-record check.
+#[test]
+fn the_time_ceiling_interrupts_a_single_slow_step() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    let source = Store::open_in_memory().unwrap();
+    let slow = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000000) \
+                SELECT COUNT(*) FROM n";
+    let run = |timeout: std::time::Duration| {
+        let flag = Arc::new(AtomicU8::new(0));
+        let limits = Limits {
+            read_timeout: timeout,
+            ..Limits::default()
+        };
+        let guard = crate::asof_share::ReadPhaseGuard::install(
+            &source,
+            std::time::Instant::now(),
+            &limits,
+            None,
+            0,
+            Arc::clone(&flag),
+        )
+        .unwrap();
+        let started = std::time::Instant::now();
+        let result: Result<i64, _> = source.conn.query_row(slow, [], |r| r.get(0));
+        drop(guard);
+        (
+            result.is_ok(),
+            flag.load(Ordering::Acquire),
+            started.elapsed(),
+        )
+    };
+    let (ok, flag, took) = run(std::time::Duration::ZERO);
+    assert!(!ok, "the step ran to completion");
+    assert_eq!(flag, 1, "interrupted by the time ceiling");
+    assert!(took < std::time::Duration::from_secs(1), "{took:?}");
+    // Control: removed on drop, so the same step now completes.
+    let done: i64 = source.conn.query_row(slow, [], |r| r.get(0)).unwrap();
+    assert_eq!(done, 5_000_000);
 }
