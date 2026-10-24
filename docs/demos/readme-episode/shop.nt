@@ -1,0 +1,25 @@
+<https://example.org/shop/checkout> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://example.org/shop/Service> .
+<https://example.org/shop/checkout> <http://www.w3.org/2000/01/rdf-schema#comment> "Takes the order" .
+<https://example.org/shop/checkout> <http://www.w3.org/2000/01/rdf-schema#label> "checkout" .
+<https://example.org/shop/checkout> <http://www.w3.org/ns/prov#wasGeneratedBy> <https://example.org/shop/episode_checkout-trace-1107> .
+<https://example.org/shop/checkout> <https://example.org/shop/calls> <https://example.org/shop/orders> .
+<https://example.org/shop/checkout> <https://example.org/shop/calls> <https://example.org/shop/payments> .
+<https://example.org/shop/episode_checkout-trace-1107> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/prov#Activity> .
+<https://example.org/shop/episode_checkout-trace-1107> <http://www.w3.org/2000/01/rdf-schema#comment> "Traced one checkout request through the shop." .
+<https://example.org/shop/episode_checkout-trace-1107> <http://www.w3.org/2000/01/rdf-schema#label> "checkout-trace-1107" .
+<https://example.org/shop/episode_checkout-trace-1107> <http://www.w3.org/ns/prov#generatedAtTime> "2026-01-05T09:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<https://example.org/shop/episode_checkout-trace-1107> <http://www.w3.org/ns/prov#wasAssociatedWith> "trace 1107" .
+<https://example.org/shop/episode_checkout-trace-1107> <https://example.org/shop/contentHash> "bf543ddb32ac529b" .
+<https://example.org/shop/orders-db> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://example.org/shop/Database> .
+<https://example.org/shop/orders-db> <http://www.w3.org/2000/01/rdf-schema#comment> "Holds orders" .
+<https://example.org/shop/orders-db> <http://www.w3.org/2000/01/rdf-schema#label> "orders-db" .
+<https://example.org/shop/orders-db> <http://www.w3.org/ns/prov#wasGeneratedBy> <https://example.org/shop/episode_checkout-trace-1107> .
+<https://example.org/shop/orders> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://example.org/shop/Service> .
+<https://example.org/shop/orders> <http://www.w3.org/2000/01/rdf-schema#comment> "Stores the order" .
+<https://example.org/shop/orders> <http://www.w3.org/2000/01/rdf-schema#label> "orders" .
+<https://example.org/shop/orders> <http://www.w3.org/ns/prov#wasGeneratedBy> <https://example.org/shop/episode_checkout-trace-1107> .
+<https://example.org/shop/orders> <https://example.org/shop/storesIn> <https://example.org/shop/orders-db> .
+<https://example.org/shop/payments> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://example.org/shop/Service> .
+<https://example.org/shop/payments> <http://www.w3.org/2000/01/rdf-schema#comment> "Charges the card" .
+<https://example.org/shop/payments> <http://www.w3.org/2000/01/rdf-schema#label> "payments" .
+<https://example.org/shop/payments> <http://www.w3.org/ns/prov#wasGeneratedBy> <https://example.org/shop/episode_checkout-trace-1107> .

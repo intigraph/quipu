@@ -1,0 +1,2 @@
+@prefix shop: <https://example.org/shop/> .
+shop:cache a shop:Service .

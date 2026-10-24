@@ -1,0 +1,6 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix shop: <https://example.org/shop/> .
+shop:ServiceShape a sh:NodeShape ; sh:targetClass shop:Service ;
+  sh:property [ sh:path rdfs:comment ; sh:minCount 1 ;
+                sh:message "a service needs a description" ] .

@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 876 596" role="img" aria-label="A terminal recording of quipu 0.16.1. An agent records a traced checkout request as an episode with its source; a guessed service with no description is refused by a rule; a query returns each dependency with the trace it came from; and a read at a time before the trace returns nothing.">
+<style>
+text{font-family:JetBrains Mono,Menlo,Consolas,monospace;font-size:13.5px;white-space:pre}
+@keyframes l0{0%,2.833%{opacity:0}2.843%,98%{opacity:1}99%,100%{opacity:0}}
+.l0{animation:l0 21.10s linear infinite}
+@keyframes c1{0%,5.213%{width:0}16.27%,98%{width:882.0px}99%,100%{width:0}}
+.c1{animation:c1 21.10s steps(105,end) infinite}
+@keyframes l1{0%,5.203%{opacity:0}5.213%,98%{opacity:1}99%,100%{opacity:0}}
+.l1{animation:l1 21.10s linear infinite}
+@keyframes l2{0%,18.182%{opacity:0}18.192%,98%{opacity:1}99%,100%{opacity:0}}
+.l2{animation:l2 21.10s linear infinite}
+@keyframes l3{0%,26.143%{opacity:0}26.153%,98%{opacity:1}99%,100%{opacity:0}}
+.l3{animation:l3 21.10s linear infinite}
+@keyframes l4{0%,26.143%{opacity:0}26.153%,98%{opacity:1}99%,100%{opacity:0}}
+.l4{animation:l4 21.10s linear infinite}
+@keyframes c5{0%,28.523%{width:0}33.999%,98%{width:436.8px}99%,100%{width:0}}
+.c5{animation:c5 21.10s steps(52,end) infinite}
+@keyframes l5{0%,28.513%{opacity:0}28.523%,98%{opacity:1}99%,100%{opacity:0}}
+.l5{animation:l5 21.10s linear infinite}
+@keyframes l6{0%,35.91%{opacity:0}35.92%,98%{opacity:1}99%,100%{opacity:0}}
+.l6{animation:l6 21.10s linear infinite}
+@keyframes l7{0%,36.147%{opacity:0}36.157%,98%{opacity:1}99%,100%{opacity:0}}
+.l7{animation:l7 21.10s linear infinite}
+@keyframes l8{0%,43.966%{opacity:0}43.976%,98%{opacity:1}99%,100%{opacity:0}}
+.l8{animation:l8 21.10s linear infinite}
+@keyframes l9{0%,43.966%{opacity:0}43.976%,98%{opacity:1}99%,100%{opacity:0}}
+.l9{animation:l9 21.10s linear infinite}
+@keyframes c10{0%,46.346%{width:0}49.61%,98%{width:260.4px}99%,100%{width:0}}
+.c10{animation:c10 21.10s steps(31,end) infinite}
+@keyframes l10{0%,46.336%{opacity:0}46.346%,98%{opacity:1}99%,100%{opacity:0}}
+.l10{animation:l10 21.10s linear infinite}
+@keyframes l11{0%,51.285%{opacity:0}51.295%,98%{opacity:1}99%,100%{opacity:0}}
+.l11{animation:l11 21.10s linear infinite}
+@keyframes l12{0%,51.664%{opacity:0}51.674%,98%{opacity:1}99%,100%{opacity:0}}
+.l12{animation:l12 21.10s linear infinite}
+@keyframes l13{0%,52.043%{opacity:0}52.053%,98%{opacity:1}99%,100%{opacity:0}}
+.l13{animation:l13 21.10s linear infinite}
+@keyframes l14{0%,52.423%{opacity:0}52.433%,98%{opacity:1}99%,100%{opacity:0}}
+.l14{animation:l14 21.10s linear infinite}
+@keyframes l15{0%,52.802%{opacity:0}52.812%,98%{opacity:1}99%,100%{opacity:0}}
+.l15{animation:l15 21.10s linear infinite}
+@keyframes l16{0%,53.181%{opacity:0}53.191%,98%{opacity:1}99%,100%{opacity:0}}
+.l16{animation:l16 21.10s linear infinite}
+@keyframes l17{0%,61.142%{opacity:0}61.152%,98%{opacity:1}99%,100%{opacity:0}}
+.l17{animation:l17 21.10s linear infinite}
+@keyframes l18{0%,61.142%{opacity:0}61.152%,98%{opacity:1}99%,100%{opacity:0}}
+.l18{animation:l18 21.10s linear infinite}
+@keyframes c19{0%,63.521%{width:0}70.261%,98%{width:537.6px}99%,100%{width:0}}
+.c19{animation:c19 21.10s steps(64,end) infinite}
+@keyframes l19{0%,63.511%{opacity:0}63.521%,98%{opacity:1}99%,100%{opacity:0}}
+.l19{animation:l19 21.10s linear infinite}
+@keyframes l20{0%,71.936%{opacity:0}71.946%,98%{opacity:1}99%,100%{opacity:0}}
+.l20{animation:l20 21.10s linear infinite}
+@keyframes l21{0%,72.315%{opacity:0}72.325%,98%{opacity:1}99%,100%{opacity:0}}
+.l21{animation:l21 21.10s linear infinite}
+@keyframes l22{0%,72.694%{opacity:0}72.704%,98%{opacity:1}99%,100%{opacity:0}}
+.l22{animation:l22 21.10s linear infinite}
+@keyframes l23{0%,73.073%{opacity:0}73.083%,98%{opacity:1}99%,100%{opacity:0}}
+.l23{animation:l23 21.10s linear infinite}
+@keyframes scroll{0%{transform:translateY(0)}98%{transform:translateY(0px)}99%,100%{transform:translateY(0)}}
+.screen{animation:scroll 21.10s steps(1,end) infinite}
+@media (prefers-reduced-motion: reduce){.screen,[class^=l],[class^=c]{animation:none!important;opacity:1!important}}
+</style>
+<rect width="876" height="596" rx="10" fill="#14141f"/>
+<rect width="876" height="32" rx="10" fill="#20203a"/><rect y="22" width="876" height="10" fill="#20203a"/>
+<circle cx="20" cy="16" r="6" fill="#ff5f57"/><circle cx="40" cy="16" r="6" fill="#febc2e"/><circle cx="60" cy="16" r="6" fill="#28c840"/>
+<text x="438.0" y="21" fill="#8b8fa8" text-anchor="middle" style="font-size:12px">quipu 0.16.1: an agent records an episode</text>
+<clipPath id="term"><rect x="0" y="34" width="876" height="562"/></clipPath>
+<g clip-path="url(#term)"><g class="screen">
+<text class="l0" x="18" y="60" fill="#8b8fa8"># An agent traced one checkout request and records what it saw.</text>
+<clipPath id="k1"><rect class="c1" x="18" y="64" height="19" width="882.0"/></clipPath>
+<text class="l1" x="18" y="79" clip-path="url(#k1)"><tspan fill="#ffc24d">$ </tspan><tspan fill="#f2f2f7">qp episode trace.json --base-ns https://example.org/shop/ --timestamp 2026-01-05T09:00:00Z --db shop.db</tspan></text>
+<text class="l2" x="18" y="98" fill="#d6d7e6">ingested episode &quot;checkout-trace-1107&quot; -- 25 facts (tx 1)</text>
+<text class="l3" x="18" y="117" fill="#d6d7e6"></text>
+<text class="l4" x="18" y="136" fill="#8b8fa8"># It guesses a cache exists, with no description. The rule refuses it.</text>
+<clipPath id="k5"><rect class="c5" x="18" y="140" height="19" width="436.8"/></clipPath>
+<text class="l5" x="18" y="155" clip-path="url(#k5)"><tspan fill="#ffc24d">$ </tspan><tspan fill="#f2f2f7">qp knot guess.ttl --shapes shapes.ttl --db shop.db</tspan></text>
+<text class="l6" x="18" y="174" fill="#ff6b6b">SHACL validation failed: 1 violation(s)</text>
+<text class="l7" x="18" y="193" fill="#ff6b6b">  Violation on https://example.org/shop/cache: a service needs a description</text>
+<text class="l8" x="18" y="212" fill="#d6d7e6"></text>
+<text class="l9" x="18" y="231" fill="#8b8fa8"># Any agent can read it back with its source. $CALLS: who calls whom, from where.</text>
+<clipPath id="k10"><rect class="c10" x="18" y="235" height="19" width="260.4"/></clipPath>
+<text class="l10" x="18" y="250" clip-path="url(#k10)"><tspan fill="#ffc24d">$ </tspan><tspan fill="#f2f2f7">qp read &quot;$CALLS&quot; --db shop.db</tspan></text>
+<text class="l11" x="18" y="269" fill="#d6d7e6">service calls   source</text>
+<text class="l12" x="18" y="288" fill="#d6d7e6">------------------------------------------------------------</text>
+<text class="l13" x="18" y="307" fill="#d6d7e6">&quot;checkout&quot;      &quot;orders&quot;        &quot;trace 1107&quot;</text>
+<text class="l14" x="18" y="326" fill="#d6d7e6">&quot;checkout&quot;      &quot;payments&quot;      &quot;trace 1107&quot;</text>
+<text class="l15" x="18" y="345" fill="#d6d7e6"></text>
+<text class="l16" x="18" y="364" fill="#d6d7e6">2 results</text>
+<text class="l17" x="18" y="383" fill="#d6d7e6"></text>
+<text class="l18" x="18" y="402" fill="#8b8fa8"># Time is part of every fact. $BEFORE: the same question, before the trace.</text>
+<clipPath id="k19"><rect class="c19" x="18" y="406" height="19" width="537.6"/></clipPath>
+<text class="l19" x="18" y="421" clip-path="url(#k19)"><tspan fill="#ffc24d">$ </tspan><tspan fill="#f2f2f7">qp read &quot;$BEFORE&quot; --valid-at 2026-01-04T00:00:00Z --db shop.db</tspan></text>
+<text class="l20" x="18" y="440" fill="#d6d7e6">service calls</text>
+<text class="l21" x="18" y="459" fill="#d6d7e6">----------------------------------------</text>
+<text class="l22" x="18" y="478" fill="#d6d7e6"></text>
+<text class="l23" x="18" y="497" fill="#d6d7e6">0 results</text>
+</g></g>
+</svg>

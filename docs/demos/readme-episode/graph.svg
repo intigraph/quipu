@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="The graph the demo stored, drawn the way Quipu&#x27;s Explore map draws a graph. Cords for Services, Databases and Episodes hang from a main cord; knots are entities sized by their links. checkout calls orders and payments, orders stores in orders-db, and faint strands tie every entity to the episode it came from.">
+<style>
+.t{font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif}
+.m{font-family:JetBrains Mono,Menlo,Consolas,monospace}
+@keyframes tie{0%{opacity:0}8%,95%{opacity:1}100%{opacity:0}}
+.a1{animation:tie 10s 0.00s both infinite}
+.a2{animation:tie 10s 0.00s both infinite}
+.a3{animation:tie 10s 0.15s both infinite}
+.a4{animation:tie 10s 0.15s both infinite}
+.a5{animation:tie 10s 0.30s both infinite}
+.a6{animation:tie 10s 0.30s both infinite}
+.a7{animation:tie 10s 1.20s both infinite}
+.a8{animation:tie 10s 1.28s both infinite}
+.a9{animation:tie 10s 1.36s both infinite}
+.a10{animation:tie 10s 1.44s both infinite}
+.a11{animation:tie 10s 1.80s both infinite}
+.a12{animation:tie 10s 2.05s both infinite}
+.a13{animation:tie 10s 2.30s both infinite}
+.a14{animation:tie 10s 0.60s both infinite}
+.a15{animation:tie 10s 0.72s both infinite}
+.a16{animation:tie 10s 0.84s both infinite}
+.a17{animation:tie 10s 0.96s both infinite}
+.a18{animation:tie 10s 1.08s both infinite}
+@media (prefers-reduced-motion: reduce){[class*=a]{animation:none!important;opacity:1!important}}
+</style>
+<rect width="960" height="540" rx="10" fill="#faf7f0" stroke="#e6e0d2"/>
+<line x1="70" y1="120" x2="890" y2="120" stroke="#2b2b2b" stroke-width="5" stroke-linecap="round"/>
+<line class="a1" x1="190" y1="120" x2="190" y2="470" stroke="#c88a00" stroke-width="3"/>
+<line class="a3" x1="480" y1="120" x2="480" y2="470" stroke="#d6338a" stroke-width="3"/>
+<line class="a5" x1="770" y1="120" x2="770" y2="470" stroke="#2f9e6e" stroke-width="3"/>
+<path class="a7" d="M190 190 C 480 190, 480 190, 770 190" fill="none" stroke="#b9c2d6" stroke-width="5" stroke-opacity=".45"/>
+<path class="a8" d="M480 190 C 625 190, 625 190, 770 190" fill="none" stroke="#b9c2d6" stroke-width="5" stroke-opacity=".45"/>
+<path class="a9" d="M190 282 C 480 282, 480 190, 770 190" fill="none" stroke="#b9c2d6" stroke-width="5" stroke-opacity=".45"/>
+<path class="a10" d="M190 374 C 480 374, 480 190, 770 190" fill="none" stroke="#b9c2d6" stroke-width="5" stroke-opacity=".45"/>
+<path class="a11" d="M190 190 C 250 220, 250 252, 190 282" fill="none" stroke="#55555f" stroke-width="2.2"/>
+<path class="a12" d="M190 190 C 250 220, 250 344, 190 374" fill="none" stroke="#55555f" stroke-width="2.2"/>
+<path class="a13" d="M190 282 C 190 312, 480 160, 480 190" fill="none" stroke="#55555f" stroke-width="2.2"/>
+<g class="a2"><rect x="120" y="80" width="140" height="26" rx="6" fill="#ffffff" stroke="#e6e0d2"/><text x="190" y="98" text-anchor="middle" class="t" fill="#c88a00" font-size="13">Services · 3</text></g>
+<g class="a4"><rect x="410" y="80" width="140" height="26" rx="6" fill="#ffffff" stroke="#e6e0d2"/><text x="480" y="98" text-anchor="middle" class="t" fill="#d6338a" font-size="13">Databases · 1</text></g>
+<g class="a6"><rect x="700" y="80" width="140" height="26" rx="6" fill="#ffffff" stroke="#e6e0d2"/><text x="770" y="98" text-anchor="middle" class="t" fill="#2f9e6e" font-size="13">Episodes · 1</text></g>
+<text class="a11 m" x="241" y="236" fill="#6f6a60" font-size="11">calls</text>
+<text class="a12 m" x="241" y="282" fill="#6f6a60" font-size="11">calls</text>
+<text class="a13 m" x="341" y="236" fill="#6f6a60" font-size="11">storesIn</text>
+<g class="a14"><circle cx="190" cy="190" r="25" fill="#c88a00" opacity=".15"/><circle cx="190" cy="190" r="18" fill="#c88a00"/><text x="190" y="228" text-anchor="middle" class="t" fill="#c88a00" font-size="13">checkout</text></g>
+<g class="a15"><circle cx="190" cy="282" r="25" fill="#c88a00" opacity=".15"/><circle cx="190" cy="282" r="18" fill="#c88a00"/><text x="190" y="320" text-anchor="middle" class="t" fill="#c88a00" font-size="13">orders</text></g>
+<g class="a16"><circle cx="190" cy="374" r="22" fill="#c88a00" opacity=".15"/><circle cx="190" cy="374" r="15" fill="#c88a00"/><text x="190" y="409" text-anchor="middle" class="t" fill="#c88a00" font-size="13">payments</text></g>
+<g class="a17"><circle cx="480" cy="190" r="22" fill="#d6338a" opacity=".15"/><circle cx="480" cy="190" r="15" fill="#d6338a"/><text x="480" y="225" text-anchor="middle" class="t" fill="#d6338a" font-size="13">orders-db</text></g>
+<g class="a18"><circle cx="770" cy="190" r="28" fill="#2f9e6e" opacity=".15"/><circle cx="770" cy="190" r="21" fill="#2f9e6e"/><text x="770" y="231" text-anchor="middle" class="t" fill="#2f9e6e" font-size="13">checkout-trace-1107 (source: trace 1107)</text></g>
+<text x="70" y="514" class="t" fill="#6f6a60" font-size="12"><tspan fill="#c88a00">●</tspan> Services · <tspan fill="#d6338a">●</tspan> Databases · <tspan fill="#2f9e6e">●</tspan> Episodes   —   Knot size: degree (links in this graph). Cords: type groups. Faint strands: provenance.</text>
+</svg>

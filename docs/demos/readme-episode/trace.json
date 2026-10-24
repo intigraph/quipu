@@ -1,0 +1,16 @@
+{
+  "name": "checkout-trace-1107",
+  "episode_body": "Traced one checkout request through the shop.",
+  "source": "trace 1107",
+  "nodes": [
+    {"name": "checkout", "type": "Service", "description": "Takes the order"},
+    {"name": "orders", "type": "Service", "description": "Stores the order"},
+    {"name": "payments", "type": "Service", "description": "Charges the card"},
+    {"name": "orders-db", "type": "Database", "description": "Holds orders"}
+  ],
+  "edges": [
+    {"source": "checkout", "target": "orders", "relation": "calls"},
+    {"source": "checkout", "target": "payments", "relation": "calls"},
+    {"source": "orders", "target": "orders-db", "relation": "storesIn"}
+  ]
+}
