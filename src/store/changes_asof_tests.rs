@@ -436,32 +436,29 @@ fn invalid_selections_are_refused() {
     assert!(spool_is_empty(spool.path()));
 }
 
-/// The scan rides `idx_geav` and needs no sort, so it holds no temporary
-/// B-tree however large the graph is.
+/// The scan is one sequential pass over facts in rowid order: no index
+/// lookups per row and no temporary B-tree, however large the graphs are.
 #[test]
-fn the_cut_scan_needs_no_sort() {
+fn the_cut_scan_is_one_sequential_pass() {
     let mut source = Store::open_in_memory().unwrap();
     fixture(&mut source);
     let mut stmt = source
         .conn
         .prepare(
-            "EXPLAIN QUERY PLAN SELECT e, a, v, tx, valid_from, \
+            "EXPLAIN QUERY PLAN SELECT g, e, a, v, tx, valid_from, \
                     CASE WHEN retracted_tx IS NULL THEN valid_to END \
-             FROM facts INDEXED BY idx_geav \
-             WHERE g = ?1 AND op = 1 AND tx <= ?2 \
-               AND (retracted_tx IS NULL OR retracted_tx > ?2) \
-             ORDER BY e, a, v",
+             FROM facts NOT INDEXED \
+             WHERE g IN (1, 2) AND op = 1 AND tx <= ?1 \
+               AND (retracted_tx IS NULL OR retracted_tx > ?1) \
+             ORDER BY rowid",
         )
         .unwrap();
     let plan: Vec<String> = stmt
-        .query_map([1, 1], |r| r.get::<_, String>(3))
+        .query_map([1], |r| r.get::<_, String>(3))
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert!(
-        !plan.iter().any(|step| step.contains("TEMP B-TREE")),
-        "{plan:?}"
-    );
+    assert_eq!(plan, vec!["SCAN facts".to_string()], "{plan:?}");
 }
 
 /// A cut pinned at an earlier `T` leaves out an assert committed after `T`;
@@ -740,4 +737,49 @@ fn nested_spool_bytes_count_against_the_quota() {
     };
     let reason = aborted(cut(&source, &request(&source, None), spool.path(), &limits));
     assert_eq!(reason, AbortReason::SpoolQuota);
+}
+
+/// Each record carries its own transaction's time, across transactions with
+/// different times, so the per-transaction metadata cache cannot go stale.
+#[test]
+fn each_record_carries_its_own_transactions_time() {
+    let mut source = Store::open_in_memory().unwrap();
+    let g = source.graph_create(G).unwrap();
+    let e = source.intern("http://example.org/korimako").unwrap();
+    let a = source.intern("http://example.org/cpuCores").unwrap();
+    let b = source.intern("http://example.org/memGiB").unwrap();
+    source
+        .transact_to_graph(
+            &[datum(e, a, Value::Int(4), TS1, Op::Assert)],
+            TS1,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    source
+        .transact_to_graph(
+            &[datum(e, b, Value::Int(32), TS2, Op::Assert)],
+            TS2,
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    let spool = tempfile::tempdir().unwrap();
+    let cut = cut(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &Limits::default(),
+    )
+    .unwrap();
+    for record in spooled_records(&cut) {
+        let want = if record["attribute"] == "http://example.org/cpuCores" {
+            TS1
+        } else {
+            TS2
+        };
+        assert_eq!(record["timestamp"], want, "{record}");
+    }
 }

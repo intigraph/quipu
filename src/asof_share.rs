@@ -80,8 +80,8 @@ pub struct Limits {
     pub disk_floor_bytes: u64,
     /// Largest part, in bytes. Tests lower it to exercise splitting.
     pub part_max_len: usize,
-    /// Canonical record lines held in memory before a sorted run is spilled
-    /// to disk while computing a graph digest.
+    /// Canonical record lines held in memory, across every graph's digest,
+    /// before the largest run is sorted and spilled to disk.
     pub digest_run_bytes: usize,
 }
 
@@ -428,41 +428,49 @@ pub(crate) fn cut_with_control(
             .prepare("SELECT timestamp, actor, source FROM transactions WHERE id = ?1")?;
         let mut graphs = BTreeMap::new();
         let mut total = 0usize;
-        for (iri, graph) in &selected {
-            let mut digest = GraphDigest::new(spool_dir, limits.digest_run_bytes)?;
-            let mut records = 0usize;
-            // idx_geav (g, e, a, v) gives this order without a sort, so the
-            // read holds no temporary B-tree, and the same source at the same
-            // T always sends the same records in the same order.
-            let mut stmt = store.conn.prepare(
-                "SELECT e, a, v, tx, valid_from, \
-                        CASE WHEN retracted_tx IS NULL THEN valid_to END \
-                 FROM facts INDEXED BY idx_geav \
-                 WHERE g = ?1 AND op = 1 AND tx <= ?2 \
-                   AND (retracted_tx IS NULL OR retracted_tx > ?2) \
-                 ORDER BY e, a, v",
-            )?;
-            let mut rows = stmt.query(params![graph, watermark_tx])?;
-            while let Some(row) = rows.next()? {
-                let (e, a, v, tx, valid_from, valid_to): (
-                    i64,
-                    i64,
-                    Vec<u8>,
-                    i64,
-                    String,
-                    Option<String>,
-                ) = (
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                );
-                // The /changes assert record, minus the transaction metadata a
-                // state cannot have: a later retract closes the row in place,
-                // so a row retracted after T reports `valid_to: null` exactly
-                // as the feed's assert record does.
+        // One pass over facts in rowid order for every selected graph. Rowid
+        // order is the order rows were written, so the read is sequential
+        // rather than one table lookup per index entry, and consecutive rows
+        // share a transaction, so its metadata is read once per transaction.
+        // The per-graph digest sorts its lines, so emission order does not
+        // reach it; the same source at the same T sends the same records in
+        // the same order.
+        let ids: Vec<String> = selected.iter().map(|(_, g)| g.to_string()).collect();
+        let mut stmt = store.conn.prepare(&format!(
+            "SELECT g, e, a, v, tx, valid_from, \
+                    CASE WHEN retracted_tx IS NULL THEN valid_to END \
+             FROM facts NOT INDEXED \
+             WHERE g IN ({}) AND op = 1 AND tx <= ?1 \
+               AND (retracted_tx IS NULL OR retracted_tx > ?1) \
+             ORDER BY rowid",
+            ids.join(",")
+        ))?;
+        let mut digests: BTreeMap<i64, (String, GraphDigest, usize)> = BTreeMap::new();
+        for (iri, g) in &selected {
+            digests.insert(*g, (iri.clone(), GraphDigest::new(spool_dir)?, 0));
+        }
+        let mut in_memory = 0usize;
+        let mut meta: Option<(i64, Option<String>, Option<String>, Option<String>)> = None;
+        let mut rows = stmt.query(params![watermark_tx])?;
+        while let Some(row) = rows.next()? {
+            let (g, e, a, v, tx, valid_from, valid_to): (
+                i64,
+                i64,
+                i64,
+                Vec<u8>,
+                i64,
+                String,
+                Option<String>,
+            ) = (
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            );
+            if meta.as_ref().is_none_or(|m| m.0 != tx) {
                 let (timestamp, actor, source) = tx_meta.query_row(params![tx], |r| {
                     Ok((
                         r.get::<_, Option<String>>(0)?,
@@ -470,40 +478,61 @@ pub(crate) fn cut_with_control(
                         r.get::<_, Option<String>>(2)?,
                     ))
                 })?;
-                let record = json!({
-                    "op": "assert",
-                    "tx": tx,
-                    "timestamp": timestamp,
-                    "actor": actor,
-                    "source": source,
-                    "graph": iri,
-                    "entity": store.resolve(e)?,
-                    "attribute": store.resolve(a)?,
-                    "value": store.value_json(&Value::from_bytes(&v)?)?,
-                    "valid_from": valid_from,
-                    "valid_to": valid_to,
-                });
-                // serde_json writes object keys sorted at every level, so this
-                // is the canonical line the applier digests.
-                charge(digest.push(record.to_string())?)?;
-                records += 1;
-                total += 1;
-                match builder.push(record) {
-                    Ok(Some(part)) => write_part(part)?,
-                    Ok(None) => {}
-                    Err(RecordTooLarge) => {
-                        return Err(invalid(format!(
-                            "one record in {iri} exceeds the transport frame budget"
-                        )));
-                    }
-                }
-                if total.is_multiple_of(CHECK_EVERY) {
-                    check_ceilings(started, limits, wal.as_deref(), wal_start)?;
-                    during(total)?;
+                meta = Some((tx, timestamp, actor, source));
+            }
+            let (_, timestamp, actor, source) = meta.as_ref().expect("set above");
+            let (iri, digest, records) = digests.get_mut(&g).expect("selected graph");
+            // The /changes assert record. A later retract closes the row in
+            // place, so a row retracted after T reports `valid_to: null`
+            // exactly as the feed's assert record does.
+            let record = json!({
+                "op": "assert",
+                "tx": tx,
+                "timestamp": timestamp,
+                "actor": actor,
+                "source": source,
+                "graph": iri,
+                "entity": store.resolve(e)?,
+                "attribute": store.resolve(a)?,
+                "value": store.value_json(&Value::from_bytes(&v)?)?,
+                "valid_from": valid_from,
+                "valid_to": valid_to,
+            });
+            // serde_json writes object keys sorted at every level, so this is
+            // the canonical line the applier digests.
+            let line = record.to_string();
+            in_memory += line.len();
+            digest.push(line);
+            *records += 1;
+            total += 1;
+            match builder.push(record) {
+                Ok(Some(part)) => write_part(part)?,
+                Ok(None) => {}
+                Err(RecordTooLarge) => {
+                    return Err(invalid(format!(
+                        "one record in {iri} exceeds the transport frame budget"
+                    )));
                 }
             }
+            // Every graph's run shares one memory budget: past it, the
+            // largest run is spilled to disk.
+            if in_memory >= limits.digest_run_bytes {
+                let (_, largest, _) = digests
+                    .values_mut()
+                    .max_by_key(|(_, d, _)| d.pending())
+                    .expect("at least one graph");
+                in_memory -= largest.pending();
+                charge(largest.spill()?)?;
+            }
+            if total.is_multiple_of(CHECK_EVERY) {
+                check_ceilings(started, limits, wal.as_deref(), wal_start)?;
+                during(total)?;
+            }
+        }
+        drop(rows);
+        for (_, (iri, digest, records)) in digests {
             graphs.insert(
-                iri.clone(),
+                iri,
                 GraphCompleteness {
                     records,
                     digest: format!("sha256:{}", digest.finish()?),
@@ -701,31 +730,30 @@ struct GraphDigest {
     dir: tempfile::TempDir,
     run: Vec<String>,
     run_len: usize,
-    run_bytes: usize,
     runs: Vec<PathBuf>,
 }
 
 impl GraphDigest {
-    fn new(spool_dir: &Path, run_bytes: usize) -> std::io::Result<Self> {
+    fn new(spool_dir: &Path) -> std::io::Result<Self> {
         Ok(Self {
             dir: tempfile::Builder::new()
                 .prefix("digest-runs-")
                 .tempdir_in(spool_dir)?,
             run: Vec::new(),
             run_len: 0,
-            run_bytes,
             runs: Vec::new(),
         })
     }
 
-    /// Add one line; returns the bytes spilled to disk, if this filled a run.
-    fn push(&mut self, line: String) -> std::io::Result<u64> {
+    /// Hold one line in the current run; the caller decides when to spill.
+    fn push(&mut self, line: String) {
         self.run_len += line.len();
         self.run.push(line);
-        if self.run_len >= self.run_bytes {
-            return self.spill();
-        }
-        Ok(0)
+    }
+
+    /// Bytes held in memory, not yet spilled.
+    fn pending(&self) -> usize {
+        self.run_len
     }
 
     fn spill(&mut self) -> std::io::Result<u64> {
