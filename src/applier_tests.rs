@@ -1,0 +1,308 @@
+//! The shared applier against the shipped feed: equal replicas from whole
+//! pages and from chunked transactions, and a refusal (with nothing written)
+//! for every case the contract says must not splice.
+use serde_json::{Value as Json, json};
+use sha2::{Digest, Sha256};
+
+use super::*;
+use crate::store::changes::Capture;
+
+const T: &str = "2026-10-24T00:00:00Z";
+
+fn d(store: &Store, e: &str, a: &str, v: Value, op: Op) -> Datum {
+    Datum {
+        entity: store.intern(e).unwrap(),
+        attribute: store.intern(a).unwrap(),
+        value: v,
+        valid_from: T.into(),
+        valid_to: None,
+        op,
+    }
+}
+
+/// A source with ROOT and named-graph writes, a retraction and bytes.
+fn source() -> Store {
+    let mut s = Store::open_in_memory().unwrap();
+    let r = |s: &Store, iri: &str| Value::Ref(s.intern(iri).unwrap());
+    let a = d(
+        &s,
+        "urn:item:1",
+        "urn:p:status",
+        Value::Str("open".into()),
+        Op::Assert,
+    );
+    s.transact(&[a], T, None, None).unwrap();
+    let b = d(
+        &s,
+        "urn:item:1",
+        "urn:p:blob",
+        Value::Bytes(vec![0, 1, 2, 255]),
+        Op::Assert,
+    );
+    s.transact(&[b], T, None, None).unwrap();
+    let g = s.graph_create("urn:graph:board").unwrap();
+    let link = r(&s, "urn:item:2");
+    let c = d(&s, "urn:item:1", "urn:p:blocks", link, Op::Assert);
+    s.transact_to_graph(&[c], T, None, None, g).unwrap();
+    let retract = d(
+        &s,
+        "urn:item:1",
+        "urn:p:status",
+        Value::Str("open".into()),
+        Op::Retract,
+    );
+    let closed = d(
+        &s,
+        "urn:item:1",
+        "urn:p:status",
+        Value::Str("closed".into()),
+        Op::Assert,
+    );
+    s.transact(&[retract, closed], T, None, None).unwrap();
+    s
+}
+
+/// The feed one transaction per page, as `/changes/stream` sends it.
+fn pages(source: &Store) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cursor = 0;
+    loop {
+        let page = source
+            .changes_after(cursor, 1, Capture::OldAndNewValues, None)
+            .unwrap();
+        if page.records.is_empty() {
+            return out;
+        }
+        cursor = page.next_tx;
+        out.push(page.to_json().to_string());
+    }
+}
+
+fn replay(replica: &mut Store, applier: &mut Applier, pages: &[String]) -> Vec<Outcome> {
+    pages
+        .iter()
+        .map(|p| applier.apply_frame(replica, "quipu.changes", p, 1).unwrap())
+        .collect()
+}
+
+#[test]
+fn the_feed_builds_a_replica_equal_to_its_source() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let outcomes = replay(&mut replica, &mut applier, &pages(&src));
+    assert!(
+        outcomes
+            .iter()
+            .all(|o| matches!(o, Outcome::Applied { .. })),
+        "{outcomes:?}"
+    );
+    assert_eq!(live_digest(&src), live_digest(&replica));
+    assert_eq!(
+        applier.progress().unwrap().source_tx,
+        src.latest_tx_id().unwrap()
+    );
+}
+
+#[test]
+fn a_repeated_feed_is_a_duplicate_and_changes_nothing() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let feed = pages(&src);
+    replay(&mut replica, &mut applier, &feed);
+    let before = live_digest(&replica);
+    let again = replay(&mut replica, &mut applier, &feed);
+    assert!(again.iter().all(|o| *o == Outcome::Duplicate), "{again:?}");
+    assert_eq!(before, live_digest(&replica));
+}
+
+#[test]
+fn a_new_source_epoch_means_rebootstrap_never_splice() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let feed = pages(&src);
+    replay(&mut replica, &mut applier, &feed[..2]);
+    let before = live_digest(&replica);
+    let mut page: Json = serde_json::from_str(&feed[2]).unwrap();
+    page["source"]["log_epoch"] = json!("another-epoch");
+    let outcome = applier
+        .apply_frame(&mut replica, "quipu.changes", &page.to_string(), 2)
+        .unwrap();
+    assert!(
+        matches!(outcome, Outcome::Rebootstrap { .. }),
+        "{outcome:?}"
+    );
+    assert_eq!(before, live_digest(&replica), "nothing may be spliced in");
+}
+
+#[test]
+fn a_page_without_its_source_is_refused() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let mut page: Json = serde_json::from_str(&pages(&src)[0]).unwrap();
+    page.as_object_mut().unwrap().remove("source");
+    let outcome = applier
+        .apply_frame(&mut replica, "quipu.changes", &page.to_string(), 1)
+        .unwrap();
+    assert!(matches!(outcome, Outcome::Refused { .. }), "{outcome:?}");
+    assert!(applier.progress().is_none());
+}
+
+#[test]
+fn a_length_only_byte_value_is_refused_and_nothing_is_written() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    let feed = pages(&src);
+    replay(&mut replica, &mut applier, &feed[..1]);
+    let before = (live_digest(&replica), applier.progress().cloned());
+    // The second source transaction carries the bytes: strip them to the
+    // length-only form a pre-F4 source sends.
+    let mut page: Json = serde_json::from_str(&feed[1]).unwrap();
+    for record in page["records"].as_array_mut().unwrap() {
+        if record["value"].get("base64").is_some() {
+            record["value"] = json!({"bytes_len": 4});
+        }
+    }
+    let outcome = applier
+        .apply_frame(&mut replica, "quipu.changes", &page.to_string(), 2)
+        .unwrap();
+    assert!(
+        matches!(&outcome, Outcome::Refused { reason } if reason.contains("length only")),
+        "{outcome:?}"
+    );
+    assert_eq!(before, (live_digest(&replica), applier.progress().cloned()));
+}
+
+/// The chunked frames for one page, in the shape the server sends them
+/// (begin, parts with a running digest of the parts as sent, commit). The
+/// server builds these in `feed_stream::chunk_transaction`; this mirrors its
+/// output format for a library test.
+fn chunk_frames(page: &str, per_part: usize, with_source: bool) -> Vec<(&'static str, String)> {
+    let page: Json = serde_json::from_str(page).unwrap();
+    let records = page["records"].as_array().unwrap().clone();
+    let tx = page["next_tx"].as_i64().unwrap();
+    let mut hasher = Sha256::new();
+    let mut parts = Vec::new();
+    for (index, chunk) in records.chunks(per_part).enumerate() {
+        let before = hex::encode(hasher.clone().finalize());
+        let data =
+            json!({"source_tx": tx, "index": index, "digest_before": before, "records": chunk})
+                .to_string();
+        hasher.update(data.as_bytes());
+        parts.push(data);
+    }
+    let digest = hex::encode(hasher.finalize());
+    let mut frames = vec![(
+        "quipu.changes.begin",
+        json!({"source_tx": tx, "parts": parts.len(), "records": records.len(), "digest": digest})
+            .to_string(),
+    )];
+    frames.extend(parts.into_iter().map(|p| ("quipu.changes.part", p)));
+    let mut commit = json!({"source_tx": tx, "parts": frames.len() - 1, "records": records.len(), "digest": digest});
+    if with_source {
+        commit["source"] = page["source"].clone();
+    }
+    frames.push(("quipu.changes.commit", commit.to_string()));
+    frames
+}
+
+#[test]
+fn a_chunked_transaction_applies_only_when_its_commit_verifies() {
+    let src = source();
+    let feed = pages(&src);
+    // The last source transaction has two records: retract + assert.
+    let frames = chunk_frames(feed.last().unwrap(), 1, true);
+    assert_eq!(frames.len(), 4);
+
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    let before = live_digest(&replica);
+    for (event, data) in &frames[..3] {
+        let o = applier.apply_frame(&mut replica, event, data, 3).unwrap();
+        assert!(matches!(o, Outcome::Buffered { .. }), "{o:?}");
+        assert_eq!(
+            before,
+            live_digest(&replica),
+            "a buffered part is not visible"
+        );
+    }
+    let (event, data) = &frames[3];
+    let o = applier.apply_frame(&mut replica, event, data, 4).unwrap();
+    assert!(matches!(o, Outcome::Applied { .. }), "{o:?}");
+    assert_eq!(live_digest(&src), live_digest(&replica));
+}
+
+#[test]
+fn a_part_out_of_order_resumes_with_nothing_applied() {
+    let src = source();
+    let feed = pages(&src);
+    let frames = chunk_frames(feed.last().unwrap(), 1, true);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    let before = live_digest(&replica);
+    let cursor = applier.progress().unwrap().source_tx;
+    applier
+        .apply_frame(&mut replica, frames[0].0, &frames[0].1, 1)
+        .unwrap();
+    // Skip part 0: part 1 arrives first.
+    let o = applier
+        .apply_frame(&mut replica, frames[2].0, &frames[2].1, 2)
+        .unwrap();
+    assert_eq!(o, Outcome::Resume { from: cursor });
+    let o = applier
+        .apply_frame(&mut replica, frames[3].0, &frames[3].1, 3)
+        .unwrap();
+    assert_eq!(
+        o,
+        Outcome::Resume { from: cursor },
+        "a commit without its chunk resumes"
+    );
+    assert_eq!(before, live_digest(&replica));
+}
+
+#[test]
+fn a_chunked_commit_that_does_not_name_its_source_is_refused() {
+    let src = source();
+    let feed = pages(&src);
+    let frames = chunk_frames(feed.last().unwrap(), 1, false);
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    replay(&mut replica, &mut applier, &feed[..feed.len() - 1]);
+    let before = live_digest(&replica);
+    let outcomes: Vec<Outcome> = frames
+        .iter()
+        .map(|(e, data)| applier.apply_frame(&mut replica, e, data, 1).unwrap())
+        .collect();
+    assert!(
+        matches!(outcomes.last(), Some(Outcome::Refused { .. })),
+        "{outcomes:?}"
+    );
+    assert_eq!(before, live_digest(&replica));
+}
+
+#[test]
+fn the_cursor_survives_reopening_and_freshness_is_never_bounded() {
+    let src = source();
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    assert_eq!(applier.freshness(10).last_frame_age_ms, None);
+    replay(&mut replica, &mut applier, &pages(&src));
+    let progress = applier.progress().cloned();
+    let reopened = Applier::open(&replica).unwrap();
+    assert_eq!(reopened.progress().cloned(), progress);
+    let f = applier.freshness(101);
+    assert_eq!(f.last_frame_age_ms, Some(100));
+    assert!(!f.bounded);
+    assert!(matches!(
+        applier
+            .apply_frame(&mut replica, "quipu.heartbeat", "{}", 5)
+            .unwrap(),
+        Outcome::Ignored
+    ));
+}
