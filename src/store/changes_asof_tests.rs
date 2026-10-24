@@ -8,7 +8,8 @@ use std::path::Path;
 
 use serde_json::Value as Json;
 
-use super::replay_tests::{apply_tx, datum, live_digest, replay_onto};
+use super::replay_tests::{apply_tx, datum, replay_onto};
+use crate::applier::live_digest;
 use crate::asof_share::{AbortReason, Cut, CutError, Limits, Request, cut, cut_with_control};
 use crate::store::Store;
 use crate::types::{Op, Value};
