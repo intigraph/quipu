@@ -648,3 +648,96 @@ fn the_time_ceiling_interrupts_a_single_slow_step() {
     let done: i64 = source.conn.query_row(slow, [], |r| r.get(0)).unwrap();
     assert_eq!(done, 5_000_000);
 }
+
+/// grant's counterexample: moving an IRI between scope and context must
+/// change the scope digest; reordering a list must not.
+#[test]
+fn the_scope_digest_binds_each_list_separately() {
+    use crate::asof_share::scope_digest;
+    let s = |v: &[&str]| v.iter().map(|x| (*x).to_string()).collect::<Vec<_>>();
+    assert_ne!(
+        scope_digest(&s(&["urn:a"]), &s(&["urn:b", "urn:c"])),
+        scope_digest(&s(&["urn:a", "urn:b"]), &s(&["urn:c"])),
+        "boundary shift collided"
+    );
+    assert_ne!(
+        scope_digest(&s(&["urn:a"]), &s(&[])),
+        scope_digest(&s(&[]), &s(&["urn:a"])),
+        "a list swap collided"
+    );
+    assert_eq!(
+        scope_digest(&s(&["urn:b", "urn:a"]), &s(&["urn:d", "urn:c"])),
+        scope_digest(&s(&["urn:a", "urn:b"]), &s(&["urn:c", "urn:d"])),
+        "order changed the digest"
+    );
+}
+
+/// A cut with no records at all still meets the final ceiling check before
+/// any manifest exists.
+#[test]
+fn an_empty_cut_past_its_time_ceiling_is_aborted_without_a_spool() {
+    let mut source = Store::open_in_memory().unwrap();
+    source.graph_create(G).unwrap();
+    let e = source.intern("http://example.org/x").unwrap();
+    let a = source.intern("http://example.org/y").unwrap();
+    source
+        .transact(
+            &[datum(e, a, Value::Int(1), TS1, Op::Assert)],
+            TS1,
+            None,
+            None,
+        )
+        .unwrap();
+    let spool = tempfile::tempdir().unwrap();
+    let limits = Limits {
+        read_timeout: std::time::Duration::ZERO,
+        ..Limits::default()
+    };
+    let reason = aborted(cut(&source, &request(&source, None), spool.path(), &limits));
+    assert_eq!(reason, AbortReason::TimeCeiling);
+    assert!(spool_is_empty(spool.path()));
+}
+
+/// With no allowance (the disk floor above any free space) the cut is
+/// refused before its read transaction opens.
+#[test]
+fn no_disk_allowance_refuses_before_reading() {
+    let mut source = Store::open_in_memory().unwrap();
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    let limits = Limits {
+        disk_floor_bytes: u64::MAX,
+        ..Limits::default()
+    };
+    let mut reads = 0;
+    let reason = aborted(cut_with_control(
+        &source,
+        &request(&source, None),
+        spool.path(),
+        &limits,
+        |_| {
+            reads += 1;
+            Ok(())
+        },
+    ));
+    assert_eq!(reason, AbortReason::SpoolQuota);
+    assert_eq!(reads, 0, "the read phase started");
+    assert!(spool_is_empty(spool.path()));
+}
+
+/// Bytes anywhere under the spool directory (a nested run directory, say)
+/// count against the quota.
+#[test]
+fn nested_spool_bytes_count_against_the_quota() {
+    let mut source = Store::open_in_memory().unwrap();
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    std::fs::create_dir(spool.path().join("digest-runs-old")).unwrap();
+    std::fs::write(spool.path().join("digest-runs-old/run-0"), vec![b'x'; 4096]).unwrap();
+    let limits = Limits {
+        spool_quota_bytes: 4096,
+        ..Limits::default()
+    };
+    let reason = aborted(cut(&source, &request(&source, None), spool.path(), &limits));
+    assert_eq!(reason, AbortReason::SpoolQuota);
+}

@@ -76,6 +76,8 @@ pub struct Limits {
     pub wal_growth_max_bytes: u64,
     /// Disk the spool directory may hold, this cut included.
     pub spool_quota_bytes: u64,
+    /// Free disk a cut always leaves on the spool's filesystem.
+    pub disk_floor_bytes: u64,
     /// Largest part, in bytes. Tests lower it to exercise splitting.
     pub part_max_len: usize,
     /// Canonical record lines held in memory before a sorted run is spilled
@@ -89,6 +91,7 @@ impl Default for Limits {
             read_timeout: Duration::from_secs(300),
             wal_growth_max_bytes: 1024 * 1024 * 1024,
             spool_quota_bytes: 8 * 1024 * 1024 * 1024,
+            disk_floor_bytes: 1024 * 1024 * 1024,
             part_max_len: crate::feed_parts::MAX_FRAME_BYTES.saturating_sub(64),
             digest_run_bytes: 32 * 1024 * 1024,
         }
@@ -159,8 +162,7 @@ pub struct Manifest {
     pub scope: Vec<String>,
     /// Declared context graphs, sorted.
     pub context_graphs: Vec<String>,
-    /// SHA-256 over each scope IRI then `\n`, an empty line, then each
-    /// context IRI then `\n`, both lists sorted.
+    /// [`scope_digest`] of the scope and context lists.
     pub scope_digest: String,
     /// SHA-256 of the read rule the cut was served under ([`POLICY`]).
     pub policy_digest: String,
@@ -204,8 +206,11 @@ pub enum AbortReason {
     TimeCeiling,
     /// The WAL grew past [`Limits::wal_growth_max_bytes`].
     WalCeiling,
-    /// The spool would pass [`Limits::spool_quota_bytes`].
+    /// The spool would pass its allowance: the quota, or the free disk
+    /// above [`Limits::disk_floor_bytes`].
     SpoolQuota,
+    /// A spool write failed for lack of disk.
+    DiskFull,
 }
 
 impl AbortReason {
@@ -216,6 +221,7 @@ impl AbortReason {
             Self::TimeCeiling => "time_ceiling",
             Self::WalCeiling => "wal_ceiling",
             Self::SpoolQuota => "spool_quota",
+            Self::DiskFull => "disk_full",
         }
     }
 }
@@ -234,6 +240,9 @@ impl From<rusqlite::Error> for CutError {
 
 impl From<std::io::Error> for CutError {
     fn from(error: std::io::Error) -> Self {
+        if error.kind() == std::io::ErrorKind::StorageFull {
+            return Self::Aborted(AbortReason::DiskFull);
+        }
         Self::Refused(Error::Store(format!("as-of spool: {error}")))
     }
 }
@@ -252,19 +261,17 @@ pub fn manifest_bytes(manifest: &Manifest) -> Result<Vec<u8>> {
     serde_json::to_vec(&value).map_err(|e| Error::InvalidValue(e.to_string()))
 }
 
-/// The scope digest of [`Manifest::scope_digest`].
+/// The scope digest of [`Manifest::scope_digest`]: SHA-256 over the compact
+/// JSON `{"context_graphs": [...], "scope": [...]}` with both lists sorted.
+/// Each list is tagged, so moving an IRI from one list to the other always
+/// changes the digest.
 #[must_use]
 pub fn scope_digest(scope: &[String], context: &[String]) -> String {
-    let mut text = String::new();
-    for iri in scope {
-        text.push_str(iri);
-        text.push('\n');
-    }
-    text.push('\n');
-    for iri in context {
-        text.push_str(iri);
-        text.push('\n');
-    }
+    let mut scope = scope.to_vec();
+    let mut context = context.to_vec();
+    scope.sort();
+    context.sort();
+    let text = json!({"scope": scope, "context_graphs": context}).to_string();
     crate::share::sha256(text.as_bytes())
 }
 
@@ -304,9 +311,19 @@ pub(crate) fn cut_with_control(
         return Err(invalid("a graph is both in scope and in context"));
     }
     std::fs::create_dir_all(spool_dir)?;
-    // Refused before the transaction opens: a full spool directory must not
-    // pin the WAL at all.
-    if spool_usage(spool_dir)? >= limits.spool_quota_bytes {
+    // The cut's disk allowance, fixed before the transaction opens: what the
+    // quota leaves after every spool, run and cache already in the directory,
+    // and never more than the free disk above the floor. One read phase runs
+    // at a time, so no other cut is drawing on it. Parts and sorted runs are
+    // charged against it BEFORE they are written. With no allowance the cut is
+    // refused here and never pins the WAL.
+    let allowance = limits
+        .spool_quota_bytes
+        .saturating_sub(spool_usage(spool_dir)?)
+        .min(free_bytes(spool_dir).map_or(u64::MAX, |free| {
+            free.saturating_sub(limits.disk_floor_bytes)
+        }));
+    if allowance == 0 {
         return Err(CutError::Aborted(AbortReason::SpoolQuota));
     }
 
@@ -386,9 +403,7 @@ pub(crate) fn cut_with_control(
     ));
     let written = (|| {
         let mut file = std::io::BufWriter::new(std::fs::File::create(&spool)?);
-        let quota = limits
-            .spool_quota_bytes
-            .saturating_sub(spool_usage(spool_dir)?);
+        let quota = allowance;
         // Spool parts and spilled digest runs both count against the quota,
         // as they are written.
         let spooled = std::cell::Cell::new(0u64);
@@ -496,12 +511,14 @@ pub(crate) fn cut_with_control(
                 },
             );
         }
-        check_ceilings(started, limits, wal.as_deref(), wal_start)?;
         let (last, summary) = builder.finish();
         if let Some(part) = last {
             write_part(part)?;
         }
         file.flush()?;
+        // The last word before a manifest exists: a cut of any size, even an
+        // empty one, ends inside its ceilings or is aborted.
+        check_ceilings(started, limits, wal.as_deref(), wal_start)?;
         Ok((graphs, summary))
     })();
     // Closing the read transaction ends the pinned window, success or not.
@@ -645,15 +662,32 @@ fn wal_len(wal: Option<&Path>) -> u64 {
         .map_or(0, |meta| meta.len())
 }
 
+/// Every byte under the spool directory: finished spools still being sent,
+/// a partial spool and sorted digest runs.
 fn spool_usage(dir: &Path) -> std::io::Result<u64> {
     let mut total = 0;
     for entry in std::fs::read_dir(dir)? {
-        let meta = entry?.metadata()?;
-        if meta.is_file() {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        if meta.is_dir() {
+            total += spool_usage(&entry.path())?;
+        } else {
             total += meta.len();
         }
     }
     Ok(total)
+}
+
+/// Free bytes on the filesystem holding `dir`, for an unprivileged writer.
+#[cfg(unix)]
+fn free_bytes(dir: &Path) -> Option<u64> {
+    let stat = rustix::fs::statvfs(dir).ok()?;
+    Some(stat.f_bavail.saturating_mul(stat.f_frsize))
+}
+
+#[cfg(not(unix))]
+fn free_bytes(_dir: &Path) -> Option<u64> {
+    None
 }
 
 /// The applier's per-graph share digest (`applier::share_graph_digest`):
