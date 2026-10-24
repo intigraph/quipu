@@ -266,10 +266,10 @@ fn a_chunked_share_equals_the_single_frame_and_applies_only_at_commit() {
     for (event, data) in &frames[..frames.len() - 1] {
         let o = applier.apply_frame(&mut replica, event, data, 1).unwrap();
         assert!(matches!(o, Outcome::Buffered { .. }), "{o:?}");
-        assert!(
-            live_digest(&replica).is_empty(),
-            "nothing is visible before the commit"
-        );
+        // Parts are written as they arrive, inside the open savepoint; the
+        // replica has no cursor yet, so it is not a replica a reader may use.
+        assert!(!replica.conn.is_autocommit(), "one open local transaction");
+        assert_eq!(applier.freshness(1).source_tx, None);
     }
     let (event, data) = frames.last().unwrap();
     let o = applier.apply_frame(&mut replica, event, data, 2).unwrap();
@@ -459,4 +459,33 @@ fn the_graph_digest_ignores_key_order_and_record_order_but_not_content() {
         share_graph_digest(&[&a, &c]),
         share_graph_digest(&[&changed, &c])
     );
+}
+
+#[test]
+fn a_share_is_streamed_never_held_and_a_reopen_mid_share_discards_it() {
+    let src = source();
+    let (manifest, records) = cut(&src);
+    let frames = chunked(&manifest, &records, 2);
+    let (mut replica, mut applier) = empty();
+    for (event, data) in &frames[..frames.len() - 1] {
+        applier.apply_frame(&mut replica, event, data, 1).unwrap();
+        // The applier keeps no records: a part's facts are already in the
+        // store, so its memory is one part, not the share.
+        let held = applier
+            .share
+            .as_ref()
+            .and_then(|s| s.chain.as_ref())
+            .map_or(0, |c| c.buffered.len());
+        assert_eq!(held, 0);
+    }
+    assert!(!live_digest(&replica).is_empty(), "parts were written");
+    drop(applier);
+    // The applier went away mid-share: a new one rolls the share back.
+    let reopened = Applier::open(&replica).unwrap();
+    assert!(replica.conn.is_autocommit());
+    assert!(
+        live_digest(&replica).is_empty(),
+        "nothing of the share stays"
+    );
+    assert!(reopened.progress().is_none());
 }

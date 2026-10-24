@@ -42,14 +42,16 @@ use std::collections::BTreeMap;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value as Json;
-use sha2::{Digest, Sha256};
 
 use crate::error::Result;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
+#[path = "applier_chunk.rs"]
+mod chunk;
 #[path = "applier_digest.rs"]
 mod digest;
+use chunk::Chunk;
 pub use digest::Stop;
 
 /// The source log a replica follows.
@@ -139,55 +141,12 @@ pub struct Freshness {
     pub bounded: bool,
 }
 
-struct Chunk {
-    source_tx: i64,
-    parts: usize,
-    /// Parts accepted so far; the next part's index must equal it.
-    seen: usize,
-    records: usize,
-    digest: String,
-    hasher: Sha256,
-    buffered: Vec<Json>,
-}
-
-impl Chunk {
-    /// Accept the next part if it continues the chain: same source
-    /// transaction, the next index, and a `digest_before` equal to the hash
-    /// of every part so far. `false` breaks the chunk.
-    fn accept(&mut self, part: &Json, data: &str) -> bool {
-        let expected_before = hex::encode(self.hasher.clone().finalize());
-        let in_order = part["source_tx"].as_i64() == Some(self.source_tx)
-            && part["index"].as_u64() == u64::try_from(self.seen).ok()
-            && part["digest_before"].as_str() == Some(expected_before.as_str());
-        if !in_order {
-            return false;
-        }
-        // The digest covers the part EXACTLY as sent, so it is hashed as text.
-        self.hasher.update(data.as_bytes());
-        self.seen += 1;
-        self.buffered
-            .extend(part["records"].as_array().cloned().unwrap_or_default());
-        true
-    }
-
-    /// Whether the commit closes this chunk exactly: every part seen, the
-    /// chained digest and record count as announced.
-    fn complete(&self, commit: &Json) -> bool {
-        let digest = hex::encode(self.hasher.clone().finalize());
-        commit["source_tx"].as_i64() == Some(self.source_tx)
-            && commit["digest"].as_str() == Some(self.digest.as_str())
-            && digest == self.digest
-            && self.seen == self.parts
-            && self.buffered.len() == self.records
-    }
-}
-
 /// The applier for one replica store.
 pub struct Applier {
     progress: Option<Progress>,
     chunk: Option<Chunk>,
-    /// A chunked as-of share being assembled, with its manifest.
-    share: Option<(Chunk, Json)>,
+    /// An as-of share being streamed into the store, inside its savepoint.
+    share: Option<bootstrap::ShareStream>,
     last_frame_ms: Option<u64>,
     stopped: Option<Outcome>,
 }
@@ -204,6 +163,7 @@ impl Applier {
     pub fn open(store: &Store) -> Result<Self> {
         store.conn.execute_batch(PROGRESS_DDL)?;
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
+        bootstrap::discard_open_share(store)?;
         let progress = store
             .conn
             .query_row(
@@ -267,6 +227,10 @@ impl Applier {
                 .and_then(|source| self.check_source(&source));
             return Ok(changed.unwrap_or(stopped));
         }
+        if self.share.is_some() && !event.starts_with("quipu.asof") {
+            // A share is one cut; anything else arriving mid-share breaks it.
+            self.abort_share(store)?;
+        }
         match event {
             "quipu.changes" => self.apply_page(store, data),
             "quipu.changes.begin" => Ok(self.begin_chunk(data)),
@@ -327,15 +291,7 @@ impl Applier {
         }
         // A new begin replaces any chunk in progress: a reconnect replays an
         // interrupted transaction from its first part.
-        self.chunk = Some(Chunk {
-            source_tx,
-            parts: usize::try_from(parts).unwrap_or(usize::MAX),
-            records: usize::try_from(records).unwrap_or(usize::MAX),
-            seen: 0,
-            digest: digest.to_string(),
-            hasher: Sha256::new(),
-            buffered: Vec::new(),
-        });
+        self.chunk = Some(Chunk::new(source_tx, parts, records, digest, true));
         Outcome::Buffered { source_tx }
     }
 

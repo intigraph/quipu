@@ -8,9 +8,14 @@
 //! numbered `quipu.asof.part` frames and a `quipu.asof.commit` barrier, with
 //! the same digest chain as a chunked transaction.
 //!
-//! Bootstrap is all or nothing. Every check below refuses with nothing
-//! written; on success the facts and the cursor `(store_id, log_epoch,
-//! watermark_tx)` commit in one savepoint.
+//! Bootstrap is all or nothing, and it never holds the share in memory. The
+//! begin frame (or the single frame) opens ONE local savepoint; each part's
+//! facts are written as it arrives, in batches the size of a part, and its
+//! canonical lines go to a temporary table so the per-graph digests can be
+//! computed in order at the commit without keeping the records. Every check
+//! refuses by rolling the savepoint back, with nothing written; on success
+//! the facts and the cursor `(store_id, log_epoch, watermark_tx)` commit
+//! together.
 
 use std::collections::BTreeMap;
 
@@ -57,6 +62,22 @@ fn canonical(v: &Json) -> String {
     }
 }
 
+/// Lines of the share in progress, one per record, for the commit's digests.
+const LINES_DDL: &str = "CREATE TEMP TABLE IF NOT EXISTS replica_share_lines \
+     (graph TEXT NOT NULL, line TEXT NOT NULL); DELETE FROM temp.replica_share_lines";
+
+/// An as-of share being written inside the `replica_bootstrap` savepoint.
+pub(super) struct ShareStream {
+    /// The digest chain of a chunked share; `None` for a single frame.
+    chain: Option<Chunk>,
+    source: Source,
+    watermark: i64,
+    /// Per graph, the manifest's `(records, digest)`.
+    graphs: BTreeMap<String, (usize, String)>,
+    /// Per graph, the records written so far.
+    counts: BTreeMap<String, usize>,
+}
+
 impl Applier {
     /// One frame of an as-of share. Only an empty replica can be bootstrapped.
     pub(super) fn bootstrap_frame(
@@ -66,129 +87,272 @@ impl Applier {
         data: &str,
     ) -> Result<Outcome> {
         let Ok(frame) = serde_json::from_str::<Json>(data) else {
-            self.share = None;
+            self.abort_share(store)?;
             return Ok(refused("share frame is not JSON"));
         };
+        let records = frame["records"].as_array().map_or(&[][..], Vec::as_slice);
         match event {
             "quipu.asof" => {
-                let records = frame["records"].as_array().cloned().unwrap_or_default();
-                self.bootstrap(store, &frame["manifest"], &records)
+                self.abort_share(store)?;
+                if let Some(outcome) = self.start_share(store, &frame["manifest"], None)? {
+                    return Ok(outcome);
+                }
+                if let Some(outcome) = self.write_share(store, records)? {
+                    return Ok(outcome);
+                }
+                self.finish_share(store)
             }
             "quipu.asof.begin" => {
-                let manifest = frame["manifest"].clone();
-                let (Some(watermark), Some(parts), Some(records), Some(digest)) = (
-                    manifest["watermark_tx"].as_i64(),
+                // A new begin replaces a share in progress: a reconnect
+                // restarts the cut, it never resumes half-way.
+                self.abort_share(store)?;
+                let (Some(watermark), Some(parts), Some(count), Some(digest)) = (
+                    frame["manifest"]["watermark_tx"].as_i64(),
                     frame["parts"].as_u64(),
                     frame["records"].as_u64(),
                     frame["digest"].as_str(),
                 ) else {
                     return Ok(refused("share begin frame is incomplete"));
                 };
-                // A new begin replaces a share in progress: a reconnect
-                // restarts the cut, it never resumes half-way.
-                self.share = Some((
-                    Chunk {
-                        source_tx: watermark,
-                        parts: usize::try_from(parts).unwrap_or(usize::MAX),
-                        records: usize::try_from(records).unwrap_or(usize::MAX),
-                        seen: 0,
-                        digest: digest.to_string(),
-                        hasher: Sha256::new(),
-                        buffered: Vec::new(),
-                    },
-                    manifest,
-                ));
+                let chain = Chunk::new(watermark, parts, count, digest, false);
+                if let Some(outcome) = self.start_share(store, &frame["manifest"], Some(chain))? {
+                    return Ok(outcome);
+                }
                 Ok(Outcome::Buffered {
                     source_tx: watermark,
                 })
             }
             "quipu.asof.part" => {
-                let Some((chunk, _)) = self.share.as_mut() else {
-                    return Ok(Outcome::Resume { from: 0 });
-                };
-                if !chunk.accept(&frame, data) {
-                    self.share = None;
+                let accepted = self
+                    .share
+                    .as_mut()
+                    .and_then(|s| s.chain.as_mut())
+                    .is_some_and(|chain| chain.accept(&frame, data));
+                if !accepted {
+                    self.abort_share(store)?;
                     return Ok(Outcome::Resume { from: 0 });
                 }
+                if let Some(outcome) = self.write_share(store, records)? {
+                    return Ok(outcome);
+                }
                 Ok(Outcome::Buffered {
-                    source_tx: chunk.source_tx,
+                    source_tx: self.share.as_ref().map_or(0, |s| s.watermark),
                 })
             }
             // "quipu.asof.commit"
             _ => {
-                let Some((chunk, manifest)) = self.share.take() else {
-                    return Ok(Outcome::Resume { from: 0 });
-                };
-                if !chunk.complete(&frame) {
+                let complete = self
+                    .share
+                    .as_ref()
+                    .and_then(|s| s.chain.as_ref())
+                    .is_some_and(|chain| chain.complete(&frame));
+                if !complete {
+                    self.abort_share(store)?;
                     return Ok(Outcome::Resume { from: 0 });
                 }
-                self.bootstrap(store, &manifest, &chunk.buffered)
+                self.finish_share(store)
             }
         }
     }
 
-    /// Validate a whole share and apply it in one savepoint.
-    fn bootstrap(
+    /// Roll back a share in progress, if any: nothing of it stays written.
+    pub(super) fn abort_share(&mut self, store: &Store) -> Result<()> {
+        if self.share.take().is_some() {
+            store
+                .conn
+                .execute_batch("ROLLBACK TO replica_bootstrap; RELEASE replica_bootstrap")?;
+        }
+        Ok(())
+    }
+
+    /// Check that the replica can be bootstrapped from `manifest`, then open
+    /// the savepoint. `Some` refuses with nothing opened.
+    fn start_share(
         &mut self,
-        store: &mut Store,
+        store: &Store,
         manifest: &Json,
-        records: &[Json],
-    ) -> Result<Outcome> {
+        chain: Option<Chunk>,
+    ) -> Result<Option<Outcome>> {
         if let Some(p) = &self.progress {
-            return Ok(refused(&format!(
+            return Ok(Some(refused(&format!(
                 "bootstrap needs an empty replica; this one follows {}/{} at {}",
                 p.source.store_id, p.source.log_epoch, p.source_tx
-            )));
+            ))));
         }
         let holds_facts: bool =
             store
                 .conn
                 .query_row("SELECT EXISTS (SELECT 1 FROM facts)", [], |r| r.get(0))?;
         if holds_facts {
-            return Ok(refused(
+            return Ok(Some(refused(
                 "bootstrap needs an empty replica; this store holds facts",
-            ));
+            )));
         }
         let (source, watermark, graphs) = match check_manifest(manifest) {
             Ok(m) => m,
-            Err(reason) => return Ok(refused(&reason)),
+            Err(reason) => return Ok(Some(refused(&reason))),
         };
-        // Every record is a live fact of a graph the manifest lists, and each
-        // graph's records are exactly the ones it counted and digested.
-        let mut by_graph: BTreeMap<String, Vec<&Json>> = BTreeMap::new();
-        for record in records {
-            if record["op"].as_str() != Some("assert") {
-                return Ok(refused(
-                    "a share carries live facts only; a record is not an assert",
-                ));
-            }
-            let graph = record["graph"].as_str().unwrap_or("ROOT").to_string();
-            if !graphs.contains_key(&graph) {
-                return Ok(refused(&format!(
-                    "record in graph {graph:?} outside the share's scope"
-                )));
-            }
-            by_graph.entry(graph).or_default().push(record);
+        // The savepoint must be the outermost transaction, or "all or
+        // nothing" would depend on a caller's commit.
+        if !store.conn.is_autocommit() {
+            return Ok(Some(refused(
+                "the replica store already has a transaction open",
+            )));
         }
-        for (graph, (count, digest)) in &graphs {
-            let held: &[&Json] = by_graph.get(graph).map_or(&[], Vec::as_slice);
-            if held.len() != *count || share_graph_digest(held) != *digest {
-                return Ok(refused(&format!(
-                    "graph {graph:?} does not match the manifest's count and digest"
-                )));
+        store.conn.execute_batch(LINES_DDL)?;
+        store.conn.execute_batch("SAVEPOINT replica_bootstrap")?;
+        self.share = Some(ShareStream {
+            chain,
+            source,
+            watermark,
+            graphs,
+            counts: BTreeMap::new(),
+        });
+        Ok(None)
+    }
+
+    /// Write one batch of the share; `Some` has rolled the whole share back.
+    fn write_share(&mut self, store: &mut Store, records: &[Json]) -> Result<Option<Outcome>> {
+        let Some(share) = self.share.as_mut() else {
+            return Ok(Some(Outcome::Resume { from: 0 }));
+        };
+        match write_batch(store, share, records)? {
+            None => Ok(None),
+            Some(reason) => {
+                self.abort_share(store)?;
+                Ok(Some(refused(&reason)))
             }
         }
-        if let Some(reason) = apply_share(store, &source, watermark, &by_graph)? {
+    }
+
+    /// Verify every graph's count and digest, then commit the facts and the
+    /// cursor together.
+    fn finish_share(&mut self, store: &mut Store) -> Result<Outcome> {
+        let Some(share) = self.share.as_ref() else {
+            return Ok(Outcome::Resume { from: 0 });
+        };
+        if let Some(reason) = verify(store, share)? {
+            self.abort_share(store)?;
             return Ok(refused(&reason));
         }
+        let Some(share) = self.share.take() else {
+            return Ok(Outcome::Resume { from: 0 });
+        };
+        store.conn.execute(
+            "INSERT INTO replica_progress (id, store_id, log_epoch, source_tx) VALUES (1, ?1, ?2, ?3) \
+             ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
+            params![share.source.store_id, share.source.log_epoch, share.watermark],
+        )?;
+        store
+            .conn
+            .execute_batch("RELEASE replica_bootstrap; DELETE FROM temp.replica_share_lines")?;
         self.progress = Some(Progress {
-            source,
-            source_tx: watermark,
+            source: share.source,
+            source_tx: share.watermark,
         });
         Ok(Outcome::Bootstrapped {
-            source_tx: watermark,
+            source_tx: share.watermark,
         })
     }
+}
+
+/// Discard the savepoint of a share left open by an applier that went away
+/// mid-share, so a new applier on the same store starts clean.
+pub(super) fn discard_open_share(store: &Store) -> Result<()> {
+    if !store.conn.is_autocommit() {
+        store
+            .conn
+            .execute_batch("ROLLBACK TO replica_bootstrap; RELEASE replica_bootstrap")?;
+    }
+    Ok(())
+}
+
+/// Write one batch: every record a live fact of a listed graph, never more
+/// records than the manifest counted. `Ok(Some(reason))` refuses the share.
+fn write_batch(
+    store: &mut Store,
+    share: &mut ShareStream,
+    records: &[Json],
+) -> Result<Option<String>> {
+    let mut by_graph: BTreeMap<&str, Vec<&Json>> = BTreeMap::new();
+    for record in records {
+        if record["op"].as_str() != Some("assert") {
+            return Ok(Some(
+                "a share carries live facts only; a record is not an assert".into(),
+            ));
+        }
+        let graph = record["graph"].as_str().unwrap_or("ROOT");
+        if !share.graphs.contains_key(graph) {
+            return Ok(Some(format!(
+                "record in graph {graph:?} outside the share's scope"
+            )));
+        }
+        by_graph.entry(graph).or_default().push(record);
+    }
+    for (graph, records) in by_graph {
+        let count = share.counts.entry(graph.to_string()).or_default();
+        *count += records.len();
+        if *count > share.graphs.get(graph).map_or(0, |(n, _)| *n) {
+            return Ok(Some(format!(
+                "graph {graph:?} has more records than the manifest counted"
+            )));
+        }
+        {
+            let mut insert = store.conn.prepare_cached(
+                "INSERT INTO temp.replica_share_lines (graph, line) VALUES (?1, ?2)",
+            )?;
+            for record in &records {
+                insert.execute(params![graph, canonical(record)])?;
+            }
+        }
+        let timestamp = records[0]["timestamp"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        let mut datums = Vec::with_capacity(records.len());
+        for record in &records {
+            match record_to_datum(store, record, &timestamp)? {
+                Ok(d) => datums.push(d),
+                Err(reason) => return Ok(Some(format!("share graph {graph:?}: {reason}"))),
+            }
+        }
+        if graph == "ROOT" {
+            store.transact(&datums, &timestamp, None, None)?;
+        } else {
+            let g = store.graph_create(graph)?;
+            store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+        }
+    }
+    Ok(None)
+}
+
+/// `Some(reason)` when a graph's records are not exactly the ones the
+/// manifest counted and digested. The digest is [`share_graph_digest`],
+/// computed from the spilled lines in sorted order (SQLite's BINARY order is
+/// the same bytewise order as sorting the strings).
+fn verify(store: &Store, share: &ShareStream) -> Result<Option<String>> {
+    let mut lines = store.conn.prepare_cached(
+        "SELECT line FROM temp.replica_share_lines WHERE graph = ?1 ORDER BY line",
+    )?;
+    for (graph, (count, digest)) in &share.graphs {
+        let mut hasher = Sha256::new();
+        let mut rows = lines.query([graph])?;
+        let mut first = true;
+        while let Some(row) = rows.next()? {
+            if !first {
+                hasher.update(b"\n");
+            }
+            first = false;
+            hasher.update(row.get_ref(0)?.as_str().unwrap_or_default().as_bytes());
+        }
+        let held = share.counts.get(graph).copied().unwrap_or(0);
+        if held != *count || hex::encode(hasher.finalize()) != *digest {
+            return Ok(Some(format!(
+                "graph {graph:?} does not match the manifest's count and digest"
+            )));
+        }
+    }
+    Ok(None)
 }
 
 /// The manifest's source, watermark and per-graph `(records, digest)`, or why
@@ -225,56 +389,6 @@ fn check_manifest(m: &Json) -> std::result::Result<Checked, String> {
         );
     }
     Ok((source, watermark, graphs))
-}
-
-/// Write every graph's facts and the cursor in one savepoint.
-/// `Ok(Some(reason))` refuses with nothing written.
-fn apply_share(
-    store: &mut Store,
-    source: &Source,
-    watermark: i64,
-    by_graph: &BTreeMap<String, Vec<&Json>>,
-) -> Result<Option<String>> {
-    store.conn.execute_batch("SAVEPOINT replica_bootstrap")?;
-    let result = (|| -> Result<Option<String>> {
-        for (graph, records) in by_graph {
-            let timestamp = records[0]["timestamp"]
-                .as_str()
-                .unwrap_or_default()
-                .to_string();
-            let mut datums = Vec::with_capacity(records.len());
-            for record in records {
-                match record_to_datum(store, record, &timestamp)? {
-                    Ok(d) => datums.push(d),
-                    Err(reason) => return Ok(Some(format!("share graph {graph:?}: {reason}"))),
-                }
-            }
-            if graph == "ROOT" {
-                store.transact(&datums, &timestamp, None, None)?;
-            } else {
-                let g = store.graph_create(graph)?;
-                store.transact_to_graph(&datums, &timestamp, None, None, g)?;
-            }
-        }
-        store.conn.execute(
-            "INSERT INTO replica_progress (id, store_id, log_epoch, source_tx) VALUES (1, ?1, ?2, ?3) \
-             ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
-            params![source.store_id, source.log_epoch, watermark],
-        )?;
-        Ok(None)
-    })();
-    match result {
-        Ok(None) => {
-            store.conn.execute_batch("RELEASE replica_bootstrap")?;
-            Ok(None)
-        }
-        other => {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO replica_bootstrap; RELEASE replica_bootstrap")?;
-            other
-        }
-    }
 }
 
 #[cfg(test)]
