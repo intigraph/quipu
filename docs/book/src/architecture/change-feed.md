@@ -27,6 +27,12 @@ mirror exactly which facts did.
   history: a reader never observes half a transaction.
 - **Ordering**: per entity, records arrive in commit order (transaction,
   then write order within it). Across entities there is no ordering promise.
+- **Every page names its source**: `source.store_id` is the store, and
+  `source.log_epoch` is the epoch of its change log, minted when the store is
+  created and minted again by any operation that removes served history. A
+  follower that sees either value change is reading a different history and
+  must re-bootstrap rather than keep its cursor. A store reconstructed from a
+  share mints its own epoch.
 - **Watermark instead of heartbeat**: every page carries `watermark_tx` and
   `watermark_timestamp` — the newest committed transaction. An empty page
   with an advancing watermark means the store is idle (or your graph scope
@@ -76,7 +82,8 @@ Both return one page:
   "next_tx": 43,
   "watermark_tx": 43,
   "watermark_timestamp": "2026-04-03",
-  "capture": "new_values"
+  "capture": "new_values",
+  "source": {"store_id": "urn:uuid:…", "log_epoch": "urn:uuid:…"}
 }
 ```
 

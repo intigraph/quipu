@@ -358,7 +358,15 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
         "records": records.len(),
         "digest": digest,
     });
-    for key in ["next_tx", "watermark_tx", "watermark_timestamp", "capture"] {
+    // `source` names the store and log epoch, so a follower can epoch-check a
+    // chunked transaction exactly as it checks a whole page (F5).
+    for key in [
+        "next_tx",
+        "watermark_tx",
+        "watermark_timestamp",
+        "capture",
+        "source",
+    ] {
         commit[key] = page.get(key).cloned().unwrap_or(Value::Null);
     }
     frames.push_back(FeedFrame {
@@ -370,6 +378,7 @@ pub(crate) fn chunk_transaction(page: &Value, next: i64) -> Result<VecDeque<Feed
             "records": records.len(),
             "bytes": parts.iter().map(String::len).sum::<usize>(),
             "digest": digest,
+            "source": page.get("source").cloned().unwrap_or(Value::Null),
         })
         .to_string(),
     });

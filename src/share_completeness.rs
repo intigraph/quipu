@@ -128,6 +128,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // replay the origin had already spent is accepted on the copy. Excluding it
     // visibly is the only honest option.
     ("attestation_nonces", Disposition::Excluded),
+    // The change log's epoch names ONE copy's history. A reconstruction is a
+    // different copy, so it must not inherit the epoch: excluded, the restored
+    // store mints its own on first open, and a follower holding a cursor into
+    // the original sees the epoch change and re-bootstraps (local-sync-mode §5).
+    ("log_epoch", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.
