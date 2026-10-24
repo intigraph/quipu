@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "file": "demoted-derivation.ttl",
+      "action": "load",
+      "name": "demoted-derivation",
+      "reason": "Retained derivation evidence uses this schema."
+    },
+    {
+      "file": "contributor-knowledge.ttl",
+      "action": "load",
+      "name": "contributor-knowledge",
+      "reason": "Contributor knowledge records require these constraints."
+    },
+    {
+      "file": "aegis-ontology.shapes.ttl",
+      "action": "load",
+      "name": "aegis-ontology",
+      "reason": "Core operational vocabulary and graph constraints."
+    },
+    {
+      "file": "governance.ttl",
+      "action": "load",
+      "name": "governance",
+      "reason": "Governed decisions and provenance constraints."
+    },
+    {
+      "file": "provenance.ttl",
+      "action": "load",
+      "name": "provenance",
+      "reason": "Provenance contract retained under its existing registry name."
+    },
+    {
+      "file": "code-entities.ttl",
+      "action": "load",
+      "name": "code-entities",
+      "reason": "Constraints for populated structural code entities."
+    },
+    {
+      "file": "aegis-class-subsumption.rules.ttl",
+      "action": "load",
+      "name": "class-subsumption",
+      "reason": "The deliberately isolated vocabulary rule is consumed from the loaded registry."
+    },
+    {
+      "file": "aegis-properties.ttl",
+      "action": "exclude",
+      "reason": "Property vocabulary, not a SHACL validation set; graph ingestion is separate."
+    },
+    {
+      "file": "aegis-rules.ttl",
+      "action": "exclude",
+      "reason": "Standalone reasoner input; whole-graph closure is not ordinary shape activation."
+    },
+    {
+      "file": "dispatch-inventory.ttl",
+      "action": "exclude",
+      "reason": "Dispatch inventory data consumed by the audit command, not a shape set."
+    },
+    {
+      "file": "graph-labels.ttl",
+      "action": "exclude",
+      "reason": "Requires a separately accepted population and resource-cost rollout."
+    },
+    {
+      "file": "policies/linkage.ttl",
+      "action": "exclude",
+      "reason": "Standalone structural policy input; not a served SHACL profile."
+    },
+    {
+      "file": "policies/treesitter.ttl",
+      "action": "exclude",
+      "reason": "Standalone structural policy input; not a served SHACL profile."
+    },
+    {
+      "file": "policies/tripwire.ttl",
+      "action": "exclude",
+      "reason": "Standalone structural policy input; not a served SHACL profile."
+    },
+    {
+      "file": "render.ttl",
+      "action": "exclude",
+      "reason": "Opt-in rendering profile; served-schema activation is a separate decision."
+    },
+    {
+      "file": "rule-answers.ttl",
+      "action": "exclude",
+      "reason": "Rule answer profile remains unloaded pending separate schema activation and runtime acceptance."
+    },
+    {
+      "file": "rule-editions.ttl",
+      "action": "exclude",
+      "reason": "Rule catalogue profile remains unloaded pending separate schema activation and runtime acceptance."
+    },
+    {
+      "file": "skill-catalogue.ttl",
+      "action": "exclude",
+      "reason": "Opt-in catalogue profile; source shipment must not activate constraints or expand admission."
+    },
+    {
+      "file": "stored-queries.ttl",
+      "action": "exclude",
+      "reason": "Package-member contract validated by the share importer/exporter, not the served graph."
+    }
+  ]
+}
