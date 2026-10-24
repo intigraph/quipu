@@ -110,9 +110,16 @@ Server to client:
   `/changes`. This bounds volume by entities touched, not datums written.
   `type.new` and `predicate.new` stay store-wide and are emitted only from ROOT,
   unchanged.
-- **Graph tag.** A nullable `graph` column on `events` (NULL = ROOT, so every
-  existing row and consumer reads the same), plus an index `(graph, "offset")`.
-  Additive migration; no backfill.
+- **Graph tag.** A nullable `graph TEXT` column on `events` holding the graph
+  IRI, like `subject`, never a term id (so respacing never rewrites it). NULL
+  means ROOT, so every existing row and consumer reads the same. A partial
+  index `(graph, "offset") WHERE graph IS NOT NULL`. Additive migration; no
+  backfill.
+- **Committed graphs only.** "Registered" means a `committed`-class row in
+  `graphs`; overlay-class rows are registered too, and stay silent.
+- **Lag.** A reader's `lag` counts only its own graph's events (ROOT's when
+  `graph` is absent), or an unfiltered ROOT consumer's lag would climb with
+  board writes it never receives.
 - **Filter rule.** On `/events`, `/events/stream` and WebSocket `events`
   subscriptions, `graph` selects exactly one graph's events. Absent `graph`
   means ROOT only, which is today's behaviour, so no existing consumer starts
