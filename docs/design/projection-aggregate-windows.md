@@ -37,6 +37,15 @@ today.
 - **`until: {"column": "<time column>", "at": "<RFC 3339>"}`**: keep rows
   whose column is strictly before the instant. It uses the same epoch-seconds
   column and index as `since`, so `[since, until)` is one index range.
+- **Whole-second bounds.** A time column is indexed by whole epoch seconds,
+  with a stored fractional second truncated. For a whole-second bound B that
+  is exact: x < B exactly when floor(x) < B, and x >= B exactly when
+  floor(x) >= B, so a closure at 23:59:59.9 falls before midnight and on the
+  right day. A bound with a fractional part cannot be compared that way
+  (floor(x) < floor(B) would exclude 00:00:00.2 from "before 00:00:00.5"). So
+  `since` and `until` must be whole seconds, and a non-zero fraction is
+  refused rather than silently floored. The brief's windows are calendar days,
+  so this costs it nothing.
 - **Day buckets in `group_by`.** `group_by` may be a list of at most two
   dimensions. Each dimension is a column name, `"key"`, or
   `{"column": "<time column>", "bucket": "day"}`, which groups by the UTC
@@ -45,8 +54,11 @@ today.
   `values: [...]` in dimension order; a one-dimension request still returns
   `value` as today.
 - **`after` on `rows`**: rows are already returned in a stable entity order.
-  A response that is `truncated` also returns `next_after` (the last entity
-  returned), and a request with `after` resumes strictly after it. Every page
+  A response that is `truncated` also returns `next_after`, the last row
+  returned as `{entity, graph}`, and a request with `after` resumes strictly
+  after it. The graph is part of the cursor because rows are ordered by
+  (entity, graph): with `graphs`, one entity can be a row in each graph, and
+  an entity-only cursor would skip the rest of them. Every page
   carries `tx`. A page whose `tx` differs from the first page's is a different
   snapshot, and the client restarts rather than splicing.
 
@@ -87,7 +99,8 @@ keyword authoritative, and the 3 items get it.
 ## 4. Tests
 
 - `[since, until)` is inclusive at the start and exclusive at the end, on
-  offset and fractional-second timestamps.
+  offset and fractional-second STORED timestamps. A bound with a non-zero
+  fractional second is refused; `.000` is accepted.
 - Day buckets equal the UTC calendar day computed independently.
 - A two-dimension aggregate equals the sum over one-dimension aggregates
   filtered by each value of the other dimension.
