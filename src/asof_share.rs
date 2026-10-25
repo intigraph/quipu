@@ -104,6 +104,10 @@ impl Default for Limits {
 mod manifest;
 pub use manifest::{Completeness, GraphCompleteness, Manifest, Producer, Source};
 
+#[path = "asof_share/scope.rs"]
+mod scope;
+pub use scope::{refuse_frozen, resolve_graphs, scope_lists};
+
 /// A finished cut: the manifest and the spool its parts were written to.
 #[derive(Debug)]
 pub struct Cut {
@@ -257,16 +261,7 @@ pub(crate) fn cut_with_control(
     limits: &Limits,
     mut during: impl FnMut(usize) -> Result<()>,
 ) -> std::result::Result<Cut, CutError> {
-    let scope = sorted_unique(&request.graphs, "graphs")?;
-    let context = sorted_unique(&request.context_graphs, "context_graphs")?;
-    if scope.is_empty() || scope.len() + context.len() > 64 {
-        return Err(invalid(
-            "as-of share requires 1..=64 explicit named graphs, context included",
-        ));
-    }
-    if scope.iter().any(|iri| context.contains(iri)) {
-        return Err(invalid("a graph is both in scope and in context"));
-    }
+    let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
     std::fs::create_dir_all(spool_dir)?;
     // The cut's disk allowance, fixed before the transaction opens: what the
     // quota leaves after every spool, run and cache already in the directory,
@@ -333,47 +328,16 @@ pub(crate) fn cut_with_control(
         return Err(invalid("as-of share source has no committed transaction"));
     }
 
-    let mut selected = Vec::new();
+    let selected = resolve_graphs(store, &scope, &context)?;
     let mut frozen: Vec<(String, i64, FrozenPack, i64)> = Vec::new();
-    for iri in scope.iter().chain(&context) {
-        // The graph-metadata graph is the source's own record (labels,
-        // lifecycle). It is source-local, and a freeze writes it in the very
-        // transaction a frozen graph's records carry, so a cut naming it
-        // would put two graphs' rows in one source transaction.
-        if iri == crate::namespace::META_GRAPH_IRI {
-            return Err(invalid(format!(
-                "the graph-metadata graph is source-local and is never cut: {iri}"
-            )));
-        }
-        // ROOT is never implied; a caller names it explicitly to cut it.
-        if iri == ROOT {
-            store.check_label_floor(&[0])?;
-            selected.push((iri.clone(), 0));
+    for (iri, graph) in &selected {
+        if *graph == 0 {
             continue;
         }
-        oxrdf::NamedNode::new(iri.clone()).map_err(|e| invalid(format!("graph IRI: {e}")))?;
-        let Some(graph) = store.registered_graph_id(iri)? else {
-            return Err(invalid(format!("unregistered graph: {iri}")));
-        };
-        if store.is_dataset(iri)? {
-            return Err(invalid(format!("dataset IRI, not a graph: {iri}")));
-        }
-        if store.graph_class(graph)?.as_deref() != Some("committed") {
-            return Err(invalid(format!(
-                "as-of share requires a committed graph, not an overlay or fork: {iri}"
-            )));
-        }
-        // Two different things live in packs. A graph CONTRIBUTED by an
-        // attachment belongs to that attachment's owner and is refused. A
-        // FROZEN graph is still a local graph whose rows moved into its own
+        // A FROZEN graph is still a local graph whose rows moved into its own
         // pack: it is read from that pack, never from main, where it would
         // look empty. Inside the transaction the registry must still name the
         // pack verified above, or a thaw or refreeze raced the cut.
-        if store.attached_graphs().contains(&graph) {
-            return Err(invalid(format!(
-                "graph is contributed by an attached pack, not cut by this store: {iri}"
-            )));
-        }
         let pack = frozen_pack(store, iri)?;
         if pack.as_ref() != verified.get(iri) {
             return Err(invalid(format!(
@@ -381,10 +345,8 @@ pub(crate) fn cut_with_control(
             )));
         }
         if let Some(pack) = pack {
-            frozen.push(frozen_member(store, iri, graph, pack, watermark_tx)?);
+            frozen.push(frozen_member(store, iri, *graph, pack, watermark_tx)?);
         }
-        store.check_label_floor(&[graph])?;
-        selected.push((iri.clone(), graph));
     }
     let shapes_hash = shapes_hash(store, watermark_tx)?;
 
@@ -664,5 +626,5 @@ mod support;
 pub(crate) use support::{AssertRecord, ReadPhaseGuard};
 use support::{
     FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_member, frozen_pack,
-    scan_plan, shapes_hash, sorted_unique, spool_usage, wal_len, wal_path,
+    scan_plan, shapes_hash, spool_usage, wal_len, wal_path,
 };

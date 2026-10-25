@@ -1,7 +1,7 @@
 //! The top `k` under ORDER BY LIMIT: the rows the full driven join returns,
 //! after probing only the survivors the ordering can reach (aegis-xacr).
 use super::tests::{
-    BOARD, PREFIX, closes, fixture, put, reference, row_text, topped_run, untopped,
+    BOARD, PREFIX, bag, closes, fixture, put, reference, row_text, topped_run, untopped,
 };
 use crate::sparql::{QueryResult, query};
 use crate::store::Store;
@@ -239,4 +239,57 @@ fn the_survivor_pass_keeps_the_query_budget() {
         matches!(judged, Err(crate::error::Error::QueryTimeout { .. })),
         "{judged:?}"
     );
+}
+
+/// The seeds ready shape (aegis-xacr.1): `NOT EXISTS` over a filtered BGP whose
+/// first pattern is seeded by the outer row. The inner filter is evaluated
+/// once per open item; it can never drive, because its seeded first pattern
+/// has at most a few rows. Before, each evaluation still counted the whole
+/// status predicate first and only then declined: one count per open item.
+#[test]
+fn a_seeded_not_exists_body_declines_before_counting() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("ready.db").to_str().unwrap()).unwrap();
+    let st = "<https://seeds.local/ontology/status>";
+    let mut data = String::new();
+    for i in 0..6000 {
+        let s = format!("<http://example.org/w/{i:04}>");
+        let status = if i % 5 == 0 { "open" } else { "closed" };
+        data.push_str(&format!(
+            "{s} {st} \"{status}\" .\n\
+             {s} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/Action> .\n\
+             {s} <https://schema.org/identifier> \"w-{i}\" .\n"
+        ));
+        if i % 50 == 0 {
+            // An open blocker (i + 5 is open too), so the item is not ready.
+            let blocker = (i + 5) % 6000;
+            data.push_str(&format!(
+                "{s} <https://scbrown.github.io/quechua/ns#blockedOn> <http://example.org/w/{blocker:04}> .\n"
+            ));
+        }
+    }
+    put(&mut store, BOARD, &data);
+    store.set_read_model_enabled(false);
+    let text = format!(
+        "PREFIX schema: <https://schema.org/> PREFIX quechua: <https://scbrown.github.io/quechua/ns#> \
+         PREFIX seeds: <https://seeds.local/ontology/> \
+         SELECT ?id WHERE {{ GRAPH <{BOARD}> {{ ?item seeds:status \"open\" . \
+         ?item a schema:Action ; schema:identifier ?id . \
+         FILTER NOT EXISTS {{ ?item quechua:blockedOn ?blocker . ?blocker seeds:status ?bs . \
+         ?item a schema:Action . FILTER(?bs != \"closed\" && ?bs != \"tombstone\") }} }} }} LIMIT 10000"
+    );
+    let old = reference(|| query(&store, &text).unwrap());
+    let (new, counts) = super::tests::estimated_run(&store, &text);
+    assert_eq!(bag(new.rows()), bag(old.rows()));
+    // 1,200 open items; the 120 blocked by an open item drop out.
+    assert_eq!(new.rows().len(), 1080);
+    assert_eq!(counts, 0, "no outer row should pay a predicate count");
+    // Positive control: a filter on the first pattern's own variables still
+    // reaches the count, so the counter can see a count when one happens.
+    let control = format!(
+        "SELECT ?item WHERE {{ GRAPH <{BOARD}> {{ ?item {st} ?s ; \
+         <https://schema.org/identifier> ?id . FILTER(?s = \"open\") }} }}"
+    );
+    let (_, counted) = super::tests::estimated_run(&store, &control);
+    assert!(counted > 0, "the counter must see a driven count");
 }

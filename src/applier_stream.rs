@@ -490,6 +490,12 @@ impl Applier {
                 self.stopped = Some(outcome.clone());
                 outcome
             }
+            "tx_too_large" => {
+                self.end_session();
+                Outcome::Rebootstrap {
+                    reason: format!("the source cannot frame a transaction: {reason}"),
+                }
+            }
             "epoch_end" => {
                 self.end_session();
                 Outcome::Rebootstrap {

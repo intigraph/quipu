@@ -132,6 +132,12 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // authorization has its own design and ruling: no unauthenticated or
     // read-only caller can pull a cut of the whole board.
     "/share/asof",
+    // aegis-s24.2: the replication stream and its freshness challenge write
+    // nothing either. Write-class for the same reason as /share/asof: a
+    // stream is a standing copy of its scope, fail-closed until per-graph read
+    // authorization has its own ruling.
+    "/replicate/stream",
+    "/replicate/challenge",
     // quipu-923: /reason runs a Datalog ruleset and PERSISTS its derivations
     // (assert + retract through the fact log) — a write however read-shaped
     // "run the reasoner" sounds.

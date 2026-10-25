@@ -14,7 +14,10 @@
     "Q9_subject_strstarts": "9 / 352, 39x",
     "B1_brief_priorities": "aegis-xacr: 22 / 85, 3.8x (1fdea502 without the probe: 77, ratio 1.0)",
     "B2_brief_asks_nested": "aegis-xacr: 16 / 446, 27x (1fdea502 without the probe: 451, ratio 1.1)",
-    "B3_brief_asks_flat": "aegis-xacr: 12 / 329, 27x (1fdea502 without the probe: 311, ratio 1.1)"
+    "B3_brief_asks_flat": "aegis-xacr: 12 / 329, 27x (1fdea502 without the probe: 311, ratio 1.1)",
+    "B4_brief_closes_wide": "aegis-xacr, 2026-10-25, fixture v3: 160 / 808, 5.1x (44d11a0a without the ORDER BY top k, #838: 902 / 856, ratio 0.95)",
+    "B4_brief_closes_24h": "aegis-xacr, 2026-10-25, fixture v3: 123 / 813, 6.6x (44d11a0a: 159 / 833, 5.2x; the filter driver, #733, narrows it)",
+    "B5_brief_gate_edges": "aegis-xacr, 2026-10-25, fixture v3: 3.4 / 169, 50x"
   },
   "classes": {
     "Q1_status_pred": {"min_ratio": 0, "max_p95_ms": 3000, "max_rel_c0": 60},
@@ -28,6 +31,9 @@
     "Q9_subject_strstarts": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 6},
     "B1_brief_priorities": {"min_ratio": 1.5, "max_p95_ms": 1000, "max_rel_c0": 3},
     "B2_brief_asks_nested": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3},
-    "B3_brief_asks_flat": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3}
+    "B3_brief_asks_flat": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3},
+    "B4_brief_closes_wide": {"min_ratio": 2.5, "max_p95_ms": 1000, "max_rel_c0": 15},
+    "B4_brief_closes_24h": {"min_ratio": 2.5, "max_p95_ms": 1000, "max_rel_c0": 10},
+    "B5_brief_gate_edges": {"min_ratio": 8, "max_p95_ms": 1000, "max_rel_c0": 3}
   }
 }

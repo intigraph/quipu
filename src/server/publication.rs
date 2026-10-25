@@ -11,11 +11,21 @@ use super::{
 
 #[path = "asof.rs"]
 mod asof;
+#[path = "replicate_stream.rs"]
+mod replicate_stream;
 
 pub(crate) fn acquisition_routes() -> axum::Router<SharedStore> {
     axum::Router::new()
         .route("/acquire", axum::routing::post(acquire))
         .route("/share/asof", axum::routing::post(asof::share_asof))
+        .route(
+            "/replicate/stream",
+            axum::routing::post(replicate_stream::stream),
+        )
+        .route(
+            "/replicate/challenge",
+            axum::routing::post(replicate_stream::challenge),
+        )
         .route("/acquire/composed", axum::routing::post(acquire_composed))
         .route(
             "/acquire/eligibility",

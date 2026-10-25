@@ -15,6 +15,18 @@ thread_local! {
     static DROVE: Cell<usize> = const { Cell::new(0) };
     static TOPPED: Cell<usize> = const { Cell::new(0) };
     static PROBED: Cell<usize> = const { Cell::new(0) };
+    static ESTIMATED: Cell<usize> = const { Cell::new(0) };
+}
+
+pub(super) fn estimated() {
+    ESTIMATED.set(ESTIMATED.get() + 1);
+}
+
+/// Rows and how many predicate counts the driver paid for them.
+pub(super) fn estimated_run(store: &Store, text: &str) -> (crate::sparql::QueryResult, usize) {
+    ESTIMATED.set(0);
+    let result = query(store, text).unwrap();
+    (result, ESTIMATED.get())
 }
 
 pub(super) fn disabled() -> bool {
