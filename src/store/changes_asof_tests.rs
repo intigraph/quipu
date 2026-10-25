@@ -1172,3 +1172,94 @@ fn a_follower_rebootstraps_across_a_freeze_and_equals_every_named_graph() {
         "the tail arrived"
     );
 }
+
+/// What each of G's records says about where its fact came from, keyed by the
+/// fact itself: `(tx, timestamp, actor, source)`.
+fn provenance_of_g(cut: &Cut) -> std::collections::BTreeMap<String, (Json, Json, Json, Json)> {
+    spooled_records(cut)
+        .into_iter()
+        .filter(|r| r["graph"] == G)
+        .map(|r| {
+            let key = format!("{} {} {}", r["entity"], r["attribute"], r["value"]);
+            (
+                key,
+                (
+                    r["tx"].clone(),
+                    r["timestamp"].clone(),
+                    r["actor"].clone(),
+                    r["source"].clone(),
+                ),
+            )
+        })
+        .collect()
+}
+
+/// FALSIFIER (s24.1.1 review): a pack numbers its transactions itself
+/// (`freeze_io::export_graph_history` re-inserts them), so a pack row's `tx`
+/// is file-local. A frozen graph's records must still say what the same facts
+/// said before the freeze, rather than borrowing main's transaction with the
+/// same number.
+#[test]
+fn a_frozen_graphs_records_keep_the_provenance_they_had_before_the_freeze() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    // Unrelated transactions FIRST, so G's main transaction ids are not the
+    // ids its pack will number them with (1, 2, ...). Without this the two
+    // numberings coincide and the test passes whichever one the cut reads.
+    for i in 0..3 {
+        note(&mut source, &format!("unrelated {i}"), TS2);
+    }
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    let before = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    let want = provenance_of_g(&before);
+    assert!(!want.is_empty(), "instrument: the pre-freeze cut carries G");
+    assert!(
+        want.values().all(|(tx, ..)| tx.as_i64().unwrap() > 3),
+        "control: G's main transaction ids are not the pack's 1, 2, ..."
+    );
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let after = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    let got = provenance_of_g(&after);
+    assert_eq!(
+        got.keys().collect::<Vec<_>>(),
+        want.keys().collect::<Vec<_>>(),
+        "control: the same live facts of G"
+    );
+    for (fact, was) in &want {
+        assert_eq!(
+            &got[fact], was,
+            "provenance of {fact} changed across the freeze"
+        );
+    }
+}
+
+/// FALSIFIER (s24.1.1 review): a pack keeps no main transaction ids, so a cut
+/// as of a transaction BEFORE a scoped graph was frozen cannot say which of
+/// its rows existed then. It must refuse, as `as_of_tx` does over attachments,
+/// rather than return the graph's whole frozen content.
+#[test]
+fn a_cut_from_before_a_scoped_graphs_freeze_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    fixture(&mut source);
+    note(&mut source, "at T", TS2);
+    let spool = tempfile::tempdir().unwrap();
+    let early = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    let t = early.manifest.watermark_tx;
+    note(&mut source, "between T and the freeze", TS2);
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let mut at_t = both(&source);
+    at_t.tx = Some(t);
+    let result = cut(&source, &at_t, spool.path(), &Limits::default());
+    assert!(
+        result.is_err(),
+        "a cut at T={t}, before G was frozen, must be refused, not served from the pack"
+    );
+    // Control: the same request at the head is served.
+    assert!(cut(&source, &both(&source), spool.path(), &Limits::default()).is_ok());
+}

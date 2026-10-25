@@ -294,7 +294,7 @@ pub(crate) fn cut_with_control(
     let mut verified: BTreeMap<String, FrozenPack> = BTreeMap::new();
     for iri in scope.iter().chain(&context) {
         if let Some(pack) = frozen_pack(store, iri)? {
-            store.verify_frozen_pack(&pack.path, iri, &pack.content_hash)?;
+            Store::verify_frozen_pack(&pack.path, iri, &pack.content_hash)?;
             verified.insert(iri.clone(), pack);
         }
     }
