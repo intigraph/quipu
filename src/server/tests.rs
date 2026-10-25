@@ -186,7 +186,7 @@ async fn query_response_carries_structured_usage_metadata() {
             .get::<quipu::request_usage::RequestUsage>(),
         Some(&quipu::request_usage::RequestUsage {
             query_shape: quipu::request_usage::QueryShape::Select,
-            result_size: 0,
+            result_size: Some(0),
         })
     );
 }
@@ -401,10 +401,77 @@ async fn sparql_protocol_post_uses_the_existing_query_deadline() {
     )
     .await
     .expect_err("a standard transport must retain the configured query deadline");
+    let response = err.into_response();
+    assert_eq!(response.status(), axum::http::StatusCode::REQUEST_TIMEOUT);
+    // aegis-raq1ok.1: the 408 still names its shape in the request log, and
+    // its size is unknown (null), never a claimed empty result.
     assert_eq!(
-        err.into_response().status(),
-        axum::http::StatusCode::REQUEST_TIMEOUT
+        response
+            .extensions()
+            .get::<quipu::request_usage::RequestUsage>(),
+        Some(&quipu::request_usage::RequestUsage {
+            query_shape: quipu::request_usage::QueryShape::Select,
+            result_size: None,
+        })
     );
+}
+
+/// aegis-raq1ok.1: the JSON `/query` path (what seeds sends) keeps the shape
+/// of a query that hit its deadline. Every captured 408 in production lacked it
+/// (104 of 104), so a timed-out query could not be told from a missing one.
+#[tokio::test]
+async fn a_query_deadline_408_keeps_its_query_shape() {
+    let mut store = Store::open_in_memory().unwrap();
+    let turtle = (0..100)
+        .map(|i| format!("<http://example.org/s{i}> <http://example.org/p> \"{i}\" ."))
+        .collect::<Vec<_>>()
+        .join("\n");
+    quipu::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-09-02T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    store.search_config_mut().query_timeout_ms = 1;
+    let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
+    for (text, shape) in [
+        (
+            "SELECT ?s WHERE { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f . ?g ?h ?i }",
+            quipu::request_usage::QueryShape::Select,
+        ),
+        (
+            "ASK { ?s ?p ?o . ?a ?b ?c . ?d ?e ?f . ?g ?h ?i . FILTER(?i = \"none\") }",
+            quipu::request_usage::QueryShape::Ask,
+        ),
+    ] {
+        let response = query(
+            State(shared.clone()),
+            axum::http::HeaderMap::new(),
+            axum::Json(json!({ "query": text })),
+        )
+        .await
+        .expect_err("a query past its deadline is still an error to its callers")
+        .into_response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            "{text}"
+        );
+        assert_eq!(
+            response
+                .extensions()
+                .get::<quipu::request_usage::RequestUsage>(),
+            Some(&quipu::request_usage::RequestUsage {
+                query_shape: shape,
+                result_size: None,
+            }),
+            "{text}"
+        );
+    }
 }
 
 /// An embedding provider whose embed is deliberately SLOW, so that whether the

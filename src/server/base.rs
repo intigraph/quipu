@@ -302,7 +302,12 @@ pub(crate) async fn stats(
 // its route to WRITE_ENDPOINTS.
 
 #[derive(Debug)]
-pub(crate) struct AppError(quipu::Error);
+pub(crate) struct AppError(
+    quipu::Error,
+    /// What the failed request was (aegis-raq1ok.1), so its response still
+    /// tells the request log the query shape. Set by the handler that knows it.
+    Option<quipu::request_usage::RequestUsage>,
+);
 
 impl AppError {
     /// Is this the admission/query deadline having interrupted the request?
@@ -323,12 +328,32 @@ impl AppError {
 
 impl From<quipu::Error> for AppError {
     fn from(e: quipu::Error) -> Self {
-        AppError(e)
+        AppError(e, None)
+    }
+}
+
+impl AppError {
+    /// The same error, recording what the failed request was for the log.
+    #[must_use]
+    pub(crate) fn with_usage(mut self, usage: quipu::request_usage::RequestUsage) -> Self {
+        self.1 = Some(usage);
+        self
     }
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
+        let usage = self.1;
+        let mut response = self.plain_response();
+        if let Some(usage) = usage {
+            response.extensions_mut().insert(usage);
+        }
+        response
+    }
+}
+
+impl AppError {
+    fn plain_response(self) -> axum::response::Response {
         // A governance denial is an authorization outcome, not a malformed
         // request — surface it as 403 so callers can distinguish it.
         let status = match &self.0 {
