@@ -651,7 +651,12 @@ fn auth_refusals_carry_a_json_body_not_a_bare_status() {
     // Guarded as TEXT for the same reason write_endpoints_cover_every_route
     // is: server.rs sits behind the `onnx` feature and the default matrix
     // never compiles it, so a behavioural test here would not run. This does.
-    let src = include_str!("../server.rs");
+    let server = include_str!("../server.rs");
+    assert!(
+        server.contains("auth_guard::layer("),
+        "the authentication middleware must remain installed"
+    );
+    let src = [server, include_str!("../server/auth_guard.rs")].join("\n");
     for bare in [
         "StatusCode::UNAUTHORIZED.into_response()",
         "StatusCode::FORBIDDEN.into_response()",
