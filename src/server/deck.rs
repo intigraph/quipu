@@ -13,6 +13,14 @@ use super::SharedStore;
 use super::admission::{read_blocking, write_blocking};
 use super::base::AppError;
 
+/// The `/deck/*` routes; each refuses while the server switch is off.
+pub(crate) fn routes() -> axum::Router<SharedStore> {
+    axum::Router::new()
+        .route("/deck/present", axum::routing::post(deck_present))
+        .route("/deck/attest", axum::routing::post(deck_attest))
+        .route("/deck/receipt", axum::routing::post(deck_receipt))
+}
+
 fn gate(s: &SharedStore) -> Result<(), AppError> {
     if s.deck_http {
         Ok(())

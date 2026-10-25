@@ -700,6 +700,11 @@ pub struct ServerConfig {
     /// `/deck/receipt`, aegis-blh.2). Off by default. Independent of, and in
     /// addition to, the store's operator-only deck switch: both must be on.
     pub deck_http: bool,
+    /// Serve the generic attested-write routes (`/attest/challenge`,
+    /// `/attest/commit`, `/attest/receipt`, aegis-25k). Off by default.
+    /// Independent of, and in addition to, the store's operator-only
+    /// attested-write switch: both must be on.
+    pub attest_http: bool,
 
     /// Expiring, operator-only private specimen capture; omitted by default.
     pub query_capture: Option<QueryCaptureConfig>,
@@ -732,6 +737,7 @@ impl Default for ServerConfig {
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
+            attest_http: false,
             query_capture: None,
             update_full_copy_max_facts: 250_000,
         }
