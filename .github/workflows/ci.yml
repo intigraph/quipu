@@ -519,6 +519,10 @@ jobs:
         run: python3 shapes/verify_shape_invariants.py --selftest
       - name: Verify shape invariants (static)
         run: python3 shapes/verify_shape_invariants.py
+      - name: Verify every shape has a deployment classification
+        run: |
+          python3 scripts/test-shape-manifest.py
+          python3 shapes/verify_manifest.py
 
 
   load-test:
