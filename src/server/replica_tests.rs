@@ -5,6 +5,7 @@ fn config(primary: &str) -> QuipuConfig {
     let mut config = QuipuConfig::default();
     config.server.replica = Some(ReplicaConfig {
         primary_url: primary.into(),
+        expected_store_id: None,
     });
     config
 }
@@ -224,4 +225,53 @@ async fn write_refusal_is_503_and_names_primary_without_redirecting() {
         assert_eq!(value["primary"], "https://primary.example");
         assert_eq!(value["endpoint"], *path);
     }
+}
+
+async fn ready_response(
+    store: quipu::Store,
+    replica: Option<Option<String>>,
+) -> (StatusCode, serde_json::Value) {
+    let mut handle = super::super::StoreHandle::writer_only(store);
+    handle.replica = replica.map(|expected| Arc::new(ReplicaStatus::expecting(expected)));
+    let response = ready(axum::extract::State(Arc::new(handle))).await;
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 4096)
+        .await
+        .unwrap();
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn replica_ready_answers_200_only_for_a_caught_up_expected_follower() {
+    let (source, follower) = applier_follower(3);
+    let expected = source.store_id().unwrap();
+    // Applied, but its bootstrap never reached the watermark.
+    let (status, body) = ready_response(follower, Some(Some(expected.clone()))).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+    assert!(
+        body["reason"].as_str().unwrap().contains("bootstrap"),
+        "{body}"
+    );
+
+    let (source, follower) = applier_follower(3);
+    let expected = source.store_id().unwrap();
+    quipu::follow_ready::mark_caught_up(&follower).unwrap();
+    let (status, body) = ready_response(follower, Some(Some(expected.clone()))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["lineage"], expected);
+    assert_eq!(body["source_tx"], source.latest_tx_id().unwrap());
+
+    let (_, follower) = applier_follower(3);
+    quipu::follow_ready::mark_caught_up(&follower).unwrap();
+    let (status, body) = ready_response(follower, Some(None)).await;
+    assert_eq!(
+        status,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "unset expected id: {body}"
+    );
+
+    let (_, follower) = applier_follower(3);
+    let (status, body) = ready_response(follower, None).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["reason"], "not a replica");
 }

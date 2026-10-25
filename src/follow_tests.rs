@@ -320,3 +320,124 @@ fn one_transaction_over_the_page_cap_stops_the_run() {
     assert_eq!(requests.borrow().len(), 3);
     assert_eq!(follower.cursor(), 0);
 }
+
+#[test]
+fn a_follower_is_ready_only_after_its_bootstrap_reaches_the_watermark() {
+    use crate::follow_ready::{Readiness, readiness};
+    let source = source_with(10);
+    let expected = source.borrow().store_id().unwrap();
+    let mut replica = Store::open_in_memory().unwrap();
+    let (feed, _) = fake(&source);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    // Part of the history, as an interrupted bootstrap leaves it.
+    let first = page_json(&source.borrow(), 0, 3);
+    assert!(matches!(
+        follower.apply("quipu.changes", &first),
+        Ok(Step::Continue)
+    ));
+    assert_eq!(follower.cursor(), 3);
+    let partial = readiness(follower.store, Some(&expected)).unwrap();
+    assert!(
+        matches!(&partial, Readiness::NotReady { reason } if reason.contains("bootstrap")),
+        "{partial:?}"
+    );
+    follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+    let head = source.borrow().latest_tx_id().unwrap();
+    drop(follower);
+    match readiness(&replica, Some(&expected)).unwrap() {
+        Readiness::Ready {
+            lineage, source_tx, ..
+        } => {
+            assert_eq!(lineage, expected);
+            assert_eq!(source_tx, head);
+        }
+        other @ Readiness::NotReady { .. } => {
+            panic!("a caught-up follower must be ready: {other:?}")
+        }
+    }
+    // The right data for another store is still not this follower's job.
+    let other = readiness(&replica, Some("urn:uuid:another-store")).unwrap();
+    assert!(matches!(other, Readiness::NotReady { .. }), "{other:?}");
+}
+
+#[test]
+fn a_follower_whose_source_changed_is_not_ready() {
+    use crate::follow_ready::{Readiness, readiness};
+    let source = source_with(3);
+    let expected = source.borrow().store_id().unwrap();
+    let mut replica = Store::open_in_memory().unwrap();
+    let (feed, _) = fake(&source);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+    drop(follower);
+    assert!(matches!(
+        readiness(&replica, Some(&expected)).unwrap(),
+        Readiness::Ready { .. }
+    ));
+    let other = source_with(5);
+    let (feed, _) = fake(&other);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    assert!(matches!(follower.tail_once(None), Err(Halt::Rebuild(_))));
+    drop(follower);
+    let after = readiness(&replica, Some(&expected)).unwrap();
+    assert!(matches!(after, Readiness::NotReady { .. }), "{after:?}");
+}
+
+/// Real-source pages with one deliberately broken continuation.
+struct BrokenBootstrap {
+    feed: Fake,
+    gap: bool,
+}
+
+impl Feed for BrokenBootstrap {
+    fn page(&mut self, since: i64, _limit: usize) -> std::io::Result<String> {
+        if since == 0 {
+            return Ok(page_json(&self.feed.source.borrow(), 0, 1));
+        }
+        if self.gap {
+            return Ok(page_json(&self.feed.source.borrow(), 3, 3));
+        }
+        let mut page: serde_json::Value =
+            serde_json::from_str(&page_json(&self.feed.source.borrow(), since, 1)).unwrap();
+        page["records"] = serde_json::json!([]);
+        page["next_tx"] = serde_json::json!(since);
+        Ok(page.to_string())
+    }
+
+    fn stream(&mut self, since: i64) -> std::io::Result<Box<dyn BufRead>> {
+        self.feed.stream(since)
+    }
+}
+
+#[test]
+fn bootstrap_gap_or_nonprogress_cannot_mark_a_partial_follower_ready() {
+    use crate::follow_ready::{Readiness, readiness};
+    for gap in [true, false] {
+        let source = source_with(6);
+        let expected = source.borrow().store_id().unwrap();
+        let mut replica = Store::open_in_memory().unwrap();
+        let (feed, _) = fake(&source);
+        let mut follower = Follower::open(&mut replica, BrokenBootstrap { feed, gap }).unwrap();
+        let result = follower.bootstrap(small_pace(), &mut |_| {});
+        assert!(
+            matches!(result, Err(Halt::Transport(_))),
+            "gap={gap}: {result:?}"
+        );
+        assert_eq!(follower.cursor(), 1);
+        assert!(matches!(
+            readiness(follower.store, Some(&expected)).unwrap(),
+            Readiness::NotReady { .. }
+        ));
+        // A normal retry uses committed progress, completes, and becomes ready.
+        drop(follower);
+        let (feed, requests) = fake(&source);
+        let mut follower = Follower::open(&mut replica, feed).unwrap();
+        follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+        assert_eq!(requests.borrow()[0], ("page", 1));
+        assert_eq!(follower.cursor(), 6);
+        assert!(matches!(
+            readiness(follower.store, Some(&expected)).unwrap(),
+            Readiness::Ready { source_tx: 6, .. }
+        ));
+    }
+}

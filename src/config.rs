@@ -613,6 +613,10 @@ impl Default for QuipuConfig {
 pub struct ReplicaConfig {
     /// Primary URL named by write refusals; the replica never forwards writes.
     pub primary_url: String,
+    /// The source store this follower must hold. `GET /replica/ready` answers
+    /// 503 until it does, and always when this is unset.
+    #[serde(default)]
+    pub expected_store_id: Option<String>,
 }
 
 /// Opt-in relay (docs/design/shared-applier-api.md §6): the store follows an
