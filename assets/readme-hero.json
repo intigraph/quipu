@@ -1,0 +1,11 @@
+{
+  "theme": "Thread Workshop",
+  "pixelsrc_revision": "48023226cacf81ce5ba5e493cc98d94fea5d7e23",
+  "sprite": "quipu",
+  "scale": 4,
+  "source": "assets/quipu-hero.pxl",
+  "source_sha256": "32d7119a15513cc8a36ea0cbba9bce3ebf5777402195a59cb46f2fc4436fe8f9",
+  "render": "assets/header.png",
+  "render_sha256": "f28a4d3819bb41c269cbfe8482aa603ab063d962fbc73b2efaf57637b7dd07fa",
+  "display_width": 704
+}
