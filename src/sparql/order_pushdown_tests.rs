@@ -435,3 +435,34 @@ fn declines_metadata_names_and_non_plain_right_sides_but_keeps_plain_ones() {
         "{p} WHERE {{ ?s ex:rank ?rank OPTIONAL {{ ?s ex:other _:o }} }} ORDER BY ?rank LIMIT 3"
     )));
 }
+
+/// The filter driver asks `total_within` of every survivor, up to its scan
+/// ceiling, before any probe, so the pass must keep the query budget (review
+/// of #838). Live context: judged. Passed deadline: the budget error, not an
+/// answer.
+#[test]
+fn the_total_order_pass_keeps_the_query_budget() {
+    let store = Store::open_in_memory().unwrap();
+    let rows: Vec<Bindings> = ["a", "b", "c"]
+        .iter()
+        .map(|v| {
+            [("k".to_string(), crate::types::Value::Str((*v).to_string()))]
+                .into_iter()
+                .collect()
+        })
+        .collect();
+    let keys = vec![spargebra::algebra::OrderExpression::Asc(
+        spargebra::algebra::Expression::Variable(spargebra::term::Variable::new_unchecked("k")),
+    )];
+    let live = TemporalContext::default();
+    assert!(super::order_pushdown::total_within(&store, &rows, &keys, &live).unwrap());
+    let expired = TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..TemporalContext::default()
+    };
+    let judged = super::order_pushdown::total_within(&store, &rows, &keys, &expired);
+    assert!(
+        matches!(judged, Err(crate::error::Error::QueryTimeout { .. })),
+        "{judged:?}"
+    );
+}

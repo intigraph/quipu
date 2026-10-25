@@ -324,6 +324,7 @@ pub fn eval_pattern_seeded(
                 order_limit: None,
                 ..ctx.clone()
             };
+            let _top = super::filter_drive::TopGuard::arm(inner, expression, ctx.order_limit);
             // aegis-xacr: under a limit, hydrate OPTIONALs for only the rows
             // the limit can return.
             let pushed = ctx

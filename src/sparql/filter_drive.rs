@@ -40,10 +40,40 @@
 //! (`RAND`, `NOW`, `UUID`, `STRUUID`, `BNODE`) and custom functions, history
 //! and as-of reads, a LIMIT pushed into the BGP, and graphs the resident read
 //! model already joins in memory.
+//!
+//! # Top `k` under ORDER BY LIMIT
+//!
+//! The same panel orders by `DESC(?end)` and keeps 101 rows. A wide window
+//! (11 days kept 33,719 of 72,848 end times on the 2026-10-24 board) both
+//! fails the half-the-driver test above, so the original plan probed every
+//! done item, and would cost one probe per survivor if driven. When the
+//! enclosing `OrderBy` hands down its keys and `k`, the survivors are sorted
+//! first and only probed until `k` joined rows exist. The answer is the one the
+//! full join gives:
+//!
+//! - every key reads only variables the driver binds, so each joined row
+//!   carries its survivor's keys, and the other patterns never rebind them;
+//! - the sort is stable, so the survivors keep their scan order among equal
+//!   keys, and the joined rows reach the outer stable top-`k` in the same
+//!   relative order the full join would produce. A survivor sorted after the
+//!   one that reached `k` has keys no better than those `k` rows and comes
+//!   after them in that order, so none of its rows could be returned, even
+//!   on a tie;
+//! - the whole filter is judged on the driver, and no conjunct raises on any
+//!   driver row. Each joined row then meets the caller's filter exactly as its
+//!   survivor did, so counting joined rows counts returned rows, and no row
+//!   the original would have filtered can hide an error the original raises.
+//!   A survivor some conjunct leaves a type error (an ill-typed end time) is
+//!   one the caller's filter drops, so only the rows every conjunct judged
+//!   `true` are ordered;
+//! - the keys must be totally ordered over all survivors, the same
+//!   comparison-class test `order_pushdown` applies.
+//!
+//! Anything else takes the plan above unchanged.
 
 use std::collections::HashSet;
 
-use spargebra::algebra::{Expression, Function, GraphPattern};
+use spargebra::algebra::{Expression, Function, GraphPattern, OrderExpression};
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use super::filter::eval_filter_tv;
@@ -58,9 +88,65 @@ pub(super) const MIN_DRIVER_ROWS: usize = 4096;
 /// A larger filtered pattern costs more to scan than the probes it can save.
 pub(super) const MAX_SCAN_ROWS: usize = 262_144;
 
+/// The ORDER BY keys and limit an `OrderBy` armed for one BGP node.
+struct Top {
+    bgp: *const GraphPattern,
+    keys: Vec<OrderExpression>,
+    k: usize,
+}
+
+thread_local! {
+    static TOP: std::cell::RefCell<Option<Top>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Offers an `OrderBy`'s keys and limit to the filtered BGP directly below
+/// it, and to no other pattern: [`try_eval`] takes them only for that exact
+/// node, so a pattern inside `EXISTS`, a subquery or the COUNT path never
+/// sees them. Restores the enclosing offer when dropped.
+pub(super) struct TopGuard(Option<Option<Top>>);
+
+impl TopGuard {
+    /// Arm for `inner` when it is a `Filter` over a BGP, directly or under
+    /// one named graph (which only re-scopes it), and `limit` is set.
+    pub(super) fn arm(
+        inner: &GraphPattern,
+        keys: &[OrderExpression],
+        limit: Option<usize>,
+    ) -> Self {
+        let inner = match inner {
+            GraphPattern::Graph {
+                name: NamedNodePattern::NamedNode(_),
+                inner,
+            } => inner.as_ref(),
+            other => other,
+        };
+        let (Some(k), GraphPattern::Filter { inner: bgp, .. }) = (limit, inner) else {
+            return Self(None);
+        };
+        if !matches!(bgp.as_ref(), GraphPattern::Bgp { .. }) {
+            return Self(None);
+        }
+        let top = Top {
+            bgp: std::ptr::from_ref(bgp.as_ref()),
+            keys: keys.to_vec(),
+            k,
+        };
+        Self(Some(TOP.with(|t| t.replace(Some(top)))))
+    }
+}
+
+impl Drop for TopGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.0.take() {
+            TOP.with(|t| *t.borrow_mut() = previous);
+        }
+    }
+}
+
 /// Rows of the BGP under `seed`, driven from a filtered pattern, or `None`
 /// when the original evaluation should run. The rows are not yet filtered by
-/// the whole expression.
+/// the whole expression. Under an armed [`TopGuard`] for `inner`, the rows may
+/// be only those its ordering can return (see the module docs).
 ///
 /// # Errors
 /// Any error from evaluating a pattern, and the query budget. A conjunct's own
@@ -116,14 +202,20 @@ pub(super) fn try_eval(
         return Ok(None);
     }
     let mut kept = Vec::new();
+    // The kept rows every conjunct judged `true`; the others left the joined
+    // rows to decide.
+    let mut sure = Vec::new();
+    let mut clean = true;
     for (i, row) in rows.into_iter().enumerate() {
         check_eval_budget(ctx, i, kept.len())?;
-        if keeps(store, &judged, &row, ctx)? {
-            kept.push(row);
+        let verdict = keeps(store, &judged, &row, ctx)?;
+        match verdict {
+            Verdict::Drop => continue,
+            Verdict::Deferred => clean = false,
+            Verdict::Keep | Verdict::Unknown => {}
         }
-    }
-    if drive != 0 && kept.len() > original / 2 {
-        return Ok(None);
+        sure.push(matches!(verdict, Verdict::Keep));
+        kept.push(row);
     }
     let rest: Vec<TriplePattern> = patterns
         .iter()
@@ -131,12 +223,48 @@ pub(super) fn try_eval(
         .filter(|(i, _)| *i != drive)
         .map(|(_, p)| p.clone())
         .collect();
-    let mut joined = Vec::new();
-    for (i, row) in kept.iter().enumerate() {
-        check_eval_budget(ctx, i, joined.len())?;
-        let (rows, _) = eval_bgp(store, &rest, ctx, row)?;
-        joined.extend(rows);
-    }
+    let top = TOP.with(|t| {
+        t.borrow()
+            .as_ref()
+            .filter(|top| std::ptr::eq(top.bgp, inner))
+            .map(|top| (top.keys.clone(), top.k))
+    });
+    #[cfg(test)]
+    let top = top.filter(|_| !tests::top_disabled());
+    let top = top.filter(|(keys, _)| {
+        clean && judged.len() == conjuncts.len() && driver_keys(keys, &patterns[drive], seed)
+    });
+    // With the whole filter judged and no conjunct raising, a row any
+    // conjunct left unknown is one the caller's filter drops: its joined rows
+    // see the same values, and an unknown conjunct makes the filter `false`
+    // or a type error, never `true`. Only the sure rows can be returned.
+    // Both passes below visit every survivor, so both keep the query budget.
+    let ordered = match top {
+        Some((keys, k)) => {
+            let survivors = sure_rows(&kept, &sure, ctx)?;
+            super::order_pushdown::total_within(store, &survivors, &keys, ctx)?
+                .then_some((survivors, keys, k))
+        }
+        None => None,
+    };
+    let joined = if let Some((survivors, keys, k)) = ordered {
+        // Probing only about `k` survivors costs less than the original plan
+        // however many the filter keeps, so the half-the-driver test is moot.
+        #[cfg(test)]
+        tests::topped();
+        top_joined(store, &rest, ctx, &survivors, &keys, k)?
+    } else {
+        if drive != 0 && kept.len() > original / 2 {
+            return Ok(None);
+        }
+        let mut joined = Vec::new();
+        for (i, row) in kept.iter().enumerate() {
+            check_eval_budget(ctx, i, joined.len())?;
+            let (rows, _) = eval_bgp(store, &rest, ctx, row)?;
+            joined.extend(rows);
+        }
+        joined
+    };
     // Same header as the BGP evaluator: variables in source pattern order.
     let mut vars = Vec::new();
     for pattern in patterns {
@@ -151,6 +279,20 @@ pub(super) fn try_eval(
     Ok(Some((joined, vars)))
 }
 
+/// How the judged prefix decides one driver row.
+enum Verdict {
+    /// Every conjunct is `true`.
+    Keep,
+    /// A conjunct is `false`.
+    Drop,
+    /// Kept: a conjunct's value is a type error, none is `false`, and none
+    /// raises.
+    Unknown,
+    /// Kept for the joined rows to decide: a conjunct raises before any is
+    /// `false`.
+    Deferred,
+}
+
 /// Whether a driver row survives the judged prefix, as the original would
 /// decide it on every row joined from it. See the module docs.
 fn keeps(
@@ -158,17 +300,117 @@ fn keeps(
     prefix: &[&Expression],
     row: &Bindings,
     ctx: &TemporalContext,
-) -> Result<bool> {
+) -> Result<Verdict> {
+    let mut verdict = Verdict::Keep;
     for conjunct in prefix {
         match eval_filter_tv(store, conjunct, row, ctx) {
-            Ok(Some(false)) => return Ok(false),
-            Ok(Some(true) | None) => {}
+            Ok(Some(false)) => return Ok(Verdict::Drop),
+            Ok(Some(true)) => {}
+            Ok(None) => verdict = Verdict::Unknown,
             Err(error) if budget(&error) => return Err(error),
             // Deferred to the joined rows, where the original raises it.
-            Err(_) => return Ok(true),
+            Err(_) => return Ok(Verdict::Deferred),
         }
     }
-    Ok(true)
+    Ok(verdict)
+}
+
+/// Whether every ORDER BY key reads only variables the driver (or the seed)
+/// binds, and nothing a row could change after the driver.
+fn driver_keys(keys: &[OrderExpression], driver: &TriplePattern, seed: &Bindings) -> bool {
+    let bound: HashSet<String> = triple_pattern_vars(driver)
+        .into_iter()
+        .chain(seed.keys().cloned())
+        .collect();
+    keys.iter().all(|order| {
+        let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = order;
+        let mut vars = HashSet::new();
+        stable_vars(e, &mut vars)
+            && vars.is_subset(&bound)
+            && !vars
+                .iter()
+                .any(|v| super::order_pushdown::METADATA.contains(&v.as_str()))
+    })
+}
+
+/// The kept rows every conjunct judged `true`, under the query budget: this
+/// visits every survivor, up to the driver's scan ceiling.
+fn sure_rows(kept: &[Bindings], sure: &[bool], ctx: &TemporalContext) -> Result<Vec<Bindings>> {
+    let mut rows = Vec::new();
+    for (i, (row, sure)) in kept.iter().zip(sure).enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        if *sure {
+            rows.push(row.clone());
+        }
+    }
+    Ok(rows)
+}
+
+/// Above this many ordered survivors, probe them all in scan order instead.
+const MAX_TOP_SURVIVORS: usize = 4096;
+
+/// The joined rows of the survivors an ORDER BY `keys` LIMIT `k` can return:
+/// survivors in stable key order, probed until `k` rows exist.
+///
+/// A survivor after the one that reached `k` has keys no better than those
+/// `k` rows and reaches the outer stable top-`k` after them, so none of its
+/// rows can be returned, tied or not.
+///
+/// The survivors are ordered by the bounded stable top-`m` the `OrderBy`
+/// itself uses, doubling `m` when its prefix runs out. A stable top-`m` is a
+/// prefix of the stable sort, so probing resumes where the shorter one ended.
+fn top_joined(
+    store: &Store,
+    rest: &[TriplePattern],
+    ctx: &TemporalContext,
+    kept: &[Bindings],
+    keys: &[OrderExpression],
+    k: usize,
+) -> Result<Vec<Bindings>> {
+    let mut joined = Vec::new();
+    let mut probed = 0;
+    let mut m = k.max(1);
+    loop {
+        if m >= kept.len().min(MAX_TOP_SURVIVORS + 1) && m < kept.len() {
+            // Too many survivors fail the join: finish in scan order.
+            return all_joined(store, rest, ctx, kept);
+        }
+        let prefix = super::order::top_rows(store, kept.to_vec(), keys, ctx, m)?;
+        for row in &prefix[probed..] {
+            if joined.len() >= k {
+                return Ok(joined);
+            }
+            check_eval_budget(ctx, probed, joined.len())?;
+            #[cfg(test)]
+            tests::probed();
+            let (rows, _) = eval_bgp(store, rest, ctx, row)?;
+            joined.extend(rows);
+            probed += 1;
+        }
+        if joined.len() >= k || prefix.len() < m {
+            // Enough rows, or every survivor is probed.
+            return Ok(joined);
+        }
+        m = m.saturating_mul(2);
+    }
+}
+
+/// Every survivor's joined rows, in scan order.
+fn all_joined(
+    store: &Store,
+    rest: &[TriplePattern],
+    ctx: &TemporalContext,
+    kept: &[Bindings],
+) -> Result<Vec<Bindings>> {
+    let mut joined = Vec::new();
+    for (i, row) in kept.iter().enumerate() {
+        check_eval_budget(ctx, i, joined.len())?;
+        #[cfg(test)]
+        tests::probed();
+        let (rows, _) = eval_bgp(store, rest, ctx, row)?;
+        joined.extend(rows);
+    }
+    Ok(joined)
 }
 
 /// Errors that belong to the query, not to the row being judged.
@@ -300,3 +542,7 @@ fn estimate_rows(store: &Store, pattern: &TriplePattern) -> Result<Option<usize>
 #[cfg(test)]
 #[path = "filter_drive_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "filter_drive_top_tests.rs"]
+mod top_tests;
