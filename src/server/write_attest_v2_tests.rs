@@ -354,3 +354,167 @@ async fn a_v2_write_revoked_while_queued_is_refused_end_to_end() {
         "a refused settlement spends nothing"
     );
 }
+
+/// `quipu-write-v1` over `body` to `path`: no audience, as sd signs today.
+fn signed_v1(
+    key: &Ed25519KeyPair,
+    binding: &SessionBinding,
+    nonce: &str,
+    path: &str,
+    body: &[u8],
+) -> axum::extract::Request {
+    use base64::Engine as _;
+    use quipu::session_attestation::{
+        AttestationEnvelope, SignedBinding, WRITE_V1, WriteBinding, canonical_message,
+    };
+    let mut envelope = AttestationEnvelope {
+        version: WRITE_V1.into(),
+        key_id: binding.key_id.clone(),
+        session: binding.session.clone(),
+        introducer: binding.introducer.clone(),
+        issued_at_epoch: quipu::time::epoch_secs(),
+        nonce: nonce.into(),
+        signature: String::new(),
+        audience: None,
+    };
+    let hash = quipu::session_attestation::body_sha256(body);
+    let message = canonical_message(
+        &envelope,
+        &SignedBinding::Write(WriteBinding {
+            method: "POST",
+            path,
+            content_type: "application/json",
+            body_sha256: &hash,
+            audience: None,
+        }),
+    );
+    envelope.signature = hex::encode(key.sign(&message).as_ref());
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&envelope).unwrap());
+    axum::http::Request::post(path)
+        .header("content-type", "application/json")
+        .header(super::super::HEADER, header)
+        .body(axum::body::Body::from(body.to_vec()))
+        .unwrap()
+}
+
+fn graph_body(graph: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({ "graph": graph })).unwrap()
+}
+
+fn has_graph(store: &SharedStore, graph: &str) -> bool {
+    quipu::tool_graph_list(&store.read(), &serde_json::json!({}))
+        .unwrap()
+        .to_string()
+        .contains(graph)
+}
+
+/// aegis-2idcev (C')2, the pair wu's ruling requires, through the full stack.
+/// Two write-granted signers on ONE store, one flag apart: the unenrolled one
+/// is still accepted on v1 (the refusal is never global, and sd signs only
+/// v1), the enrolled one is refused on v1 with nothing written and nothing
+/// spent, accepted on v2, and accepted on v1 again after `allow-v1`.
+#[tokio::test]
+async fn require_v2_refuses_v1_only_for_the_enrolled_signer() {
+    use ring::signature::KeyPair;
+    let (store, open_key, open) = identity_fixture();
+    let here = store.read().store_id().unwrap();
+    let enrolled_key = Ed25519KeyPair::from_seed_unchecked(&[53; 32]).unwrap();
+    let now = quipu::time::epoch_secs();
+    let mut enrolled = SessionBinding::new(
+        "synthetic-dream",
+        "enrolled-control",
+        hex::encode(enrolled_key.public_key().as_ref()),
+        "synthetic-introducer",
+        now - 10,
+        now + 3600,
+    )
+    .unwrap();
+    enrolled.allow_write = true;
+    store.read().attestation_register(&enrolled).unwrap();
+    store
+        .read()
+        .attestation_set_require_v2(&enrolled.session, true)
+        .unwrap();
+    let app = receiver(&store);
+
+    let (status, value) = send(
+        &app,
+        signed_v1(
+            &open_key,
+            &open,
+            &nonce(20),
+            "/graph/create",
+            &graph_body("urn:rv2:open"),
+        ),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "unenrolled v1 must be accepted: {value}"
+    );
+    assert!(has_graph(&store, "urn:rv2:open"));
+
+    let (status, value) = send(
+        &app,
+        signed_v1(
+            &enrolled_key,
+            &enrolled,
+            &nonce(21),
+            "/graph/create",
+            &graph_body("urn:rv2:refused"),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{value}");
+    assert_eq!(value["verdict"], "invalid", "{value}");
+    assert!(
+        value["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("quipu-write-v2"),
+        "{value}"
+    );
+    assert!(!has_graph(&store, "urn:rv2:refused"));
+    assert!(
+        !spent(&store, &enrolled, 21),
+        "a refused pre-check spends nothing"
+    );
+
+    let (status, value) = send(
+        &app,
+        signed_v2(
+            &enrolled_key,
+            &enrolled,
+            &nonce(22),
+            ("/graph/create", "/graph/create"),
+            &here,
+            &graph_body("urn:rv2:v2"),
+        ),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "enrolled v2 must be accepted: {value}"
+    );
+    assert!(has_graph(&store, "urn:rv2:v2"));
+
+    store
+        .read()
+        .attestation_set_require_v2(&enrolled.session, false)
+        .unwrap();
+    let (status, value) = send(
+        &app,
+        signed_v1(
+            &enrolled_key,
+            &enrolled,
+            &nonce(23),
+            "/graph/create",
+            &graph_body("urn:rv2:allow-v1"),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "allow-v1 restores v1: {value}");
+}

@@ -484,16 +484,25 @@ same the governance plane uses; it is not an HSM.
 
 ```text
 quipu attest register --agent <a> --session <s> --public-key <hex> \
-  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--allow-write] [--db <path>]
+  --introducer <who> --issued-at <epoch> --expires-at <epoch> [--allow-write] [--require-v2] [--db <path>]
 quipu attest allow-write|deny-write <session> [--db <path>]
+quipu attest require-v2|allow-v1 <session> [--db <path>]
 quipu attest revoke <session> [--db <path>]
 quipu attest list [--db <path>]
 ```
 
 A binding is **share-only** unless an operator grants it write (`--allow-write` at
 registration, or `allow-write` later). Only then may its key sign HTTP writes. `list`
-prints each binding's `allow_write`, `expires_at` and `revoked`, so the scope a key
-holds is visible without reading the store. `revoke` keeps the row: a revoked binding
+prints each binding's `allow_write`, `expires_at`, `revoked` and `require_v2`, so the
+scope a key holds is visible without reading the store.
+
+`require-v2` makes one session's `quipu-write-v1` writes refuse as `invalid`, so every
+write from that key is bound to the store it was signed for (`quipu-write-v2` carries
+the receiving store's id). It is per session and off by default, and there is no
+store-wide switch: v1 clients keep working until each of their bindings is moved
+deliberately. `allow-v1` reverses it. Like the write grant, the flag never travels in
+a share manifest. It is read when a request is verified; a flip while a write is
+queued applies from the next request. `revoke` keeps the row: a revoked binding
 refuses as `revoked`, which is a different finding from an unbound key. Rotation is a
 new binding plus a revoke of the old one.
 
