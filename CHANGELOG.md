@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-10-25
+
+### Added
+
+- *(promote)* Dry-run a subject move and warn before it retracts target facts (#747)([b3b70f1](https://github.com/scbrown/quipu/commit/b3b70f1f255fb89aa86ea618cebce6d64c0765d7))
+- *(projections)* Until, two-dimension day buckets, a rows cursor, presence columns (#800)([186565a](https://github.com/scbrown/quipu/commit/186565af20cf0fba623e9f177420b350a10df639))
+- *(events)* Semantic events for registered named graphs, with a graph filter (#784)([8379cc9](https://github.com/scbrown/quipu/commit/8379cc9eac3dc481eac2690ffc4218063db9b1df))
+- *(changes)* Name the source store and log epoch on every page (#789)([3b1cf19](https://github.com/scbrown/quipu/commit/3b1cf1980af2b1357f5c5b4d2d8efc984c4428fa))
+- *(deck)* Operator CLI to configure, enroll, enable and revoke (#794)([6666c1e](https://github.com/scbrown/quipu/commit/6666c1e85836a7073ea94a437803883b50b4e537))
+- *(applier)* The shared applier, slice 1: a replica from the shipped feed (#796)([4b2372a](https://github.com/scbrown/quipu/commit/4b2372a05d1481cc2201b8b2a5edbfbcd97aeaf6))
+- *(asof-share)* Cut a replica bootstrap at one transaction (#805)([2733fef](https://github.com/scbrown/quipu/commit/2733fefb4ea835b95dd16306e0e53018901dac3f))
+- *(bindings)* A replica through the binding facade and the browser Database (#798)([d68a89a](https://github.com/scbrown/quipu/commit/d68a89a35b9a64eed057b9f5a126df032c80b00c))
+- *(applier)* Slice 2, a replica bootstrapped from an as-of share (#803)([bb9254c](https://github.com/scbrown/quipu/commit/bb9254c249fccc64ca3f2168a870f00c4f8430f5))
+- *(store)* Attested writes, a generic default-off signed-write primitive (#819)([7c9a80d](https://github.com/scbrown/quipu/commit/7c9a80d54c3ac457e78f40f53a126261f3b5a26a))
+- *(attestation)* One canonical signed-request check and an opaque VerifiedWrite (#820)([9fc5294](https://github.com/scbrown/quipu/commit/9fc5294126fb086be413777317fde52910122a4d))
+- *(feed)* One shared reader behind the change stream (event-push §2) (#821)([da5a150](https://github.com/scbrown/quipu/commit/da5a150b1d4173c144311bb1ec480a016600f03c))
+- *(asof-share)* Carry frozen graphs; frozen rows carry the freeze tx (s24.1.1) (#831)([44d11a0](https://github.com/scbrown/quipu/commit/44d11a0a8540b13e5a2e874c281e161f7acf95d4))
+- *(attest)* Per-session require-v2 refuses a binding's v1 writes (#824)([ac5b7e1](https://github.com/scbrown/quipu/commit/ac5b7e11885f7d9a4cd46fbd52a1300d53103ae7))
+- *(applier)* Slice 3a, stream sessions, signed coverage and the freshness challenge (#816)([72d2e29](https://github.com/scbrown/quipu/commit/72d2e2992dd3fdadfdd27aecbce37f273a6cd1f9))
+
+### Documentation
+
+- Synchronize the canonical stack overview (#773)([d7ccd4a](https://github.com/scbrown/quipu/commit/d7ccd4a2e123132e854c5be4292bc27fca22a105))
+- *(delivery)* Document emitter support from the shared catalog (#825)([8e95a04](https://github.com/scbrown/quipu/commit/8e95a042142f9791df6d2a6a4d4198758eaf6855))
+
+### Fixed
+
+- *(mcp)* Publish the image and registry entry under intigraph (#774)([af45220](https://github.com/scbrown/quipu/commit/af452206a37997f31c4d6141b09aab45c717ca33))
+- *(read-model)* Reuse a recent "too big" affordability count (#781)([bdd3b6e](https://github.com/scbrown/quipu/commit/bdd3b6e2334fb07b409eec530f7bf3d441fac51d))
+- *(changes)* Carry valid time and byte bodies so a feed replica equals its source (#780)([b8ebe7e](https://github.com/scbrown/quipu/commit/b8ebe7e365ae07665c4f55a033e01c99b88132d7))
+- *(owl)* Write a retract row when a functional value is superseded (#787)([472faae](https://github.com/scbrown/quipu/commit/472faae212c932bcba5fa1ef543093dfa19c3caf))
+- *(stream)* Send an oversized transaction as parts instead of ending the stream (#788)([ff81361](https://github.com/scbrown/quipu/commit/ff81361f186081f5d6a52fb78d95dd2174a47503))
+- *(freeze)* Mint a new log epoch when freeze or thaw changes served history (#785)([e3ea365](https://github.com/scbrown/quipu/commit/e3ea3658626bcacc1502f7d494e406b599817840))
+- *(shapes)* Ship deployment classification with each source revision (#786)([2058b2d](https://github.com/scbrown/quipu/commit/2058b2d792b23a26e39ed983b9e992d295447366))
+- *(api)* Include truncation metadata in named-query responses (#832)([5fd4710](https://github.com/scbrown/quipu/commit/5fd471013b35e1281a4a8269b875afbb04caed5b))
+- *(query)* A failed query keeps its shape in the request log (#834)([d63e3f0](https://github.com/scbrown/quipu/commit/d63e3f07d1366267658fa398abd506590bfe03c3))
+
+
+
+### Testing
+
+- *(attestation)* Write-v2 receiver controls end to end (#823)([d6c403c](https://github.com/scbrown/quipu/commit/d6c403c2d16f31aacf4e9aa37e2b1ca1d6874fee))
+
+### Perf
+
+- *(changes)* Page a graph-filtered feed in commit order (#776)([ec08d9f](https://github.com/scbrown/quipu/commit/ec08d9fd89c40beb3858e4576162548e8954593b))
+- *(read-model)* Bind-join a pattern when the rows so far are fewer than its facts (#782)([8d62e33](https://github.com/scbrown/quipu/commit/8d62e3325dddf52332ea395a865482a8016c7fd1))
+
 ## [0.16.1] - 2026-10-23
 
 ### Added

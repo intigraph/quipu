@@ -8,6 +8,7 @@ fn process_routing_never_sends_writes_or_streams_to_readers() {
     }
     for path in [
         "/events/stream",
+        "/feed/ws",
         "/export",
         "/acquire/composed",
         "/acquire/eligibility",

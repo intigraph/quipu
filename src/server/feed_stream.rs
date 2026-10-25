@@ -8,12 +8,14 @@ use std::{
 };
 
 use axum::{
+    Router,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{
         IntoResponse, Response, Sse,
         sse::{Event, KeepAlive},
     },
+    routing::get,
 };
 use futures::stream::unfold;
 use serde_json::{Value, json};
@@ -28,6 +30,16 @@ use super::{
 
 #[path = "feed_hub.rs"]
 pub(crate) mod feed_hub;
+#[path = "feed_ws.rs"]
+pub(crate) mod feed_ws;
+
+/// The change and event feeds, as server-sent events and over one WebSocket.
+pub(crate) fn routes() -> Router<SharedStore> {
+    Router::new()
+        .route("/events/stream", get(events_stream))
+        .route("/changes/stream", get(changes_stream))
+        .route("/feed/ws", get(feed_ws::feed_ws))
+}
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,7 +50,7 @@ pub(crate) struct Params {
     graph: Option<String>,
 }
 
-struct Cursor {
+pub(crate) struct Cursor {
     store: SharedStore,
     hints: watch::Receiver<()>,
     offset: i64,
@@ -54,7 +66,7 @@ struct Cursor {
     hub: Option<(Arc<feed_hub::Hub>, watch::Receiver<i64>)>,
     /// How far the hub's ring has been searched for this stream's graph.
     scanned: i64,
-    _slot: OwnedSemaphorePermit,
+    _slot: Option<OwnedSemaphorePermit>,
 }
 
 pub(crate) async fn events_stream(
@@ -81,14 +93,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         Ok(offset) => offset,
         Err(message) => return (StatusCode::BAD_REQUEST, message).into_response(),
     };
-    if changes && (params.types.is_some() || params.group.is_some())
-        || params
-            .graph
-            .as_ref()
-            .is_some_and(|s| s.is_empty() || s.len() > 2048)
-        || params.group.as_ref().is_some_and(|s| s.len() > 2048)
-        || params.types.as_ref().is_some_and(|s| s.len() > 2048)
-    {
+    if !scope_ok(&params, changes) {
         return (
             StatusCode::BAD_REQUEST,
             "unsupported or oversized feed scope",
@@ -102,44 +107,85 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
         )
             .into_response();
     };
-    // Subscribe BEFORE the first log read so a concurrent commit cannot fall
-    // between the empty read and registering interest.
-    let mut hints = store.commit_wake.subscribe();
-    hints.borrow_and_update();
-    let cursor = Cursor {
-        store,
-        hints,
-        offset,
-        params,
-        changes,
-        wait: false,
-        terminal: false,
-        pending: VecDeque::new(),
-        hub: None,
-        scanned: 0,
-        _slot: slot,
-    };
+    let cursor = Cursor::open(store, offset, params, changes, Some(slot));
     let output = unfold(cursor, |mut cursor| async move {
-        if let Some(frame) = cursor.pending.pop_front() {
-            return Some((Ok::<_, Infallible>(frame.into_sse()), cursor));
+        let frame = cursor.next_frame().await?;
+        Some((Ok::<_, Infallible>(frame.into_sse()), cursor))
+    });
+    Sse::new(output)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
+        .into_response()
+}
+
+/// Whether a stream may serve this scope: a change feed takes only a graph,
+/// and no filter is empty or oversized.
+pub(crate) fn scope_ok(params: &Params, changes: bool) -> bool {
+    !(changes && (params.types.is_some() || params.group.is_some())
+        || params
+            .graph
+            .as_ref()
+            .is_some_and(|s| s.is_empty() || s.len() > 2048)
+        || params.group.as_ref().is_some_and(|s| s.len() > 2048)
+        || params.types.as_ref().is_some_and(|s| s.len() > 2048))
+}
+
+impl Cursor {
+    /// A subscription from `offset`. `slot` is the stream slot when the
+    /// cursor is a connection of its own (SSE); a WebSocket connection holds
+    /// one slot for all of its subscriptions.
+    pub(crate) fn open(
+        store: SharedStore,
+        offset: i64,
+        params: Params,
+        changes: bool,
+        slot: Option<OwnedSemaphorePermit>,
+    ) -> Self {
+        // Subscribe BEFORE the first log read so a concurrent commit cannot
+        // fall between the empty read and registering interest.
+        let mut hints = store.commit_wake.subscribe();
+        hints.borrow_and_update();
+        Self {
+            store,
+            hints,
+            offset,
+            params,
+            changes,
+            wait: false,
+            terminal: false,
+            pending: VecDeque::new(),
+            hub: None,
+            scanned: 0,
+            _slot: slot,
         }
-        if cursor.terminal {
+    }
+
+    /// The last cursor this subscription delivered.
+    pub(crate) fn offset(&self) -> i64 {
+        self.offset
+    }
+
+    /// The next frame for this subscription, transport-independent; `None`
+    /// once it has ended (after its last error frame).
+    pub(crate) async fn next_frame(&mut self) -> Option<FeedFrame> {
+        if let Some(frame) = self.pending.pop_front() {
+            return Some(frame);
+        }
+        if self.terminal {
             return None;
         }
         loop {
-            if cursor.wait
-                && let Some((_, head)) = cursor.hub.as_mut()
+            if self.wait
+                && let Some((_, head)) = self.hub.as_mut()
             {
                 // The hub crosses the writer barrier and reads once for every
                 // stream; this one only waits for the ring's head to move.
                 let _ = tokio::time::timeout(Duration::from_secs(3600), head.changed()).await;
-            } else if cursor.wait {
+            } else if self.wait {
                 // Hourly metadata reconcile covers external writers that did
                 // not install this serving connection's hook. Heartbeats do
                 // not query the store. No per-connection polling loop.
-                let _ =
-                    tokio::time::timeout(Duration::from_secs(3600), cursor.hints.changed()).await;
-                let writer = cursor.store.clone();
+                let _ = tokio::time::timeout(Duration::from_secs(3600), self.hints.changed()).await;
+                let writer = self.store.clone();
                 if blocking(move || {
                     // Do not settle a request attestation: this is a pure
                     // synchronization barrier, not an authenticated write.
@@ -149,47 +195,40 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 .await
                 .is_err()
                 {
-                    cursor.terminal = true;
+                    self.terminal = true;
                 }
             }
-            if cursor.terminal {
-                return Some((
-                    Ok::<_, Infallible>(
-                        Event::default()
-                            .event("quipu.error")
-                            .data("feed read unavailable; reconnect from last applied cursor"),
-                    ),
-                    cursor,
+            if self.terminal {
+                return Some(FeedFrame::error(
+                    "feed read unavailable; reconnect from last applied cursor",
                 ));
             }
-            if let Some((_, head)) = cursor.hub.as_mut() {
+            if let Some((_, head)) = self.hub.as_mut() {
                 head.borrow_and_update();
             }
-            let served = match &cursor.hub {
-                Some((hub, _)) if cursor.changes => hub.serve(
-                    cursor.offset,
-                    cursor.params.graph.as_deref(),
-                    &mut cursor.scanned,
-                ),
+            let served = match &self.hub {
+                Some((hub, _)) if self.changes => {
+                    hub.serve(self.offset, self.params.graph.as_deref(), &mut self.scanned)
+                }
                 _ => feed_hub::Serve::CatchUp,
             };
             let page = if let feed_hub::Serve::Page(body) = served {
                 Ok(axum::Json(body))
             } else if matches!(served, feed_hub::Serve::Wait) {
-                cursor.wait = true;
+                self.wait = true;
                 continue;
-            } else if cursor.changes {
-                if let Some((hub, _)) = &cursor.hub {
+            } else if self.changes {
+                if let Some((hub, _)) = &self.hub {
                     hub.catchup_reads
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
                 let params = serde_json::from_value(
-                    json!({"since": cursor.offset, "limit": 1, "capture": "old_and_new_values", "graph": cursor.params.graph}),
+                    json!({"since": self.offset, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph}),
                 );
                 match params {
                     Ok(params) => {
                         feed::changes_get(
-                            State(cursor.store.clone()),
+                            State(self.store.clone()),
                             headers_for_feed(),
                             Query(params),
                         )
@@ -199,13 +238,13 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 }
             } else {
                 let params = serde_json::from_value(
-                    json!({"since": cursor.offset, "limit": 1, "types": cursor.params.types, "group": cursor.params.group, "graph": cursor.params.graph}),
+                    json!({"since": self.offset, "limit": 1, "types": self.params.types, "group": self.params.group, "graph": self.params.graph}),
                 );
                 match params {
                     // A named graph streams from its own log; ROOT from `/events`.
-                    Ok(params) if cursor.params.graph.is_some() => {
+                    Ok(params) if self.params.graph.is_some() => {
                         feed::events_graph_get(
-                            State(cursor.store.clone()),
+                            State(self.store.clone()),
                             headers_for_feed(),
                             Query(params),
                         )
@@ -213,7 +252,7 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                     }
                     Ok(params) => {
                         feed::events_get(
-                            State(cursor.store.clone()),
+                            State(self.store.clone()),
                             headers_for_feed(),
                             Query(params),
                         )
@@ -225,95 +264,78 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
             let body = match page {
                 Ok(page) => page.0,
                 Err(_) => {
-                    cursor.terminal = true;
-                    return Some((
-                        Ok::<_, Infallible>(
-                            Event::default()
-                                .event("quipu.error")
-                                .data("feed read refused; reconnect from last applied cursor"),
-                        ),
-                        cursor,
+                    self.terminal = true;
+                    return Some(FeedFrame::error(
+                        "feed read refused; reconnect from last applied cursor",
                     ));
                 }
             };
             // The first store page validated this stream's graph: from here
             // on it is served from the shared reader.
-            let attached = cursor.changes && cursor.hub.is_none();
+            let attached = self.changes && self.hub.is_none();
             if attached {
-                let hub = feed_hub::Hub::of(&cursor.store);
+                let hub = feed_hub::Hub::of(&self.store);
                 let head = hub.watch();
-                cursor.hub = Some((hub, head));
+                self.hub = Some((hub, head));
             }
-            let key = if cursor.changes {
+            let key = if self.changes {
                 "next_tx"
             } else {
                 "next_offset"
             };
-            let next = body
-                .get(key)
-                .and_then(Value::as_i64)
-                .unwrap_or(cursor.offset);
-            if next <= cursor.offset {
+            let next = body.get(key).and_then(Value::as_i64).unwrap_or(self.offset);
+            if next <= self.offset {
                 // An empty store page proves no in-scope transaction up to its
                 // watermark: the stream need not search below it again, so a
                 // quiet graph behind the ring floor reaches the ring instead of
                 // re-reading the store on every unrelated commit. The cursor
                 // itself does not move.
-                if cursor.changes
+                if self.changes
                     && let Some(watermark) = body.get("watermark_tx").and_then(Value::as_i64)
                 {
-                    cursor.scanned = cursor.scanned.max(watermark);
+                    self.scanned = self.scanned.max(watermark);
                 }
                 // A stream that just attached asks the hub before it waits, so
                 // a commit the hub read meanwhile is not slept through.
-                cursor.wait = !attached;
+                self.wait = !attached;
                 continue;
             }
             let data = body.to_string();
-            if cursor.changes && !fits_frame(&data) {
+            if self.changes && !fits_frame(&data) {
                 match chunk_transaction(&body, next) {
                     Ok(frames) => {
-                        cursor.offset = next;
-                        cursor.wait = false;
-                        cursor.pending = frames;
+                        self.offset = next;
+                        self.wait = false;
+                        self.pending = frames;
                     }
                     Err(refusal) => {
-                        cursor.terminal = true;
-                        cursor.pending.push_back(refusal);
+                        self.terminal = true;
+                        self.pending.push_back(refusal);
                     }
                 }
-                let first = cursor.pending.pop_front();
-                return first.map(|frame| (Ok::<_, Infallible>(frame.into_sse()), cursor));
+                return self.pending.pop_front();
             }
-            if validate_frame(cursor.offset, next, &data).is_err() {
-                cursor.terminal = true;
-                return Some((
-                    Ok::<_, Infallible>(
-                        Event::default()
-                            .event("quipu.error")
-                            .data("feed page exceeds frame budget; cursor not acknowledged"),
-                    ),
-                    cursor,
+            if validate_frame(self.offset, next, &data).is_err() {
+                self.terminal = true;
+                return Some(FeedFrame::error(
+                    "feed page exceeds frame budget; cursor not acknowledged",
                 ));
             }
-            cursor.offset = next;
-            cursor.wait = false;
+            self.offset = next;
+            self.wait = false;
             // This ID acknowledges only delivery. Changes IDs are transaction
             // IDs; never POST them to /events/commit (event offsets).
-            let event = Event::default()
-                .event(if cursor.changes {
+            return Some(FeedFrame {
+                event: if self.changes {
                     "quipu.changes"
                 } else {
                     "quipu.events"
-                })
-                .id(next.to_string())
-                .data(data);
-            return Some((Ok::<_, Infallible>(event), cursor));
+                },
+                id: Some(next),
+                data,
+            });
         }
-    });
-    Sse::new(output)
-        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
-        .into_response()
+    }
 }
 
 /// One of the 64 slots every long-lived feed stream holds while it sends,
@@ -339,6 +361,15 @@ pub(crate) struct FeedFrame {
 }
 
 impl FeedFrame {
+    /// A `quipu.error` frame: the subscription ends after it.
+    pub(crate) fn error(message: &str) -> Self {
+        Self {
+            event: "quipu.error",
+            id: None,
+            data: message.to_string(),
+        }
+    }
+
     pub(crate) fn into_sse(self) -> Event {
         let event = Event::default().event(self.event);
         let event = match self.id {
