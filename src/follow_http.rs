@@ -75,13 +75,17 @@ fn transport(error: &ureq::Error) -> std::io::Error {
 /// The body read up to `cap` bytes; a longer one is [`PageTooLarge`]. ureq's
 /// own `into_string` stops at 10 MiB with an error indistinguishable from a
 /// transport failure, so a legitimately large page was retried forever.
+///
+/// The cap is checked on raw bytes BEFORE decoding: a cut at `cap + 1` can split
+/// a multi-byte character, and decoding first would turn an oversized page into
+/// an `InvalidData` error the bootstrap retries forever.
 fn read_capped(reader: impl Read, cap: u64) -> std::io::Result<String> {
-    let mut body = String::new();
-    reader.take(cap + 1).read_to_string(&mut body)?;
-    if body.len() as u64 > cap {
+    let mut bytes = Vec::new();
+    reader.take(cap + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > cap {
         return Err(std::io::Error::other(PageTooLarge));
     }
-    Ok(body)
+    String::from_utf8(bytes).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
 impl Feed for Http {
@@ -131,6 +135,24 @@ mod tests {
         assert_eq!(
             read_capped("x".repeat(100).as_bytes(), 100).unwrap().len(),
             100
+        );
+    }
+
+    #[test]
+    fn an_oversized_unicode_page_is_too_large_even_when_the_cut_splits_a_character() {
+        // grant's #843 SAME: valid JSON with multi-byte characters over the
+        // cap. Decoding before the size check gave InvalidData, retried
+        // forever as a transport failure.
+        let body = format!("{{\"v\":\"{}\"}}", "é".repeat(60));
+        assert!(body.len() > 100);
+        let error = read_capped(body.as_bytes(), 100).unwrap_err();
+        assert!(
+            matches!(error.get_ref(), Some(e) if e.is::<PageTooLarge>()),
+            "{error:?}"
+        );
+        assert_eq!(
+            read_capped(body.as_bytes(), body.len() as u64).unwrap(),
+            body
         );
     }
 }
