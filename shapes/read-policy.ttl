@@ -1,0 +1,16 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix read: <urn:quipu:read-policy:> .
+
+# Effective authority lives only in the separate owner-local policy store.
+# Importing this class or predicate into tenant data grants no authority.
+# The strict versioned JSON record also undergoes semantic owner/IRI/operation/
+# validity/revision validation in read_authorization.rs, not JSON sniffing here.
+read:ReadGrantRevision a rdfs:Class ;
+    rdfs:label "Read grant revision" .
+
+read:ReadGrantRevisionShape a sh:NodeShape ;
+    sh:targetClass read:ReadGrantRevision ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path read:record ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .

@@ -35,7 +35,7 @@ pub mod rdfs;
 pub mod rdfs_closure;
 #[cfg(test)]
 mod rdfs_closure_tests;
-mod root_scope;
+pub(crate) mod root_scope;
 mod sparse_bgp;
 mod sql_star;
 pub mod status_pushdown;

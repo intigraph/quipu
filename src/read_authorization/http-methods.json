@@ -1,0 +1,375 @@
+{
+  "/": [
+    "get"
+  ],
+  "/.well-known/void": [
+    "get"
+  ],
+  "/acquire": [
+    "post"
+  ],
+  "/acquire/composed": [
+    "post"
+  ],
+  "/acquire/eligibility": [
+    "post"
+  ],
+  "/align/apply": [
+    "post"
+  ],
+  "/align/decide": [
+    "post"
+  ],
+  "/align/propose": [
+    "post"
+  ],
+  "/ask": [
+    "post"
+  ],
+  "/attest/challenge": [
+    "post"
+  ],
+  "/attest/commit": [
+    "post"
+  ],
+  "/attest/receipt": [
+    "post"
+  ],
+  "/changes": [
+    "get"
+  ],
+  "/changes/stream": [
+    "get"
+  ],
+  "/context": [
+    "post"
+  ],
+  "/cooccurrence": [
+    "post"
+  ],
+  "/cord": [
+    "post"
+  ],
+  "/datalinks.js": [
+    "get"
+  ],
+  "/datasets": [
+    "post"
+  ],
+  "/deck/attest": [
+    "post"
+  ],
+  "/deck/present": [
+    "post"
+  ],
+  "/deck/receipt": [
+    "post"
+  ],
+  "/embed_backfill": [
+    "post"
+  ],
+  "/embed_backfill_graph": [
+    "post"
+  ],
+  "/entity": [
+    "get"
+  ],
+  "/entity/{iri}": [
+    "get"
+  ],
+  "/entity/{iri}/html": [
+    "get"
+  ],
+  "/entity/{iri}/json": [
+    "get"
+  ],
+  "/entity/{iri}/ttl": [
+    "get"
+  ],
+  "/entity_history": [
+    "post"
+  ],
+  "/entity_ref": [
+    "post"
+  ],
+  "/episode": [
+    "post"
+  ],
+  "/episode/retract": [
+    "post"
+  ],
+  "/episodes/complete": [
+    "post"
+  ],
+  "/events": [
+    "get"
+  ],
+  "/events/commit": [
+    "post"
+  ],
+  "/events/graph": [
+    "get"
+  ],
+  "/events/graph/commit": [
+    "post"
+  ],
+  "/events/stream": [
+    "get"
+  ],
+  "/explain": [
+    "post"
+  ],
+  "/export": [
+    "post"
+  ],
+  "/feed/ws": [
+    "get"
+  ],
+  "/fragments": [
+    "get"
+  ],
+  "/graph": [
+    "post"
+  ],
+  "/graph-canvas.js": [
+    "get"
+  ],
+  "/graph/create": [
+    "post"
+  ],
+  "/graph/freeze": [
+    "post"
+  ],
+  "/graph/label": [
+    "post"
+  ],
+  "/graph/thaw": [
+    "post"
+  ],
+  "/graphs": [
+    "get"
+  ],
+  "/health": [
+    "get"
+  ],
+  "/hybrid_search": [
+    "post"
+  ],
+  "/identity": [
+    "post"
+  ],
+  "/impact": [
+    "post"
+  ],
+  "/import": [
+    "post"
+  ],
+  "/import/promote": [
+    "post"
+  ],
+  "/knot": [
+    "post"
+  ],
+  "/knot/cancel": [
+    "post"
+  ],
+  "/knot/promote": [
+    "post"
+  ],
+  "/knot/stage": [
+    "post"
+  ],
+  "/memory/commit": [
+    "post"
+  ],
+  "/memory/export": [
+    "post"
+  ],
+  "/memory/projection": [
+    "post"
+  ],
+  "/memory/read": [
+    "post"
+  ],
+  "/memory/receipt": [
+    "post"
+  ],
+  "/merge/apply": [
+    "post"
+  ],
+  "/merge/decisions": [
+    "post"
+  ],
+  "/metrics": [
+    "get"
+  ],
+  "/namespaces": [
+    "get",
+    "post"
+  ],
+  "/ontology": [
+    "post"
+  ],
+  "/overlay/compose": [
+    "post"
+  ],
+  "/overlay/create": [
+    "post"
+  ],
+  "/overlay/write": [
+    "post"
+  ],
+  "/path/backtest": [
+    "post"
+  ],
+  "/path/cone": [
+    "post"
+  ],
+  "/policy/check": [
+    "post"
+  ],
+  "/preview/{iri}": [
+    "get"
+  ],
+  "/project": [
+    "post"
+  ],
+  "/projections": [
+    "post"
+  ],
+  "/proposal/accept": [
+    "post"
+  ],
+  "/proposal/reject": [
+    "post"
+  ],
+  "/proposals": [
+    "post"
+  ],
+  "/propose": [
+    "post"
+  ],
+  "/queries": [
+    "post"
+  ],
+  "/query": [
+    "get",
+    "post"
+  ],
+  "/quipu-components.js": [
+    "get"
+  ],
+  "/rdf-graph-store": [
+    "delete",
+    "get",
+    "head",
+    "post",
+    "put"
+  ],
+  "/reason": [
+    "post"
+  ],
+  "/reconcile": [
+    "post"
+  ],
+  "/render": [
+    "post"
+  ],
+  "/replica/ready": [
+    "get"
+  ],
+  "/replicate/challenge": [
+    "post"
+  ],
+  "/replicate/stream": [
+    "post"
+  ],
+  "/report": [
+    "get",
+    "post"
+  ],
+  "/resolve": [
+    "post"
+  ],
+  "/retract": [
+    "post"
+  ],
+  "/retract/source": [
+    "post"
+  ],
+  "/rule_query": [
+    "post"
+  ],
+  "/search": [
+    "post"
+  ],
+  "/search/nodes": [
+    "post"
+  ],
+  "/search_facts": [
+    "post"
+  ],
+  "/search_nodes": [
+    "post"
+  ],
+  "/search_query": [
+    "post"
+  ],
+  "/set": [
+    "post"
+  ],
+  "/shapes": [
+    "post"
+  ],
+  "/share": [
+    "post"
+  ],
+  "/share/asof": [
+    "post"
+  ],
+  "/spotlight": [
+    "post"
+  ],
+  "/stats": [
+    "get"
+  ],
+  "/subscriptions": [
+    "post"
+  ],
+  "/transactions": [
+    "get"
+  ],
+  "/ui": [
+    "get"
+  ],
+  "/unified_search": [
+    "post"
+  ],
+  "/unravel": [
+    "post"
+  ],
+  "/update": [
+    "post"
+  ],
+  "/validate": [
+    "post"
+  ],
+  "/vendor/three.module.min.js": [
+    "get"
+  ],
+  "/verdict/verify": [
+    "post"
+  ],
+  "/verifier/authorized": [
+    "post"
+  ],
+  "/version": [
+    "get"
+  ],
+  "/watermark": [
+    "get"
+  ],
+  "/workflow/capabilities": [
+    "get"
+  ]
+}

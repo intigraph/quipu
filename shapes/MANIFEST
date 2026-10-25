@@ -102,6 +102,12 @@
       "file": "stored-queries.ttl",
       "action": "exclude",
       "reason": "Package-member contract validated by the share importer/exporter, not the served graph."
+    },
+    {
+      "file": "read-policy.ttl",
+      "action": "load",
+      "name": "read-policy",
+      "reason": "Owner-local read grant revision vocabulary; tenant imports never establish effective read policy."
     }
   ]
 }

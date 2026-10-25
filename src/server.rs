@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    http::StatusCode,
-    response::IntoResponse,
     routing::{get, post},
 };
 
@@ -23,6 +21,8 @@ mod assets;
 mod attest;
 #[path = "server/auth.rs"]
 mod auth;
+#[path = "server/auth_guard.rs"]
+mod auth_guard;
 #[path = "server/auth_response.rs"]
 mod auth_response;
 #[path = "server/background.rs"]
@@ -83,6 +83,8 @@ mod relay;
 mod replica;
 #[path = "server/request_middleware.rs"]
 mod request_middleware;
+#[path = "server/scoped_reads.rs"]
+mod scoped_reads;
 #[path = "server/service_description.rs"]
 mod service_description;
 #[path = "server/snapshot_upload.rs"]
@@ -128,6 +130,7 @@ async fn main() {
     }
 
     let config = base::load_config(&args);
+    scoped_reads::validate(&config, &args);
     let memory_allocation = process_pool::startup_allocation(&config, &args);
 
     let db_path = config.store_path.to_string_lossy().to_string();
@@ -359,7 +362,19 @@ async fn main() {
     });
     let auth_policy = auth::bearer_policy(&config.server);
     let session_keys = auth::session_key_policy(&config.server);
-    let preflight_keys_required = session_keys.required;
+    let preflight_keys_required = session_keys.required || config.server.scoped_reads.is_some();
+    let scoped_profile = config.server.scoped_reads.clone().map(|profile| {
+        (
+            profile,
+            config
+                .server
+                .crew_credentials_file
+                .clone()
+                .expect("validated scoped registry"),
+        )
+    });
+    let scoped_source = state.clone();
+    let scoped_enabled = scoped_profile.is_some();
     let read_only = base::read_only(&config, is_replica);
     let replica_config = config.server.replica.clone();
     let is_relay = relay.is_some();
@@ -508,162 +523,49 @@ async fn main() {
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
         .route("/preview/{iri}", get(preview_handler));
-    let app = process_pool::route(app, &workers)
-        // Auth / read-only guard on write endpoints (hq-azs). Added before the
-        // CORS layer so CORS stays outermost and answers OPTIONS preflight
-        // before the guard runs.
-        .layer(axum::middleware::from_fn(
-            move |req: axum::extract::Request, next: axum::middleware::Next| {
-                let auth_policy = auth_policy.clone();
-                let session_keys = session_keys.clone();
-                let attest_store = attest_store.clone();
-                let replica_config = replica_config.clone();
-                async move {
-                    let path = req.uri().path().to_string();
-                    let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
-                    if let Some(replica) = &replica_config && is_write {
-                        return replica::write_refusal(replica, &path);
-                    }
-                    // A relay serves its children's streams and challenges,
-                    // which are write-class, and refuses every other write.
-                    if is_relay && is_write && !path.starts_with("/replicate/") {
-                        return relay::write_refusal(&path);
-                    }
-                    // A signed write authenticates by attestation, never by a
-                    // bearer on the same request (aegis-bys8d1).
-                    if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
-                        return auth::write_attest::handle(attest_store, session_keys.required, req, next).await;
-                    }
-                    if let Some(response) = auth::session_key_refusal(
-                        &session_keys, &req, is_write && read_only,
-                    ) {
-                        return response;
-                    }
-                    let (auth_header, authorization) = auth::authorize_request(
-                        &req, &auth_policy, read_only,
-                    );
-                    match authorization.decision {
-                        quipu::http_auth::AccessDecision::Allow => {
-                            let mut req = req;
-                            if matches!(
-                                authorization.generation,
-                                Some(
-                                    quipu::http_auth::AuthGeneration::Current
-                                        | quipu::http_auth::AuthGeneration::Previous
-                                )
-                            ) {
-                                req.extensions_mut().insert(
-                                    quipu::http_auth::AuthenticatedPrincipal::LEGACY_SHARED_BEARER,
-                                );
-                            }
-                            let mut response = auth::run_authorized(
-                                req, next, &auth_policy, authorization, auth_header.as_deref(),
-                            ).await;
-                            let outcome = match authorization.generation {
-                                Some(quipu::http_auth::AuthGeneration::NotRequired) => {
-                                    quipu::request_usage::AuthOutcome::NotRequired
-                                }
-                                Some(quipu::http_auth::AuthGeneration::OpenWrite) => {
-                                    quipu::request_usage::AuthOutcome::OpenWrite
-                                }
-                                Some(quipu::http_auth::AuthGeneration::Current) => {
-                                    quipu::request_usage::AuthOutcome::AuthenticatedCurrent
-                                }
-                                Some(quipu::http_auth::AuthGeneration::Previous) => {
-                                    quipu::request_usage::AuthOutcome::AuthenticatedPrevious
-                                }
-                                Some(quipu::http_auth::AuthGeneration::Named) => {
-                                    quipu::request_usage::AuthOutcome::AuthenticatedNamed
-                                }
-                                None => quipu::request_usage::AuthOutcome::Pending,
-                            };
-                            response.extensions_mut().insert(outcome);
-                            response
-                        }
-                        // BOTH refusals carry a JSON body, and that is the whole
-                        // point of aegis-zodg0. `StatusCode::into_response()`
-                        // yields a bare status with a ZERO-LENGTH body, so
-                        // `curl -s` prints NOTHING and exits 0 — a refusal that
-                        // is indistinguishable from "the algorithm returned no
-                        // results" or "the graph is empty". Measured on /project:
-                        // it took two round trips to discover it was auth at all.
-                        //
-                        // Same failure SHAPE this repo already records for the
-                        // bobbin /search 405 (CLAUDE.md): a documented recipe that
-                        // silently returns nothing, so the reader concludes the
-                        // service is empty rather than that they called it wrong.
-                        // A refusal MUST say it refused; an empty body cannot.
-                        //
-                        // Fixed HERE, in the middleware, rather than per-route:
-                        // every bearer-gated endpoint shared the defect. /shapes
-                        // returned 0 bytes on 401 too, so there was no correct
-                        // per-route body to copy — the bug was never /project's.
-                        quipu::http_auth::AccessDecision::Unauthorized => {
-                            // The /project note is PATH-SCOPED. Emitting it on
-                            // every gated route put an explanation of `louvain`
-                            // on a /shapes 401 — a message that is accurate about
-                            // some other endpoint is its own small version of the
-                            // defect this whole change is about, so it is
-                            // conditional rather than convenient.
-                            let why = if path == "/project" {
-                                " /project looks read-only and is not: `louvain` with persist:true \
-                                 WRITES quipu:memberOfCommunity, so the whole route is gated even \
-                                 though its other algorithms only read."
-                            } else {
-                                ""
-                            };
-                            let mut response = auth_response::unauthorized(&path, why);
-                            response.extensions_mut().insert(
-                                quipu::request_usage::AuthOutcome::Unauthorized,
-                            );
-                            response
-                        }
-                        quipu::http_auth::AccessDecision::ReadOnly => {
-                            let mut response = (
-                                StatusCode::FORBIDDEN,
-                                axum::Json(serde_json::json!({
-                                    "error": format!(
-                                        "read-only mode: {path} is a WRITE endpoint and this server was \
-                                         started read-only, so no credential will authorize it. Restart \
-                                         without read-only to permit writes."
-                                    ),
-                                    "endpoint": path,
-                                    "reason": "server_is_read_only",
-                                })),
-                            )
-                                .into_response();
-                            response
-                                .extensions_mut()
-                                .insert(quipu::request_usage::AuthOutcome::ReadOnly);
-                            response
-                        }
-                    }
-                }
-            },
-        ))
-        // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
-        // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
-        // preflight (GH#5). Built above from the configured allowlist.
-        .layer(cors)
-        // Strict profiles cannot admit an unsigned CORS preflight before the
-        // signature verifier. Use a same-origin client or authenticated broker.
-        .layer(axum::middleware::from_fn(move |req, next| {
-            auth::strict_preflight(preflight_keys_required, req, next)
-        }))
-        // Body limit: axum's 2MB default silently caps /knot at small graphs —
-        // a code-graph promotion of one real repository is ~9MB of Turtle and
-        // was refused 413. 64MB bounds a whole-repo promotion with headroom
-        // while still refusing runaway bodies.
-        .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
-        // Request log, outermost so every request (including CORS preflights
-        // and auth rejections) leaves a trace. Until this existed, server.log
-        // was startup banners only, and a wedged instance left NOTHING to RCA
-        // from — the whole incident was reconstructed from gdb.
-        // stderr on purpose: stdout is block-buffered under systemd, stderr is
-        // not, and the journal timestamps every line itself.
-        .layer(axum::middleware::from_fn(request_middleware::log_request))
-        .layer(axum::middleware::from_fn_with_state(state.clone(), replica::headers))
-        .with_state(state);
+    let app = scoped_reads::guard(
+        process_pool::route(app, &workers),
+        scoped_profile,
+        scoped_source,
+    );
+    let app = auth_guard::layer(
+        app,
+        auth_guard::Config {
+            auth_policy,
+            session_keys,
+            attest_store,
+            replica_config,
+            read_only,
+            is_relay,
+            scoped_enabled,
+        },
+    )
+    // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
+    // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
+    // preflight (GH#5). Built above from the configured allowlist.
+    .layer(cors)
+    // Strict profiles cannot admit an unsigned CORS preflight before the
+    // signature verifier. Use a same-origin client or authenticated broker.
+    .layer(axum::middleware::from_fn(move |req, next| {
+        auth::strict_preflight(preflight_keys_required, req, next)
+    }))
+    // Body limit: axum's 2MB default silently caps /knot at small graphs —
+    // a code-graph promotion of one real repository is ~9MB of Turtle and
+    // was refused 413. 64MB bounds a whole-repo promotion with headroom
+    // while still refusing runaway bodies.
+    .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
+    // Request log, outermost so every request (including CORS preflights
+    // and auth rejections) leaves a trace. Until this existed, server.log
+    // was startup banners only, and a wedged instance left NOTHING to RCA
+    // from — the whole incident was reconstructed from gdb.
+    // stderr on purpose: stdout is block-buffered under systemd, stderr is
+    // not, and the journal timestamps every line itself.
+    .layer(axum::middleware::from_fn(request_middleware::log_request))
+    .layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        replica::headers,
+    ))
+    .with_state(state);
 
     let app = process_pool::protect_worker(app);
 
@@ -678,6 +580,10 @@ async fn main() {
     // Everything committed before this line is STARTUP in quipu_write_facts_total
     // (aegis-gwkd76): the work every restart repeats.
     quipu::write_kind::set_serving();
-    quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    if scoped_enabled {
+        scoped_reads::serve_http(app, &bind_addr).await;
+    } else {
+        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    }
     drop(workers);
 }

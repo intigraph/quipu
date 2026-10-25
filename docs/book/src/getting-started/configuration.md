@@ -1,5 +1,9 @@
 # Configuration
 
+The default-off scoped current-read profile is documented in
+[Scoped current reads](../reference/scoped-reads.md). It requires separate
+owner-controlled policy authority and independent rollout admission.
+
 Quipu is configured via `.bobbin/config.toml` in your project directory
 or `~/.config/bobbin/config.toml` for global defaults.
 

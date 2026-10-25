@@ -116,6 +116,10 @@ pub(super) fn bearer_policy(
                 );
                 auth_policy.with_named(registry)
             }
+            Err(_) if config.scoped_reads.is_some() => {
+                eprintln!("error: scoped credential authority unavailable; refusing startup");
+                std::process::exit(2);
+            }
             Err(reason) => {
                 // Optional additions cannot disable an existing shared bearer.
                 // Deployment must validate the candidate before provisioning clients.

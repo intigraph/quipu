@@ -171,10 +171,18 @@ bench name *args:
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
 # This is the dataset behind the README screenshot — see examples/demo-graph.
-demo:
-    rm -f /tmp/quipu-demo.db
-    cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
-    cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
+demo name="explorer":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(name)}} in
+        scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        explorer)
+            rm -f /tmp/quipu-demo.db
+            cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
+            cargo run --bin quipu-server --features full -- --db /tmp/quipu-demo.db
+            ;;
+        *) echo "unknown demo" >&2; exit 2 ;;
+    esac
 
 # Re-run the two-store transcript embedded in the Sharing & Federation chapter.
 sharing-demo:

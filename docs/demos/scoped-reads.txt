@@ -1,0 +1,12 @@
+Script started on 2026-10-25 16:55:38-04:00 [COMMAND="bash docs/demos/scoped-reads.sh" <not executed on terminal>]
+$ just demo scoped-reads
+Target: private in-memory fixture; unchanged legacy API and new scoped API on the candidate.
+P has query permission for A only. Same explicit B query:
+legacy: {"count":1,"labels":null,"rows":[{"value":"fixture-secret"}],"truncated":false,"variables":["value"]}
+scoped: policy denied: scoped read denied
+Allowed A control: {"head":{},"boolean":true}
+After revocation, buffered publication recheck: policy denied: scoped read denied
+No production access or bootstrap/lease/runtime acceptance is demonstrated.
+Demonstration exit: 0
+
+Script done on 2026-10-25 16:56:21-04:00 [COMMAND_EXIT_CODE="0"]

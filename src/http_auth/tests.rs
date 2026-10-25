@@ -292,6 +292,14 @@ fn routes_in_server_source() -> Vec<String> {
     let sources = [
         ("server.rs", include_str!("../server.rs")),
         (
+            "server/auth_guard.rs",
+            include_str!("../server/auth_guard.rs"),
+        ),
+        (
+            "server/scoped_reads.rs",
+            include_str!("../server/scoped_reads.rs"),
+        ),
+        (
             "query_endpoint/routes.rs",
             include_str!("../query_endpoint/routes.rs"),
         ),
@@ -413,6 +421,8 @@ fn routes_in_server_source() -> Vec<String> {
          neither classified nor reported as unclassified."
     );
     let mut paths = Vec::new();
+    let mut methods =
+        std::collections::BTreeMap::<String, std::collections::BTreeSet<String>>::new();
     for (_, src) in sources {
         let mut remaining = src;
         while let Some(idx) = remaining.find(".route(") {
@@ -421,11 +431,48 @@ fn routes_in_server_source() -> Vec<String> {
             if let Some(path) = candidate.strip_prefix('"')
                 && let Some(end) = path.find('"')
             {
-                paths.push(path[..end].to_string());
+                let name = path[..end].to_string();
+                paths.push(name.clone());
                 remaining = &path[end + 1..];
+                let mut depth = 1usize;
+                let mut end = 0;
+                for (index, byte) in remaining.bytes().enumerate() {
+                    match byte {
+                        b'(' => depth += 1,
+                        b')' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = index;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                assert!(end > 0, "route census lost declaration boundary for {name}");
+                let body = &remaining[..end];
+                let entry = methods.entry(name.clone()).or_default();
+                for method in [
+                    "get", "head", "post", "put", "patch", "delete", "options", "trace", "connect",
+                    "any",
+                ] {
+                    if body.contains(&format!("{method}(")) {
+                        entry.insert(method.to_string());
+                    }
+                }
+                assert!(
+                    !entry.is_empty(),
+                    "unclassified method registration for {name}"
+                );
             }
         }
     }
+    let expected: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        serde_json::from_str(include_str!("../read_authorization/http-methods.json")).unwrap();
+    assert_eq!(
+        methods, expected,
+        "HTTP method/alias dispatch changed: make the scoped decision explicit"
+    );
     paths
 }
 
@@ -445,6 +492,13 @@ fn write_endpoints_cover_every_route() {
 
     let mut unclassified = Vec::new();
     for r in &routes {
+        for method in ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] {
+            assert_ne!(
+                crate::read_authorization::routes::classify(r, method),
+                crate::read_authorization::routes::RouteClass::Unclassified,
+                "new route {method} {r} needs explicit scoped classification"
+            );
+        }
         let is_w = WRITE_ENDPOINTS.contains(&r.as_str());
         let is_r = READ_ENDPOINTS.contains(&r.as_str());
         if is_w && is_r {
@@ -597,7 +651,12 @@ fn auth_refusals_carry_a_json_body_not_a_bare_status() {
     // Guarded as TEXT for the same reason write_endpoints_cover_every_route
     // is: server.rs sits behind the `onnx` feature and the default matrix
     // never compiles it, so a behavioural test here would not run. This does.
-    let src = include_str!("../server.rs");
+    let server = include_str!("../server.rs");
+    assert!(
+        server.contains("auth_guard::layer("),
+        "the authentication middleware must remain installed"
+    );
+    let src = [server, include_str!("../server/auth_guard.rs")].join("\n");
     for bare in [
         "StatusCode::UNAUTHORIZED.into_response()",
         "StatusCode::FORBIDDEN.into_response()",

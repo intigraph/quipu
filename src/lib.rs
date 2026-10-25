@@ -84,6 +84,7 @@ pub mod follow_http;
 pub mod follow_ready;
 mod rdf_graph_store;
 mod rdf_scope;
+pub mod read_authorization;
 pub mod read_pin;
 pub mod reasoner;
 pub mod reconcile;

@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "0204be83ad7c98a2c1322d17aaea91f87b5b896b41ef5cd119a7d1caffd1f63d",
+      "source_sha256": "835167869859963bf977baaf26ceb62941c5febecafc2d35707b4b98a95e56ef",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "7d8fee499c23187c06965070a07a2d590c4435ea15535b815648df40f6ba264d",
+      "source_sha256": "fd6beff9172bd71db1b26c246f5bb1593500a45951920508aacf3b16cedc499d",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"

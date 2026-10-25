@@ -46,6 +46,7 @@
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
+  - [Scoped current reads](reference/scoped-reads.md)
   - [Versioned file memory](reference/memory-files.md)
 - [Atomic source acquisition](reference/acquisition.md)
 - [Explicit substring search](reference/substring-search.md)
