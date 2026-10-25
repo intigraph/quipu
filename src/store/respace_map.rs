@@ -281,6 +281,21 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("deck_receipts", "revision", TermIdKind::None),
     ("deck_receipts", "data", TermIdKind::None),
     ("deck_receipts", "tx", TermIdKind::None),
+    // -- attested-write state: text/JSON, counters and tx IDs; no
+    // dictionary IDs are embedded in any of these payloads. --
+    ("attest_switch", "id", TermIdKind::None),
+    ("attest_switch", "enabled", TermIdKind::None),
+    ("attest_signers", "id", TermIdKind::None),
+    ("attest_signers", "data", TermIdKind::None),
+    ("attest_signers", "revoked", TermIdKind::None),
+    ("attest_signers", "sign_count", TermIdKind::None),
+    ("attest_graphs", "iri", TermIdKind::None),
+    ("attest_challenges", "nonce", TermIdKind::None),
+    ("attest_challenges", "data", TermIdKind::None),
+    ("attest_challenges", "consumed", TermIdKind::None),
+    ("attest_receipts", "nonce", TermIdKind::None),
+    ("attest_receipts", "data", TermIdKind::None),
+    ("attest_receipts", "tx", TermIdKind::None),
     // -- session attestation registry (aegis-c9c44) --
     // Server-protected identity state, deliberately outside the interned term
     // space: a session id, an agent URN, hex key material, an introducer name
