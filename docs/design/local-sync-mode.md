@@ -167,7 +167,9 @@ consistent snapshot read at `T`. Its manifest adds:
 takes one graph (`src/server/feed_stream.rs:72-86`). Tailing N graphs as N
 streams would split a multi-graph transaction across streams, with no
 atomicity between them. The replication stream therefore takes the scope
-itself: `GET /replicate/stream?scope=<scope_digest>&since=T`. Each frame
+itself: `POST /replicate/stream` with the scope's graph lists and `since=T`
+(a POST, like `/share/asof`, because graph IRIs do not belong in a query
+string; the session frame states the `scope_digest`). Each frame
 carries every in-scope record of one source transaction, across all its
 graphs, and is applied as one unit.
 

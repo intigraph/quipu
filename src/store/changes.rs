@@ -37,8 +37,10 @@
 //! - **The log is permanent.** Unlike Spanner's 1–30 day retention, the fact
 //!   log never garbage-collects, so a cursor never expires.
 
+use std::collections::HashMap;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value as Json, json};
 
 use crate::error::Result;
@@ -138,6 +140,23 @@ fn page_sql(graph: bool) -> &'static str {
     }
 }
 
+/// Graph ids as an SQL list. An empty set matches nothing.
+/// JSON's worst case: a control character escapes to six bytes (`\u0000`).
+pub const ESCAPE_FACTOR: u64 = 6;
+/// A record's keys, numbers and punctuation, beyond its strings.
+pub const RECORD_OVERHEAD: u64 = 256;
+
+fn id_list(graphs: &[i64]) -> String {
+    if graphs.is_empty() {
+        return "NULL".into();
+    }
+    graphs
+        .iter()
+        .map(i64::to_string)
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 impl Store {
     /// Serve change records for transactions STRICTLY AFTER `since_tx`, at
     /// most `max_txs` transactions (whole transactions only). `graph`
@@ -165,7 +184,12 @@ impl Store {
 
         let mut records = Vec::new();
         for tx in &tx_ids {
-            self.records_for_tx(*tx, capture, graph, &mut records)?;
+            self.records_for_tx(
+                *tx,
+                capture,
+                graph.as_ref().map(std::slice::from_ref),
+                &mut records,
+            )?;
         }
         Ok(ChangePage {
             records,
@@ -177,6 +201,155 @@ impl Store {
             store_id: self.store_id()?,
             log_epoch: self.log_epoch()?,
         })
+    }
+
+    /// [`Store::changes_after`] for a SET of graphs (ids, `0` = ROOT): the
+    /// first `max_txs` transactions after `since_tx` that wrote any of them,
+    /// each with only its records in those graphs. The replication stream's
+    /// read (`replicate_source`); the caller holds one read transaction
+    /// around it so the page and its watermark are one snapshot.
+    pub fn changes_in_graphs(
+        &self,
+        since_tx: i64,
+        max_txs: usize,
+        capture: Capture,
+        graphs: &[i64],
+    ) -> Result<ChangePage> {
+        let (watermark_tx, watermark_timestamp) = self.latest_transaction()?;
+        // Graph ids are integers, so they are written into the SQL directly.
+        // `+g` keeps the graph test out of index selection (see `page_sql`).
+        let sql = format!(
+            "SELECT DISTINCT tx FROM facts WHERE tx > ?1 AND +g IN ({}) ORDER BY tx LIMIT ?2",
+            id_list(graphs)
+        );
+        let tx_ids: Vec<i64> = self
+            .conn
+            .prepare(&sql)?
+            .query_map(params![since_tx, max_txs as i64], |r| r.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        let mut records = Vec::new();
+        for tx in &tx_ids {
+            self.records_for_tx(*tx, capture, Some(graphs), &mut records)?;
+        }
+        Ok(ChangePage {
+            records,
+            since: since_tx,
+            next_tx: tx_ids.last().copied().unwrap_or(since_tx),
+            watermark_tx,
+            watermark_timestamp,
+            capture,
+            store_id: self.store_id()?,
+            log_epoch: self.log_epoch()?,
+        })
+    }
+
+    /// The bounded pre-pass for [`Store::changes_in_graphs`]: the first
+    /// `max_txs` transactions after `since_tx` that wrote any of `graphs`, each
+    /// with its in-scope row count. Counted in SQL, so no record is built.
+    pub fn tx_rows_in_graphs(
+        &self,
+        since_tx: i64,
+        max_txs: usize,
+        graphs: &[i64],
+    ) -> Result<Vec<(i64, u64)>> {
+        let sql = format!(
+            "SELECT tx, COUNT(*) FROM facts WHERE tx > ?1 AND +g IN ({}) \
+             GROUP BY tx ORDER BY tx LIMIT ?2",
+            id_list(graphs)
+        );
+        let rows = self
+            .conn
+            .prepare(&sql)?
+            .query_map(params![since_tx, max_txs as i64], |r| {
+                Ok((r.get(0)?, r.get::<_, i64>(1)?.unsigned_abs()))
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(rows)
+    }
+
+    /// An upper bound on the encoded bytes of `tx`'s records in `graphs`, as
+    /// [`Store::changes_in_graphs`] would build them, read without building
+    /// them: string lengths come from SQL `length()` over each string cast to a
+    /// blob, so no IRI, value or metadata is loaded. (On text, `length()` counts
+    /// characters only up to the first NUL; on a blob it counts every byte.) Every string counts at JSON's worst-case escaping
+    /// ([`ESCAPE_FACTOR`] bytes per byte), the transaction's timestamp, actor
+    /// and source count once per record (each record repeats them), and a
+    /// record adds [`RECORD_OVERHEAD`] for its keys and numbers. Counting stops
+    /// once the bound passes `cap`, so a refusal reads at most what it refuses.
+    pub fn tx_encoded_bound(&self, tx: i64, graphs: &[i64], cap: u64) -> Result<u64> {
+        let meta: u64 = self
+            .conn
+            .query_row(
+                "SELECT length(CAST(timestamp AS BLOB)) + COALESCE(length(CAST(actor AS BLOB)), 0) \
+                 + COALESCE(length(CAST(source AS BLOB)), 0) FROM transactions WHERE id = ?1",
+                params![tx],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten()
+            .unwrap_or(0)
+            .unsigned_abs();
+        // A Ref is tag 0 plus an 8-byte id; only those blobs are read whole.
+        let sql = format!(
+            "SELECT e, a, g, length(v), CASE WHEN substr(v, 1, 1) = x'00' THEN v END, \
+                    length(CAST(valid_from AS BLOB)) + COALESCE(length(CAST(valid_to AS BLOB)), 0) \
+             FROM facts WHERE tx = ?1 AND g IN ({})",
+            id_list(graphs)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![tx])?;
+        let mut lengths: HashMap<i64, u64> = HashMap::new();
+        let mut total = 0u64;
+        while let Some(r) = rows.next()? {
+            let (e, a, g): (i64, i64, i64) = (r.get(0)?, r.get(1)?, r.get(2)?);
+            let value_len = r.get::<_, i64>(3)?.unsigned_abs();
+            let reference =
+                r.get::<_, Option<Vec<u8>>>(4)?
+                    .and_then(|v| match Value::from_bytes(&v) {
+                        Ok(Value::Ref(id)) => Some(id),
+                        _ => None,
+                    });
+            let times = r.get::<_, Option<i64>>(5)?.unwrap_or(0).unsigned_abs();
+            let mut strings = meta + times + self.term_len(e, &mut lengths)?;
+            strings += self.term_len(a, &mut lengths)?;
+            strings += if g == 0 {
+                4
+            } else {
+                self.term_len(g, &mut lengths)?
+            };
+            strings += match reference {
+                Some(id) => self.term_len(id, &mut lengths)?,
+                None => value_len,
+            };
+            total = total.saturating_add(strings * ESCAPE_FACTOR + RECORD_OVERHEAD);
+            if total > cap {
+                break;
+            }
+        }
+        Ok(total)
+    }
+
+    /// A term's IRI length in bytes, from SQL `length()` on the IRI cast to a
+    /// blob, so the IRI is never loaded.
+    fn term_len(&self, id: i64, seen: &mut HashMap<i64, u64>) -> Result<u64> {
+        if let Some(len) = seen.get(&id) {
+            return Ok(*len);
+        }
+        let local: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT length(CAST(iri AS BLOB)) FROM main.terms WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        // An attached layer's term is resolved the ordinary way.
+        let len = match local {
+            Some(len) => len.unsigned_abs(),
+            None => self.resolve(id)?.len() as u64,
+        };
+        seen.insert(id, len);
+        Ok(len)
     }
 
     fn latest_transaction(&self) -> Result<(i64, Option<String>)> {
@@ -195,7 +368,7 @@ impl Store {
         &self,
         tx: i64,
         capture: Capture,
-        graph: Option<i64>,
+        graphs: Option<&[i64]>,
         out: &mut Vec<Json>,
     ) -> Result<()> {
         let (timestamp, actor, source) = self
@@ -218,8 +391,8 @@ impl Store {
                           CASE WHEN retracted_tx IS NULL THEN valid_to END \
                           FROM facts WHERE tx = ?1",
         );
-        if graph.is_some() {
-            sql.push_str(" AND g = ?2");
+        if let Some(graphs) = graphs {
+            sql.push_str(&format!(" AND g IN ({})", id_list(graphs)));
         }
         // rowid is the write order inside the transaction — the per-entity
         // ordering promise rides on it.
@@ -238,14 +411,8 @@ impl Store {
                     r.get(6)?,
                 ))
             };
-            match graph {
-                Some(g) => stmt
-                    .query_map(params![tx, g], map)?
-                    .collect::<std::result::Result<_, _>>()?,
-                None => stmt
-                    .query_map(params![tx], map)?
-                    .collect::<std::result::Result<_, _>>()?,
-            }
+            stmt.query_map(params![tx], map)?
+                .collect::<std::result::Result<_, _>>()?
         };
 
         for (sequence, (e, a, v, g, op, valid_from, valid_to)) in rows.into_iter().enumerate() {
@@ -348,3 +515,7 @@ mod replay_tests;
 #[cfg(test)]
 #[path = "changes_asof_tests.rs"]
 mod asof_tests;
+
+#[cfg(test)]
+#[path = "changes_bound_tests.rs"]
+mod bound_tests;

@@ -45,6 +45,8 @@ mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
 pub mod replica_provider;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod replicate_source;
 pub mod replicate_wire;
 mod search_graph_scope;
 pub mod search_trace;
