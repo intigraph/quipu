@@ -55,18 +55,19 @@ const MAX_SUB_LEN: usize = 128;
 
 static SUBSCRIPTIONS: AtomicUsize = AtomicUsize::new(0);
 
-/// One of the process-wide subscriptions, released when dropped.
-struct Held;
+/// One of the process-wide subscriptions, released when dropped. It lives in
+/// the subscription's task, so a subscription that ends on its own (after its
+/// last error) frees its place at once, not when its connection next speaks.
+struct Held(&'static AtomicUsize);
 
 impl Held {
-    fn take() -> Option<Self> {
+    fn take(quota: &'static AtomicUsize) -> Option<Self> {
         // A plain CAS loop: current stable deprecates `fetch_update` (renamed
         // `try_update`), which older toolchains do not have.
-        let mut n = SUBSCRIPTIONS.load(Ordering::Acquire);
+        let mut n = quota.load(Ordering::Acquire);
         while n < MAX_SUBSCRIPTIONS {
-            match SUBSCRIPTIONS.compare_exchange_weak(n, n + 1, Ordering::AcqRel, Ordering::Acquire)
-            {
-                Ok(_) => return Some(Self),
+            match quota.compare_exchange_weak(n, n + 1, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return Some(Self(quota)),
                 Err(current) => n = current,
             }
         }
@@ -76,13 +77,12 @@ impl Held {
 
 impl Drop for Held {
     fn drop(&mut self) {
-        SUBSCRIPTIONS.fetch_sub(1, Ordering::AcqRel);
+        self.0.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
 struct Subscription {
     task: tokio::task::JoinHandle<()>,
-    _held: Held,
 }
 
 pub(crate) async fn feed_ws(
@@ -108,7 +108,8 @@ async fn serve(store: SharedStore, mut socket: WebSocket, _slot: OwnedSemaphoreP
         tokio::select! {
             incoming = socket.recv() => match incoming {
                 Some(Ok(Message::Text(text))) => {
-                    if let Some(reply) = handle(&store, text.as_str(), &mut subs, &outbox)
+                    if let Some(reply) =
+                        handle(&store, text.as_str(), &mut subs, &outbox, &SUBSCRIPTIONS)
                         && socket.send(Message::Text(reply.into())).await.is_err()
                     {
                         break;
@@ -151,13 +152,14 @@ fn handle(
     text: &str,
     subs: &mut HashMap<String, Subscription>,
     outbox: &mpsc::Sender<String>,
+    quota: &'static AtomicUsize,
 ) -> Option<String> {
     let Ok(message) = serde_json::from_str::<Value>(text) else {
         return Some(refusal(None, "message is not JSON"));
     };
     let sub = message["sub"].as_str().map(str::to_string);
     match message["op"].as_str() {
-        Some("subscribe") => subscribe(store, &message, subs, outbox).err(),
+        Some("subscribe") => subscribe(store, &message, subs, outbox, quota).err(),
         Some("unsubscribe") => {
             let Some(sub) = sub else {
                 return Some(refusal(None, "unsubscribe names no sub"));
@@ -179,6 +181,7 @@ fn subscribe(
     message: &Value,
     subs: &mut HashMap<String, Subscription>,
     outbox: &mpsc::Sender<String>,
+    quota: &'static AtomicUsize,
 ) -> Result<(), String> {
     let Some(sub) = message["sub"]
         .as_str()
@@ -232,13 +235,14 @@ fn subscribe(
     if subs.len() >= MAX_PER_CONNECTION {
         return fail("too many subscriptions on this connection");
     }
-    let Some(held) = Held::take() else {
+    let Some(held) = Held::take(quota) else {
         return fail("subscription capacity exhausted; retry later");
     };
     let mut cursor = Cursor::open(store.clone(), offset, params, changes, None);
     let name = sub.to_string();
     let outbox = outbox.clone();
     let task = tokio::spawn(async move {
+        let _held = held;
         while let Some(frame) = cursor.next_frame().await {
             let message = encode(&name, &frame, cursor.offset());
             if outbox.send(message).await.is_err() {
@@ -246,7 +250,7 @@ fn subscribe(
             }
         }
     });
-    subs.insert(sub.to_string(), Subscription { task, _held: held });
+    subs.insert(sub.to_string(), Subscription { task });
     Ok(())
 }
 

@@ -487,3 +487,52 @@ async fn a_drop_at_every_frame_boundary_still_converges() {
         assert_eq!(facts(&store, BOARD), want, "cut {cut}: diverged");
     }
 }
+
+/// A subscription that ends on its own (here: an unregistered graph, one
+/// error, then the task finishes) frees its process-wide place at once,
+/// without the connection sending anything else. The live subscription beside
+/// it keeps its place, so the count cannot pass by never counting at all.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_finished_subscription_frees_its_place_without_another_message() {
+    static QUOTA: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let count = || QUOTA.load(std::sync::atomic::Ordering::Acquire);
+    let (store, _url) = serve().await;
+    let (outbox, mut frames) = tokio::sync::mpsc::channel(64);
+    let mut subs = std::collections::HashMap::new();
+    let live =
+        json!({"op": "subscribe", "sub": "live", "feed": "changes", "since": 0, "graph": BOARD});
+    assert!(super::handle(&store, &live.to_string(), &mut subs, &outbox, &QUOTA).is_none());
+    let gone = json!({"op": "subscribe", "sub": "gone", "feed": "changes", "since": 0,
+                      "graph": "urn:not-registered"});
+    assert!(super::handle(&store, &gone.to_string(), &mut subs, &outbox, &QUOTA).is_none());
+    assert_eq!(count(), 2);
+    let error = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let frame: Json = serde_json::from_str(&frames.recv().await.unwrap()).unwrap();
+            if frame["sub"] == "gone" && frame["event"] == "quipu.error" {
+                return frame;
+            }
+        }
+    })
+    .await
+    .expect("the unregistered graph is refused on the subscription");
+    assert_eq!(error["sub"], "gone");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !subs["gone"].task.is_finished() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        count(),
+        1,
+        "the finished subscription still holds its place"
+    );
+    assert!(!subs["live"].task.is_finished());
+    for (_, sub) in subs.drain() {
+        sub.task.abort();
+        let _ = sub.task.await;
+    }
+    assert_eq!(count(), 0, "an aborted subscription releases its place");
+}
