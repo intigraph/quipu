@@ -379,3 +379,111 @@ async fn a_stalled_connection_never_delays_another() {
     }
     assert_eq!(got, txs);
 }
+
+/// The live facts of a graph, by meaning (term ids differ per store).
+fn facts(store: &Store, graph: &str) -> std::collections::BTreeSet<String> {
+    let Some(g) = store.registered_graph_id(graph).unwrap() else {
+        return std::collections::BTreeSet::new();
+    };
+    let page = store
+        .changes_after(
+            0,
+            10_000,
+            quipu::store::changes::Capture::NewValues,
+            Some(g),
+        )
+        .unwrap();
+    page.records
+        .iter()
+        .map(|r| {
+            format!(
+                "{} {} {} {}",
+                r["op"], r["entity"], r["attribute"], r["value"]
+            )
+        })
+        .collect()
+}
+
+/// Read up to `limit` frames into `applier`; `true` once it reaches `head`.
+async fn follow(
+    socket: &mut Socket,
+    store: &mut Store,
+    applier: &mut quipu::applier::Applier,
+    head: i64,
+    limit: usize,
+) -> bool {
+    for _ in 0..limit {
+        if applier.progress().is_some_and(|p| p.source_tx >= head) {
+            return true;
+        }
+        let Some(frame) = next(socket, Duration::from_secs(10)).await else {
+            return false;
+        };
+        let event = frame["event"].as_str().unwrap();
+        let data = frame["data"].as_str().unwrap();
+        applier.apply_frame(store, event, data, 0).unwrap();
+    }
+    applier.progress().is_some_and(|p| p.source_tx >= head)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_drop_at_every_frame_boundary_still_converges() {
+    let (shared, url) = serve().await;
+    // A fresh replica's cursor is 0: the applier refuses a page that does not
+    // continue from it, so every consumer here starts from the beginning.
+    let since = 0;
+    // Small transactions around one that crosses as begin, parts and commit.
+    write(&shared, BOARD, "urn:item:a");
+    {
+        let mut store = shared.lock();
+        let g = store.registered_graph_id(BOARD).unwrap().unwrap();
+        let datums: Vec<Datum> = (0..25)
+            .map(|i| Datum {
+                entity: store.intern(&format!("urn:big:{i}")).unwrap(),
+                attribute: store.intern("urn:p:body").unwrap(),
+                value: Value::Str("z".repeat(50_000)),
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            })
+            .collect();
+        store.transact_to_graph(&datums, T, None, None, g).unwrap();
+    }
+    write(&shared, BOARD, "urn:item:b");
+    write(&shared, BOARD, "urn:item:c");
+    let head = shared.read().latest_tx_id().unwrap();
+    let want = facts(&shared.read(), BOARD);
+
+    // Count the frames of one uninterrupted pass.
+    let mut socket = connect(&url).await;
+    send(&mut socket, subscribe("all", since, BOARD)).await;
+    let mut total = 0;
+    loop {
+        let frame = next(&mut socket, Duration::from_secs(10)).await.unwrap();
+        total += 1;
+        if frame["id"] == head.to_string() {
+            break;
+        }
+    }
+    drop(socket);
+    assert!(total >= 6, "{total} frames; the fixture must chunk");
+
+    for cut in 1..total {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut applier = quipu::applier::Applier::open(&store).unwrap();
+        let mut socket = connect(&url).await;
+        send(&mut socket, subscribe("all", since, BOARD)).await;
+        follow(&mut socket, &mut store, &mut applier, head, cut).await;
+        drop(socket);
+        // A restart: reopen from the persisted cursor; a half chunk is gone.
+        let mut applier = quipu::applier::Applier::open(&store).unwrap();
+        let resume = applier.progress().map_or(since, |p| p.source_tx);
+        let mut socket = connect(&url).await;
+        send(&mut socket, subscribe("all", resume, BOARD)).await;
+        assert!(
+            follow(&mut socket, &mut store, &mut applier, head, 1_000).await,
+            "cut {cut}: never reached the head"
+        );
+        assert_eq!(facts(&store, BOARD), want, "cut {cut}: diverged");
+    }
+}
