@@ -75,6 +75,8 @@ mod query_endpoint;
 mod query_usage;
 #[path = "server/reason.rs"]
 mod reason;
+#[path = "server/relay.rs"]
+mod relay;
 #[path = "server/replica.rs"]
 mod replica;
 #[path = "server/request_middleware.rs"]
@@ -153,6 +155,14 @@ async fn main() {
     // It refuses when this build cannot construct the configured one rather
     // than falling back to the SQLite table a migrated deployment has left.
     let is_replica = config.server.replica.is_some();
+    if is_replica && config.server.relay.is_some() {
+        eprintln!("error: server.replica and server.relay are exclusive");
+        std::process::exit(1);
+    }
+    // A relay writes only through its applier (s24.2 S4): like a replica it
+    // runs no writer jobs, observers or derivations, which would put local
+    // transactions with no source in the log it serves from.
+    let is_follower = is_replica || config.server.relay.is_some();
     if !is_replica {
         base::apply_vector_backend(&mut store, &config);
     }
@@ -214,12 +224,12 @@ async fn main() {
     // Apply the OWL write-time constraint policy and opt-in reactive
     // materialization (aegis-bmqup, quipu-923) — see base::apply_owl for why
     // the clone_from is load-bearing.
-    if !is_replica {
+    if !is_follower {
         base::apply_owl(&mut store, &config);
     }
 
     // Current-state projections (aegis-tg5 F2) — see projections::install_at_startup.
-    projections::install_at_startup(&mut store, &config, is_replica);
+    projections::install_at_startup(&mut store, &config, is_follower);
 
     // Register the reactive reasoner so DERIVED facts stay fresh on write
     // (aegis-nnf0h). It was registered at src/cli.rs:582 and NOWHERE else, so the
@@ -244,7 +254,7 @@ async fn main() {
     // needed a restart. Now /shapes hot-swaps the ruleset through the Arc kept
     // on StoreHandle, and an empty reasoner is a per-write no-op.
     #[cfg(feature = "reactive-reasoner")]
-    let reactive_reasoner = if is_replica {
+    let reactive_reasoner = if is_follower {
         None
     } else {
         let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
@@ -341,7 +351,14 @@ async fn main() {
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
+    let relay = config.server.relay.as_ref().map(|relay_config| {
+        relay::open(&store, relay_config).unwrap_or_else(|reason| {
+            eprintln!("error: cannot start the relay: {reason}");
+            std::process::exit(1)
+        })
+    });
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;
     handle.deck_http = config.server.deck_http;
@@ -367,6 +384,7 @@ async fn main() {
     let preflight_keys_required = session_keys.required;
     let read_only = config.server.read_only || is_replica;
     let replica_config = config.server.replica.clone();
+    let is_relay = relay.is_some();
     if read_only {
         eprintln!("server is READ-ONLY — write endpoints will return 403");
     }
@@ -531,6 +549,11 @@ async fn main() {
                     if let Some(replica) = &replica_config && is_write {
                         return replica::write_refusal(replica, &path);
                     }
+                    // A relay serves its children's streams and challenges,
+                    // which are write-class, and refuses every other write.
+                    if is_relay && is_write && !path.starts_with("/replicate/") {
+                        return relay::write_refusal(&path);
+                    }
                     // A signed write authenticates by attestation, never by a
                     // bearer on the same request (aegis-bys8d1).
                     if (!is_write || !read_only) && req.headers().contains_key(auth::write_attest::HEADER) {
@@ -671,6 +694,16 @@ async fn main() {
 
     if let Some(replica) = config.server.replica {
         replica::start_metadata_reader(push_store_outer, replica);
+    } else if let Some(relay) = relay {
+        eprintln!(
+            "relay: following {}",
+            config
+                .server
+                .relay
+                .as_ref()
+                .map_or("", |r| r.upstream_url.as_str())
+        );
+        relay::start(push_store_outer, relay);
     } else {
         background::start(push_store_outer, config.events.retention_days);
     }

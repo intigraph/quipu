@@ -280,6 +280,37 @@ contract before interpreting transaction distance. A primary without
 must never deliver. Library/server tests also plant a write against the actual
 read-only connection. The scratch test does not change or probe production.
 
+## Relay serving
+
+A relay follows an upstream's scoped replication stream and serves its own
+children, so the source serves one stream per relay instead of one per
+follower (design: `docs/design/shared-applier-api.md` §6).
+
+```toml
+[quipu.server.relay]
+upstream_url = "https://source.example"
+upstream_store_id = "<the source's store_id>"
+upstream_key = "<the source's stream key, ed25519 public key in hex>"
+graphs = ["urn:graph:board"]
+context_graphs = []
+```
+
+- The relay store starts empty, or as an existing replica of the same source.
+  A store holding other facts is refused at startup.
+- It needs its own signing key. Children pin the relay's key, never the
+  source's.
+- Upstream coverage is trusted only under the pinned `upstream_key`.
+- It accepts writes only from its upstream stream. Every write endpoint except
+  `/replicate/*` answers 503 with `reason: relay`. Like a replica, it runs no
+  writer jobs, reasoner, OWL materialization or projection installs.
+- A child may ask only for graphs inside `graphs` and `context_graphs`.
+- A child's freshness challenge is answered only from an upstream proof the
+  relay requests after the challenge arrives. With the upstream unreachable,
+  children's freshness stays UNKNOWN.
+- Every response carries `x-quipu-relay-staleness-ms`: the relay's proven bound
+  from its upstream, or `unknown`.
+- `server.replica` and `server.relay` are exclusive.
+
 ## Private bounded query specimen
 
 `server.query_capture` is omitted by default. An omitted configuration or

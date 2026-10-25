@@ -43,8 +43,25 @@ const HEARTBEAT: Duration = Duration::from_secs(15);
 const FRAME_BUFFER: usize = 64;
 /// Challenges a session holds unanswered before further ones are refused.
 const CHALLENGE_BUFFER: usize = 8;
+/// How long a relay waits for its upstream proof before a child's challenge
+/// goes unanswered (the child's freshness then stays UNKNOWN).
+const UPSTREAM_PROOF_WAIT: Duration = if cfg!(test) {
+    Duration::from_millis(1_000)
+} else {
+    Duration::from_secs(5)
+};
 
-type Registry = Mutex<HashMap<String, mpsc::Sender<[u8; 16]>>>;
+/// A child's challenge, with the relay's fresh upstream proof when relayed.
+type Challenge = ([u8; 16], Option<i64>);
+
+/// An open session: where its challenges go, and its relay if it has one.
+#[derive(Clone)]
+struct Entry {
+    challenges: mpsc::Sender<Challenge>,
+    relay: Option<std::sync::Arc<crate::relay::Relay>>,
+}
+
+type Registry = Mutex<HashMap<String, Entry>>;
 
 fn sessions() -> &'static Registry {
     static SESSIONS: OnceLock<Registry> = OnceLock::new();
@@ -103,12 +120,24 @@ pub(crate) async fn stream(
     let Some(id) = session_id() else {
         return unavailable("stream_session_unavailable");
     };
+    let relay = store.relay.clone();
     let opened = {
         let store = store.clone();
         let id = id.clone();
+        let relay = relay.clone();
         crate::admission::read_blocking(move || {
             let read = store.read();
-            Ok(Session::open(&read, &request, id, identity))
+            Ok(match &relay {
+                // A relay serves in its source's numbering, inside its scope.
+                Some(relay) => Session::open_relay(
+                    &read,
+                    &request,
+                    (&relay.graphs, &relay.context_graphs),
+                    id,
+                    identity,
+                ),
+                None => Session::open(&read, &request, id, identity),
+            })
         })
         .await
     };
@@ -121,9 +150,9 @@ pub(crate) async fn stream(
         Err(error) => return error.into_response(),
     };
     let (frames, received) = mpsc::channel::<Event>(FRAME_BUFFER);
-    let (challenges, inbox) = mpsc::channel::<[u8; 16]>(CHALLENGE_BUFFER);
+    let (challenges, inbox) = mpsc::channel::<Challenge>(CHALLENGE_BUFFER);
     if let Ok(mut map) = sessions().lock() {
-        map.insert(id.clone(), challenges);
+        map.insert(id.clone(), Entry { challenges, relay });
     }
     let registered = Registered(id);
     if frames.send(sse(first)).await.is_err() {
@@ -150,14 +179,18 @@ async fn produce(
     store: SharedStore,
     mut session: Session,
     frames: mpsc::Sender<Event>,
-    mut inbox: mpsc::Receiver<[u8; 16]>,
+    mut inbox: mpsc::Receiver<Challenge>,
 ) {
     // Subscribe BEFORE the first read so no commit falls between them.
     let mut hints = store.commit_wake.subscribe();
     hints.borrow_and_update();
-    let mut nonces: VecDeque<[u8; 16]> = VecDeque::new();
+    let mut nonces: VecDeque<Challenge> = VecDeque::new();
     loop {
-        let nonce = nonces.front().copied();
+        let front = nonces.front().copied();
+        if let Some((_, Some(proof))) = front {
+            session.upstream_proof(proof);
+        }
+        let nonce = front.map(|(nonce, _)| nonce);
         let polled = {
             let store = store.clone();
             crate::admission::read_blocking(move || {
@@ -242,34 +275,59 @@ pub(crate) async fn challenge(axum::Json(request): axum::Json<ChallengeRequest>)
         )
             .into_response();
     };
-    let sender = sessions()
+    let entry = sessions()
         .lock()
         .ok()
         .and_then(|map| map.get(&request.session).cloned());
-    let Some(sender) = sender else {
+    let Some(Entry {
+        challenges: sender,
+        relay,
+    }) = entry
+    else {
         return (
             StatusCode::NOT_FOUND,
             axum::Json(json!({"error": "no open stream session with that id"})),
         )
             .into_response();
     };
-    match sender.try_send(nonce) {
+    if let Some(relay) = relay {
+        // §6, freshness per hop: the child's nonce reaches its session only
+        // with an upstream proof requested after it arrived.
+        if sender.capacity() == 0 {
+            return too_many();
+        }
+        tokio::spawn(async move {
+            if let Some(proof) = relay.fresh_proof(UPSTREAM_PROOF_WAIT).await {
+                let _ = sender.send((nonce, Some(proof))).await;
+            }
+        });
+        return (
+            StatusCode::ACCEPTED,
+            axum::Json(json!({"session": request.session})),
+        )
+            .into_response();
+    }
+    match sender.try_send((nonce, None)) {
         Ok(()) => (
             StatusCode::ACCEPTED,
             axum::Json(json!({"session": request.session})),
         )
             .into_response(),
-        Err(mpsc::error::TrySendError::Full(_)) => (
-            StatusCode::TOO_MANY_REQUESTS,
-            axum::Json(json!({"error": "too many unanswered challenges on this session"})),
-        )
-            .into_response(),
+        Err(mpsc::error::TrySendError::Full(_)) => too_many(),
         Err(mpsc::error::TrySendError::Closed(_)) => (
             StatusCode::NOT_FOUND,
             axum::Json(json!({"error": "the stream session has ended"})),
         )
             .into_response(),
     }
+}
+
+fn too_many() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        axum::Json(json!({"error": "too many unanswered challenges on this session"})),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

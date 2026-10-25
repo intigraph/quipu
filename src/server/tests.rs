@@ -1117,6 +1117,7 @@ pub(super) fn pooled_handle_with_provider(
         deck_http: false,
         query_capture: None,
         replica: None,
+        relay: None,
         federation: quipu::config::FederationConfig::default(),
         readers: super::ReadPool {
             conns,
