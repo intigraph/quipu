@@ -1,0 +1,3 @@
+{"version": 2, "width": 65, "height": 14, "title": "Quipu | turn a note into a queryable graph", "env": {"TERM": "dumb"}}
+[0.0, "o", "\u001b[2J\u001b[H$ quipu episode episode.json --base-ns urn:demo: --timestamp \r\n2026-01-01T00:00:00Z --db demo.db\r\ningested episode \"demo\" -- 14 facts (tx 1)\r\nautomatic embedding unavailable: no model and tokenizer \r\nconfigured; graph loading is not semantic-index readiness\r\n"]
+[10.0, "o", "\u001b[2J\u001b[H$ quipu read 'SELECT ?person ?thing WHERE { ?person \r\n<urn:demo:studies> ?thing }' --db demo.db\r\nperson  thing\r\n----------------------------------------\r\nurn:demo:Ada    urn:demo:Engine\r\n\r\n1 results\r\n"]

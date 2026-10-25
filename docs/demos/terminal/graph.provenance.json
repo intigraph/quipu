@@ -1,0 +1,10 @@
+{
+  "input_manifest_sha256": "bf542fd101cb9d16dcf96ea8e7169abd20596f11b2f4c4eca15ee0deee713e75",
+  "source": "native query stdout, command index 1; exact one-row assertion",
+  "row": [
+    "urn:demo:Ada",
+    "urn:demo:Engine"
+  ],
+  "relation": "urn:demo:studies",
+  "graph_sha256": "fb6353e5cbec215004ea97972b10bacb402f6ee29cfa697c52c41e89a3b09426"
+}
