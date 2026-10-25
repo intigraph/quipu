@@ -32,6 +32,8 @@ pub(crate) type SharedStore = Arc<StoreHandle>;
 pub(crate) struct StoreHandle {
     /// Coalesced hints only; durable rows remain in the existing SQLite logs.
     pub(crate) commit_wake: tokio::sync::watch::Sender<()>,
+    /// The change feed's shared reader, started by the first change stream.
+    pub(crate) changes_hub: std::sync::OnceLock<Arc<super::feed_stream::feed_hub::Hub>>,
     pub(crate) graph_metrics: super::graph_metrics::GraphMetrics,
     pub(crate) writer: FairMutex<quipu::Store>,
     pub(crate) readers: ReadPool,
@@ -154,6 +156,7 @@ impl StoreHandle {
         let commit_wake = Self::commit_wake_for(&store);
         Self {
             commit_wake,
+            changes_hub: std::sync::OnceLock::new(),
             graph_metrics: super::graph_metrics::GraphMetrics::new(db_path),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
@@ -195,6 +198,7 @@ impl StoreHandle {
         let commit_wake = Self::commit_wake_for(&store);
         Self {
             commit_wake,
+            changes_hub: std::sync::OnceLock::new(),
             graph_metrics: super::graph_metrics::GraphMetrics::new(":memory:"),
             vector_reads_pooled: store.has_sqlite_vector_backend(),
             embedding_provider: store.embedding_provider(),
