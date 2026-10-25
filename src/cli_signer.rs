@@ -26,15 +26,20 @@ fn required(args: &[String], name: &str) -> String {
     values[0].to_owned()
 }
 
-pub fn cmd_signer(raw_args: &[String], db_path: &str) {
+// Keep global selection and command normalization on the same token walk.
+// Syntax admission has already checked that every option has its value.
+fn normalized_args(raw_args: &[String]) -> (Vec<String>, Option<&str>) {
     // The global database option is legal before or after the subcommand.
     // Consume option values literally; a credential value named --db is data.
     let mut normalized = raw_args[..2].to_vec();
+    let mut db = None;
     let mut i = 2;
     while i < raw_args.len() {
         if raw_args[i].starts_with("--") {
             if raw_args[i] != "--db" {
                 normalized.extend_from_slice(&raw_args[i..i + 2]);
+            } else if db.is_none() {
+                db = Some(raw_args[i + 1].as_str());
             }
             i += 2;
         } else {
@@ -42,6 +47,15 @@ pub fn cmd_signer(raw_args: &[String], db_path: &str) {
             i += 1;
         }
     }
+    (normalized, db)
+}
+
+pub fn database_override(raw_args: &[String]) -> Option<&str> {
+    normalized_args(raw_args).1
+}
+
+pub fn cmd_signer(raw_args: &[String], db_path: &str) {
+    let (normalized, _) = normalized_args(raw_args);
     let args = normalized.as_slice();
     match args.get(2).map(String::as_str) {
         Some("enroll") => enroll(args, db_path),

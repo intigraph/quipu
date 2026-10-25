@@ -209,3 +209,75 @@ fn global_database_option_before_subcommand_uses_same_store() {
         .unwrap();
     assert_eq!(json(&out), json(&cli(&db, &["status"])));
 }
+
+#[test]
+fn flag_shaped_actor_never_redirects_database_selection() {
+    use base64::Engine as _;
+    let mut key = vec![0xa4, 0x01, 0x01, 0x03, 0x27, 0x20, 0x06, 0x21, 0x58, 0x20];
+    key.extend(1..=32u8);
+    let key = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(key);
+    let expiry = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 86400)
+        .to_string();
+    for actor in ["--db", "operator@example.org"] {
+        // All are syntax-admitted positions for the real global option.
+        for position in [1, 2, 14, 16, 20] {
+            let dir = tempfile::tempdir().unwrap();
+            let db = dir.path().join("chosen.db");
+            let mut args: Vec<String> = [
+                "signer",
+                "enroll",
+                "--credential-id",
+                "Y3JlZGVudGlhbC0x",
+                "--cose-key",
+                &key,
+                "--scheme",
+                "webauthn-eddsa",
+                "--origin",
+                "https://signer.example.org",
+                "--rp-id",
+                "signer.example.org",
+                "--expires-at",
+                &expiry,
+                "--actor",
+                actor,
+                "--graph",
+                "https://example.org/answers",
+                "--graph",
+                "https://example.org/other",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+            args.splice(
+                position..position,
+                ["--db".into(), db.to_str().unwrap().into()],
+            );
+            let out = Command::new(env!("CARGO_BIN_EXE_quipu"))
+                .args(&args)
+                .current_dir(dir.path())
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "actor={actor} position={position}: {out:?}"
+            );
+            assert!(db.is_file(), "chosen store missing: {args:?}");
+            assert!(
+                !dir.path().join("--graph").exists(),
+                "actor redirected the store"
+            );
+            let status = json(&cli(&db, &["status"]));
+            assert_eq!(status["enabled"], false);
+            assert_eq!(status["signers"].as_array().unwrap().len(), 1);
+            assert_eq!(status["signers"][0]["actor"], actor);
+            assert_eq!(
+                status["signers"][0]["graphs"],
+                serde_json::json!(["https://example.org/answers", "https://example.org/other"])
+            );
+        }
+    }
+}

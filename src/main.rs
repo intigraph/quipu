@@ -134,10 +134,13 @@ fn main() {
     }
 
     // Parse --db flag from anywhere in args (overrides config file).
-    let db_flag = args
-        .windows(2)
-        .find(|w| w[0] == "--db")
-        .map(|w| w[1].as_str());
+    let db_flag = if args[1] == "signer" {
+        cli_signer::database_override(&args)
+    } else {
+        args.windows(2)
+            .find(|w| w[0] == "--db")
+            .map(|w| w[1].as_str())
+    };
 
     // Load config from .bobbin/config.toml, then apply CLI overrides.
     let config = quipu::QuipuConfig::load(std::path::Path::new(".")).with_db_override(db_flag);

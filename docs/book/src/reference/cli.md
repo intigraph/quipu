@@ -1239,6 +1239,8 @@ For the complete new-class write recipe, see
 `enroll` records a public WebAuthn signer with its own HTTPS origin, relying
 party, human identity, expiry and explicit graph allowlist. Repeat `--graph`
 for each allowed graph. It never enables writes or protects a graph.
+The global `--db` option may precede or follow the signer subcommand. Option
+values are consumed literally: an actor named `--db` does not select a store.
 
 ```bash
 quipu signer enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-eddsa --origin https://signer.example.org --rp-id signer.example.org --actor operator@example.org --graph https://example.org/answers --expires-at EPOCH --db store.db
