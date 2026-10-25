@@ -297,6 +297,8 @@ fn routes_in_server_source() -> Vec<String> {
         ),
         ("server/cors.rs", include_str!("../server/cors.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        ("server/deck.rs", include_str!("../server/deck.rs")),
+        ("server/attest.rs", include_str!("../server/attest.rs")),
         (
             "server/publication.rs",
             include_str!("../server/publication.rs"),
@@ -346,7 +348,6 @@ fn routes_in_server_source() -> Vec<String> {
     // listed as route-free.
     const NO_ROUTES: &[&str] = &[
         "server/memory_files.rs", // handlers only; routes registered in server.rs
-        "server/deck.rs",         // handlers only; routes registered in server.rs
         "server/background.rs",   // primary worker startup, no route registration
         "server/replica.rs",      // handlers/middleware; route is registered in server.rs
         "server/relay.rs",        // upstream follower task, no route registration

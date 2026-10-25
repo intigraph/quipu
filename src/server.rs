@@ -19,6 +19,8 @@ mod admission;
 mod align;
 #[path = "server/assets.rs"]
 mod assets;
+#[path = "server/attest.rs"]
+mod attest;
 #[path = "server/auth.rs"]
 mod auth;
 #[path = "server/auth_response.rs"]
@@ -337,7 +339,7 @@ async fn main() {
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;
-    handle.deck_http = config.server.deck_http;
+    handle.signed_route_switches(&config.server);
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
     handle.replica = config
         .server
@@ -442,9 +444,8 @@ async fn main() {
         .route("/impact", post(impact_analysis))
         .route("/path/cone", post(path_cone))
         .route("/path/backtest", post(path_backtest))
-        .route("/deck/present", post(deck::deck_present))
-        .route("/deck/attest", post(deck::deck_attest))
-        .route("/deck/receipt", post(deck::deck_receipt))
+        .merge(deck::routes())
+        .merge(attest::routes())
         .route("/retract", post(retract))
         .route("/set", post(set_predicate))
         .route("/episode/retract", post(retract_episode))

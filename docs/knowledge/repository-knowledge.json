@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "c115a4223c211f7d345319d69e0ac65a58147625f55a2e3f249cd50d5ef48874",
+      "source_sha256": "34f8e9cfb8c2008e83a8064fbb9f6306346debe5556e7768b80f52530a4387a6",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "ed2e5a0264200faa6643db36d405645d42a393b2a60d69562ee8d0b52533cf41",
+      "source_sha256": "099c51689a4ac8c28bb25bb6ec0c37cb0d6b77837f5b4ef3dbc46c64483a82b2",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "118d66f4935455ee259c22319680feff270e731eab21088a589b5d726822cd70",
+      "source_sha256": "978ec20e0d34a8a80bed82565a08845ad22f2a13ce283d4268c1859e9047b0e7",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
