@@ -382,3 +382,62 @@ fn a_follower_whose_source_changed_is_not_ready() {
     let after = readiness(&replica, Some(&expected)).unwrap();
     assert!(matches!(after, Readiness::NotReady { .. }), "{after:?}");
 }
+
+/// Real-source pages with one deliberately broken continuation.
+struct BrokenBootstrap {
+    feed: Fake,
+    gap: bool,
+}
+
+impl Feed for BrokenBootstrap {
+    fn page(&mut self, since: i64, _limit: usize) -> std::io::Result<String> {
+        if since == 0 {
+            return Ok(page_json(&self.feed.source.borrow(), 0, 1));
+        }
+        if self.gap {
+            return Ok(page_json(&self.feed.source.borrow(), 3, 3));
+        }
+        let mut page: serde_json::Value =
+            serde_json::from_str(&page_json(&self.feed.source.borrow(), since, 1)).unwrap();
+        page["records"] = serde_json::json!([]);
+        page["next_tx"] = serde_json::json!(since);
+        Ok(page.to_string())
+    }
+
+    fn stream(&mut self, since: i64) -> std::io::Result<Box<dyn BufRead>> {
+        self.feed.stream(since)
+    }
+}
+
+#[test]
+fn bootstrap_gap_or_nonprogress_cannot_mark_a_partial_follower_ready() {
+    use crate::follow_ready::{Readiness, readiness};
+    for gap in [true, false] {
+        let source = source_with(6);
+        let expected = source.borrow().store_id().unwrap();
+        let mut replica = Store::open_in_memory().unwrap();
+        let (feed, _) = fake(&source);
+        let mut follower = Follower::open(&mut replica, BrokenBootstrap { feed, gap }).unwrap();
+        let result = follower.bootstrap(small_pace(), &mut |_| {});
+        assert!(
+            matches!(result, Err(Halt::Transport(_))),
+            "gap={gap}: {result:?}"
+        );
+        assert_eq!(follower.cursor(), 1);
+        assert!(matches!(
+            readiness(follower.store, Some(&expected)).unwrap(),
+            Readiness::NotReady { .. }
+        ));
+        // A normal retry uses committed progress, completes, and becomes ready.
+        drop(follower);
+        let (feed, requests) = fake(&source);
+        let mut follower = Follower::open(&mut replica, feed).unwrap();
+        follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+        assert_eq!(requests.borrow()[0], ("page", 1));
+        assert_eq!(follower.cursor(), 6);
+        assert!(matches!(
+            readiness(follower.store, Some(&expected)).unwrap(),
+            Readiness::Ready { source_tx: 6, .. }
+        ));
+    }
+}

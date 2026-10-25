@@ -182,17 +182,35 @@ impl<'a, F: Feed> Follower<'a, F> {
             pages += 1;
             // Back toward the paced size once pages fit again.
             limit = (limit * 2).min(pace.page_txs.max(1));
-            if let Step::Stop(halt) = self.apply("quipu.changes", &body)? {
-                return Err(halt);
+            match self.apply("quipu.changes", &body)? {
+                Step::Continue => {}
+                Step::Resume => {
+                    return Err(Halt::Transport(std::io::Error::other(
+                        "bootstrap page did not continue the committed cursor; retry from that cursor",
+                    )));
+                }
+                Step::Stop(halt) => return Err(halt),
             }
             let page: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
-            let watermark = page["watermark_tx"].as_i64().unwrap_or(i64::MAX);
-            let next = page["next_tx"].as_i64().unwrap_or(since);
-            // Caught up: the page reached the head, or it moved nothing.
-            if next >= watermark || self.cursor() >= watermark || next <= since {
-                // Only now may the follower serve reads in the primary's place.
+            let watermark = page["watermark_tx"]
+                .as_i64()
+                .filter(|tx| *tx >= 0)
+                .ok_or_else(|| {
+                    Halt::Transport(std::io::Error::other(
+                        "bootstrap page has no valid watermark",
+                    ))
+                })?;
+            // Only committed progress proves catch-up. A page's next_tx is a
+            // transport hint, including when the applier could not apply it.
+            let committed = self.cursor();
+            if committed >= watermark {
                 crate::follow_ready::mark_caught_up(self.store)?;
                 return Ok(pages);
+            }
+            if committed <= since {
+                return Err(Halt::Transport(std::io::Error::other(
+                    "bootstrap page made no committed progress below its watermark",
+                )));
             }
             sleep(pace.page_gap_ms);
         }
