@@ -93,6 +93,12 @@ Anything else is refused at declaration. No literal transforms, no
 value maps and no SPARQL-defined correspondences are allowed: those cannot
 be inverted soundly, and §3.5 depends on inversion.
 
+"Yes" in the write-back column is necessary, not sufficient. Equivalence
+rows may be **many-to-one**: `ex:Ticket ≡ my:Task` and `ex:Issue ≡ my:Task`
+are both allowed, and both serve reads. Such a target term then has more
+than one inverse, so an *assert* through it is ambiguous. §3.5 defines
+write-back by **inverse uniqueness** per target term, not per row.
+
 ### 3.2 Lifecycle reuses the alignment discipline
 
 Mappings go through the same three steps as instance alignment: **propose**
@@ -174,12 +180,31 @@ tail.
 An edit made in my vocabulary, to a subject that lives in a mapped source
 graph, is translated **on the replica, before the changeset is built**:
 
-- Each asserted or retracted quad whose predicate (or `rdf:type` object) is
-  a target term is rewritten through the mapping's invertible rows
-  (§3.1, last column) into the source vocabulary and the source graph.
-- A quad that would need a non-invertible row (`⊑`) is **refused locally**
-  with "not translatable through mapping M: my:Task has 2 source classes".
-  It is never guessed.
+For each target term `t` (a class, or a property) the replica computes its
+**inverse set** `inv(t)`: the source terms of every decided row in the
+scope that maps to `t`, together with their kind. Translation depends only
+on that set.
+
+- **Assert.** An asserted quad on `t` translates only when `inv(t)` has
+  **exactly one** member and that row is invertible (§3.1, last column).
+  The quad is rewritten into that source term, in its source graph. Every
+  other case is **refused locally** and never guessed:
+  - `|inv(t)| > 1`, as in a many-to-one equivalence: "not translatable:
+    my:Task has 2 source classes (ex:Ticket, ex:Issue) in mapping M".
+  - the only row is `⊑`: "not translatable: ex:Ticket ⊑ my:Task is
+    one-way".
+- **Retract.** "This target fact is no longer true" is well defined even
+  when `inv(t)` has several members. The fact is withdrawn when every source
+  fact that supports it is withdrawn. A retracted quad `(s, t, o)`
+  therefore translates into retracting **every** quad in the base journal
+  that supports it through `inv(t)`: `⊑` rows count, because they support
+  reads. Each such quad is listed **explicitly** in the changeset, with its
+  graph, so the master admits exact retractions and never re-derives them.
+  When the base journal holds no supporting quad, the retraction is refused
+  locally as "nothing to retract". It is not sent as a no-op.
+- **Inverse properties.** `owl:inverseOf` rows translate in the same way,
+  with subject and object swapped. A property whose `inv` set mixes an
+  inverse row and a direct row counts as `|inv| > 1` for asserts.
 - A quad on a target term no mapping covers stays in my own graph,
   unchanged.
 
@@ -205,6 +230,11 @@ grants no authority.
   chain is refused, and the refusal names the existing mapping.
 - **Conflicting mappings.** Two decided mappings in one scope whose rows send
   the same source term to different target terms are refused at apply.
+- **Many-to-one is allowed, and is read-only for asserts.** Several source
+  terms that map to one target term are not a conflict: reads union them.
+  Apply does not refuse them; instead it reports, for each target term,
+  whether it is **assert-writable** (`|inv(t)| = 1` and invertible). The
+  catalog shows the same flag (§6), so an agent learns before it writes.
 
 ## 4. Local reasoning, isolated in companion graphs
 
@@ -342,7 +372,8 @@ get a complete answer.
 5. **Catalog.** `quipu_graph_list` on a replica adds, for each graph:
    `followed` (yes or no), scope membership, cursor and freshness from the
    applier, the shape-set versions in force, and the mappings that read from
-   or write to it, with their status. A role primer in `quipu_context`
+   or write to it, with their status and, for each target term, whether it
+   is assert-writable (§3.6). A role primer in `quipu_context`
    names the agent's followed scope and its mappings in a few lines.
 6. **Write status in plain words.** A write returns `merged` (with the
    receipt), `pending merge` (queued, with operation id) or `refused`. A
@@ -373,6 +404,19 @@ control must fail with its mechanism disabled.
   `my:Task` on a new subject when two source classes are mapped `⊑` is
   refused locally as not translatable. A changeset carrying a stale mapping
   digest is a `mapping-stale` conflict with the overlay intact.
+- **A2b — many-to-one, paired assert and retract.** Add a second source class
+  `ex:Issue ≡ my:Task` to the mapping, and give subject `s` both
+  `rdf:type ex:Ticket` and `rdf:type ex:Issue` in B. A read for `my:Task`
+  returns `s` once. **Assert** `s rdf:type my:Task` on a new subject is
+  refused locally, naming both source classes; with the `ex:Issue` row
+  removed, the same assert translates to `ex:Ticket`. **Retract**
+  `s rdf:type my:Task` produces one changeset listing exactly the two
+  source quads. After admission, a fresh as-of read of B shows neither
+  quad, and the read for `my:Task` no longer returns `s`. With only one of
+  the two quads present in the base, the changeset lists only that one.
+  Each control fails with inverse-uniqueness disabled (the assert is
+  silently written to one class) or with explicit listing disabled (one
+  supporting quad survives and `s` still reads as `my:Task`).
 - **A3 — shape change flags.** Loading a new version of B's `ex:Ticket`
   shape on the master flags the mapping (a `MappingRecord`, a
   `mapping.flagged` event, a `shapes` frame to R). A1's query then reports
@@ -407,7 +451,7 @@ follows the corresponding `local-sync-mode.md` phase where it says so.
 | **C1** mappings on the master | per-version shape digests; `ShapeMapping` facts; `quipu_mapping_*`; flagging and `MappingRecord` | none; master-only, no replica needed | A3 on the master; refusal controls for chains, conflicts and disallowed predicates |
 | **C2** rewrite reads | `alias_read` (from `equivalence-aware-reads.md`) plus scoped inclusion expansion | C1 | A1 in `rewrite` mode on the master |
 | **C3** replica reasoning | local reasoner over followed graphs; mapping rules into mapping companions; `derivedAsOfSource`; the companion refusal on share, stream and relay; the `shapes` control frame | C1, `local-sync-mode.md` P2 | A1 `materialize`, A4, A5 |
-| **C4** write-back | translation in the changeset builder; `translated_by`; the `mapping-stale` conflict | C1, `local-sync-mode.md` P3 | A2 |
+| **C4** write-back | translation in the changeset builder (inverse-unique asserts, explicit supporting retractions); `translated_by`; the `mapping-stale` conflict | C1, `local-sync-mode.md` P3 | A2, A2b |
 | **C5** operation records | `ChangesetReceipt` (with P3), `MergeRecord`, opt-in `SubscriptionRecord`, `what_changed`; `PromotionRecord` only once the promotion authority exists | `local-sync-mode.md` P3; `entailment-regime.md` §3 for promotion | A6 |
 | **C6** agent surface | replica default scope, provenance line, absence contract on query and context, replica catalog, plain-word write status | `local-sync-mode.md` P2 and P4 | A7 before and after |
 
