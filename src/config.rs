@@ -639,6 +639,8 @@ pub struct RelayConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
+    /// Explicit isolated read profile; None retains the single-principal mode.
+    pub scoped_reads: Option<crate::read_authorization::profile::ScopedReadConfig>,
     /// Whether to start the REST server (default: false).
     pub enabled: bool,
 
@@ -742,6 +744,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
+            scoped_reads: None,
             enabled: false,
             bind: "127.0.0.1:3030".to_string(),
             auth_token: None,

@@ -13,7 +13,7 @@ enum Node<'a> {
 }
 
 /// A place in the algebra that changes which graphs a pattern reads.
-pub(super) enum Scope<'a> {
+pub(crate) enum Scope<'a> {
     /// `GRAPH <iri>` or `GRAPH ?g`.
     Graph(&'a NamedNodePattern),
     /// `SERVICE`: reads another endpoint, not this store's graphs.
@@ -39,7 +39,7 @@ pub(super) fn check(query: &Query) -> Result<()> {
 /// `EXISTS`, and refuse algebra the evaluator does not support.
 // The LATERAL variant exists only when dependency features are unified by SHACL.
 #[allow(clippy::match_wildcard_for_single_variants)]
-pub(super) fn visit_scopes<'a>(
+pub(crate) fn visit_scopes<'a>(
     query: &'a Query,
     mut visit: impl FnMut(Scope<'a>) -> Result<()>,
 ) -> Result<()> {
