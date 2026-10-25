@@ -461,7 +461,7 @@ async fn a_drop_at_every_frame_boundary_still_converges() {
     loop {
         let frame = next(&mut socket, Duration::from_secs(10)).await.unwrap();
         total += 1;
-        if frame["id"] == head.to_string() {
+        if frame["id"].as_str() == Some(head.to_string().as_str()) {
             break;
         }
     }
