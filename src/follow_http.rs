@@ -5,10 +5,10 @@
 //! heartbeats, so a silent connection is dropped and reopened from
 //! the cursor rather than held forever.
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
 
-use crate::follow::{CLIENT, Feed};
+use crate::follow::{CLIENT, Feed, PAGE_MAX_BYTES, PageTooLarge};
 
 /// The stream's heartbeat is 15 s; three missed beats mean the connection is gone.
 const STREAM_IDLE: Duration = Duration::from_secs(45);
@@ -72,17 +72,30 @@ fn transport(error: &ureq::Error) -> std::io::Error {
     std::io::Error::other(error.to_string())
 }
 
+/// The body read up to `cap` bytes; a longer one is [`PageTooLarge`]. ureq's
+/// own `into_string` stops at 10 MiB with an error indistinguishable from a
+/// transport failure, so a legitimately large page was retried forever.
+fn read_capped(reader: impl Read, cap: u64) -> std::io::Result<String> {
+    let mut body = String::new();
+    reader.take(cap + 1).read_to_string(&mut body)?;
+    if body.len() as u64 > cap {
+        return Err(std::io::Error::other(PageTooLarge));
+    }
+    Ok(body)
+}
+
 impl Feed for Http {
     fn page(&mut self, since: i64, limit: usize) -> std::io::Result<String> {
-        self.agent
+        let response = self
+            .agent
             .get(&format!("{}/changes", self.base))
             .query("since", &since.to_string())
             .query("limit", &limit.to_string())
             .query("capture", "old_and_new_values")
             .set("X-Quipu-Client", CLIENT)
             .call()
-            .map_err(|e| transport(&e))?
-            .into_string()
+            .map_err(|e| transport(&e))?;
+        read_capped(response.into_reader(), PAGE_MAX_BYTES)
     }
 
     fn stream(&mut self, since: i64) -> std::io::Result<Box<dyn BufRead>> {
@@ -95,5 +108,29 @@ impl Feed for Http {
             .call()
             .map_err(|e| transport(&e))?;
         Ok(Box::new(BufReader::new(response.into_reader())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_page_past_ureqs_ten_mib_default_is_read_whole() {
+        let body = "x".repeat(11 << 20);
+        assert_eq!(
+            read_capped(body.as_bytes(), PAGE_MAX_BYTES).unwrap().len(),
+            11 << 20
+        );
+    }
+
+    #[test]
+    fn a_page_over_the_cap_is_too_large_not_a_transport_failure() {
+        let error = read_capped("x".repeat(101).as_bytes(), 100).unwrap_err();
+        assert!(matches!(error.get_ref(), Some(e) if e.is::<PageTooLarge>()));
+        assert_eq!(
+            read_capped("x".repeat(100).as_bytes(), 100).unwrap().len(),
+            100
+        );
     }
 }

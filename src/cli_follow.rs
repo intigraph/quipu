@@ -98,5 +98,9 @@ fn handle(halt: Halt, cursor: i64, backoff: Duration) -> Duration {
             std::process::exit(3);
         }
         Halt::Budget => backoff,
+        Halt::TooLarge(reason) => {
+            eprintln!("follow: STOPPED at tx {cursor}: {reason}");
+            std::process::exit(3);
+        }
     }
 }

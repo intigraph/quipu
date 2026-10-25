@@ -48,6 +48,8 @@ struct Fake {
     requests: Requests,
     /// Cut the stream after this many frames with a read error.
     break_after: Option<usize>,
+    /// A page of more transactions than this is over the page cap.
+    max_page_txs: Option<usize>,
 }
 
 fn page_json(source: &Store, since: i64, limit: usize) -> String {
@@ -71,6 +73,9 @@ impl Read for Broken {
 impl Feed for Fake {
     fn page(&mut self, since: i64, limit: usize) -> std::io::Result<String> {
         self.requests.borrow_mut().push(("page", since));
+        if self.max_page_txs.is_some_and(|max| limit > max) {
+            return Err(std::io::Error::other(PageTooLarge));
+        }
         Ok(page_json(&self.source.borrow(), since, limit))
     }
 
@@ -111,6 +116,7 @@ fn fake(source: &Rc<RefCell<Store>>) -> (Fake, Requests) {
         source: source.clone(),
         requests: requests.clone(),
         break_after: None,
+        max_page_txs: None,
     };
     (feed, requests)
 }
@@ -277,4 +283,40 @@ fn sse_events_join_data_lines_and_skip_comments_and_ids() {
             ("message".to_string(), "plain".to_string()),
         ]
     );
+}
+
+#[test]
+fn an_oversized_page_is_asked_again_smaller_instead_of_retried_forever() {
+    // grant's #843 finding: a page over the transport cap was a transport
+    // failure, retried with the same cursor and limit forever.
+    let source = source_with(10);
+    let mut replica = Store::open_in_memory().unwrap();
+    let (mut feed, _) = fake(&source);
+    feed.max_page_txs = Some(1);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    let pace = Pace {
+        page_txs: 8,
+        page_gap_ms: 7,
+    };
+    follower.bootstrap(pace, &mut |_| ()).unwrap();
+    assert_eq!(follower.cursor(), source.borrow().latest_tx_id().unwrap());
+    drop(follower);
+    assert_eq!(live_digest(&replica), live_digest(&source.borrow()));
+}
+
+#[test]
+fn one_transaction_over_the_page_cap_stops_the_run() {
+    let source = source_with(2);
+    let mut replica = Store::open_in_memory().unwrap();
+    let (mut feed, requests) = fake(&source);
+    feed.max_page_txs = Some(0);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    let halt = follower.bootstrap(small_pace(), &mut |_| ()).unwrap_err();
+    assert!(
+        matches!(&halt, Halt::TooLarge(r) if r.contains("after 0")),
+        "{halt:?}"
+    );
+    // 3 -> 2 -> 1 transactions, then a stop: never the same request forever.
+    assert_eq!(requests.borrow().len(), 3);
+    assert_eq!(follower.cursor(), 0);
 }

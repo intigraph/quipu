@@ -269,6 +269,10 @@ qp follow --primary http://primary.example:3030 --db /srv/quipu/follower.db
   bootstrap cannot push the primary toward its memory limit. It then tails
   `GET /changes/stream` from the cursor.
   `--bootstrap-only` exits once a page reaches the primary's watermark.
+- A page body is read up to 256 MiB. A larger page is asked again with half
+  the transactions, and the page size grows back once pages fit. One source
+  transaction over 256 MiB ends the run with exit status 3, because no page
+  can carry it.
 - It reads only: no writer credential is needed. Every request carries
   `X-Quipu-Client: replica-follower`.
 - The cursor is durable, so a restart resumes where the follower stopped. A

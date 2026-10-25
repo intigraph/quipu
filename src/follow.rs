@@ -16,6 +16,11 @@
 //!   [`Halt::Rebuild`]: an operator rebuilds the follower. A broken or dropped frame
 //!   only reconnects from the cursor.
 //!
+//! - **Bounded pages.** A page body is read up to [`PAGE_MAX_BYTES`]. A larger
+//!   page is asked again with half the transactions, and a single transaction
+//!   over the cap ends the run with [`Halt::TooLarge`]: retrying the same
+//!   request could never succeed.
+//!
 //! Graphs frozen into packs are not in the change feed, so a follower does not
 //! hold them.
 
@@ -26,6 +31,31 @@ use crate::store::Store;
 
 /// The client label every follower request carries (`X-Quipu-Client`).
 pub const CLIENT: &str = "replica-follower";
+
+/// The most bytes a follower reads for one `/changes` page.
+pub const PAGE_MAX_BYTES: u64 = 256 << 20;
+
+/// A `/changes` page over [`PAGE_MAX_BYTES`], returned by [`Feed::page`] inside
+/// an `std::io::Error`, so the bootstrap asks for fewer transactions instead
+/// of retrying the same request.
+#[derive(Debug)]
+pub struct PageTooLarge;
+
+impl std::fmt::Display for PageTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the page is over the {} MiB page cap",
+            PAGE_MAX_BYTES >> 20
+        )
+    }
+}
+
+impl std::error::Error for PageTooLarge {}
+
+fn too_large(error: &std::io::Error) -> bool {
+    matches!(error.get_ref(), Some(e) if e.is::<PageTooLarge>())
+}
 
 /// Where the frames come from. [`crate::follow_http::Http`] is the primary over
 /// HTTP; tests drive a [`Store`] directly.
@@ -57,6 +87,9 @@ pub enum Halt {
     Rebuild(String),
     /// The caller's frame budget ran out; resume later.
     Budget,
+    /// One source transaction is over [`PAGE_MAX_BYTES`]: no page can carry
+    /// it, so retrying cannot help. The text names where.
+    TooLarge(String),
 }
 
 impl From<crate::error::Error> for Halt {
@@ -128,13 +161,27 @@ impl<'a, F: Feed> Follower<'a, F> {
     /// cursor), or a refusal to continue.
     pub fn bootstrap(&mut self, pace: Pace, sleep: &mut dyn FnMut(u64)) -> Result<usize, Halt> {
         let mut pages = 0;
+        let mut limit = pace.page_txs.max(1);
         loop {
             let since = self.cursor();
-            let body = self
-                .feed
-                .page(since, pace.page_txs.max(1))
-                .map_err(Halt::Transport)?;
+            let body = match self.feed.page(since, limit) {
+                Ok(body) => body,
+                Err(error) if too_large(&error) && limit > 1 => {
+                    limit = limit.div_ceil(2);
+                    sleep(pace.page_gap_ms);
+                    continue;
+                }
+                Err(error) if too_large(&error) => {
+                    return Err(Halt::TooLarge(format!(
+                        "the source transaction after {since} alone is over the {} MiB page cap",
+                        PAGE_MAX_BYTES >> 20
+                    )));
+                }
+                Err(error) => return Err(Halt::Transport(error)),
+            };
             pages += 1;
+            // Back toward the paced size once pages fit again.
+            limit = (limit * 2).min(pace.page_txs.max(1));
             if let Step::Stop(halt) = self.apply("quipu.changes", &body)? {
                 return Err(halt);
             }
