@@ -259,3 +259,79 @@ async fn a_connection_holds_at_most_thirty_two_subscriptions() {
     assert_eq!(frame["sub"], "now-fits");
     assert_eq!(frame["id"], tx.to_string());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn idle_subscriptions_cost_no_reads() {
+    let (shared, url) = serve().await;
+    let since = shared.read().latest_tx_id().unwrap();
+    let mut socket = connect(&url).await;
+    for s in 0..10 {
+        send(&mut socket, subscribe(&format!("s{s}"), since, BOARD)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let hub = Hub::of(&shared);
+    let reads = || hub.reads.load(std::sync::atomic::Ordering::Relaxed);
+    let catchup = || hub.catchup_reads.load(std::sync::atomic::Ordering::Relaxed);
+    let (before, before_catchup) = (reads(), catchup());
+    // No commits: nothing is read, whatever the number of subscribers.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(reads(), before, "an idle hub read the store");
+    assert_eq!(
+        catchup(),
+        before_catchup,
+        "an idle subscriber read the store"
+    );
+    assert!(
+        next(&mut socket, Duration::from_millis(200))
+            .await
+            .is_none()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_transaction_over_the_frame_budget_crosses_whole_and_byte_exact() {
+    use sha2::{Digest, Sha256};
+    let (shared, url) = serve().await;
+    let since = shared.read().latest_tx_id().unwrap();
+    let mut socket = connect(&url).await;
+    send(&mut socket, subscribe("board", since, BOARD)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // ~1.5 MB in one transaction: over the 1 MiB frame budget.
+    let tx = {
+        let mut store = shared.lock();
+        let g = store.registered_graph_id(BOARD).unwrap().unwrap();
+        let datums: Vec<Datum> = (0..30)
+            .map(|i| Datum {
+                entity: store.intern(&format!("urn:big:{i}")).unwrap(),
+                attribute: store.intern("urn:p:body").unwrap(),
+                value: Value::Str("x".repeat(50_000)),
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            })
+            .collect();
+        store.transact_to_graph(&datums, T, None, None, g).unwrap()
+    };
+    let begin = next(&mut socket, Duration::from_secs(10)).await.unwrap();
+    assert_eq!(begin["event"], "quipu.changes.begin", "{begin}");
+    assert!(begin.get("id").is_none(), "only the barrier carries an id");
+    let mut hasher = Sha256::new();
+    let mut parts = 0;
+    let commit = loop {
+        let frame = next(&mut socket, Duration::from_secs(10)).await.unwrap();
+        match frame["event"].as_str().unwrap() {
+            "quipu.changes.part" => {
+                assert!(frame.get("id").is_none());
+                hasher.update(frame["data"].as_str().unwrap().as_bytes());
+                parts += 1;
+            }
+            "quipu.changes.commit" => break frame,
+            other => panic!("unexpected {other}"),
+        }
+    };
+    assert!(parts >= 2, "{parts} parts");
+    assert_eq!(commit["id"], tx.to_string());
+    let summary: Json = serde_json::from_str(commit["data"].as_str().unwrap()).unwrap();
+    assert_eq!(summary["parts"], parts);
+    assert_eq!(summary["digest"], hex::encode(hasher.finalize()));
+}
