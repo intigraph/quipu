@@ -341,6 +341,13 @@ from the last fresh observation, or `unknown`. Metrics
 expose the same bounded observation. Failure, stale metadata or mismatched
 lineage never means zero lag. Replica writes return 503 naming the primary;
 they are not forwarded.
+Responses also carry `X-Quipu-Replica-Source-Tx` and
+`X-Quipu-Replica-Source-Time` (the last source transaction the follower holds
+and when it committed at the source) and `X-Quipu-Replica-Confirmed-Age-S`
+(seconds since a primary last confirmed the lag), each `unknown` when it cannot
+be established; metrics `quipu_replica_source_tx` and
+`quipu_replica_confirmed_age_seconds` use -1. A follower kept current by
+`quipu follow` measures lag against the source it follows.
 
 ### `GET /health`
 

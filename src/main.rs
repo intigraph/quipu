@@ -54,6 +54,8 @@ mod cli_demotions;
 mod cli_entailment;
 mod cli_explain;
 mod cli_export;
+#[cfg(feature = "remote")]
+mod cli_follow;
 mod cli_fork;
 mod cli_gate;
 mod cli_git_merge;
@@ -217,6 +219,13 @@ fn main() {
         "db" => cli_commands::cmd_db(&args, db_path),
         "events" => cli_commands::cmd_events(&args, db_path),
         "changes" => cli_changes::cmd_changes(&args, db_path),
+        #[cfg(feature = "remote")]
+        "follow" => cli_follow::cmd_follow(&args, db_path),
+        #[cfg(not(feature = "remote"))]
+        "follow" => {
+            eprintln!("follow needs an HTTP client; this build lacks the `remote` feature");
+            std::process::exit(2);
+        }
         "acquire" => cli_acquire::cmd_acquire(&args, db_path),
         "graph" => cli_graph::cmd_graph(&args, db_path),
         "fork" => cli_fork::cmd_fork(&args, db_path),
@@ -420,6 +429,7 @@ COMMANDS:
     qp db attach --list [--db <path>]
     qp events refusals [--db <path>]
     qp changes [--from N] [--capture new_values|old_and_new_values|new_row] [--limit N] [--graph IRI] [--db <path>]
+    qp follow --primary <url> [--page-txs N] [--page-gap-ms N] [--bootstrap-only] [--db <path>]  Keep this database a read-only follower of a primary
     qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
     qp graph label <iri> --label '<JSON label fields>' [--db <path>]
     qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]

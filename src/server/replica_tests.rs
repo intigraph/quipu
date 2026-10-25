@@ -117,12 +117,97 @@ fn observation_checks_lineage_and_primary_position_not_mtime() {
         let (url, join) = primary(
             serde_json::json!({"store_id":store_id,"watermark_tx":watermark_tx}).to_string(),
         );
-        assert_eq!(observe(&handle, &url), expected);
+        assert_eq!(observe(&handle, &url).1, expected);
         join.join().unwrap();
     }
     let (url, join) = primary("not JSON".into());
-    assert_eq!(observe(&handle, &url), None);
+    assert_eq!(observe(&handle, &url).1, None);
     join.join().unwrap();
+}
+
+/// A follower built by the applier from `n` source transactions.
+fn applier_follower(n: usize) -> (quipu::Store, quipu::Store) {
+    let mut source = quipu::Store::open_in_memory().unwrap();
+    for i in 0..n {
+        let turtle = format!("<urn:item:{i}> <urn:p:title> \"v{i}\" .");
+        quipu::tool_knot(&mut source, &serde_json::json!({ "turtle": turtle })).unwrap();
+    }
+    let mut follower = quipu::Store::open_in_memory().unwrap();
+    let mut applier = quipu::applier::Applier::open(&follower).unwrap();
+    let page = source
+        .changes_after(
+            0,
+            1_000,
+            quipu::store::changes::Capture::OldAndNewValues,
+            None,
+        )
+        .unwrap();
+    applier
+        .apply_frame(
+            &mut follower,
+            "quipu.changes",
+            &page.to_json().to_string(),
+            0,
+        )
+        .unwrap();
+    (source, follower)
+}
+
+#[test]
+fn an_applier_built_follower_measures_lag_against_its_source_lineage() {
+    let (source, follower) = applier_follower(3);
+    let held = source.latest_tx_id().unwrap();
+    let position = quipu::follow::position(&follower).unwrap();
+    assert_eq!(position.lineage, source.store_id().unwrap());
+    assert_eq!(position.source_tx, held);
+    assert!(position.source_time.is_some());
+    let ahead = Watermark {
+        store_id: source.store_id().unwrap(),
+        watermark_tx: held + 4,
+    };
+    assert_eq!(lag_of(&ahead, &position), Some(4));
+    // The follower's own store id is not its lineage: that is UNKNOWN, not 0.
+    let own = Watermark {
+        store_id: follower.store_id().unwrap(),
+        watermark_tx: held,
+    };
+    assert_eq!(lag_of(&own, &position), None);
+}
+
+#[test]
+fn staleness_is_stated_when_the_primary_is_unreachable() {
+    let (_, follower) = applier_follower(2);
+    let position = quipu::follow::position(&follower).unwrap();
+    let status = ReplicaStatus::default();
+    // Never confirmed: the follower says what it holds and that lag is unknown.
+    status.record(Some(position.clone()), None);
+    let headers: std::collections::HashMap<_, _> = status.header_values().into_iter().collect();
+    assert_eq!(headers["x-quipu-replica-lag-tx"], "unknown");
+    assert_eq!(
+        headers["x-quipu-replica-source-tx"],
+        position.source_tx.to_string()
+    );
+    assert_eq!(
+        headers["x-quipu-replica-source-time"],
+        position.source_time.clone().unwrap()
+    );
+    assert_eq!(headers["x-quipu-replica-confirmed-age-s"], "unknown");
+    // Confirmed once, then the primary goes away: lag is unknown again, but
+    // the age of the last confirmation is stated.
+    status.record(Some(position.clone()), Some(0));
+    status.record(None, None);
+    let headers: std::collections::HashMap<_, _> = status.header_values().into_iter().collect();
+    assert_eq!(headers["x-quipu-replica-lag-tx"], "unknown");
+    assert_eq!(headers["x-quipu-replica-confirmed-age-s"], "0");
+    assert_eq!(
+        headers["x-quipu-replica-source-tx"],
+        position.source_tx.to_string()
+    );
+    assert!(
+        status
+            .metrics()
+            .contains("quipu_replica_confirmed_age_seconds 0")
+    );
 }
 
 #[tokio::test]
