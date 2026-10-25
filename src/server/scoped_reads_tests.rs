@@ -264,6 +264,19 @@ async fn scoped_reads_identity_scope_method_alias_and_unknown_refusals_are_paire
             "{path}"
         );
     }
+    // Follower readiness is owner metadata, not a principal-scoped read.
+    assert_eq!(
+        quipu::read_authorization::routes::classify("/replica/ready", "GET"),
+        quipu::read_authorization::routes::RouteClass::OwnerOnly
+    );
+    let ready = fixture
+        .call("GET", "/replica/ready", Some("p"), Value::Null)
+        .await;
+    assert_eq!(ready.0, StatusCode::FORBIDDEN);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&ready.1).unwrap(),
+        json!({"error":"scoped read denied"})
+    );
     for method in ["GET", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"] {
         assert_eq!(
             fixture

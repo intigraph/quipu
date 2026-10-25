@@ -113,6 +113,7 @@ const CENSUS: &[&str] = &[
     "/reason",
     "/reconcile",
     "/render",
+    "/replica/ready",
     "/replicate/challenge",
     "/replicate/stream",
     "/report",

@@ -275,6 +275,9 @@
   "/render": [
     "post"
   ],
+  "/replica/ready": [
+    "get"
+  ],
   "/replicate/challenge": [
     "post"
   ],
