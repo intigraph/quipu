@@ -84,9 +84,19 @@ impl Drop for ReadPhaseGuard<'_> {
     }
 }
 
-/// Whether `iri` is a frozen graph whose pack is mounted (not thawed). A store
-/// that never froze anything has no registry table.
-pub(super) fn is_frozen(store: &Store, iri: &str) -> Result<bool> {
+/// A frozen graph's mounted pack, as the registry records it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct FrozenPack {
+    pub(super) alias: String,
+    pub(super) path: String,
+    pub(super) content_hash: String,
+    pub(super) frozen_at: String,
+}
+
+/// The mounted (not thawed) pack of frozen graph `iri`, if it is frozen. A
+/// store that never froze anything has no registry table.
+pub(super) fn frozen_pack(store: &Store, iri: &str) -> Result<Option<FrozenPack>> {
+    use rusqlite::OptionalExtension as _;
     let registry: bool = store.conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM main.sqlite_master \
                         WHERE type = 'table' AND name = 'frozen_packs')",
@@ -94,14 +104,24 @@ pub(super) fn is_frozen(store: &Store, iri: &str) -> Result<bool> {
         |r| r.get(0),
     )?;
     if !registry {
-        return Ok(false);
+        return Ok(None);
     }
-    Ok(store.conn.query_row(
-        "SELECT EXISTS (SELECT 1 FROM main.frozen_packs \
-                        WHERE graph_iri = ?1 AND thawed_at IS NULL)",
-        params![iri],
-        |r| r.get(0),
-    )?)
+    Ok(store
+        .conn
+        .query_row(
+            "SELECT alias, path, content_hash, frozen_at FROM main.frozen_packs \
+             WHERE graph_iri = ?1 AND thawed_at IS NULL ORDER BY id DESC LIMIT 1",
+            params![iri],
+            |r| {
+                Ok(FrozenPack {
+                    alias: r.get(0)?,
+                    path: r.get(1)?,
+                    content_hash: r.get(2)?,
+                    frozen_at: r.get(3)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 pub(super) fn sorted_unique(
@@ -286,4 +306,120 @@ pub(super) fn shapes_hash(store: &Store, tx: i64) -> Result<String> {
         out.push_str(&format!("# --- {name} ---\n{}\n", turtle.trim_end()));
     }
     Ok(crate::share::sha256(out.as_bytes()))
+}
+
+/// The main transaction that froze graph `g`: the live
+/// `lifecycleState "frozen"` fact the freeze asserted in the graph-metadata
+/// graph. A pack keeps no main transaction ids (its own are numbered from 1),
+/// so this is the only main-ordered point a frozen graph's rows can carry.
+pub(super) fn freeze_tx(store: &Store, g: i64) -> Result<Option<i64>> {
+    use rusqlite::OptionalExtension as _;
+    let (Some(meta), Some(state)) = (
+        store.lookup(crate::namespace::META_GRAPH_IRI)?,
+        store.lookup(crate::namespace::QUIPU_LIFECYCLE_STATE)?,
+    ) else {
+        return Ok(None);
+    };
+    let frozen = crate::types::Value::Str("frozen".into()).to_bytes();
+    Ok(store
+        .conn
+        .query_row(
+            "SELECT MAX(tx) FROM main.facts \
+             WHERE g = ?1 AND e = ?2 AND a = ?3 AND v = ?4 AND op = 1 AND retracted_tx IS NULL",
+            params![meta, g, state, frozen],
+            |r| r.get::<_, Option<i64>>(0),
+        )
+        .optional()?
+        .flatten())
+}
+
+/// A scoped frozen graph and the freeze transaction its records carry. A pack
+/// orders nothing against main, so a watermark before the freeze cannot say
+/// which of its rows existed then: refused.
+pub(super) fn frozen_member(
+    store: &Store,
+    iri: &str,
+    graph: i64,
+    pack: FrozenPack,
+    watermark_tx: i64,
+) -> std::result::Result<(String, i64, FrozenPack, i64), CutError> {
+    let freeze_tx = freeze_tx(store, graph)?
+        .ok_or_else(|| invalid(format!("frozen graph has no freeze record: {iri}")))?;
+    if watermark_tx < freeze_tx {
+        return Err(invalid(format!(
+            "as-of tx {watermark_tx} predates the freeze of {iri} at tx {freeze_tx}; \
+             a frozen graph's earlier state cannot be cut"
+        )));
+    }
+    Ok((iri.to_string(), graph, pack, freeze_tx))
+}
+
+/// One pass of a cut over one fact table.
+pub(super) struct Scan<'a> {
+    pub(super) sql: String,
+    /// Set when the pass reads a frozen graph from its pack.
+    pub(super) frozen: Option<FrozenScan<'a>>,
+}
+
+/// A frozen graph's pass: its IRI and main id, the pack alias, and the main
+/// transaction `freeze_tx` that froze it, which every one of its records carries.
+pub(super) struct FrozenScan<'a> {
+    pub(super) iri: &'a str,
+    pub(super) g: i64,
+    pub(super) alias: &'a str,
+    pub(super) freeze_tx: i64,
+}
+
+/// Main's rows for every selected graph that is not frozen, then each frozen
+/// graph from its own pack. A pack scan reports the graph's main id as `g`, so
+/// both feed the same digests. Aliases are validated identifiers.
+///
+/// A pack's rows are selected by STATE, not by transaction: its transaction
+/// ids are file-local and cannot be compared with the watermark. That is sound
+/// because the cut refuses a watermark before the freeze, and a frozen graph
+/// refuses writes, so its state at any later watermark is its state at the freeze.
+pub(super) fn scan_plan<'a>(
+    selected: &[(String, i64)],
+    frozen: &'a [(String, i64, FrozenPack, i64)],
+) -> Vec<Scan<'a>> {
+    let frozen_ids: Vec<i64> = frozen.iter().map(|(_, g, ..)| *g).collect();
+    let main_ids: Vec<String> = selected
+        .iter()
+        .filter(|(_, g)| !frozen_ids.contains(g))
+        .map(|(_, g)| g.to_string())
+        .collect();
+    let mut scans = Vec::new();
+    if !main_ids.is_empty() {
+        scans.push(Scan {
+            sql: format!(
+                "SELECT g, e, a, v, tx, valid_from, \
+                        CASE WHEN retracted_tx IS NULL THEN valid_to END \
+                 FROM main.facts NOT INDEXED \
+                 WHERE g IN ({}) \
+                   AND op = 1 AND tx <= ?1 AND (retracted_tx IS NULL OR retracted_tx > ?1) \
+                 ORDER BY rowid",
+                main_ids.join(",")
+            ),
+            frozen: None,
+        });
+    }
+    for (iri, g, pack, freeze_tx) in frozen {
+        let alias = &pack.alias;
+        scans.push(Scan {
+            sql: format!(
+                "SELECT ?2, e, a, v, tx, valid_from, valid_to \
+                 FROM {alias}.facts NOT INDEXED \
+                 WHERE g = (SELECT id FROM {alias}.terms WHERE iri = ?1) \
+                   AND op = 1 AND retracted_tx IS NULL \
+                 ORDER BY rowid"
+            ),
+            frozen: Some(FrozenScan {
+                iri,
+                g: *g,
+                alias,
+                freeze_tx: *freeze_tx,
+            }),
+        });
+    }
+    scans
 }
