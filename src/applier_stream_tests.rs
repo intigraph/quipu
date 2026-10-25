@@ -629,3 +629,85 @@ fn a_session_for_another_scope_asks_for_a_new_bootstrap() {
         Outcome::Rebootstrap { .. }
     ));
 }
+
+#[test]
+fn coverage_before_any_transaction_anchors_the_replica_across_reopening() {
+    // A scope with no matching transaction yet: coverage arrives first.
+    let src = source();
+    let key = keypair();
+    let (mut store, mut applier) = replica(&key);
+    let mut p = Producer::new(&src, &key, "s1");
+    one(&mut store, &mut applier, &p.open(0), 1);
+    let w = head(&src);
+    assert_eq!(
+        one(&mut store, &mut applier, &p.coverage(w, None), 1),
+        Outcome::CoverageAdvanced { watermark: w }
+    );
+    assert_eq!(applier.progress(), None);
+
+    // Reopened, the replica still holds W as its coverage and its cursor.
+    let mut applier = Applier::open(&store).unwrap();
+    applier.trust_stream(&public_key_hex(&key), SCOPE);
+    assert_eq!(applier.coverage(), Some(w));
+    let mut p = Producer::new(&src, &key, "s2");
+    assert!(matches!(
+        one(&mut store, &mut applier, &p.open(w), 2),
+        Outcome::SessionOpened { .. }
+    ));
+    let mut ahead = Producer::new(&src, &key, "s3");
+    assert_eq!(
+        one(&mut store, &mut applier, &ahead.open(w + 1), 3),
+        Outcome::Resume { from: w }
+    );
+}
+
+#[test]
+fn coverage_from_one_source_refuses_another_source_before_and_after_reopening() {
+    let src = source();
+    let other = source();
+    let key = keypair();
+    let (mut store, mut applier) = replica(&key);
+    let mut p = Producer::new(&src, &key, "s1");
+    one(&mut store, &mut applier, &p.open(0), 1);
+    one(&mut store, &mut applier, &p.coverage(head(&src), None), 1);
+    let mut q = Producer::new(&other, &key, "s2");
+    assert!(matches!(
+        one(&mut store, &mut applier, &q.open(0), 2),
+        Outcome::Rebootstrap { .. }
+    ));
+    let mut applier = Applier::open(&store).unwrap();
+    applier.trust_stream(&public_key_hex(&key), SCOPE);
+    let mut q = Producer::new(&other, &key, "s3");
+    assert!(matches!(
+        one(&mut store, &mut applier, &q.open(0), 3),
+        Outcome::Rebootstrap { .. }
+    ));
+}
+
+#[test]
+fn a_broken_chunk_ends_the_session_and_its_proofs() {
+    let src = source();
+    let key = keypair();
+    let (mut store, mut applier) = replica(&key);
+    let mut p = Producer::new(&src, &key, "s1");
+    one(&mut store, &mut applier, &p.open(0), 1);
+    applier.challenge("s1", [9; 16], 10).unwrap();
+    assert_eq!(
+        one(&mut store, &mut applier, &p.coverage(0, Some([9; 16])), 20),
+        Outcome::ProofAccepted { t_send_ms: 10 }
+    );
+    assert!(applier.freshness(30).bounded);
+    // A commit whose digest does not match its parts, in sequence.
+    let mut frames = p.chunked(0, 1);
+    let last = frames.len() - 1;
+    let mut commit: Json = serde_json::from_str(&frames[last].1).unwrap();
+    commit["digest"] = json!("00".repeat(32));
+    frames[last].1 = commit.to_string();
+    let outcomes = feed(&mut store, &mut applier, &frames, 40);
+    assert!(
+        matches!(outcomes.last(), Some(Outcome::Resume { .. })),
+        "{outcomes:?}"
+    );
+    assert_eq!(applier.session(), None);
+    assert!(!applier.freshness(50).bounded);
+}

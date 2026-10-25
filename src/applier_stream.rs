@@ -86,6 +86,9 @@ pub(super) struct Stream {
     trust: Option<Trust>,
     session: Option<Session>,
     coverage: Option<i64>,
+    /// The source `coverage` was verified from. It anchors a replica whose
+    /// scope has no applied transaction yet (coverage before any match).
+    covered: Option<Source>,
     /// Outstanding challenges of the current session: nonce -> `t_send_ms`.
     outstanding: HashMap<[u8; 16], u64>,
     /// Every nonce issued in the current session, answered or not.
@@ -95,24 +98,38 @@ pub(super) struct Stream {
 }
 
 impl Stream {
+    /// Load persisted coverage. With applied progress it must be the same
+    /// source's; without (a scope with no transaction yet) the coverage row
+    /// is itself the replica's anchor and cursor.
     pub(super) fn load(store: &Store, source: Option<&Source>) -> Result<Self> {
         store.conn.execute_batch(COVERAGE_DDL)?;
-        let coverage = match source {
-            Some(s) => store
-                .conn
-                .query_row(
-                    "SELECT watermark FROM replica_coverage \
-                     WHERE id = 1 AND store_id = ?1 AND log_epoch = ?2",
-                    params![s.store_id, s.log_epoch],
-                    |r| r.get(0),
-                )
-                .optional()?,
-            None => None,
-        };
+        let row: Option<(Source, i64)> = store
+            .conn
+            .query_row(
+                "SELECT store_id, log_epoch, watermark FROM replica_coverage WHERE id = 1",
+                [],
+                |r| {
+                    Ok((
+                        Source {
+                            store_id: r.get(0)?,
+                            log_epoch: r.get(1)?,
+                        },
+                        r.get(2)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let row = row.filter(|(covered, _)| source.is_none_or(|s| s == covered));
         Ok(Self {
-            coverage,
+            coverage: row.as_ref().map(|(_, w)| *w),
+            covered: row.map(|(covered, _)| covered),
             ..Self::default()
         })
+    }
+
+    /// The source persisted coverage belongs to, if any.
+    pub(super) fn covered(&self) -> Option<&Source> {
+        self.covered.as_ref()
     }
 
     pub(super) fn coverage(&self) -> Option<i64> {
@@ -228,7 +245,7 @@ impl Applier {
         if let Some(open) = self.stream.session.as_mut() {
             open.frame_seq = seq;
         }
-        match name {
+        let outcome = match name {
             event::TX => self.stream_tx(store, &frame),
             event::TX_BEGIN => {
                 if self.chunk.is_some() {
@@ -252,7 +269,13 @@ impl Applier {
             event::COVERAGE => self.stream_coverage(store, &frame),
             event::CONTROL => self.stream_control(store, &frame),
             _ => Ok(Outcome::Ignored),
+        }?;
+        // Any recovery (a gap, or a broken or refused chunk) ends the session
+        // and its proofs, whichever path found it.
+        if matches!(outcome, Outcome::Resume { .. }) {
+            return Ok(self.fault());
         }
+        Ok(outcome)
     }
 
     /// A transport fault: drop the session (and any open chunk) and resume.
@@ -415,6 +438,7 @@ impl Applier {
             params![source.store_id, source.log_epoch, watermark],
         )?;
         self.stream.coverage = Some(watermark);
+        self.stream.covered = Some(source);
         if let Some(s) = self.stream.session.as_mut() {
             s.last_tx = s.last_tx.max(watermark);
         }
