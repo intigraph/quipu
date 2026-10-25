@@ -528,3 +528,6 @@ async fn a_v2_signed_write_is_bound_to_this_store_and_settles_under_the_lock() {
         "a refused settlement spends nothing"
     );
 }
+
+#[path = "write_attest_v2_tests.rs"]
+mod v2;
