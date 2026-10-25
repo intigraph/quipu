@@ -344,6 +344,8 @@ follower (design: `docs/design/shared-applier-api.md` §6).
 ```toml
 [quipu.server.relay]
 upstream_url = "https://source.example"
+# Optional; transport authentication for a protected upstream:
+# upstream_credential_file = "/etc/quipu/relay-upstream.bearer"
 upstream_store_id = "<the source's store_id>"
 upstream_key = "<the source's stream key, ed25519 public key in hex>"
 graphs = ["urn:graph:board"]
@@ -355,6 +357,27 @@ context_graphs = []
 - It needs its own signing key. Children pin the relay's key, never the
   source's.
 - Upstream coverage is trusted only under the pinned `upstream_key`.
+- `upstream_credential_file` contains one bearer token, optionally followed by
+  one LF or CRLF. On Unix it must be an absolute path to a regular file owned
+  by the server's effective user, with no group/other permissions (for example,
+  mode 0600), at most 4096 bytes. Final symlinks are refused. Configured files
+  are unsupported on other platforms. Inline token configuration is refused.
+- The file is checked at startup and read again before each upstream stream
+  connection and freshness challenge. An invalid, missing or refused credential
+  never falls back to an anonymous request or a previously loaded token.
+  Rotation affects subsequent requests; removing the file does not revoke an
+  already open stream. Without this option the relay sends no Authorization
+  header, preserving compatibility with explicitly open sources only.
+- Both operations refuse redirects. The upstream URL must be HTTP(S), without
+  user information, query or fragment; credentials belong only in the file.
+  Stream responses must be HTTP 200 with `text/event-stream`; challenges must
+  return HTTP 202. Errors omit credential contents and response bodies.
+- This authenticates transport only. Current replication routes require the
+  source's write-class bearer; this option does not implement a scoped read
+  grant, stream-only credential or serving lease. Provisioning a real bearer
+  on another host and activating a protected relay require separate operator
+  authorization. The graph-read authorization model remains a separate gate.
+
 - It accepts writes only from its upstream stream. Every write endpoint except
   `/replicate/*` answers 503 with `reason: relay`. Like a replica, it runs no
   writer jobs, reasoner, OWL materialization or projection installs.

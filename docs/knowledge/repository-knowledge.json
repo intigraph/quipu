@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "24cc1c05153ffe5a5975593d9523174d790a645138488e2dad15c03c702caf89",
+      "source_sha256": "18e430331670a562cb7b8af3fb5617e822d7ad856c752bf779215f155d12eb01",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "ab3313d926d28b679498519eb5ca70ec92bb0c3d9f78663f958f95285d8cbb43",
+      "source_sha256": "7d8fee499c23187c06965070a07a2d590c4435ea15535b815648df40f6ba264d",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"

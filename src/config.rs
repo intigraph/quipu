@@ -627,6 +627,11 @@ pub struct ReplicaConfig {
 pub struct RelayConfig {
     /// The upstream's base URL (a source or another relay).
     pub upstream_url: String,
+    /// Optional absolute path to a private upstream bearer file. The relay
+    /// reloads it for each stream or challenge; no token is stored in config.
+    /// This authenticates transport, not a graph grant or serving lease.
+    #[serde(default)]
+    pub upstream_credential_file: Option<String>,
     /// The upstream source's store identity, pinned.
     pub upstream_store_id: String,
     /// The upstream's stream key (ed25519 public key, hex), pinned: coverage
