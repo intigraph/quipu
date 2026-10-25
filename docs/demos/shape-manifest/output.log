@@ -1,0 +1,10 @@
+Script started on 2026-10-23 23:46:37-04:00 [COMMAND="stty -onlcr && python3 docs/demos/shape-manifest/demo.py" <not executed on terminal>]
+Before: existing invariant checker, new unclassified profile => exit 0
+After: mandatory classification checker, SAME unclassified file:
+shape manifest REFUSED: unclassified shape files: ['fixture-new-profile.ttl']; stale entries: []
+Classify as exclude:
+Manifest accepted; fixture load selected: False
+Classify as load with a stable name:
+Manifest accepted; fixture load selected: True
+
+Script done on 2026-10-23 23:46:37-04:00 [COMMAND_EXIT_CODE="0"]
