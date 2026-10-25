@@ -375,11 +375,18 @@ impl Applier {
 
     /// `None` when the frame's source is this replica's (or the first one).
     fn check_source(&self, source: &Source) -> Option<Outcome> {
-        match &self.progress {
-            Some(p) if p.source != *source => Some(Outcome::Rebootstrap {
+        // Applied progress anchors the replica; before any applied
+        // transaction, verified coverage does.
+        let anchor = self
+            .progress
+            .as_ref()
+            .map(|p| &p.source)
+            .or(self.stream.covered());
+        match anchor {
+            Some(held) if held != source => Some(Outcome::Rebootstrap {
                 reason: format!(
                     "source changed from {}/{} to {}/{}",
-                    p.source.store_id, p.source.log_epoch, source.store_id, source.log_epoch
+                    held.store_id, held.log_epoch, source.store_id, source.log_epoch
                 ),
             }),
             _ => None,

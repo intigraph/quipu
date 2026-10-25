@@ -1,0 +1,11 @@
+$ quipu episode episode.json --base-ns urn:demo: --timestamp 2026-01-01T00:00:00Z --db demo.db
+ingested episode "demo" -- 14 facts (tx 1)
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+[exit 0]
+$ quipu read 'SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }' --db demo.db
+person	thing
+----------------------------------------
+urn:demo:Ada	urn:demo:Engine
+
+1 results
+[exit 0]

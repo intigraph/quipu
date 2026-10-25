@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "59aab7ff84d4566a50808318e4f700a3da27d87d51628e00ad25a13f14760b02",
+      "source_sha256": "c115a4223c211f7d345319d69e0ac65a58147625f55a2e3f249cd50d5ef48874",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
