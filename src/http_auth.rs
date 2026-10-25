@@ -168,6 +168,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/receipt",
     "/rule_query",
     "/watermark",
+    // aegis-tnh: follower readiness from its own records; never asks the primary.
+    "/replica/ready",
     // aegis-5qmg3r: alignment reads. `propose` takes &Store and only queries
     // (lookup + a prepared SELECT); `decide` touches no store at all. The
     // writer of the three is /align/apply, above.

@@ -41,7 +41,16 @@ pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
                     .map(|r| r.primary_url.clone())
             })
             .unwrap_or_default();
-        config.server.replica = Some(quipu::config::ReplicaConfig { primary_url });
+        // The flag selects replica serving; the configured identity stays.
+        let expected_store_id = config
+            .server
+            .replica
+            .as_ref()
+            .and_then(|r| r.expected_store_id.clone());
+        config.server.replica = Some(quipu::config::ReplicaConfig {
+            primary_url,
+            expected_store_id,
+        });
     }
     super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
     config
