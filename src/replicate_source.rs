@@ -13,6 +13,8 @@
 //! - **Challenge.** A nonce is answered only by a poll that read after the
 //!   challenge arrived and reached the head, so its `W` was observed after
 //!   receipt. A short page leaves the nonce for the next poll.
+//! - **Open.** The opening epoch and the scope checks are one snapshot, epoch
+//!   first, so a change committed during the open is caught by `epoch_end`.
 //! - **Epoch.** A poll that finds a different store or log epoch than the
 //!   session opened on ends the session with a signed `epoch_end`.
 
@@ -53,6 +55,31 @@ pub struct Frame {
     pub data: String,
 }
 
+/// The source's transfer limits (local-sync-mode.md §6). A transaction over
+/// `tx_max_rows` or `tx_max_bytes` in scope ends the session with
+/// `tx_too_large` and the cursor unchanged; recovery is a re-bootstrap from an
+/// as-of share at or after it. A poll stops adding transactions once the page
+/// would pass `page_max_rows` (one transaction is always taken).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// Most in-scope records one transaction may carry.
+    pub tx_max_rows: u64,
+    /// Most encoded value bytes one transaction may carry in scope.
+    pub tx_max_bytes: u64,
+    /// Rows one poll reads before it stops adding transactions.
+    pub page_max_rows: u64,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            tx_max_rows: 100_000,
+            tx_max_bytes: 64 << 20,
+            page_max_rows: 10_000,
+        }
+    }
+}
+
 /// One stream session at the source.
 pub struct Session {
     id: String,
@@ -67,6 +94,7 @@ pub struct Session {
     seq: u64,
     ended: bool,
     part_max_len: Option<usize>,
+    limits: Limits,
 }
 
 impl Session {
@@ -82,7 +110,33 @@ impl Session {
         id: String,
         identity: Arc<SigningIdentity>,
     ) -> std::result::Result<(Self, Frame), CutError> {
+        Self::open_between(store, request, id, identity, || ())
+    }
+
+    /// [`Session::open`], running `between` after the epoch is read and before
+    /// the scope is checked (tests interleave a concurrent write there).
+    ///
+    /// The epoch and every check are read in ONE read transaction, epoch
+    /// first: a freeze or other history change that commits during the open
+    /// either precedes the whole snapshot (and is refused or served in its new
+    /// epoch) or follows it, in which case the session carries the OLD epoch
+    /// and its first poll ends it with `epoch_end`. It can never open on the
+    /// new epoch with a scope checked before the change.
+    fn open_between(
+        store: &Store,
+        request: &StreamRequest,
+        id: String,
+        identity: Arc<SigningIdentity>,
+        between: impl FnOnce(),
+    ) -> std::result::Result<(Self, Frame), CutError> {
         let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
+        let read = store
+            .conn
+            .is_autocommit()
+            .then(|| store.conn.unchecked_transaction())
+            .transpose()?;
+        let log_epoch = store.log_epoch()?;
+        between();
         let store_id = store.store_id()?;
         if store_id != request.expected_store_id {
             return Err(refused("replication source store identity mismatch"));
@@ -92,12 +146,13 @@ impl Session {
         }
         let resolved = resolve_graphs(store, &scope, &context)?;
         refuse_frozen(store, &resolved)?;
+        drop(read);
         let graphs = resolved.into_iter().map(|(_, id)| id).collect();
         let session = Self {
             id,
             identity,
             store_id,
-            log_epoch: store.log_epoch()?,
+            log_epoch,
             scope: scope_digest(&scope, &context),
             graphs,
             since: request.since,
@@ -106,6 +161,7 @@ impl Session {
             seq: 0,
             ended: false,
             part_max_len: None,
+            limits: Limits::default(),
         };
         let frame = session.session_frame();
         Ok((session, frame))
@@ -137,6 +193,13 @@ impl Session {
         self
     }
 
+    /// Serve under `limits` instead of the defaults.
+    #[must_use]
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
+        self
+    }
+
     /// Read at most `max_txs` new transactions and the coverage they reach.
     /// `nonce` is an unanswered challenge: it is answered if this poll reaches
     /// the head, and returned unanswered (`false`) otherwise. A poll that adds
@@ -158,19 +221,53 @@ impl Session {
             .is_autocommit()
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
+        if store.store_id()? != self.store_id || store.log_epoch()? != self.log_epoch {
+            drop(read);
+            self.ended = true;
+            return Ok((
+                vec![self.control("epoch_end", "the source log epoch changed")],
+                false,
+            ));
+        }
+        // The bounded pre-pass (local-sync-mode.md §6): sizes are counted in
+        // SQL, so an oversized transaction is refused, and a page is cut at
+        // the row budget, before any record is built.
+        let max_txs = max_txs.max(1);
+        let sizes = store.tx_sizes_in_graphs(self.cursor, max_txs, &self.graphs)?;
+        let (mut take, mut rows) = (0, 0);
+        for size in &sizes {
+            if size.rows > self.limits.tx_max_rows || size.value_bytes > self.limits.tx_max_bytes {
+                if take == 0 {
+                    drop(read);
+                    self.ended = true;
+                    let reason = format!(
+                        "source tx {} has {} rows and {} value bytes in scope, over the limit of {} rows and {} bytes",
+                        size.tx,
+                        size.rows,
+                        size.value_bytes,
+                        self.limits.tx_max_rows,
+                        self.limits.tx_max_bytes
+                    );
+                    return Ok((vec![self.control("tx_too_large", &reason)], false));
+                }
+                break;
+            }
+            if take > 0 && rows + size.rows > self.limits.page_max_rows {
+                break;
+            }
+            rows += size.rows;
+            take += 1;
+        }
+        // Every transaction after the cursor is in this page.
+        let full = sizes.len() < max_txs && take == sizes.len();
         let page = store.changes_in_graphs(
             self.cursor,
-            max_txs.max(1),
+            take.max(1),
             Capture::OldAndNewValues,
             &self.graphs,
         )?;
         drop(read);
         let mut frames = Vec::new();
-        if page.store_id != self.store_id || page.log_epoch != self.log_epoch {
-            self.ended = true;
-            frames.push(self.control("epoch_end", "the source log epoch changed"));
-            return Ok((frames, false));
-        }
         let mut by_tx: BTreeMap<i64, Vec<Json>> = BTreeMap::new();
         for record in page.records {
             by_tx
@@ -178,7 +275,6 @@ impl Session {
                 .or_default()
                 .push(record);
         }
-        let full = by_tx.len() < max_txs.max(1);
         for (tx, records) in by_tx {
             if !self.tx_frames(tx, &records, &mut frames) {
                 self.ended = true;

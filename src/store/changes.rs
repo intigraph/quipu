@@ -139,6 +139,18 @@ fn page_sql(graph: bool) -> &'static str {
 }
 
 /// Graph ids as an SQL list. An empty set matches nothing.
+/// One transaction's in-scope size, from [`Store::tx_sizes_in_graphs`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TxSize {
+    /// The transaction.
+    pub tx: i64,
+    /// Its records in the scope graphs.
+    pub rows: u64,
+    /// The encoded bytes of those records' values (IRIs and metadata are
+    /// bounded per row, so `rows` bounds the rest).
+    pub value_bytes: u64,
+}
+
 fn id_list(graphs: &[i64]) -> String {
     if graphs.is_empty() {
         return "NULL".into();
@@ -234,6 +246,35 @@ impl Store {
             store_id: self.store_id()?,
             log_epoch: self.log_epoch()?,
         })
+    }
+
+    /// The bounded pre-pass for [`Store::changes_in_graphs`]: for the first
+    /// `max_txs` transactions after `since_tx` that wrote any of `graphs`, its
+    /// in-scope row count and value bytes, counted in SQL so no record is
+    /// built. The stream refuses or cuts a page on these before reading it.
+    pub fn tx_sizes_in_graphs(
+        &self,
+        since_tx: i64,
+        max_txs: usize,
+        graphs: &[i64],
+    ) -> Result<Vec<TxSize>> {
+        let sql = format!(
+            "SELECT tx, COUNT(*), COALESCE(SUM(length(v)), 0) FROM facts \
+             WHERE tx > ?1 AND +g IN ({}) GROUP BY tx ORDER BY tx LIMIT ?2",
+            id_list(graphs)
+        );
+        let sizes = self
+            .conn
+            .prepare(&sql)?
+            .query_map(params![since_tx, max_txs as i64], |r| {
+                Ok(TxSize {
+                    tx: r.get(0)?,
+                    rows: r.get::<_, i64>(1)?.unsigned_abs(),
+                    value_bytes: r.get::<_, i64>(2)?.unsigned_abs(),
+                })
+            })?
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(sizes)
     }
 
     fn latest_transaction(&self) -> Result<(i64, Option<String>)> {

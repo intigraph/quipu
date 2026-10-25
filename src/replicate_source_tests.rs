@@ -300,3 +300,159 @@ fn a_session_refuses_the_metadata_graph_and_a_frozen_graph() {
     // The unfrozen graph beside it is still served.
     assert!(Session::open(&src, &request(&src, 0), "s".into(), id).is_ok());
 }
+
+#[test]
+fn a_freeze_committed_during_the_open_ends_the_session_instead_of_covering_nothing() {
+    // ian's #817 race: the scope check passed, a freeze of the scope graph
+    // committed, then the epoch was read, so the session opened on the NEW
+    // epoch and signed coverage over zero records with the fact still in
+    // scope. The open's reads are one snapshot, epoch first: the session
+    // opens on the old epoch and its first poll ends it.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("source.db");
+    let path = path.to_str().unwrap();
+    let mut src = Store::open(path).unwrap();
+    write(&mut src, BOARD, "urn:item:0", "board 0");
+    let mut writer = Store::open(path).unwrap();
+    let packs = tempfile::tempdir().unwrap();
+    let before = src.log_epoch().unwrap();
+    let id = identity();
+    let (mut session, open) =
+        Session::open_between(&src, &request(&src, 0), "s".into(), id.clone(), || {
+            writer
+                .freeze_graph(
+                    BOARD,
+                    packs.path().to_str().unwrap(),
+                    "2026-10-25T00:00:00Z",
+                    None,
+                )
+                .unwrap();
+        })
+        .unwrap();
+    assert_ne!(
+        src.log_epoch().unwrap(),
+        before,
+        "the freeze re-minted the epoch"
+    );
+    assert!(
+        open.data.contains(&before),
+        "opened on the old epoch: {}",
+        open.data
+    );
+    let (frames, _) = session.poll(&src, 100, None).unwrap();
+    assert!(session.ended());
+    assert_eq!(frames.len(), 1, "{frames:?}");
+    assert_eq!(frames[0].event, event::CONTROL, "{frames:?}");
+    assert!(frames[0].data.contains("epoch_end"), "{frames:?}");
+    let (mut replica, mut applier) = follower(&id, session.scope());
+    let outcomes = feed(&mut replica, &mut applier, &[open, frames[0].clone()], 1);
+    assert!(
+        matches!(outcomes.last(), Some(Outcome::Rebootstrap { .. })),
+        "{outcomes:?}"
+    );
+}
+
+/// One transaction writing `n` small records to `graph`.
+fn write_many(store: &mut Store, graph: &str, tag: &str, n: usize) {
+    let g = store.graph_create(graph).unwrap();
+    let datums: Vec<Datum> = (0..n)
+        .map(|i| Datum {
+            entity: store.intern(&format!("urn:{tag}:{i}")).unwrap(),
+            attribute: store.intern("urn:p:title").unwrap(),
+            value: Value::Str(format!("{tag} {i}")),
+            valid_from: T.into(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+        .collect();
+    store.transact_to_graph(&datums, T, None, None, g).unwrap();
+}
+
+const SMALL: Limits = Limits {
+    tx_max_rows: 5,
+    tx_max_bytes: 1 << 20,
+    page_max_rows: 6,
+};
+
+#[test]
+fn a_transaction_over_the_row_limit_is_refused_before_it_is_built_and_the_cursor_holds() {
+    // ian's #817 P2: many small records are no single oversized record, so
+    // the per-record check never fired and the whole transaction was built.
+    let mut src = source();
+    let id = identity();
+    let (session, open) = Session::open(&src, &request(&src, 0), "s".into(), id.clone()).unwrap();
+    let mut session = session.with_limits(SMALL);
+    let (mut replica, mut applier) = follower(&id, session.scope());
+    feed(&mut replica, &mut applier, &[open], 1);
+    let (frames, _) = session.poll(&src, 100, None).unwrap();
+    feed(&mut replica, &mut applier, &frames, 1);
+    let held = applier.progress().map(|p| p.source_tx);
+    let before = in_graph(&replica, BOARD);
+    write_many(&mut src, BOARD, "big", 6);
+    let (frames, answered) = session.poll(&src, 100, Some([7; 16])).unwrap();
+    assert!(session.ended());
+    assert!(!answered, "a refused page proves nothing about the head");
+    assert_eq!(frames.len(), 1, "{frames:?}");
+    assert_eq!(frames[0].event, event::CONTROL);
+    assert!(frames[0].data.contains("tx_too_large"), "{frames:?}");
+    assert!(frames[0].data.contains("6 rows"), "{frames:?}");
+    let outcomes = feed(&mut replica, &mut applier, &frames, 2);
+    assert!(
+        !outcomes
+            .iter()
+            .any(|o| matches!(o, Outcome::Applied { .. })),
+        "{outcomes:?}"
+    );
+    assert_eq!(applier.progress().map(|p| p.source_tx), held);
+    assert_eq!(in_graph(&replica, BOARD), before);
+}
+
+#[test]
+fn a_page_stops_at_the_row_budget_and_covers_only_what_it_sent() {
+    let mut src = Store::open_in_memory().unwrap();
+    for i in 0..4 {
+        write_many(&mut src, BOARD, &format!("t{i}"), 3);
+    }
+    let id = identity();
+    let (session, open) = Session::open(&src, &request(&src, 0), "s".into(), id.clone()).unwrap();
+    let mut session = session.with_limits(SMALL);
+    let (mut replica, mut applier) = follower(&id, session.scope());
+    feed(&mut replica, &mut applier, &[open], 1);
+    // 3 + 3 rows fit the budget of 6; the third transaction waits.
+    let (frames, answered) = session.poll(&src, 100, Some([1; 16])).unwrap();
+    assert!(!answered, "a cut page did not reach the head");
+    let txs = frames.iter().filter(|f| f.event == event::TX).count();
+    assert_eq!(txs, 2, "{frames:?}");
+    feed(&mut replica, &mut applier, &frames, 1);
+    let sent = applier.progress().unwrap().source_tx;
+    assert_eq!(applier.coverage(), Some(sent), "coverage stops at the cut");
+    // The follower still reaches the source by paging on.
+    loop {
+        let (frames, _) = session.poll(&src, 100, None).unwrap();
+        if frames.is_empty() {
+            break;
+        }
+        feed(&mut replica, &mut applier, &frames, 1);
+    }
+    assert_eq!(in_graph(&replica, BOARD), in_graph(&src, BOARD));
+    assert_eq!(applier.coverage(), Some(src.latest_tx_id().unwrap()));
+}
+
+#[test]
+fn an_oversized_transaction_later_in_a_page_waits_for_its_own_poll() {
+    let mut src = Store::open_in_memory().unwrap();
+    write_many(&mut src, BOARD, "small", 2);
+    write_many(&mut src, BOARD, "big", 6);
+    let id = identity();
+    let (session, open) = Session::open(&src, &request(&src, 0), "s".into(), id.clone()).unwrap();
+    let mut session = session.with_limits(SMALL);
+    let (mut replica, mut applier) = follower(&id, session.scope());
+    feed(&mut replica, &mut applier, &[open], 1);
+    let (frames, _) = session.poll(&src, 100, None).unwrap();
+    assert!(!session.ended());
+    feed(&mut replica, &mut applier, &frames, 1);
+    assert_eq!(in_graph(&replica, BOARD).len(), 2);
+    let (frames, _) = session.poll(&src, 100, None).unwrap();
+    assert!(session.ended());
+    assert!(frames[0].data.contains("tx_too_large"), "{frames:?}");
+}
