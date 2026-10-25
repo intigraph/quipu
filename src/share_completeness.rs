@@ -151,6 +151,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Which source transaction each local transaction of the replica holds:
     // the same cursor's numbering, excluded with it.
     ("replica_tx_map", Disposition::Excluded),
+    // Source lineages whose log ended while the replica followed them, so a
+    // relay ends its children's sessions too. The same cursor's state:
+    // excluded with it.
+    ("replica_source_end", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.

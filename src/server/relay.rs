@@ -248,11 +248,14 @@ async fn follow(store: &SharedStore, relay: &Arc<Relay>) {
                 }
                 // Reconnect from the cursor; a stopped, revoked or replaced
                 // source answers the same on every later frame.
-                Outcome::Resume { .. }
-                | Outcome::Rebootstrap { .. }
-                | Outcome::Refused { .. }
-                | Outcome::Revoked { .. }
-                | Outcome::Stopped { .. } => return,
+                Outcome::Resume { .. } | Outcome::Refused { .. } => return,
+                // The lineage ended for the children too: the applier recorded
+                // it, so wake their producers to send epoch_end now rather than
+                // at their next heartbeat.
+                Outcome::Rebootstrap { .. } | Outcome::Revoked { .. } | Outcome::Stopped { .. } => {
+                    store.commit_wake.send_replace(());
+                    return;
+                }
                 _ => {}
             }
         }

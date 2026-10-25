@@ -13,6 +13,53 @@ pub(super) const MAP_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_tx_map (\
      local_tx INTEGER PRIMARY KEY, store_id TEXT NOT NULL, log_epoch TEXT NOT NULL, \
      source_tx INTEGER NOT NULL)";
 
+/// Source lineages whose log ended while this replica followed them: the
+/// source signed `epoch_end` (or could not frame a transaction). A relay ends
+/// its children's sessions on the same lineage, so the end reaches the leaf.
+pub(super) const ENDED_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_source_end (\
+     store_id TEXT NOT NULL, log_epoch TEXT NOT NULL, reason TEXT NOT NULL, \
+     PRIMARY KEY (store_id, log_epoch))";
+
+/// Record that `source`'s log ended (the first reason wins).
+pub(super) fn record_end(store: &Store, source: &Source, reason: &str) -> Result<()> {
+    store.conn.execute(
+        "INSERT OR IGNORE INTO replica_source_end (store_id, log_epoch, reason) \
+         VALUES (?1, ?2, ?3)",
+        params![source.store_id, source.log_epoch, reason],
+    )?;
+    Ok(())
+}
+
+/// Whether this replica can no longer serve `source`: its log ended, or the
+/// replica stopped (a persisted stop is never cleared but by a rebuild).
+///
+/// # Errors
+/// [`crate::Error::Sqlite`] if the replica tables cannot be read.
+pub fn ended(store: &Store, source: &Source) -> Result<bool> {
+    let has = |table: &str| -> Result<bool> {
+        Ok(store.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [table],
+            |r| r.get(0),
+        )?)
+    };
+    if has("replica_stop")?
+        && store
+            .conn
+            .query_row("SELECT EXISTS (SELECT 1 FROM replica_stop)", [], |r| {
+                r.get(0)
+            })?
+    {
+        return Ok(true);
+    }
+    Ok(has("replica_source_end")?
+        && store.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM replica_source_end WHERE store_id = ?1 AND log_epoch = ?2)",
+            params![source.store_id, source.log_epoch],
+            |r| r.get(0),
+        )?)
+}
+
 /// Record that `local_tx` holds part of `source_tx` (inside the apply savepoint).
 pub(super) fn record(store: &Store, source: &Source, local_tx: i64, source_tx: i64) -> Result<()> {
     store.conn.execute(

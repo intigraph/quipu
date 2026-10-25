@@ -608,3 +608,86 @@ fn a_relay_refuses_a_wider_scope_a_non_replica_and_an_unheld_cursor() {
         Session::open_relay(&tree.relay, &ahead, (&board, &[]), "a".into(), identity()).is_err()
     );
 }
+
+#[test]
+fn an_upstream_epoch_end_reaches_the_leaf_through_the_relay() {
+    // ian's #828 review: the relay took the signed epoch_end as Rebootstrap,
+    // but its existing child session kept serving the old lineage, so the leaf
+    // never learned the master's history changed.
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    let packs = tempfile::tempdir().unwrap();
+    tree.master
+        .freeze_graph(BOARD, packs.path().to_str().unwrap(), T, None)
+        .unwrap();
+    let (up, _) = tree.upstream.poll(&tree.master, 100, None).unwrap();
+    assert!(
+        up.iter()
+            .any(|f| f.event == event::CONTROL && f.data.contains("epoch_end"))
+    );
+    let at_relay = feed(&mut tree.relay, &mut tree.relay_applier, &up, 3);
+    assert!(
+        at_relay
+            .iter()
+            .any(|o| matches!(o, Outcome::Rebootstrap { .. }))
+    );
+    let (down, _) = tree.downstream.poll(&tree.relay, 100, None).unwrap();
+    assert!(tree.downstream.ended());
+    let at_leaf = feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 4);
+    assert!(
+        at_leaf
+            .iter()
+            .any(|o| matches!(o, Outcome::Rebootstrap { .. })),
+        "frames {down:?}, leaf {at_leaf:?}"
+    );
+    // A new child cannot open on the ended lineage either.
+    let board = vec![BOARD.to_string()];
+    let again = request(&tree.master, 0);
+    assert!(
+        Session::open_relay(&tree.relay, &again, (&board, &[]), "n".into(), identity()).is_err()
+    );
+}
+
+#[test]
+fn a_relay_never_signs_coverage_past_what_upstream_verified() {
+    // ian's #828 review: transaction 9 reached the relay but its coverage frame
+    // did not yet; the relay forwarded 9 with signed coverage 9 over a
+    // watermark it had verified only to 8.
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    let verified = tree.relay_applier.coverage().unwrap();
+    write(
+        &mut tree.master,
+        BOARD,
+        "urn:item:pending",
+        "pending coverage",
+    );
+    let (up, _) = tree.upstream.poll(&tree.master, 100, None).unwrap();
+    let tx_only: Vec<Frame> = up
+        .iter()
+        .filter(|f| f.event != event::COVERAGE)
+        .cloned()
+        .collect();
+    feed(&mut tree.relay, &mut tree.relay_applier, &tx_only, 3);
+    assert_eq!(tree.relay_applier.coverage(), Some(verified));
+    assert!(tree.relay_applier.progress().unwrap().source_tx > verified);
+    let (down, _) = tree.downstream.poll(&tree.relay, 100, None).unwrap();
+    feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 4);
+    assert!(
+        tree.leaf_applier.coverage().unwrap() <= verified,
+        "frames {down:?}"
+    );
+    assert!(
+        !in_graph(&tree.leaf, BOARD)
+            .iter()
+            .any(|v| v.contains("pending coverage"))
+    );
+    // Once the coverage frame arrives, the transaction flows on.
+    let cover: Vec<Frame> = up
+        .into_iter()
+        .filter(|f| f.event == event::COVERAGE)
+        .collect();
+    feed(&mut tree.relay, &mut tree.relay_applier, &cover, 5);
+    tree.sync(100);
+    assert_eq!(in_graph(&tree.leaf, BOARD), in_graph(&tree.master, BOARD));
+}

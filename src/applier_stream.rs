@@ -491,12 +491,14 @@ impl Applier {
                 outcome
             }
             "tx_too_large" => {
+                super::map::record_end(store, &source, reason)?;
                 self.end_session();
                 Outcome::Rebootstrap {
                     reason: format!("the source cannot frame a transaction: {reason}"),
                 }
             }
             "epoch_end" => {
+                super::map::record_end(store, &source, reason)?;
                 self.end_session();
                 Outcome::Rebootstrap {
                     reason: format!("the source ended its log epoch: {reason}"),

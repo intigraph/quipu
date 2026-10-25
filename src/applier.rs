@@ -191,6 +191,7 @@ impl Applier {
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
         store.conn.execute_batch(digest::STOP_DDL)?;
         store.conn.execute_batch(map::MAP_DDL)?;
+        store.conn.execute_batch(map::ENDED_DDL)?;
         bootstrap::discard_open_share(store)?;
         let progress = store
             .conn
