@@ -30,7 +30,8 @@ impl Store {
         Ok(())
     }
 
-    pub(super) fn attest_enabled(&self) -> Result<bool> {
+    /// Read the local operator switch without changing it.
+    pub fn attest_enabled(&self) -> Result<bool> {
         Ok(self
             .conn
             .query_row("SELECT enabled FROM attest_switch WHERE id=1", [], |r| {

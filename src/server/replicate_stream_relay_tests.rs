@@ -84,18 +84,64 @@ impl Tree {
 
     /// The relay reaches the master over real HTTP, as a deployment does.
     async fn over_http() -> Self {
+        Self::over_http_authenticated(None).await
+    }
+
+    async fn over_http_authenticated(file: Option<std::path::PathBuf>) -> Self {
         let (master, master_key) = source(true);
         let app = axum::Router::new()
             .route("/replicate/stream", axum::routing::post(stream))
             .route("/replicate/challenge", axum::routing::post(challenge))
             .with_state(master.clone());
+        let app = if file.is_some() {
+            use axum::response::IntoResponse;
+            let policy = quipu::http_auth::BearerPolicy::new(
+                Some("private-relay-tree-fixture".into()),
+                None,
+                None,
+                1,
+            )
+            .unwrap();
+            app.layer(axum::middleware::from_fn(
+                move |request: axum::extract::Request, next: axum::middleware::Next| {
+                    let policy = policy.clone();
+                    async move {
+                        let result = quipu::http_auth::authorize_http_bearers(
+                            request.uri().path(),
+                            request.method().as_str(),
+                            false,
+                            &policy,
+                            request
+                                .headers()
+                                .get("authorization")
+                                .and_then(|v| v.to_str().ok()),
+                            2,
+                        );
+                        if result.decision != quipu::http_auth::AccessDecision::Allow {
+                            return StatusCode::UNAUTHORIZED.into_response();
+                        }
+                        next.run(request).await
+                    }
+                },
+            ))
+        } else {
+            app
+        };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        Self::build(master, &master_key, Some(url))
+        Self::build(
+            master,
+            &master_key,
+            Some(crate::relay::HttpUpstream::new(url, file).unwrap()),
+        )
     }
 
-    fn build(master: SharedStore, master_key: &str, http: Option<String>) -> Self {
+    fn build(
+        master: SharedStore,
+        master_key: &str,
+        http: Option<crate::relay::HttpUpstream>,
+    ) -> Self {
         let master_id = master.read().store_id().unwrap();
         let mut store = Store::open_in_memory().unwrap();
         let doc = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
@@ -108,7 +154,7 @@ impl Tree {
         let answering = Arc::new(AtomicBool::new(true));
         let opens = Arc::new(AtomicUsize::new(0));
         let upstream: Arc<dyn Upstream> = match http {
-            Some(url) => Arc::new(crate::relay::HttpUpstream { url }),
+            Some(upstream) => Arc::new(upstream),
             None => Arc::new(InProcess {
                 master: master.clone(),
                 answering: answering.clone(),
@@ -356,6 +402,34 @@ async fn a_relay_follows_its_upstream_over_http() {
     assert_eq!(board(&leaf.store), board(&tree.master.read()));
     // The upstream challenge travels over HTTP too.
     let proof = leaf.challenge([0x33; 16], Duration::from_secs(5)).await;
+    assert!(
+        matches!(proof, Some(Outcome::ProofAccepted { .. })),
+        "{proof:?}"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn protected_http_source_replicates_and_proves_freshness_through_relay() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("credential");
+    std::fs::write(&file, "private-relay-tree-fixture\n").unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let tree = Tree::over_http_authenticated(Some(file)).await;
+    tree.relay_covered().await;
+    let mut leaf = tree.leaf().await;
+    let head = tree.master.read().latest_tx_id().unwrap();
+    assert!(leaf.covers(head).await);
+    write(
+        &mut tree.master.lock(),
+        "urn:item:authenticated",
+        "authenticated",
+    );
+    let head = tree.master.read().latest_tx_id().unwrap();
+    assert!(leaf.covers(head).await);
+    assert_eq!(board(&leaf.store), board(&tree.master.read()));
+    let proof = leaf.challenge([0x47; 16], Duration::from_secs(5)).await;
     assert!(
         matches!(proof, Some(Outcome::ProofAccepted { .. })),
         "{proof:?}"
