@@ -178,6 +178,21 @@ pub(super) fn try_eval(
     let Some((drive, judged)) = choose_driver(patterns, &conjuncts, seed) else {
         return Ok(None);
     };
+    // The floor below is never under MIN_DRIVER_ROWS, so a first pattern that
+    // cannot exceed it always declines. Prove that with a bounded probe BEFORE
+    // counting the filtered predicate: under `NOT EXISTS` this runs once per
+    // outer row with the first pattern seeded, and counting first cost a full
+    // predicate count per row only to decline (aegis-xacr.1: 5,117 counts,
+    // 8.3 of 8.8 s, for the seeds ready query).
+    if drive != 0
+        && eval_triple_pattern_limited(store, &patterns[0], seed, ctx, Some(MIN_DRIVER_ROWS + 1))?
+            .len()
+            <= MIN_DRIVER_ROWS
+    {
+        return Ok(None);
+    }
+    #[cfg(test)]
+    tests::estimated();
     let Some(estimate) = estimate_rows(store, &patterns[drive])? else {
         return Ok(None);
     };
