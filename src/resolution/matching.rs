@@ -277,20 +277,20 @@ pub fn revalidate_episode_resolution(
         let iri = crate::episode::node_iri(&node.name, base_ns);
         let mut excused = recorded_distinct_from(store, &iri)?;
         excused.extend(node.distinct_from.iter().cloned());
-        let mut candidates = previous.remove(&node.name).unwrap_or_default();
-        candidates.extend(delta.candidates(store, &node.name, opts.threshold)?);
-        if !excused.is_empty() {
-            let excused: std::collections::HashSet<&str> =
-                excused.iter().map(String::as_str).collect();
-            candidates.retain(|c| !excused.contains(c.iri.as_str()));
-        }
-        candidates.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        super::dedup_by_iri(&mut candidates);
-        candidates.truncate(opts.top_k);
+        let mut candidates = previous
+            .remove(&node.name)
+            .unwrap_or_default()
+            .into_iter()
+            .map(super::selection::Candidate::Known)
+            .collect::<Vec<_>>();
+        candidates.extend(delta.candidates(&node.name, opts.threshold)?);
+        let candidates = super::selection::select(
+            store,
+            candidates,
+            &excused,
+            opts.top_k,
+            super::selection::Ties::Input,
+        )?;
         if let Some(top) = candidates.first() {
             claims.push((top.iri.clone(), node.name.clone(), top.score));
             hints.push((node.name.clone(), candidates));

@@ -322,11 +322,10 @@ impl Store {
         }
         Ok(self
             .conn
-            .query_row(
-                "SELECT canonical_id FROM term_alias WHERE alias_id = ?1",
-                params![id],
-                |r| r.get(0),
-            )
+            // Cache the compiled statement, never the row or a negative lookup.
+            // Composed label scans perform this lookup for every current label.
+            .prepare_cached("SELECT canonical_id FROM term_alias WHERE alias_id = ?1")?
+            .query_row(params![id], |r| r.get(0))
             .optional()?
             .unwrap_or(id))
     }
