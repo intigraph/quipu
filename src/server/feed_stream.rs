@@ -201,6 +201,10 @@ impl Cursor {
                 self.wait = true;
                 continue;
             } else if self.changes {
+                if let Some((hub, _)) = &self.hub {
+                    hub.catchup_reads
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 let params = serde_json::from_value(
                     json!({"since": self.offset, "limit": 1, "capture": "old_and_new_values", "graph": self.params.graph}),
                 );
@@ -264,6 +268,16 @@ impl Cursor {
             };
             let next = body.get(key).and_then(Value::as_i64).unwrap_or(self.offset);
             if next <= self.offset {
+                // An empty store page proves no in-scope transaction up to its
+                // watermark: the stream need not search below it again, so a
+                // quiet graph behind the ring floor reaches the ring instead of
+                // re-reading the store on every unrelated commit. The cursor
+                // itself does not move.
+                if self.changes
+                    && let Some(watermark) = body.get("watermark_tx").and_then(Value::as_i64)
+                {
+                    self.scanned = self.scanned.max(watermark);
+                }
                 // A stream that just attached asks the hub before it waits, so
                 // a commit the hub read meanwhile is not slept through.
                 self.wait = !attached;

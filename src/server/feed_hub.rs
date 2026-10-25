@@ -64,6 +64,8 @@ pub(crate) struct Hub {
     head: watch::Sender<i64>,
     /// Change pages read by the hub, for the one-read-per-transaction control.
     pub(crate) reads: AtomicU64,
+    /// Store pages read by attached subscribers catching up on their own.
+    pub(crate) catchup_reads: AtomicU64,
 }
 
 impl Hub {
@@ -83,6 +85,7 @@ impl Hub {
                     }),
                     head: watch::channel(0).0,
                     reads: AtomicU64::new(0),
+                    catchup_reads: AtomicU64::new(0),
                 });
                 tokio::spawn(read_loop(Arc::downgrade(store), hub.clone()));
                 hub

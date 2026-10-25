@@ -201,3 +201,82 @@ async fn a_new_log_epoch_empties_the_ring() {
         "a page of the old epoch was served from memory"
     );
 }
+
+/// A real `/changes/stream` subscriber; its frames, as `(event, id)`.
+fn subscribe(
+    shared: &SharedStore,
+    since: i64,
+    graph: &str,
+) -> tokio::sync::mpsc::Receiver<(String, String)> {
+    use futures::StreamExt;
+    let params =
+        serde_json::from_value(serde_json::json!({"since": since, "graph": graph})).unwrap();
+    let (frames, received) = tokio::sync::mpsc::channel(64);
+    let shared = shared.clone();
+    tokio::spawn(async move {
+        let response = super::super::changes_stream(
+            axum::extract::State(shared),
+            axum::http::HeaderMap::new(),
+            axum::extract::Query(params),
+        )
+        .await;
+        let mut body = response.into_body().into_data_stream();
+        let mut buffer = String::new();
+        while let Some(Ok(chunk)) = body.next().await {
+            buffer.push_str(std::str::from_utf8(&chunk).unwrap());
+            while let Some(end) = buffer.find("\n\n") {
+                let block: String = buffer.drain(..end + 2).collect();
+                let field = |name: &str| {
+                    block
+                        .lines()
+                        .find_map(|l| l.strip_prefix(name))
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                let event = field("event: ");
+                if !event.is_empty() && frames.send((event, field("id: "))).await.is_err() {
+                    return;
+                }
+            }
+        }
+    });
+    received
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_quiet_graph_behind_the_ring_floor_stops_reading_the_store() {
+    // BOARD's last transaction predates the hub; OTHER moves the store past
+    // it, so the ring's floor is above the subscriber's cursor.
+    let shared = shared();
+    let board_last = shared.read().latest_tx_id().unwrap() - 1;
+    write(&shared, OTHER, "urn:x:before");
+    let hub = Hub::of(&shared);
+    settled(&shared, &hub).await;
+    let mut frames = subscribe(&shared, board_last, BOARD);
+    quiet(&hub).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let catchup = || hub.catchup_reads.load(std::sync::atomic::Ordering::Relaxed);
+    let before = catchup();
+
+    // Commits in other graphs only: served from the ring, no store read.
+    for i in 0..3 {
+        write(&shared, OTHER, &format!("urn:x:{i}"));
+        settled(&shared, &hub).await;
+    }
+    quiet(&hub).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(
+        catchup(),
+        before,
+        "unrelated commits sent the subscriber to the store"
+    );
+
+    // And nothing in scope is lost: the next BOARD commit arrives.
+    write(&shared, BOARD, "urn:item:after");
+    let board_tx = shared.read().latest_tx_id().unwrap();
+    let frame = tokio::time::timeout(Duration::from_secs(5), frames.recv())
+        .await
+        .expect("the BOARD commit never arrived")
+        .unwrap();
+    assert_eq!(frame, ("quipu.changes".to_string(), board_tx.to_string()));
+}
