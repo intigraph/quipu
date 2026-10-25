@@ -41,6 +41,8 @@ All notable changes to this project will be documented in this file.
 - *(api)* Include truncation metadata in named-query responses (#832)([5fd4710](https://github.com/scbrown/quipu/commit/5fd471013b35e1281a4a8269b875afbb04caed5b))
 - *(query)* A failed query keeps its shape in the request log (#834)([d63e3f0](https://github.com/scbrown/quipu/commit/d63e3f07d1366267658fa398abd506590bfe03c3))
 
+
+
 ### Testing
 
 - *(attestation)* Write-v2 receiver controls end to end (#823)([d6c403c](https://github.com/scbrown/quipu/commit/d6c403c2d16f31aacf4e9aa37e2b1ca1d6874fee))
