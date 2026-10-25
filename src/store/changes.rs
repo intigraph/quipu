@@ -269,8 +269,9 @@ impl Store {
 
     /// An upper bound on the encoded bytes of `tx`'s records in `graphs`, as
     /// [`Store::changes_in_graphs`] would build them, read without building
-    /// them: string lengths come from SQL `length()`, so no IRI, value or
-    /// metadata is loaded. Every string counts at JSON's worst-case escaping
+    /// them: string lengths come from SQL `length()` over each string cast to a
+    /// blob, so no IRI, value or metadata is loaded. (On text, `length()` counts
+    /// characters only up to the first NUL; on a blob it counts every byte.) Every string counts at JSON's worst-case escaping
     /// ([`ESCAPE_FACTOR`] bytes per byte), the transaction's timestamp, actor
     /// and source count once per record (each record repeats them), and a
     /// record adds [`RECORD_OVERHEAD`] for its keys and numbers. Counting stops
@@ -279,8 +280,8 @@ impl Store {
         let meta: u64 = self
             .conn
             .query_row(
-                "SELECT length(timestamp) + COALESCE(length(actor), 0) \
-                 + COALESCE(length(source), 0) FROM transactions WHERE id = ?1",
+                "SELECT length(CAST(timestamp AS BLOB)) + COALESCE(length(CAST(actor AS BLOB)), 0) \
+                 + COALESCE(length(CAST(source AS BLOB)), 0) FROM transactions WHERE id = ?1",
                 params![tx],
                 |r| r.get::<_, Option<i64>>(0),
             )
@@ -291,7 +292,7 @@ impl Store {
         // A Ref is tag 0 plus an 8-byte id; only those blobs are read whole.
         let sql = format!(
             "SELECT e, a, g, length(v), CASE WHEN substr(v, 1, 1) = x'00' THEN v END, \
-                    length(valid_from) + COALESCE(length(valid_to), 0) \
+                    length(CAST(valid_from AS BLOB)) + COALESCE(length(CAST(valid_to AS BLOB)), 0) \
              FROM facts WHERE tx = ?1 AND g IN ({})",
             id_list(graphs)
         );
@@ -328,7 +329,8 @@ impl Store {
         Ok(total)
     }
 
-    /// A term's IRI length, from SQL `length()` so the IRI is never loaded.
+    /// A term's IRI length in bytes, from SQL `length()` on the IRI cast to a
+    /// blob, so the IRI is never loaded.
     fn term_len(&self, id: i64, seen: &mut HashMap<i64, u64>) -> Result<u64> {
         if let Some(len) = seen.get(&id) {
             return Ok(*len);
@@ -336,7 +338,7 @@ impl Store {
         let local: Option<i64> = self
             .conn
             .query_row(
-                "SELECT length(iri) FROM main.terms WHERE id = ?1",
+                "SELECT length(CAST(iri AS BLOB)) FROM main.terms WHERE id = ?1",
                 params![id],
                 |r| r.get(0),
             )

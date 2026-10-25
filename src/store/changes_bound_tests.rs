@@ -112,3 +112,21 @@ fn counting_stops_once_the_bound_passes_the_cap() {
     let capped = store.tx_encoded_bound(tx, &[g], 1).unwrap();
     assert!(capped > 1 && capped < full, "capped {capped}, full {full}");
 }
+
+#[test]
+fn the_bound_counts_strings_past_an_embedded_nul() {
+    // SQLite's length() stops at the first NUL of a text value; the bound
+    // must count every byte of IRIs and transaction metadata.
+    let text = format!("urn:prefix:{}", "\0".repeat(1000));
+    let mut store = Store::open_in_memory().unwrap();
+    let datums = [datum(&store, &text, Value::Str("v".into()), Op::Assert)];
+    covers(&mut store, &datums, None, None);
+    let mut store = Store::open_in_memory().unwrap();
+    let datums = [datum(
+        &store,
+        "urn:short",
+        Value::Str("v".into()),
+        Op::Assert,
+    )];
+    covers(&mut store, &datums, Some(&text), Some(&text));
+}
