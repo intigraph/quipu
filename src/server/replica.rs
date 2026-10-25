@@ -84,9 +84,14 @@ pub(crate) async fn watermark(
     .await
 }
 
+/// What the follower holds and when it was last confirmed current.
 #[derive(Default)]
 pub(crate) struct ReplicaStatus {
     observation: Mutex<Option<(Instant, i64)>>,
+    /// The last successful lag observation: when a primary last confirmed it.
+    confirmed: Mutex<Option<Instant>>,
+    /// The follower's own position, read every tick even with no primary.
+    position: Mutex<Option<quipu::follow::Position>>,
 }
 impl ReplicaStatus {
     fn lag(&self) -> Option<i64> {
@@ -96,13 +101,56 @@ impl ReplicaStatus {
             .filter(|(at, _)| at.elapsed() <= Duration::from_secs(30))
             .map(|(_, lag)| *lag)
     }
+    fn confirmed_age_secs(&self) -> Option<u64> {
+        self.confirmed.lock().map(|at| at.elapsed().as_secs())
+    }
+    fn record(&self, position: Option<quipu::follow::Position>, lag: Option<i64>) {
+        if lag.is_some() {
+            *self.confirmed.lock() = Some(Instant::now());
+        }
+        *self.observation.lock() = lag.map(|lag| (Instant::now(), lag));
+        if position.is_some() {
+            *self.position.lock() = position;
+        }
+    }
     pub(crate) fn metrics(&self) -> String {
         let lag = self.lag();
+        let source_tx = self.position.lock().as_ref().map_or(-1, |p| p.source_tx);
+        let age = self
+            .confirmed_age_secs()
+            .map_or(-1, |s| i64::try_from(s).unwrap_or(i64::MAX));
         format!(
-            "# HELP quipu_replica_lag_transactions Primary minus follower transaction IDs; -1 means unknown.\n# TYPE quipu_replica_lag_transactions gauge\nquipu_replica_lag_transactions {}\n# HELP quipu_replica_lag_known Whether a fresh primary/follower observation exists.\n# TYPE quipu_replica_lag_known gauge\nquipu_replica_lag_known {}\n",
+            "# HELP quipu_replica_lag_transactions Primary minus follower transaction IDs; -1 means unknown.\n# TYPE quipu_replica_lag_transactions gauge\nquipu_replica_lag_transactions {}\n# HELP quipu_replica_lag_known Whether a fresh primary/follower observation exists.\n# TYPE quipu_replica_lag_known gauge\nquipu_replica_lag_known {}\n# HELP quipu_replica_source_tx The last source transaction the follower holds; -1 means unknown.\n# TYPE quipu_replica_source_tx gauge\nquipu_replica_source_tx {source_tx}\n# HELP quipu_replica_confirmed_age_seconds Seconds since a primary last confirmed the lag; -1 means never since start.\n# TYPE quipu_replica_confirmed_age_seconds gauge\nquipu_replica_confirmed_age_seconds {age}\n",
             lag.unwrap_or(-1),
             u8::from(lag.is_some())
         )
+    }
+    /// The staleness headers every replica response carries. A value nobody
+    /// can establish is `unknown`, never zero.
+    fn header_values(&self) -> [(&'static str, String); 4] {
+        let unknown = || "unknown".to_string();
+        let position = self.position.lock().clone();
+        [
+            (
+                "x-quipu-replica-lag-tx",
+                self.lag().map_or_else(unknown, |n| n.to_string()),
+            ),
+            (
+                "x-quipu-replica-source-tx",
+                position
+                    .as_ref()
+                    .map_or_else(unknown, |p| p.source_tx.to_string()),
+            ),
+            (
+                "x-quipu-replica-source-time",
+                position.and_then(|p| p.source_time).unwrap_or_else(unknown),
+            ),
+            (
+                "x-quipu-replica-confirmed-age-s",
+                self.confirmed_age_secs()
+                    .map_or_else(unknown, |s| s.to_string()),
+            ),
+        ]
     }
 }
 
@@ -113,17 +161,22 @@ pub(crate) async fn headers(
 ) -> axum::response::Response {
     let mut response = next.run(req).await;
     if let Some(replica) = &store.replica {
-        let lag = replica
-            .lag()
-            .map_or_else(|| "unknown".to_string(), |n| n.to_string());
-        response
-            .headers_mut()
-            .insert("x-quipu-replica-lag-tx", lag.parse().expect("numeric lag"));
+        for (name, value) in replica.header_values() {
+            if let Ok(value) = value.parse() {
+                response.headers_mut().insert(name, value);
+            }
+        }
     }
     response
 }
 
-fn observe(store: &SharedStore, primary: &str) -> Option<i64> {
+/// The follower's position, read on its own connection.
+fn local_position(store: &SharedStore) -> Option<quipu::follow::Position> {
+    let local = store.writer.try_lock()?;
+    quipu::follow::position(&local).ok()
+}
+
+fn remote_watermark(primary: &str) -> Option<Watermark> {
     // Never hold a local SQLite connection across the network request.
     let response = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(2))
@@ -142,14 +195,30 @@ fn observe(store: &SharedStore, primary: &str) -> Option<i64> {
     if bytes.len() > 65_536 {
         return None;
     }
-    let remote: Watermark = serde_json::from_slice(&bytes).ok()?;
-    let local = store.writer.try_lock()?;
-    let tx = local.latest_tx_id().ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+/// Primary minus follower, against the lineage the follower actually holds:
+/// the source's id in an applier-built follower, its own id in a file copy.
+fn lag_of(remote: &Watermark, local: &quipu::follow::Position) -> Option<i64> {
     // A lineage mismatch or a primary behind the follower is UNKNOWN, never zero.
-    if remote.store_id != local.store_id().ok()? || remote.watermark_tx < tx || tx < 0 {
+    if remote.store_id != local.lineage
+        || remote.watermark_tx < local.source_tx
+        || local.source_tx < 0
+    {
         return None;
     }
-    Some(remote.watermark_tx - tx)
+    Some(remote.watermark_tx - local.source_tx)
+}
+
+fn observe(store: &SharedStore, primary: &str) -> (Option<quipu::follow::Position>, Option<i64>) {
+    let remote = remote_watermark(primary);
+    let local = local_position(store);
+    let lag = remote
+        .as_ref()
+        .zip(local.as_ref())
+        .and_then(|(r, l)| lag_of(r, l));
+    (local, lag)
 }
 
 pub(crate) fn start_metadata_reader(store: SharedStore, config: ReplicaConfig) {
@@ -157,12 +226,11 @@ pub(crate) fn start_metadata_reader(store: SharedStore, config: ReplicaConfig) {
         loop {
             let s = store.clone();
             let primary = config.primary_url.clone();
-            let result = tokio::task::spawn_blocking(move || observe(&s, &primary))
+            let (position, lag) = tokio::task::spawn_blocking(move || observe(&s, &primary))
                 .await
-                .ok()
-                .flatten();
+                .unwrap_or_default();
             if let Some(status) = &store.replica {
-                *status.observation.lock() = result.map(|lag| (Instant::now(), lag));
+                status.record(position, lag);
             }
             tokio::time::sleep(Duration::from_secs(15)).await;
         }
