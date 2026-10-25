@@ -11,26 +11,50 @@ use crate::store::attach::Attachment;
 
 thread_local! {
     static DISABLED: Cell<bool> = const { Cell::new(false) };
+    static TOP_DISABLED: Cell<bool> = const { Cell::new(false) };
     static DROVE: Cell<usize> = const { Cell::new(0) };
+    static TOPPED: Cell<usize> = const { Cell::new(0) };
+    static PROBED: Cell<usize> = const { Cell::new(0) };
 }
 
 pub(super) fn disabled() -> bool {
     DISABLED.get()
 }
 
+pub(super) fn top_disabled() -> bool {
+    TOP_DISABLED.get()
+}
+
 pub(super) fn drove() {
     DROVE.set(DROVE.get() + 1);
 }
 
-fn reference<T>(run: impl FnOnce() -> T) -> T {
-    struct Reset(bool);
+pub(super) fn topped() {
+    TOPPED.set(TOPPED.get() + 1);
+}
+
+pub(super) fn probed() {
+    PROBED.set(PROBED.get() + 1);
+}
+
+fn with<T>(flag: &'static std::thread::LocalKey<Cell<bool>>, run: impl FnOnce() -> T) -> T {
+    struct Reset(&'static std::thread::LocalKey<Cell<bool>>, bool);
     impl Drop for Reset {
         fn drop(&mut self) {
-            DISABLED.set(self.0);
+            self.0.set(self.1);
         }
     }
-    let _reset = Reset(DISABLED.replace(true));
+    let _reset = Reset(flag, flag.replace(true));
     run()
+}
+
+pub(super) fn reference<T>(run: impl FnOnce() -> T) -> T {
+    with(&DISABLED, run)
+}
+
+/// The driven plan as it was before the top `k`: every survivor probed.
+pub(super) fn untopped<T>(run: impl FnOnce() -> T) -> T {
+    with(&TOP_DISABLED, run)
 }
 
 /// Rows and how many times the driven plan ran for them.
@@ -40,22 +64,37 @@ fn driven(store: &Store, text: &str) -> (crate::sparql::QueryResult, usize) {
     (result, DROVE.get())
 }
 
-fn bag(rows: &[Bindings]) -> Vec<String> {
+/// Rows, how many times the top `k` ran, and how many survivors it probed.
+pub(super) fn topped_run(
+    store: &Store,
+    text: &str,
+) -> (
+    crate::error::Result<crate::sparql::QueryResult>,
+    usize,
+    usize,
+) {
+    TOPPED.set(0);
+    PROBED.set(0);
+    let result = query(store, text);
+    (result, TOPPED.get(), PROBED.get())
+}
+
+pub(super) fn bag(rows: &[Bindings]) -> Vec<String> {
     let mut result: Vec<_> = rows.iter().map(row_text).collect();
     result.sort();
     result
 }
 
-fn row_text(row: &Bindings) -> String {
+pub(super) fn row_text(row: &Bindings) -> String {
     let mut values: Vec<_> = row.iter().collect();
     values.sort_by_key(|(k, _)| *k);
     format!("{values:?}")
 }
 
-const BOARD: &str = "http://example.org/board";
+pub(super) const BOARD: &str = "http://example.org/board";
 const DT: &str = "http://www.w3.org/2001/XMLSchema#dateTime";
 
-fn put(store: &mut Store, graph: &str, data: &str) {
+pub(super) fn put(store: &mut Store, graph: &str, data: &str) {
     let graph = store.graph_create(graph).unwrap();
     ingest_rdf_to_graph(
         store,
@@ -106,7 +145,7 @@ fn board(items: usize) -> String {
     data
 }
 
-fn fixture(items: usize, composed: bool) -> (Store, tempfile::TempDir) {
+pub(super) fn fixture(items: usize, composed: bool) -> (Store, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let main = dir.path().join("main.db");
     {
@@ -144,9 +183,9 @@ fn fixture(items: usize, composed: bool) -> (Store, tempfile::TempDir) {
     (store, dir)
 }
 
-const PREFIX: &str = "PREFIX s: <https://schema.org/> PREFIX q: <https://scbrown.github.io/quechua/ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> ";
+pub(super) const PREFIX: &str = "PREFIX s: <https://schema.org/> PREFIX q: <https://scbrown.github.io/quechua/ns#> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> ";
 
-fn closes(filter: &str) -> String {
+pub(super) fn closes(filter: &str) -> String {
     format!(
         "{PREFIX}SELECT ?item ?title ?end WHERE {{ GRAPH <{BOARD}> {{ ?item q:outcome \"done\" ; s:endTime ?end . FILTER({filter}) OPTIONAL {{ ?item s:name ?title }} }} }} ORDER BY DESC(?end) ?item LIMIT 101"
     )

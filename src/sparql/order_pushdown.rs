@@ -84,7 +84,15 @@ pub(super) fn check(store: &Store, rows: &[Bindings], expression: &[OrderExpress
     if !STATE.with(|s| s.get().0) {
         return;
     }
-    let total = expression.iter().all(|order| {
+    if !total(store, rows, expression) {
+        STATE.with(|s| s.set((true, true)));
+    }
+}
+
+/// Whether `rows` order totally under every key in `expression`: each key's
+/// values share one comparison class (see the module docs).
+pub(super) fn total(store: &Store, rows: &[Bindings], expression: &[OrderExpression]) -> bool {
+    expression.iter().all(|order| {
         let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = order;
         let mut class = None;
         rows.iter().all(|row| {
@@ -94,10 +102,7 @@ pub(super) fn check(store: &Store, rows: &[Bindings], expression: &[OrderExpress
             // Unbound sorts first against everything, consistently.
             kind == Kind::Unbound || *class.get_or_insert(kind) == kind
         })
-    });
-    if !total {
-        STATE.with(|s| s.set((true, true)));
-    }
+    })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -261,7 +266,7 @@ fn plain(p: &GraphPattern) -> bool {
     }
 }
 
-const METADATA: [&str; 4] = ["_provider", "_trust", "_freshness", "_policy"];
+pub(super) const METADATA: [&str; 4] = ["_provider", "_trust", "_freshness", "_policy"];
 
 /// Whether a reserved response-metadata name appears as a binding key anywhere.
 /// Blank-node labels are binding keys too (`triple_pattern_vars`), so
