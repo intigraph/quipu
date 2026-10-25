@@ -214,6 +214,23 @@ impl LabelIndex {
     }
 
     /// Candidates for `name` by exact (case-insensitive) then Jaro-Winkler match.
+    /// Every candidate for `name`, each resolved to its IRI, in index order:
+    /// the eager shape the share-import delta recheck merges and sorts itself.
+    /// Same candidates, scores and `matched_on` text as the lazy path.
+    pub(crate) fn entity_candidates(
+        &self,
+        store: &Store,
+        name: &str,
+        threshold: f64,
+    ) -> Result<Vec<super::EntityCandidate>> {
+        let mut iris = std::collections::HashMap::new();
+        let mut resolve = |id| store.resolve(id);
+        self.candidates(name, threshold)?
+            .into_iter()
+            .map(|candidate| candidate.resolve(&mut resolve, &mut iris))
+            .collect()
+    }
+
     pub(super) fn candidates(&self, name: &str, threshold: f64) -> Result<Vec<Candidate>> {
         let name_lower = name.to_lowercase();
         let name_profile = LabelProfile::of(&name_lower);

@@ -158,7 +158,7 @@ pub(crate) fn revalidate(
             entry.candidates.iter().cloned().partition(|c| {
                 c.matched_on.starts_with("canonical_name") && touched.contains(&c.iri)
             });
-        candidates.extend(delta.candidates(store, &entry.label, THRESHOLD)?);
+        candidates.extend(delta.entity_candidates(store, &entry.label, THRESHOLD)?);
         sort(&mut candidates);
         out.push(LabelCandidates {
             candidates,

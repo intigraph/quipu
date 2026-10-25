@@ -25,7 +25,7 @@ impl Candidate {
         }
     }
 
-    fn resolve(
+    pub(super) fn resolve(
         self,
         resolve: &mut impl FnMut(i64) -> Result<String>,
         iris: &mut HashMap<i64, String>,
