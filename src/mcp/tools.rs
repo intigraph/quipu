@@ -3,6 +3,8 @@
 //! Split by responsibility so each file stays within the 500-line limit:
 //! reads, searches, shape/subscription management, and writes.
 
+#[cfg(not(target_arch = "wasm32"))]
+mod attest;
 mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 mod deck;
@@ -25,6 +27,8 @@ mod structured_search;
 mod structured_syntax;
 mod write;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use attest::{tool_attest_challenge, tool_attest_commit, tool_attest_receipt};
 pub use datasets::tool_datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub use deck::{tool_deck_attest, tool_deck_present, tool_deck_receipt};

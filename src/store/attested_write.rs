@@ -28,6 +28,10 @@ mod operator;
 #[cfg(test)]
 mod tests;
 mod transaction;
+#[cfg(test)]
+mod transport_tests;
+
+pub use admission::receipt_iri;
 
 /// Signed-message domain; never interpretable as any other signed object.
 pub const DOMAIN: &str = "quipu-attested-write-v1";

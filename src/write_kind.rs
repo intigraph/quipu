@@ -123,6 +123,8 @@ impl WriteKind {
             "/reason" => Self::Reasoner,
             // aegis-blh.2: a stored challenge, then a signed human decision.
             "/deck/present" | "/deck/attest" => Self::Verdict,
+            // aegis-25k: a stored proposal, then a write a human signed.
+            "/attest/challenge" | "/attest/commit" => Self::Verdict,
             _ => return None,
         })
     }

@@ -238,6 +238,8 @@ pub use mcp::tools::{
     tool_shapes, tool_subscriptions, tool_unravel, tool_validate,
 };
 #[cfg(not(target_arch = "wasm32"))]
+pub use mcp::tools::{tool_attest_challenge, tool_attest_commit, tool_attest_receipt};
+#[cfg(not(target_arch = "wasm32"))]
 pub use mcp::tools::{tool_deck_attest, tool_deck_present, tool_deck_receipt};
 pub use mcp::{
     inference_header, labels_json, query_inference, query_result, query_result_with_federation,

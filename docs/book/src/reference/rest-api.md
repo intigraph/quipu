@@ -822,6 +822,41 @@ operator has configured and enabled the store's deck, which no route can do.
 
 Unknown fields are refused on all three.
 
+### Attested writes: `POST /attest/challenge`, `POST /attest/commit`, `POST /attest/receipt`
+
+An ordinary governed write that is admitted only when an enrolled human
+signer approved its exact content on their own device (`WebAuthn`). These
+routes are **off by default**: they answer `403` unless `[quipu.server]
+attest_http = true`. Even then they admit nothing until an operator has
+enabled the store's attested writes, enrolled a signer and marked the target
+graph attested-only, which no route can do.
+
+- `/attest/challenge` (write): `{"signer", "graph", "datums", "expect"?}`.
+  `datums` are 1 to 64 `{"s", "p", "o"}` triples and `expect` up to 16 live
+  preconditions `{"graph", "s", "p", "o"}`, where `o: null` expects no value.
+  Objects are typed: `{"kind": "str"|"int"|"iri", "value": ...}`. Returns
+  `{"challenge", "message", "webauthn_challenge"}`: `message` is the exact
+  signed bytes and `webauthn_challenge` the value for
+  `navigator.credentials.get()`, both unpadded base64url. Sign what is
+  returned; never rebuild it. Preconditions are checked now and again at
+  commit.
+- `/attest/commit` (write): `{"nonce", "client_data_json",
+  "authenticator_data", "signature"}`, each byte field base64url. Nothing
+  else is sent: the server writes exactly what its stored challenge names.
+  One savepoint verifies the assertion, re-checks every precondition, runs
+  the normal graph gates, consumes the challenge, writes, and records a
+  receipt, returning `{"nonce", "receipt_iri", "content_hash",
+  "recorded_at"}`. A refusal admits nothing; the refusal audit is kept. A
+  replayed, expired or stale challenge is refused. After a lost response,
+  look the receipt up; do not resubmit.
+- `/attest/receipt` (read): `{"nonce"}` returns `{"found", "verified",
+  "receipt_iri", "receipt", "tx"}`. `verified` re-checks the retained
+  assertion against the enrolled key snapshot.
+
+The signed message is the canonical JSON of the stored challenge under the
+domain `quipu-attested-write-v1`; a frozen test vector pins its bytes.
+Unknown fields are refused on all three.
+
 ### `POST /retract`
 
 Retract facts for an entity.

@@ -43,6 +43,8 @@ pub(crate) struct StoreHandle {
     pub(crate) log_query_phases: bool,
     /// `[quipu.server] deck_http` (aegis-blh.2); off unless configured.
     pub(crate) deck_http: bool,
+    /// `[quipu.server] attest_http` (aegis-25k); off unless configured.
+    pub(crate) attest_http: bool,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
@@ -131,6 +133,12 @@ impl ReadPool {
 }
 
 impl StoreHandle {
+    /// The two signed-write route switches, both off unless configured.
+    pub(crate) fn signed_route_switches(&mut self, server: &quipu::config::ServerConfig) {
+        self.deck_http = server.deck_http;
+        self.attest_http = server.attest_http;
+    }
+
     pub(crate) fn commit_wake_for(store: &quipu::Store) -> tokio::sync::watch::Sender<()> {
         let (sender, _) = tokio::sync::watch::channel(());
         let wake = sender.clone();
@@ -166,6 +174,7 @@ impl StoreHandle {
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
+            attest_http: false,
             query_capture: None,
             replica: None,
             federation,
@@ -208,6 +217,7 @@ impl StoreHandle {
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
+            attest_http: false,
             query_capture: None,
             replica: None,
             federation: quipu::config::FederationConfig::default(),
