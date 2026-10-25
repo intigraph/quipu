@@ -177,7 +177,7 @@ only downward for this profile until a measured requirement changes the ruling.
 Issuance, signing-key rotation and lifecycle use the existing source signing
 plane; there is no key material in the lease.
 
-This is an explicitly versioned extension. Existing `quipu-asof-v1` manifests
+This is an explicitly versioned extension. Existing `quipu-asof-share/v1` manifests
 and stream messages use strict deserialization; do not append fields and assume
 old clients ignore them. Negotiate a new profile/schema, keep the shared applier,
 and require the upgraded client to verify the lease and current policy binding.

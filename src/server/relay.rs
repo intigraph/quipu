@@ -12,6 +12,7 @@
 //! While the upstream session is down no proof arrives, so the child's
 //! freshness stays UNKNOWN.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,9 @@ use quipu::replicate_source::StreamRequest;
 use tokio::sync::watch;
 
 use crate::SharedStore;
+
+#[path = "relay_auth.rs"]
+mod auth;
 
 /// Wait before reconnecting to the upstream after its stream ends.
 const RECONNECT: Duration = Duration::from_secs(2);
@@ -146,9 +150,10 @@ pub(crate) fn open(
     if config.upstream_key.len() != 64 || hex::decode(&config.upstream_key).is_err() {
         return Err("relay upstream_key must be an ed25519 public key in hex".into());
     }
-    let upstream = Arc::new(HttpUpstream {
-        url: config.upstream_url.clone(),
-    });
+    let upstream = Arc::new(HttpUpstream::new(
+        config.upstream_url.clone(),
+        config.upstream_credential_file.as_ref().map(PathBuf::from),
+    )?);
     Relay::new(
         store,
         config.graphs.clone(),
@@ -298,7 +303,21 @@ impl SseParser {
 /// The upstream over HTTP: `POST {url}/replicate/stream` and
 /// `POST {url}/replicate/challenge`.
 pub(crate) struct HttpUpstream {
-    pub(crate) url: String,
+    url: String,
+    credential_file: Option<PathBuf>,
+}
+
+impl HttpUpstream {
+    pub(crate) fn new(url: String, credential_file: Option<PathBuf>) -> Result<Self, &'static str> {
+        auth::validate_url(&url)?;
+        // Refuse an invalid configured file at startup. Retain only its path:
+        // each operation must independently reload the current credential.
+        auth::credential_header(credential_file.as_deref())?;
+        Ok(Self {
+            url,
+            credential_file,
+        })
+    }
 }
 
 impl Upstream for HttpUpstream {
@@ -307,6 +326,7 @@ impl Upstream for HttpUpstream {
         request: StreamRequest,
     ) -> BoxFuture<'static, Option<BoxStream<'static, String>>> {
         let url = format!("{}/replicate/stream", self.url.trim_end_matches('/'));
+        let credential_file = self.credential_file.clone();
         let body = serde_json::json!({
             "graphs": request.graphs, "context_graphs": request.context_graphs,
             "since": request.since, "expected_store_id": request.expected_store_id,
@@ -318,18 +338,49 @@ impl Upstream for HttpUpstream {
             // a store connection across the network.
             std::thread::spawn(move || {
                 use std::io::Read as _;
-                let response = ureq::AgentBuilder::new()
+                let credential = match auth::credential_header(credential_file.as_deref()) {
+                    Ok(header) => header,
+                    Err(reason) => {
+                        eprintln!("relay upstream stream refused: {reason}");
+                        let _ = opened.send(false);
+                        return;
+                    }
+                };
+                let mut request = ureq::AgentBuilder::new()
                     .timeout_connect(Duration::from_secs(5))
                     .redirects(0)
                     .build()
                     .post(&url)
                     .set("X-Quipu-Client", "replica-relay")
-                    .set("Content-Type", "application/json")
-                    .send_string(&body.to_string());
-                let Ok(response) = response else {
+                    .set("Content-Type", "application/json");
+                if let Some(header) = credential {
+                    request = request.set("Authorization", &header);
+                }
+                let response = match request.send_string(&body.to_string()) {
+                    Ok(response) if response.status() == 200 => response,
+                    result => {
+                        // Never format an upstream body/error: it may reflect
+                        // the credential. A redirect is not an open stream.
+                        let status = match result {
+                            Ok(response) => Some(response.status()),
+                            Err(ureq::Error::Status(status, _)) => Some(status),
+                            Err(_) => None,
+                        };
+                        eprintln!("relay upstream stream refused or unavailable (HTTP {status:?})");
+                        let _ = opened.send(false);
+                        return;
+                    }
+                };
+                if !response.header("Content-Type").is_some_and(|value| {
+                    value
+                        .split(';')
+                        .next()
+                        .is_some_and(|mime| mime.trim().eq_ignore_ascii_case("text/event-stream"))
+                }) {
+                    eprintln!("relay upstream stream refused: expected text/event-stream");
                     let _ = opened.send(false);
                     return;
-                };
+                }
                 let _ = opened.send(true);
                 let mut reader = response.into_reader();
                 let mut buffer = [0u8; 8192];
@@ -363,15 +414,27 @@ impl Upstream for HttpUpstream {
 
     fn challenge(&self, session: String, nonce: [u8; 16]) -> BoxFuture<'static, bool> {
         let url = format!("{}/replicate/challenge", self.url.trim_end_matches('/'));
+        let credential_file = self.credential_file.clone();
         Box::pin(async move {
             tokio::task::spawn_blocking(move || {
-                ureq::AgentBuilder::new()
+                let credential = match auth::credential_header(credential_file.as_deref()) {
+                    Ok(header) => header,
+                    Err(reason) => {
+                        eprintln!("relay upstream challenge refused: {reason}");
+                        return false;
+                    }
+                };
+                let mut request = ureq::AgentBuilder::new()
                     .timeout(Duration::from_secs(5))
                     .redirects(0)
                     .build()
                     .post(&url)
                     .set("X-Quipu-Client", "replica-relay")
-                    .set("Content-Type", "application/json")
+                    .set("Content-Type", "application/json");
+                if let Some(header) = credential {
+                    request = request.set("Authorization", &header);
+                }
+                request
                     .send_string(
                         &serde_json::json!({"session": session, "nonce": hex::encode(nonce)})
                             .to_string(),
@@ -387,3 +450,7 @@ impl Upstream for HttpUpstream {
 #[cfg(test)]
 #[path = "relay_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "relay_http_auth_tests.rs"]
+mod http_auth_tests;
