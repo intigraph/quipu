@@ -97,6 +97,12 @@ impl Store {
                 "decision deck graph requires its protected writer".into(),
             ));
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.attest_graph_is_protected(&iri)? {
+            return Err(Error::PolicyDenied(format!(
+                "graph <{iri}> accepts attested writes only"
+            )));
+        }
         if is_inferred_graph_iri(&iri) && !source_may_write_inferred(source) {
             return Err(Error::InvalidValue(format!(
                 "graph <{iri}> is a companion inferred graph — the \

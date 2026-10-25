@@ -1,0 +1,23 @@
+{
+  "name": "demo",
+  "group_id": "demo",
+  "source": "local public fixture",
+  "episode_body": "Ada studies the Engine.",
+  "nodes": [
+    {
+      "name": "Ada",
+      "type": "Person"
+    },
+    {
+      "name": "Engine",
+      "type": "Machine"
+    }
+  ],
+  "edges": [
+    {
+      "source": "Ada",
+      "target": "Engine",
+      "relation": "studies"
+    }
+  ]
+}

@@ -393,3 +393,138 @@ async fn sd_signed_write_with_declared_provenance_is_refused_only_when_keys_are_
         control.err().map(|r| r.message)
     );
 }
+
+/// A signed POST of `{}` to `path` under `quipu-write-v2`, bound to
+/// `audience` (the store the client believes it is writing to).
+fn signed_post_v2(
+    key: &Ed25519KeyPair,
+    binding: &SessionBinding,
+    nonce: &str,
+    path: &str,
+    audience: &str,
+    relabel: Option<&str>,
+) -> axum::extract::Request {
+    use base64::Engine as _;
+    use quipu::session_attestation::{
+        AttestationEnvelope, SignedBinding, WRITE_V2, WriteBinding, canonical_message,
+    };
+    let mut envelope = AttestationEnvelope {
+        version: WRITE_V2.into(),
+        key_id: binding.key_id.clone(),
+        session: binding.session.clone(),
+        introducer: binding.introducer.clone(),
+        issued_at_epoch: quipu::time::epoch_secs(),
+        nonce: nonce.into(),
+        signature: String::new(),
+        audience: Some(audience.into()),
+    };
+    let hash = quipu::session_attestation::body_sha256(b"{}");
+    let message = canonical_message(
+        &envelope,
+        &SignedBinding::Write(WriteBinding {
+            method: "POST",
+            path,
+            content_type: "application/json",
+            body_sha256: &hash,
+            audience: Some(audience),
+        }),
+    );
+    envelope.signature = hex::encode(key.sign(&message).as_ref());
+    // A relay that edits the audience claim after signing.
+    if let Some(claim) = relabel {
+        envelope.audience = Some(claim.into());
+    }
+    let header = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&envelope).unwrap());
+    axum::http::Request::post(path)
+        .header("content-type", "application/json")
+        .header(super::HEADER, header)
+        .body(axum::body::Body::from("{}"))
+        .unwrap()
+}
+
+/// The HTTP adapter's v2 path, end to end through `verify` and the writer
+/// lock: the audience is this store's own id, a relabelled claim fails the
+/// signature, and a binding revoked while the write is queued is refused at
+/// settlement without spending the nonce. The older tests here are v1-only,
+/// so none of them could see an audience or settlement regression on v2.
+#[tokio::test]
+async fn a_v2_signed_write_is_bound_to_this_store_and_settles_under_the_lock() {
+    let (store, key, binding) = identity_fixture();
+    let here = store.read().store_id().unwrap();
+    let elsewhere = quipu::Store::open_in_memory().unwrap().store_id().unwrap();
+    assert_ne!(here, elsewhere, "control: two store identities");
+    let nonce = |n: u8| format!("{n:032x}");
+
+    // Admitted for this store.
+    let ok = super::verify(
+        &store,
+        false,
+        signed_post_v2(&key, &binding, &nonce(1), "/graph/create", &here, None),
+    )
+    .await;
+    assert!(ok.is_ok(), "{:?}", ok.err().map(|r| r.message));
+
+    // Signed for another store.
+    let Err(refusal) = super::verify(
+        &store,
+        false,
+        signed_post_v2(&key, &binding, &nonce(2), "/graph/create", &elsewhere, None),
+    )
+    .await
+    else {
+        panic!("a signature for another store was admitted");
+    };
+    assert!(
+        refusal.message.contains("audience mismatch"),
+        "{}",
+        refusal.message
+    );
+
+    // Signed for another store, claim relabelled to this one.
+    let Err(refusal) = super::verify(
+        &store,
+        false,
+        signed_post_v2(
+            &key,
+            &binding,
+            &nonce(3),
+            "/graph/create",
+            &elsewhere,
+            Some(&here),
+        ),
+    )
+    .await
+    else {
+        panic!("a relabelled audience was admitted");
+    };
+    assert_eq!(refusal.verdict, "badsig");
+
+    // Valid at the pre-check, revoked while queued: refused at settlement.
+    let Ok((pending, _, _)) = super::verify(
+        &store,
+        false,
+        signed_post_v2(&key, &binding, &nonce(4), "/graph/create", &here, None),
+    )
+    .await
+    else {
+        panic!("pre-check refused a valid v2 request");
+    };
+    store.read().attestation_revoke(&binding.session).unwrap();
+    let settled = store.lock().settle_attestation(&pending);
+    assert!(settled.is_err());
+    assert!(matches!(
+        pending.state(),
+        AttestState::Refused {
+            verdict: "revoked",
+            ..
+        }
+    ));
+    assert!(
+        !store
+            .read()
+            .attestation_nonce_spent(&binding.session, &nonce(4))
+            .unwrap(),
+        "a refused settlement spends nothing"
+    );
+}
