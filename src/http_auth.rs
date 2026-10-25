@@ -84,6 +84,9 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // aegis-blh.2: present stores a challenge; attest settles a decision.
     "/deck/present",
     "/deck/attest",
+    // aegis-25k: challenge stores a proposal; commit admits a signed write.
+    "/attest/challenge",
+    "/attest/commit",
     "/retract",
     // aegis-rz75m6: retract-only repair path. Writes a retraction transaction
     // stamped repair:<ticket> when `apply` is true.
@@ -157,6 +160,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/identity",
     // aegis-blh.2: exact receipt lookup by nonce; no write.
     "/deck/receipt",
+    // aegis-25k: exact attested-write receipt lookup by nonce; no write.
+    "/attest/receipt",
     "/memory/read",
     "/memory/export",
     "/memory/projection",
