@@ -130,9 +130,8 @@ impl Store {
                     graph,
                     &incoming_targets,
                 )?;
-                if graph != 0 {
-                    // ROOT types may target a named-graph focus, but ROOT values
-                    // never contribute to that graph's cardinality.
+                if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
+                    // ROOT types can target focuses; ROOT values never affect cardinality.
                     if let Some(rdf_type) =
                         self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
                     {
@@ -363,7 +362,7 @@ impl Store {
                     })
                     .collect();
                 for entity in classes {
-                    for g in BTreeSet::from([0, graph]) {
+                    for g in self.reference_type_graphs(graph) {
                         self.append_bounded_entity(facts, entity, g, Some(rdf_type))?;
                     }
                 }
