@@ -45,17 +45,23 @@ pub fn cmd_attest(args: &[String], db_path: &str) {
         Some(verb @ ("allow-write" | "deny-write")) => {
             set_write(args, db_path, verb == "allow-write");
         }
+        Some(verb @ ("require-v2" | "allow-v1")) => {
+            set_require_v2(args, db_path, verb == "require-v2");
+        }
         Some("revoke") => revoke(args, db_path),
         _ => {
             eprintln!(
                 "quipu attest register --agent A --session S --public-key HEX \\
-                 --introducer I --issued-at EPOCH --expires-at EPOCH [--allow-write] [--db PATH]\n\
+                 --introducer I --issued-at EPOCH --expires-at EPOCH [--allow-write] [--require-v2] [--db PATH]\n\
                  quipu attest allow-write|deny-write <SESSION> [--db PATH]\n\
+                 quipu attest require-v2|allow-v1 <SESSION> [--db PATH]\n\
                  quipu attest revoke <SESSION> [--db PATH]\n\
                  quipu attest list [--db PATH]\n\n\
                  A binding is SHARE-ONLY unless granted write: --allow-write at\n\
                  registration, or allow-write later. Only then may its key sign\n\
-                 HTTP writes to /knot, /update, /episode (aegis-bys8d1).\n\n\
+                 HTTP writes to /knot, /update, /episode (aegis-bys8d1).\n\
+                 require-v2 refuses that session's quipu-write-v1 writes, so each\n\
+                 write is bound to this store; per session only (aegis-2idcev).\n\n\
                  Registers a producer session binding OUT OF BAND, which is what a\n\
                  share import needs to reach tier=attested. Do NOT populate this from\n\
                  a share you are importing: a key that vouches for the bundle it\n\
@@ -90,6 +96,7 @@ fn register(args: &[String], db_path: &str) {
         }
     };
     binding.allow_write = args.iter().any(|a| a == "--allow-write");
+    binding.require_v2 = args.iter().any(|a| a == "--require-v2");
     let store = crate::cli_open::open_store(db_path);
     match store.attestation_register(&binding) {
         Ok(()) => {
@@ -119,6 +126,30 @@ fn set_write(args: &[String], db_path: &str, allow: bool) {
                 "GRANTED"
             } else {
                 "withdrawn (share-only)"
+            }
+        ),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Require write-v2 for one session's signed writes, or allow v1 again
+/// (aegis-2idcev). Per session: there is deliberately no store-wide switch.
+fn set_require_v2(args: &[String], db_path: &str, require: bool) {
+    let Some(session) = args.get(3).filter(|a| !a.starts_with("--")) else {
+        eprintln!("usage: quipu attest require-v2|allow-v1 <SESSION> [--db PATH]");
+        std::process::exit(2);
+    };
+    let store = crate::cli_open::open_store(db_path);
+    match store.attestation_set_require_v2(session, require) {
+        Ok(()) => println!(
+            "session {session}: {}",
+            if require {
+                "quipu-write-v2 REQUIRED (v1 writes refused)"
+            } else {
+                "quipu-write-v1 allowed again"
             }
         ),
         Err(e) => {
@@ -159,14 +190,15 @@ fn list(db_path: &str) {
         Ok(bindings) => {
             for b in bindings {
                 println!(
-                    "{}\t{}\tkey_id={}\tintroducer={}\tallow_write={}\texpires_at={}\trevoked={}",
+                    "{}\t{}\tkey_id={}\tintroducer={}\tallow_write={}\texpires_at={}\trevoked={}\trequire_v2={}",
                     b.agent,
                     b.session,
                     b.key_id,
                     b.introducer,
                     b.allow_write,
                     b.expires_at_epoch,
-                    b.revoked
+                    b.revoked,
+                    b.require_v2
                 );
             }
         }

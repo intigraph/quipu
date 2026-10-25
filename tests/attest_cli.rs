@@ -67,3 +67,46 @@ fn register_list_and_revoke_round_trip_through_the_cli() {
     let usage = attest(&db, &["revoke"]);
     assert_eq!(usage.status.code(), Some(2), "{usage:?}");
 }
+
+/// aegis-2idcev: `require-v2` and `allow-v1` are per-session operator verbs, and
+/// `list` shows the result, so moving one signer to write-v2 needs no raw SQL.
+#[test]
+fn require_v2_is_set_and_cleared_per_session_through_the_cli() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("attest.db");
+    let reg = attest(
+        &db,
+        &[
+            "register",
+            "--agent",
+            "urn:probe:writer",
+            "--session",
+            "s-v2",
+            "--public-key",
+            KEY,
+            "--introducer",
+            "operator",
+            "--issued-at",
+            "1790815248",
+            "--expires-at",
+            "1790901648",
+            "--allow-write",
+        ],
+    );
+    assert!(reg.status.success(), "register: {reg:?}");
+    assert!(stdout(&attest(&db, &["list"])).contains("require_v2=false"));
+
+    let set = attest(&db, &["require-v2", "s-v2"]);
+    assert!(set.status.success(), "require-v2: {set:?}");
+    assert!(stdout(&set).contains("REQUIRED"), "{set:?}");
+    assert!(stdout(&attest(&db, &["list"])).contains("require_v2=true"));
+
+    let clear = attest(&db, &["allow-v1", "s-v2"]);
+    assert!(clear.status.success(), "allow-v1: {clear:?}");
+    assert!(stdout(&attest(&db, &["list"])).contains("require_v2=false"));
+
+    let missing = attest(&db, &["require-v2", "s-absent"]);
+    assert_eq!(missing.status.code(), Some(1), "{missing:?}");
+    let usage = attest(&db, &["require-v2"]);
+    assert_eq!(usage.status.code(), Some(2), "{usage:?}");
+}

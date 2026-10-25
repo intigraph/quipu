@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension as _, params};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -284,9 +284,20 @@ pub(crate) fn cut_with_control(
         return Err(CutError::Aborted(AbortReason::SpoolQuota));
     }
 
-    // Main's rows only. Resolution stays composed, so an attached id a main
-    // row names still resolves; graphs served from an attachment are refused
-    // below.
+    // Resolution stays composed, so an attached id a row names still
+    // resolves; graphs contributed by an attachment are refused below.
+    // Frozen graphs are read from their packs. Verify each pack's full
+    // history against its recorded hash BEFORE the read transaction opens:
+    // the check reads only the immutable pack file, and must not extend the
+    // window in which main's WAL is pinned.
+    let mut verified: BTreeMap<String, FrozenPack> = BTreeMap::new();
+    for iri in scope.iter().chain(&context) {
+        if let Some(pack) = frozen_pack(store, iri)? {
+            Store::verify_frozen_pack(&pack.path, iri, &pack.content_hash)?;
+            verified.insert(iri.clone(), pack);
+        }
+    }
+
     let _main = store.scope_composition(false);
     let started = Instant::now();
     let wal = wal_path(store)?;
@@ -323,7 +334,17 @@ pub(crate) fn cut_with_control(
     }
 
     let mut selected = Vec::new();
+    let mut frozen: Vec<(String, i64, FrozenPack, i64)> = Vec::new();
     for iri in scope.iter().chain(&context) {
+        // The graph-metadata graph is the source's own record (labels,
+        // lifecycle). It is source-local, and a freeze writes it in the very
+        // transaction a frozen graph's records carry, so a cut naming it
+        // would put two graphs' rows in one source transaction.
+        if iri == crate::namespace::META_GRAPH_IRI {
+            return Err(invalid(format!(
+                "the graph-metadata graph is source-local and is never cut: {iri}"
+            )));
+        }
         // ROOT is never implied; a caller names it explicitly to cut it.
         if iri == ROOT {
             store.check_label_floor(&[0])?;
@@ -343,15 +364,24 @@ pub(crate) fn cut_with_control(
             )));
         }
         // Two different things live in packs. A graph CONTRIBUTED by an
-        // attachment is registered with that attachment as its source. A
-        // FROZEN graph is still a local graph, but its rows moved into its own
-        // pack, so it is not in `attached_graphs`; reading main for it would
-        // cut it as empty. Both are refused until frozen packs can be read.
-        if store.attached_graphs().contains(&graph) || is_frozen(store, iri)? {
+        // attachment belongs to that attachment's owner and is refused. A
+        // FROZEN graph is still a local graph whose rows moved into its own
+        // pack: it is read from that pack, never from main, where it would
+        // look empty. Inside the transaction the registry must still name the
+        // pack verified above, or a thaw or refreeze raced the cut.
+        if store.attached_graphs().contains(&graph) {
             return Err(invalid(format!(
-                "graph is served from an attached or frozen pack, which this \
-                 producer cannot cut yet (aegis-s24.1.1): {iri}"
+                "graph is contributed by an attached pack, not cut by this store: {iri}"
             )));
+        }
+        let pack = frozen_pack(store, iri)?;
+        if pack.as_ref() != verified.get(iri) {
+            return Err(invalid(format!(
+                "frozen graph changed during the cut (thawed or refrozen): {iri}"
+            )));
+        }
+        if let Some(pack) = pack {
+            frozen.push(frozen_member(store, iri, graph, pack, watermark_tx)?);
         }
         store.check_label_floor(&[graph])?;
         selected.push((iri.clone(), graph));
@@ -392,7 +422,7 @@ pub(crate) fn cut_with_control(
         // transaction's time, actor and source.
         let mut tx_meta = store
             .conn
-            .prepare("SELECT timestamp, actor, source FROM transactions WHERE id = ?1")?;
+            .prepare("SELECT timestamp, actor, source FROM main.transactions WHERE id = ?1")?;
         let mut graphs = BTreeMap::new();
         let mut total = 0usize;
         // One pass over facts in rowid order for every selected graph. Rowid
@@ -402,24 +432,13 @@ pub(crate) fn cut_with_control(
         // The per-graph digest sorts its lines, so emission order does not
         // reach it; the same source at the same T sends the same records in
         // the same order.
-        let ids: Vec<String> = selected.iter().map(|(_, g)| g.to_string()).collect();
-        let mut stmt = store.conn.prepare(&format!(
-            "SELECT g, e, a, v, tx, valid_from, \
-                    CASE WHEN retracted_tx IS NULL THEN valid_to END \
-             FROM facts NOT INDEXED \
-             WHERE g IN ({}) AND op = 1 AND tx <= ?1 \
-               AND (retracted_tx IS NULL OR retracted_tx > ?1) \
-             ORDER BY rowid",
-            ids.join(",")
-        ))?;
+        let scans = scan_plan(&selected, &frozen);
         let mut digests: BTreeMap<i64, (String, GraphDigest, usize)> = BTreeMap::new();
         for (iri, g) in &selected {
             digests.insert(*g, (iri.clone(), GraphDigest::new(spool_dir)?, 0));
         }
         let mut in_memory = 0usize;
         let mut profile = CutProfile::default();
-        let mut meta: Option<(i64, TxMeta)> = None;
-        let mut rows = stmt.query(params![watermark_tx])?;
         let mut clock = Instant::now();
         // Charge the time since the previous mark to one phase.
         let mut lap = |slot: &mut Duration| {
@@ -427,99 +446,126 @@ pub(crate) fn cut_with_control(
             *slot += now - clock;
             clock = now;
         };
-        while let Some(row) = rows.next()? {
-            lap(&mut profile.sql_step);
-            let (g, e, a, v, tx, valid_from, valid_to): (
-                i64,
-                i64,
-                i64,
-                Vec<u8>,
-                i64,
-                String,
-                Option<String>,
-            ) = (
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-            );
-            let value = Value::from_bytes(&v)?;
-            lap(&mut profile.decode);
-            if meta.as_ref().is_none_or(|m| m.0 != tx) {
-                let fields = tx_meta.query_row(params![tx], |r| {
-                    Ok((
-                        r.get::<_, Option<String>>(0)?,
-                        r.get::<_, Option<String>>(1)?,
-                        r.get::<_, Option<String>>(2)?,
-                    ))
-                })?;
-                meta = Some((tx, fields));
-            }
-            let (_, (timestamp, actor, source)) = meta.as_ref().expect("set above");
-            lap(&mut profile.tx_meta);
-            let (entity, attribute) = (store.resolve(e)?, store.resolve(a)?);
-            lap(&mut profile.terms);
-            let value = store.value_json(&value)?;
-            lap(&mut profile.value_json);
-            let (iri, digest, records) = digests.get_mut(&g).expect("selected graph");
-            // The /changes assert record. A later retract closes the row in
-            // place, so a row retracted after T reports `valid_to: null`
-            // exactly as the feed's assert record does. Serialized once: the
-            // same line feeds the graph digest and the part.
-            let line = serde_json::to_string(&AssertRecord {
-                actor,
-                attribute: &attribute,
-                entity: &entity,
-                graph: iri,
-                op: "assert",
-                source,
-                timestamp,
-                tx,
-                valid_from: &valid_from,
-                valid_to: &valid_to,
-                value: &value,
-            })
-            .map_err(|e| invalid(e.to_string()))?;
-            lap(&mut profile.serialize);
-            in_memory += line.len();
-            digest.push(line.clone());
-            *records += 1;
-            total += 1;
-            lap(&mut profile.digest);
-            match builder.push_line(line) {
-                Ok(Some(part)) => write_part(part)?,
-                Ok(None) => {}
-                Err(RecordTooLarge) => {
-                    return Err(invalid(format!(
-                        "one record in {iri} exceeds the transport frame budget"
-                    )));
+        for scan in &scans {
+            let mut stmt = store.conn.prepare(&scan.sql)?;
+            // A pack carries the transactions of the history it holds, under
+            // its own ids: its rows' provenance is read there, never in main.
+            let mut pack_meta = match &scan.frozen {
+                Some(f) => Some(store.conn.prepare(&format!(
+                    "SELECT timestamp, actor, source FROM {}.transactions WHERE id = ?1",
+                    f.alias
+                ))?),
+                None => None,
+            };
+            let mut rows = match &scan.frozen {
+                Some(f) => stmt.query(params![f.iri, f.g])?,
+                None => stmt.query(params![watermark_tx])?,
+            };
+            // Each table numbers its own transactions: a lookup never
+            // outlives its scan.
+            let mut meta: Option<(i64, TxMeta)> = None;
+            while let Some(row) = rows.next()? {
+                lap(&mut profile.sql_step);
+                let (g, e, a, v, row_tx, valid_from, valid_to): (
+                    i64,
+                    i64,
+                    i64,
+                    Vec<u8>,
+                    i64,
+                    String,
+                    Option<String>,
+                ) = (
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                );
+                let value = Value::from_bytes(&v)?;
+                lap(&mut profile.decode);
+                if meta.as_ref().is_none_or(|m| m.0 != row_tx) {
+                    let read = |r: &rusqlite::Row<'_>| {
+                        Ok((
+                            r.get::<_, Option<String>>(0)?,
+                            r.get::<_, Option<String>>(1)?,
+                            r.get::<_, Option<String>>(2)?,
+                        ))
+                    };
+                    let fields = match pack_meta.as_mut() {
+                        Some(pack) => pack.query_row(params![row_tx], read)?,
+                        None => tx_meta
+                            .query_row(params![row_tx], read)
+                            .optional()?
+                            .ok_or_else(|| invalid(format!("transaction {row_tx} is missing")))?,
+                    };
+                    meta = Some((row_tx, fields));
                 }
+                // A frozen row carries the main transaction that froze it.
+                let tx = scan.frozen.as_ref().map_or(row_tx, |f| f.freeze_tx);
+                let (_, (timestamp, actor, source)) = meta.as_ref().expect("set above");
+                lap(&mut profile.tx_meta);
+                let (entity, attribute) = (store.resolve(e)?, store.resolve(a)?);
+                lap(&mut profile.terms);
+                let value = store.value_json(&value)?;
+                lap(&mut profile.value_json);
+                let (iri, digest, records) = digests.get_mut(&g).expect("selected graph");
+                // The /changes assert record. A later retract closes the row in
+                // place, so a row retracted after T reports `valid_to: null`
+                // exactly as the feed's assert record does. Serialized once: the
+                // same line feeds the graph digest and the part.
+                let line = serde_json::to_string(&AssertRecord {
+                    actor,
+                    attribute: &attribute,
+                    entity: &entity,
+                    graph: iri,
+                    op: "assert",
+                    source,
+                    timestamp,
+                    tx,
+                    valid_from: &valid_from,
+                    valid_to: &valid_to,
+                    value: &value,
+                })
+                .map_err(|e| invalid(e.to_string()))?;
+                lap(&mut profile.serialize);
+                in_memory += line.len();
+                digest.push(line.clone());
+                *records += 1;
+                total += 1;
+                lap(&mut profile.digest);
+                match builder.push_line(line) {
+                    Ok(Some(part)) => write_part(part)?,
+                    Ok(None) => {}
+                    Err(RecordTooLarge) => {
+                        return Err(invalid(format!(
+                            "one record in {iri} exceeds the transport frame budget"
+                        )));
+                    }
+                }
+                lap(&mut profile.frame);
+                // Every graph's run shares one memory budget: past it, the
+                // largest run is spilled to disk.
+                if in_memory >= limits.digest_run_bytes {
+                    let (_, largest, _) = digests
+                        .values_mut()
+                        .max_by_key(|(_, d, _)| d.pending())
+                        .expect("at least one graph");
+                    in_memory -= largest.pending();
+                    charge(largest.spill()?)?;
+                    // A spill sorts and writes at most one run while the snapshot
+                    // is held; the ceilings are checked again after it.
+                    check_ceilings(started, limits, wal.as_deref(), wal_start)?;
+                }
+                lap(&mut profile.digest);
+                if total.is_multiple_of(CHECK_EVERY) {
+                    check_ceilings(started, limits, wal.as_deref(), wal_start)?;
+                    during(total)?;
+                }
+                lap(&mut profile.other);
             }
-            lap(&mut profile.frame);
-            // Every graph's run shares one memory budget: past it, the
-            // largest run is spilled to disk.
-            if in_memory >= limits.digest_run_bytes {
-                let (_, largest, _) = digests
-                    .values_mut()
-                    .max_by_key(|(_, d, _)| d.pending())
-                    .expect("at least one graph");
-                in_memory -= largest.pending();
-                charge(largest.spill()?)?;
-                // A spill sorts and writes at most one run while the snapshot
-                // is held; the ceilings are checked again after it.
-                check_ceilings(started, limits, wal.as_deref(), wal_start)?;
-            }
-            lap(&mut profile.digest);
-            if total.is_multiple_of(CHECK_EVERY) {
-                check_ceilings(started, limits, wal.as_deref(), wal_start)?;
-                during(total)?;
-            }
-            lap(&mut profile.other);
         }
-        drop(rows);
         // The last word before a manifest exists: a cut of any size, even an
         // empty one, ends its read inside the ceilings or is aborted.
         check_ceilings(started, limits, wal.as_deref(), wal_start)?;
@@ -532,11 +578,19 @@ pub(crate) fn cut_with_control(
         let finishing = Instant::now();
         for (_, (iri, digest, records)) in digests {
             graphs.insert(
-                iri,
+                iri.clone(),
                 GraphCompleteness {
                     records,
                     digest: format!("sha256:{}", digest.finish()?),
-                    frozen: None,
+                    frozen: frozen
+                        .iter()
+                        .find(|(f, ..)| *f == iri)
+                        .map(|(_, _, pack, _)| {
+                            json!({
+                                "pack_content_hash": pack.content_hash,
+                                "frozen_at": pack.frozen_at,
+                            })
+                        }),
                 },
             );
         }
@@ -609,6 +663,6 @@ pub(crate) fn cut_with_control(
 mod support;
 pub(crate) use support::{AssertRecord, ReadPhaseGuard};
 use support::{
-    GraphDigest, TxMeta, check_ceilings, free_bytes, is_frozen, shapes_hash, sorted_unique,
-    spool_usage, wal_len, wal_path,
+    FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_member, frozen_pack,
+    scan_plan, shapes_hash, sorted_unique, spool_usage, wal_len, wal_path,
 };

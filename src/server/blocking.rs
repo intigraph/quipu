@@ -66,11 +66,12 @@ where
     .await
     {
         Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(AppError(e)),
+        Ok(Err(e)) => Err(AppError(e, None)),
         // Only reachable if the handler panicked; the mutex is then poisoned and
         // the process is not going to recover on its own either way.
-        Err(e) => Err(AppError(quipu::Error::InvalidValue(format!(
-            "request handler failed: {e}"
-        )))),
+        Err(e) => Err(AppError(
+            quipu::Error::InvalidValue(format!("request handler failed: {e}")),
+            None,
+        )),
     }
 }

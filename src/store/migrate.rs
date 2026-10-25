@@ -484,7 +484,9 @@ impl Store {
                  revoked          INTEGER NOT NULL DEFAULT 0
                      CHECK (revoked IN (0, 1)),
                  allow_write      INTEGER NOT NULL DEFAULT 0
-                     CHECK (allow_write IN (0, 1))
+                     CHECK (allow_write IN (0, 1)),
+                 require_v2       INTEGER NOT NULL DEFAULT 0
+                     CHECK (require_v2 IN (0, 1))
              );
              -- Keyed by (session, nonce) rather than nonce alone: a nonce is
              -- only ever meaningful against the session that minted it, and a
@@ -509,6 +511,19 @@ impl Store {
             conn.execute_batch(
                 "ALTER TABLE attestation_bindings ADD COLUMN allow_write INTEGER NOT NULL DEFAULT 0 \
                  CHECK (allow_write IN (0, 1));",
+            )?;
+        }
+        // aegis-2idcev: a binding may be required to sign under write-v2.
+        // Existing bindings read 0, so no current v1 signer changes behaviour.
+        let has_v2 = conn
+            .prepare(
+                "SELECT 1 FROM pragma_table_info('attestation_bindings') WHERE name = 'require_v2'",
+            )?
+            .exists([])?;
+        if !has_v2 {
+            conn.execute_batch(
+                "ALTER TABLE attestation_bindings ADD COLUMN require_v2 INTEGER NOT NULL DEFAULT 0 \
+                 CHECK (require_v2 IN (0, 1));",
             )?;
         }
         Ok(())

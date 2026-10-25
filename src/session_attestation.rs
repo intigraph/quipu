@@ -53,6 +53,12 @@ pub struct SessionBinding {
     /// producer is share-only until an operator grants write explicitly.
     #[serde(skip)]
     pub allow_write: bool,
+    /// Writes from this session must be signed under `quipu-write-v2`, so each
+    /// is bound to the store it was signed for (aegis-2idcev). Per binding and
+    /// operator-set only, for the same reason as `allow_write`: never global,
+    /// because sd and other v1 clients still sign every crew write under v1.
+    #[serde(skip)]
+    pub require_v2: bool,
 }
 
 impl SessionBinding {
@@ -87,6 +93,7 @@ impl SessionBinding {
             expires_at_epoch,
             revoked: false,
             allow_write: false,
+            require_v2: false,
         })
     }
 }
@@ -406,6 +413,16 @@ fn check_binding<B: AttestationBindings + ?Sized>(
             "session binding is not granted write (quipu attest allow-write)".into(),
         ));
     }
+    if matches!(payload, SignedBinding::Write(_))
+        && binding.require_v2
+        && envelope.version != WRITE_V2
+    {
+        observation.result = Verdict::Invalid;
+        return Err(Error::InvalidValue(format!(
+            "session binding requires {WRITE_V2}; a {} write is refused (quipu attest allow-v1)",
+            envelope.version
+        )));
+    }
     if now_epoch > binding.expires_at_epoch || now_epoch < binding.issued_at_epoch {
         observation.result = Verdict::Expired;
         return Err(Error::InvalidValue(
@@ -545,3 +562,7 @@ pub fn canonical_message(envelope: &AttestationEnvelope, payload: &SignedBinding
 #[cfg(test)]
 #[path = "session_attestation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "session_attestation_require_v2_tests.rs"]
+mod require_v2_tests;

@@ -509,6 +509,16 @@ impl Store {
         Ok(())
     }
 
+    /// Verify a frozen pack's full history against its recorded hash, before
+    /// anything reads it as the graph's content.
+    pub(crate) fn verify_frozen_pack(
+        path: &str,
+        graph_iri: &str,
+        content_hash: &str,
+    ) -> Result<()> {
+        super::freeze_io::verify_history_pack(path, graph_iri, content_hash)
+    }
+
     /// Bring this connection's frozen-pack attachments in line with the
     /// `frozen_packs` registry. Returns whether anything changed.
     ///
