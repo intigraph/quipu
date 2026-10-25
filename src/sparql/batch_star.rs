@@ -9,12 +9,30 @@ use std::collections::HashSet;
 const MAX_SUBJECTS: usize = 16_384;
 const MAX_ROWS: usize = 50_000;
 pub(super) const MAX_BYTES: usize = 8 * 1024 * 1024;
+/// Subjects per window of a dense anchor. [`binding_bytes`] charges about
+/// 1 KiB for a one- or two-variable row, so a window's relations stay within
+/// [`MAX_BYTES`] at up to two rows per subject.
+const WINDOW_SUBJECTS: usize = 4_096;
+/// The anchor binds only the subject, so [`MAX_ROWS`] of its rows account to
+/// about 51 MiB. The plan this replaces retains the same rows without a bound.
+const ANCHOR_BYTES: usize = 64 * 1024 * 1024;
 
 pub(super) fn try_eval(
     store: &Store,
     patterns: &[TriplePattern],
     ctx: &TemporalContext,
     seed: &Bindings,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    try_eval_windowed(store, patterns, ctx, seed, WINDOW_SUBJECTS)
+}
+
+/// [`try_eval`] with an explicit window, so tests can split a small star.
+pub(super) fn try_eval_windowed(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    window: usize,
 ) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
     #[cfg(test)]
     if super::filter_join::reference_disabled() {
@@ -48,21 +66,54 @@ pub(super) fn try_eval(
     }) else {
         return Ok(None);
     };
+    // An owner denser than one window (aegis-t9n: 22,679 Actions for one
+    // principal) is evaluated window by window instead of once per subject.
     let Some(selected) = speculative(selected_relation(
         store,
         &patterns[anchor],
         ctx,
-        MAX_SUBJECTS + 1,
-        MAX_BYTES,
+        MAX_ROWS + 1,
+        ANCHOR_BYTES,
     ))?
     else {
         return Ok(None);
     };
     // Small stars retain the proven sparse plan. Overflow never returns a prefix.
-    if selected.len() <= super::sparse_bgp::SMALL || selected.len() > MAX_SUBJECTS {
+    if selected.len() <= super::sparse_bgp::SMALL || selected.len() > MAX_ROWS {
         return Ok(None);
     }
-    evaluate_selected(store, patterns, ctx, selected, Some(anchor))
+    evaluate_windows(store, patterns, ctx, &selected, anchor, window)
+}
+
+/// Evaluate the star over consecutive windows of the anchor's rows.
+///
+/// Every pattern shares the one subject variable, so the star over all anchor
+/// rows is the concatenation of the star over each window of them, in anchor
+/// order. Each window keeps the per-relation row and byte bounds. A window
+/// that declines restores the original planner for the whole BGP: no prefix
+/// is returned.
+fn evaluate_windows(
+    store: &Store,
+    patterns: &[TriplePattern],
+    ctx: &TemporalContext,
+    selected: &[Bindings],
+    anchor: usize,
+    window: usize,
+) -> Result<Option<(Vec<Bindings>, Vec<String>)>> {
+    let mut rows = Vec::new();
+    let mut variables = Vec::new();
+    for chunk in selected.chunks(window) {
+        let Some((found, vars)) =
+            evaluate_selected(store, patterns, ctx, chunk.to_vec(), Some(anchor))?
+        else {
+            return Ok(None);
+        };
+        rows.extend(found);
+        // Index 0 polls the deadline after every window; the cap sees the total.
+        check_eval_budget(ctx, 0, rows.len())?;
+        variables = vars;
+    }
+    Ok(Some((rows, variables)))
 }
 
 /// Reuse a subject-only driving relation already proven by the guarded join.
