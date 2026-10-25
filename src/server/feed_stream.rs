@@ -179,6 +179,10 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 cursor.wait = true;
                 continue;
             } else if cursor.changes {
+                if let Some((hub, _)) = &cursor.hub {
+                    hub.catchup_reads
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 let params = serde_json::from_value(
                     json!({"since": cursor.offset, "limit": 1, "capture": "old_and_new_values", "graph": cursor.params.graph}),
                 );
@@ -250,6 +254,16 @@ fn stream(store: SharedStore, headers: &HeaderMap, params: Params, changes: bool
                 .and_then(Value::as_i64)
                 .unwrap_or(cursor.offset);
             if next <= cursor.offset {
+                // An empty store page proves no in-scope transaction up to its
+                // watermark: the stream need not search below it again, so a
+                // quiet graph behind the ring floor reaches the ring instead of
+                // re-reading the store on every unrelated commit. The cursor
+                // itself does not move.
+                if cursor.changes
+                    && let Some(watermark) = body.get("watermark_tx").and_then(Value::as_i64)
+                {
+                    cursor.scanned = cursor.scanned.max(watermark);
+                }
                 // A stream that just attached asks the hub before it waits, so
                 // a commit the hub read meanwhile is not slept through.
                 cursor.wait = !attached;
