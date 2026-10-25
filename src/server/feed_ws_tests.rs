@@ -335,3 +335,47 @@ async fn a_transaction_over_the_frame_budget_crosses_whole_and_byte_exact() {
     assert_eq!(summary["parts"], parts);
     assert_eq!(summary["digest"], hex::encode(hasher.finalize()));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stalled_connection_never_delays_another() {
+    let (shared, url) = serve().await;
+    let since = shared.read().latest_tx_id().unwrap();
+    let mut stalled = connect(&url).await;
+    let mut live = connect(&url).await;
+    send(&mut stalled, subscribe("slow", since, BOARD)).await;
+    send(&mut live, subscribe("fast", since, BOARD)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // ~6 MB while `stalled` reads nothing, enough to fill its socket buffers.
+    let mut txs = Vec::new();
+    let started = std::time::Instant::now();
+    for i in 0..60 {
+        let tx = {
+            let mut store = shared.lock();
+            let g = store.registered_graph_id(BOARD).unwrap().unwrap();
+            let datum = Datum {
+                entity: store.intern(&format!("urn:bulk:{i}")).unwrap(),
+                attribute: store.intern("urn:p:body").unwrap(),
+                value: Value::Str("y".repeat(100_000)),
+                valid_from: T.into(),
+                valid_to: None,
+                op: Op::Assert,
+            };
+            store.transact_to_graph(&[datum], T, None, None, g).unwrap()
+        };
+        txs.push(tx);
+        let frame = next(&mut live, Duration::from_secs(5))
+            .await
+            .expect("the live connection fell behind the stalled one");
+        assert_eq!(frame["id"], tx.to_string());
+    }
+    assert!(started.elapsed() < Duration::from_secs(30));
+    // The stalled connection converges once it reads again: nothing lost.
+    let mut got = Vec::new();
+    while got.len() < txs.len() {
+        let frame = next(&mut stalled, Duration::from_secs(10))
+            .await
+            .expect("a frame");
+        got.push(frame["id"].as_str().unwrap().parse::<i64>().unwrap());
+    }
+    assert_eq!(got, txs);
+}
