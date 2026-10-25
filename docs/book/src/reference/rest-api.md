@@ -2296,6 +2296,46 @@ limits output frames to 1 MiB. A large transaction is still read whole before
 it is split into parts, so this is not a total heap bound. See the
 [committed-feed protocol](../architecture/event-stream.md).
 
+### `GET /feed/ws`
+
+The same two feeds over one WebSocket (`docs/design/event-push.md` §3), so many
+filters share one connection. Authentication is the same as for reads and is
+checked at the upgrade. A connection takes one of the 64 stream slots that the
+SSE streams share, whatever number of subscriptions it carries. A connection
+holds at most 32 subscriptions, and the process at most 1,024. Exhausted stream
+capacity answers the upgrade with HTTP 503.
+
+Every message is one JSON text frame. From the client:
+
+```json
+{"op": "subscribe", "sub": "board", "feed": "changes", "since": 713600, "graph": "<iri>"}
+{"op": "subscribe", "sub": "items", "feed": "events", "since": 4100, "types": ["entity.updated"], "group": "<group>"}
+{"op": "unsubscribe", "sub": "board"}
+```
+
+From the server:
+
+```json
+{"sub": "board", "event": "quipu.changes", "id": "713601", "data": "<the SSE data string>"}
+{"event": "quipu.heartbeat", "ts": 1792886133}
+{"sub": "items", "event": "quipu.error", "data": "<reason>", "last": 4120}
+```
+
+- `event`, `id` and `data` are the SSE frame's fields, byte for byte. `data` is
+  the SSE data as a string, not parsed, because the part digests of a chunked
+  transaction (`quipu.changes.begin`/`.part`/`.commit`) hash those exact bytes.
+- A subscription takes the same scope as its SSE stream: change subscriptions
+  take `graph`; event subscriptions take `types` (a list), `group` and `graph`.
+  An invalid scope, an unknown `feed`, a duplicate `sub`, a subscription over a
+  limit and an unknown `op` are each answered with `quipu.error` for that
+  message. The connection stays open.
+- A `quipu.error` frame ends its subscription. `last` is the last cursor the
+  subscription delivered.
+- Resume is per subscription: subscribe again with `since` set to the last
+  applied cursor. The server keeps no session state.
+- The heartbeat comes every 15 s from a timer. It proves the connection, never
+  freshness. Consumers must ignore an `event` they do not handle.
+
 ### `POST /share/asof`
 
 The replica bootstrap: the live facts of 1 to 64 registered committed graphs
