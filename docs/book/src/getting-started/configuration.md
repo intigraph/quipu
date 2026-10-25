@@ -252,6 +252,43 @@ signed writes: the refusal occurs before credential/nonce settlement. SQLite's
 read-only handle independently refuses a planted writer that bypasses HTTP.
 This role does not provision, replicate, promote or fail over a database.
 
+### Keeping a follower current: `quipu follow`
+
+`quipu follow` is the follower's only writer. It applies the primary's
+committed change feed through the shared applier, so the follower database is
+always at a source transaction boundary:
+
+```sh
+qp follow --primary http://primary.example:3030 --db /srv/quipu/follower.db
+```
+
+- It bootstraps by paging `GET /changes` from the follower's cursor
+  (transaction 0 for a new follower) with old and new values, `--page-txs`
+  transactions per page (default 200, at most 250) and a `--page-gap-ms`
+  pause between pages (default and minimum 1000), one request at a time, so a
+  bootstrap cannot push the primary toward its memory limit. It then tails
+  `GET /changes/stream` from the cursor.
+  `--bootstrap-only` exits once a page reaches the primary's watermark.
+- A page body is read up to 256 MiB. A larger page is asked again with half
+  the transactions, and the page size grows back once pages fit. One source
+  transaction over 256 MiB ends the run with exit status 3, because no page
+  can carry it.
+- It reads only: no writer credential is needed. Every request carries
+  `X-Quipu-Client: replica-follower`.
+- The cursor is durable, so a restart resumes where the follower stopped. A
+  dropped connection or an unreachable primary is retried with backoff (up to
+  60 s).
+- It never splices. Another source behind the same URL (a restore, a clone,
+  removed history), a digest mismatch or a record it cannot reproduce exactly
+  ends the run with exit status 3: rebuild the follower. A local store error
+  exits 1.
+- Graphs frozen into packs are not in the change feed, so a follower does not
+  hold them. The run states how many the primary has (from `GET /graphs`), or
+  that the count is unknown.
+
+Run `quipu-server --read-only` on the same database to serve it; the two
+processes share it through SQLite's locking.
+
 ### Lag observations
 
 `GET /watermark` returns the serving store's `store_id` and `watermark_tx` using
@@ -273,6 +310,20 @@ cross-host snapshot, elapsed seconds or proof of identical contents. The
 replication operator must establish the same primary lineage and common-prefix
 contract before interpreting transaction distance. A primary without
 `/watermark` yields UNKNOWN until upgraded; no expensive fallback query runs.
+
+For a follower built by `quipu follow`, "the same lineage" is the source it
+follows: the lag compares the primary's watermark with the source transaction
+the follower holds (its `replica_progress` record), not with the follower's own
+store ID. Every response also states what the follower holds, so a reader can
+judge staleness while the primary is unreachable:
+
+- `X-Quipu-Replica-Source-Tx`: the last source transaction held;
+- `X-Quipu-Replica-Source-Time`: when that transaction committed at the source;
+- `X-Quipu-Replica-Confirmed-Age-S`: seconds since a primary last confirmed the
+  lag, or `unknown` if none has since the server started.
+
+The metrics `quipu_replica_source_tx` and `quipu_replica_confirmed_age_seconds`
+carry the same values, with -1 for unknown.
 
 `just replica-test /path/to/quipu-server /path/to/quipu` checks a scratch follower:
 100 positive reads, unchanged main DB hash/counter/mtime across start and stop,
