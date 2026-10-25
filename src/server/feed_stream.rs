@@ -8,12 +8,14 @@ use std::{
 };
 
 use axum::{
+    Router,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{
         IntoResponse, Response, Sse,
         sse::{Event, KeepAlive},
     },
+    routing::get,
 };
 use futures::stream::unfold;
 use serde_json::{Value, json};
@@ -30,6 +32,14 @@ use super::{
 pub(crate) mod feed_hub;
 #[path = "feed_ws.rs"]
 pub(crate) mod feed_ws;
+
+/// The change and event feeds, as server-sent events and over one WebSocket.
+pub(crate) fn routes() -> Router<SharedStore> {
+    Router::new()
+        .route("/events/stream", get(events_stream))
+        .route("/changes/stream", get(changes_stream))
+        .route("/feed/ws", get(feed_ws::feed_ws))
+}
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]

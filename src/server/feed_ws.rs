@@ -60,12 +60,17 @@ struct Held;
 
 impl Held {
     fn take() -> Option<Self> {
-        SUBSCRIPTIONS
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < MAX_SUBSCRIPTIONS).then_some(n + 1)
-            })
-            .ok()
-            .map(|_| Self)
+        // A plain CAS loop: current stable deprecates `fetch_update` (renamed
+        // `try_update`), which older toolchains do not have.
+        let mut n = SUBSCRIPTIONS.load(Ordering::Acquire);
+        while n < MAX_SUBSCRIPTIONS {
+            match SUBSCRIPTIONS.compare_exchange_weak(n, n + 1, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return Some(Self),
+                Err(current) => n = current,
+            }
+        }
+        None
     }
 }
 
