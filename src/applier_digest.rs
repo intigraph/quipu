@@ -181,13 +181,15 @@ pub(super) fn load_stop(store: &Store) -> Result<Option<Outcome>> {
             r.get(0)
         })
         .optional()?;
-    Ok(match text {
-        Some(t) => Some(Outcome::Stopped {
-            reason: serde_json::from_str(&t)
-                .map_err(|e| crate::Error::InvalidValue(e.to_string()))?,
-        }),
-        None => None,
-    })
+    let Some(text) = text else {
+        return Ok(None);
+    };
+    let reason: Stop =
+        serde_json::from_str(&text).map_err(|e| crate::Error::InvalidValue(e.to_string()))?;
+    Ok(Some(match reason {
+        Stop::Revoked { reason } => Outcome::Revoked { reason },
+        reason => Outcome::Stopped { reason },
+    }))
 }
 
 /// Keep the digest of a transaction just applied (inside its savepoint).
@@ -230,6 +232,11 @@ pub enum Stop {
     DigestUnverifiable {
         /// The source transaction.
         source_tx: i64,
+    },
+    /// The source revoked the replica's grant (a signed control frame).
+    Revoked {
+        /// The source's reason.
+        reason: String,
     },
 }
 

@@ -35,8 +35,8 @@
 //!   replica disagree with its source without saying so.
 //!
 //! Freshness is reported as (last applied transaction, time since the last
-//! frame) and never claims a bound: a bounded claim needs the source's
-//! freshness challenge, which a later slice adds.
+//! frame). It claims a staleness bound only from the source's signed answer to
+//! a freshness challenge on the scoped replication stream (`applier_stream.rs`).
 
 use std::collections::BTreeMap;
 
@@ -58,9 +58,12 @@ mod digest;
 mod record;
 #[path = "applier_start.rs"]
 mod start;
+#[path = "applier_stream.rs"]
+mod stream;
 use chunk::Chunk;
 pub use digest::Stop;
 pub use record::record_to_datum;
+pub use stream::Freshness;
 
 /// The source log a replica follows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,6 +131,29 @@ pub enum Outcome {
     },
     /// An event this slice does not act on (heartbeats, newer frame kinds).
     Ignored,
+    /// A signed stream session is open; its frames follow in sequence.
+    SessionOpened {
+        /// The session id, to bind challenges to.
+        session: String,
+    },
+    /// Signed coverage: every in-scope source transaction up to `watermark`
+    /// is held. Completeness only, never freshness.
+    CoverageAdvanced {
+        /// The verified coverage watermark.
+        watermark: i64,
+    },
+    /// Signed coverage that answered an outstanding challenge: freshness is
+    /// now bounded by the time since `t_send_ms`.
+    ProofAccepted {
+        /// When the answered challenge was sent, on the caller's clock.
+        t_send_ms: u64,
+    },
+    /// The source revoked this replica's grant: stop serving the scope. Every
+    /// later frame answers the same until the replica is rebuilt.
+    Revoked {
+        /// The source's reason.
+        reason: String,
+    },
     /// A redelivered transaction does not match the one applied, or cannot
     /// be checked. Nothing from it was written, and every later frame answers
     /// the same until the replica is rebuilt (a new source still answers
@@ -138,17 +164,6 @@ pub enum Outcome {
     },
 }
 
-/// What a reader may say about how current the replica is.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct Freshness {
-    /// The last source transaction applied, if any.
-    pub source_tx: Option<i64>,
-    /// Milliseconds since the last frame of any kind; `None` before the first.
-    pub last_frame_age_ms: Option<u64>,
-    /// Always `false` in this slice: no freshness challenge has been answered.
-    pub bounded: bool,
-}
-
 /// The applier for one replica store.
 pub struct Applier {
     progress: Option<Progress>,
@@ -157,6 +172,7 @@ pub struct Applier {
     share: Option<bootstrap::ShareStream>,
     last_frame_ms: Option<u64>,
     stopped: Option<Outcome>,
+    stream: stream::Stream,
 }
 
 const PROGRESS_DDL: &str = "CREATE TABLE IF NOT EXISTS replica_progress (\
@@ -189,7 +205,9 @@ impl Applier {
                 },
             )
             .optional()?;
+        let stream = stream::Stream::load(store, progress.as_ref().map(|p| &p.source))?;
         Ok(Self {
+            stream,
             progress,
             chunk: None,
             share: None,
@@ -202,16 +220,6 @@ impl Applier {
     #[must_use]
     pub fn progress(&self) -> Option<&Progress> {
         self.progress.as_ref()
-    }
-
-    /// What may be said about freshness at `now_ms` (never a bound here).
-    #[must_use]
-    pub fn freshness(&self, now_ms: u64) -> Freshness {
-        Freshness {
-            source_tx: self.progress.as_ref().map(|p| p.source_tx),
-            last_frame_age_ms: self.last_frame_ms.map(|t| now_ms.saturating_sub(t)),
-            bounded: false,
-        }
     }
 
     /// Apply one feed frame, given as the transport delivered it.
@@ -248,6 +256,7 @@ impl Applier {
             "quipu.asof" | "quipu.asof.begin" | "quipu.asof.part" | "quipu.asof.commit" => {
                 self.bootstrap_frame(store, event, data)
             }
+            name if name.starts_with("quipu.replicate.") => self.stream_frame(store, name, data),
             "quipu.changes.tx_too_large" => Ok(Outcome::Refused {
                 reason: "the source cannot send this transaction in frames".into(),
             }),
@@ -347,8 +356,11 @@ impl Applier {
         self.apply_records(store, &source, &chunk.buffered)
     }
 
+    /// Where a reconnect continues: everything in scope up to here is held,
+    /// by applied transactions or by verified coverage.
     fn resume_point(&self) -> i64 {
-        self.progress.as_ref().map_or(0, |p| p.source_tx)
+        let applied = self.progress.as_ref().map_or(0, |p| p.source_tx);
+        applied.max(self.stream.coverage().unwrap_or(0))
     }
 
     /// `None` when the frame continues from the cursor: its `since` is at or
@@ -363,11 +375,18 @@ impl Applier {
 
     /// `None` when the frame's source is this replica's (or the first one).
     fn check_source(&self, source: &Source) -> Option<Outcome> {
-        match &self.progress {
-            Some(p) if p.source != *source => Some(Outcome::Rebootstrap {
+        // Applied progress anchors the replica; before any applied
+        // transaction, verified coverage does.
+        let anchor = self
+            .progress
+            .as_ref()
+            .map(|p| &p.source)
+            .or(self.stream.covered());
+        match anchor {
+            Some(held) if held != source => Some(Outcome::Rebootstrap {
                 reason: format!(
                     "source changed from {}/{} to {}/{}",
-                    p.source.store_id, p.source.log_epoch, source.store_id, source.log_epoch
+                    held.store_id, held.log_epoch, source.store_id, source.log_epoch
                 ),
             }),
             _ => None,
