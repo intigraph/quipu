@@ -1,0 +1,8 @@
+{"version": 2, "width": 120, "height": 24, "title": "Explicit reference-type dataset: synthetic library fixture"}
+[24.799126, "o", "Synthetic library fixture: an ephemeral Action depends on a project Action.\r\nRun the same write with default context and explicit [ephemeral, project] context.\r\n"]
+[24.801193, "o", "\r\nrunning 1 test\r\n"]
+[24.845484, "o", "existing_graph=false; destination=eph; default context; accepted=false\r\n"]
+[24.849553, "o", "existing_graph=false; destination=eph; context=[eph,project]; accepted=true\r\n"]
+[24.916574, "o", "existing_graph=true; destination=eph; default context; accepted=false\r\n"]
+[24.923952, "o", "existing_graph=true; destination=eph; context=[eph,project]; accepted=true\r\n"]
+[24.960803, "o", "test store::shacl_reference_context::tests::explicit_reference_types_preserve_graph_isolation_on_both_paths ... ok\r\n\r\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3000 filtered out; finished in 0.16s\r\n\r\n"]
