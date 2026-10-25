@@ -1233,3 +1233,28 @@ the existing tab-separated listing remains the default.
 accept `--input '<JSON object>'` using the corresponding MCP tool input fields.
 For the complete new-class write recipe, see
 [named graphs through MCP](../recipes/named-graph-mcp.md).
+
+### `quipu signer` — local operator registration
+
+`enroll` records a public WebAuthn signer with its own HTTPS origin, relying
+party, human identity, expiry and explicit graph allowlist. Repeat `--graph`
+for each allowed graph. It never enables writes or protects a graph.
+
+```bash
+quipu signer enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-eddsa --origin https://signer.example.org --rp-id signer.example.org --actor operator@example.org --graph https://example.org/answers --expires-at EPOCH --db store.db
+quipu signer status --db store.db
+quipu signer revoke B64URL --db store.db
+quipu signer enable --db store.db
+quipu signer disable --db store.db
+quipu signer protect-graph https://example.org/answers --db store.db
+```
+
+Compare the displayed fingerprint with the enrolling device. `status` returns
+JSON including the store switch, each signer's scope, expiry, revocation,
+counter and fingerprint. It does not export keys. Revoked IDs cannot be reused;
+rotation enrolls a new ID. `protect-graph` is permanent: ordinary writes to that
+graph are refused afterward. It is an explicit operator action, independent
+of enrollment and the store switch. The HTTP transport also requires its own
+`attest_http` switch. No command enrolls through HTTP or activates a browser;
+store-file access remains the operator authority. Existing domain-specific
+registries are retained separately during migration.

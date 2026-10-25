@@ -80,6 +80,7 @@ mod cli_rule_answers;
 mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
+mod cli_signer;
 mod cli_trust_root;
 mod cli_validate;
 mod hook_session_capture;
@@ -173,6 +174,7 @@ fn main() {
         "ingest" => cli_ingest::cmd_ingest(&args, db_path),
         "attest" => cli_attest::cmd_attest(&args, db_path),
         "deck" => cli_deck::cmd_deck(&args, db_path),
+        "signer" => cli_signer::cmd_signer(&args, db_path),
         "trust-root" => cli_trust_root::cmd_trust_root(&args, db_path),
         "read" | "query" => cli::cmd_query(&args, db_path),
         "rule-query" => cli_rule_answers::run(&args, db_path),
@@ -446,6 +448,10 @@ COMMANDS:
     qp share ... --attest --attest-agent A --attest-session S --attest-introducer I --attest-issued-at EPOCH --attest-nonce N [--attest-key PATH] [--attest-ttl SECS]
     qp attest register --agent A --session S --public-key HEX --introducer I --issued-at EPOCH --expires-at EPOCH [--db <path>]
     qp attest list [--db <path>]
+    qp signer enroll --credential-id B64URL --cose-key B64URL --scheme SCHEME --origin https://HOST --rp-id HOST --actor WHO --graph IRI --expires-at EPOCH [--db <path>]
+    qp signer status|enable|disable [--db <path>]
+    qp signer revoke <credential-id> [--db <path>]
+    qp signer protect-graph <IRI> [--db <path>]   Permanent attested-only graph protection
     qp deck configure --origin https://HOST --rp-id HOST --actor WHO --author CURATOR [--db <path>]   Decision Deck scope (operator-only, starts disabled)
     qp deck enroll --credential-id B64URL --cose-key B64URL --scheme webauthn-es256|webauthn-eddsa --expires-at EPOCH [--db <path>]
     qp deck enable|disable|status [--db <path>]

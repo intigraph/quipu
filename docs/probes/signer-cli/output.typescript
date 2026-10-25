@@ -1,0 +1,43 @@
+Script started on 2026-10-25 14:34:23-04:00 [COMMAND="bash demo.sh" <not executed on terminal>]
+BEFORE: retained release 0.16.2 / 4cd9e48d (local fixture; no service)
+$ quipu signer --help
+unknown command: signer
+Use qp --help for usage.
+Expected refusal observed
+AFTER: source candidate over 8fa29473 (working-tree build; no installation)
+$ quipu signer --help
+Usage: qp signer [OPTIONS]
+    qp signer enroll
+      Value options: --credential-id <VALUE> --cose-key <VALUE> --scheme <VALUE> --origin <VALUE> --rp-id <VALUE> --actor <VALUE> --graph <VALUE> --expires-at <VALUE>
+    qp signer status
+    qp signer enable
+    qp signer disable
+    qp signer revoke <credential-id>
+    qp signer protect-graph <IRI>
+
+Local store: --db <path> (default: .bobbin/quipu/quipu.db; configuration may override it).
+Help (-h/--help or help <command>) never reads configuration or opens a store.
+Store commands operate on a local database, not the HTTP service; there is no --remote flag.
+import can fetch a share URL; read --federation uses configured remotes; mcp starts the local stdio companion.
+Git transport, hook(s) and install-alias operate on local files/configuration rather than a graph store.
+share --project [ID] takes an optional project ID. ontology/explain require the owl feature; reason --reactive requires reactive-reasoner.
+-h, --help  Print help and exit. Value options consume the following argument literally.
+$ quipu signer status --db demo.db
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+{"enabled":false,"signers":[]}
+$ quipu signer enroll <public test credential> --graph https://example.org/answers --db demo.db
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+enrolled signer Y3JlZGVudGlhbC0x fingerprint 9bb1-7e67-b268-ca8b; compare with the enrolling device
+Enrollment did not enable writes or protect any graph.
+$ quipu signer status --db demo.db
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+{"enabled":false,"signers":[{"actor":"operator@example.org","expires_at":1793039663,"fingerprint":"9bb1-7e67-b268-ca8b","graphs":["https://example.org/answers"],"id":"Y3JlZGVudGlhbC0x","origin":"https://signer.example.org","revoked":false,"rp_id":"signer.example.org","scheme":"webauthn-eddsa","sign_count":0}]}
+$ quipu signer revoke Y3JlZGVudGlhbC0x --db demo.db
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+signer Y3JlZGVudGlhbC0x: REVOKED
+$ quipu signer status --db demo.db
+automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+{"enabled":false,"signers":[{"actor":"operator@example.org","expires_at":1793039663,"fingerprint":"9bb1-7e67-b268-ca8b","graphs":["https://example.org/answers"],"id":"Y3JlZGVudGlhbC0x","origin":"https://signer.example.org","revoked":true,"rp_id":"signer.example.org","scheme":"webauthn-eddsa","sign_count":0}]}
+Observed: enrollment and revocation persist; enabled stays false. No graph protection or activation.
+
+Script done on 2026-10-25 14:34:23-04:00 [COMMAND_EXIT_CODE="0"]
