@@ -23,6 +23,8 @@ All notable changes to this project will be documented in this file.
 - *(capture)* Require derived structured provenance in guidance (#850)([ffeba5d](https://github.com/scbrown/quipu/commit/ffeba5de5080fabde50aebf70ded764733367c69))
 - *(shacl)* Scope referenced types to explicit application datasets (#857)([cc33128](https://github.com/scbrown/quipu/commit/cc33128f442b608da087973a9814ce4274323e4d))
 
+
+
 ### Testing
 
 - *(perf)* Gate the Brief closes and gate-edge panels (#842)([f8ec77e](https://github.com/scbrown/quipu/commit/f8ec77e4fbb8ceaf44ec0c6fbe3fb8a266128ed7))
