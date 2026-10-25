@@ -721,6 +721,15 @@ pub struct ServerConfig {
     /// the remaining readers and admission permits. No extra connection opens.
     pub reserve_point_reads: bool,
 
+    /// Cooperative scheduling cap for declared heavy /query operations.
+    /// Empty by default: no scheduling change. Initially supports owner-rows.
+    /// This is neither authorization nor a classifier for undeclared queries.
+    pub heavy_read_operations: Vec<String>,
+
+    /// Maximum listed operations occupying ordinary readers simultaneously.
+    /// When enabled, must be positive and less than actual ordinary readers.
+    pub heavy_read_permits: usize,
+
     /// Include an optional permit-acquisition timestamp in query observation
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
@@ -770,6 +779,8 @@ impl Default for ServerConfig {
             read_processes: 0,
             read_process_base_port: 3031,
             reserve_point_reads: false,
+            heavy_read_operations: Vec::new(),
+            heavy_read_permits: 1,
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
@@ -779,6 +790,33 @@ impl Default for ServerConfig {
         }
     }
 }
+
+impl ServerConfig {
+    /// Validate against actual usable ordinary readers, after point reservation.
+    ///
+    /// # Errors
+    /// Returns an error for unsupported operations or a cap that cannot leave
+    /// at least one ordinary reader free for other operations.
+    pub fn validate_heavy_reads(&self, ordinary_readers: usize) -> std::result::Result<(), String> {
+        if self.heavy_read_operations.is_empty() {
+            return Ok(());
+        }
+        if self.heavy_read_operations.as_slice() != ["owner-rows"] {
+            return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
+        }
+        if self.read_processes > 0
+            || self.heavy_read_permits == 0
+            || self.heavy_read_permits >= ordinary_readers
+        {
+            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "config/heavy_reads_tests.rs"]
+mod heavy_reads_tests;
 
 /// Embedding configuration for auto-embedding on write.
 #[derive(Debug, Clone, Deserialize)]

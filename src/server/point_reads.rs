@@ -44,6 +44,11 @@ pub(crate) fn open_pool(
         std::process::exit(1);
     }
     let point_reserved = read_pool.reserve_point_reads(config.reserve_point_reads);
+    if let Err(error) = config.validate_heavy_reads(read_pool.ordinary_len()) {
+        eprintln!("error: {error}");
+        std::process::exit(1);
+    }
+    super::admission::heavy_reads::init(config);
 
     if read_pool.len() > 0 {
         eprintln!("read pool: {} read-only connections", read_pool.len());
