@@ -37,8 +37,10 @@
 //! - **The log is permanent.** Unlike Spanner's 1–30 day retention, the fact
 //!   log never garbage-collects, so a cursor never expires.
 
+use std::collections::HashMap;
+
 use base64::{Engine, engine::general_purpose::STANDARD};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value as Json, json};
 
 use crate::error::Result;
@@ -139,17 +141,10 @@ fn page_sql(graph: bool) -> &'static str {
 }
 
 /// Graph ids as an SQL list. An empty set matches nothing.
-/// One transaction's in-scope size, from [`Store::tx_sizes_in_graphs`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TxSize {
-    /// The transaction.
-    pub tx: i64,
-    /// Its records in the scope graphs.
-    pub rows: u64,
-    /// The encoded bytes of those records' values (IRIs and metadata are
-    /// bounded per row, so `rows` bounds the rest).
-    pub value_bytes: u64,
-}
+/// JSON's worst case: a control character escapes to six bytes (`\u0000`).
+pub const ESCAPE_FACTOR: u64 = 6;
+/// A record's keys, numbers and punctuation, beyond its strings.
+pub const RECORD_OVERHEAD: u64 = 256;
 
 fn id_list(graphs: &[i64]) -> String {
     if graphs.is_empty() {
@@ -248,33 +243,111 @@ impl Store {
         })
     }
 
-    /// The bounded pre-pass for [`Store::changes_in_graphs`]: for the first
-    /// `max_txs` transactions after `since_tx` that wrote any of `graphs`, its
-    /// in-scope row count and value bytes, counted in SQL so no record is
-    /// built. The stream refuses or cuts a page on these before reading it.
-    pub fn tx_sizes_in_graphs(
+    /// The bounded pre-pass for [`Store::changes_in_graphs`]: the first
+    /// `max_txs` transactions after `since_tx` that wrote any of `graphs`, each
+    /// with its in-scope row count. Counted in SQL, so no record is built.
+    pub fn tx_rows_in_graphs(
         &self,
         since_tx: i64,
         max_txs: usize,
         graphs: &[i64],
-    ) -> Result<Vec<TxSize>> {
+    ) -> Result<Vec<(i64, u64)>> {
         let sql = format!(
-            "SELECT tx, COUNT(*), COALESCE(SUM(length(v)), 0) FROM facts \
-             WHERE tx > ?1 AND +g IN ({}) GROUP BY tx ORDER BY tx LIMIT ?2",
+            "SELECT tx, COUNT(*) FROM facts WHERE tx > ?1 AND +g IN ({}) \
+             GROUP BY tx ORDER BY tx LIMIT ?2",
             id_list(graphs)
         );
-        let sizes = self
+        let rows = self
             .conn
             .prepare(&sql)?
             .query_map(params![since_tx, max_txs as i64], |r| {
-                Ok(TxSize {
-                    tx: r.get(0)?,
-                    rows: r.get::<_, i64>(1)?.unsigned_abs(),
-                    value_bytes: r.get::<_, i64>(2)?.unsigned_abs(),
-                })
+                Ok((r.get(0)?, r.get::<_, i64>(1)?.unsigned_abs()))
             })?
             .collect::<std::result::Result<_, _>>()?;
-        Ok(sizes)
+        Ok(rows)
+    }
+
+    /// An upper bound on the encoded bytes of `tx`'s records in `graphs`, as
+    /// [`Store::changes_in_graphs`] would build them, read without building
+    /// them: string lengths come from SQL `length()`, so no IRI, value or
+    /// metadata is loaded. Every string counts at JSON's worst-case escaping
+    /// ([`ESCAPE_FACTOR`] bytes per byte), the transaction's timestamp, actor
+    /// and source count once per record (each record repeats them), and a
+    /// record adds [`RECORD_OVERHEAD`] for its keys and numbers. Counting stops
+    /// once the bound passes `cap`, so a refusal reads at most what it refuses.
+    pub fn tx_encoded_bound(&self, tx: i64, graphs: &[i64], cap: u64) -> Result<u64> {
+        let meta: u64 = self
+            .conn
+            .query_row(
+                "SELECT length(timestamp) + COALESCE(length(actor), 0) \
+                 + COALESCE(length(source), 0) FROM transactions WHERE id = ?1",
+                params![tx],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten()
+            .unwrap_or(0)
+            .unsigned_abs();
+        // A Ref is tag 0 plus an 8-byte id; only those blobs are read whole.
+        let sql = format!(
+            "SELECT e, a, g, length(v), CASE WHEN substr(v, 1, 1) = x'00' THEN v END, \
+                    length(valid_from) + COALESCE(length(valid_to), 0) \
+             FROM facts WHERE tx = ?1 AND g IN ({})",
+            id_list(graphs)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![tx])?;
+        let mut lengths: HashMap<i64, u64> = HashMap::new();
+        let mut total = 0u64;
+        while let Some(r) = rows.next()? {
+            let (e, a, g): (i64, i64, i64) = (r.get(0)?, r.get(1)?, r.get(2)?);
+            let value_len = r.get::<_, i64>(3)?.unsigned_abs();
+            let reference =
+                r.get::<_, Option<Vec<u8>>>(4)?
+                    .and_then(|v| match Value::from_bytes(&v) {
+                        Ok(Value::Ref(id)) => Some(id),
+                        _ => None,
+                    });
+            let times = r.get::<_, Option<i64>>(5)?.unwrap_or(0).unsigned_abs();
+            let mut strings = meta + times + self.term_len(e, &mut lengths)?;
+            strings += self.term_len(a, &mut lengths)?;
+            strings += if g == 0 {
+                4
+            } else {
+                self.term_len(g, &mut lengths)?
+            };
+            strings += match reference {
+                Some(id) => self.term_len(id, &mut lengths)?,
+                None => value_len,
+            };
+            total = total.saturating_add(strings * ESCAPE_FACTOR + RECORD_OVERHEAD);
+            if total > cap {
+                break;
+            }
+        }
+        Ok(total)
+    }
+
+    /// A term's IRI length, from SQL `length()` so the IRI is never loaded.
+    fn term_len(&self, id: i64, seen: &mut HashMap<i64, u64>) -> Result<u64> {
+        if let Some(len) = seen.get(&id) {
+            return Ok(*len);
+        }
+        let local: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT length(iri) FROM main.terms WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        // An attached layer's term is resolved the ordinary way.
+        let len = match local {
+            Some(len) => len.unsigned_abs(),
+            None => self.resolve(id)?.len() as u64,
+        };
+        seen.insert(id, len);
+        Ok(len)
     }
 
     fn latest_transaction(&self) -> Result<(i64, Option<String>)> {
@@ -440,3 +513,7 @@ mod replay_tests;
 #[cfg(test)]
 #[path = "changes_asof_tests.rs"]
 mod asof_tests;
+
+#[cfg(test)]
+#[path = "changes_bound_tests.rs"]
+mod bound_tests;

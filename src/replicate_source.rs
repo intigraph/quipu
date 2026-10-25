@@ -59,15 +59,19 @@ pub struct Frame {
 /// `tx_max_rows` or `tx_max_bytes` in scope ends the session with
 /// `tx_too_large` and the cursor unchanged; recovery is a re-bootstrap from an
 /// as-of share at or after it. A poll stops adding transactions once the page
-/// would pass `page_max_rows` (one transaction is always taken).
+/// would pass `page_max_rows` or `page_max_bytes` (one transaction that
+/// fits the transaction limits is always taken).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     /// Most in-scope records one transaction may carry.
     pub tx_max_rows: u64,
-    /// Most encoded value bytes one transaction may carry in scope.
+    /// Most encoded bytes one transaction's in-scope records may take, as an
+    /// upper bound counted before they are built (`Store::tx_encoded_bound`).
     pub tx_max_bytes: u64,
     /// Rows one poll reads before it stops adding transactions.
     pub page_max_rows: u64,
+    /// Encoded bytes (the same bound) one poll reads before it stops.
+    pub page_max_bytes: u64,
 }
 
 impl Default for Limits {
@@ -76,6 +80,7 @@ impl Default for Limits {
             tx_max_rows: 100_000,
             tx_max_bytes: 64 << 20,
             page_max_rows: 10_000,
+            page_max_bytes: 16 << 20,
         }
     }
 }
@@ -229,37 +234,50 @@ impl Session {
                 false,
             ));
         }
-        // The bounded pre-pass (local-sync-mode.md §6): sizes are counted in
-        // SQL, so an oversized transaction is refused, and a page is cut at
-        // the row budget, before any record is built.
+        // The bounded pre-pass (local-sync-mode.md §6): sizes are counted from
+        // SQL lengths, so an oversized transaction is refused, and a page is
+        // cut at its budget, before any record is built.
         let max_txs = max_txs.max(1);
-        let sizes = store.tx_sizes_in_graphs(self.cursor, max_txs, &self.graphs)?;
-        let (mut take, mut rows) = (0, 0);
-        for size in &sizes {
-            if size.rows > self.limits.tx_max_rows || size.value_bytes > self.limits.tx_max_bytes {
+        let counts = store.tx_rows_in_graphs(self.cursor, max_txs, &self.graphs)?;
+        let limits = self.limits;
+        let (mut take, mut rows, mut bytes) = (0, 0, 0);
+        for &(tx, tx_rows) in &counts {
+            // Rows first: a transaction over the row limit is refused without
+            // reading its records at all.
+            let tx_bytes = if tx_rows > limits.tx_max_rows {
+                None
+            } else {
+                Some(store.tx_encoded_bound(tx, &self.graphs, limits.tx_max_bytes)?)
+            };
+            if tx_bytes.is_none_or(|b| b > limits.tx_max_bytes) {
                 if take == 0 {
                     drop(read);
                     self.ended = true;
+                    let size = tx_bytes.map_or_else(
+                        || format!("{tx_rows} rows"),
+                        |b| format!("over {b} encoded bytes"),
+                    );
                     let reason = format!(
-                        "source tx {} has {} rows and {} value bytes in scope, over the limit of {} rows and {} bytes",
-                        size.tx,
-                        size.rows,
-                        size.value_bytes,
-                        self.limits.tx_max_rows,
-                        self.limits.tx_max_bytes
+                        "source tx {tx} has {size} in scope; the limit is {} rows and {} bytes",
+                        limits.tx_max_rows, limits.tx_max_bytes
                     );
                     return Ok((vec![self.control("tx_too_large", &reason)], false));
                 }
                 break;
             }
-            if take > 0 && rows + size.rows > self.limits.page_max_rows {
+            let tx_bytes = tx_bytes.unwrap_or_default();
+            if take > 0
+                && (rows + tx_rows > limits.page_max_rows
+                    || bytes + tx_bytes > limits.page_max_bytes)
+            {
                 break;
             }
-            rows += size.rows;
+            rows += tx_rows;
+            bytes += tx_bytes;
             take += 1;
         }
         // Every transaction after the cursor is in this page.
-        let full = sizes.len() < max_txs && take == sizes.len();
+        let full = counts.len() < max_txs && take == counts.len();
         let page = store.changes_in_graphs(
             self.cursor,
             take.max(1),
@@ -439,3 +457,7 @@ fn refused(message: &str) -> CutError {
 #[cfg(test)]
 #[path = "replicate_source_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "replicate_source_limits_tests.rs"]
+mod limits_tests;
