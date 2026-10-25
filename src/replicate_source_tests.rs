@@ -360,6 +360,7 @@ fn a_freeze_committed_during_the_open_ends_the_session_instead_of_covering_nothi
 /// master -> relay -> leaf, all through the one applier and producer.
 struct Tree {
     master: Store,
+    master_key: Arc<SigningIdentity>,
     relay: Store,
     relay_applier: Applier,
     upstream: Session,
@@ -408,6 +409,7 @@ impl Tree {
         ));
         Self {
             master,
+            master_key,
             relay,
             relay_applier,
             upstream,
@@ -730,4 +732,40 @@ fn a_child_cannot_reopen_past_what_the_relay_verified() {
         let w: serde_json::Value = serde_json::from_str(&f.data).unwrap();
         assert!(w["watermark"].as_i64().unwrap() <= verified, "{f:?}");
     }
+}
+
+#[test]
+fn an_upstream_reconnect_on_a_new_epoch_ends_the_children_too() {
+    // ian's #828 SAME: the relay's upstream session ended, it reconnected, and
+    // the new session's signed frame named a NEW epoch. The relay took that as
+    // Rebootstrap, but nothing recorded the end, so its child kept serving.
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    let packs = tempfile::tempdir().unwrap();
+    // Freezing another graph re-mints the store's epoch; BOARD stays served.
+    tree.master
+        .freeze_graph(OTHER, packs.path().to_str().unwrap(), T, None)
+        .unwrap();
+    let cursor = tree.relay_applier.progress().unwrap().source_tx;
+    let mut req = request(&tree.master, cursor);
+    req.graphs = graphs_of(&[BOARD]);
+    let (_, reopened) =
+        Session::open(&tree.master, &req, "up2".into(), tree.master_key.clone()).unwrap();
+    tree.relay_applier.end_session();
+    let at_relay = feed(&mut tree.relay, &mut tree.relay_applier, &[reopened], 5);
+    assert!(
+        at_relay
+            .iter()
+            .any(|o| matches!(o, Outcome::Rebootstrap { .. })),
+        "{at_relay:?}"
+    );
+    let (down, _) = tree.downstream.poll(&tree.relay, 100, None).unwrap();
+    assert!(tree.downstream.ended(), "frames {down:?}");
+    let at_leaf = feed(&mut tree.leaf, &mut tree.leaf_applier, &down, 6);
+    assert!(
+        at_leaf
+            .iter()
+            .any(|o| matches!(o, Outcome::Rebootstrap { .. })),
+        "frames {down:?}, leaf {at_leaf:?}"
+    );
 }

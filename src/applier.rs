@@ -238,6 +238,28 @@ impl Applier {
         data: &str,
         now_ms: u64,
     ) -> Result<Outcome> {
+        // The lineage this replica held before the frame. Any Rebootstrap ends
+        // it (a signed epoch_end, an unframeable transaction, or a different
+        // source seen on reconnect), so a relay ends its children on it too.
+        let held = self
+            .progress
+            .as_ref()
+            .map(|p| p.source.clone())
+            .or_else(|| self.stream.covered().cloned());
+        let outcome = self.apply_frame_inner(store, event, data, now_ms)?;
+        if let (Outcome::Rebootstrap { reason }, Some(held)) = (&outcome, held) {
+            map::record_end(store, &held, reason)?;
+        }
+        Ok(outcome)
+    }
+
+    fn apply_frame_inner(
+        &mut self,
+        store: &mut Store,
+        event: &str,
+        data: &str,
+        now_ms: u64,
+    ) -> Result<Outcome> {
         self.last_frame_ms = Some(now_ms);
         if let Some(stopped) = self.stopped.clone() {
             // A new source still comes first: it means a new replica.
