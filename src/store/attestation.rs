@@ -81,8 +81,8 @@ impl Store {
         self.conn.execute(
             "INSERT INTO attestation_bindings
                  (session, agent, public_key, key_id, introducer,
-                  issued_at_epoch, expires_at_epoch, revoked, allow_write)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                  issued_at_epoch, expires_at_epoch, revoked, allow_write, require_v2)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 binding.session,
                 binding.agent,
@@ -97,6 +97,7 @@ impl Store {
                 i64::try_from(binding.expires_at_epoch).unwrap_or(i64::MAX),
                 i64::from(binding.revoked),
                 i64::from(binding.allow_write),
+                i64::from(binding.require_v2),
             ],
         )?;
         Ok(())
@@ -113,6 +114,21 @@ impl Store {
         let changed = self.conn.execute(
             "UPDATE attestation_bindings SET allow_write = ?2 WHERE session = ?1",
             params![session, i64::from(allow)],
+        )?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(Error::InvalidValue(format!("no session binding {session}")))
+        }
+    }
+
+    /// Require (or stop requiring) `quipu-write-v2` for a binding's signed
+    /// writes (aegis-2idcev). Per session, never store-wide: v1 clients keep
+    /// working until each of their bindings is moved deliberately.
+    pub fn attestation_set_require_v2(&self, session: &str, require: bool) -> Result<()> {
+        let changed = self.conn.execute(
+            "UPDATE attestation_bindings SET require_v2 = ?2 WHERE session = ?1",
+            params![session, i64::from(require)],
         )?;
         if changed == 1 {
             Ok(())
@@ -150,7 +166,7 @@ impl Store {
     pub fn attestation_bindings(&self) -> Result<Vec<SessionBinding>> {
         let mut stmt = self.conn.prepare(
             "SELECT session, agent, public_key, introducer, issued_at_epoch,
-                    expires_at_epoch, revoked, allow_write
+                    expires_at_epoch, revoked, allow_write, require_v2
                FROM attestation_bindings ORDER BY session",
         )?;
         let rows = stmt
@@ -164,11 +180,13 @@ impl Store {
                     row.get::<_, i64>(5)?,
                     row.get::<_, i64>(6)?,
                     row.get::<_, i64>(7)?,
+                    row.get::<_, i64>(8)?,
                 ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let mut out = Vec::with_capacity(rows.len());
-        for (session, agent, public_key, introducer, issued, expires, revoked, allow_write) in rows
+        for (session, agent, public_key, introducer, issued, expires, revoked, allow_write, v2) in
+            rows
         {
             let mut binding = SessionBinding::new(
                 agent,
@@ -180,6 +198,7 @@ impl Store {
             )?;
             binding.revoked = revoked != 0;
             binding.allow_write = allow_write != 0;
+            binding.require_v2 = v2 != 0;
             out.push(binding);
         }
         Ok(out)
@@ -270,7 +289,7 @@ pub(crate) fn binding_on(
     let row = conn
         .query_row(
             "SELECT agent, public_key, introducer, issued_at_epoch,
-                    expires_at_epoch, revoked, allow_write
+                    expires_at_epoch, revoked, allow_write, require_v2
                FROM attestation_bindings WHERE session = ?1",
             params![session],
             |row| {
@@ -282,11 +301,13 @@ pub(crate) fn binding_on(
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, i64>(7)?,
                 ))
             },
         )
         .optional()?;
-    let Some((agent, public_key, introducer, issued, expires, revoked, allow_write)) = row else {
+    let Some((agent, public_key, introducer, issued, expires, revoked, allow_write, v2)) = row
+    else {
         return Ok(None);
     };
     let mut binding = SessionBinding::new(
@@ -299,6 +320,7 @@ pub(crate) fn binding_on(
     )?;
     binding.revoked = revoked != 0;
     binding.allow_write = allow_write != 0;
+    binding.require_v2 = v2 != 0;
     Ok(Some(binding))
 }
 

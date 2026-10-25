@@ -85,8 +85,10 @@ impl QueryShape {
 pub struct RequestUsage {
     /// Classified SPARQL operation.
     pub query_shape: QueryShape,
-    /// Number of returned rows, triples, or ASK result values.
-    pub result_size: usize,
+    /// Number of returned rows, triples, or ASK result values. `None` when the
+    /// query returned no result (it failed or hit its deadline): unknown, which
+    /// is not the same as an empty result.
+    pub result_size: Option<usize>,
 }
 
 /// Classify a SPARQL query by its first operation keyword.
@@ -340,7 +342,7 @@ mod tests {
             AuthOutcome::NotRequired,
             Some(RequestUsage {
                 query_shape: QueryShape::Select,
-                result_size: 3,
+                result_size: Some(3),
             }),
         );
         let value: Value = serde_json::from_str(&line).unwrap();
@@ -350,6 +352,35 @@ mod tests {
         assert_eq!(value["result_size"], 3);
         assert_eq!(value["auth_outcome"], "not_required");
         assert!(value.get("authorization").is_none());
+    }
+
+    /// aegis-raq1ok.1: a failed query (a deadline 408) logs its shape, and
+    /// its size as null: unknown, never 0, which would claim an empty result.
+    #[test]
+    fn a_failed_query_logs_its_shape_and_a_null_size() {
+        let line = structured_request_log(
+            "request_complete",
+            8,
+            "seeds",
+            "unattributed",
+            "POST",
+            "/query",
+            "/query",
+            Some(408),
+            Some(10_000),
+            AuthOutcome::NotRequired,
+            Some(RequestUsage {
+                query_shape: QueryShape::Select,
+                result_size: None,
+            }),
+        );
+        let value: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(value["status"], 408);
+        assert_eq!(value["query_shape"], "select");
+        assert!(
+            value.get("result_size").is_some_and(Value::is_null),
+            "{line}"
+        );
     }
 
     #[test]

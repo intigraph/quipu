@@ -198,6 +198,26 @@ async fn query_core(
 ) -> Result<axum::response::Response, AppError> {
     let query_shape =
         quipu::request_usage::classify_query(input.get("query").and_then(JsonValue::as_str));
+    // Every failure, a deadline 408 included, still names its shape in the
+    // request log (aegis-raq1ok.1). It returned no result: its size is
+    // unknown, which is not an empty result.
+    answer_query(store, headers, input, is_post, query_shape)
+        .await
+        .map_err(|error| {
+            error.with_usage(quipu::request_usage::RequestUsage {
+                query_shape,
+                result_size: None,
+            })
+        })
+}
+
+async fn answer_query(
+    store: SharedStore,
+    headers: HeaderMap,
+    input: JsonValue,
+    is_post: bool,
+    query_shape: quipu::request_usage::QueryShape,
+) -> Result<axum::response::Response, AppError> {
     // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
     // into the W3C SPARQL 1.1 results/RDF shape; absent / */* / application/json
     // keeps the default bespoke rows shape byte-for-byte, so existing callers are

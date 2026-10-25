@@ -8,6 +8,7 @@ use super::tools::*;
 use super::*;
 use crate::embedding::EmbeddingProvider;
 use crate::error::Result as QResult;
+use crate::tool_ask;
 use crate::vector::KnowledgeVectorStore;
 
 fn test_store_with_data() -> Store {
@@ -30,6 +31,65 @@ ex:bob a ex:Person ; ex:name "Bob" ; ex:age "25"^^xsd:integer .
     )
     .unwrap();
     store
+}
+
+#[test]
+fn ask_truncation_marker_covers_catalog_builtin_and_empty_reads() {
+    let store = test_store_with_data();
+    for request in [serde_json::json!({}), serde_json::json!({"name":"list"})] {
+        let out = tool_ask(&store, &request).unwrap();
+        assert_eq!(out["truncated"].as_bool(), Some(false));
+        assert!(out["queries"].as_array().unwrap().len() > 1);
+    }
+    for (entity, count) in [
+        ("http://example.org/alice", 3_usize),
+        ("http://example.org/absent", 0),
+    ] {
+        let out = tool_ask(
+            &store,
+            &serde_json::json!({
+                "name":"entity_facts", "params":{"entity":entity}
+            }),
+        )
+        .unwrap();
+        assert_eq!(out["truncated"].as_bool(), Some(false));
+        assert_eq!(out["count"], count);
+        assert_eq!(out["rows"].as_array().unwrap().len(), count);
+    }
+}
+
+#[test]
+fn ask_truncation_marker_describes_complete_query_result_not_dataset_coverage() {
+    let mut store = test_store_with_data();
+    // Named queries currently return their complete evaluated result; unlike
+    // /query they have no response row ceiling. Preserve that behavior.
+    store.search_config_mut().max_sparql_rows = 1;
+    for (suffix, count) in [("", 2_usize), (" LIMIT 1", 1), (" LIMIT 0", 0)] {
+        let template = format!(
+            "SELECT ?name WHERE {{ ?s <http://example.org/name> ?name }} ORDER BY ?name{suffix}"
+        );
+        store
+            .query_load(
+                &crate::store::queries::StoredQuery {
+                    name: "complete_names".into(),
+                    description: "Private fixture".into(),
+                    template: template.clone(),
+                    dataset: None,
+                    params: vec![],
+                },
+                "2026-01-01T00:00:00Z",
+            )
+            .unwrap();
+        let out = tool_ask(&store, &serde_json::json!({"name":"complete_names"})).unwrap();
+        println!("named query response: {out}");
+        assert_eq!(out["truncated"].as_bool(), Some(false));
+        assert_eq!(out["count"], count);
+        assert_eq!(out["rows"].as_array().unwrap().len(), count);
+        assert_eq!(out["sparql"], template);
+        if count > 0 {
+            assert_eq!(out["rows"][0]["name"], "Alice");
+        }
+    }
 }
 
 #[test]

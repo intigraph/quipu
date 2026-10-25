@@ -432,6 +432,7 @@ fn catalog_json(store: &Store) -> JsonValue {
     }
     serde_json::json!({
         "queries": queries,
+        "truncated": false,
         "usage": "Call with {\"name\": \"<query>\", \"params\": {...}}. Call with no name to list.",
     })
 }
@@ -441,16 +442,13 @@ fn catalog_json(store: &Store) -> JsonValue {
 /// Input: `{ "name": "<query>", "params": { ... } }`. With no `name` (or
 /// `name: "list"`) returns the self-describing catalog.
 ///
-/// Output: `{ "query", "sparql", "columns", "rows": [...], "count" }`.
+/// Output includes `truncated: false`: the entire evaluated result is returned.
+/// A template's LIMIT selects its answer; it is not response truncation.
 pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let name = input.get("name").and_then(|v| v.as_str());
-
-    let Some(name) = name else {
-        return Ok(catalog_json(store));
+    let name = match input.get("name").and_then(JsonValue::as_str) {
+        Some(name) if name != "list" => name,
+        _ => return Ok(catalog_json(store)),
     };
-    if name == "list" {
-        return Ok(catalog_json(store));
-    }
 
     // Collect caller params into a string map for rendering.
     let mut args: BTreeMap<String, String> = BTreeMap::new();
@@ -519,6 +517,7 @@ pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         "columns": columns,
         "rows": rows,
         "count": rows.len(),
+        "truncated": false,
     }))
 }
 

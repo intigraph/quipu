@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 use serde_json::{Value as Json, json};
 
-use crate::asof_share::{CutError, resolve_graphs, scope_digest, scope_lists};
+use crate::asof_share::{CutError, refuse_frozen, resolve_graphs, scope_digest, scope_lists};
 use crate::error::{Error, Result};
 use crate::feed_parts::{PartBuilder, RecordTooLarge, fits_frame_len};
 use crate::replicate_wire::{Signed, event, message};
@@ -90,10 +90,9 @@ impl Session {
         if request.since < 0 || request.since > store.latest_tx_id()? {
             return Err(refused("the cursor is not a transaction of this source"));
         }
-        let graphs = resolve_graphs(store, &scope, &context)?
-            .into_iter()
-            .map(|(_, id)| id)
-            .collect();
+        let resolved = resolve_graphs(store, &scope, &context)?;
+        refuse_frozen(store, &resolved)?;
+        let graphs = resolved.into_iter().map(|(_, id)| id).collect();
         let session = Self {
             id,
             identity,

@@ -265,3 +265,38 @@ fn the_stream_serves_the_scope_digest_an_as_of_share_names() {
     let (session, _) = Session::open(&src, &request(&src, 0), "s".into(), identity()).unwrap();
     assert_eq!(session.scope(), scope_digest(&[BOARD.to_string()], &[]));
 }
+
+#[test]
+fn a_session_refuses_the_metadata_graph_and_a_frozen_graph() {
+    // Shared with the as-of cut: the graph-metadata graph is source-local and
+    // never streamed (s24.1.1 ruling). A frozen graph's rows live in its pack,
+    // which the cut reads but the stream does not serve yet.
+    let mut src = source();
+    let id = identity();
+    assert!(Session::open(&src, &request(&src, 0), "s".into(), id.clone()).is_ok());
+    let mut meta = request(&src, 0);
+    meta.graphs = vec![crate::namespace::META_GRAPH_IRI.into()];
+    let err = Session::open(&src, &meta, "s".into(), id.clone())
+        .err()
+        .expect("meta refused");
+    assert!(
+        format!("{err:?}").contains("graph-metadata graph"),
+        "{err:?}"
+    );
+    let packs = tempfile::tempdir().unwrap();
+    src.freeze_graph(
+        OTHER,
+        packs.path().to_str().unwrap(),
+        "2026-10-25T00:00:00Z",
+        None,
+    )
+    .unwrap();
+    let mut frozen = request(&src, 0);
+    frozen.graphs = vec![OTHER.into()];
+    let err = Session::open(&src, &frozen, "s".into(), id.clone())
+        .err()
+        .expect("frozen refused");
+    assert!(format!("{err:?}").contains("frozen into a pack"), "{err:?}");
+    // The unfrozen graph beside it is still served.
+    assert!(Session::open(&src, &request(&src, 0), "s".into(), id).is_ok());
+}

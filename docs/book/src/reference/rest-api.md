@@ -1572,7 +1572,12 @@ Unified knowledge search (text + optional vector); results tagged
 Run a curated, parameterized named query by name (see `quipu_ask` in the
 [MCP tools reference](./mcp-tools.md)). Body: `name` (omit or `"list"` to list
 the catalog), optional `params` map. Parameters are validated and escaped by
-type. Response: `query`, resolved `sparql`, `columns`, `rows`, `count`.
+type. Response: `query`, resolved `sparql`, `columns`, `rows`, `count`, and
+boolean `truncated`. Named queries return their complete evaluated result, so
+`truncated` is `false`, including empty results and catalog responses. A
+template's `LIMIT` defines its selection; `false` does not promise complete
+dataset coverage. Unlike `/query`, `/ask` does not apply `max_sparql_rows` to
+the response. Consumers must still enforce their own byte and row budgets.
 
 ```bash
 curl -s localhost:3030/ask -X POST \
