@@ -540,7 +540,10 @@ fn a_relay_answers_a_leaf_challenge_only_from_a_fresh_upstream_proof() {
         .poll(&tree.relay, 100, Some([8; 16]))
         .unwrap();
     assert!(!answered);
-    assert!(down.iter().all(|f| !f.data.contains(&hex::encode([8u8; 16]))));
+    assert!(
+        down.iter()
+            .all(|f| !f.data.contains(&hex::encode([8u8; 16])))
+    );
     // A proof the relay does not yet hold answers nothing either.
     let held = tree.relay_applier.coverage().unwrap();
     tree.downstream.upstream_proof(held + 1);
