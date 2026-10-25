@@ -284,9 +284,8 @@ pub(crate) fn cut_with_control(
         return Err(CutError::Aborted(AbortReason::SpoolQuota));
     }
 
-    // Main's rows only. Resolution stays composed, so an attached id a main
-    // row names still resolves; graphs served from an attachment are refused
-    // below.
+    // Resolution stays composed, so an attached id a row names still
+    // resolves; graphs contributed by an attachment are refused below.
     // Frozen graphs are read from their packs. Verify each pack's full
     // history against its recorded hash BEFORE the read transaction opens:
     // the check reads only the immutable pack file, and must not extend the
@@ -335,8 +334,17 @@ pub(crate) fn cut_with_control(
     }
 
     let mut selected = Vec::new();
-    let mut frozen: Vec<(String, i64, FrozenPack)> = Vec::new();
+    let mut frozen: Vec<(String, i64, FrozenPack, i64)> = Vec::new();
     for iri in scope.iter().chain(&context) {
+        // The graph-metadata graph is the source's own record (labels,
+        // lifecycle). It is source-local, and a freeze writes it in the very
+        // transaction a frozen graph's records carry, so a cut naming it
+        // would put two graphs' rows in one source transaction.
+        if iri == crate::namespace::META_GRAPH_IRI {
+            return Err(invalid(format!(
+                "the graph-metadata graph is source-local and is never cut: {iri}"
+            )));
+        }
         // ROOT is never implied; a caller names it explicitly to cut it.
         if iri == ROOT {
             store.check_label_floor(&[0])?;
@@ -373,7 +381,7 @@ pub(crate) fn cut_with_control(
             )));
         }
         if let Some(pack) = pack {
-            frozen.push((iri.clone(), graph, pack));
+            frozen.push(frozen_member(store, iri, graph, pack, watermark_tx)?);
         }
         store.check_label_floor(&[graph])?;
         selected.push((iri.clone(), graph));
@@ -424,49 +432,13 @@ pub(crate) fn cut_with_control(
         // The per-graph digest sorts its lines, so emission order does not
         // reach it; the same source at the same T sends the same records in
         // the same order.
-        // Main's rows for every graph not frozen, then each frozen graph from
-        // its own pack. A pack scan reports the graph's main id as `g`, so
-        // both feed the same digests. Aliases are validated identifiers.
-        let frozen_ids: Vec<i64> = frozen.iter().map(|(_, g, _)| *g).collect();
-        let main_ids: Vec<String> = selected
-            .iter()
-            .filter(|(_, g)| !frozen_ids.contains(g))
-            .map(|(_, g)| g.to_string())
-            .collect();
-        let live = "op = 1 AND tx <= ?1 AND (retracted_tx IS NULL OR retracted_tx > ?1)";
-        let mut scans: Vec<(String, Option<(&str, i64, &str)>)> = Vec::new();
-        if !main_ids.is_empty() {
-            scans.push((
-                format!(
-                    "SELECT g, e, a, v, tx, valid_from, \
-                            CASE WHEN retracted_tx IS NULL THEN valid_to END \
-                     FROM main.facts NOT INDEXED \
-                     WHERE g IN ({}) AND {live} ORDER BY rowid",
-                    main_ids.join(",")
-                ),
-                None,
-            ));
-        }
-        for (iri, g, pack) in &frozen {
-            let alias = &pack.alias;
-            scans.push((
-                format!(
-                    "SELECT ?3, e, a, v, tx, valid_from, \
-                            CASE WHEN retracted_tx IS NULL THEN valid_to END \
-                     FROM {alias}.facts NOT INDEXED \
-                     WHERE g = (SELECT id FROM {alias}.terms WHERE iri = ?2) AND {live} \
-                     ORDER BY rowid"
-                ),
-                Some((iri.as_str(), *g, alias.as_str())),
-            ));
-        }
+        let scans = scan_plan(&selected, &frozen);
         let mut digests: BTreeMap<i64, (String, GraphDigest, usize)> = BTreeMap::new();
         for (iri, g) in &selected {
             digests.insert(*g, (iri.clone(), GraphDigest::new(spool_dir)?, 0));
         }
         let mut in_memory = 0usize;
         let mut profile = CutProfile::default();
-        let mut meta: Option<(i64, TxMeta)> = None;
         let mut clock = Instant::now();
         // Charge the time since the previous mark to one phase.
         let mut lap = |slot: &mut Duration| {
@@ -474,22 +446,27 @@ pub(crate) fn cut_with_control(
             *slot += now - clock;
             clock = now;
         };
-        for (sql, pack) in &scans {
-            let mut stmt = store.conn.prepare(sql)?;
-            // A pack carries the transactions of the history it holds.
-            let mut pack_meta = match pack {
-                Some((_, _, alias)) => Some(store.conn.prepare(&format!(
-                    "SELECT timestamp, actor, source FROM {alias}.transactions WHERE id = ?1"
+        for scan in &scans {
+            let mut stmt = store.conn.prepare(&scan.sql)?;
+            // A pack carries the transactions of the history it holds, under
+            // its own ids: its rows' provenance is read there, never in main.
+            let mut pack_meta = match &scan.frozen {
+                Some(f) => Some(store.conn.prepare(&format!(
+                    "SELECT timestamp, actor, source FROM {}.transactions WHERE id = ?1",
+                    f.alias
                 ))?),
                 None => None,
             };
-            let mut rows = match pack {
-                Some((iri, g, _)) => stmt.query(params![watermark_tx, iri, g])?,
+            let mut rows = match &scan.frozen {
+                Some(f) => stmt.query(params![f.iri, f.g])?,
                 None => stmt.query(params![watermark_tx])?,
             };
+            // Each table numbers its own transactions: a lookup never
+            // outlives its scan.
+            let mut meta: Option<(i64, TxMeta)> = None;
             while let Some(row) = rows.next()? {
                 lap(&mut profile.sql_step);
-                let (g, e, a, v, tx, valid_from, valid_to): (
+                let (g, e, a, v, row_tx, valid_from, valid_to): (
                     i64,
                     i64,
                     i64,
@@ -508,7 +485,7 @@ pub(crate) fn cut_with_control(
                 );
                 let value = Value::from_bytes(&v)?;
                 lap(&mut profile.decode);
-                if meta.as_ref().is_none_or(|m| m.0 != tx) {
+                if meta.as_ref().is_none_or(|m| m.0 != row_tx) {
                     let read = |r: &rusqlite::Row<'_>| {
                         Ok((
                             r.get::<_, Option<String>>(0)?,
@@ -516,16 +493,17 @@ pub(crate) fn cut_with_control(
                             r.get::<_, Option<String>>(2)?,
                         ))
                     };
-                    let local = tx_meta.query_row(params![tx], read).optional()?;
-                    let fields = match (local, pack_meta.as_mut()) {
-                        (Some(fields), _) => fields,
-                        (None, Some(pack)) => pack.query_row(params![tx], read)?,
-                        (None, None) => {
-                            return Err(invalid(format!("transaction {tx} is missing")));
-                        }
+                    let fields = match pack_meta.as_mut() {
+                        Some(pack) => pack.query_row(params![row_tx], read)?,
+                        None => tx_meta
+                            .query_row(params![row_tx], read)
+                            .optional()?
+                            .ok_or_else(|| invalid(format!("transaction {row_tx} is missing")))?,
                     };
-                    meta = Some((tx, fields));
+                    meta = Some((row_tx, fields));
                 }
+                // A frozen row carries the main transaction that froze it.
+                let tx = scan.frozen.as_ref().map_or(row_tx, |f| f.freeze_tx);
                 let (_, (timestamp, actor, source)) = meta.as_ref().expect("set above");
                 lap(&mut profile.tx_meta);
                 let (entity, attribute) = (store.resolve(e)?, store.resolve(a)?);
@@ -606,8 +584,8 @@ pub(crate) fn cut_with_control(
                     digest: format!("sha256:{}", digest.finish()?),
                     frozen: frozen
                         .iter()
-                        .find(|(f, _, _)| *f == iri)
-                        .map(|(_, _, pack)| {
+                        .find(|(f, ..)| *f == iri)
+                        .map(|(_, _, pack, _)| {
                             json!({
                                 "pack_content_hash": pack.content_hash,
                                 "frozen_at": pack.frozen_at,
@@ -685,6 +663,6 @@ pub(crate) fn cut_with_control(
 mod support;
 pub(crate) use support::{AssertRecord, ReadPhaseGuard};
 use support::{
-    FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_pack, shapes_hash,
-    sorted_unique, spool_usage, wal_len, wal_path,
+    FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_member, frozen_pack,
+    scan_plan, shapes_hash, sorted_unique, spool_usage, wal_len, wal_path,
 };

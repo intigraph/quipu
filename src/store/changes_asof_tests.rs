@@ -1037,7 +1037,8 @@ fn pack_digest(store: &Store, alias: &str, graph: &str) -> std::collections::BTr
                AND g = (SELECT id FROM {alias}.terms WHERE iri = ?1)"
         ))
         .unwrap();
-    let rows: Vec<(i64, i64, Vec<u8>, String, Option<String>)> = stmt
+    type Row = (i64, i64, Vec<u8>, String, Option<String>);
+    let rows: Vec<Row> = stmt
         .query_map([graph], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })
@@ -1194,13 +1195,15 @@ fn provenance_of_g(cut: &Cut) -> std::collections::BTreeMap<String, (Json, Json,
         .collect()
 }
 
-/// FALSIFIER (s24.1.1 review): a pack numbers its transactions itself
-/// (`freeze_io::export_graph_history` re-inserts them), so a pack row's `tx`
-/// is file-local. A frozen graph's records must still say what the same facts
-/// said before the freeze, rather than borrowing main's transaction with the
-/// same number.
+/// FALSIFIER (s24.1.1 review, ruled (B1)): a pack numbers its transactions
+/// itself (`freeze_io::export_graph_history` re-inserts them), so a pack row's
+/// `tx` is file-local and the original main id is gone. A frozen graph's
+/// records keep their timestamp, actor and source (read from the PACK, never
+/// borrowed from main's transaction with the same number), and all carry ONE
+/// main transaction F: the freeze, later than every original, which no other
+/// record of the cut uses (an applier buckets records by `tx`).
 #[test]
-fn a_frozen_graphs_records_keep_the_provenance_they_had_before_the_freeze() {
+fn a_frozen_graphs_records_keep_their_provenance_and_carry_the_freeze_tx() {
     let dir = tempfile::tempdir().unwrap();
     let (mut source, _path) = file_store(dir.path());
     // Unrelated transactions FIRST, so G's main transaction ids are not the
@@ -1229,11 +1232,63 @@ fn a_frozen_graphs_records_keep_the_provenance_they_had_before_the_freeze() {
         "control: the same live facts of G"
     );
     for (fact, was) in &want {
+        let (_, timestamp, actor, source) = &got[fact];
         assert_eq!(
-            &got[fact], was,
-            "provenance of {fact} changed across the freeze"
+            (timestamp, actor, source),
+            (&was.1, &was.2, &was.3),
+            "timestamp/actor/source of {fact} changed across the freeze"
         );
     }
+    let txs: std::collections::BTreeSet<i64> =
+        got.values().map(|(tx, ..)| tx.as_i64().unwrap()).collect();
+    assert_eq!(txs.len(), 1, "every frozen record carries one tx: {txs:?}");
+    let f = *txs.iter().next().unwrap();
+    let latest_original = want
+        .values()
+        .map(|(tx, ..)| tx.as_i64().unwrap())
+        .max()
+        .unwrap();
+    assert!(f > latest_original, "F={f} is after every original tx");
+    assert!(f <= after.manifest.watermark_tx, "F={f} is within the cut");
+    let others: Vec<Json> = spooled_records(&after)
+        .into_iter()
+        .filter(|r| r["graph"] != G && r["tx"] == f)
+        .collect();
+    assert!(
+        others.is_empty(),
+        "no other graph's record shares F: {others:#?}"
+    );
+}
+
+/// FALSIFIER (wu's s24.1.1 condition): the graph-metadata graph is
+/// source-local, and a freeze writes it in transaction F, so a cut naming it
+/// would mix its records into F's bucket with the frozen rows. It is refused
+/// in the scope and as a context graph, and the same request without it is
+/// served (control).
+#[test]
+fn the_graph_metadata_graph_is_never_cut() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    fixture(&mut source);
+    note(&mut source, "a note", TS2);
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let spool = tempfile::tempdir().unwrap();
+    let meta = crate::namespace::META_GRAPH_IRI.to_string();
+    let mut in_scope = both(&source);
+    in_scope.graphs.push(meta.clone());
+    let mut in_context = both(&source);
+    in_context.context_graphs.push(meta);
+    for (name, request) in [("scope", in_scope), ("context", in_context)] {
+        let result = cut(&source, &request, spool.path(), &Limits::default());
+        assert!(
+            matches!(&result, Err(e) if format!("{e:?}").contains("graph-metadata")),
+            "{name}: the meta graph was cut: {:?}",
+            result.map(|c| c.manifest.watermark_tx)
+        );
+    }
+    assert!(cut(&source, &both(&source), spool.path(), &Limits::default()).is_ok());
 }
 
 /// FALSIFIER (s24.1.1 review): a pack keeps no main transaction ids, so a cut
@@ -1262,4 +1317,38 @@ fn a_cut_from_before_a_scoped_graphs_freeze_is_refused() {
     );
     // Control: the same request at the head is served.
     assert!(cut(&source, &both(&source), spool.path(), &Limits::default()).is_ok());
+}
+
+/// FALSIFIER for the per-scan lookup cache (s24.1.1): main and a pack number
+/// their transactions independently, so the cut must not carry a metadata
+/// lookup from one scan into the next. Arranged so they collide: G2's only row
+/// is main tx 1, scanned last from main, and the pack's first row is its own
+/// tx 1. A carried lookup would stamp G's rows with G2's note timestamp.
+#[test]
+fn a_frozen_scan_never_reuses_main_metadata_for_its_own_tx_numbers() {
+    const NOTE_TS: &str = "2026-05-05T00:00:00Z";
+    let dir = tempfile::tempdir().unwrap();
+    let (mut source, _path) = file_store(dir.path());
+    note(&mut source, "main tx 1", NOTE_TS);
+    fixture(&mut source);
+    let spool = tempfile::tempdir().unwrap();
+    let before = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    let notes: Vec<Json> = spooled_records(&before)
+        .into_iter()
+        .filter(|r| r["graph"] == G2)
+        .collect();
+    assert_eq!(
+        (notes.len(), notes[0]["tx"].as_i64()),
+        (1, Some(1)),
+        "control: G2's only row is main tx 1"
+    );
+    let want = provenance_of_g(&before);
+    source
+        .freeze_graph(G, dir.path().to_str().unwrap(), TS3, None)
+        .unwrap();
+    let after = cut(&source, &both(&source), spool.path(), &Limits::default()).unwrap();
+    for (fact, (_, timestamp, ..)) in provenance_of_g(&after) {
+        assert_ne!(timestamp, NOTE_TS, "{fact} borrowed main tx 1's metadata");
+        assert_eq!(timestamp, want[&fact].1, "{fact} timestamp");
+    }
 }
