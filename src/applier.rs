@@ -42,15 +42,25 @@ use std::collections::BTreeMap;
 
 use rusqlite::{OptionalExtension, params};
 use serde_json::Value as Json;
-use sha2::{Digest, Sha256};
 
 use crate::error::Result;
-use crate::store::{Datum, Store};
+#[cfg(test)]
+use crate::store::Datum;
+use crate::store::Store;
+#[cfg(test)]
 use crate::types::{Op, Value};
 
+#[path = "applier_chunk.rs"]
+mod chunk;
 #[path = "applier_digest.rs"]
 mod digest;
+#[path = "applier_record.rs"]
+mod record;
+#[path = "applier_start.rs"]
+mod start;
+use chunk::Chunk;
 pub use digest::Stop;
+pub use record::record_to_datum;
 
 /// The source log a replica follows.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +120,12 @@ pub enum Outcome {
         /// Why the frame cannot be applied exactly.
         reason: String,
     },
+    /// An as-of share was applied to an empty replica: it now holds the
+    /// source as of `source_tx`, and the tail continues from there.
+    Bootstrapped {
+        /// The share's watermark: the last source transaction it contains.
+        source_tx: i64,
+    },
     /// An event this slice does not act on (heartbeats, newer frame kinds).
     Ignored,
     /// A redelivered transaction does not match the one applied, or cannot
@@ -133,21 +149,12 @@ pub struct Freshness {
     pub bounded: bool,
 }
 
-struct Chunk {
-    source_tx: i64,
-    parts: usize,
-    /// Parts accepted so far; the next part's index must equal it.
-    seen: usize,
-    records: usize,
-    digest: String,
-    hasher: Sha256,
-    buffered: Vec<Json>,
-}
-
 /// The applier for one replica store.
 pub struct Applier {
     progress: Option<Progress>,
     chunk: Option<Chunk>,
+    /// An as-of share being streamed into the store, inside its savepoint.
+    share: Option<bootstrap::ShareStream>,
     last_frame_ms: Option<u64>,
     stopped: Option<Outcome>,
 }
@@ -165,6 +172,7 @@ impl Applier {
         store.conn.execute_batch(PROGRESS_DDL)?;
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
         store.conn.execute_batch(digest::STOP_DDL)?;
+        bootstrap::discard_open_share(store)?;
         let progress = store
             .conn
             .query_row(
@@ -184,6 +192,7 @@ impl Applier {
         Ok(Self {
             progress,
             chunk: None,
+            share: None,
             last_frame_ms: None,
             stopped: digest::load_stop(store)?,
         })
@@ -227,11 +236,18 @@ impl Applier {
                 .and_then(|source| self.check_source(&source));
             return Ok(changed.unwrap_or(stopped));
         }
+        if self.share.is_some() && !event.starts_with("quipu.asof") {
+            // A share is one cut; anything else arriving mid-share breaks it.
+            self.abort_share(store)?;
+        }
         match event {
             "quipu.changes" => self.apply_page(store, data),
             "quipu.changes.begin" => Ok(self.begin_chunk(data)),
             "quipu.changes.part" => Ok(self.chunk_part(data)),
             "quipu.changes.commit" => self.commit_chunk(store, data),
+            "quipu.asof" | "quipu.asof.begin" | "quipu.asof.part" | "quipu.asof.commit" => {
+                self.bootstrap_frame(store, event, data)
+            }
             "quipu.changes.tx_too_large" => Ok(Outcome::Refused {
                 reason: "the source cannot send this transaction in frames".into(),
             }),
@@ -284,15 +300,7 @@ impl Applier {
         }
         // A new begin replaces any chunk in progress: a reconnect replays an
         // interrupted transaction from its first part.
-        self.chunk = Some(Chunk {
-            source_tx,
-            parts: usize::try_from(parts).unwrap_or(usize::MAX),
-            records: usize::try_from(records).unwrap_or(usize::MAX),
-            seen: 0,
-            digest: digest.to_string(),
-            hasher: Sha256::new(),
-            buffered: Vec::new(),
-        });
+        self.chunk = Some(Chunk::new(source_tx, parts, records, digest, true));
         Outcome::Buffered { source_tx }
     }
 
@@ -305,20 +313,10 @@ impl Applier {
             self.chunk = None;
             return Outcome::Resume { from: resume };
         };
-        let expected_before = hex::encode(chunk.hasher.clone().finalize());
-        let in_order = part["source_tx"].as_i64() == Some(chunk.source_tx)
-            && part["index"].as_u64() == u64::try_from(chunk.seen).ok()
-            && part["digest_before"].as_str() == Some(expected_before.as_str());
-        if !in_order {
+        if !chunk.accept(&part, data) {
             self.chunk = None;
             return Outcome::Resume { from: resume };
         }
-        // The digest covers the part EXACTLY as sent, so it is hashed as text.
-        chunk.hasher.update(data.as_bytes());
-        chunk.seen += 1;
-        chunk
-            .buffered
-            .extend(part["records"].as_array().cloned().unwrap_or_default());
         Outcome::Buffered {
             source_tx: chunk.source_tx,
         }
@@ -332,13 +330,7 @@ impl Applier {
         let Ok(commit) = serde_json::from_str::<Json>(data) else {
             return Ok(Outcome::Resume { from: resume });
         };
-        let digest = hex::encode(chunk.hasher.clone().finalize());
-        let complete = commit["source_tx"].as_i64() == Some(chunk.source_tx)
-            && commit["digest"].as_str() == Some(chunk.digest.as_str())
-            && digest == chunk.digest
-            && chunk.seen == chunk.parts
-            && chunk.buffered.len() == chunk.records;
-        if !complete {
+        if !chunk.complete(&commit) {
             return Ok(Outcome::Resume { from: resume });
         }
         let Some(source) = source_of(&commit) else {
@@ -396,6 +388,11 @@ impl Applier {
                 return Ok(refused("record without a source transaction"));
             };
             by_tx.entry(tx).or_default().push(record);
+        }
+        if self.progress.is_none()
+            && let Some(reason) = Self::new_replica_refusal(store)?
+        {
+            return Ok(Outcome::Refused { reason });
         }
         let mut applied = Vec::new();
         for (tx, records) in by_tx {
@@ -503,94 +500,6 @@ fn apply_one_tx(
     }
 }
 
-/// One feed record as the datum that reproduces it, or why it cannot be
-/// reproduced exactly. The outer `Result` is a store failure.
-///
-/// # Errors
-/// [`Error::Sqlite`] if interning a term fails.
-pub fn record_to_datum(
-    store: &Store,
-    record: &Json,
-    tx_timestamp: &str,
-) -> Result<std::result::Result<Datum, String>> {
-    let (Some(entity), Some(attribute), Some(op)) = (
-        record["entity"].as_str(),
-        record["attribute"].as_str(),
-        record["op"].as_str(),
-    ) else {
-        return Ok(Err("record lacks entity, attribute or op".into()));
-    };
-    let retract = match digest::op_is_retract(op) {
-        Ok(r) => r,
-        Err(reason) => return Ok(Err(reason)),
-    };
-    let value_field = if retract { "old_value" } else { "value" };
-    let value = match value_of(store, &record[value_field])? {
-        Ok(v) => v,
-        Err(reason) => return Ok(Err(reason)),
-    };
-    let valid_from = record["valid_from"]
-        .as_str()
-        .unwrap_or(tx_timestamp)
-        .to_string();
-    Ok(Ok(Datum {
-        entity: store.intern(entity)?,
-        attribute: store.intern(attribute)?,
-        value,
-        valid_from,
-        // A retract names the fact it closes; its own row's valid time
-        // describes the closing, not an interval to replay.
-        valid_to: if retract {
-            None
-        } else {
-            record["valid_to"].as_str().map(String::from)
-        },
-        op: if retract { Op::Retract } else { Op::Assert },
-    }))
-}
-
-fn value_of(store: &Store, json: &Json) -> Result<std::result::Result<Value, String>> {
-    use base64::Engine as _;
-    Ok(Ok(match json {
-        Json::String(s) => Value::Str(s.clone()),
-        Json::Bool(b) => Value::Bool(*b),
-        Json::Number(n) => match n.as_i64() {
-            Some(i) => Value::Int(i),
-            None => match n.as_f64() {
-                Some(f) => Value::Float(f),
-                None => return Ok(Err(format!("unrepresentable number {n}"))),
-            },
-        },
-        Json::Object(o) if o.get("ref").and_then(Json::as_str).is_some() => {
-            Value::Ref(store.intern(o["ref"].as_str().unwrap_or_default())?)
-        }
-        Json::Object(o) if o.contains_key("lang") => Value::Lang {
-            lexical: o["value"].as_str().unwrap_or_default().into(),
-            lang: o["lang"].as_str().unwrap_or_default().into(),
-        },
-        Json::Object(o) if o.contains_key("datatype") => Value::Typed {
-            lexical: o["value"].as_str().unwrap_or_default().into(),
-            datatype: o["datatype"].as_str().unwrap_or_default().into(),
-        },
-        Json::Object(o) if o.get("base64").and_then(Json::as_str).is_some() => {
-            match base64::engine::general_purpose::STANDARD
-                .decode(o["base64"].as_str().unwrap_or_default())
-            {
-                Ok(bytes) => Value::Bytes(bytes),
-                Err(_) => return Ok(Err("byte value is not valid base64".into())),
-            }
-        }
-        // A source from before byte bodies were carried sends only the length.
-        // Writing empty bytes would be a silent loss: refuse instead.
-        Json::Object(o) if o.contains_key("bytes_len") => {
-            return Ok(Err(
-                "byte value sent as its length only; the source predates lossless bytes".into(),
-            ));
-        }
-        other => return Ok(Err(format!("unreplayable value {other}"))),
-    }))
-}
-
 /// Live facts of a store as resolved strings, so two stores with different
 /// term ids compare by meaning; valid time is part of a fact's identity here.
 /// Shared by the applier and feed-replay conformance tests.
@@ -641,6 +550,14 @@ pub(crate) fn live_digest(store: &Store) -> std::collections::BTreeSet<String> {
         .collect()
 }
 
+#[path = "applier_bootstrap.rs"]
+mod bootstrap;
+pub use bootstrap::share_graph_digest;
+
 #[cfg(test)]
 #[path = "applier_tests.rs"]
 mod tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "applier_seam_tests.rs"]
+mod seam_tests;
