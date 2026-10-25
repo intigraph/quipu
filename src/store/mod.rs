@@ -20,6 +20,7 @@ mod poststate_profile;
 mod shacl_focus;
 mod shacl_new_graph;
 mod shacl_poststate;
+mod shacl_reference_context;
 #[cfg(feature = "shacl")]
 mod shacl_subclass;
 pub use decision_nonces::DecisionNonceSpend;
@@ -126,6 +127,8 @@ pub struct Store {
     pub(crate) projection_defs: Vec<crate::config::ProjectionConfig>,
     /// Explicit per-operation shapes, restored when the scoped operation ends.
     pub(crate) write_shapes: Option<String>,
+    /// Explicit referenced-type dataset for one destination and operation.
+    pub(crate) write_reference_graphs: Option<(i64, Vec<i64>)>,
     /// Time spent in the post-state SHACL write gate since the last
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.

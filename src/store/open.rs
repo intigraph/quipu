@@ -537,6 +537,7 @@ impl Store {
             shacl_config: ShaclConfig::default(),
             projection_defs: Vec::new(),
             write_shapes: None,
+            write_reference_graphs: None,
             poststate_profile: PoststateProfile::default(),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]

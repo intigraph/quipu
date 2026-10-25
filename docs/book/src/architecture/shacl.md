@@ -113,6 +113,25 @@ separate full-store or explicitly scoped validation for stored SHACL
 conformance; incremental acceptance alone does not establish it. Neither
 this documentation nor the tests enable a gate or change its runtime policy.
 
+Library applications with an explicit multi-graph dataset may scope referenced
+type lookup to that dataset for one operation:
+
+```rust,ignore
+store.with_write_reference_graphs(destination, &[destination, project], |store| {
+    store.transact_graph_batches(&batches, timestamp, actor, source)
+})?;
+```
+
+The graph IDs come from the application's configured dataset. This API performs
+no sibling discovery and grants no write authority. It selects only referenced
+nodes' `rdf:type` context for writes to the named destination, on both payload
+repair and post-state validation. ROOT contributes referenced types only when
+explicitly listed. Property values, cardinality and write-owned focuses stay
+scoped to the destination. Other destinations keep their default context.
+The prior scope is restored after a return, an error or unwinding, including
+nested operations. The scope requires its destination and at most sixteen
+graphs; it neither enables SHACL nor persists a configuration change.
+
 ## Agent-Friendly Feedback
 
 When validation fails, the `ValidationFeedback` struct provides structured

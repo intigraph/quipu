@@ -1,25 +1,36 @@
 <p align="center">
-  <img src="assets/logo.svg" width="200" alt="Quipu logo — knotted strings forming a knowledge graph"/>
+  <img src="assets/header.png" width="704" alt="Quipu: knotted knowledge and history, from the Thread Workshop stack illustration family"/>
 </p>
 
-# quipu
+<p align="center">
+  <img src="assets/logo.svg" width="160" alt="Quipu logo: knotted strings forming a knowledge graph"/>
+</p>
 
-**Quipu is a governed, bitemporal knowledge store for AI coding agents and the
-people who run them.** It can check writes against your rules, records where each fact came from, and answers what was true when. *Bitemporal* means keeping both
-when a fact was recorded and, when supplied, when it was true.
+<h1 align="center">Quipu</h1>
+<p align="center"><em>Governed knowledge your agents can read, reuse and share</em></p>
+<p align="center">
+  <a href="LICENSE">Apache-2.0</a> ·
+  <a href="https://github.com/intigraph/quipu/actions/workflows/ci.yml">CI</a> ·
+  <a href="https://intigraph.github.io/quipu/">Read the book</a>
+</p>
 
-The [60-second demo](docs/demos/governed-memory-v0.13.0/) shows an enabled gate,
-a refused write, corrected provenance, and a valid-time read.
+**Quipu is a governed, bitemporal knowledge store for AI agents and the people
+who run them.** Use it from the command line, REST, MCP or a Rust application.
+A quipu is an Andean knotted-cord record: cords are entities, knots are facts.
 
-Quipu answers standard SPARQL 1.1 as a CLI, REST server and Rust library, with its own MCP server (`quipu mcp` or `quipu-server` over HTTP).
+## Why you would want it
 
-[Domain shapes in practice](docs/book/src/concepts/domain-shapes.md) describes
-producer-owned Camayoc profiles, the Seeds work profile and the staged
-load-before-remove transition from bundled domain examples.
+- **Governed:** check incoming knowledge against your vocabulary and shapes.
+- **Bitemporal:** keep a queryable history of facts and decisions.
+- **Reusable agent knowledge:** store memory agents can read, reuse and share across tools.
+- **Time-aware entities:** attach event-triggering time attributes for [Chaski](https://github.com/intigraph/chaski) to react to.
 
-A [quipu](https://en.wikipedia.org/wiki/Quipu) is the Andean knotted-cord record: cords are entities, knots are facts.
+Use Quipu as the **central graph and base for many tools**: see [the stack](#-the-stack).
+The full case is in [Why Quipu](https://intigraph.github.io/quipu/why-quipu.html).
 
-mcp-name: io.github.intigraph/quipu
+<p align="center">
+  <img src="assets/run-anywhere.svg" width="900" alt="Animated: one Quipu store connects the CLI, MCP clients, HTTP server, Rust library, offline use and WebAssembly"/>
+</p>
 
 ## Install
 
@@ -27,67 +38,55 @@ mcp-name: io.github.intigraph/quipu
 curl -fsSL https://raw.githubusercontent.com/intigraph/quipu/main/install.sh | sh
 ```
 
-Python 3.9+, curl, and a Linux or macOS shell. Downloads the latest published archive, verifies SHA-256 and the executable
-version before publishing command links in `~/.local/bin`. Add it to `PATH`.
-The complete versioned bundle stays in `~/.local/lib/quipu/TAG` for rollback.
-Published targets: Linux and macOS, x86_64 and arm64.
+Linux and macOS, x86_64 and arm64; requires Python 3.9+ and curl.
+The installer verifies the published archive checksum and executable version.
+Then run `quipu --version`. [Install, upgrade or remove Quipu](https://intigraph.github.io/quipu/getting-started/installation.html).
+For the whole stack, use [Tambo's guided onboarding](https://github.com/intigraph/tambo).
 
-Set `STACK_INSTALL_ROOT` on the receiving shell for another prefix.
-Pinned releases, alternatives, configuration and removal are in the
-[installation, upgrades and removal](https://intigraph.github.io/quipu/getting-started/installation.html).
+## First success in three commands
 
-## Try it
+In an empty directory, fetch the public fixture, store its episode, then ask about its relationship:
 
-Write a rule (every `Person` needs a name), two people who follow it, and one
-who does not:
-
-```bash
-mkdir quipu-demo && cd quipu-demo
-printf '@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;\n  sh:property [ sh:path ex:name ; sh:minCount 1 ] .\n' > shapes.ttl
-printf '@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name "Alice" ; ex:knows ex:bob .\nex:bob   a ex:Person ; ex:name "Bob" .\n' > people.ttl
-printf '@prefix ex: <http://example.org/> .\nex:carol a ex:Person .\n' > carol.ttl
+```sh
+curl -fsSL https://raw.githubusercontent.com/intigraph/quipu/main/docs/demos/terminal/fixture/episode.json -o episode.json
+quipu episode episode.json --base-ns urn:demo: --timestamp 2026-01-01T00:00:00Z --db demo.db
+quipu read 'SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }' --db demo.db
 ```
 
-Then load the good facts, ask a question, and try the bad one:
+The query returns **Ada → Engine**. Here is the real local episode and query:
 
-```bash
-quipu knot people.ttl --shapes shapes.ttl --db demo.db
-quipu read 'SELECT ?who ?name WHERE { ?who <http://example.org/name> ?name }' --db demo.db
-quipu knot carol.ttl --shapes shapes.ttl --db demo.db
-```
+![Animated terminal: a public note becomes a queryable Quipu graph](docs/demos/terminal/demo.svg)
 
-<!-- markdownlint-disable MD010 -->
-<!-- quipu's real output is tab-separated; the block below is verbatim. -->
+The resulting row, drawn as cords and knots:
 
-```text
-SHACL validation passed
-knotted 5 facts from people.ttl (tx 1)
-who	name
-----------------------------------------
-http://example.org/alice	"Alice"
-http://example.org/bob	"Bob"
+![Generated graph: Ada studies Engine, with one entity per cord and the relationship joining them](docs/demos/terminal/graph.svg)
 
-2 results
-SHACL validation failed: 1 violation(s)
-  Violation on http://example.org/carol: MinCount(1) not satisfied
-```
+The recording uses a local public fixture, without a server or model. Its native
+warning is retained: loading facts is not proof that a semantic index is ready.
+[Transcript, tool version and reproducible capture](docs/demos/terminal.md).
 
-<!-- markdownlint-enable MD010 -->
+## On your own code
 
-The last command exits 1 and writes nothing: Carol breaks the rule, so she never
-enters the graph. That refusal at write time, with the reason attached, is what
-Quipu is for.
+Keep project facts, decisions and relationships together instead of pasting the same context into each agent.
 
-## Next steps
+| You want to | Start here |
+|---|---|
+| Load facts and apply your vocabulary | [Quick Start](https://intigraph.github.io/quipu/getting-started/quick-start.html) |
+| Ask about current or historical knowledge | [SPARQL and time](https://intigraph.github.io/quipu/concepts/temporal-model.html) |
+| Share a governed knowledge bundle | [Verified sharing](https://intigraph.github.io/quipu/sharing/index.html) |
+| Prepare domain knowledge and shapes | [Camayoc](https://github.com/intigraph/camayoc) |
 
-- [Tambo](https://github.com/scbrown/tambo): guided stack installation and verification.
-- [Camayoc](https://github.com/scbrown/camayoc): governed memory and vocabulary.
-- [Quick Start examples](https://intigraph.github.io/quipu/getting-started/quick-start.html).
-- [Agent Setup](https://github.com/intigraph/quipu/blob/main/docs/book/src/getting-started/agent-setup.md).
+<p align="center">
+  <img src="assets/sharing-flow.svg" width="900" alt="Animated: export a share, verify it in quarantine, then explicitly promote admitted knowledge; conflicts are not silently merged"/>
+</p>
 
-![Repository pendants compose; dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
+### Repository knowledge
 
-**Load this repository’s graph:** the [latest release](https://github.com/intigraph/quipu/releases/latest) includes a repository pendant, checksum and provenance. Verify those together, extract the share directory, then use `quipu import SHARE_DIR --db repository.db`; import stages knowledge and leaves ROOT unchanged. See the [verified import workflow](https://intigraph.github.io/quipu/sharing/index.html).
+![Repository pendants compose: dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
+
+The [latest release](https://github.com/intigraph/quipu/releases/latest) includes a repository pendant,
+checksum and provenance. Verify them together, then use `quipu import SHARE_DIR --db repository.db`;
+import stages knowledge and leaves ROOT unchanged. Follow the [verified import workflow](https://intigraph.github.io/quipu/sharing/index.html).
 
 <!-- delivery-catalog:start -->
 
@@ -114,7 +113,36 @@ Missing change or deployment history is not a measured zero.
 <!-- catalog-source-sha256: ea2627bd96ba33263f3c3cc89dd0e64cfbb14788f6a14411df92448ec48aef14 -->
 <!-- delivery-catalog:end -->
 
-## The stack
+## Wire it into your agent
+
+For Claude Code, connect the local MCP server to your database:
+
+```sh
+claude mcp add quipu -- quipu mcp --db /path/to/knowledge.db
+```
+
+The MCP Registry identifier is `mcp-name: io.github.intigraph/quipu`.
+Other clients, HTTP MCP and credential configuration: [Agent Setup](https://github.com/intigraph/quipu/blob/main/docs/book/src/getting-started/agent-setup.md).
+Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tools together.
+
+## Before you start
+
+- The CLI runs locally; `quipu-server` supplies the network API and explorer.
+- Keep your database and credentials private. A demo fixture is not a deployment profile.
+- Semantic search needs a configured model and index; storing a graph alone does not provide either.
+- [Configuration](https://intigraph.github.io/quipu/getting-started/configuration.html) covers storage and server settings.
+
+## What's next
+
+- [The Quipu book](https://intigraph.github.io/quipu/): tutorials, concepts and references.
+- [Quick Start](https://intigraph.github.io/quipu/getting-started/quick-start.html): governed local examples.
+- [Domain shapes](https://intigraph.github.io/quipu/concepts/domain-shapes.html): producer-owned vocabulary.
+- [Stack README format](https://github.com/intigraph/tambo/blob/main/docs/stack/README-TEMPLATE.md) and [shared hero theme](assets/readme-theme.md).
+
+## 🧺 The stack
+
+Tambo installs these together and proves each one works; every tool also stands alone.
+Use each tool's README for its own installation and first success.
 
 <!-- stack-table:start -->
 
@@ -140,4 +168,15 @@ when.
 
 <!-- stack-table:end -->
 
-[License](LICENSE).
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The repository's checks are:
+
+```sh
+just check
+just docs check
+```
+
+## 📜 License
+
+[Apache-2.0](LICENSE).

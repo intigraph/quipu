@@ -7,14 +7,23 @@ through the ordinary canonical triple reader, then applies the same filters.
 
 The planner admits current named-graph subject stars with `rdf:type`, a fixed
 non-type property, constant predicates, and no incoming seed or string narrowing.
-It retains the existing sparse planner through 128 selected rows. Batches cover
-at most 16,384 selected rows, 128 canonical subjects per query, and 50,000 rows
-per completed BGP relation (and per absence batch). An 8 MiB conservative
-retained-binding accounting bound also covers keys and literal payloads; a single
-decoded row is transient. This is not a total-RSS cap. Overflow restores the
-existing planner; it never returns
-a truncated relation. ROOT, historical reads, explicit entailment, variable
-graphs, unsupported expressions, and unsafe scopes retain their prior paths.
+It retains the existing sparse planner through 128 selected rows. The selected
+(anchor) relation holds at most 50,000 rows under a 64 MiB accounting bound; it
+binds only the subject, which the per-subject plan retains anyway. It is then
+evaluated in windows of 4,096 subjects, 128 canonical subjects per query, and
+50,000 rows per completed window relation (and per absence batch). An 8 MiB
+conservative retained-binding accounting bound per window relation also covers
+keys and literal payloads; a single decoded row is transient. This is not a
+total-RSS cap. Overflow in any window restores the existing planner for the
+whole star; it never returns a truncated relation. ROOT, historical reads,
+explicit entailment, variable graphs, unsupported expressions, and unsafe
+scopes retain their prior paths.
+
+The accounting charges about 1 KiB per one-variable row, so a single 8 MiB
+batch holds about 8,100 selected subjects; windows keep owners denser than that
+on this plan. For aegis-t9n, one principal owns 22,679 Actions. On a copy of the
+board, its unknown-status owner branch takes 0.39-0.41 s windowed and
+1.31-1.43 s when probed per subject.
 
 For the existing grouped guard join, dense inputs reuse an already proven
 subject-only driving relation. The trailing BGP may not introduce variables

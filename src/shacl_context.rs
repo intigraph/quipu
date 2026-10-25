@@ -169,10 +169,7 @@ pub fn store_type_context_in_graph(
         return Ok(String::new());
     };
     let mut lines = BTreeSet::new();
-    let mut graphs = vec![crate::schema::ROOT_GRAPH];
-    if g != crate::schema::ROOT_GRAPH {
-        graphs.push(g);
-    }
+    let graphs = store.reference_type_graphs(g);
     for iri in iris {
         let Some(entity) = store.lookup(iri)? else {
             continue;
@@ -321,10 +318,7 @@ pub fn store_property_context_in_graph(
         return Ok(String::new());
     }
 
-    let mut graphs = vec![crate::schema::ROOT_GRAPH];
-    if g != crate::schema::ROOT_GRAPH {
-        graphs.push(g);
-    }
+    let graphs = store.write_property_graphs(g);
 
     let mut lines = BTreeSet::new();
     for iri in subjects {

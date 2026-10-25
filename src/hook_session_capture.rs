@@ -247,7 +247,12 @@ Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, 
 QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop \
 before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the \
 bearer server-side where possible and never print it. Send the header X-Quipu-Client: \
-session-capture on every call so this traffic is attributable. Three rules:
+session-capture on every call so this traffic is attributable. A client label and free-text source \
+are not structured write provenance. Use the deployment's environment-based provenance formatter \
+to derive X-Quipu-Agent, X-Quipu-Harness, X-Quipu-Model, X-Quipu-Session and X-Quipu-Host. The gated \
+graph-extract writer supplies these headers automatically. Never type or guess these values; if \
+any cannot be derived, keep capture pending and report the missing fields before HTTP. These \
+declared headers describe provenance; they do not authenticate the caller. Three rules:
 
 1. SEARCH BEFORE YOU MINT. POST {server}/search with {{\"query\":\"<your concept>\"}} and REUSE the \
 existing node's exact name if one matches. Do not create a second node for a concept that already \

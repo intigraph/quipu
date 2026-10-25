@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-10-25
+
+### Added
+
+- *(feed)* GET /feed/ws, the change and event feeds over one WebSocket (xdvg.2 step 3) (#826)([a7c5c9e](https://github.com/scbrown/quipu/commit/a7c5c9ecea44d4f1b119bf14e6b119c4daebc4e8))
+- *(replicate)* The scoped replication stream and its freshness challenge (#817)([9f24238](https://github.com/scbrown/quipu/commit/9f242389690bc707d21b9854469ad6fc86edaa91))
+- *(server)* Serve attested writes over HTTP, off by default (#845)([4cd9e48](https://github.com/scbrown/quipu/commit/4cd9e48d913e0312553de18114e585dbfc686d4a))
+- *(follow)* Quipu follow keeps a read-only follower current; replicas state staleness (#843)([0e80184](https://github.com/scbrown/quipu/commit/0e801841214b01432a44f2a9a57a38f714fb6841))
+- *(relay)* A replica serves its children, one upstream stream per relay (s24.2 S4) (#828)([4ebcec3](https://github.com/scbrown/quipu/commit/4ebcec322332e51b7d484bbb40e1454e84dcc47e))
+
+### Documentation
+
+- Restore Quipu README diagrams and first success (#856)([e4c5301](https://github.com/scbrown/quipu/commit/e4c5301a89b562d13518de5ad0d5c1560cc8f622))
+
+### Fixed
+
+- *(capture)* Require derived structured provenance in guidance (#850)([ffeba5d](https://github.com/scbrown/quipu/commit/ffeba5de5080fabde50aebf70ded764733367c69))
+- *(shacl)* Scope referenced types to explicit application datasets (#857)([cc33128](https://github.com/scbrown/quipu/commit/cc33128f442b608da087973a9814ce4274323e4d))
+
+
+
+### Testing
+
+- *(perf)* Gate the Brief closes and gate-edge panels (#842)([f8ec77e](https://github.com/scbrown/quipu/commit/f8ec77e4fbb8ceaf44ec0c6fbe3fb8a266128ed7))
+
+### Perf
+
+- *(sparql)* Probe only the survivors an ORDER BY LIMIT can return (#838)([5b04818](https://github.com/scbrown/quipu/commit/5b04818d9ca2df4f0aa822d6b7ab275f9f1b0590))
+- *(sparql)* Decline a filtered BGP before counting its driver (#840)([351c15c](https://github.com/scbrown/quipu/commit/351c15c7b0fcc47d5834fdcae1c01a1d8235b494))
+- *(resolution)* Bounded exact Jaro and lazy IRI lookup, about 5x faster episode resolution with identical hints (#849)([bd94a6c](https://github.com/scbrown/quipu/commit/bd94a6cf6de23f0000694c1c236c030acb6a6b2c))
+- *(sparql)* Batch owners denser than one window instead of probing each (#852)([ce63a43](https://github.com/scbrown/quipu/commit/ce63a4356dfb2e4449fc190e9ccb840d6ff05c02))
+
 ## [0.16.2] - 2026-10-25
 
 ### Added

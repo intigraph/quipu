@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "7807eb55b5efbca88c3ec0e9181d38aa04330f56ef5acdb6a428e6369c78abf4",
+      "source_sha256": "a67be5570de63d9a1d38721567c40c9df63a6e65f303d049dbec84ef2c3c2995",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "005acf132e6f9feb7d5ae6dd3a5a0e4e0e157e270bd92d168b932ae90254a258",
+      "source_sha256": "0204be83ad7c98a2c1322d17aaea91f87b5b896b41ef5cd119a7d1caffd1f63d",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"

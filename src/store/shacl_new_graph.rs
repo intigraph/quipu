@@ -99,32 +99,67 @@ impl Store {
             &[graph],
         )?;
         let rdf_type = self.lookup(RDF_TYPE)?;
+        let explicit_context =
+            matches!(&self.write_reference_graphs, Some((destination, _)) if *destination == graph);
+        // Capture write-owned focuses before adding any referenced types.
+        let subjects: BTreeSet<i64> = facts.iter().map(|fact| fact.entity).collect();
+        let mut owned: BTreeSet<String> = subjects
+            .iter()
+            .map(|entity| self.resolve(*entity))
+            .collect::<Result<_>>()?;
+        let object_targets = crate::shacl::cached_validator(shapes)?
+            .cardinality_plan()?
+            .object_target_predicates;
+        for fact in &facts {
+            if object_targets.contains(&self.resolve(fact.attribute)?) {
+                match fact.value {
+                    crate::Value::Ref(object) => {
+                        owned.insert(self.resolve(object)?);
+                    }
+                    _ => {
+                        if let oxrdf::Term::Literal(literal) =
+                            crate::rdf::value_to_term(self, &fact.value)?
+                        {
+                            owned.insert(literal.value().to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        let objects: BTreeSet<i64> = facts
+            .iter()
+            .filter_map(|fact| match fact.value {
+                crate::Value::Ref(object) if explicit_context || !subjects.contains(&object) => {
+                    Some(object)
+                }
+                _ => None,
+            })
+            .collect();
         if graph != 0
+            && self.reference_type_graphs(graph).contains(&0)
             && let Some(rdf_type) = rdf_type
         {
             // ROOT types may target a named-graph focus, as on the incremental path.
-            let subjects: BTreeSet<i64> = facts.iter().map(|f| f.entity).collect();
-            let objects: BTreeSet<i64> = facts
-                .iter()
-                .filter_map(|f| match f.value {
-                    crate::Value::Ref(object) if !subjects.contains(&object) => Some(object),
-                    _ => None,
-                })
-                .collect();
             facts.extend(self.post_state_facts(
                 "SELECT e,a,v,tx,valid_from,valid_to FROM facts \
                  WHERE g = 0 AND a = ?1 AND op = 1 AND valid_to IS NULL AND e IN \
                  (SELECT e FROM facts WHERE g = ?2 AND op = 1 AND valid_to IS NULL)",
                 &[rdf_type, graph],
             )?);
-            // A referenced value's ROOT type decides sh:class on it: an object
-            // typed only in ROOT is not a subject of this graph (review finding).
+        }
+        if let Some(rdf_type) = rdf_type {
+            // Only referenced types cross the explicit dataset boundary.
             for object in objects {
-                facts.extend(
-                    self.entity_facts_in_graph(object, 0)?
-                        .into_iter()
-                        .filter(|fact| fact.attribute == rdf_type),
-                );
+                for context_graph in self.reference_type_graphs(graph) {
+                    if context_graph == graph {
+                        continue; // The whole destination is already present.
+                    }
+                    facts.extend(
+                        self.entity_facts_in_graph(object, context_graph)?
+                            .into_iter()
+                            .filter(|fact| fact.attribute == rdf_type),
+                    );
+                }
             }
         }
         if let (Some(rdf_type), Some(subclass)) = (rdf_type, self.lookup(SUBCLASS_OF)?) {
@@ -168,6 +203,9 @@ impl Store {
         let issues: Vec<_> = feedback
             .results
             .iter()
+            .filter(|issue| {
+                !explicit_context || owned.contains(issue.focus_node.trim_matches(['<', '>']))
+            })
             .filter(|issue| {
                 reported.insert((
                     issue.component.clone(),
