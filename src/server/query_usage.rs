@@ -216,7 +216,7 @@ pub(crate) fn annotate(
         .extensions_mut()
         .insert(quipu::request_usage::RequestUsage {
             query_shape,
-            result_size,
+            result_size: Some(result_size),
         });
     response
 }
