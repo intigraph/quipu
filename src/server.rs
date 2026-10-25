@@ -360,12 +360,9 @@ async fn main() {
     let auth_policy = auth::bearer_policy(&config.server);
     let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required;
-    let read_only = config.server.read_only || is_replica;
+    let read_only = base::read_only(&config, is_replica);
     let replica_config = config.server.replica.clone();
     let is_relay = relay.is_some();
-    if read_only {
-        eprintln!("server is READ-ONLY — write endpoints will return 403");
-    }
 
     let cors_origins = config.server.cors_allowed_origins.clone();
     let cors = cors::layer(&cors_origins);

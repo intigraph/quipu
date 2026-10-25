@@ -61,6 +61,16 @@ pub(crate) fn report_attachments(store: &quipu::Store) {
     }
 }
 
+/// Whether the server refuses writes (configured, or a replica), announced at
+/// startup so an operator sees why a write gets 403.
+pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
+    let read_only = config.server.read_only || is_replica;
+    if read_only {
+        eprintln!("server is READ-ONLY — write endpoints will return 403");
+    }
+    read_only
+}
+
 /// Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
 /// default (aegis-4h3x): without this, `[quipu] base_ns = "..."` was inert
 /// and every REST/MCP ingest silently minted aegis IRIs. Data identity, so it
