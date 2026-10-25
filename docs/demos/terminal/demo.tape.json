@@ -1,0 +1,47 @@
+{
+  "title": "Quipu | turn a note into a queryable graph",
+  "description": "A local episode becomes a graph, then a query finds its relationship. No model or server is used.",
+  "width": 1000,
+  "height": 620,
+  "font_size": 24,
+  "line_height": 32,
+  "inputs": [
+    "episode.json"
+  ],
+  "steps": [
+    {
+      "tool": "quipu",
+      "args": [
+        "episode",
+        "episode.json",
+        "--base-ns",
+        "urn:demo:",
+        "--timestamp",
+        "2026-01-01T00:00:00Z",
+        "--db",
+        "demo.db"
+      ],
+      "requires": [
+        "14 facts",
+        "automatic embedding unavailable"
+      ],
+      "allow_stderr": true,
+      "hold": 10
+    },
+    {
+      "tool": "quipu",
+      "args": [
+        "read",
+        "SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }",
+        "--db",
+        "demo.db"
+      ],
+      "requires": [
+        "urn:demo:Ada",
+        "urn:demo:Engine",
+        "1 results"
+      ],
+      "hold": 10
+    }
+  ]
+}

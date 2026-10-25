@@ -160,6 +160,15 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("deck_requests", Disposition::Excluded),
     ("deck_challenges", Disposition::Excluded),
     ("deck_receipts", Disposition::Excluded),
+    // Attested-write switch, enrolled signers, attested-only graph list,
+    // one-use challenges and admission receipts. A share may carry the written
+    // facts and their provenance, never the authority to enroll, protect a
+    // graph or admit a write on the receiving store.
+    ("attest_switch", Disposition::Excluded),
+    ("attest_signers", Disposition::Excluded),
+    ("attest_graphs", Disposition::Excluded),
+    ("attest_challenges", Disposition::Excluded),
+    ("attest_receipts", Disposition::Excluded),
     // A READER's cursor. Restoring it resumes someone else's position.
     ("consumers", Disposition::Excluded),
     // The same, for named-graph event readers.
