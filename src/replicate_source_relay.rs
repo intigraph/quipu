@@ -60,9 +60,14 @@ impl Session {
                 "this relay's source ended its log; the relay must rebuild",
             ));
         }
-        let held_to = coverage.unwrap_or(source_tx).max(source_tx);
-        if request.since > held_to || map::local_cursor(store, &source, request.since)?.is_none() {
-            return Err(refused("the cursor is outside what this relay holds"));
+        // A child resumes only inside what the relay has VERIFIED upstream: a
+        // cursor past the verified watermark (an applied but uncovered source
+        // transaction) would let the first poll sign coverage up to it.
+        let verified = coverage.unwrap_or(0).min(source_tx);
+        if request.since > verified || map::local_cursor(store, &source, request.since)?.is_none() {
+            return Err(refused(
+                "the cursor is outside what this relay has verified",
+            ));
         }
         let resolved = resolve_graphs(store, &scope, &context)?;
         refuse_frozen(store, &resolved)?;
@@ -108,7 +113,9 @@ impl Session {
         }
         // Serve only what upstream coverage has verified: a transaction applied
         // before its coverage frame arrives waits for it.
-        let Some(verified) = coverage else {
+        // Nothing verified yet, or the cursor is already past the verified
+        // watermark: serve nothing and claim nothing until coverage catches up.
+        let Some(verified) = coverage.filter(|&v| v >= self.cursor) else {
             return Ok(Outcome::Page(Page {
                 by_tx: BTreeMap::new(),
                 full: false,

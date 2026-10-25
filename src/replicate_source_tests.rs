@@ -691,3 +691,43 @@ fn a_relay_never_signs_coverage_past_what_upstream_verified() {
     tree.sync(100);
     assert_eq!(in_graph(&tree.leaf, BOARD), in_graph(&tree.master, BOARD));
 }
+
+#[test]
+fn a_child_cannot_reopen_past_what_the_relay_verified() {
+    // ian's #828 SAME: upstream verified to 8, transaction 9 applied without its
+    // coverage. A child opening at since = 9 was admitted (the bound used the
+    // applied tx) and its first poll signed coverage 9.
+    let mut tree = Tree::new(source(), &[BOARD]);
+    tree.sync(100);
+    let verified = tree.relay_applier.coverage().unwrap();
+    write(
+        &mut tree.master,
+        BOARD,
+        "urn:item:uncovered",
+        "applied, not yet covered",
+    );
+    let (up, _) = tree.upstream.poll(&tree.master, 100, None).unwrap();
+    let tx_only: Vec<Frame> = up
+        .iter()
+        .filter(|f| f.event != event::COVERAGE)
+        .cloned()
+        .collect();
+    feed(&mut tree.relay, &mut tree.relay_applier, &tx_only, 3);
+    let applied = tree.relay_applier.progress().unwrap().source_tx;
+    assert!(applied > verified);
+    let board = vec![BOARD.to_string()];
+    let ahead = request(&tree.master, applied);
+    assert!(
+        Session::open_relay(&tree.relay, &ahead, (&board, &[]), "r".into(), identity()).is_err(),
+        "a cursor past the verified watermark must be refused"
+    );
+    // At the verified cursor a child opens, and its coverage never passes it.
+    let at = request(&tree.master, verified);
+    let (mut child, _) =
+        Session::open_relay(&tree.relay, &at, (&board, &[]), "v".into(), identity()).unwrap();
+    let (frames, _) = child.poll(&tree.relay, 100, None).unwrap();
+    for f in frames.iter().filter(|f| f.event == event::COVERAGE) {
+        let w: serde_json::Value = serde_json::from_str(&f.data).unwrap();
+        assert!(w["watermark"].as_i64().unwrap() <= verified, "{f:?}");
+    }
+}
