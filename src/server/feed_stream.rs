@@ -28,6 +28,8 @@ use super::{
 
 #[path = "feed_hub.rs"]
 pub(crate) mod feed_hub;
+#[path = "feed_ws.rs"]
+pub(crate) mod feed_ws;
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -145,6 +147,11 @@ impl Cursor {
             scanned: 0,
             _slot: slot,
         }
+    }
+
+    /// The last cursor this subscription delivered.
+    pub(crate) fn offset(&self) -> i64 {
+        self.offset
     }
 
     /// The next frame for this subscription, transport-independent; `None`

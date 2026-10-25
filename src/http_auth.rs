@@ -223,6 +223,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/events/graph", // one named graph's event log read (event-push §4)
     "/events/stream", // read-only replay; delivery never commits a consumer ACK
     "/changes/stream", // read-only transaction replay, including named graphs
+    "/feed/ws",      // the same two feeds over one WebSocket; no consumer ACK
     "/changes",      // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
     "/spotlight",
     "/fragments",
