@@ -1206,7 +1206,12 @@ The agent resolves a non-empty `QUIPU_AUTH_TOKEN`, then
 `QUIPU_AUTH_TOKEN_FILE` or the configured client token file. A missing
 credential stops the request before HTTP; it is not a reason to send an
 unauthenticated probe. Credentials stay server-side where possible and must
-never be printed. Requests carry `X-Quipu-Client: session-capture`. The act rate is
+never be printed. Requests carry `X-Quipu-Client: session-capture`. The gated writer
+also derives the structured agent, harness, model, session and host headers from
+the deployment's environment-based formatter. A client label and free-text source
+alone do not supply these fields. Never type or guess missing values: keep capture
+pending and report the gap before HTTP. These declarations describe provenance;
+they do not authenticate the caller. The act rate is
 `episodes whose source carries the session id / lines in solicit-log.jsonl`.
 
 ## Create and label named graphs

@@ -1,0 +1,45 @@
+Script started on 2026-10-25 09:05:32-04:00 [COMMAND="[private binary arguments redacted; see run.sh]" <not executed on terminal>]
+
+before: actual CLI solicitation, isolated state, no HTTP
+quipu 0.16.2
+git_sha: 4cd9e48d913e0312553de18114e585dbfc686d4a
+git_dirty: false
+$ quipu hook session-capture < same-stop-event.json
+If yes, capture it as a Quipu episode in group demo. Prefer the authenticated Quipu MCP tools or your deployment's gated graph-extract helper. For HTTP fallback, /search stays open, but /shapes vocabulary reads, POST https://example.invalid/episode and POST https://example.invalid/propose require Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, then QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the bearer server-side where possible and never print it. Send the header X-Quipu-Client: session-capture on every call so this traffic is attributable. Three rules:
+{
+  "structured_headers": {
+    "X-Quipu-Agent": false,
+    "X-Quipu-Harness": false,
+    "X-Quipu-Model": false,
+    "X-Quipu-Session": false,
+    "X-Quipu-Host": false
+  },
+  "derive_not_guess": false,
+  "missing_fields_keep_capture_pending": false,
+  "declarations_are_not_authentication": false,
+  "authenticated_mcp_preferred": true,
+  "credential_stop_before_http_preserved": true
+}
+
+after: actual CLI solicitation, isolated state, no HTTP
+quipu 0.16.2
+git_sha: 0f3cb74858469e23678fcd1da6e18017ba094c67
+git_dirty: false
+$ quipu hook session-capture < same-stop-event.json
+If yes, capture it as a Quipu episode in group demo. Prefer the authenticated Quipu MCP tools or your deployment's gated graph-extract helper. For HTTP fallback, /search stays open, but /shapes vocabulary reads, POST https://example.invalid/episode and POST https://example.invalid/propose require Authorization: Bearer <token>. Resolve a non-empty token from QUIPU_AUTH_TOKEN, then QUIPU_AUTH_TOKEN_FILE or the configured client token file. If no credential is available, stop before HTTP and report the missing credential; do not send an unauthenticated probe. Keep the bearer server-side where possible and never print it. Send the header X-Quipu-Client: session-capture on every call so this traffic is attributable. A client label and free-text source are not structured write provenance. Use the deployment's environment-based provenance formatter to derive X-Quipu-Agent, X-Quipu-Harness, X-Quipu-Model, X-Quipu-Session and X-Quipu-Host. The gated graph-extract writer supplies these headers automatically. Never type or guess these values; if any cannot be derived, keep capture pending and report the missing fields before HTTP. These declared headers describe provenance; they do not authenticate the caller. Three rules:
+{
+  "structured_headers": {
+    "X-Quipu-Agent": true,
+    "X-Quipu-Harness": true,
+    "X-Quipu-Model": true,
+    "X-Quipu-Session": true,
+    "X-Quipu-Host": true
+  },
+  "derive_not_guess": true,
+  "missing_fields_keep_capture_pending": true,
+  "declarations_are_not_authentication": true,
+  "authenticated_mcp_preferred": true,
+  "credential_stop_before_http_preserved": true
+}
+
+Script done on 2026-10-25 09:05:32-04:00 [COMMAND_EXIT_CODE="0"]
