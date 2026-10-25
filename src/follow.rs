@@ -158,16 +158,14 @@ impl<'a, F: Feed> Follower<'a, F> {
     /// frame budget.
     pub fn tail_once(&mut self, max_frames: Option<usize>) -> Result<(), Halt> {
         let reader = self.feed.stream(self.cursor()).map_err(Halt::Transport)?;
-        let mut frames = 0;
-        for event in SseEvents::new(reader) {
+        for (handled, event) in SseEvents::new(reader).enumerate() {
             let (name, data) = event.map_err(Halt::Transport)?;
             match self.apply(&name, &data)? {
                 Step::Continue => {}
                 Step::Resume => return Ok(()),
                 Step::Stop(halt) => return Err(halt),
             }
-            frames += 1;
-            if max_frames.is_some_and(|max| frames >= max) {
+            if max_frames.is_some_and(|max| handled + 1 >= max) {
                 return Err(Halt::Budget);
             }
         }

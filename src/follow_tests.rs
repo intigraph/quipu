@@ -39,11 +39,13 @@ fn source_with(n: usize) -> Rc<RefCell<Store>> {
     Rc::new(RefCell::new(s))
 }
 
+/// `(route, since)` of every request, in order.
+type Requests = Rc<RefCell<Vec<(&'static str, i64)>>>;
+
 /// What the primary serves, built from a live source store.
 struct Fake {
     source: Rc<RefCell<Store>>,
-    /// `since` of every request, in order.
-    requests: Rc<RefCell<Vec<(&'static str, i64)>>>,
+    requests: Requests,
     /// Cut the stream after this many frames with a read error.
     break_after: Option<usize>,
 }
@@ -103,7 +105,7 @@ impl Feed for Fake {
     }
 }
 
-fn fake(source: &Rc<RefCell<Store>>) -> (Fake, Rc<RefCell<Vec<(&'static str, i64)>>>) {
+fn fake(source: &Rc<RefCell<Store>>) -> (Fake, Requests) {
     let requests = Rc::new(RefCell::new(Vec::new()));
     let feed = Fake {
         source: source.clone(),

@@ -52,7 +52,7 @@ impl Http {
             .get(&format!("{}/graphs", self.base))
             .set("X-Quipu-Client", CLIENT)
             .call()
-            .map_err(transport)?
+            .map_err(|e| transport(&e))?
             .into_string()?;
         let graphs: serde_json::Value =
             serde_json::from_str(&body).map_err(std::io::Error::other)?;
@@ -68,7 +68,7 @@ impl Http {
     }
 }
 
-fn transport(error: ureq::Error) -> std::io::Error {
+fn transport(error: &ureq::Error) -> std::io::Error {
     std::io::Error::other(error.to_string())
 }
 
@@ -81,7 +81,7 @@ impl Feed for Http {
             .query("capture", "old_and_new_values")
             .set("X-Quipu-Client", CLIENT)
             .call()
-            .map_err(transport)?
+            .map_err(|e| transport(&e))?
             .into_string()
     }
 
@@ -93,7 +93,7 @@ impl Feed for Http {
             .set("Accept", "text/event-stream")
             .set("X-Quipu-Client", CLIENT)
             .call()
-            .map_err(transport)?;
+            .map_err(|e| transport(&e))?;
         Ok(Box::new(BufReader::new(response.into_reader())))
     }
 }
