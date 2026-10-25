@@ -99,6 +99,8 @@ pub mod shacl_cycles;
 #[cfg(feature = "shacl")]
 mod shacl_debt;
 pub mod share;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod verified_write;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
 // inside the module. The wasm explorer produces the same `share-delta/v1`
 // artifact the CLI does, and it can only do that if the builder compiles there
