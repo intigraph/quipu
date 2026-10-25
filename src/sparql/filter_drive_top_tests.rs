@@ -213,3 +213,30 @@ fn rows_the_filter_cannot_judge_take_no_place_in_the_top() {
     assert_eq!(old.rows().len(), 5);
     assert_eq!(ordered(&new), ordered(&old));
 }
+
+/// The survivor pass before the top `k` visits every kept row, up to the
+/// driver's scan ceiling, so it must keep the query budget (review of #838).
+/// A whole query cannot isolate it: the driver scan polls the same deadline
+/// first. Live context: the sure rows. Passed deadline: the budget error.
+#[test]
+fn the_survivor_pass_keeps_the_query_budget() {
+    let row = |v: &str| -> crate::sparql::Bindings {
+        [("k".to_string(), crate::types::Value::Str(v.to_string()))]
+            .into_iter()
+            .collect()
+    };
+    let kept = vec![row("a"), row("b"), row("c")];
+    let sure = [true, false, true];
+    let live = crate::sparql::TemporalContext::default();
+    let rows = super::sure_rows(&kept, &sure, &live).unwrap();
+    assert_eq!(rows, vec![row("a"), row("c")]);
+    let expired = crate::sparql::TemporalContext {
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..crate::sparql::TemporalContext::default()
+    };
+    let judged = super::sure_rows(&kept, &sure, &expired);
+    assert!(
+        matches!(judged, Err(crate::error::Error::QueryTimeout { .. })),
+        "{judged:?}"
+    );
+}

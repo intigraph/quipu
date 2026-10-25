@@ -238,17 +238,15 @@ pub(super) fn try_eval(
     // conjunct left unknown is one the caller's filter drops: its joined rows
     // see the same values, and an unknown conjunct makes the filter `false`
     // or a type error, never `true`. Only the sure rows can be returned.
-    let ordered = top.map(|(keys, k)| {
-        let survivors: Vec<Bindings> = kept
-            .iter()
-            .zip(&sure)
-            .filter(|(_, sure)| **sure)
-            .map(|(row, _)| row.clone())
-            .collect();
-        (survivors, keys, k)
-    });
-    let ordered =
-        ordered.filter(|(survivors, keys, _)| super::order_pushdown::total(store, survivors, keys));
+    // Both passes below visit every survivor, so both keep the query budget.
+    let ordered = match top {
+        Some((keys, k)) => {
+            let survivors = sure_rows(&kept, &sure, ctx)?;
+            super::order_pushdown::total_within(store, &survivors, &keys, ctx)?
+                .then_some((survivors, keys, k))
+        }
+        None => None,
+    };
     let joined = if let Some((survivors, keys, k)) = ordered {
         // Probing only about `k` survivors costs less than the original plan
         // however many the filter keeps, so the half-the-driver test is moot.
@@ -333,6 +331,19 @@ fn driver_keys(keys: &[OrderExpression], driver: &TriplePattern, seed: &Bindings
                 .iter()
                 .any(|v| super::order_pushdown::METADATA.contains(&v.as_str()))
     })
+}
+
+/// The kept rows every conjunct judged `true`, under the query budget: this
+/// visits every survivor, up to the driver's scan ceiling.
+fn sure_rows(kept: &[Bindings], sure: &[bool], ctx: &TemporalContext) -> Result<Vec<Bindings>> {
+    let mut rows = Vec::new();
+    for (i, (row, sure)) in kept.iter().zip(sure).enumerate() {
+        check_eval_budget(ctx, i, rows.len())?;
+        if *sure {
+            rows.push(row.clone());
+        }
+    }
+    Ok(rows)
 }
 
 /// Above this many ordered survivors, probe them all in scan order instead.

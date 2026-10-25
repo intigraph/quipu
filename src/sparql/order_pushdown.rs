@@ -92,17 +92,36 @@ pub(super) fn check(store: &Store, rows: &[Bindings], expression: &[OrderExpress
 /// Whether `rows` order totally under every key in `expression`: each key's
 /// values share one comparison class (see the module docs).
 pub(super) fn total(store: &Store, rows: &[Bindings], expression: &[OrderExpression]) -> bool {
-    expression.iter().all(|order| {
+    // No deadline on the default context, so this cannot fail.
+    total_within(store, rows, expression, &super::TemporalContext::default()).unwrap_or(false)
+}
+
+/// [`total`], polling the query budget while it judges the rows: the filter
+/// driver asks it of every survivor (up to its scan ceiling) before any probe.
+///
+/// # Errors
+/// The query budget.
+pub(super) fn total_within(
+    store: &Store,
+    rows: &[Bindings],
+    expression: &[OrderExpression],
+    ctx: &super::TemporalContext,
+) -> crate::error::Result<bool> {
+    for order in expression {
         let (OrderExpression::Asc(e) | OrderExpression::Desc(e)) = order;
         let mut class = None;
-        rows.iter().all(|row| {
+        for (i, row) in rows.iter().enumerate() {
+            super::pattern_util::check_eval_budget(ctx, i, 0)?;
             let Some(kind) = kind(super::filter::eval_expr(store, e, row).as_ref()) else {
-                return false;
+                return Ok(false);
             };
             // Unbound sorts first against everything, consistently.
-            kind == Kind::Unbound || *class.get_or_insert(kind) == kind
-        })
-    })
+            if kind != Kind::Unbound && *class.get_or_insert(kind) != kind {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
