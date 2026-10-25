@@ -320,3 +320,65 @@ fn one_transaction_over_the_page_cap_stops_the_run() {
     assert_eq!(requests.borrow().len(), 3);
     assert_eq!(follower.cursor(), 0);
 }
+
+#[test]
+fn a_follower_is_ready_only_after_its_bootstrap_reaches_the_watermark() {
+    use crate::follow_ready::{Readiness, readiness};
+    let source = source_with(10);
+    let expected = source.borrow().store_id().unwrap();
+    let mut replica = Store::open_in_memory().unwrap();
+    let (feed, _) = fake(&source);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    // Part of the history, as an interrupted bootstrap leaves it.
+    let first = page_json(&source.borrow(), 0, 3);
+    assert!(matches!(
+        follower.apply("quipu.changes", &first),
+        Ok(Step::Continue)
+    ));
+    assert_eq!(follower.cursor(), 3);
+    let partial = readiness(follower.store, Some(&expected)).unwrap();
+    assert!(
+        matches!(&partial, Readiness::NotReady { reason } if reason.contains("bootstrap")),
+        "{partial:?}"
+    );
+    follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+    let head = source.borrow().latest_tx_id().unwrap();
+    drop(follower);
+    match readiness(&replica, Some(&expected)).unwrap() {
+        Readiness::Ready {
+            lineage, source_tx, ..
+        } => {
+            assert_eq!(lineage, expected);
+            assert_eq!(source_tx, head);
+        }
+        other @ Readiness::NotReady { .. } => {
+            panic!("a caught-up follower must be ready: {other:?}")
+        }
+    }
+    // The right data for another store is still not this follower's job.
+    let other = readiness(&replica, Some("urn:uuid:another-store")).unwrap();
+    assert!(matches!(other, Readiness::NotReady { .. }), "{other:?}");
+}
+
+#[test]
+fn a_follower_whose_source_changed_is_not_ready() {
+    use crate::follow_ready::{Readiness, readiness};
+    let source = source_with(3);
+    let expected = source.borrow().store_id().unwrap();
+    let mut replica = Store::open_in_memory().unwrap();
+    let (feed, _) = fake(&source);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    follower.bootstrap(small_pace(), &mut |_| {}).unwrap();
+    drop(follower);
+    assert!(matches!(
+        readiness(&replica, Some(&expected)).unwrap(),
+        Readiness::Ready { .. }
+    ));
+    let other = source_with(5);
+    let (feed, _) = fake(&other);
+    let mut follower = Follower::open(&mut replica, feed).unwrap();
+    assert!(matches!(follower.tail_once(None), Err(Halt::Rebuild(_))));
+    drop(follower);
+    let after = readiness(&replica, Some(&expected)).unwrap();
+    assert!(matches!(after, Readiness::NotReady { .. }), "{after:?}");
+}

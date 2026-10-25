@@ -80,6 +80,8 @@ pub mod feed_parts;
 pub mod follow;
 #[cfg(feature = "remote")]
 pub mod follow_http;
+/// Whether a follower may serve reads in place of its primary (aegis-tnh).
+pub mod follow_ready;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_pin;

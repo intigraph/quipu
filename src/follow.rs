@@ -190,6 +190,8 @@ impl<'a, F: Feed> Follower<'a, F> {
             let next = page["next_tx"].as_i64().unwrap_or(since);
             // Caught up: the page reached the head, or it moved nothing.
             if next >= watermark || self.cursor() >= watermark || next <= since {
+                // Only now may the follower serve reads in the primary's place.
+                crate::follow_ready::mark_caught_up(self.store)?;
                 return Ok(pages);
             }
             sleep(pace.page_gap_ms);

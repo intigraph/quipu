@@ -155,6 +155,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // relay ends its children's sessions too. The same cursor's state:
     // excluded with it.
     ("replica_source_end", Disposition::Excluded),
+    // When the follower's bootstrap first reached its primary's watermark on
+    // that cursor's lineage, which makes it ready to serve reads (aegis-tnh).
+    // A copy has not bootstrapped anything: excluded with the cursor.
+    ("follow_caught_up", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.
