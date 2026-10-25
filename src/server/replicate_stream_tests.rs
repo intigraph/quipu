@@ -285,3 +285,6 @@ async fn a_follower_that_goes_away_frees_its_session() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
+
+#[path = "replicate_stream_relay_tests.rs"]
+mod relay;

@@ -210,6 +210,73 @@ Rules, in the order `apply` checks them:
   challenge (nonce echo, `W` observed after receipt). Until a source answers,
   `challenge` is accepted but no proof can arrive, so freshness stays UNKNOWN.
 
+## 6. Relays (s24.2 S4)
+
+A relay is a replica that serves its own children (`local-sync-mode.md` §6,
+"Fan-out"). The master then serves one stream per relay, not one per agent.
+A relay uses this same applier upstream and the same producer
+(`replicate_source::Session`) downstream. It adds no second applier and no
+second frame format.
+
+**Source numbering.** A replica commits each source transaction as a new LOCAL
+transaction, so its own change log is numbered locally. Children follow the
+SOURCE: their cursor, duplicate digests and coverage are all in source
+transaction ids. So the applier records which source transaction each local
+transaction it commits belongs to (`replica_tx_map(local_tx, source_tx)`,
+written in the same savepoint). A source transaction that spans graphs is
+several local transactions, and a bootstrap's local transactions all map to its
+watermark. A relay's producer reads its local log and states each frame's
+`source_tx` through that map. A local transaction with no map row (one the
+relay wrote itself) is never served. A relay refuses local writes anyway, so
+such a row means corruption: the session ends with a signed `control` frame
+of kind `relay_unmapped`, which the child treats like `tx_too_large`.
+
+**Bootstrap from a relay.** A child bootstraps from its relay's as-of share
+(`local-sync-mode.md` §6: "never from a fresh whole-graph export per agent").
+The relay cuts at the local transaction mapped to its source cursor. The
+manifest states the master's `source` and that source cursor as
+`watermark_tx`. A cut between mapped transactions, or below the relay's own
+bootstrap watermark, is refused.
+
+**Identity and source.**
+
+- Frames name the MASTER's `(store_id, log_epoch)`, unchanged. A child of a
+  relay is a replica of the master, so a restore or epoch change upstream
+  reaches every leaf as a source change.
+- Session, coverage and control frames are signed by the RELAY's own stream
+  key. A child pins its relay's key, never the master's: a coverage frame is
+  an assertion by its signer, and the relay is the one asserting what it has
+  sent.
+
+**Scope.** A relay serves only a subset of its own scope. A child request is
+resolved against the relay's pinned scope lists, never against graphs the
+relay merely happens to hold. Read authorization is re-checked at the relay
+for every transfer, as at the master (§4 of local-sync).
+
+**Coverage.** A relay's coverage to a child is at most the coverage it has
+verified from upstream. A relay holds every in-scope source transaction up to
+its upstream `W`, and nothing beyond it. Heartbeats repeat the last coverage.
+
+**Freshness, per hop.** A child's challenge reaching a relay is answered only
+from an upstream challenge that the relay sends AFTER the child's challenge
+arrived. The upstream answer (`ProofAccepted`, with `W_up`) is relayed as a
+coverage frame to the child, echoing the child's nonce. Every transaction up
+to `W_up` is sent to the child before that frame. The child's bound,
+`now - t_send(child)`, then covers both hops, and no clocks are compared
+across machines. A relay whose upstream session is down answers no
+challenges, so its children's freshness becomes UNKNOWN.
+
+**Acceptance (S4):**
+
+- A grandchild (master -> relay -> leaf) equals the master in scope.
+- A >1 MiB transaction crosses the relay in parts, with nothing visible at the
+  leaf before the barrier.
+- A leaf challenge yields a bound only after a fresh upstream proof; with the
+  upstream down, the leaf stays UNKNOWN.
+- An epoch change at the master reaches the leaf as `Rebootstrap`.
+- A relay refuses a child scope outside its own.
+- The master serves N leaves through one relay with one master stream.
+
 ## 5. Acceptance (from local-sync-mode.md §12, P2 row)
 
 Duplicate, reordered and dropped frames; an epoch change; a chunk cut

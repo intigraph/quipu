@@ -100,6 +100,10 @@ pub struct Session {
     ended: bool,
     part_max_len: Option<usize>,
     limits: Limits,
+    /// A relay: the store is a replica, served in its source's numbering.
+    relay: bool,
+    /// A relay's fresh upstream proof (`W_up`), not yet spent on a nonce.
+    upstream_proof: Option<i64>,
 }
 
 impl Session {
@@ -167,6 +171,8 @@ impl Session {
             ended: false,
             part_max_len: None,
             limits: Limits::default(),
+            relay: false,
+            upstream_proof: None,
         };
         let frame = session.session_frame();
         Ok((session, frame))
@@ -191,6 +197,15 @@ impl Session {
         self.ended
     }
 
+    /// A relay's upstream proof: the relay's own challenge, sent AFTER the
+    /// child's challenge arrived, was accepted upstream at coverage
+    /// `watermark` (§6, "Freshness, per hop"). The next child nonce may then
+    /// be answered once the relay holds that coverage; one proof answers one
+    /// nonce. A relay answers no nonce without one.
+    pub fn upstream_proof(&mut self, watermark: i64) {
+        self.upstream_proof = Some(watermark);
+    }
+
     /// Split parts at `max_len` bytes instead of the frame budget (tests).
     #[must_use]
     pub fn with_part_max_len(mut self, max_len: usize) -> Self {
@@ -207,8 +222,9 @@ impl Session {
 
     /// Read at most `max_txs` new transactions and the coverage they reach.
     /// `nonce` is an unanswered challenge: it is answered if this poll reaches
-    /// the head, and returned unanswered (`false`) otherwise. A poll that adds
-    /// nothing sends nothing unless it answers a nonce.
+    /// the head, and returned unanswered (`false`) otherwise. On a relay it is
+    /// answered only after [`Self::upstream_proof`]. A poll that adds nothing
+    /// sends nothing unless it answers a nonce.
     ///
     /// # Errors
     /// A store error; nothing was sent and the session may be polled again.
@@ -226,19 +242,66 @@ impl Session {
             .is_autocommit()
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
-        if store.store_id()? != self.store_id || store.log_epoch()? != self.log_epoch {
-            drop(read);
-            self.ended = true;
-            return Ok((
-                vec![self.control("epoch_end", "the source log epoch changed")],
-                false,
-            ));
+        let outcome = if self.relay {
+            self.relay_page(store, max_txs.max(1))?
+        } else {
+            self.source_page(store, max_txs.max(1))?
+        };
+        drop(read);
+        let mut frames = Vec::new();
+        let Page { by_tx, full, head } = match outcome {
+            Outcome::Page(page) => page,
+            Outcome::EpochEnd => {
+                self.ended = true;
+                frames.push(self.control("epoch_end", "the source log epoch changed"));
+                return Ok((frames, false));
+            }
+            Outcome::TooLarge(reason) => {
+                self.ended = true;
+                frames.push(self.control("tx_too_large", &reason));
+                return Ok((frames, false));
+            }
+        };
+        for (tx, records) in by_tx {
+            if !self.tx_frames(tx, &records, &mut frames) {
+                self.ended = true;
+                frames.push(self.control(
+                    "tx_too_large",
+                    &format!("source tx {tx} has a record larger than a frame"),
+                ));
+                return Ok((frames, false));
+            }
+            self.cursor = tx;
         }
-        // The bounded pre-pass (local-sync-mode.md §6): sizes are counted from
-        // SQL lengths, so an oversized transaction is refused, and a page is
-        // cut at its budget, before any record is built.
-        let max_txs = max_txs.max(1);
-        let counts = store.tx_rows_in_graphs(self.cursor, max_txs, &self.graphs)?;
+        let watermark = if full {
+            head.max(self.cursor)
+        } else {
+            self.cursor
+        };
+        let proven = !self.relay || self.upstream_proof.is_some_and(|w| watermark >= w);
+        let answer = nonce.filter(|_| full && proven);
+        if answer.is_some() && self.relay {
+            self.upstream_proof = None;
+        }
+        if answer.is_some() || self.coverage.is_none_or(|c| watermark > c) {
+            frames.push(self.coverage_frame(watermark, answer));
+        }
+        Ok((frames, answer.is_some()))
+    }
+
+    /// How many transactions after `after` (in the store's own numbering) one
+    /// page takes under the limits (local-sync-mode.md §6), and whether those
+    /// are every transaction after it. Sizes are counted from SQL lengths, so
+    /// an oversized transaction is refused, and a page is cut at its budget,
+    /// before any record is built. `Err` is the `tx_too_large` reason, when
+    /// the first transaction alone is over the transaction limits.
+    fn budget(
+        &self,
+        store: &Store,
+        after: i64,
+        max_txs: usize,
+    ) -> Result<std::result::Result<(usize, bool), String>> {
+        let counts = store.tx_rows_in_graphs(after, max_txs, &self.graphs)?;
         let limits = self.limits;
         let (mut take, mut rows, mut bytes) = (0, 0, 0);
         for &(tx, tx_rows) in &counts {
@@ -251,17 +314,14 @@ impl Session {
             };
             if tx_bytes.is_none_or(|b| b > limits.tx_max_bytes) {
                 if take == 0 {
-                    drop(read);
-                    self.ended = true;
                     let size = tx_bytes.map_or_else(
                         || format!("{tx_rows} rows"),
                         |b| format!("over {b} encoded bytes"),
                     );
-                    let reason = format!(
+                    return Ok(Err(format!(
                         "source tx {tx} has {size} in scope; the limit is {} rows and {} bytes",
                         limits.tx_max_rows, limits.tx_max_bytes
-                    );
-                    return Ok((vec![self.control("tx_too_large", &reason)], false));
+                    )));
                 }
                 break;
             }
@@ -276,16 +336,24 @@ impl Session {
             bytes += tx_bytes;
             take += 1;
         }
-        // Every transaction after the cursor is in this page.
-        let full = counts.len() < max_txs && take == counts.len();
+        Ok(Ok((take, counts.len() < max_txs && take == counts.len())))
+    }
+
+    /// The next page of whole source transactions on a source store.
+    fn source_page(&self, store: &Store, max_txs: usize) -> Result<Outcome> {
+        if store.store_id()? != self.store_id || store.log_epoch()? != self.log_epoch {
+            return Ok(Outcome::EpochEnd);
+        }
+        let (take, full) = match self.budget(store, self.cursor, max_txs)? {
+            Ok(taken) => taken,
+            Err(reason) => return Ok(Outcome::TooLarge(reason)),
+        };
         let page = store.changes_in_graphs(
             self.cursor,
             take.max(1),
             Capture::OldAndNewValues,
             &self.graphs,
         )?;
-        drop(read);
-        let mut frames = Vec::new();
         let mut by_tx: BTreeMap<i64, Vec<Json>> = BTreeMap::new();
         for record in page.records {
             by_tx
@@ -293,27 +361,11 @@ impl Session {
                 .or_default()
                 .push(record);
         }
-        for (tx, records) in by_tx {
-            if !self.tx_frames(tx, &records, &mut frames) {
-                self.ended = true;
-                frames.push(self.control(
-                    "tx_too_large",
-                    &format!("source tx {tx} has a record larger than a frame"),
-                ));
-                return Ok((frames, false));
-            }
-            self.cursor = tx;
-        }
-        let watermark = if full {
-            page.watermark_tx.max(self.cursor)
-        } else {
-            self.cursor
-        };
-        let answer = nonce.filter(|_| full);
-        if answer.is_some() || self.coverage.is_none_or(|c| watermark > c) {
-            frames.push(self.coverage_frame(watermark, answer));
-        }
-        Ok((frames, answer.is_some()))
+        Ok(Outcome::Page(Page {
+            by_tx,
+            full,
+            head: page.watermark_tx,
+        }))
     }
 
     /// A signed heartbeat: the last coverage again, so an idle follower keeps
@@ -450,9 +502,27 @@ impl Session {
     }
 }
 
+/// What one poll read: a page, or the reason the session ends.
+enum Outcome {
+    Page(Page),
+    EpochEnd,
+    TooLarge(String),
+}
+
+/// One page of whole source transactions, and whether it reached the head.
+struct Page {
+    by_tx: BTreeMap<i64, Vec<Json>>,
+    full: bool,
+    /// The coverage the page may claim when it is full.
+    head: i64,
+}
+
 fn refused(message: &str) -> CutError {
     CutError::Refused(Error::InvalidValue(message.into()))
 }
+
+#[path = "replicate_source_relay.rs"]
+mod relay;
 
 #[cfg(test)]
 #[path = "replicate_source_tests.rs"]

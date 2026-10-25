@@ -54,6 +54,8 @@ use crate::types::{Op, Value};
 mod chunk;
 #[path = "applier_digest.rs"]
 mod digest;
+#[path = "applier_map.rs"]
+pub mod map;
 #[path = "applier_record.rs"]
 mod record;
 #[path = "applier_start.rs"]
@@ -188,6 +190,8 @@ impl Applier {
         store.conn.execute_batch(PROGRESS_DDL)?;
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
         store.conn.execute_batch(digest::STOP_DDL)?;
+        store.conn.execute_batch(map::MAP_DDL)?;
+        store.conn.execute_batch(map::ENDED_DDL)?;
         bootstrap::discard_open_share(store)?;
         let progress = store
             .conn
@@ -228,6 +232,28 @@ impl Applier {
     /// [`Error::Sqlite`] or a write error if the local store fails; the frame
     /// is then not applied and the cursor has not moved.
     pub fn apply_frame(
+        &mut self,
+        store: &mut Store,
+        event: &str,
+        data: &str,
+        now_ms: u64,
+    ) -> Result<Outcome> {
+        // The lineage this replica held before the frame. Any Rebootstrap ends
+        // it (a signed epoch_end, an unframeable transaction, or a different
+        // source seen on reconnect), so a relay ends its children on it too.
+        let held = self
+            .progress
+            .as_ref()
+            .map(|p| p.source.clone())
+            .or_else(|| self.stream.covered().cloned());
+        let outcome = self.apply_frame_inner(store, event, data, now_ms)?;
+        if let (Outcome::Rebootstrap { reason }, Some(held)) = (&outcome, held) {
+            map::record_end(store, &held, reason)?;
+        }
+        Ok(outcome)
+    }
+
+    fn apply_frame_inner(
         &mut self,
         store: &mut Store,
         event: &str,
@@ -422,7 +448,8 @@ impl Applier {
                 }
                 continue;
             }
-            match apply_one_tx(store, source, tx, &records)? {
+            let first = self.progress.is_none();
+            match apply_one_tx(store, source, tx, &records, first)? {
                 None => {
                     self.progress = Some(Progress {
                         source: source.clone(),
@@ -463,6 +490,7 @@ fn apply_one_tx(
     source: &Source,
     tx: i64,
     records: &[&Json],
+    first: bool,
 ) -> Result<Option<String>> {
     let timestamp = records[0]["timestamp"]
         .as_str()
@@ -477,6 +505,11 @@ fn apply_one_tx(
     }
     store.conn.execute_batch("SAVEPOINT replica_apply")?;
     let result = (|| -> Result<Option<String>> {
+        if first {
+            // A replica tailing from transaction 0 holds the source from 0:
+            // map local 0 to source 0 so a relay can serve a child from 0.
+            map::record(store, source, 0, 0)?;
+        }
         for (graph, records) in &by_graph {
             let mut datums = Vec::with_capacity(records.len());
             for record in records {
@@ -486,10 +519,12 @@ fn apply_one_tx(
                 }
             }
             if graph == "ROOT" {
-                store.transact(&datums, &timestamp, None, None)?;
+                let local = store.transact(&datums, &timestamp, None, None)?;
+                map::record(store, source, local, tx)?;
             } else {
                 let g = store.graph_create(graph)?;
-                store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+                let local = store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+                map::record(store, source, local, tx)?;
             }
         }
         // Every record decoded above, so its exact encoding exists.

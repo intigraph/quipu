@@ -331,10 +331,12 @@ fn write_batch(
             }
         }
         if graph == "ROOT" {
-            store.transact(&datums, &timestamp, None, None)?;
+            let local = store.transact(&datums, &timestamp, None, None)?;
+            super::map::record(store, &share.source, local, share.watermark)?;
         } else {
             let g = store.graph_create(graph)?;
-            store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+            let local = store.transact_to_graph(&datums, &timestamp, None, None, g)?;
+            super::map::record(store, &share.source, local, share.watermark)?;
         }
     }
     Ok(None)

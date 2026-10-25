@@ -615,6 +615,26 @@ pub struct ReplicaConfig {
     pub primary_url: String,
 }
 
+/// Opt-in relay (docs/design/shared-applier-api.md §6): the store follows an
+/// upstream's `POST /replicate/stream` through the shared applier and serves
+/// its own children inside `graphs`. It accepts no other writes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RelayConfig {
+    /// The upstream's base URL (a source or another relay).
+    pub upstream_url: String,
+    /// The upstream source's store identity, pinned.
+    pub upstream_store_id: String,
+    /// The upstream's stream key (ed25519 public key, hex), pinned: coverage
+    /// is trusted only under this key, never under one the stream names.
+    pub upstream_key: String,
+    /// The relay's scope graphs.
+    pub graphs: Vec<String>,
+    /// Context graphs the scope needs.
+    #[serde(default)]
+    pub context_graphs: Vec<String>,
+}
+
 /// REST API server configuration.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -651,6 +671,9 @@ pub struct ServerConfig {
 
     /// Opt-in follower serving: SQLite read-only opens, no writers, 503 on writes.
     pub replica: Option<ReplicaConfig>,
+
+    /// Opt-in relay: follow an upstream stream and serve children (s24.2 S4).
+    pub relay: Option<RelayConfig>,
 
     /// CORS origin allowlist (hq-azs). Empty (default) = allow any origin,
     /// preserving the existing browser-tab behaviour; non-empty restricts
@@ -728,6 +751,7 @@ impl Default for ServerConfig {
             previous_auth_token_expires_at_epoch_secs: None,
             read_only: false,
             replica: None,
+            relay: None,
             cors_allowed_origins: Vec::new(),
             read_pool_size: 4,
             memory_budget_mib: None,

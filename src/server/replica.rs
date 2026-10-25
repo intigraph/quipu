@@ -167,6 +167,18 @@ pub(crate) async fn headers(
             }
         }
     }
+    if let Some(relay) = &store.relay {
+        // The relay's own freshness from its upstream: a proven bound, never
+        // a guess; UNKNOWN until a fresh upstream proof exists.
+        let bound = relay
+            .freshness()
+            .staleness_bound_ms
+            .map_or_else(|| "unknown".to_string(), |ms| ms.to_string());
+        response.headers_mut().insert(
+            "x-quipu-relay-staleness-ms",
+            bound.parse().expect("numeric bound"),
+        );
+    }
     response
 }
 

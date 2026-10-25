@@ -47,6 +47,8 @@ pub(crate) struct StoreHandle {
     pub(crate) attest_http: bool,
     pub(crate) query_capture: Option<Arc<super::query_capture::Capture>>,
     pub(crate) replica: Option<Arc<super::replica::ReplicaStatus>>,
+    /// A relay serves its children from this replica (s24.2 S4).
+    pub(crate) relay: Option<Arc<super::relay::Relay>>,
     /// Read-pool stores share the built-in `SQLite` vectors table, but cannot
     /// clone boxed external/LanceDB backends. Keep those searches on the writer
     /// so moving `SQLite` search to WAL readers never changes backend semantics.
@@ -177,6 +179,7 @@ impl StoreHandle {
             attest_http: false,
             query_capture: None,
             replica: None,
+            relay: None,
             federation,
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
@@ -220,6 +223,7 @@ impl StoreHandle {
             attest_http: false,
             query_capture: None,
             replica: None,
+            relay: None,
             federation: quipu::config::FederationConfig::default(),
             #[cfg(feature = "reactive-reasoner")]
             reasoner: None,
