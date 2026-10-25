@@ -533,6 +533,11 @@ These rulings must exist before the phase that depends on them starts:
 
 Merging this document does not count as any of those rulings.
 
+The proposed P1 model is detailed in
+[per-graph read authorization](graph-read-authorization.md). That proposal
+keeps the temporary bootstrap protection in place until its implementation
+and paired authorization controls are admitted.
+
 Benchmarks and production replays need their own authorization. None are
 granted by this document.
 
