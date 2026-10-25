@@ -155,10 +155,6 @@ async fn main() {
     // It refuses when this build cannot construct the configured one rather
     // than falling back to the SQLite table a migrated deployment has left.
     let is_replica = config.server.replica.is_some();
-    if is_replica && config.server.relay.is_some() {
-        eprintln!("error: server.replica and server.relay are exclusive");
-        std::process::exit(1);
-    }
     // A relay writes only through its applier (s24.2 S4): like a replica it
     // runs no writer jobs, observers or derivations, which would put local
     // transactions with no source in the log it serves from.
@@ -172,24 +168,9 @@ async fn main() {
     // a mystery; a missing file already refused the open above.
     base::report_attachments(&store);
 
-    // Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
-    // default (aegis-4h3x) — without this, `[quipu] base_ns = "..."` was inert
-    // and every REST/MCP ingest silently minted aegis IRIs. Data identity, so
-    // it must be set before the first write; announce it when it is non-default
-    // so a non-aegis deployment can see the namespace it is actually writing.
-    store.set_base_ns(config.base_ns.clone());
-    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
-        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
-    }
-    // Apply the entity-resolution policy so episode ingest actually dedups
-    // (hq-uye) — without this, `[quipu.resolution] enabled = true` is inert.
-    store.resolution_config_mut().clone_from(&config.resolution);
-    if config.resolution.enabled {
-        eprintln!(
-            "entity resolution enabled (threshold={}, top_k={}, strict={})",
-            config.resolution.threshold, config.resolution.top_k, config.resolution.strict_mode
-        );
-    }
+    // The configured base namespace and entity-resolution policy; see
+    // base::apply_identity_policies for why both must precede the first write.
+    base::apply_identity_policies(&mut store, &config);
 
     // Apply search/limit guardrails so callers can't request unbounded result
     // sets or scan the whole fact log (hq-gkd).
@@ -351,12 +332,7 @@ async fn main() {
     admission::init_request_budget_ms(store.search_config().request_timeout_ms);
     admission::init_episode_budget_ms(store.search_config().episode_request_timeout_ms);
 
-    let relay = config.server.relay.as_ref().map(|relay_config| {
-        relay::open(&store, relay_config).unwrap_or_else(|reason| {
-            eprintln!("error: cannot start the relay: {reason}");
-            std::process::exit(1)
-        })
-    });
+    let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
@@ -695,14 +671,6 @@ async fn main() {
     if let Some(replica) = config.server.replica {
         replica::start_metadata_reader(push_store_outer, replica);
     } else if let Some(relay) = relay {
-        eprintln!(
-            "relay: following {}",
-            config
-                .server
-                .relay
-                .as_ref()
-                .map_or("", |r| r.upstream_url.as_str())
-        );
         relay::start(push_store_outer, relay);
     } else {
         background::start(push_store_outer, config.events.retention_days);

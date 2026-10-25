@@ -61,6 +61,27 @@ pub(crate) fn report_attachments(store: &quipu::Store) {
     }
 }
 
+/// Mint IRIs under the CONFIGURED base namespace, not the hardcoded aegis
+/// default (aegis-4h3x): without this, `[quipu] base_ns = "..."` was inert
+/// and every REST/MCP ingest silently minted aegis IRIs. Data identity, so it
+/// must be set before the first write; it is announced when non-default so a
+/// non-aegis deployment can see the namespace it is actually writing. And
+/// apply the entity-resolution policy so episode ingest actually dedups
+/// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
+pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
+    store.set_base_ns(config.base_ns.clone());
+    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
+        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    }
+    store.resolution_config_mut().clone_from(&config.resolution);
+    if config.resolution.enabled {
+        eprintln!(
+            "entity resolution enabled (threshold={}, top_k={}, strict={})",
+            config.resolution.threshold, config.resolution.top_k, config.resolution.strict_mode
+        );
+    }
+}
+
 /// Install the configured vector backend, or exit naming the refusal
 /// (quipu-lv7).
 ///

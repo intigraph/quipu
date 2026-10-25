@@ -161,6 +161,26 @@ pub(crate) fn open(
     .map_err(|e| e.to_string())
 }
 
+/// The relay `config.server.relay` asks for, opened, or `None`. Exits the
+/// process when it cannot run: a relay that is also a replica, or one
+/// [`open`] refuses.
+pub(crate) fn open_configured(
+    store: &quipu::Store,
+    config: &quipu::QuipuConfig,
+) -> Option<Arc<Relay>> {
+    let relay_config = config.server.relay.as_ref()?;
+    let fail = |reason: &str| -> ! {
+        eprintln!("error: cannot start the relay: {reason}");
+        std::process::exit(1)
+    };
+    if config.server.replica.is_some() {
+        fail("server.replica and server.relay are exclusive");
+    }
+    let relay = open(store, relay_config).unwrap_or_else(|reason| fail(&reason));
+    eprintln!("relay: following {}", relay_config.upstream_url);
+    Some(relay)
+}
+
 /// A write the relay refuses: it accepts writes only from its applier.
 pub(crate) fn write_refusal(path: &str) -> axum::response::Response {
     use axum::response::IntoResponse as _;
