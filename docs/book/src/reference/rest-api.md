@@ -325,6 +325,26 @@ invalidate the result.
 
 All POST endpoints accept `Content-Type: application/json`.
 
+### `GET /replica/ready`
+
+On a read-only follower, whether it may serve reads in its primary's place,
+for example as a failover router's fallback check. It reads only the
+follower's own records and never asks the primary, so it keeps answering
+while the primary is down.
+
+- `200` with `{"ready": true, "lineage", "source_tx", "caught_up_at"}` when
+  the follower was built by `quipu follow`, holds the configured
+  `server.replica.expected_store_id`, and its bootstrap reached the primary's
+  watermark at least once on its current lineage.
+- `503` with `{"ready": false, "reason"}` otherwise: no expected store
+  configured, not an applier-built follower, another lineage, a bootstrap
+  still in progress, a follower the applier stopped, or a lineage that ended
+  (an epoch change at the source). The last two need a rebuild.
+- On a server that is not a replica: `503` with `reason: "not a replica"`.
+
+Readiness says nothing about lag. Every replica response states its
+staleness in the `X-Quipu-Replica-*` headers.
+
 ### `GET /watermark`
 
 A bounded, read-only metadata endpoint for replication observers. Returns

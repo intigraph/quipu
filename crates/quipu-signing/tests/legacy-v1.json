@@ -1,0 +1,6 @@
+{
+  "hash": "sha256:93c0449b603ded71e7bd77beeabf271eaed06702e1e6d9d730174dca914099b5",
+  "message": "v1|fixture-policy|urn:fixture:target|satisfied|sha256:93c0449b603ded71e7bd77beeabf271eaed06702e1e6d9d730174dca914099b5|tree-sitter|yupana",
+  "public_key": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "signature": "32e46d68231f86b4d826194540af397f05165c5cd3e4dc4806848d20b7895c123f2c1a4853ae57e720b4418bcbe9bd2e7495138fd455b94124ee068abe39be07"
+}

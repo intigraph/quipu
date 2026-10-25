@@ -344,11 +344,11 @@ async fn main() {
     handle.log_query_phases = config.server.log_query_phases;
     handle.signed_route_switches(&config.server);
     handle.query_capture = query_capture::start(config.server.query_capture.as_ref(), &db_path);
-    handle.replica = config
-        .server
-        .replica
-        .as_ref()
-        .map(|_| Arc::new(replica::ReplicaStatus::default()));
+    handle.replica = config.server.replica.as_ref().map(|r| {
+        Arc::new(replica::ReplicaStatus::expecting(
+            r.expected_store_id.clone(),
+        ))
+    });
     #[cfg(feature = "reactive-reasoner")]
     let handle = handle.with_reasoner(reactive_reasoner);
     let state: SharedStore = handle.into_shared();
@@ -512,6 +512,7 @@ async fn main() {
         // Event log pull API (event-log P1)
         .route("/changes", get(changes_get))
         .route("/watermark", get(replica::watermark))
+        .route("/replica/ready", get(replica::ready))
         .route("/events", get(events_get))
         .merge(feed_stream::routes())
         .route("/events/commit", post(events_commit))

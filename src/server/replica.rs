@@ -68,6 +68,41 @@ struct Watermark {
     watermark_tx: i64,
 }
 
+/// `GET /replica/ready`: 200 only while this follower may serve reads in its
+/// primary's place ([`quipu::follow_ready::readiness`]), otherwise 503 with
+/// the reason. It never asks the primary.
+pub(crate) async fn ready(State(store): State<SharedStore>) -> axum::response::Response {
+    let Some(expected) = store.replica.as_ref().map(|r| r.expected_store_id.clone()) else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({"ready": false, "reason": "not a replica"})),
+        )
+            .into_response();
+    };
+    let readiness = super::base::blocking(move || {
+        let store = store.read();
+        Ok(quipu::follow_ready::readiness(&store, expected.as_deref())?)
+    })
+    .await;
+    match readiness {
+        Ok(quipu::follow_ready::Readiness::Ready {
+            lineage,
+            source_tx,
+            caught_up_at,
+        }) => axum::Json(serde_json::json!({
+            "ready": true, "lineage": lineage, "source_tx": source_tx,
+            "caught_up_at": caught_up_at,
+        }))
+        .into_response(),
+        Ok(quipu::follow_ready::Readiness::NotReady { reason }) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({"ready": false, "reason": reason})),
+        )
+            .into_response(),
+        Err(error) => error.into_response(),
+    }
+}
+
 pub(crate) async fn watermark(
     State(store): State<SharedStore>,
 ) -> Result<axum::Json<serde_json::Value>, super::base::AppError> {
@@ -92,8 +127,16 @@ pub(crate) struct ReplicaStatus {
     confirmed: Mutex<Option<Instant>>,
     /// The follower's own position, read every tick even with no primary.
     position: Mutex<Option<quipu::follow::Position>>,
+    /// The source store this follower must hold (`server.replica.expected_store_id`).
+    expected_store_id: Option<String>,
 }
 impl ReplicaStatus {
+    pub(crate) fn expecting(expected_store_id: Option<String>) -> Self {
+        Self {
+            expected_store_id,
+            ..Self::default()
+        }
+    }
     fn lag(&self) -> Option<i64> {
         self.observation
             .lock()

@@ -226,7 +226,11 @@ A file-level replication operator can serve a changing follower with:
 ```toml
 [quipu.server.replica]
 primary_url = "https://primary.example"
+expected_store_id = "<the primary's store_id>"
 ```
+
+`expected_store_id` is the source store this follower must hold. It is read
+only by `GET /replica/ready`, which answers 503 while it is unset.
 
 Start `quipu-server --read-only --db /path/to/follower.db` from that configuration
 directory. Keep `--read-only` in the service invocation: it refuses startup if
