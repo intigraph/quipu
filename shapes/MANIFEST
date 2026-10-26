@@ -108,6 +108,12 @@
       "action": "load",
       "name": "read-policy",
       "reason": "Owner-local read grant revision vocabulary; tenant imports never establish effective read policy."
+    },
+    {
+      "file": "shape-mappings.ttl",
+      "action": "load",
+      "name": "shape-mappings",
+      "reason": "C1 mapping declarations and atomic lifecycle records use these constraints; no mapping or read grant is created by loading vocabulary."
     }
   ]
 }

@@ -105,7 +105,7 @@ fn test_tool_query() {
 
 #[test]
 fn query_iris_are_compact_by_default_and_verbose_round_trips() {
-    let store = test_store_with_data();
+    let mut store = test_store_with_data();
     store
         .load_shapes(
             "prefixes",
@@ -126,7 +126,7 @@ fn query_iris_are_compact_by_default_and_verbose_round_trips() {
 
 #[test]
 fn search_iris_are_compact_by_default_and_verbose_round_trips() {
-    let store = test_store_with_data();
+    let mut store = test_store_with_data();
     store
         .load_shapes(
             "prefixes",
@@ -1827,11 +1827,11 @@ fn test_tool_set_unknown_entity_refused_new_predicate_allowed() {
 /// is a documented caller and must keep working (aegis-rtht / aegis-1y3q).
 #[test]
 fn test_tool_shapes_get_and_unknown_action() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     let shapes = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:S a sh:NodeShape ; sh:targetClass ex:T .\n";
 
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load", "name": "roundtrip", "turtle": shapes, "timestamp": "2026-07-20"
         }),
@@ -1840,7 +1840,7 @@ fn test_tool_shapes_get_and_unknown_action() {
 
     // get -> exact content back, so a caller can verify WHICH shapes are loaded.
     let got = tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({"action": "get", "name": "roundtrip"}),
     )
     .expect("get should succeed for a loaded set");
@@ -1853,7 +1853,7 @@ fn test_tool_shapes_get_and_unknown_action() {
     // get on an unknown name is an error, not an empty success.
     assert!(
         tool_shapes(
-            &store,
+            &mut store,
             &serde_json::json!({"action": "get", "name": "absent"})
         )
         .is_err(),
@@ -1861,7 +1861,7 @@ fn test_tool_shapes_get_and_unknown_action() {
     );
 
     // A typo must NOT silently behave like `list`.
-    let typo = tool_shapes(&store, &serde_json::json!({"action": "laod"}));
+    let typo = tool_shapes(&mut store, &serde_json::json!({"action": "laod"}));
     assert!(
         typo.is_err(),
         "an unknown action must error, not fall through to list"
@@ -1869,11 +1869,11 @@ fn test_tool_shapes_get_and_unknown_action() {
 
     // Explicit and implicit list both still work.
     assert_eq!(
-        tool_shapes(&store, &serde_json::json!({"action": "list"})).unwrap()["count"],
+        tool_shapes(&mut store, &serde_json::json!({"action": "list"})).unwrap()["count"],
         1
     );
     assert_eq!(
-        tool_shapes(&store, &serde_json::json!({})).unwrap()["count"],
+        tool_shapes(&mut store, &serde_json::json!({})).unwrap()["count"],
         1,
         "a bare {{}} probe must keep defaulting to list"
     );
@@ -1881,7 +1881,7 @@ fn test_tool_shapes_get_and_unknown_action() {
 
 #[test]
 fn test_tool_shapes_vocabulary_unions_targets_and_abstract_parents() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -1892,14 +1892,14 @@ bobbin:CodeShape a sh:NodeShape ; sh:targetClass bobbin:CodeSymbol .
 aegis:WebApplication rdfs:subClassOf aegis:Service .
 "#;
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load", "name": "mixed-prefixes", "turtle": shapes
         }),
     )
     .unwrap();
 
-    let got = tool_shapes(&store, &serde_json::json!({"action": "vocabulary"})).unwrap();
+    let got = tool_shapes(&mut store, &serde_json::json!({"action": "vocabulary"})).unwrap();
     assert_eq!(got["count"], 3);
     assert_eq!(
         got["classes"],
@@ -1929,10 +1929,10 @@ ex:PersonShape a sh:NodeShape ;
         "turtle": shapes,
         "timestamp": "2026-04-04"
     });
-    tool_shapes(&store, &load_input).unwrap();
+    tool_shapes(&mut store, &load_input).unwrap();
 
     let list_input = serde_json::json!({ "action": "list" });
-    let list_result = tool_shapes(&store, &list_input).unwrap();
+    let list_result = tool_shapes(&mut store, &list_input).unwrap();
     assert_eq!(list_result["count"], 1);
 
     let good_input = serde_json::json!({
@@ -2013,15 +2013,18 @@ fn test_tool_definitions() {
     // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
     assert!(names.contains(&"quipu_merge_decisions"));
     assert!(names.contains(&"quipu_merge_apply"));
+    assert!(names.contains(&"quipu_mapping_propose"));
+    assert!(names.contains(&"quipu_mapping_decide"));
+    assert!(names.contains(&"quipu_mapping_apply"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 83);
+        assert_eq!(defs.len(), 86);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 81);
+        assert_eq!(defs.len(), 84);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }
@@ -2193,7 +2196,7 @@ fn test_propose_and_list_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_proposal_roundtrip() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a valid shape proposal.
     let shape_turtle = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -2224,7 +2227,7 @@ ex:PersonShape a sh:NodeShape ;
         "note": "Approved — looks correct",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let accept_result = super::proposal::tool_accept_proposal(&store, &accept).unwrap();
+    let accept_result = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap();
     assert_eq!(accept_result["status"], "accepted");
     assert_eq!(accept_result["proposal_id"], id);
 
@@ -2268,7 +2271,7 @@ fn test_reject_proposal_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_invalid_turtle_stays_pending() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a shape proposal with invalid Turtle.
     let propose = serde_json::json!({
@@ -2287,7 +2290,7 @@ fn test_accept_invalid_turtle_stays_pending() {
         "decided_by": "agent/reviewer",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let err = super::proposal::tool_accept_proposal(&store, &accept).unwrap_err();
+    let err = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap_err();
     assert!(err.to_string().contains("invalid"));
 
     // Proposal should still be pending.
@@ -3746,7 +3749,7 @@ fn test_tool_export_named_graph_subset() {
 fn knot_refuses_when_a_type_no_shape_targets_and_writes_nothing() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "vocab-advisory",
@@ -3782,7 +3785,7 @@ fn knot_refuses_when_a_type_no_shape_targets_and_writes_nothing() {
 fn knot_is_silent_when_every_type_is_governed() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "vocab-advisory",
@@ -3831,7 +3834,7 @@ fn knot_is_silent_when_every_type_is_governed() {
 fn knot_refuses_the_undeclared_half_of_a_dual_typed_node_atomically() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "vocab-advisory",
@@ -3870,7 +3873,7 @@ fn knot_refuses_the_undeclared_half_of_a_dual_typed_node_atomically() {
 fn episode_refuses_when_a_node_type_no_shape_targets_and_writes_nothing() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "vocab-advisory",
@@ -3911,7 +3914,7 @@ fn episode_refuses_when_a_node_type_no_shape_targets_and_writes_nothing() {
 fn episode_is_silent_when_every_node_type_is_governed() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "vocab-advisory",
@@ -3945,7 +3948,7 @@ fn episode_is_silent_when_every_node_type_is_governed() {
 fn vocabulary_gate_accepts_prefix_neutral_targets_and_declared_parents() {
     let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({
             "action": "load",
             "name": "mixed-vocabulary",
@@ -5112,7 +5115,7 @@ mod knot_on_violation {
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
 
     fn store_with(shapes: &str) -> Store {
-        let store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory().unwrap();
         store
             .load_shapes("aegis-ontology", shapes, "2026-10-01T00:00:00Z")
             .unwrap();

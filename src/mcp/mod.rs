@@ -14,6 +14,7 @@ pub mod graphiti;
 pub mod history;
 pub mod impact;
 pub mod knot;
+pub mod mapping;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod merge_decisions;
 pub mod named_query;
@@ -45,6 +46,7 @@ pub use governance::{
     tool_verifier_authorized,
 };
 pub use knot::tool_knot;
+pub use mapping::{tool_mapping_apply, tool_mapping_decide, tool_mapping_propose};
 pub use repair::tool_retract_source;
 
 use crate::error::{Error, Result};

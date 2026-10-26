@@ -108,7 +108,7 @@ impl Snapshot {
             }
         }
         for (name, turtle, loaded_at) in &ontologies {
-            scratch.load_ontology(name, turtle, loaded_at)?;
+            scratch.load_snapshot_ontology(name, turtle, loaded_at)?;
         }
         write.commit()?;
         read.commit()?;

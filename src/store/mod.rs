@@ -41,6 +41,8 @@ pub mod labels;
 pub mod labels_advisory;
 mod literal_identity;
 mod literal_overlay;
+mod mapping_atomic;
+mod mapping_writes;
 mod migrate;
 mod named_graphs;
 mod open;

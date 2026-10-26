@@ -257,6 +257,9 @@ async fn scoped_reads_identity_scope_method_alias_and_unknown_refusals_are_paire
         "/share/asof",
         "/replicate/stream",
         "/replicate/challenge",
+        "/mapping/propose",
+        "/mapping/decide",
+        "/mapping/apply",
     ] {
         assert_eq!(
             fixture.call("POST", path, Some("p"), json!({})).await.0,

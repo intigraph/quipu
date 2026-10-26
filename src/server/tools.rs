@@ -24,8 +24,8 @@ macro_rules! ro_handler {
             //
             // ⚠ `&Store` does NOT prove read-only, and assuming it does is the
             // mistake this comment exists to stop. `Store::intern` takes
-            // `&self` and runs an INSERT; so do `load_shapes`, `remove_shapes`,
-            // `load_ontology` and `remove_ontology`. The borrow checker cannot
+            // `&self` and runs an INSERT. Mutable registry writers are now
+            // explicit, but the borrow checker still cannot
             // tell a pooled-safe tool from a writing one, and this codebase has
             // already caught two handlers mis-registered as `ro_handler!` for
             // exactly that reason (see the notes on `set_predicate` and the
@@ -487,6 +487,8 @@ ro_handler!(context, quipu::tool_context);
 rw_handler!(propose_schema_change, quipu::tool_propose_schema_change);
 ro_handler!(list_proposals, quipu::tool_list_proposals);
 rw_handler!(accept_proposal, quipu::tool_accept_proposal);
+ro_handler!(mapping_propose, quipu::tool_mapping_propose);
+rw_handler!(mapping_apply, quipu::tool_mapping_apply);
 rw_handler!(reject_proposal, quipu::tool_reject_proposal);
 
 /// `/episode` in two phases (aegis-xi0).

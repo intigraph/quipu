@@ -179,7 +179,7 @@ impl Store {
     /// writes it to the `shapes` table. Returns the updated proposal.
     #[cfg(feature = "shacl")]
     pub fn accept_proposal(
-        &self,
+        &mut self,
         id: i64,
         decided_by: &str,
         decided_at: &str,
@@ -225,7 +225,7 @@ impl Store {
     /// Accept a proposal (non-SHACL build — no Turtle validation).
     #[cfg(not(feature = "shacl"))]
     pub fn accept_proposal(
-        &self,
+        &mut self,
         id: i64,
         decided_by: &str,
         decided_at: &str,

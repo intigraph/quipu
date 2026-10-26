@@ -11,6 +11,36 @@ use super::{AsOf, Store};
 use crate::error::Result;
 
 impl Store {
+    /// OWL snapshot reconstruction owns an empty private store and one copy
+    /// transaction. It copies retained ontology rows without invoking a live
+    /// lifecycle commit or installing mapping admission state.
+    #[cfg(feature = "owl")]
+    pub(crate) fn load_snapshot_ontology(
+        &self,
+        name: &str,
+        turtle: &str,
+        timestamp: &str,
+    ) -> Result<()> {
+        let transaction = self.get_transaction(self.latest_tx_id()?)?;
+        if self.conn.is_autocommit()
+            || transaction.as_ref().and_then(|tx| tx.source.as_deref()) != Some("owl:snapshot")
+            || self
+                .conn
+                .prepare("SELECT 1 FROM shape_mapping_state LIMIT 1")?
+                .exists([])?
+            || self
+                .conn
+                .prepare("SELECT 1 FROM shape_mapping_pins LIMIT 1")?
+                .exists([])?
+        {
+            return Err(crate::Error::InvalidValue(
+                "ontology copy requires an unadmitted private OWL snapshot transaction".into(),
+            ));
+        }
+        self.load_versioned("ontologies", name, turtle, timestamp)?;
+        self.emit_registry_event("ontology.loaded", name, timestamp)
+    }
+
     // -- Shape storage --
 
     /// Store a named SHACL shape graph, **closing** any prior version
@@ -20,30 +50,25 @@ impl Store {
     /// versions form an adjacent, gapless pair and an as-of read lands on
     /// exactly one. Emits a `shapes.loaded` event carrying the tx watermark —
     /// before this, the audit spine had **no record that the rules changed**.
-    pub fn load_shapes(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
-        // A recursive set must never reach the registry: every write validates
-        // against the combined loaded shapes, so it would refuse ALL writes
-        // (aegis-ahu0). Checked against the sets it will be combined with, since
-        // a cycle can cross sets; the version it replaces is left out.
-        let others: Vec<_> = self
-            .list_shapes()?
-            .into_iter()
-            .filter(|(n, _, _)| n != name)
-            .map(|(_, t, _)| t)
-            .collect();
-        crate::shacl_cycles::refuse_cyclic_shapes(&format!("{}\n{turtle}", others.join("\n")))?;
-        self.load_versioned("shapes", name, turtle, timestamp)?;
-        self.emit_registry_event("shapes.loaded", name, timestamp)
+    pub fn load_shapes(&mut self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        self.mapping_registry_change(
+            crate::shape_mapping::RegistryKind::Shapes,
+            name,
+            Some(turtle),
+            timestamp,
+        )
+        .map(|_| ())
     }
 
     /// Close a stored shape graph's current version. **Never deletes** — the
     /// history stays queryable, which is the whole point of #71.
-    pub fn remove_shapes(&self, name: &str) -> Result<bool> {
-        let closed = self.close_versioned("shapes", name, &crate::time::now_iso())?;
-        if closed {
-            self.emit_registry_event("shapes.removed", name, &crate::time::now_iso())?;
-        }
-        Ok(closed)
+    pub fn remove_shapes(&mut self, name: &str) -> Result<bool> {
+        self.mapping_registry_change(
+            crate::shape_mapping::RegistryKind::Shapes,
+            name,
+            None,
+            &crate::time::now_iso(),
+        )
     }
 
     /// Get the CURRENT stored shapes as a list of (name, turtle, `loaded_at`).
@@ -88,7 +113,14 @@ impl Store {
     // problem, so they get one implementation rather than two that can drift.
 
     /// Close the open row for `name`, then insert a new open row.
-    fn load_versioned(&self, table: &str, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+    pub(super) fn load_versioned(
+        &self,
+        table: &str,
+        name: &str,
+        turtle: &str,
+        timestamp: &str,
+    ) -> Result<()> {
+        let digest = crate::shape_mapping::canonical_shape_digest(turtle)?;
         let tx = self.latest_tx_id()?;
         self.conn
             .execute_batch(&format!("SAVEPOINT quipu_load_{table}"))?;
@@ -111,10 +143,10 @@ impl Store {
             )?;
             self.conn.execute(
                 &format!(
-                    "INSERT INTO {table} (name, turtle, loaded_at, valid_from, valid_to, tx) \
-                     VALUES (?1, ?2, ?3, ?3, NULL, ?4)"
+                    "INSERT INTO {table} (name, turtle, loaded_at, valid_from, valid_to, tx, digest) \
+                     VALUES (?1, ?2, ?3, ?3, NULL, ?4, ?5)"
                 ),
-                params![name, turtle, timestamp, tx],
+                params![name, turtle, timestamp, tx, digest],
             )?;
             Ok(())
         })();
@@ -134,7 +166,7 @@ impl Store {
     }
 
     /// Close the open row for `name`. Returns whether one was open.
-    fn close_versioned(&self, table: &str, name: &str, timestamp: &str) -> Result<bool> {
+    pub(super) fn close_versioned(&self, table: &str, name: &str, timestamp: &str) -> Result<bool> {
         let affected = self.conn.execute(
             &format!("UPDATE {table} SET valid_to = ?2 WHERE name = ?1 AND valid_to IS NULL"),
             params![name, timestamp],
@@ -227,22 +259,25 @@ impl Store {
     // -- Ontology storage --
 
     /// Store a named OWL ontology, **closing** any prior version (quipu #71).
-    pub fn load_ontology(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
-        // NOTE: &self, so the cache is invalidated by the /ontology tool after
-        // this returns (see invalidate_owl_cache). Kept here as the reminder that
-        // a stale cache would enforce yesterday's axioms.
-        self.load_versioned("ontologies", name, turtle, timestamp)?;
-        self.emit_registry_event("ontology.loaded", name, timestamp)
+    pub fn load_ontology(&mut self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        self.mapping_registry_change(
+            crate::shape_mapping::RegistryKind::Ontologies,
+            name,
+            Some(turtle),
+            timestamp,
+        )
+        .map(|_| ())
     }
 
     /// Close a stored ontology's current version. **Never deletes** — history
     /// stays queryable.
-    pub fn remove_ontology(&self, name: &str) -> Result<bool> {
-        let closed = self.close_versioned("ontologies", name, &crate::time::now_iso())?;
-        if closed {
-            self.emit_registry_event("ontology.removed", name, &crate::time::now_iso())?;
-        }
-        Ok(closed)
+    pub fn remove_ontology(&mut self, name: &str) -> Result<bool> {
+        self.mapping_registry_change(
+            crate::shape_mapping::RegistryKind::Ontologies,
+            name,
+            None,
+            &crate::time::now_iso(),
+        )
     }
 
     /// The stored ontologies as they stood at `as_of` (quipu #71).
