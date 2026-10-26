@@ -123,6 +123,12 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Master-local lifecycle admission/receipt state. A foreign pack carries
+    // mapping and audit RDF as content, but cannot authorize changes by
+    // installing a protected writer's execution cache. Missing cache with an
+    // existing mapping identity refuses new admission rather than overwriting.
+    ("shape_mapping_state", Disposition::Excluded),
+    ("shape_mapping_pins", Disposition::Excluded),
     // REPLAY STATE, and wrong in BOTH directions: carry spent nonces and a
     // legitimate re-import is refused as a replay; omit them silently and a
     // replay the origin had already spent is accepted on the copy. Excluding it

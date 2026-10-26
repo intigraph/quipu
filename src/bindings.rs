@@ -175,7 +175,7 @@ impl Engine {
             "storage": "memory",
             "features": { "shacl": cfg!(feature = "shacl") },
             "reasoning": "none_registered",
-            "shape_catalog": match crate::tool_shapes(&self.store, &json!({"action": "list"})) {
+            "shape_catalog": match crate::mcp::tools::list_shapes_json(&self.store) {
                 Ok(catalog) => json!({"state": "available", "catalog": catalog}),
                 Err(error) => json!({"state": "unknown", "error": error.to_string()}),
             },

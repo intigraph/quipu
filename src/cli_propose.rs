@@ -5,11 +5,11 @@ use crate::cli::chrono_now;
 pub fn cmd_propose(args: &[String], db_path: &str) {
     let action = args.get(2).map_or("list", std::string::String::as_str);
 
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
 
     match action {
         "submit" => cmd_propose_submit(args, &store),
-        "accept" => cmd_propose_accept(args, &store),
+        "accept" => cmd_propose_accept(args, &mut store),
         "reject" => cmd_propose_reject(args, &store),
         _ => cmd_propose_list(args, &store),
     }
@@ -136,7 +136,7 @@ fn decided_by_or_exit(args: &[String]) -> String {
     })
 }
 
-fn cmd_propose_accept(args: &[String], store: &quipu::Store) {
+fn cmd_propose_accept(args: &[String], store: &mut quipu::Store) {
     let id_str = match args.get(3) {
         Some(s) if !s.starts_with("--") => s.as_str(),
         _ => {

@@ -15,7 +15,7 @@ fn ingest(store: &mut Store, ts: &str, json: &str) {
     ingest_episode(store, &episode(json), ts, DEFAULT_BASE_NS).unwrap();
 }
 
-fn shape(store: &Store, name: &str, turtle: &str) {
+fn shape(store: &mut Store, name: &str, turtle: &str) {
     store.load_shapes(name, turtle, TS).unwrap();
 }
 
@@ -74,7 +74,7 @@ fn episode_minted_predicates_absent_from_every_shape_are_reported() {
 fn a_predicate_a_loaded_shape_mentions_is_not_reported() {
     let mut store = Store::open_in_memory().unwrap();
     shape(
-        &store,
+        &mut store,
         "hosts",
         &format!(
             "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\

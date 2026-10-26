@@ -451,9 +451,9 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
     // update document the delta builds from it.
     const POISONED_PARENT: &str = "<urn:leak> <urn:p> \"private.example\" .\n";
 
-    let delta = |parent_export: &str, no_shapes: bool, destination| {
+    let delta = |clean: &crate::Store, parent_export: &str, no_shapes: bool, destination| {
         crate::share_delta::build_delta(
-            &clean,
+            clean,
             "sha256:0",
             "sha256:0",
             parent_export,
@@ -467,7 +467,7 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
     use crate::share::ShareDestination::{Internal, Outward};
 
     // ---- the SET ----------------------------------------------------------
-    let built = delta(POISONED_PARENT, true, Internal).unwrap();
+    let built = delta(&clean, POISONED_PARENT, true, Internal).unwrap();
     let names: Vec<String> = built
         .files()
         .unwrap()
@@ -491,8 +491,8 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
     );
     // CONTROL: with a clean parent this same call succeeds outward, so the
     // refusal is the parent's content and not the fixture.
-    delta("", true, Outward).unwrap();
-    let error = delta(POISONED_PARENT, true, Outward).unwrap_err();
+    delta(&clean, "", true, Outward).unwrap();
+    let error = delta(&clean, POISONED_PARENT, true, Outward).unwrap_err();
     assert!(
         error.to_string().contains("refused delta.ru"),
         "delta.ru must be scrubbed on its own account: {error}"
@@ -508,8 +508,8 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         .unwrap();
     // CONTROL: shapes omitted, clean parent — succeeds, so the refusal below
     // is the shape text alone.
-    delta("", true, Outward).unwrap();
-    let error = delta("", false, Outward).unwrap_err();
+    delta(&clean, "", true, Outward).unwrap();
+    let error = delta(&clean, "", false, Outward).unwrap_err();
     assert!(
         error.to_string().contains("refused shapes.ttl"),
         "shapes.ttl must be scrubbed on its own account: {error}"

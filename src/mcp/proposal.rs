@@ -84,7 +84,7 @@ pub fn tool_list_proposals(store: &Store, input: &JsonValue) -> Result<JsonValue
 }
 
 /// MCP tool: `quipu_accept_proposal` -- Accept a pending schema proposal.
-pub fn tool_accept_proposal(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+pub fn tool_accept_proposal(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let id = input
         .get("id")
         .and_then(serde_json::Value::as_i64)

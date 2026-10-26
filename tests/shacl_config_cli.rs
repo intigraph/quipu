@@ -47,7 +47,7 @@ ex:good a ex:Thing ; ex:name \"good\" .
 fn store_with_loaded_shape(dir: &Path) -> String {
     let db = dir.join("store.db");
     let path = db.to_str().unwrap().to_string();
-    let store = quipu::Store::open(&path).unwrap();
+    let mut store = quipu::Store::open(&path).unwrap();
     store
         .load_shapes("cli-config-test", SHAPE, "2026-10-21T00:00:00Z")
         .unwrap();

@@ -5,8 +5,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `quipu-server` at `/mcp` over HTTP. (Bobbin embeds Quipu but serves its own
 `knowledge_*` tools, not these.)
 
-The registry (`tool_definitions()`) exposes **81 tools** in a default build, or
-**83** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **84 tools** in a default build, or
+**86** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -1227,3 +1227,35 @@ certify target coverage or graph completeness.
 
 Read serving version, source commit and dirty-build identity without REST.
 No arguments; version identity does not replace behavioral acceptance.
+
+### Shape mapping preparation and settlement
+
+- `quipu_mapping_propose` is read-only: qualify an explicit `mapping` against
+  registered graphs and exact current registry pins; return its proposal digest.
+- `quipu_mapping_decide` is read-only: bind explicit full-key row decisions to
+  `proposal` and declared `reviewer`; return the accepted mapping and digest.
+- `quipu_mapping_apply` writes either `action: "apply"` with a mapping object,
+  or `action: "retire"` with a mapping IRI. Both require `expected_digest` and
+  declared `actor`. Application may select an existing `operations_graph`.
+
+Declared authors are provenance, not credentials. Existing graph authority and
+validation remain enforced. Apply reports per-target `assert_writable`, and
+registry changes flag stale mappings atomically without automatic repinning.
+See [the REST mapping contract](rest-api.md#version-pinned-shape-mappings) for
+fields, the five allowed predicates, replay, and retirement semantics.
+
+### `quipu_mapping_propose`
+
+Read-only explicit mapping qualification. Supply `mapping` with exact registry
+pins and graph scopes. Returns the complete proposal and `expected_digest`.
+
+### `quipu_mapping_decide`
+
+Read-only row decisions. Supply `proposal`, declared `reviewer`, and full-key
+`decisions`. Returns the accepted mapping, digest, and declined rows.
+
+### `quipu_mapping_apply`
+
+Write the accepted mapping or retire an existing mapping using `action`,
+`mapping`, `expected_digest`, and declared `actor`. Application accepts an
+optional existing `operations_graph`. Normal graph authority remains required.

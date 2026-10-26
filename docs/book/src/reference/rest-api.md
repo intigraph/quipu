@@ -2622,3 +2622,46 @@ unknown axis values, and empty labels are errors. Create first via
 `GET /graphs` returns each row's `creation` together with class/lifecycle/labels.
 The [MCP-only recipe](../recipes/named-graph-mcp.md) exercises the same handlers
 without a REST client.
+
+## Version-pinned shape mappings
+
+`POST /mapping/propose`, `POST /mapping/decide`, and `POST /mapping/apply`
+expose the master-side mapping lifecycle. All three are owner-only on servers
+using scoped read authorization. Preparation grants no graph access.
+
+`/mapping/propose` accepts `{"mapping": M}`. `M` contains an `id`, a registered
+named `graph`, explicit `maps_from` and `maps_to` graph arrays, exact `pins`,
+and correspondence `rows`. Each pin specifies `registry` (`shapes` or
+`ontologies`), `name`, `valid_from`, and canonical RDF `digest`. Each row carries
+`subject_id`, `predicate_id`, `object_id`, `mapping_justification`, `author_id`,
+and `quipu_review`. The response binds the complete proposal to an
+`expected_digest`; proposing writes no transaction or decision.
+
+`/mapping/decide` accepts `proposal`, a declared reviewer IRI, and `decisions`.
+Each decision names the complete subject/predicate/object key and an `accept`
+boolean. Every proposed row needs exactly one decision. The response contains
+the accepted mapping and its new `expected_digest`. This is a pure preparation
+step: a reviewer name is provenance, not authentication or a write grant.
+
+`/mapping/apply` is a write. For application, supply `action: "apply"`, the
+accepted `mapping` object, its exact `expected_digest`, a declared `actor` IRI,
+and optionally an existing named `operations_graph`. The default operations
+graph is `urn:quipu:graph:operations`; it must already exist. Existing graph
+write authority and validation apply to both graphs. Application records its
+lifecycle decision and `MappingRecord` in the same transaction as the mapping.
+For retirement, supply `action: "retire"`, the mapping IRI as `mapping`,
+`expected_digest`, and `actor`. Retirement closes validity and retains history.
+
+Allowed correspondence predicates are `owl:equivalentClass`,
+`owl:equivalentProperty`, `owl:inverseOf`, `rdfs:subClassOf`, and
+`rdfs:subPropertyOf`, expressed as full IRIs. Chains and conflicting rows are
+refused. Receipts report `assert_writable` per target term: only a unique,
+invertible inverse across active mappings in overlapping target scope qualifies.
+Flagged and retired mappings report false. Exact application replay returns the
+original application record without resurrecting a retired mapping.
+
+Closing a pinned registry version flags affected mappings and records the old
+pin, replacement versions, lifecycle record, and `mapping.flagged` event in the
+same transaction. No mapping is automatically repinned. Explicitly proposing and
+applying the replacement pin produces a different digest. Loading mapping
+vocabulary alone creates no mapping, replica, scoped view, or grant.

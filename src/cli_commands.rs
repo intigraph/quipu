@@ -114,7 +114,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 pub fn cmd_shapes(args: &[String], db_path: &str) {
     let action = args.get(2).map_or("list", std::string::String::as_str);
 
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
 
     match action {
         "load" => {
@@ -145,7 +145,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
                 "turtle": turtle,
                 "timestamp": chrono_now(),
             });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(_) => println!("loaded shape graph \"{name}\" from {file_path}"),
                 Err(e) => {
                     eprintln!("error loading shapes: {e}");
@@ -162,7 +162,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
                 }
             };
             let input = serde_json::json!({ "action": "remove", "name": name });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(result) => {
                     if result["found"].as_bool().unwrap_or(false) {
                         println!("removed shape graph \"{name}\"");
@@ -178,7 +178,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
         }
         _ => {
             let input = serde_json::json!({ "action": "list" });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(result) => {
                     let shapes = result["shapes"].as_array().unwrap();
                     if shapes.is_empty() {
