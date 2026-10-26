@@ -19,6 +19,16 @@ is needed.
 2. **Evaluate**: Walk the AST, executing each graph pattern against SQLite
 3. **Return**: Variable bindings as `HashMap<String, Value>` rows
 
+A query keeps its SQLite reads in one read transaction, including separate
+aggregate or UNION arms. A concurrent writer can commit, but later operators
+in that query keep the snapshot established by its first read. A later query
+can see the committed changes. Success and errors release a transaction owned
+by the query; a caller-owned transaction keeps its original lifetime.
+
+Attached databases retain file-local snapshots established when each file is
+first read. This does not establish a global commit order across files or
+relax the existing restrictions on time travel with attachments.
+
 ```rust
 use quipu::store::Store;
 use quipu::sparql;
