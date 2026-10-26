@@ -49,6 +49,8 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/mapping.rs"]
+mod mapping;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]
@@ -436,6 +438,7 @@ async fn main() {
         .route("/share", post(publication::share_payload))
         .merge(publication::acquisition_routes())
         .merge(align::routes())
+        .merge(mapping::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/render", post(render_prepare))

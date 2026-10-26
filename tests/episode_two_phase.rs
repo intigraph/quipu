@@ -15,7 +15,7 @@ fn store(threshold: f64) -> Store {
         store.base_ns()
     );
     quipu::mcp::tools::tool_shapes(
-        &store,
+        &mut store,
         &json!({"action":"load", "name":"documents", "turtle":shapes}),
     )
     .unwrap();

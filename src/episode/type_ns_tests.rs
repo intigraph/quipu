@@ -11,9 +11,9 @@ use serde_json::json;
 const LEGACY: &str = namespace::DEFAULT_BASE_NS;
 
 fn store_with_shapes(turtle: &str) -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     tool_shapes(
-        &store,
+        &mut store,
         &json!({"action": "load", "name": "type-ns", "turtle": turtle}),
     )
     .unwrap();

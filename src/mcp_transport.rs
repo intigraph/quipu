@@ -69,6 +69,9 @@ fn endpoint(name: &str) -> (Method, String) {
         "quipu_align_propose" => "/align/propose",
         "quipu_align_decide" => "/align/decide",
         "quipu_align_apply" => "/align/apply",
+        "quipu_mapping_propose" => "/mapping/propose",
+        "quipu_mapping_decide" => "/mapping/decide",
+        "quipu_mapping_apply" => "/mapping/apply",
         "quipu_merge_decisions" => "/merge/decisions",
         "quipu_merge_apply" => "/merge/apply",
         "quipu_merge_resolve" => "/merge/resolve",
@@ -524,6 +527,7 @@ mod tests {
             assert!(
                 source.contains(&format!("\"{path}\""))
                     || include_str!("server/align.rs").contains(&format!("\"{path}\""))
+                    || include_str!("server/mapping.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/merge_decisions.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/snapshot_upload.rs").contains(&format!("\"{path}\""))
                     || include_str!("server/publication.rs").contains(&format!("\"{path}\""))

@@ -53,6 +53,31 @@ impl Store {
         timestamp: &str,
         retract_source: Option<&str>,
     ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
+        self.stage_source_claims_inner(datums, graph, tx, timestamp, retract_source, false)
+    }
+
+    /// C1 lifecycle changes close validity, retaining assertion history. The
+    /// logical before/after delta still reaches gates, events and observers.
+    /// The fact log retains the original assertion with its closed interval.
+    pub(super) fn stage_mapping_valid_time(
+        &self,
+        datums: &[super::Datum],
+        graph: i64,
+        tx: i64,
+        timestamp: &str,
+    ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
+        self.stage_source_claims_inner(datums, graph, tx, timestamp, None, true)
+    }
+
+    fn stage_source_claims_inner(
+        &self,
+        datums: &[super::Datum],
+        graph: i64,
+        tx: i64,
+        timestamp: &str,
+        retract_source: Option<&str>,
+        valid_time_only: bool,
+    ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
         use crate::Op;
         let source: Option<String> =
             self.conn
@@ -89,7 +114,7 @@ impl Store {
                         tx,
                         retract_source
                     ])?;
-                    if count > 0 {
+                    if count > 0 && !valid_time_only {
                         // Exact original blob in the immutable retraction log.
                         insert.execute(params![
                             datum.entity,

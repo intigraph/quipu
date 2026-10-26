@@ -28,11 +28,9 @@ pub(crate) async fn shapes(
     blocking(move || {
         let (out, work) = {
             let mut st = s.lock();
-            // `&st`, not `&mut st`: `tool_shapes` writes through `&self`
-            // (interior mutability over the SQLite connection) — see the
-            // ro_handler! warning in tools.rs about what `&Store` does NOT
-            // prove. The write-endpoint classification lives in http_auth.
-            let out = quipu::tool_shapes(&st, &i)?;
+            // Registry changes and dependent mapping flags settle through the
+            // mutable writer, before any post-commit observer runs.
+            let out = quipu::tool_shapes(&mut st, &i)?;
             (out, st.take_deferred_embed())
         };
         if let Some(work) = work {

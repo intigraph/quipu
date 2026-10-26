@@ -7,7 +7,7 @@ use serde_json::json;
 fn concurrent_allocation_cannot_race_a_shape_contract_edit() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("identity.db");
-    let store = Store::open(path.to_str().unwrap()).unwrap();
+    let mut store = Store::open(path.to_str().unwrap()).unwrap();
     let mut writer = Store::open(path.to_str().unwrap()).unwrap();
     let ty = "urn:example:Endpoint";
     let host = "urn:example:host";
@@ -33,29 +33,43 @@ fn concurrent_allocation_cannot_race_a_shape_contract_edit() {
         .load_shapes("endpoint", &shape, &crate::time::now_iso())
         .unwrap();
     let candidate = shape.replace("\"hash\"", "\"lexical\"");
-    let mut allocated = None;
-    let result = store.guard_shape_edit(|| {
-        // Establish the no-allocation snapshot before the other connection mints.
-        crate::entity_key_guard::check_shapes(&store, &candidate)?;
-        allocated = Some(tool_entity_ref(
-            &mut writer,
-            &json!({"action":"mint","namespace":"ep","type":ty,"keys":{host:"db.example"}}),
-        )?);
-        store.load_shapes_checked("endpoint", &candidate, &crate::time::now_iso())
-    });
+    // The registry edit's guard runs under the mapping settlement's writer
+    // reservation (BEGIN IMMEDIATE), so a key allocation cannot interleave
+    // between the identity check and the shape contract edit.
+    let mut raced = None;
+    let replayed = store
+        .mapping_atomic(
+            "urn:quipu:principal:test",
+            |store| {
+                crate::entity_key_guard::check_shapes(store, &candidate)?;
+                raced = Some(tool_entity_ref(
+                    &mut writer,
+                    &json!({"action":"mint","namespace":"ep","type":ty,"keys":{host:"db.example"}}),
+                ));
+                Ok(crate::store::mapping_atomic::Preparation::<(), ()>::Replay(()))
+            },
+            |_, (), _, _| unreachable!("a replay preparation never writes"),
+        )
+        .unwrap();
+    assert_eq!(replayed, ());
     assert!(
-        matches!(result, Err(crate::Error::Sqlite(rusqlite::Error::SqliteFailure(error, _)))
+        matches!(raced, Some(Err(crate::Error::Sqlite(rusqlite::Error::SqliteFailure(error, _))))
             if error.code == rusqlite::ErrorCode::DatabaseBusy),
-        "a stale read snapshot must not authorize a write"
+        "an allocation must not commit inside the shape edit's reservation: {raced:?}"
     );
     assert!(
         store.conn.is_autocommit(),
-        "refusal must release its snapshot"
+        "the settlement must release its reservation"
     );
+    let allocated = tool_entity_ref(
+        &mut writer,
+        &json!({"action":"mint","namespace":"ep","type":ty,"keys":{host:"db.example"}}),
+    )
+    .unwrap();
     assert_eq!(store.get_combined_shapes().unwrap().unwrap(), shape);
     let result = tool_entity_ref(
         &mut writer,
-        &json!({"action":"verify","iri":allocated.unwrap()["iri"]}),
+        &json!({"action":"verify","iri":allocated["iri"]}),
     )
     .unwrap();
     assert_eq!(result["verified"], true);

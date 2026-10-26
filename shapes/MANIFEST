@@ -107,6 +107,12 @@
       "file": "read-policy.ttl",
       "action": "exclude",
       "reason": "Owner-local policy carrier, not a served-graph profile. Protected owner-store semantic validation remains enforced; tenant imports never establish effective read authority."
+    },
+    {
+      "file": "shape-mappings.ttl",
+      "action": "load",
+      "name": "shape-mappings",
+      "reason": "C1 mapping declarations and atomic lifecycle records use these constraints; no mapping or read grant is created by loading vocabulary."
     }
   ]
 }
