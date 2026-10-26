@@ -12,6 +12,8 @@ fn ownership_copied_store_cannot_open_a_replication_session() {
         .conn
         .execute("VACUUM INTO ?1", [copy.to_str().unwrap()])
         .unwrap();
+    Store::adopt(copy.to_str().unwrap()).unwrap();
+    std::fs::remove_file(copy.with_extension("db.ownership.json")).unwrap();
     let copied = Store::open(copy.to_str().unwrap()).unwrap();
     assert!(Session::open(&copied, &request(&copied, 0), "copy".into(), identity()).is_err());
     Store::adopt(copy.to_str().unwrap()).unwrap();
@@ -77,6 +79,8 @@ fn ownership_relay_copy_refuses_and_adopting_an_owned_relay_ends_its_session() {
         .conn
         .execute("VACUUM INTO ?1", [path.to_str().unwrap()])
         .unwrap();
+    Store::adopt(path.to_str().unwrap()).unwrap();
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
     let copied = Store::open(path.to_str().unwrap()).unwrap();
     let allowed = vec![super::tests::BOARD.to_owned()];
     assert!(
@@ -103,4 +107,61 @@ fn ownership_relay_copy_refuses_and_adopting_an_owned_relay_ends_its_session() {
     let (frames, _) = session.poll(&relay, 100, None).unwrap();
     assert!(session.ended());
     assert!(frames.iter().any(|frame| frame.data.contains("epoch_end")));
+}
+
+#[test]
+fn ownership_legacy_stream_requests_remain_explicitly_inactive_without_minting() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy-source.db");
+    source()
+        .conn
+        .execute("VACUUM INTO ?1", [path.to_str().unwrap()])
+        .unwrap();
+    let src = Store::open(path.to_str().unwrap()).unwrap();
+    let epoch = src.log_epoch().unwrap();
+    for _ in 0..2 {
+        let (mut session, _) =
+            Session::open(&src, &request(&src, 0), "legacy".into(), identity()).unwrap();
+        assert_eq!(
+            session.ownership_state(),
+            crate::store::OwnershipState::Inactive
+        );
+        session.poll(&src, 100, None).unwrap();
+        assert_eq!(src.log_epoch().unwrap(), epoch);
+        assert!(src.require_ownership().is_err());
+    }
+}
+
+#[test]
+fn ownership_legacy_relay_repeated_requests_remain_inactive() {
+    let src = source();
+    let id = identity();
+    let (mut up, open) = Session::open(&src, &request(&src, 0), "up".into(), id.clone()).unwrap();
+    let (mut replica, mut applier) = follower(&id, up.scope());
+    feed(&mut replica, &mut applier, &[open], 1);
+    let (frames, _) = up.poll(&src, 100, None).unwrap();
+    feed(&mut replica, &mut applier, &frames, 1);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy-relay.db");
+    replica
+        .conn
+        .execute("VACUUM INTO ?1", [path.to_str().unwrap()])
+        .unwrap();
+    let relay = Store::open(path.to_str().unwrap()).unwrap();
+    let epoch = relay.log_epoch().unwrap();
+    let allowed = vec![super::tests::BOARD.to_owned()];
+    for _ in 0..2 {
+        let (mut s, _) = Session::open_relay(
+            &relay,
+            &request(&src, 0),
+            (&allowed, &[]),
+            "legacy".into(),
+            id.clone(),
+        )
+        .unwrap();
+        assert_eq!(s.ownership_state(), crate::store::OwnershipState::Inactive);
+        s.poll(&relay, 100, None).unwrap();
+        assert_eq!(relay.log_epoch().unwrap(), epoch);
+    }
+    assert!(relay.require_ownership().is_err());
 }

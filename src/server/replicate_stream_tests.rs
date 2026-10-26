@@ -297,6 +297,8 @@ async fn ownership_unadopted_disk_copy_is_forbidden_before_http_stream_admission
     original.graph_create(BOARD).unwrap();
     let bytes = original.serialize_db().unwrap();
     std::fs::write(&path, bytes).unwrap();
+    Store::adopt(path.to_str().unwrap()).unwrap();
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
     let mut copy = Store::open(path.to_str().unwrap()).unwrap();
     let doc = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
     copy.set_signing_identity(Arc::new(quipu::signing::SigningIdentity::new(

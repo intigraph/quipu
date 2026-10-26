@@ -16,6 +16,9 @@ pub mod datasets;
 pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
+pub use ownership::OwnershipState;
+#[cfg(test)]
+mod ownership_stage_a_tests;
 #[cfg(test)]
 mod ownership_tests;
 mod poststate_profile;

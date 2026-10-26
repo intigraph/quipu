@@ -1,7 +1,10 @@
 # Explicit store ownership
 
-A database copied to a new path must refuse writes until explicitly adopted.
-This local candidate demo makes a SQLite backup, observes the copied-store write
+An explicitly ENFORCED database copied to a new path refuses writes until
+explicitly adopted there. Stage A legacy databases remain INACTIVE; that
+compatibility state is not ownership acceptance.
+This local candidate demo reports initial INACTIVE status, explicitly adopts
+the source, makes a SQLite backup, observes the copied-store write
 refusal, adopts it and repeats the same write successfully. A second adoption
 must produce another epoch. All files are disposable; no service or installed
 store is touched.

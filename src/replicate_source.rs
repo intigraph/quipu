@@ -92,6 +92,7 @@ pub struct Session {
     store_id: String,
     log_epoch: String,
     local_epoch: String,
+    ownership: crate::store::OwnershipState,
     scope: String,
     graphs: Vec<i64>,
     since: i64,
@@ -139,7 +140,6 @@ impl Session {
         identity: Arc<SigningIdentity>,
         between: impl FnOnce(),
     ) -> std::result::Result<(Self, Frame), CutError> {
-        store.require_ownership()?;
         let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
         let read = store
             .conn
@@ -147,6 +147,7 @@ impl Session {
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
         let log_epoch = store.log_epoch()?;
+        let ownership = store.ownership_state()?;
         between();
         let store_id = store.store_id()?;
         if store_id != request.expected_store_id {
@@ -164,6 +165,7 @@ impl Session {
             identity,
             store_id,
             local_epoch: log_epoch.clone(),
+            ownership,
             log_epoch,
             scope: scope_digest(&scope, &context),
             graphs,
@@ -179,6 +181,13 @@ impl Session {
         };
         let frame = session.session_frame();
         Ok((session, frame))
+    }
+
+    /// Placement admission captured for this session; INACTIVE is legacy
+    /// compatibility, never an ownership-authorized capability.
+    #[must_use]
+    pub fn ownership_state(&self) -> crate::store::OwnershipState {
+        self.ownership
     }
 
     /// The session id.
@@ -245,7 +254,9 @@ impl Session {
             .is_autocommit()
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
-        let outcome = if store.log_epoch()? != self.local_epoch {
+        let local_epoch = store.log_epoch()?;
+        store.ownership_state()?;
+        let outcome = if local_epoch != self.local_epoch {
             Outcome::EpochEnd
         } else if self.relay {
             self.relay_page(store, max_txs.max(1))?

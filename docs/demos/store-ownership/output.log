@@ -1,4 +1,4 @@
-Script started on 2026-10-26 01:52:13-04:00 [COMMAND="python3 docs/demos/store-ownership/run-demo.py" <not executed on terminal>]
+Script started on 2026-10-26 04:23:34-04:00 [COMMAND="python3 docs/demos/store-ownership/run-demo.py" <not executed on terminal>]
 Candidate source only; isolated SQLite fixtures; no service or installation
 $ quipu read SELECT ?x WHERE { VALUES ?x { 1 } } --db original.db
 x
@@ -6,16 +6,20 @@ x
 1
 
 1 results
+$ quipu store status --db original.db
+{"ownership":"INACTIVE"}
+$ quipu store adopt --db original.db
+{"log_epoch":"urn:uuid:0b36a9f3-6eae-430c-a79e-9d6cab8ab70f","owned":true}
 SQLite backup copied database facts/identity, without adopting the new path
 $ quipu knot fact.ttl --db copy.db
 automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
 error ingesting: sqlite error: attempt to write a readonly database
 $ quipu store adopt --db copy.db
-{"log_epoch":"urn:uuid:27f8effd-6bbf-4c0a-858a-f95a4be62ef3","owned":true}
+{"log_epoch":"urn:uuid:c80a75b0-b409-4adf-87ea-6193c78ab23d","owned":true}
 $ quipu knot fact.ttl --db copy.db
 knotted 1 facts from fact.ttl (tx 1)
 $ quipu store adopt --db copy.db
-{"log_epoch":"urn:uuid:fa16ea36-9969-49c3-a4d4-a5f5be23bf5f","owned":true}
+{"log_epoch":"urn:uuid:aceacf17-c86c-47f1-89cf-c19f6649aa5e","owned":true}
 PASS: copy write refused; explicit adopt permits reopened writes; each adopt minted a fresh epoch
 
-Script done on 2026-10-26 01:52:13-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-26 04:23:34-04:00 [COMMAND_EXIT_CODE="0"]

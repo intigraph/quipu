@@ -24,6 +24,8 @@ with tempfile.TemporaryDirectory(prefix="store-ownership-demo-") as scratch:
 
     print("Candidate source only; isolated SQLite fixtures; no service or installation")
     run(["read", "SELECT ?x WHERE { VALUES ?x { 1 } }", "--db", "original.db"])
+    run(["store", "status", "--db", "original.db"])
+    run(["store", "adopt", "--db", "original.db"])
     source = sqlite3.connect(root / "original.db")
     destination = sqlite3.connect(root / "copy.db")
     source.backup(destination)

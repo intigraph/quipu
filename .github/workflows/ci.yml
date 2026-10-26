@@ -247,6 +247,20 @@ jobs:
           trap 'docker volume rm -f quipu-ci >/dev/null' EXIT
           timeout 180 python3 scripts/ci/mcp-stdio-smoke.py -- \
             docker run -i --rm -v quipu-ci:/data quipu-mcp:ci
+          # Actual container restart retains legacy data without pretending the
+          # image has a physical-host placement provider. No injected identity.
+          docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store status --db /data/quipu.db \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["ownership"] == "INACTIVE"'
+          docker run --rm --entrypoint /bin/sh quipu-mcp:ci -c 'test ! -s /etc/machine-id'
+          if docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store adopt --db /data/quipu.db; then
+            echo "ownership adoption succeeded without a host provider" >&2
+            exit 1
+          fi
+          docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store status --db /data/quipu.db \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["ownership"] == "INACTIVE"'
       - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
       - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
       - run: cargo test --no-default-features --features remote

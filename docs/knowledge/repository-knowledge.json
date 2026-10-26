@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "b9f1bbd285f69941fae92af4398129e7941893d4e4ba29766467644afbbae062",
+      "source_sha256": "f51569ae78d6f302d16af22aeee6ace909b12a7041639c9f75ec82547a28014f",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "a9fd838e1ea737a6b3b078692dc88f23194890ce5c7e70d113c28cdd7a281149",
+      "source_sha256": "42d5fdf5365fcc950c2f3d05c68ec93da879426235fb9dbce3738adf207e6baa",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

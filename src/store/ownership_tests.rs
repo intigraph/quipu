@@ -13,6 +13,8 @@ fn ownership_copy_refuses_sql_writes_until_explicit_adopt() {
     let dir = tempfile::tempdir().unwrap();
     let original = dir.path().join("original.db");
     let copy = dir.path().join("copy.db");
+    drop(Store::open(original.to_str().unwrap()).unwrap());
+    Store::adopt(original.to_str().unwrap()).unwrap();
     let store = Store::open(original.to_str().unwrap()).unwrap();
     let epoch = store.log_epoch().unwrap();
     store.require_ownership().unwrap();
@@ -43,6 +45,8 @@ fn ownership_copying_the_sidecar_cannot_launder_a_new_path_or_host() {
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("a.db");
     let b = dir.path().join("b.db");
+    drop(Store::open(a.to_str().unwrap()).unwrap());
+    Store::adopt(a.to_str().unwrap()).unwrap();
     let store = Store::open(a.to_str().unwrap()).unwrap();
     snapshot(&store, &b);
     std::fs::copy(
@@ -92,6 +96,8 @@ fn ownership_restore_is_consistent_new_epoch_and_never_overwrites() {
 fn ownership_adoption_is_explicit_each_time_and_missing_record_is_not_migrated() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let store = Store::open(path.to_str().unwrap()).unwrap();
     let before = store.log_epoch().unwrap();
     std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
@@ -110,6 +116,8 @@ fn ownership_configured_open_and_immutable_replication_cannot_bypass_binding() {
     let dir = tempfile::tempdir().unwrap();
     let a = dir.path().join("original.db");
     let b = dir.path().join("copy.db");
+    drop(Store::open(a.to_str().unwrap()).unwrap());
+    Store::adopt(a.to_str().unwrap()).unwrap();
     let original = Store::open_with_attachments(a.to_str().unwrap(), &[]).unwrap();
     original.require_ownership().unwrap();
     snapshot(&original, &b);
@@ -134,6 +142,8 @@ fn ownership_invalid_record_keeps_existing_database_bytes_unchanged() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     {
+        drop(Store::open(path.to_str().unwrap()).unwrap());
+        Store::adopt(path.to_str().unwrap()).unwrap();
         let store = Store::open(path.to_str().unwrap()).unwrap();
         store.checkpoint_wal_truncate().unwrap();
     }
@@ -155,6 +165,8 @@ fn ownership_invalid_record_keeps_existing_database_bytes_unchanged() {
 fn ownership_failed_sidecar_install_never_claims_adoption_success() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let original = Store::open(path.to_str().unwrap()).unwrap();
     let old = original.log_epoch().unwrap();
     let record = path.with_extension("db.ownership.json");
@@ -163,7 +175,10 @@ fn ownership_failed_sidecar_install_never_claims_adoption_success() {
     assert!(Store::adopt(path.to_str().unwrap()).is_err());
     // The epoch commit precedes the file install. The failure is partial, not
     // evidence of no change and never permission for an automatic retry.
-    assert_ne!(original.log_epoch().unwrap(), old);
+    let partial_epoch = original.log_epoch().unwrap();
+    assert_ne!(partial_epoch, old);
+    assert!(Store::adopt(path.to_str().unwrap()).is_err());
+    assert_eq!(original.log_epoch().unwrap(), partial_epoch);
     let inspected = Store::open(path.to_str().unwrap()).unwrap();
     assert!(inspected.require_ownership().is_err());
     assert!(

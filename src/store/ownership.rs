@@ -2,6 +2,16 @@
 use super::Store;
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
+
+/// Stage A distinguishes legacy compatibility from verified native ownership.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OwnershipState {
+    /// Legacy startup and streams work, but no owned capability is granted.
+    Inactive,
+    /// Sticky native placement has been explicitly adopted and verified.
+    Enforced,
+}
 use std::{
     fs,
     io::{Read, Write},
@@ -98,40 +108,96 @@ impl Store {
         path: &str,
         attachments: &[super::attach::Attachment],
     ) -> Result<Self> {
-        if path == ":memory:" {
-            return Self::init_with_attachments(
-                rusqlite::Connection::open_in_memory()?,
-                attachments,
-            );
-        }
-        let existing = fs::metadata(path).is_ok_and(|m| m.len() > 0);
-        if existing {
-            let inspected = Self::open_read_only(path)?;
-            if inspected.require_ownership().is_err() {
-                if !attachments.is_empty() {
-                    inspected.require_ownership()?;
-                }
-                return Ok(inspected);
-            }
-        }
         let conn = rusqlite::Connection::open(path)?;
-        let store = Self::init_with_attachments(conn, attachments)?;
-        if !existing {
-            store.bind_creation()?;
+        let inspected = Self::with_connection(conn);
+        // Check before any schema migration. Invalid sticky/partial state is
+        // inspectable only; selecting a default constructor cannot downgrade it.
+        if inspected.ownership_state().is_err() {
+            if !attachments.is_empty() {
+                inspected.ownership_state()?;
+            }
+            drop(inspected);
+            return Self::open_read_only(path);
         }
-        Ok(store)
+        Self::init_with_attachments(inspected.conn, attachments)
     }
 
-    /// Refuse replication from an unowned or relocated disk store. Memory-only
-    /// stores have no persistent copy to bind. Ordinary read inspection remains possible.
+    /// Explicit observable state. INACTIVE is not ownership authorization.
+    /// The database marker travels with raw copies; removing only the sidecar
+    /// cannot turn an enforced copy into an ordinary legacy store.
+    pub fn ownership_state(&self) -> Result<OwnershipState> {
+        let marked: bool = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='ownership_enforcement')",
+            [],
+            |r| r.get(0),
+        )?;
+        if !marked {
+            // Browser VFS has no native sidecar namespace. This is explicitly
+            // INACTIVE, never a successful ownership/provider check. A sticky
+            // SQLite marker below still refuses there, without a cfg fallback.
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(path) = self.conn.path().filter(|p| !p.is_empty()) {
+                match fs::symlink_metadata(sidecar(Path::new(path))) {
+                    Ok(_) => {
+                        return Err(failure(
+                            "partial ownership record without enforcement marker",
+                        ));
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+                    Err(e) => return Err(failure(e)),
+                }
+            }
+            return Ok(OwnershipState::Inactive);
+        }
+        let version: Vec<i64> = self
+            .conn
+            .prepare("SELECT version FROM ownership_enforcement WHERE id=1 AND phase='ready'")?
+            .query_map([], |r| r.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        let rows: i64 =
+            self.conn
+                .query_row("SELECT count(*) FROM ownership_enforcement", [], |r| {
+                    r.get(0)
+                })?;
+        if version != [1] || rows != 1 {
+            return Err(failure("malformed enforcement marker"));
+        }
+        self.verify_binding()?;
+        Ok(OwnershipState::Enforced)
+    }
+
+    /// Ownership-authorized capability check. Legacy/in-memory/browser INACTIVE
+    /// operation must never pass this check merely because it can serve reads.
     pub fn require_ownership(&self) -> Result<()> {
-        let Some(path) = self.conn.path().filter(|path| !path.is_empty()) else {
-            return Ok(());
-        };
+        match self.ownership_state()? {
+            OwnershipState::Enforced => Ok(()),
+            OwnershipState::Inactive => Err(failure("ownership enforcement is INACTIVE")),
+        }
+    }
+
+    fn verify_binding(&self) -> Result<()> {
+        self.verify_binding_with(host)
+    }
+
+    pub(super) fn verify_binding_with(
+        &self,
+        provider: impl FnOnce() -> Result<String>,
+    ) -> Result<()> {
+        let path = self
+            .conn
+            .path()
+            .filter(|path| !path.is_empty())
+            .ok_or_else(|| failure("native disk placement unavailable"))?;
         let canonical = Path::new(path).canonicalize().map_err(failure)?;
         let binding = record(&canonical)?;
-        if binding.version != 1
-            || binding.host != host()?
+        let adopted: String = self.conn.query_row(
+            "SELECT adopted_epoch FROM ownership_enforcement WHERE id=1 AND phase='ready'",
+            [],
+            |r| r.get(0),
+        )?;
+        if binding.adopted_epoch != adopted
+            || binding.version != 1
+            || binding.host != provider()?
             || binding.path != canonical
             || binding.store_id != self.store_id()?
         {
@@ -209,11 +275,30 @@ impl Store {
                 id INTEGER PRIMARY KEY CHECK (id = 1), epoch TEXT NOT NULL,
                 minted_at TEXT NOT NULL, reason TEXT NOT NULL);",
         )?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS ownership_enforcement (
+            id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL CHECK(version=1),
+            phase TEXT NOT NULL CHECK(phase IN ('pending','ready')), adopted_epoch TEXT NOT NULL);",
+        )?;
+        let phases: Vec<(i64, String)> = tx
+            .prepare("SELECT version,phase FROM ownership_enforcement")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<std::result::Result<_, _>>()?;
+        if !phases.is_empty() && phases != [(1, "ready".to_owned())] {
+            return Err(failure(
+                "incomplete or malformed adoption; operator recovery/readback required, refusing repeat",
+            ));
+        }
         Self::ensure_store_identity(&store.conn)?;
         Self::ensure_log_epoch(&store.conn)?;
         let epoch = store.mint_log_epoch("explicit store adopt")?;
+        tx.execute("INSERT INTO ownership_enforcement(id,version,phase,adopted_epoch) VALUES(1,1,'pending',?1)
+            ON CONFLICT(id) DO UPDATE SET phase='pending',adopted_epoch=excluded.adopted_epoch", [&epoch])?;
         tx.commit()?;
         store.bind_creation()?;
+        // A failed file install leaves a sticky pending operation. An identical
+        // adopt command cannot blindly mint another epoch after that failure.
+        store.conn.execute("UPDATE ownership_enforcement SET phase='ready' WHERE id=1 AND phase='pending' AND adopted_epoch=?1", [&epoch])?;
         store.require_ownership()?;
         Ok(epoch)
     }

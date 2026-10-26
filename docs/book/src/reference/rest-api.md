@@ -2622,3 +2622,13 @@ unknown axis values, and empty labels are errors. Create first via
 `GET /graphs` returns each row's `creation` together with class/lifecycle/labels.
 The [MCP-only recipe](../recipes/named-graph-mcp.md) exercises the same handlers
 without a REST client.
+
+### Local ownership staging
+
+Stage A keeps legacy disk/browser/container startup and ordinary replication
+requests explicitly INACTIVE; they do not confer ownership authority. The local
+CLI `quipu store status --db <path>` reports this state without adoption.
+Explicit native adoption persists a sticky `ownership_enforcement` marker;
+its authority and filesystem binding are excluded from reconstruction shares.
+Malformed/partial enforced state refuses instead of falling back to INACTIVE.
+No ownership HTTP route, activation default or backend identity fallback is added.

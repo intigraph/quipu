@@ -444,6 +444,7 @@ COMMANDS:
     qp fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     qp unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
     qp restore <file.pendant | text-pack-dir> [--force] [--db <path>]
+    qp store status [--db <path>]
     qp store adopt [--db <path>]
     qp store restore <source.db> [--db <new-path>]
                                                                      REPLACES the store with a --full pack, binary or text

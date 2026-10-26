@@ -179,8 +179,10 @@ fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
         "notice_policy",
         "payload",
     ];
+    const OWNERSHIP: &[&str] = &["id", "version", "phase", "adopted_epoch"];
     ((table == "pack_manifest" && PACK_MANIFEST.contains(&column))
-        || (table == "import_reviews" && IMPORT_REVIEWS.contains(&column)))
+        || (table == "import_reviews" && IMPORT_REVIEWS.contains(&column))
+        || (table == "ownership_enforcement" && OWNERSHIP.contains(&column)))
     .then_some(TermIdKind::None)
 }
 
@@ -273,7 +275,7 @@ pub fn respace_file(src: &Path, dst: &Path, to_space: i64) -> Result<RespaceRepo
         // behind: it opens, it queries, and its registry points at the wrong
         // terms. The source is untouched, so discarding is always safe.
         let _ = std::fs::remove_file(dst);
-        for suffix in ["-wal", "-shm"] {
+        for suffix in ["-wal", "-shm", ".ownership.json"] {
             let mut sidecar = dst.as_os_str().to_owned();
             sidecar.push(suffix);
             let _ = std::fs::remove_file(Path::new(&sidecar));
@@ -300,7 +302,8 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     // a complete schema rather than whichever subset the source happened to
     // have. `Store::open` is the one definition of "current"; it is opened and
     // dropped purely for its migrations.
-    drop(crate::store::Store::init(Connection::open(&path)?)?);
+    crate::store::Store::adopt(&path)?;
+    drop(crate::store::Store::open(&path)?);
     let mut conn = Connection::open(&path)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 

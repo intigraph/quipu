@@ -1,15 +1,19 @@
 {
-  "base": "8b4e383586147d344a8e20997903ad8166ff2c6f",
-  "changed_runtime_source_sha256": {
-    "src/cli_input/catalogue.rs": "d413bb1258766119ed33b88659d1b9d34f893beab3b1a2009dfa0be93a53fec7",
-    "src/cli_store.rs": "cbf09dc90d70c79124eab983a186c21524ab42f0eee05fbece550a84a696b0eb",
-    "src/main.rs": "b9f1bbd285f69941fae92af4398129e7941893d4e4ba29766467644afbbae062",
+  "base_source": "8b4e383586147d344a8e20997903ad8166ff2c6f",
+  "stage": "Stage A candidate, INACTIVE legacy default; built before final source commit",
+  "runtime_sha256": {
+    "src/main.rs": "f51569ae78d6f302d16af22aeee6ace909b12a7041639c9f75ec82547a28014f",
+    "src/cli_input/catalogue.rs": "6060058e5d4d41c65507fcc3e5d7af4b52b1fc884df7e9e7b6a76572b6609243",
+    "src/cli_store.rs": "23fa3c4de4e10cc68c9c2bb5b7a973c420b97a77997dd13ca1921b9e9e14db88",
+    "src/store/mod.rs": "fc41bf7c87fd596fc0119f3cb67a41205a63b640351d9e69398d15978a924c3f",
+    "src/store/open.rs": "df5945668ffb61af4128566c1d9df572f6f1231de23ca6b42a1441e0b48a8adb",
+    "src/store/ownership.rs": "ef2df7818c183e99d91961604685fbe47bc14f84b5b83800c7d1de6708c951ea",
+    "src/store/respace.rs": "d90f232b0806138149ae2b2b66bf7a1a951f807e3f60cd5792221e90fefbfe9c",
+    "src/replicate_source.rs": "651994dbfdee4494efc8454cfd2774d6d7763cd31b49d199570b271ac314bc23",
+    "src/replicate_source_relay.rs": "8879e691f9b513510468a5a4fc59e3192ca068bbec6c3c161cde0cd1ca16a3e2",
     "src/pack_restore.rs": "700fa21df87c7726da6a6d3babd9a30de0fcb9cd61c17449266155c03e3ffbf5",
-    "src/replicate_source.rs": "3420b9693b9732ac7f9a9fcdc56a10644cea06406007fb5b8bf86cf0bf28a942",
-    "src/replicate_source_relay.rs": "9eff2fbe950641cfba24ae3fdadc4edd9ac4ec757e9486d757f26d4f2cda44f3",
-    "src/store/mod.rs": "d7026ceab68935c95ec6cdd59ec03eb9a6cc35f60690eccebe7ac1551ced77b7",
-    "src/store/open.rs": "22292a2b3d1ca6743b108d3585655ca0b42520e0cdf4b7236c3dd505c36563eb",
-    "src/store/ownership.rs": "ab15e05cbf0831876c68f94e7c094eddc36912325230fa1550d90747ac2482a3",
-    "src/store/respace.rs": "82e194931c2628476980d875db0b06c22a08c2d6468e6cc21bf64a6ca8d51b47"
+    "src/share_completeness.rs": "406c8be342eda452e61a0b6844079eabd9d0e9cbb1e37d01f9f0209944fe52ad",
+    "src/pack_full.rs": "b27c64770b8cc7a53cc54b960b68da942fc277defb0aa4e873165180c9d20ae5",
+    "src/pack_full_text.rs": "1b9e0fd82820137e08d85e3131e72e92236123ba953bf8b9cb0f18e80bbc56f4"
   }
 }

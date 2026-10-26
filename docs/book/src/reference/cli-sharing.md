@@ -832,9 +832,13 @@ quipu store adopt --db /data/graph.db
 quipu store restore /backups/graph.db --db /data/restored.db
 ```
 
-New disk databases bind their ownership to the canonical path and host.
-Copied or legacy databases without a matching ownership record permit read-only
-inspection, but refuse writes and replication until explicitly adopted.
+Stage A new and legacy databases remain explicitly `INACTIVE`, preserving
+ordinary startup/writes/streams without ownership authorization. The read-only
+`quipu store status --db <path>` command reports this state. Explicit native
+adoption establishes
+sticky `ENFORCED` host/path ownership. Copies of enforced databases with missing
+or mismatched records permit read-only inspection, refusing writes/replication;
+default constructors cannot downgrade them to INACTIVE.
 Adoption always mints a new log epoch; old replication cursors must bootstrap
 again. `store restore` takes a consistent SQLite snapshot into a new destination
 and adopts it; it refuses to overwrite an existing destination. It is distinct

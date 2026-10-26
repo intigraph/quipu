@@ -38,7 +38,6 @@ impl Session {
         id: String,
         identity: Arc<SigningIdentity>,
     ) -> std::result::Result<(Self, Frame), CutError> {
-        store.require_ownership()?;
         let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
         // One snapshot for every check, as `open_between` does for a source.
         let read = store
@@ -47,6 +46,7 @@ impl Session {
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
         let local_epoch = store.log_epoch()?;
+        let ownership = store.ownership_state()?;
         let held: Vec<&String> = allowed.0.iter().chain(allowed.1).collect();
         if scope.iter().chain(&context).any(|g| !held.contains(&g)) {
             return Err(refused("a relay serves only graphs inside its own scope"));
@@ -81,6 +81,7 @@ impl Session {
             store_id: source.store_id,
             log_epoch: source.log_epoch,
             local_epoch,
+            ownership,
             scope: scope_digest(&scope, &context),
             graphs,
             since: request.since,

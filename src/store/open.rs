@@ -232,6 +232,11 @@ impl Store {
         conn: Connection,
         attachments: &[attach::Attachment],
     ) -> Result<Self> {
+        // Every initializing constructor checks sticky ownership before DDL,
+        // including deserialized stores; unsupported providers cannot downgrade.
+        let inspected = Self::with_connection(conn);
+        inspected.ownership_state()?;
+        let conn = inspected.conn;
         crate::lexical::register(&conn)?;
         // `wal_autocheckpoint` is stated EXPLICITLY rather than left to SQLite's
         // default (aegis-raq1ok). Read the honest caveat before changing it:
