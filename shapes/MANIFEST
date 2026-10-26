@@ -105,9 +105,8 @@
     },
     {
       "file": "read-policy.ttl",
-      "action": "load",
-      "name": "read-policy",
-      "reason": "Owner-local read grant revision vocabulary; tenant imports never establish effective read policy."
+      "action": "exclude",
+      "reason": "Owner-local policy carrier, not a served-graph profile. Protected owner-store semantic validation remains enforced; tenant imports never establish effective read authority."
     }
   ]
 }
