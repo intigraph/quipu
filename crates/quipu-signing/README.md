@@ -27,3 +27,7 @@ cargo check --locked --manifest-path crates/quipu-signing/Cargo.toml --target wa
 
 Run meaningful local checks under the deployment's HOME escape guard with a
 private target directory. No production key or registration is needed.
+
+The [distribution preparation contract](../../docs/design/signing-distribution.md)
+adds an explicit inert publisher route and offline artifact checks. It grants
+no publication or consumer admission.
