@@ -1,0 +1,10 @@
+Script started on 2026-10-25 23:17:55-04:00 [COMMAND="stty -onlcr; bash docs/demos/signing-package/run-demo.sh" <not executed on terminal>]
+$ default route (existing callers)
+root
+$ shared package without opt-in: expected refusal
+REFUSED: unknown package/manifest or absent/invalid shared preparation opt-in
+$ explicit preparation-only route
+shared-preparation
+No registry request, credential, publication or consumer migration.
+
+Script done on 2026-10-25 23:17:56-04:00 [COMMAND_EXIT_CODE="0"]

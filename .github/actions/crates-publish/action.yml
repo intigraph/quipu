@@ -57,10 +57,91 @@ inputs:
     required: false
     default: 'false'
 
+  package-name:
+    description: 'Default root package, or explicit quipu-signing preparation only.'
+    required: false
+    default: 'quipu-ai'
+  manifest-path:
+    description: 'Exact package manifest; no arbitrary path selection.'
+    required: false
+    default: 'Cargo.toml'
+  shared-package-opt-in:
+    description: 'Inert by default; prepare-quipu-signing-0.1.0 prepares bytes only.'
+    required: false
+    default: ''
+  package-metadata:
+    description: 'Retained offline Cargo metadata for shared preparation.'
+    required: false
+    default: ''
+  package-archive:
+    description: 'Retained offline package archive; never uploaded by the shared route.'
+    required: false
+    default: ''
+  shared-plan:
+    description: 'Exact preparation plan required only after a future root shared dependency.'
+    required: false
+    default: ''
+  registry-version:
+    description: 'Future retained exact-version registry JSON; not a max-version headline.'
+    required: false
+    default: ''
+  registry-archive:
+    description: 'Future retained registry archive; checked against exact prepared bytes.'
+    required: false
+    default: ''
+
 runs:
   using: composite
   steps:
+    - name: Select only an admitted package route
+      id: route
+      shell: bash
+      env:
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        SHARED_OPT_IN: ${{ inputs.shared-package-opt-in }}
+      run: |
+        set -euo pipefail
+        route=$(python3 scripts/ci/signing-package.py select \
+          --name "$PACKAGE_NAME" --manifest "$MANIFEST_PATH" --opt-in "$SHARED_OPT_IN")
+        echo "route=$route" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare shared package without publication
+      if: steps.route.outputs.route == 'shared-preparation'
+      shell: bash
+      env:
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        MANIFEST_PATH: ${{ inputs.manifest-path }}
+        SHARED_OPT_IN: ${{ inputs.shared-package-opt-in }}
+        EXPECTED: ${{ inputs.expected-version }}
+        REF_NAME: ${{ github.ref_name }}
+        METADATA: ${{ inputs.package-metadata }}
+        ARCHIVE: ${{ inputs.package-archive }}
+      run: |
+        set -euo pipefail
+        python3 scripts/ci/signing-package.py prepare --name "$PACKAGE_NAME" \
+          --manifest "$MANIFEST_PATH" --opt-in "$SHARED_OPT_IN" \
+          --expected-version "$EXPECTED" --ref "$REF_NAME" \
+          --metadata "$METADATA" --archive "$ARCHIVE"
+        echo "::notice::PREPARATION ONLY — no authentication or publication."
+
+    - name: Refuse unverified shared dependency before root progression
+      if: steps.route.outputs.route == 'root'
+      shell: bash
+      env:
+        SHARED_PLAN: ${{ inputs.shared-plan }}
+        REGISTRY_VERSION: ${{ inputs.registry-version }}
+        REGISTRY_ARCHIVE: ${{ inputs.registry-archive }}
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "$SHARED_PLAN" ]; then args+=(--plan "$SHARED_PLAN"); fi
+        if [ -n "$REGISTRY_VERSION" ]; then args+=(--registry-version "$REGISTRY_VERSION"); fi
+        if [ -n "$REGISTRY_ARCHIVE" ]; then args+=(--archive "$REGISTRY_ARCHIVE"); fi
+        python3 scripts/ci/signing-package.py root-ready "${args[@]}"
+
     - name: Refuse a rehearsal, a prerelease, or the wrong version
+      if: steps.route.outputs.route == 'root'
       shell: bash
       env:
         EXPECTED: ${{ inputs.expected-version }}
@@ -84,6 +165,7 @@ runs:
     # partly succeeded, and is the difference between a real check and one that
     # passes because nothing changed.
     - name: Record what crates.io serves now
+      if: steps.route.outputs.route == 'root'
       id: before
       shell: bash
       run: |
@@ -116,11 +198,12 @@ runs:
         fi
 
     - name: Verify package
+      if: steps.route.outputs.route == 'root'
       shell: bash
       run: cargo package --no-verify
 
     - name: Publish (dry run)
-      if: inputs.dry-run == 'true'
+      if: steps.route.outputs.route == 'root' && (inputs.dry-run == 'true')
       shell: bash
       env:
         EXPECTED: ${{ inputs.expected-version }}
@@ -134,12 +217,12 @@ runs:
              "${{ steps.before.outputs.before }}, not ${EXPECTED}."
 
     - name: Authenticate with crates.io
-      if: inputs.dry-run != 'true' && steps.before.outputs.already != 'true'
+      if: steps.route.outputs.route == 'root' && (inputs.dry-run != 'true' && steps.before.outputs.already != 'true')
       id: crates-auth
       uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1
 
     - name: Publish to crates.io
-      if: inputs.dry-run != 'true' && steps.before.outputs.already != 'true'
+      if: steps.route.outputs.route == 'root' && (inputs.dry-run != 'true' && steps.before.outputs.already != 'true')
       shell: bash
       run: cargo publish
       env:
@@ -150,7 +233,7 @@ runs:
     # upload was accepted, not that the index has the version — so poll, and
     # fail if it never appears.
     - name: Verify crates.io actually moved
-      if: inputs.dry-run != 'true'
+      if: steps.route.outputs.route == 'root' && (inputs.dry-run != 'true')
       shell: bash
       env:
         EXPECTED: ${{ inputs.expected-version }}

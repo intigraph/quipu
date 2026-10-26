@@ -437,7 +437,9 @@ jobs:
       # workflow would stay green, and the next thing to notice would be a
       # rehearsal tag on crates.io, which cannot be undone.
       - name: Prove the crates publish guard still refuses
-        run: scripts/ci/crates-publish-guard.sh --selftest
+        run: |
+          scripts/ci/crates-publish-guard.sh --selftest
+          python3 scripts/ci/test_signing_package.py
 
       # The release's book restage skips a disabled docs.yml and fails on
       # anything else (scripts/ci/restage-docs.sh). Both directions are
