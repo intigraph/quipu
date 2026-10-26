@@ -287,8 +287,6 @@ fn declines_where_driving_could_cost_more_or_change_the_answer() {
     for text in [
         // The filter keeps most rows: the probes saved cannot pay for the scan.
         plain("?end >= \"2026-01-01T00:00:00Z\"^^xsd:dateTime"),
-        // NOW is not stable, and it is the only conjunct.
-        plain("?end <= NOW()"),
         // No conjunct one pattern can judge: `?elsewhere` is bound by none.
         plain(&format!("{window} || BOUND(?elsewhere)")),
     ] {
@@ -314,6 +312,63 @@ fn declines_where_driving_could_cost_more_or_change_the_answer() {
     let (model, _dir) = fixture(12_000, false);
     model.set_read_model_enabled(true);
     assert_eq!(driven(&model, &plain(window)).1, 0);
+}
+
+// Volatile expressions must not drive. Unlike the deterministic cases above,
+// two NOW queries need not return equal bags: they may straddle an end time.
+#[test]
+fn now_only_filter_declines_without_comparing_separate_clock_instants() {
+    let (store, _dir) = fixture(12_000, true);
+    let text = plain("?end <= NOW()");
+    assert_eq!(driven(&store, &text).1, 0, "{text}");
+
+    // Make volatility, rather than today's selectivity, the reason to decline.
+    // Both IF branches return the same cutoff, so even two separate NOW
+    // evaluations cannot change this answer. Removing NOW from the volatility
+    // exclusion would incorrectly drive this selective filter.
+    let cutoff = "\"2026-10-27T12:00:00Z\"^^xsd:dateTime";
+    let text = plain(&format!("?end >= IF(NOW() = NOW(), {cutoff}, {cutoff})"));
+    let old = reference(|| query(&store, &text).unwrap());
+    let (new, drove) = driven(&store, &text);
+    assert_eq!(drove, 0, "volatile selective filter: {text}");
+    assert_eq!(bag(new.rows()), bag(old.rows()), "{text}");
+    assert!(!new.rows().is_empty());
+    assert!(new.rows().len() < 12_000 / 4);
+}
+
+#[test]
+fn end_time_boundary_changes_the_bag_without_changing_plan_parity() {
+    // Reproduce the 2026-10-26 05:00 UTC CI boundary without reading or changing
+    // the wall clock. Each instant has its own independent reference answer.
+    for composed in [false, true] {
+        let (store, _dir) = fixture(12_000, composed);
+        let mut answers = Vec::new();
+        for instant in ["2026-10-26T04:59:59.999Z", "2026-10-26T05:00:00Z"] {
+            let text = plain(&format!("?end <= \"{instant}\"^^xsd:dateTime"));
+            let old = reference(|| query(&store, &text).unwrap());
+            let (new, drove) = driven(&store, &text);
+            assert_eq!(drove, 0, "nonselective boundary: {text}");
+            assert_eq!(new.variables(), old.variables(), "{text}");
+            let rows = bag(new.rows());
+            assert_eq!(rows, bag(old.rows()), "composed={composed} {text}");
+            assert!(!rows.is_empty(), "positive control: {text}");
+            answers.push(rows);
+        }
+        let before = &answers[0];
+        let after = &answers[1];
+        assert!(before.iter().all(|row| after.binary_search(row).is_ok()));
+        let entering: Vec<_> = after
+            .iter()
+            .filter(|row| before.binary_search(row).is_err())
+            .collect();
+        assert_eq!(after.len(), before.len() + 46);
+        assert_eq!(entering.len(), 46, "the bags must differ at this boundary");
+        assert!(
+            entering
+                .iter()
+                .all(|row| row.contains("2026-10-26T05:00:00Z"))
+        );
+    }
 }
 
 /// The streamed COUNT path drives the same way and counts the same rows.
