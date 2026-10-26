@@ -3,9 +3,11 @@ use super::*;
 use crate::shape_mapping::Correspondence;
 
 const OLD: &str = "<urn:fixture:Ticket> <http://www.w3.org/2000/01/rdf-schema#label> \"old\" .";
+#[cfg(feature = "shacl")]
 const NEW: &str = "<urn:fixture:Ticket> <http://www.w3.org/2000/01/rdf-schema#label> \"new\" .";
 const ACTOR: &str = "urn:fixture:reviewer";
 const AT: &str = "2026-10-25T00:00:00Z";
+#[cfg(feature = "shacl")]
 const NEXT: &str = "2026-10-26T00:00:00Z";
 
 fn fixture() -> (Store, ShapeMapping) {
@@ -41,12 +43,14 @@ fn fixture() -> (Store, ShapeMapping) {
     };
     (store, mapping)
 }
+#[cfg(feature = "shacl")]
 fn apply(store: &mut Store, mapping: &ShapeMapping) -> MappingReceipt {
     store
         .apply_shape_mapping(mapping.clone(), &mapping.digest().unwrap(), ACTOR, None)
         .unwrap()
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn aggregate_inverse_changes_when_another_mapping_is_retired() {
     let (mut store, first) = fixture();
@@ -77,6 +81,7 @@ fn aggregate_inverse_changes_when_another_mapping_is_retired() {
     );
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn a3_registry_flag_record_and_event_share_transaction_without_auto_repin() {
     let (mut store, mapping) = fixture();
@@ -133,6 +138,7 @@ fn a3_registry_flag_record_and_event_share_transaction_without_auto_repin() {
     assert_eq!(apply(&mut store, &repinned).status, "decided");
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn late_flag_record_failure_rolls_back_registry_mapping_and_events() {
     let (mut store, mapping) = fixture();
@@ -169,6 +175,7 @@ fn late_flag_record_failure_rolls_back_registry_mapping_and_events() {
     assert!(store.conn.is_autocommit());
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn replay_returns_original_application_and_does_not_resurrect_retirement() {
     let (mut store, mapping) = fixture();
@@ -187,6 +194,7 @@ fn replay_returns_original_application_and_does_not_resurrect_retirement() {
     assert_eq!(store.latest_tx_id().unwrap(), retired_tx);
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn loaded_mapping_profile_accepts_records_and_removal_flags_old_pin() {
     let (mut store, mapping) = fixture();
@@ -220,6 +228,7 @@ fn loaded_mapping_profile_accepts_records_and_removal_flags_old_pin() {
     assert_eq!(payload["tx"], flagged.tx);
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn readonly_preparation_and_strict_transport_cannot_write_or_forge_authority() {
     let (mut store, mapping) = fixture();
@@ -264,6 +273,7 @@ fn proposal_survives_sqlite_readonly_while_the_writer_refuses() {
     assert_eq!(store.latest_tx_id().unwrap(), before);
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn retired_mapping_identity_remains_reserved_against_generic_writes() {
     let (mut store, mapping) = fixture();
@@ -319,4 +329,24 @@ fn retired_mapping_identity_remains_reserved_against_generic_writes() {
             )
             .is_ok()
     );
+}
+
+#[cfg(not(feature = "shacl"))]
+#[test]
+fn preparation_without_shacl_cannot_admit_mapping_writes() {
+    let (mut store, mapping) = fixture();
+    let before = store.latest_tx_id().unwrap();
+    let proposal = store.propose_shape_mapping(mapping.clone()).unwrap();
+    assert_eq!(proposal.expected_digest, mapping.digest().unwrap());
+    let error = store
+        .apply_shape_mapping(mapping.clone(), &mapping.digest().unwrap(), ACTOR, None)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("write SHACL requires the shacl feature")
+    );
+    assert!(store.conn.is_autocommit());
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+    assert!(store.shape_mapping_receipt(&mapping.id).unwrap().is_none());
 }
