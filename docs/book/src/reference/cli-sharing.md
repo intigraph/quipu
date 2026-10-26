@@ -824,3 +824,23 @@ shapes. Use the existing alignment propose/decide/apply workflow for curation.
 The browser reader uses the same verification, and Explorer export preserves the
 imported carrier. A release needs a compatible engine and actual asset readback;
 source configuration alone does not establish availability.
+
+## Store ownership after a database copy
+
+```text
+quipu store adopt --db /data/graph.db
+quipu store restore /backups/graph.db --db /data/restored.db
+```
+
+New disk databases bind their ownership to the canonical path and host.
+Copied or legacy databases without a matching ownership record permit read-only
+inspection, but refuse writes and replication until explicitly adopted.
+Adoption always mints a new log epoch; old replication cursors must bootstrap
+again. `store restore` takes a consistent SQLite snapshot into a new destination
+and adopts it; it refuses to overwrite an existing destination. It is distinct
+from reconstruction-pack `quipu restore` above.
+
+These are operator actions, never automatic server startup repairs. Source
+installation does not authorize production adoption. See the
+ownership and failure contract in `docs/design/store-ownership.md` for partial
+completion, supported host identity and rollout limits.

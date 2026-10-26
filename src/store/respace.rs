@@ -300,7 +300,7 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     // a complete schema rather than whichever subset the source happened to
     // have. `Store::open` is the one definition of "current"; it is opened and
     // dropped purely for its migrations.
-    drop(crate::store::Store::open(&path)?);
+    drop(crate::store::Store::init(Connection::open(&path)?)?);
     let mut conn = Connection::open(&path)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 
@@ -375,6 +375,8 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
         ref_blobs,
     };
     assert_respaced(&conn, &classified, to_space)?;
+    drop(conn);
+    crate::store::Store::adopt(&path)?;
     Ok(report)
 }
 

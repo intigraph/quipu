@@ -15,6 +15,9 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod ownership;
+#[cfg(test)]
+mod ownership_tests;
 mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;

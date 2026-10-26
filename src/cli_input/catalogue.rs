@@ -31,6 +31,9 @@ pub(super) fn is_group(spec: &Spec) -> bool {
 
 #[rustfmt::skip]
 pub(super) static SPECS: &[Spec] = &[
+    spec!("store", "", GROUP, 0, "", ""),
+    spec!("store adopt", "", 0, 0, "", ""),
+    spec!("store restore", "<source.db>", 1, 1, "", ""),
     spec!("version", "", 0, 0, "", ""),
     spec!("install-alias", "", 0, 0, "bin-dir", "check"),
     spec!("knot", "<file.ttl>", 1, 1, "shapes graph timestamp blank-node-scope", ""),

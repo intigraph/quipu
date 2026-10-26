@@ -14,6 +14,7 @@ fn legacy_file() -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn legacy_store_without_scope_keeps_root_compatibility() {
     let (_dir, path) = legacy_file();
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let store = Store::open(path.to_str().unwrap()).unwrap();
     store.graph_create("urn:legacy:named").unwrap();
     // The actual old schema, not a freshly-created candidate store, preserves
@@ -28,6 +29,9 @@ fn full_backup_and_restore_preserve_both_store_defaults() {
         let (dir, path) = legacy_file();
         if !legacy {
             std::fs::remove_file(&path).unwrap();
+        }
+        if legacy {
+            Store::adopt(path.to_str().unwrap()).unwrap();
         }
         let mut source = Store::open(path.to_str().unwrap()).unwrap();
         crate::rdf::ingest_rdf(
@@ -80,6 +84,7 @@ fn same_unversioned_configuration_uses_store_intent_not_file_age() {
     );
     assert!(GraphScope::parse(&fresh, &json!({})).is_err());
     let (_dir, path) = legacy_file();
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let mut old = Store::open(path.to_str().unwrap()).unwrap();
     old.graph_create("urn:old:named").unwrap();
     *old.search_config_mut() = config;
@@ -94,6 +99,7 @@ fn same_unversioned_configuration_uses_store_intent_not_file_age() {
 #[test]
 fn explicit_scope_wins_but_never_enables_unprepared_named_vectors() {
     let (_dir, path) = legacy_file();
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let mut old = Store::open(path.to_str().unwrap()).unwrap();
     old.graph_create("urn:old:named").unwrap();
     old.search_config_mut().default_graph_scope = Some("all".into());
@@ -128,6 +134,9 @@ fn reopening_preserves_both_default_and_identity_without_changing_facts() {
             let path = dir.path().join("new.db");
             (dir, path)
         };
+        if legacy {
+            Store::adopt(path.to_str().unwrap()).unwrap();
+        }
         let (id, facts) = {
             let store = Store::open(path.to_str().unwrap()).unwrap();
             store.graph_create("urn:reopen:named").unwrap();

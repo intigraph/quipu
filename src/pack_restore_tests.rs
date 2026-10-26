@@ -305,7 +305,7 @@ fn the_format_gate_decides_before_the_hash_does() {
 }
 
 #[test]
-fn restore_reproduces_every_row_of_every_table() {
+fn restore_preserves_every_portable_row_and_establishes_a_new_local_epoch() {
     let dir = tmpdir("round-trip");
     let pack = full_pack(&dir, "src.pendant");
     let dest = at(&dir, "restored.db");
@@ -326,6 +326,15 @@ fn restore_reproduces_every_row_of_every_table() {
         // `pack_manifest` describes the ARTIFACT; the restored store carries it
         // as lineage and it is excluded from the pack's own content hash too.
         if table == "pack_manifest" {
+            continue;
+        }
+        if table == "log_epoch" {
+            // A full pack explicitly strips source-local epochs. Explicit
+            // restoration establishes exactly one new local epoch, never an
+            // inherited cursor. Every other row comparison remains exact.
+            assert!(rows.is_empty());
+            assert_eq!(restored[table].len(), 1);
+            assert!(restored[table][0].contains("explicit store adopt"));
             continue;
         }
         assert_eq!(

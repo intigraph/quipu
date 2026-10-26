@@ -91,6 +91,7 @@ pub struct Session {
     identity: Arc<SigningIdentity>,
     store_id: String,
     log_epoch: String,
+    local_epoch: String,
     scope: String,
     graphs: Vec<i64>,
     since: i64,
@@ -138,6 +139,7 @@ impl Session {
         identity: Arc<SigningIdentity>,
         between: impl FnOnce(),
     ) -> std::result::Result<(Self, Frame), CutError> {
+        store.require_ownership()?;
         let (scope, context) = scope_lists(&request.graphs, &request.context_graphs)?;
         let read = store
             .conn
@@ -161,6 +163,7 @@ impl Session {
             id,
             identity,
             store_id,
+            local_epoch: log_epoch.clone(),
             log_epoch,
             scope: scope_digest(&scope, &context),
             graphs,
@@ -242,7 +245,9 @@ impl Session {
             .is_autocommit()
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
-        let outcome = if self.relay {
+        let outcome = if store.log_epoch()? != self.local_epoch {
+            Outcome::EpochEnd
+        } else if self.relay {
             self.relay_page(store, max_txs.max(1))?
         } else {
             self.source_page(store, max_txs.max(1))?
@@ -531,3 +536,7 @@ mod tests;
 #[cfg(test)]
 #[path = "replicate_source_limits_tests.rs"]
 mod limits_tests;
+
+#[cfg(test)]
+#[path = "replicate_source_ownership_tests.rs"]
+mod ownership_tests;
