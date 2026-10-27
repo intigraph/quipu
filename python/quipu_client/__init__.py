@@ -4,6 +4,7 @@ Stdlib only. See ``docs/book/src/reference/python-client.md`` in the main
 repository for the documented surface.
 """
 
+from . import sparql
 from .client import QuipuClient, QuipuError
 from .types import AskResult, EpisodeResult, KnotResult, RetractResult, SetResult
 
@@ -12,6 +13,7 @@ __version__ = "0.1.0"
 __all__ = [
     "QuipuClient",
     "QuipuError",
+    "sparql",
     "AskResult",
     "EpisodeResult",
     "KnotResult",

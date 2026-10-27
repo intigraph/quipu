@@ -143,6 +143,13 @@ class QuipuClient:
         )
         return self._request("POST", "/query", body)
 
+    def run(self, builder: Any, **params: Any) -> dict[str, Any]:
+        """``POST /query`` for a :mod:`quipu_client.sparql` builder: sends its
+        SPARQL plus its ``valid_at`` / ``tx`` / ``graph`` pins. ``params``
+        fill any :class:`~quipu_client.sparql.Param` placeholders."""
+        body = {"query": builder.to_sparql(**params), **builder.request_fields()}
+        return self._request("POST", "/query", body)
+
     def validate(self, shapes: str, data: str) -> dict[str, Any]:
         """``POST /validate`` — dry-run SHACL validation, writes nothing."""
         return self._request("POST", "/validate", {"shapes": shapes, "data": data})
@@ -335,6 +342,20 @@ class QuipuClient:
         return RetractResult.from_body(
             self._request("POST", "/retract", body, write=True)
         )
+
+    def save_query(
+        self,
+        builder: Any,
+        name: str,
+        *,
+        description: str = "",
+        dataset: str | None = None,
+    ) -> dict[str, Any]:
+        """``POST /queries`` ``load`` -- store a builder query in the governed
+        stored-query registry, callable later through :meth:`ask`. The server
+        validates (parses) the template at load."""
+        payload = builder.to_stored_query(name, description=description, dataset=dataset)
+        return self._request("POST", "/queries", payload, write=True)
 
 
 def _decode(payload: bytes) -> Any:
