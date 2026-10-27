@@ -245,6 +245,12 @@ pub fn compare_option_values(a: &Option<Value>, b: &Option<Value>) -> std::cmp::
     {
         return crate::numeric_value::compare(a, b).unwrap_or(std::cmp::Ordering::Equal);
     }
+    // Temporals order by value, totally (aegis-neg); see the rule there.
+    if let (Some(a), Some(b)) = (a, b)
+        && let Some(order) = super::filter::temporal_sort_order(a, b)
+    {
+        return order;
+    }
     match (a, b) {
         (None, None) => std::cmp::Ordering::Equal,
         (None, Some(_)) => std::cmp::Ordering::Less,

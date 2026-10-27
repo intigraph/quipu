@@ -17,6 +17,8 @@ use super::Bindings;
 
 mod regex_cache;
 pub(super) use regex_cache::build_regex;
+mod temporal_sort;
+pub(super) use temporal_sort::temporal_sort_order;
 
 thread_local! {
     static QUERY_BASE_IRI: RefCell<Option<String>> = const { RefCell::new(None) };
