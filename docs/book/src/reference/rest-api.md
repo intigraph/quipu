@@ -505,6 +505,72 @@ temporal/graph fields are refused on a federated query (they only shape the
 local evaluator's context). See
 [Federation](../architecture/federation.md).
 
+### `GET /diff` and `POST /patch`
+
+Change-sets in the store-wide `quipu-changeset` v1 format: parent-bound SPARQL
+Update (ground `DELETE DATA`, then ground `INSERT DATA`) under a `# key: value`
+comment header naming `base-tx`, `target-tx`, `store-id`, `valid-time`,
+`source`, `shapes-hash` and a `digest` over the statements. Share deltas
+(`delta.ru`) use the same format. The spec is
+[`docs/design/changeset-format.md`](https://github.com/intigraph/quipu/blob/main/docs/design/changeset-format.md).
+
+`GET /diff?from=<side>&to=<side>` returns the change-set that turns `from` into
+`to`. A side is `tx:N` (ROOT as of transaction N), `main` (ROOT now) or
+`fork:<name>` (a fork now, rendered as a change to ROOT). Add
+`graph=<iri>` to diff a registered named graph instead of ROOT (not with a
+fork side). Send `Accept: application/rdf-patch` for the
+[RDF Patch](https://afs.github.io/rdf-patch/) form; the default is
+`application/sparql-update`. Blank nodes are refused: skolemize first.
+
+```bash
+curl 'localhost:3030/diff?from=tx:4180&to=main' -H 'Authorization: Bearer <token>'
+```
+
+```sparql
+# quipu-changeset: v1
+# base-tx: 4180
+# target-tx: 4182
+# store-id: 0b6f…
+# source: diff:tx:4180..main
+# shapes-hash: 6f1c…
+# digest: sha256:9a0e…
+DELETE DATA {
+  <http://ex/s> <http://ex/status> "open" .
+};
+INSERT DATA {
+  <http://ex/s> <http://ex/status> "closed" .
+};
+```
+
+`POST /patch` applies a change-set sent as `application/sparql-update` or
+`application/rdf-patch`. It is a write: it needs write authentication and
+passes the same authority, placement, policy, OWL and reject-mode SHACL gates
+as `/update`. A refusal writes nothing. The touched statements are compared
+with the store first:
+
+| Store state | Response |
+|---|---|
+| Post-state already holds (deletes absent, inserts present) | `200`, `"already_applied": true`, `tx` null, nothing written |
+| Pre-state holds (deletes present, inserts absent) | `200`, `"applied": true` with the `/update` report (`tx`, `asserted`, `retracted`, `graphs`) |
+| Anything else | `409`, `already_deleted` and `already_inserted` list the statements already in their post-state; nothing written |
+
+Retrying a patch whose response was lost is therefore safe. The header's
+`valid-time` becomes the inserted statements' `valid_from` (default: now).
+Transaction time is always the server's. `source` is recorded as the
+transaction source unless a `source` query parameter overrides it; `actor`
+and `source` parameters work as on `/update`. A declared `digest` that does
+not match the statements is refused. `shapes_hash_matches` reports whether
+the sender's `shapes-hash` equals the server's current one. It is advisory:
+the server always validates against its own shapes.
+
+```bash
+curl 'localhost:3030/diff?from=tx:4180&to=main' > change.ru
+curl localhost:3030/patch -X POST -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/sparql-update' --data-binary @change.ru
+# {"applied":true,"already_applied":false,"digest":"sha256:9a0e…",
+#  "tx":5120,"asserted":1,"retracted":1,"graphs":[…],"shapes_hash_matches":true}
+```
+
 ### `POST /knot`
 
 Assert facts from Turtle data.

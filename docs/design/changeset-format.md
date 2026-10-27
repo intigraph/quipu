@@ -61,7 +61,7 @@ Every key except `quipu-changeset` is optional.
 | `store-id` | `store_id` of the store the base was read from. |
 | `valid-time` | ISO-8601 `valid_from` for inserted statements. Defaults to the apply time. Transaction time is always the receiver's. |
 | `source` | Provenance label, recorded as the applying transaction's `source`. |
-| `shapes-hash` | SHA-256 of the shape sets in force at the pre-state, in the as-of-share encoding. It is advisory: the receiver always validates against its own current shapes. |
+| `shapes-hash` | SHA-256 of the shape sets the producer had in force, in the as-of-share encoding (`/diff`: at `base-tx`; share deltas: the result share's). It is advisory: the receiver always validates against its own current shapes. |
 | `digest` | `sha256:` plus the digest defined below. When present, it must match or the change-set is refused. |
 
 `log_epoch` and `base_slice_hash` belong to the signed envelope (s24.4). They
@@ -117,7 +117,9 @@ first, as `git_merge` already requires.
 ## Producers
 
 - `GET /diff?from=&to=`: each side is `tx:N` (ROOT as of transaction N),
-  `main` (ROOT now), or `fork:<name>` (a fork now).
+  `main` (ROOT now), or `fork:<name>` (a fork now). `graph=<iri>` diffs a
+  named graph instead of ROOT. Shares are files, not store states, so a share
+  diff is the share delta below rather than a `/diff` side.
 - Share deltas: `delta.ru` is this format, with `base-share` set to the parent
   share. Old header-less deltas still materialize, because the header is a
   comment.

@@ -358,6 +358,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/memory_files.rs", // handlers only; routes registered in server.rs
         "server/background.rs",   // primary worker startup, no route registration
         "server/replica.rs",      // handlers/middleware; route is registered in server.rs
+        "server/patch.rs",        // /diff and /patch handlers; routes registered in server.rs
         "server/relay.rs",        // upstream follower task, no route registration
         "server/admission.rs",
         "server/auth.rs",
