@@ -8,6 +8,7 @@
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Agent Setup](getting-started/agent-setup.md)
+- [Agent Primer](getting-started/agent-primer.md)
 - [Configuration](getting-started/configuration.md)
 - [Stable Entity References](reference/namespaces.md)
 
