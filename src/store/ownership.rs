@@ -241,6 +241,8 @@ impl Store {
         }
     }
 
+    /// Provider injection for tests; production uses the cached host.
+    #[cfg(test)]
     pub(super) fn verify_binding_with(
         &self,
         provider: impl FnOnce() -> Result<String>,
