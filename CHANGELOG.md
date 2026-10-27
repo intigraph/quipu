@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - *(replica)* GET /replica/ready says whether a follower may serve in its primary's place (#854)([c015325](https://github.com/scbrown/quipu/commit/c01532521c073e95ac492d1674be02fbcad96b91))
 - *(reads)* Enforce owner-local grants with bounded scoped views (#867)([2f3805a](https://github.com/scbrown/quipu/commit/2f3805af0efe3ceed4a3af49ec8c44e6542fdb49))
 
+
+
 ### Fixed
 
 - *(relay)* Authenticate upstream streams and challenges from a private file (#864)([f40f53f](https://github.com/scbrown/quipu/commit/f40f53f49217e84724daf30420c5cb49fedd9c2d))
