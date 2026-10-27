@@ -137,6 +137,9 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             "replace_snapshot requires a non-empty stable 'snapshot' producer key".into(),
         ));
     }
+    // A blank key is no key: it owns nothing and is not echoed.
+    let snapshot_key = snapshot.filter(|s| !s.trim().is_empty());
+    let mut written_source = String::new();
     let graph = resolve_committed_graph(store, input.get("graph").and_then(JsonValue::as_str))?;
 
     // Closed-vocabulary gate (aegis-hpav5). SHACL is open-world: an rdf:type
@@ -260,6 +263,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let (tx_id, count) = store.with_write_shapes(write_shapes.as_deref(), |store| {
         Ok(if replace_snapshot {
             let source_tag = format!("snapshot:{}", snapshot.unwrap());
+            written_source = source_tag.clone();
             // Both the retraction plan and the transaction are scoped to the
             // resolved graph: a snapshot in graph G replaces only G's prior
             // facts under this producer key and leaves ROOT untouched. The
@@ -315,7 +319,19 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             // break callers to fix a defect none of them can see. The derived key
             // is `knot:<actor>` — attributable, retractable, and outside the
             // `snapshot:` namespace, which carries authority this write lacks.
-            let tagged = crate::store::source_tag::resolve("knot", actor, source);
+            //
+            // A `snapshot` key on an append write OWNS the facts under the same
+            // `snapshot:<key>` tag a replace uses. Before, the key was accepted,
+            // echoed back, and ignored: the facts landed under `source` or
+            // `knot:<actor>`, so a later replace under that key could never
+            // retract them and a changed literal stayed live beside its
+            // successor (two `status` values on one entity). Without a key,
+            // the source rules above are unchanged.
+            let tagged = match snapshot_key {
+                Some(key) => format!("snapshot:{key}"),
+                None => crate::store::source_tag::resolve("knot", actor, source),
+            };
+            written_source = tagged.clone();
             crate::rdf::ingest_rdf_bitemporal_with_scope(
                 store,
                 turtle.as_bytes(),
@@ -338,7 +354,8 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
         "conforms": true,
         "tx_id": tx_id,
         "count": count,
-        "snapshot": snapshot,
+        "snapshot": snapshot_key,
+        "source": written_source,
         "replaced": replace_snapshot,
         "valid_from": valid_from
     }))
