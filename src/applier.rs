@@ -543,13 +543,11 @@ fn apply_one_tx(
     })();
     match result {
         Ok(None) => {
-            store.conn.execute_batch("RELEASE replica_apply")?;
+            crate::store::release::release(&store.conn, "replica_apply")?;
             Ok(None)
         }
         other => {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO replica_apply; RELEASE replica_apply")?;
+            crate::store::release::rollback_release(&store.conn, "replica_apply")?;
             other
         }
     }

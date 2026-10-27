@@ -245,13 +245,11 @@ impl Store {
 
         match result {
             Ok(info) => {
-                self.conn.execute_batch("RELEASE quipu_fork_create")?;
+                crate::store::release::release(&self.conn, "quipu_fork_create")?;
                 Ok(info)
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_fork_create; RELEASE quipu_fork_create");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_fork_create");
                 Err(e)
             }
         }
@@ -377,7 +375,7 @@ impl Store {
 
         match result {
             Ok(tx) => {
-                self.conn.execute_batch("RELEASE quipu_fork_promote")?;
+                crate::store::release::release(&self.conn, "quipu_fork_promote")?;
                 Ok(ForkPromotion::Promoted {
                     tx,
                     asserted: diff.added.len(),
@@ -385,9 +383,7 @@ impl Store {
                 })
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_fork_promote; RELEASE quipu_fork_promote");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_fork_promote");
                 Err(e)
             }
         }

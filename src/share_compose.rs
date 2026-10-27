@@ -209,13 +209,11 @@ pub fn compose(
     .map(|(composition, _)| composition);
     match result {
         Ok(result) => {
-            store.conn.execute_batch("RELEASE quipu_compose_all")?;
+            crate::store::release::release(&store.conn, "quipu_compose_all")?;
             Ok(result)
         }
         Err(error) => {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO quipu_compose_all; RELEASE quipu_compose_all")?;
+            crate::store::release::rollback_release(&store.conn, "quipu_compose_all")?;
             store.read_model.borrow_mut().clear();
             store.term_cache.borrow_mut().clear_persistent();
             Err(error)
@@ -464,11 +462,9 @@ pub(crate) fn compose_scoped(
         Ok(())
     })();
     match write {
-        Ok(()) => store.conn.execute_batch("RELEASE quipu_composition")?,
+        Ok(()) => crate::store::release::release(&store.conn, "quipu_composition")?,
         Err(error) => {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO quipu_composition; RELEASE quipu_composition")?;
+            crate::store::release::rollback_release(&store.conn, "quipu_composition")?;
             store.read_model.borrow_mut().clear();
             store.term_cache.borrow_mut().clear_persistent();
             return Err(error);

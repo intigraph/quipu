@@ -289,7 +289,8 @@ impl Store {
                 rows,
             });
         }
-        tx.commit()?;
+        let committed = tx.commit();
+        crate::store::release::settle(&self.conn, committed)?;
         Ok(out)
     }
 
@@ -402,7 +403,8 @@ impl Store {
             "INSERT OR REPLACE INTO projection_defs (name, def_hash, built_at, rows) VALUES (?1, ?2, ?3, ?4)",
             params![def.name, def_hash(def), crate::time::now_iso(), rows],
         )?;
-        tx.commit()?;
+        let committed = tx.commit();
+        crate::store::release::settle(&self.conn, committed)?;
         Ok(rows)
     }
 

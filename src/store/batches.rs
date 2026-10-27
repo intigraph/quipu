@@ -39,15 +39,13 @@ impl Store {
             match self.transact_to_graph(datums, timestamp, actor, source, *graph) {
                 Ok(tx) => txs.push((*graph, tx)),
                 Err(error) => {
-                    self.conn.execute_batch(
-                        "ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph",
-                    )?;
+                    crate::store::release::rollback_release(&self.conn, "quipu_multi_graph")?;
                     self.read_model.borrow_mut().clear();
                     return Err(error);
                 }
             }
         }
-        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
+        crate::store::release::release(&self.conn, "quipu_multi_graph")?;
         Ok(txs)
     }
 }

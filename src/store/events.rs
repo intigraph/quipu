@@ -141,8 +141,7 @@ impl Store {
     /// SQLite keeps one commit hook per connection, so this one also carries
     /// the ownership commit fence; a refused commit never wakes consumers.
     pub fn set_commit_wake(&self, mut wake: impl FnMut() + Send + 'static) -> Result<()> {
-        let mut fence =
-            super::ownership_fence::commit_fence(&self.conn, self.ownership_fence_tripped.clone());
+        let mut fence = super::ownership_fence::commit_fence(&self.conn);
         self.conn.commit_hook(Some(move || {
             if fence.as_mut().is_some_and(|refuse| refuse()) {
                 return true;

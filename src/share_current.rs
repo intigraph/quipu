@@ -119,13 +119,11 @@ fn savepoint<T>(
     store.conn.execute_batch(&format!("SAVEPOINT {name}"))?;
     match body(store) {
         Ok(value) => {
-            store.conn.execute_batch(&format!("RELEASE {name}"))?;
+            crate::store::release::release(&store.conn, name)?;
             Ok(value)
         }
         Err(error) => {
-            store
-                .conn
-                .execute_batch(&format!("ROLLBACK TO {name}; RELEASE {name}"))?;
+            crate::store::release::rollback_release(&store.conn, name)?;
             store.read_model.borrow_mut().clear();
             store.term_cache.borrow_mut().clear_persistent();
             Err(error)

@@ -220,15 +220,6 @@ impl Store {
     /// Every committing write entrypoint calls this before it writes anything.
     /// INACTIVE legacy stores stay writable; this grants no ownership capability.
     pub fn ensure_ownership_writable(&self) -> Result<()> {
-        if self
-            .ownership_fence_tripped
-            .swap(false, std::sync::atomic::Ordering::SeqCst)
-            && !self.conn.is_autocommit()
-        {
-            // The commit fence refused an outermost RELEASE; its data is
-            // already rolled back, only the open-transaction state remains.
-            self.conn.execute_batch("ROLLBACK")?;
-        }
         self.ownership_state().map(|_| ())
     }
 

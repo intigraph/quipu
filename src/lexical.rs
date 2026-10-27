@@ -242,17 +242,16 @@ impl Store {
                 self.conn
                     .execute_batch("ROLLBACK TO lexical_scope_upgrade")?;
             }
-            self.conn.execute_batch("RELEASE lexical_scope_upgrade")?;
+            crate::store::release::release(&self.conn, "lexical_scope_upgrade")?;
             return outcome;
         }
         register(&self.conn)?;
         self.conn.execute_batch("SAVEPOINT lexical_setup")?;
         let outcome = self.conn.execute_batch(SCHEMA);
         if outcome.is_err() {
-            self.conn
-                .execute_batch("ROLLBACK TO lexical_setup; RELEASE lexical_setup")?;
+            crate::store::release::rollback_release(&self.conn, "lexical_setup")?;
         } else {
-            self.conn.execute_batch("RELEASE lexical_setup")?;
+            crate::store::release::release(&self.conn, "lexical_setup")?;
         }
         outcome?;
         Ok(())
@@ -326,10 +325,9 @@ impl Store {
             Ok(())
         })();
         if outcome.is_err() {
-            self.conn
-                .execute_batch("ROLLBACK TO lexical_backfill; RELEASE lexical_backfill")?;
+            crate::store::release::rollback_release(&self.conn, "lexical_backfill")?;
         } else {
-            self.conn.execute_batch("RELEASE lexical_backfill")?;
+            crate::store::release::release(&self.conn, "lexical_backfill")?;
         }
         outcome?;
         self.lexical_progress()?
@@ -338,7 +336,13 @@ impl Store {
 
     /// Derived data only; removes triggers before dropping their target.
     pub fn drop_lexical_index(&self) -> Result<()> {
-        self.conn.execute_batch("SAVEPOINT lexical_drop; DROP TRIGGER IF EXISTS lexical_insert; DROP TRIGGER IF EXISTS lexical_update; DROP TRIGGER IF EXISTS lexical_delete; DROP VIEW IF EXISTS lexical_source; DROP TABLE IF EXISTS lexical_fts; DROP TABLE IF EXISTS lexical_progress; RELEASE lexical_drop")?;
+        self.conn.execute_batch("SAVEPOINT lexical_drop")?;
+        let dropped = self.conn.execute_batch("DROP TRIGGER IF EXISTS lexical_insert; DROP TRIGGER IF EXISTS lexical_update; DROP TRIGGER IF EXISTS lexical_delete; DROP VIEW IF EXISTS lexical_source; DROP TABLE IF EXISTS lexical_fts; DROP TABLE IF EXISTS lexical_progress;");
+        if dropped.is_err() {
+            crate::store::release::rollback_release(&self.conn, "lexical_drop")?;
+            dropped?;
+        }
+        crate::store::release::release(&self.conn, "lexical_drop")?;
         Ok(())
     }
 

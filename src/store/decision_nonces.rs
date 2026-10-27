@@ -100,19 +100,15 @@ impl Store {
         })();
         match result {
             Ok(Some(tx)) => {
-                self.conn.execute_batch("RELEASE quipu_decision_nonce")?;
+                crate::store::release::release(&self.conn, "quipu_decision_nonce")?;
                 Ok(Some(tx))
             }
             Ok(None) => {
-                self.conn.execute_batch(
-                    "ROLLBACK TO quipu_decision_nonce; RELEASE quipu_decision_nonce",
-                )?;
+                crate::store::release::rollback_release(&self.conn, "quipu_decision_nonce")?;
                 Ok(None)
             }
             Err(e) => {
-                let _ = self.conn.execute_batch(
-                    "ROLLBACK TO quipu_decision_nonce; RELEASE quipu_decision_nonce",
-                );
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_decision_nonce");
                 Err(e)
             }
         }

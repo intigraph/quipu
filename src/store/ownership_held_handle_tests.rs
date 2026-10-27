@@ -194,12 +194,11 @@ fn commit_fence_refuses_direct_writers_on_a_held_handle() {
         .execute("INSERT INTO direct_probe VALUES (3)", [])
         .unwrap();
     assert!(
-        held.conn.execute_batch("RELEASE probe").is_err(),
+        crate::store::release::release(&held.conn, "probe").is_err(),
         "outermost release must be refused"
     );
-    // SQLite leaves a refused outermost RELEASE marked as open; the next
-    // entrypoint check refuses and clears it.
-    assert!(held.ensure_ownership_writable().is_err());
+    // SQLite alone would leave this connection inside a dead transaction;
+    // the shared release helper ends it before returning the refusal.
     assert!(
         held.conn.is_autocommit(),
         "no transaction stays open after a refused commit"
@@ -260,4 +259,95 @@ fn stale_handle_refuses_shape_load() {
     );
     assert!(held.ensure_ownership_writable().is_err());
     assert_eq!(count(&held, "shapes"), 0);
+}
+
+/// Arm a one-shot trip: the next transaction row removes the binding, after
+/// the entry check has passed, so only the commit fence can refuse that write.
+/// Returns the record bytes to restore afterwards.
+fn trip_fence_once(held: &Store, path: &std::path::Path) -> Vec<u8> {
+    let sidecar = path.with_extension("db.ownership.json");
+    let saved = std::fs::read(&sidecar).unwrap();
+    let armed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    held.conn
+        .create_scalar_function(
+            "trip_ownership_once",
+            0,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+            move |_| {
+                if armed.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                    let _ = std::fs::remove_file(&sidecar);
+                }
+                Ok(0)
+            },
+        )
+        .unwrap();
+    held.conn
+        .execute_batch(
+            "CREATE TEMP TRIGGER trip_ownership AFTER INSERT ON main.transactions \
+             BEGIN SELECT trip_ownership_once(); END;",
+        )
+        .unwrap();
+    saved
+}
+
+/// After the fence refuses one outer commit and ownership is valid again,
+/// later writes on the same handle persist or fail; none reports Ok and is
+/// then discarded, and no term id is handed out twice.
+#[test]
+fn writes_after_a_refused_outer_commit_persist_or_fail() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("trip.db");
+    let p = path.to_str().unwrap();
+    drop(Store::open(p).unwrap());
+    Store::adopt(p).unwrap();
+    let mut held = Store::open(p).unwrap();
+    write(&mut held, 1).unwrap();
+    let saved = trip_fence_once(&held, &path);
+    let before = transactions(&held);
+    assert!(write(&mut held, 2).is_err(), "the fence refuses the commit");
+    assert!(held.conn.is_autocommit(), "no dead transaction is left");
+    std::fs::write(path.with_extension("db.ownership.json"), saved).unwrap();
+    held.ensure_ownership_writable().unwrap();
+    assert_eq!(transactions(&held), before);
+
+    // A direct bookkeeping write now lands for real.
+    held.commit_consumer("c-probe", 7, "2026-10-27T00:00:00Z")
+        .unwrap();
+    let other = rusqlite::Connection::open(p).unwrap();
+    let offset: i64 = other
+        .query_row(
+            "SELECT committed_offset FROM consumers WHERE consumer_id = 'c-probe'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(offset, 7);
+
+    // intern then transact keeps its ids, and a later intern never reuses one.
+    let e = held.intern("urn:after:e").unwrap();
+    let a = held.intern("urn:after:a").unwrap();
+    held.transact(
+        &[Datum {
+            entity: e,
+            attribute: a,
+            value: Value::Int(3),
+            valid_from: "2026-10-27".into(),
+            valid_to: None,
+            op: Op::Assert,
+        }],
+        "2026-10-27T00:00:01Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let z = held.intern("urn:after:z").unwrap();
+    assert!(z != e && z != a, "a committed term id was handed out again");
+    let persisted: i64 = other
+        .query_row(
+            "SELECT count(*) FROM terms WHERE iri IN ('urn:after:e', 'urn:after:a', 'urn:after:z')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(persisted, 3);
 }

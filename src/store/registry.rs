@@ -122,14 +122,14 @@ impl Store {
         })();
         match result {
             Ok(()) => {
-                self.conn
-                    .execute_batch(&format!("RELEASE quipu_load_{table}"))?;
+                crate::store::release::release(&self.conn, &format!("quipu_load_{table}"))?;
                 Ok(())
             }
             Err(e) => {
-                let _ = self.conn.execute_batch(&format!(
-                    "ROLLBACK TO quipu_load_{table}; RELEASE quipu_load_{table}"
-                ));
+                let _ = crate::store::release::rollback_release(
+                    &self.conn,
+                    &format!("quipu_load_{table}"),
+                );
                 Err(e)
             }
         }

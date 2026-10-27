@@ -62,8 +62,10 @@ does. Two layers do this:
   event pruning. It also closes the window between an entrypoint check and the
   commit, so an adoption that fails concurrently cannot slip one write through.
   Its refusal surfaces as SQLite's commit-hook constraint error. SQLite leaves
-  a refused outermost `RELEASE` marked as an open transaction; the next
-  entrypoint check on that handle rolls it back.
+  a refused outermost `RELEASE` marked as an open transaction, in which later
+  writes would report success and then vanish. Every write scope therefore
+  ends through one shared helper (`store::release`) that issues `ROLLBACK`
+  immediately when its commit is refused and returns the error.
 
 Derived index maintenance (lexical and substring indexes) and term interning
 run inside the fenced write paths when a write drives them. Run on their own,

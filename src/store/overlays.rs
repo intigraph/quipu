@@ -280,7 +280,8 @@ impl Store {
                         params![entity, attribute, v_bytes, overlay_g, tx_id, timestamp],
                     )?;
                 }
-                sp.commit()?;
+                let committed = sp.commit();
+                crate::store::release::settle(&self.conn, committed)?;
                 Ok(tx_id)
             }
         }

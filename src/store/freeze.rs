@@ -235,11 +235,9 @@ impl Store {
             Ok(())
         })();
         match result {
-            Ok(()) => self.conn.execute_batch("RELEASE quipu_freeze")?,
+            Ok(()) => crate::store::release::release(&self.conn, "quipu_freeze")?,
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_freeze; RELEASE quipu_freeze");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_freeze");
                 return Err(Error::Store(format!(
                     "freeze of '{graph_iri}' rolled back ({e}); the pack file \
                      {final_path} remains on disk and can be deleted"
@@ -346,13 +344,11 @@ impl Store {
         })();
         match result {
             Ok(counts) => {
-                self.conn.execute_batch("RELEASE quipu_thaw")?;
+                crate::store::release::release(&self.conn, "quipu_thaw")?;
                 Ok(counts)
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_thaw; RELEASE quipu_thaw");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_thaw");
                 // Remount so the store composes the archive again — the thaw
                 // failed, but the graph must not vanish.
                 self.mount_attachment(Attachment::read_only(&alias, &path))?;

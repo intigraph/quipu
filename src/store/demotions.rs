@@ -115,12 +115,11 @@ impl Store {
         );
         match result {
             Ok(count) => {
-                self.conn.execute_batch("RELEASE quipu_demotion")?;
+                crate::store::release::release(&self.conn, "quipu_demotion")?;
                 Ok(count)
             }
             Err(error) => {
-                self.conn
-                    .execute_batch("ROLLBACK TO quipu_demotion; RELEASE quipu_demotion")?;
+                crate::store::release::rollback_release(&self.conn, "quipu_demotion")?;
                 self.read_model.borrow_mut().clear();
                 Err(error)
             }

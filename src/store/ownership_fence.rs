@@ -22,21 +22,13 @@
 //!
 //! SQLite rolls the data back on a refused commit, but a refused outermost
 //! RELEASE leaves the connection marked as inside a transaction. The hook
-//! cannot issue SQL, so it sets `tripped`; the next
-//! `Store::ensure_ownership_writable` on the handle rolls that state back,
-//! so a fenced handle does not keep a stale read snapshot or a write lock.
+//! cannot issue SQL, so every write scope ends through `store::release`,
+//! which rolls back at once and reports the refusal.
 use rusqlite::{Connection, OpenFlags};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 
 /// The fence for the store file at `path`, or `None` for in-memory and
 /// browser stores (INACTIVE by definition, with no native placement).
-pub(super) fn commit_fence(
-    conn: &Connection,
-    tripped: Arc<AtomicBool>,
-) -> Option<impl FnMut() -> bool + Send + 'static> {
+pub(super) fn commit_fence(conn: &Connection) -> Option<impl FnMut() -> bool + Send + 'static> {
     if cfg!(target_arch = "wasm32") {
         return None;
     }
@@ -59,17 +51,13 @@ pub(super) fn commit_fence(
             .and_then(|c| c.execute_batch("PRAGMA query_only=ON;").map(|()| c))
             .ok();
         }
-        let refuse = match reader.as_ref() {
+        match reader.as_ref() {
             Some(reader) => super::ownership::state_on(reader).is_err(),
             None => {
                 let gone = std::fs::symlink_metadata(&path)
                     .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
                 !(gone && opened_inactive)
             }
-        };
-        if refuse {
-            tripped.store(true, Ordering::SeqCst);
         }
-        refuse
     })
 }

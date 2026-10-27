@@ -341,9 +341,7 @@ impl Store {
         store.attached_graphs = attach::attached_graph_ids(&store.conn, attachments)?;
         // Installed after the migrations: from here on every outer commit on
         // this handle re-checks ownership (see `ownership_fence`).
-        if let Some(fence) =
-            super::ownership_fence::commit_fence(&store.conn, store.ownership_fence_tripped.clone())
-        {
+        if let Some(fence) = super::ownership_fence::commit_fence(&store.conn) {
             store.conn.commit_hook(Some(fence))?;
         }
         Ok(store)
@@ -565,7 +563,6 @@ impl Store {
             replay_capture: None,
             gate_clock: None,
             principal_chain: Vec::new(),
-            ownership_fence_tripped: Default::default(),
             recording_verdicts: false,
             trust_root_bootstrap: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),

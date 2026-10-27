@@ -34,13 +34,13 @@ impl Store {
         })();
         match result {
             Ok(value) => {
-                self.conn
-                    .execute_batch("RELEASE quipu_graph_create_recorded")?;
+                crate::store::release::release(&self.conn, "quipu_graph_create_recorded")?;
                 Ok(value)
             }
             Err(error) => {
-                let _ = self.conn.execute_batch(
-                    "ROLLBACK TO quipu_graph_create_recorded; RELEASE quipu_graph_create_recorded",
+                let _ = crate::store::release::rollback_release(
+                    &self.conn,
+                    "quipu_graph_create_recorded",
                 );
                 Err(error)
             }
