@@ -322,3 +322,119 @@ fn owner_rename_leaves_foreign_owned_label_alone() {
         vec!["Alias".to_string(), "New name".to_string()]
     );
 }
+
+fn append(store: &mut Store, input: serde_json::Value) -> serde_json::Value {
+    let mut input = input;
+    input["turtle"] = serde_json::json!(format!(
+        "@prefix ex: <http://example.org/> . {}",
+        input["turtle"].as_str().unwrap()
+    ));
+    let result = tool_knot(store, &input).unwrap();
+    assert_eq!(result["conforms"], true);
+    result
+}
+
+fn tx_sources(store: &Store) -> Vec<String> {
+    store
+        .conn
+        .prepare("SELECT coalesce(source, 'NULL') FROM transactions ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect()
+}
+
+fn statuses(store: &Store, name: &str) -> Vec<String> {
+    facts(store, name)
+        .into_iter()
+        .filter(|f| store.resolve(f.attribute).unwrap() == "http://example.org/status")
+        .map(|f| match f.value {
+            crate::types::Value::Str(s) => s,
+            other => format!("{other:?}"),
+        })
+        .collect()
+}
+
+/// A non-replace write carrying `snapshot` is owned by that snapshot, so a
+/// later replace under the key retracts it: one status value, not two.
+#[test]
+fn append_under_snapshot_key_is_retracted_by_a_later_replace() {
+    let mut store = Store::open_in_memory().unwrap();
+    let out = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"applied\" .",
+            "snapshot": "jobs", "actor": "hammond", "source": "patrol",
+            "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(out["snapshot"], "jobs");
+    assert_eq!(out["source"], "snapshot:jobs");
+    publish(
+        &mut store,
+        "jobs",
+        "ex:role ex:status \"interviewing\" .",
+        AFTER,
+    );
+    assert_eq!(statuses(&store, "role"), vec!["interviewing".to_string()]);
+    assert_eq!(tx_sources(&store), vec!["snapshot:jobs", "snapshot:jobs"]);
+}
+
+/// Without a snapshot key the old source rules hold: an explicit `source`
+/// wins, else `knot:<actor>`; a blank key counts as no key.
+#[test]
+fn append_without_snapshot_key_keeps_its_source() {
+    let mut store = Store::open_in_memory().unwrap();
+    let named = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:a ex:status \"x\" .", "actor": "hammond",
+            "source": "patrol", "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(named["source"], "patrol");
+    assert!(named["snapshot"].is_null());
+    let derived = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:b ex:status \"x\" .", "actor": "hammond",
+            "snapshot": "  ", "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(derived["source"], "knot:hammond");
+    assert!(derived["snapshot"].is_null());
+    assert_eq!(tx_sources(&store), vec!["patrol", "knot:hammond"]);
+}
+
+/// A replace under one key never touches facts appended under another key or
+/// written without one.
+#[test]
+fn replace_under_one_key_leaves_other_keys_and_sources_alone() {
+    let mut store = Store::open_in_memory().unwrap();
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"applied\" .",
+            "snapshot": "jobs", "timestamp": BEFORE,
+        }),
+    );
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"screened\" .",
+            "snapshot": "other", "timestamp": BEFORE,
+        }),
+    );
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"noted\" .",
+            "actor": "hammond", "timestamp": BEFORE,
+        }),
+    );
+    publish(&mut store, "jobs", "ex:role ex:status \"offer\" .", AFTER);
+    let mut got = statuses(&store, "role");
+    got.sort();
+    assert_eq!(got, vec!["noted", "offer", "screened"]);
+}
