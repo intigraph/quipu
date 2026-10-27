@@ -375,12 +375,12 @@ fn root_has(store: &Store, e: i64, a: i64, v: &Value) -> bool {
         .any(|f| f.entity == e && f.attribute == a && f.value.term_key() == v.term_key())
 }
 
-fn expect_promoted(out: ForkPromotion) -> (i64, usize, usize) {
+fn expect_promoted(out: &ForkPromotion) -> (i64, usize, usize) {
     let ForkPromotion::Promoted {
         tx,
         asserted,
         retracted,
-    } = &out
+    } = out
     else {
         panic!("expected Promoted, got {out:?}");
     };
@@ -415,7 +415,7 @@ fn root_write_after_fork_survives_promotion() {
         )
         .unwrap();
 
-    let (_, asserted, retracted) = expect_promoted(store.fork_promote("work", TS, None).unwrap());
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("work", TS, None).unwrap());
     assert_eq!((asserted, retracted), (1, 0));
     assert!(
         root_has(&store, alice, age, &Value::Int(30)),
@@ -441,7 +441,7 @@ fn promoting_a_fork_of_old_history_keeps_later_root_history() {
         )
         .unwrap();
 
-    let (_, asserted, retracted) = expect_promoted(store.fork_promote("old", TS, None).unwrap());
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("old", TS, None).unwrap());
     assert_eq!((asserted, retracted), (1, 0));
     assert!(root_has(&store, alice, name, &Value::Str("v2".into())));
     assert!(!root_has(&store, alice, name, &Value::Str("v1".into())));
@@ -472,7 +472,8 @@ fn fork_retraction_still_applies_alongside_new_root_writes() {
         )
         .unwrap();
 
-    let (tx, asserted, retracted) = expect_promoted(store.fork_promote("prune", TS, None).unwrap());
+    let (tx, asserted, retracted) =
+        expect_promoted(&store.fork_promote("prune", TS, None).unwrap());
     assert!(tx > 0);
     assert_eq!((asserted, retracted), (0, 1));
     assert!(!root_has(&store, alice, knows, &Value::Ref(bob)));
@@ -598,7 +599,7 @@ fn unbounded_slot_edits_on_both_sides_union() {
         )
         .unwrap();
 
-    let (_, asserted, retracted) = expect_promoted(store.fork_promote("tags", TS, None).unwrap());
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("tags", TS, None).unwrap());
     assert_eq!((asserted, retracted), (1, 0));
     assert!(root_has(&store, alice, tag, &Value::Str("root".into())));
     assert!(root_has(&store, alice, tag, &Value::Str("fork".into())));
@@ -634,7 +635,7 @@ fn root_retraction_and_replacement_after_fork_stand_after_promotion() {
         )
         .unwrap();
 
-    let (_, asserted, retracted) = expect_promoted(store.fork_promote("stale", TS, None).unwrap());
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("stale", TS, None).unwrap());
     assert_eq!((asserted, retracted), (1, 0));
     assert!(
         !root_has(&store, alice, knows, &Value::Ref(bob)),
