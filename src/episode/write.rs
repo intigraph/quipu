@@ -23,7 +23,7 @@ pub(super) fn commit(
         )?;
         let assertion_count = assertions.len();
         let stale = if episode.replace_snapshot {
-            store.plan_episode_retraction(&episode.name, graph)?
+            store.plan_episode_replacement(&episode.name, graph, &assertions)?
         } else if let Some(ep) = store.lookup(&format!(
             "{base_ns}episode_{}",
             sanitize_iri_local(&episode.name)

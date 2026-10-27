@@ -262,8 +262,9 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             let source_tag = format!("snapshot:{}", snapshot.unwrap());
             // Both the retraction plan and the transaction are scoped to the
             // resolved graph: a snapshot in graph G replaces only G's prior
-            // facts under this producer key and leaves ROOT untouched.
-            let datums = store.plan_source_retraction(&source_tag, graph)?;
+            // facts under this producer key and leaves ROOT untouched. The
+            // payload is parsed FIRST so the plan can see which nodes it still
+            // names (aegis-p9q: a renamed node must not keep its old label).
             let mut assertions = crate::rdf::parse_rdf_scoped(
                 store,
                 turtle.as_bytes(),
@@ -273,6 +274,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 graph,
                 input.get("blank_node_scope").and_then(JsonValue::as_str),
             )?;
+            let datums = store.plan_source_replacement(&source_tag, graph, &assertions)?;
             let count = assertions.len();
             // Compare canonical term keys once instead of an O(old * new) scan.
             let mut keys = std::collections::BTreeSet::new();

@@ -190,3 +190,135 @@ fn replacing_one_partition_leaves_untouched_file_facts_unchanged() {
         before
     );
 }
+
+fn labels(store: &Store, name: &str) -> Vec<String> {
+    let mut out: Vec<String> = facts(store, name)
+        .into_iter()
+        .filter(|f| {
+            store.resolve(f.attribute).unwrap() == "http://www.w3.org/2000/01/rdf-schema#label"
+        })
+        .map(|f| match f.value {
+            crate::types::Value::Str(s) => s,
+            other => format!("{other:?}"),
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// aegis-p9q: the owner RENAMES a node another producer still references. The
+/// replacement names the node itself, so the old label has no orphan to
+/// protect and must go: exactly the new label remains.
+#[test]
+fn owner_rename_of_foreign_referenced_node_keeps_only_the_new_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(labels(&store, "section"), vec!["New name".to_string()]);
+    // The foreign reference is untouched.
+    let foreign = facts(&store, "foreign");
+    assert_eq!(foreign.len(), 1, "foreign producer's fact must survive");
+}
+
+/// Existing intent, pinned beside the rename case: when the owner REMOVES a
+/// foreign-referenced node, its old label is retained so the reference is not
+/// left unnameable.
+#[test]
+fn owner_removal_of_foreign_referenced_node_retains_old_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(&mut store, "docs:owner", "ex:other a ex:Section .", AFTER);
+    assert_eq!(labels(&store, "section"), vec!["Old name".to_string()]);
+    // A replacement that keeps the node but drops its label also leaves it
+    // unnamed, so retention still applies.
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(&mut store, "docs:owner", "ex:section a ex:Section .", AFTER);
+    assert_eq!(labels(&store, "section"), vec!["Old name".to_string()]);
+}
+
+/// No foreign reference: a rename has always replaced the label outright.
+#[test]
+fn owner_rename_without_foreign_reference_retracts_old_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(labels(&store, "section"), vec!["New name".to_string()]);
+}
+
+/// A label another producer asserted on the same node is not the snapshot's
+/// to retract, rename or not.
+#[test]
+fn owner_rename_leaves_foreign_owned_label_alone() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:section rdfs:label \"Alias\" . ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(
+        labels(&store, "section"),
+        vec!["Alias".to_string(), "New name".to_string()]
+    );
+}
