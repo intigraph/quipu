@@ -87,6 +87,43 @@ pub(super) fn eval_filter_tv(
             })
         }
         Expression::Not(inner) => Ok(eval_filter_tv(store, inner, row, ctx)?.map(|b| !b)),
+        // Comparisons are three-valued too: an indeterminate or ill-typed
+        // temporal pair is a type error, which `!`, `!=` (parsed as
+        // `!(a = b)`) and `NOT IN` must propagate rather than invert into a
+        // pass (aegis-u93).
+        Expression::Equal(left, right) => Ok(sparql_eq(store, left, right, row)),
+        // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
+        // `?x = a || ?x = b`, so it desugars here rather than needing its own
+        // comparison logic — it shares `sparql_eq` with the `=` arm above so the
+        // two can never drift. `NOT IN` is parsed as `Not(In(…))`, which the
+        // `Not` arm above handles. An EMPTY candidate list is `false` (and
+        // `NOT IN ()` therefore `true`), per spec. Per the `||` truth table a
+        // `true` candidate wins, otherwise any error makes the whole IN an error.
+        Expression::In(lhs, candidates) => {
+            let mut result = Some(false);
+            for candidate in candidates {
+                match sparql_eq(store, lhs, candidate, row) {
+                    Some(true) => return Ok(Some(true)),
+                    Some(false) => {}
+                    None => result = None,
+                }
+            }
+            Ok(result)
+        }
+        Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
+            o == std::cmp::Ordering::Greater
+        })),
+        Expression::GreaterOrEqual(left, right) => {
+            Ok(compare_values(store, left, right, row, |o| {
+                o == std::cmp::Ordering::Greater || o == std::cmp::Ordering::Equal
+            }))
+        }
+        Expression::Less(left, right) => Ok(compare_values(store, left, right, row, |o| {
+            o == std::cmp::Ordering::Less
+        })),
+        Expression::LessOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
+            o == std::cmp::Ordering::Less || o == std::cmp::Ordering::Equal
+        })),
         // A bare variable/literal used directly as a FILTER takes its effective
         // boolean value, e.g. `FILTER(?flag)` or `FILTER("x")`. An unbound
         // variable or a value with no EBV is a type error, not a query failure.
@@ -104,35 +141,11 @@ fn eval_filter_two_valued(
     ctx: &TemporalContext,
 ) -> Result<bool> {
     match expr {
-        Expression::Equal(left, right) => Ok(sparql_eq(store, left, right, row)),
         // sameTerm had no FILTER arm, so every form fell to the catch-all
         // error below while the same call in BIND answered (aegis-soqv1r,
         // W3C sparql10 sameTerm-simple/-eq/-not-eq). It keeps term identity
         // (`expr_eq`), unlike `=` which compares numerics by value.
         Expression::SameTerm(left, right) => Ok(expr_eq(store, left, right, row)),
-        // quipu #52: `?x IN (a, b)` is defined by SPARQL 1.1 as the disjunction
-        // `?x = a || ?x = b`, so it desugars here rather than needing its own
-        // comparison logic — it shares `sparql_eq` with the `=` arm above so the
-        // two can never drift. `NOT IN` is parsed as `Not(In(…))`, which the
-        // `Not` arm of `eval_filter_tv` already handles. An EMPTY candidate list is `false`
-        // (and `NOT IN ()` therefore `true`), per spec.
-        Expression::In(lhs, candidates) => Ok(candidates
-            .iter()
-            .any(|candidate| sparql_eq(store, lhs, candidate, row))),
-        Expression::Greater(left, right) => Ok(compare_values(store, left, right, row, |o| {
-            o == std::cmp::Ordering::Greater
-        })),
-        Expression::GreaterOrEqual(left, right) => {
-            Ok(compare_values(store, left, right, row, |o| {
-                o == std::cmp::Ordering::Greater || o == std::cmp::Ordering::Equal
-            }))
-        }
-        Expression::Less(left, right) => Ok(compare_values(store, left, right, row, |o| {
-            o == std::cmp::Ordering::Less
-        })),
-        Expression::LessOrEqual(left, right) => Ok(compare_values(store, left, right, row, |o| {
-            o == std::cmp::Ordering::Less || o == std::cmp::Ordering::Equal
-        })),
         Expression::Bound(var) => Ok(row.contains_key(var.as_str())),
         Expression::FunctionCall(func, args) => eval_bool_function(store, func, args, row),
         // EXISTS { pattern } (and NOT EXISTS via the Not arm above). The inner
@@ -160,17 +173,26 @@ fn eval_filter_two_valued(
     }
 }
 
-/// Value equality for `=` and `IN`. An operand that cannot be evaluated (such
-/// as an unbound variable) is not equal to anything rather than an error.
+/// Value equality for `=` and `IN`, three-valued: `None` is a SPARQL type
+/// error. An operand that cannot be evaluated (such as an unbound variable) is
+/// not equal to anything rather than an error.
 /// IRI constants retain query-local identity even without a dictionary entry.
 /// SPARQL `=`: numbers compare by VALUE across datatypes, so `1 = 1.0` holds
-/// (aegis-soqv1r). Everything else falls back to term identity (`expr_eq`),
-/// which is what `sameTerm` uses; the two differ only for numerics.
-fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
+/// (aegis-soqv1r). Two temporals of the same kind compare by value too
+/// (`op:dateTime-equal`): the same instant at different offsets is equal, and
+/// an indeterminate or ill-typed pair is an error (aegis-u93). Everything else
+/// falls back to term identity (`expr_eq`), which is what `sameTerm` uses.
+fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> Option<bool> {
     let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
-        return false;
+        return Some(false);
     };
-    crate::numeric_value::equal(&a, &b)
+    if a == b {
+        return Some(true);
+    }
+    if let Some(order) = temporal_equality_order(&a, &b) {
+        return order.map(|o| o == std::cmp::Ordering::Equal);
+    }
+    Some(crate::numeric_value::equal(&a, &b))
 }
 
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {

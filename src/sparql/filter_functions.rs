@@ -1,24 +1,24 @@
 fn eval_expression_boolean(store: &Store, expr: &Expression, row: &Bindings) -> Option<bool> {
     match expr {
-        Expression::Equal(left, right) => Some(sparql_eq(store, left, right, row)),
+        Expression::Equal(left, right) => sparql_eq(store, left, right, row),
         Expression::SameTerm(left, right) => Some(expr_eq(store, left, right, row)),
         Expression::Greater(left, right) => {
-            Some(compare_values(store, left, right, row, |order| {
+            compare_values(store, left, right, row, |order| {
                 order == std::cmp::Ordering::Greater
-            }))
+            })
         }
         Expression::GreaterOrEqual(left, right) => {
-            Some(compare_values(store, left, right, row, |order| {
+            compare_values(store, left, right, row, |order| {
                 order != std::cmp::Ordering::Less
-            }))
+            })
         }
-        Expression::Less(left, right) => Some(compare_values(store, left, right, row, |order| {
+        Expression::Less(left, right) => compare_values(store, left, right, row, |order| {
             order == std::cmp::Ordering::Less
-        })),
+        }),
         Expression::LessOrEqual(left, right) => {
-            Some(compare_values(store, left, right, row, |order| {
+            compare_values(store, left, right, row, |order| {
                 order != std::cmp::Ordering::Greater
-            }))
+            })
         }
         Expression::And(left, right) => Some(
             eval_expression_boolean(store, left, row)?
@@ -487,35 +487,49 @@ fn temporal_order(a: &Value, b: &Value) -> Option<Option<std::cmp::Ordering>> {
     })
 }
 
-/// Compare two expressions with an ordering predicate.
+/// `temporal_order` restricted to two temporals of the SAME kind, for `=`:
+/// a mixed pair (dateTime against a string, say) keeps term-identity
+/// equality, so only a same-kind pair can be value-equal or an error.
+fn temporal_equality_order(a: &Value, b: &Value) -> Option<Option<std::cmp::Ordering>> {
+    let kind = temporal(a.datatype())?;
+    if temporal(b.datatype()) != Some(kind) {
+        return None;
+    }
+    temporal_order(a, b)
+}
+
+/// Compare two expressions with an ordering predicate, three-valued: `None`
+/// is a SPARQL type error, which the FILTER `!` / `&&` / `||` truth tables
+/// propagate (a bare FILTER still drops the row).
 pub fn compare_values(
     store: &Store,
     left: &Expression,
     right: &Expression,
     row: &Bindings,
     pred: impl Fn(std::cmp::Ordering) -> bool,
-) -> bool {
+) -> Option<bool> {
     let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
-        return false;
+        return Some(false);
     };
     if a.datatype().is_some_and(namespace::is_numeric_datatype)
         && b.datatype().is_some_and(namespace::is_numeric_datatype)
     {
-        return crate::numeric_value::compare(&a, &b).is_some_and(pred);
+        return Some(crate::numeric_value::compare(&a, &b).is_some_and(pred));
     }
     // Temporal literals compare by VALUE (aegis-jd2t): offsets normalised, an
     // ill-typed lexeme, a mixed pair or an indeterminate (timezoned against
-    // untimezoned) comparison is the SPARQL type error, i.e. false. A lexical
-    // compare ordered 06:00-05:00 before 10:00Z and let "not-a-time" pass.
+    // untimezoned) comparison is the SPARQL type error (`None`), so it fails
+    // under `!` as well (aegis-u93). A lexical compare ordered 06:00-05:00
+    // before 10:00Z and let "not-a-time" pass.
     if let Some(order) = temporal_order(&a, &b) {
-        return order.is_some_and(pred);
+        return order.map(pred);
     }
     // String comparison uses the LEXICAL form, so "hello"@en compares as
     // "hello" (it used to compare as "hello@en").
-    match (a.as_lexical(), b.as_lexical()) {
+    Some(match (a.as_lexical(), b.as_lexical()) {
         (Some(a), Some(b)) => pred(a.cmp(b)),
         _ => false,
-    }
+    })
 }
 
 /// Convert an oxrdf Literal to a Value (same logic as rdf module).
