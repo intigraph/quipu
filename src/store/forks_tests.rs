@@ -376,14 +376,15 @@ fn root_has(store: &Store, e: i64, a: i64, v: &Value) -> bool {
 }
 
 fn expect_promoted(out: ForkPromotion) -> (i64, usize, usize) {
-    match out {
-        ForkPromotion::Promoted {
-            tx,
-            asserted,
-            retracted,
-        } => (tx, asserted, retracted),
-        other => panic!("expected Promoted, got {other:?}"),
-    }
+    let ForkPromotion::Promoted {
+        tx,
+        asserted,
+        retracted,
+    } = &out
+    else {
+        panic!("expected Promoted, got {out:?}");
+    };
+    (*tx, *asserted, *retracted)
 }
 
 #[test]
@@ -522,19 +523,17 @@ fn divergent_max_count_one_edits_conflict_and_write_nothing() {
     let root_before = triple_set(&store.current_facts().unwrap());
     let tx_before = store.latest_tx_id().unwrap();
     let out = store.fork_promote("rename", TS, None).unwrap();
-    match &out {
-        ForkPromotion::Conflicts(conflicts) => {
-            assert_eq!(conflicts.len(), 1, "{conflicts:?}");
-            let c = &conflicts[0];
-            assert_eq!(c.subject, "<urn:t:alice>");
-            assert_eq!(c.predicate, "urn:t:name");
-            assert_eq!(c.max_count, 1);
-            assert_eq!(c.base, vec!["\"v2\"".to_string()]);
-            assert_eq!(c.ours, vec!["\"v4\"".to_string()]);
-            assert_eq!(c.theirs, vec!["\"v3\"".to_string()]);
-        }
-        other => panic!("expected Conflicts, got {other:?}"),
-    }
+    let ForkPromotion::Conflicts(conflicts) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+    let c = &conflicts[0];
+    assert_eq!(c.subject, "<urn:t:alice>");
+    assert_eq!(c.predicate, "urn:t:name");
+    assert_eq!(c.max_count, 1);
+    assert_eq!(c.base, vec!["\"v2\"".to_string()]);
+    assert_eq!(c.ours, vec!["\"v4\"".to_string()]);
+    assert_eq!(c.theirs, vec!["\"v3\"".to_string()]);
     // Nothing written; the fork stays open for a decision.
     assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
     assert_eq!(tx_before, store.latest_tx_id().unwrap());
@@ -679,14 +678,13 @@ fn root_delete_versus_fork_replace_on_max_count_one_is_a_conflict() {
         .unwrap();
 
     let root_before = triple_set(&store.current_facts().unwrap());
-    match store.fork_promote("revive", TS, None).unwrap() {
-        ForkPromotion::Conflicts(c) => {
-            assert_eq!(c.len(), 1, "{c:?}");
-            assert!(c[0].ours.is_empty());
-            assert_eq!(c[0].theirs, vec!["\"v3\"".to_string()]);
-        }
-        other => panic!("expected Conflicts, got {other:?}"),
-    }
+    let out = store.fork_promote("revive", TS, None).unwrap();
+    let ForkPromotion::Conflicts(c) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(c.len(), 1, "{c:?}");
+    assert!(c[0].ours.is_empty());
+    assert_eq!(c[0].theirs, vec!["\"v3\"".to_string()]);
     assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
     assert_eq!(store.fork_lookup("revive").unwrap().unwrap().status, "open");
 }

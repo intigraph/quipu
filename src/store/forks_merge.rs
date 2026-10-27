@@ -1,4 +1,4 @@
-//! Fork promotion as a three-way merge (TerminusDB gap analysis, gap 1).
+//! Fork promotion as a three-way merge (gap 1 of `docs/design/terminusdb-gap-analysis.md`).
 //!
 //! Promotion used to diff the fork against CURRENT ROOT and apply the
 //! difference, so a fact written to ROOT after the fork's base looked like
