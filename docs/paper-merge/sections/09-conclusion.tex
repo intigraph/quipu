@@ -19,15 +19,15 @@ operator reproduces that benefit on data nobody generated for the purpose --- an
 alias divergence is invisible to triple-level merge, $0$ of $93$, and no schema
 will fix it.
 
+The schema-evolution trials refine that claim.
+Merging declarations first changes cardinality decisions as intended in the
+tested fixtures, but datatype incompatibility still needs validation and a
+resolution policy. Schema-first orchestration is therefore not a complete
+conflict-resolution rule on its own.
+
 Two directions follow. Partial application would let a merge land its
 uncontended slots and hold back only the contended ones, removing the cost
 noted in \S\ref{sec:limits}. And the alias class, which dominates the recorded
 corpus and which this operator cannot see, is where entity resolution would have
 to meet merge --- with the open question being whether its errors are cheaper
 than the divergence it repairs.
-
-The schema-evolution trials refine that claim.
-Merging declarations first changes cardinality decisions as intended in the
-tested fixtures, but datatype incompatibility still needs validation and a
-resolution policy. Schema-first orchestration is therefore not a complete
-conflict-resolution rule on its own.
