@@ -33,7 +33,7 @@ fn a_tx_range_diff_names_its_base_and_target() {
         .unwrap();
     let head = store.latest_tx_id().unwrap();
 
-    let cs = diff(&store, &DiffSide::Tx(t1), &DiffSide::Main).unwrap();
+    let cs = diff(&store, &DiffSide::Tx(t1), &DiffSide::Main, None).unwrap();
     assert_eq!(cs.deletes, vec![st(A)]);
     assert_eq!(cs.inserts, vec![st(B)]);
     assert_eq!(cs.header.base_tx, Some(t1));
@@ -46,7 +46,7 @@ fn a_tx_range_diff_names_its_base_and_target() {
     );
 
     // The reverse range is the inverse change.
-    let back = diff(&store, &DiffSide::Main, &DiffSide::Tx(t1)).unwrap();
+    let back = diff(&store, &DiffSide::Main, &DiffSide::Tx(t1), None).unwrap();
     assert_eq!(back.deletes, cs.inserts);
     assert_eq!(back.inserts, cs.deletes);
 }
@@ -76,7 +76,13 @@ fn a_fork_diff_reads_as_a_change_to_root() {
             fork.g,
         )
         .unwrap();
-    let cs = diff(&store, &DiffSide::Main, &DiffSide::Fork("feature".into())).unwrap();
+    let cs = diff(
+        &store,
+        &DiffSide::Main,
+        &DiffSide::Fork("feature".into()),
+        None,
+    )
+    .unwrap();
     assert!(cs.deletes.is_empty());
     assert_eq!(cs.inserts, vec![st(B)]);
 }
@@ -94,9 +100,17 @@ fn sides_parse_and_bad_sides_are_refused() {
     assert!(DiffSide::parse("share:abc").is_err());
 
     let store = Store::open_in_memory().unwrap();
-    let err = diff(&store, &DiffSide::Tx(999), &DiffSide::Main).unwrap_err();
+    let err = diff(&store, &DiffSide::Tx(999), &DiffSide::Main, None).unwrap_err();
     assert!(err.to_string().contains("beyond"), "{err}");
-    assert!(diff(&store, &DiffSide::Main, &DiffSide::Fork("nope".into())).is_err());
+    assert!(
+        diff(
+            &store,
+            &DiffSide::Main,
+            &DiffSide::Fork("nope".into()),
+            None
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -145,10 +159,54 @@ fn classify_compares_literals_in_the_stores_value_model() {
 fn blank_nodes_are_refused_on_both_paths() {
     let mut store = Store::open_in_memory().unwrap();
     ingest(&mut store, "_:b1 <urn:x:p> \"x\" .\n");
-    let err = diff(&store, &DiffSide::Tx(0), &DiffSide::Main).unwrap_err();
+    let err = diff(&store, &DiffSide::Tx(0), &DiffSide::Main, None).unwrap_err();
     assert!(err.to_string().contains("blank node"), "{err}");
 
     let cs = ChangeSet::parse("INSERT DATA { _:n <urn:x:p> \"y\" }", SPARQL_UPDATE).unwrap();
     let err = classify(&store, &cs).unwrap_err();
     assert!(err.to_string().contains("blank node"), "{err}");
+}
+
+#[test]
+fn a_named_graph_diff_carries_its_graph() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.graph_create("urn:x:g").unwrap();
+    let g = store.lookup("urn:x:g").unwrap().unwrap();
+    let t0 = store.latest_tx_id().unwrap();
+    let a = store.intern("urn:x:a").unwrap();
+    let p = store.intern("urn:x:p").unwrap();
+    store
+        .transact_to_graph(
+            &[crate::store::Datum {
+                entity: a,
+                attribute: p,
+                value: crate::Value::Str("one".into()),
+                valid_from: "2026-10-02T00:00:00Z".into(),
+                valid_to: None,
+                op: crate::Op::Assert,
+            }],
+            "2026-10-02T00:00:00Z",
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    let cs = diff(&store, &DiffSide::Tx(t0), &DiffSide::Main, Some("urn:x:g")).unwrap();
+    assert_eq!(cs.inserts, vec![Statement::new(A, Some("urn:x:g".into()))]);
+    // ROOT is untouched, and an unknown graph or a fork+graph is refused.
+    assert!(
+        diff(&store, &DiffSide::Tx(t0), &DiffSide::Main, None)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(diff(&store, &DiffSide::Main, &DiffSide::Main, Some("urn:x:nope")).is_err());
+    assert!(
+        diff(
+            &store,
+            &DiffSide::Main,
+            &DiffSide::Fork("f".into()),
+            Some("urn:x:g")
+        )
+        .is_err()
+    );
 }

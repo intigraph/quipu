@@ -551,10 +551,16 @@ impl Store {
     /// **ROOT-scoped** (quipu #56) — time travel scopes *within* a graph
     /// (`docs/design/named-graphs.md` §1).
     pub fn facts_as_of(&self, as_of: &AsOf) -> Result<Vec<Fact>> {
-        // `g = 0` is a literal, not a bound param, so it cannot disturb the
-        // positional ?1/?2 indices the tx/valid_at clauses below depend on.
-        let mut sql = String::from(
-            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1 AND g = 0",
+        self.facts_as_of_in_graph(as_of, crate::schema::ROOT_GRAPH)
+    }
+
+    /// [`Store::facts_as_of`] for one graph (`0` = ROOT, else a named graph's
+    /// term id): the as-of read `GET /diff` needs for a named graph (aegis-4mk).
+    pub fn facts_as_of_in_graph(&self, as_of: &AsOf, g: i64) -> Result<Vec<Fact>> {
+        // `g` is formatted as an integer literal, not a bound param, so it cannot
+        // disturb the positional ?1/?2 indices the tx/valid_at clauses depend on.
+        let mut sql = format!(
+            "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts WHERE op = 1 AND g = {g}"
         );
         if as_of.tx.is_some() {
             sql.push_str(" AND tx <= ?1");

@@ -95,36 +95,61 @@ fn refuse_blank(statements: &BTreeSet<Statement>, what: &str) -> Result<()> {
     }
 }
 
-fn side_facts(store: &Store, side: &DiffSide) -> Result<Vec<Fact>> {
+fn side_facts(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<Vec<Fact>> {
+    let g = match graph {
+        None => crate::schema::ROOT_GRAPH,
+        Some(_) if matches!(side, DiffSide::Fork(_)) => {
+            return Err(Error::InvalidValue(
+                "a fork is its own graph; graph= applies to tx:N and main sides only".into(),
+            ));
+        }
+        Some(iri) => store
+            .registered_graph_id(iri)?
+            .ok_or_else(|| Error::InvalidValue(format!("unknown graph IRI: {iri}")))?,
+    };
     match side {
-        DiffSide::Main => store.current_facts(),
-        DiffSide::Tx(tx) => store.facts_as_of(&AsOf {
-            tx: Some(*tx),
-            valid_at: None,
-        }),
+        DiffSide::Main => store.current_facts_in_graph(g),
+        DiffSide::Tx(tx) => store.facts_as_of_in_graph(
+            &AsOf {
+                tx: Some(*tx),
+                valid_at: None,
+            },
+            g,
+        ),
         DiffSide::Fork(name) => store.current_facts_in_graph(store.fork_graph_for_read(name)?),
     }
 }
 
-/// A side's statements, rendered into the default graph. Forks are lineages
-/// of ROOT, so a fork diff reads as a change to ROOT.
+/// A side's statements in `graph` (`None` = ROOT). Forks render into the
+/// default graph: a fork is a lineage of ROOT, so a fork diff reads as a
+/// change to ROOT.
 ///
 /// # Errors
-/// Unknown fork, unresolvable term, or a blank node.
-pub fn side_statements(store: &Store, side: &DiffSide) -> Result<BTreeSet<Statement>> {
-    let set = side_facts(store, side)?
+/// Unknown fork or graph, unresolvable term, or a blank node.
+pub fn side_statements(
+    store: &Store,
+    side: &DiffSide,
+    graph: Option<&str>,
+) -> Result<BTreeSet<Statement>> {
+    let set = side_facts(store, side, graph)?
         .iter()
-        .map(|f| fact_statement(store, f, None))
+        .map(|f| fact_statement(store, f, graph))
         .collect::<Result<BTreeSet<_>>>()?;
     refuse_blank(&set, "diff side")?;
     Ok(set)
 }
 
-/// `GET /diff`: the change-set that turns `from` into `to`.
+/// `GET /diff`: the change-set that turns `from` into `to`, in `graph`
+/// (`None` = ROOT).
 ///
 /// # Errors
 /// See [`side_statements`]; also a tx beyond the store's head.
-pub fn diff(store: &Store, from: &DiffSide, to: &DiffSide) -> Result<ChangeSet> {
+pub fn diff(
+    store: &Store,
+    from: &DiffSide,
+    to: &DiffSide,
+    graph: Option<&str>,
+) -> Result<ChangeSet> {
     let head = store.latest_tx_id()?;
     let at = |side: &DiffSide| -> Result<i64> {
         match side {
@@ -146,14 +171,22 @@ pub fn diff(store: &Store, from: &DiffSide, to: &DiffSide) -> Result<ChangeSet> 
         target_tx: Some(target_tx),
         store_id: Some(store.store_id()?),
         source: Some(format!("diff:{}..{}", label(from), label(to))),
-        shapes_hash: Some(crate::asof_share::shapes_hash(store, base_tx)?),
+        shapes_hash: Some(shapes_hash(store, base_tx)?),
         ..Header::default()
     };
     Ok(ChangeSet::from_states(
         header,
-        side_statements(store, from)?,
-        side_statements(store, to)?,
+        side_statements(store, from, graph)?,
+        side_statements(store, to, graph)?,
     ))
+}
+
+/// SHA-256 of the shape sets in force at `tx`: the header's `shapes-hash`.
+///
+/// # Errors
+/// The shapes registry cannot be read.
+pub fn shapes_hash(store: &Store, tx: i64) -> Result<String> {
+    crate::asof_share::shapes_hash(store, tx)
 }
 
 /// What applying a change-set to the store's current state would mean.
