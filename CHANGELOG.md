@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-10-27
+
+### Added
+
+- *(cli)* Expose local attested-write signer operations (#862)([b305795](https://github.com/scbrown/quipu/commit/b3057958ab0a6e581d593b9a65e4f7c30d182cdf))
+- *(replica)* GET /replica/ready says whether a follower may serve in its primary's place (#854)([c015325](https://github.com/scbrown/quipu/commit/c01532521c073e95ac492d1674be02fbcad96b91))
+- *(reads)* Enforce owner-local grants with bounded scoped views (#867)([2f3805a](https://github.com/scbrown/quipu/commit/2f3805af0efe3ceed4a3af49ec8c44e6542fdb49))
+
+### Fixed
+
+- *(relay)* Authenticate upstream streams and challenges from a private file (#864)([f40f53f](https://github.com/scbrown/quipu/commit/f40f53f49217e84724daf30420c5cb49fedd9c2d))
+- *(sparql)* Pin a read snapshot for each query (#873)([8b4e383](https://github.com/scbrown/quipu/commit/8b4e383586147d344a8e20997903ad8166ff2c6f))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 268641e4 (#863)([0d0b769](https://github.com/scbrown/quipu/commit/0d0b769d7311304583de2815c8f35b8e480b1991))
+- *(conformance)* Re-derive ledgers at b3057958 (#866)([ed28f6e](https://github.com/scbrown/quipu/commit/ed28f6e51d68a4a1717ca322b8557e7fc7615a67))
+- *(conformance)* Re-derive ledgers at c0153252 (#869)([7247da4](https://github.com/scbrown/quipu/commit/7247da4aa08e596d8563ea29dc090a3d36f6facb))
+- *(conformance)* Re-derive ledgers at 2f3805af (#870)([e4ede32](https://github.com/scbrown/quipu/commit/e4ede323402cfcb0068d613d95d3fc4acd5f712e))
+- *(conformance)* Re-derive ledgers at b70d1e4d (#877)([79bda9b](https://github.com/scbrown/quipu/commit/79bda9b3838ad5a9d077bb45483d8f4dc2177330))
+
+### Testing
+
+- *(sparql)* Separate volatile NOW from plan parity (#875)([b70d1e4](https://github.com/scbrown/quipu/commit/b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc))
+
 ## [0.16.3] - 2026-10-25
 
 ### Added
