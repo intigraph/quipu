@@ -1,0 +1,32 @@
+# The local Python library: `pip install quipu-kg`, `import quipu`
+# (docs/design/cross-language-bindings.md, "Python architecture").
+#
+# A native extension over the shared `quipu::bindings::Engine` facade, the same
+# registry the WASM `Database` dispatches through. It never reimplements a
+# handler, never writes SQL and never runs Python under a store transaction.
+#
+# Not a member of any workspace, like `wasm/explorer`: maturin builds it as a
+# cdylib against the core by path, and its own Cargo.lock pins what a wheel
+# links. Keep `version` equal to the core crate's (a test asserts it).
+[package]
+name = "quipu-kg"
+version = "0.16.4"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+description = "Quipu as a local Python library (PyO3 bindings over the shared engine facade)"
+repository = "https://github.com/intigraph/quipu"
+readme = "README.md"
+
+[workspace]
+
+[lib]
+name = "_quipu"
+crate-type = ["cdylib"]
+
+[dependencies]
+# SHACL is required: without it every write is an unsupported capability, and
+# the binding must never ship a build whose write gate is compiled out.
+quipu = { package = "quipu-ai", path = "../..", default-features = false, features = ["shacl"] }
+pyo3 = "0.30"
+serde_json = "1"

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+# `quipu` on PyPI is an unrelated 2012 package; the distribution is `quipu-kg`
+# and the import name stays `quipu`. Publication is NOT wired here: it needs the
+# one-way release gate and an owner-configured Trusted Publisher.
+name = "quipu-kg"
+description = "Quipu knowledge graph as a local Python library: governed writes, SPARQL and bitemporal history in-process"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dynamic = ["version"]
+dependencies = []
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Database",
+]
+
+[project.urls]
+Homepage = "https://github.com/intigraph/quipu"
+Documentation = "https://github.com/intigraph/quipu/tree/main/bindings/python/README.md"
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.maturin]
+module-name = "quipu._quipu"
+python-source = "python"
+features = ["pyo3/extension-module"]

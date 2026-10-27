@@ -142,6 +142,8 @@ impl BindingError {
 /// A local engine owns its store; adapters cannot mutate it around validation.
 pub struct Engine {
     store: Store,
+    /// `memory` or `file`, reported verbatim in the capability manifest.
+    storage: &'static str,
     /// Set once this store becomes a replica (the first `replica_*` call).
     /// From then on it is read-only to local callers: only the applier
     /// writes, and it writes what the source already accepted.
@@ -152,16 +154,27 @@ impl Engine {
     /// Create a fresh memory store. Shapes must be explicitly adopted through
     /// `quipu_shapes`; writes cannot silently disable a linked validator.
     pub fn open_in_memory() -> Result<Self> {
-        #[allow(unused_mut)]
-        let mut store = Store::open_in_memory()?;
+        Ok(Self::governed(Store::open_in_memory()?, "memory"))
+    }
+
+    /// Open (or create) a file-backed store. Shapes adopted in an earlier
+    /// session persist in the file and are enforced again from the first
+    /// write; a fresh file starts with no adopted schema, like memory.
+    pub fn open(path: &str) -> Result<Self> {
+        Ok(Self::governed(Store::open(path)?, "file"))
+    }
+
+    #[cfg_attr(not(feature = "shacl"), allow(unused_mut))]
+    fn governed(mut store: Store, storage: &'static str) -> Self {
         #[cfg(feature = "shacl")]
         {
             store.shacl_config_mut().validate_on_write = true;
         }
-        Ok(Self {
+        Self {
             store,
+            storage,
             replica: None,
-        })
+        }
     }
 
     /// Report this build and actual dispatch availability, not global parity.
@@ -172,7 +185,7 @@ impl Engine {
             "version": crate::VERSION,
             "revision": crate::GIT_SHA,
             "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-            "storage": "memory",
+            "storage": self.storage,
             "features": { "shacl": cfg!(feature = "shacl") },
             "reasoning": "none_registered",
             "shape_catalog": match crate::tool_shapes(&self.store, &json!({"action": "list"})) {

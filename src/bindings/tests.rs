@@ -356,3 +356,45 @@ fn a_replica_applies_source_data_its_local_shapes_would_refuse() {
     // Validation is restored for anything that is not the applier.
     assert!(replica.store.shacl_config_mut().validate_on_write);
 }
+
+#[test]
+fn a_file_engine_reports_its_storage_and_survives_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bound.db");
+    let path = path.to_str().unwrap();
+    {
+        let engine = Engine::open(path).unwrap();
+        assert_eq!(engine.capabilities()["storage"], "file");
+    }
+    assert_eq!(
+        Engine::open_in_memory().unwrap().capabilities()["storage"],
+        "memory"
+    );
+    #[cfg(feature = "shacl")]
+    {
+        let mut engine = Engine::open(path).unwrap();
+        load_shape(&mut engine);
+        engine
+            .invoke(
+                "quipu_knot",
+                &json!({"timestamp": TS, "turtle": "<urn:kept> a <urn:Record>; <urn:title> \"Kept\" ."}),
+            )
+            .unwrap();
+        drop(engine);
+        let mut reopened = Engine::open(path).unwrap();
+        assert_eq!(reopened.capabilities()["schema_state"], "adopted");
+        let rows = reopened
+            .invoke(
+                "quipu_query",
+                &json!({"query": "SELECT ?s WHERE { ?s a <urn:Record> }"}),
+            )
+            .unwrap();
+        assert_eq!(rows["count"], 1);
+        // The reopened engine still enforces the adopted shape.
+        let bad = reopened.invoke(
+            "quipu_knot",
+            &json!({"timestamp": TS, "turtle": "<urn:bad> a <urn:Record> ."}),
+        );
+        assert!(bad.is_err() || bad.unwrap()["conforms"] == false);
+    }
+}

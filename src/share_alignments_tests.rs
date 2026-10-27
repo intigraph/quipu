@@ -258,12 +258,15 @@ fn native_producer_inputs_refuse_symlink_fifo_and_oversized_files() {
     symlink(&regular, &link).unwrap();
     assert!(read_file(&link).is_err());
     let fifo = dir.path().join("fifo");
-    rustix::fs::mkfifoat(
-        rustix::fs::CWD,
-        &fifo,
-        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
-    )
-    .unwrap();
+    // `rustix::fs::mkfifoat` is not provided on Apple targets, which kept the
+    // lib tests from compiling on macOS; the POSIX utility works on every unix.
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success()
+    );
     assert!(read_file(&fifo).is_err());
     let huge = dir.path().join("huge");
     std::fs::File::create(&huge)

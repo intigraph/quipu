@@ -1,0 +1,376 @@
+{
+  "corpus": "quipu-bindings-conformance/v1",
+  "about": "One fixture corpus for every local binding (native Rust, WASM, Python). Each case runs on a fresh memory store. Matching rules: an object pattern matches when each of its keys matches (extra actual keys are ignored); an array pattern matches element-wise with equal length; scalars compare exactly, including integer lexemes; \"$positive_int\" matches any integer > 0; {\"$contains\": [p...]} matches an array holding an element for each p; {\"$len\": n} matches an array of length n. A step's \"capture\" maps a name to a JSON pointer in its result; a later input string \"${name}\" is replaced by that captured value.",
+  "shapes": {
+    "record": "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] .",
+    "note": "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:NoteShape> a sh:NodeShape; sh:targetClass <http://aegis.gastown.local/ontology/Note> ."
+  },
+  "cases": [
+    {
+      "name": "unsupported_operation_is_refused_before_dispatch",
+      "steps": [
+        {
+          "op": "quipu_update",
+          "input": {
+            "entity": "urn:never"
+          },
+          "expect": {
+            "error": {
+              "code": "unsupported_capability",
+              "commit_state": "not_started",
+              "retryable": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "writes_are_refused_until_a_schema_is_adopted",
+      "steps": [
+        {
+          "op": "quipu_knot",
+          "input": {
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "<urn:good> a <urn:Record>; <urn:title> \"Before\" ."
+          },
+          "expect": {
+            "error": {
+              "code": "schema_not_adopted",
+              "commit_state": "not_started",
+              "retryable": false
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?s WHERE { ?s ?p ?o }"
+          },
+          "expect": {
+            "ok": {
+              "count": 0,
+              "rows": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "shapes_knot_query_set_history_and_as_of",
+      "steps": [
+        {
+          "op": "quipu_shapes",
+          "input": {
+            "action": "load",
+            "name": "record",
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "${shape:record}"
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_knot",
+          "input": {
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "<urn:good> a <urn:Record>; <urn:title> \"Before\" ."
+          },
+          "expect": {
+            "ok": {
+              "tx_id": "$positive_int"
+            }
+          },
+          "capture": {
+            "first_tx": "/tx_id"
+          }
+        },
+        {
+          "op": "quipu_set",
+          "input": {
+            "entity": "urn:good",
+            "predicate": "urn:title",
+            "value": {
+              "str": "After"
+            },
+            "timestamp": "2026-10-20T00:01:00Z"
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?t WHERE { <urn:good> <urn:title> ?t }"
+          },
+          "expect": {
+            "ok": {
+              "count": 1,
+              "rows": [
+                {
+                  "t": "After"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?t WHERE { <urn:good> <urn:title> ?t }",
+            "tx": "${first_tx}"
+          },
+          "expect": {
+            "ok": {
+              "count": 1,
+              "rows": [
+                {
+                  "t": "Before"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "op": "quipu_entity_history",
+          "input": {
+            "iri": "urn:good"
+          },
+          "expect": {
+            "ok": {
+              "iri": "urn:good",
+              "history": {
+                "$contains": [
+                  {
+                    "op": "assert",
+                    "predicate": "urn:title",
+                    "value": "Before"
+                  },
+                  {
+                    "op": "assert",
+                    "predicate": "urn:title",
+                    "value": "After"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "shacl_refusal_leaves_no_fact_and_has_a_positive_control",
+      "steps": [
+        {
+          "op": "quipu_shapes",
+          "input": {
+            "action": "load",
+            "name": "record",
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "${shape:record}"
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_knot",
+          "input": {
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "<urn:bad> a <urn:Record> ."
+          },
+          "expect": {
+            "ok": {
+              "conforms": false,
+              "violations": 1,
+              "issues": [
+                {
+                  "focus_node": "urn:bad",
+                  "path": "urn:title",
+                  "severity": "Violation",
+                  "component": "http://www.w3.org/ns/shacl#MinCountConstraintComponent"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?s WHERE { ?s a <urn:Record> }"
+          },
+          "expect": {
+            "ok": {
+              "count": 0
+            }
+          }
+        },
+        {
+          "op": "quipu_entity_history",
+          "input": {
+            "iri": "urn:bad"
+          },
+          "expect": {
+            "error": {
+              "code": "engine_error"
+            }
+          }
+        },
+        {
+          "op": "quipu_knot",
+          "input": {
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "<urn:good> a <urn:Record>; <urn:title> \"Titled\" ."
+          },
+          "expect": {
+            "ok": {
+              "tx_id": "$positive_int"
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?s WHERE { ?s a <urn:Record> }"
+          },
+          "expect": {
+            "ok": {
+              "count": 1,
+              "rows": [
+                {
+                  "s": "urn:good"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "large_integers_and_tagged_literals_survive",
+      "steps": [
+        {
+          "op": "quipu_shapes",
+          "input": {
+            "action": "load",
+            "name": "record",
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "${shape:record}"
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_knot",
+          "input": {
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "<urn:big> a <urn:Record>; <urn:title> \"Hola\"@es; <urn:n> 9007199254740993 ."
+          },
+          "expect": {
+            "ok": {
+              "tx_id": "$positive_int"
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?n ?t WHERE { <urn:big> <urn:n> ?n; <urn:title> ?t }"
+          },
+          "expect": {
+            "ok": {
+              "count": 1,
+              "rows": [
+                {
+                  "n": 9007199254740993,
+                  "t": {
+                    "value": "Hola",
+                    "lang": "es"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "off_vocabulary_episode_type_is_refused",
+      "steps": [
+        {
+          "op": "quipu_shapes",
+          "input": {
+            "action": "load",
+            "name": "note",
+            "timestamp": "2026-10-20T00:00:00Z",
+            "turtle": "${shape:note}"
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_episode",
+          "input": {
+            "name": "conformance-episode",
+            "episode_body": "an off-vocabulary type",
+            "source": "conformance",
+            "nodes": [
+              {
+                "name": "stray",
+                "type": "NotInTheVocabulary"
+              }
+            ]
+          },
+          "expect": {
+            "error": {
+              "code": "engine_error",
+              "retryable": false
+            }
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?s WHERE { ?s ?p \"stray\" }"
+          },
+          "expect": {
+            "ok": {
+              "count": 0
+            }
+          }
+        },
+        {
+          "op": "quipu_episode",
+          "input": {
+            "name": "conformance-control",
+            "episode_body": "an adopted type",
+            "source": "conformance",
+            "nodes": [
+              {
+                "name": "kept",
+                "type": "Note"
+              }
+            ]
+          },
+          "expect": {
+            "ok": {}
+          }
+        },
+        {
+          "op": "quipu_query",
+          "input": {
+            "query": "SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/Note> }"
+          },
+          "expect": {
+            "ok": {
+              "count": 1
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

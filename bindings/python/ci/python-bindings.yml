@@ -1,0 +1,188 @@
+# STAGED WORKFLOW: install as .github/workflows/python-bindings.yml.
+# It lives here only because the authoring credential lacks GitHub's
+# `workflow` scope; a workflow-scoped push moves it (git mv) unchanged.
+# Until then nothing runs it, and it must not be read as passing CI.
+name: Python bindings
+
+# Local wheel + sdist build and installed-artifact tests for `quipu-kg`
+# (bindings/python; docs/design/cross-language-bindings.md "Packaging and
+# release"). BUILD AND TEST ONLY: there is no publish job and no registry
+# credential here. First publication needs the one-way release gate and an
+# owner-configured PyPI Trusted Publisher, in a separate reviewed workflow.
+#
+# The tests run against INSTALLED artifacts in fresh virtualenvs, from outside
+# the source tree, so a package that only works from the checkout fails here.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "bindings/python/**"
+      - "tests/fixtures/bindings-conformance/**"
+      - ".github/workflows/python-bindings.yml"
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: python-bindings-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONS: "3.11 3.12 3.13 3.14"
+
+jobs:
+  wheels:
+    name: Wheels (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            manylinux: auto
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            manylinux: auto
+          - name: macos-arm64
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: runner.os == 'macOS'
+        with:
+          python-version: |
+            3.11
+            3.12
+            3.13
+            3.14
+      # One build per interpreter; the core crate compiles once and is reused.
+      # On Linux this runs in the manylinux container and auditwheel-repairs
+      # the result (maturin's platform audit).
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          command: build
+          args: --release --locked --out dist -i ${{ env.PYTHONS }}
+          manylinux: ${{ matrix.manylinux || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: bindings/python/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Sdist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          working-directory: bindings/python
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: bindings/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  test-wheels:
+    name: Test wheel (${{ matrix.name }}, py${{ matrix.python }})
+    needs: wheels
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [linux-x86_64, linux-aarch64, macos-arm64]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+          - name: macos-arm64
+            runner: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            bindings/python/tests
+            tests/fixtures/bindings-conformance
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: dist
+      - name: Install the wheel into a clean venv and run pytest outside the tree
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          . "$RUNNER_TEMP/venv/bin/activate"
+          pip install pytest
+          # --no-index: the wheel must install with no registry and no source.
+          pip install --no-index --find-links dist quipu-kg
+          export QUIPU_CONFORMANCE_CORPUS="$GITHUB_WORKSPACE/tests/fixtures/bindings-conformance/v1.json"
+          cd "$RUNNER_TEMP"
+          python -c "import quipu, sys; assert quipu.__file__.startswith(sys.prefix), quipu.__file__; print(quipu.__version__, quipu.Store.memory().capabilities()['revision'])"
+          python -m pytest -q "$GITHUB_WORKSPACE/bindings/python/tests"
+
+  test-sdist:
+    name: Test sdist (build wheel from sdist)
+    needs: sdist
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            bindings/python/tests
+            tests/fixtures/bindings-conformance
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - name: Build the wheel from the sdist, install it, run pytest
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          . "$RUNNER_TEMP/venv/bin/activate"
+          pip install pytest
+          pip install --no-binary quipu-kg dist/quipu_kg-*.tar.gz
+          export QUIPU_CONFORMANCE_CORPUS="$GITHUB_WORKSPACE/tests/fixtures/bindings-conformance/v1.json"
+          cd "$RUNNER_TEMP"
+          python -m pytest -q "$GITHUB_WORKSPACE/bindings/python/tests"
+
+  lint:
+    name: Binding crate fmt + clippy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      # The core crate is a path dependency, so a blanket `-D warnings` would
+      # also judge its feature-subset warnings. Fail on this crate's own
+      # diagnostics only (reported relative to bindings/python).
+      - working-directory: bindings/python
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets --message-format=short 2>&1 | tee clippy.txt
+          ! grep -E '^src/.*(warning|error)' clippy.txt
