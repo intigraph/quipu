@@ -242,7 +242,7 @@ fn spill_path_matches_in_memory_order() {
         .unwrap();
         // Stable DESC: groups reversed, ties keep input order.
         let mut groups: Vec<Vec<i64>> = Vec::new();
-        let instant = |id: i64| (id as usize * 37) % 500;
+        let instant = |id: i64| (usize::try_from(id).unwrap() * 37) % 500;
         for id in expected {
             match groups.last_mut() {
                 Some(g) if instant(g[0]) == instant(id) => g.push(id),
