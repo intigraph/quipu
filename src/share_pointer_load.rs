@@ -134,6 +134,7 @@ impl LazyPacks {
                 cache.put(&digest, &bytes)?;
             }
             let requests = [self.authority.clone(), self.declaration.clone(), request];
+            store.ensure_ownership_writable()?;
             store.conn.execute_batch("SAVEPOINT quipu_pointer_use")?;
             let result = crate::share_compose::compose(store, &requests, Some(0), timestamp, actor)
                 .and_then(|result| {

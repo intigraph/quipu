@@ -176,6 +176,7 @@ impl Store {
             }
         }
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_dataset")?;
         let result = (|| -> Result<()> {
             self.transact_to_graph(&datums, timestamp, actor, Some("dataset"), meta_g)?;

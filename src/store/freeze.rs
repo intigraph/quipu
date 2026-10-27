@@ -196,6 +196,7 @@ impl Store {
         // delete, frozen_packs row, dataset membership. On any failure the
         // savepoint takes it all back and only the pack file remains — an
         // inert artifact, named in the error.
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_freeze")?;
         let result = (|| -> Result<()> {
             let l = self.label_of_id(g)?;
@@ -302,6 +303,7 @@ impl Store {
         // so the import below is the only source of this graph's rows.
         self.unmount_attachment(&alias)?;
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_thaw")?;
         let result = (|| -> Result<(usize, usize)> {
             let (facts, vectors) = super::freeze_io::import_graph_history(self, &path, graph_iri)?;

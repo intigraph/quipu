@@ -22,6 +22,7 @@ pub(crate) fn promote_snapshot(
     actor: Option<&str>,
     source: &str,
 ) -> Result<(i64, usize, usize)> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT quipu_snapshot_promotion")?;

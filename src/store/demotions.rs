@@ -108,6 +108,7 @@ impl Store {
         supported: &BTreeSet<(i64, i64)>,
         timestamp: &str,
     ) -> Result<usize> {
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_demotion")?;
         let result = self.reconcile_demotion_snapshot(
             attribute, source, premise, companion, supported, timestamp,

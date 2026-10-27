@@ -182,6 +182,7 @@ impl Store {
         let a_fork_tx = self.intern(QUIPU_FORK_TX)?;
         let o_fork = self.intern(QUIPU_FORK)?;
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_fork_create")?;
         let result = (|| -> Result<ForkInfo> {
             let g = self.graph_create(&iri)?;
@@ -352,6 +353,7 @@ impl Store {
             });
         }
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_fork_promote")?;
         let result = (|| -> Result<i64> {
             let tx = if datums.is_empty() {

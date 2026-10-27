@@ -16,6 +16,7 @@ impl Store {
         if !self.conn.is_autocommit() {
             return Err(refuse("requires an independent writer transaction"));
         }
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_deck")?;
         let ts = crate::time::now_iso();
         self.set_write_in_progress(true);

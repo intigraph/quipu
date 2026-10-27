@@ -35,7 +35,19 @@ fn failure(e: impl std::fmt::Display) -> Error {
     ))
 }
 
+/// Host identity is stable for a process; resolve it once so the per-write
+/// fence on an ENFORCED store does not spawn a platform query every time.
+/// Only a successful lookup is kept; a failure is retried on the next check.
 fn host() -> Result<String> {
+    static HOST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    if let Some(known) = HOST.get() {
+        return Ok(known.clone());
+    }
+    let resolved = host_uncached()?;
+    Ok(HOST.get_or_init(|| resolved).clone())
+}
+
+fn host_uncached() -> Result<String> {
     #[cfg(target_os = "linux")]
     {
         let id = fs::read_to_string("/etc/machine-id").map_err(failure)?;
@@ -164,6 +176,16 @@ impl Store {
         }
         self.verify_binding()?;
         Ok(OwnershipState::Enforced)
+    }
+
+    /// Write fence for handles that are ALREADY open. Opening re-checks
+    /// ownership, but a writable handle opened earlier keeps its connection:
+    /// a later failed adoption (sticky pending marker) or a lost/invalid
+    /// binding must refuse its ordinary writes exactly as a fresh open would.
+    /// Every committing write entrypoint calls this before it writes anything.
+    /// INACTIVE legacy stores stay writable; this grants no ownership capability.
+    pub fn ensure_ownership_writable(&self) -> Result<()> {
+        self.ownership_state().map(|_| ())
     }
 
     /// Ownership-authorized capability check. Legacy/in-memory/browser INACTIVE

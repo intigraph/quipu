@@ -18,6 +18,8 @@ mod decision_nonces;
 mod ownership;
 pub use ownership::OwnershipState;
 #[cfg(test)]
+mod ownership_held_handle_tests;
+#[cfg(test)]
 mod ownership_stage_a_tests;
 #[cfg(test)]
 mod ownership_tests;

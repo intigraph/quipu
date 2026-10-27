@@ -158,6 +158,7 @@ impl Store {
 
         // One savepoint over BOTH writes. `transact_to_graph` opens its own
         // `quipu_transact` inside this one — the same nesting `speculate` uses.
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_set_label")?;
         let result = (|| -> Result<i64> {
             let tx =

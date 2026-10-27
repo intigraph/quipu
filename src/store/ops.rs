@@ -102,6 +102,9 @@ impl Store {
         expected: &[super::conditional::ExpectedValue],
         set: Option<&super::conditional::SetExpectation>,
     ) -> Result<i64> {
+        // Ownership is revalidated on this handle, before any gate can write an
+        // audit row: a handle opened earlier must not outlive invalid ownership.
+        self.ensure_ownership_writable()?;
         // Normal graph/authority gates precede the savepoint. Conditional
         // callers share this exact pipeline and its post-rollback evidence.
         self.assert_write_target_allowed(graph, source)?;

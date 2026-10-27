@@ -214,6 +214,7 @@ impl Applier {
             )));
         }
         store.conn.execute_batch(LINES_DDL)?;
+        store.ensure_ownership_writable()?;
         store.conn.execute_batch("SAVEPOINT replica_bootstrap")?;
         self.share = Some(ShareStream {
             chain,

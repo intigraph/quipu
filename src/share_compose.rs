@@ -196,6 +196,7 @@ pub fn compose(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<Composition> {
+    store.ensure_ownership_writable()?;
     store.conn.execute_batch("SAVEPOINT quipu_compose_all")?;
     let result = compose_scoped(
         store,
@@ -412,6 +413,7 @@ pub(crate) fn compose_scoped(
             })
             .collect(),
     };
+    store.ensure_ownership_writable()?;
     store.conn.execute_batch("SAVEPOINT quipu_composition")?;
     let write = (|| -> Result<()> {
         for (pack, data) in result.packs.iter().zip(graphs) {

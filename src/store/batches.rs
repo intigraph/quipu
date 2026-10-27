@@ -32,6 +32,7 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<Vec<(i64, i64)>> {
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
         let mut txs = Vec::with_capacity(batches.len());
         for (graph, datums) in batches {

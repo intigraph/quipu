@@ -65,6 +65,7 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<Option<i64>> {
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_decision_nonce")?;
         let result = (|| -> Result<Option<i64>> {
             let inserted = self.conn.execute(

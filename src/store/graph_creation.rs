@@ -13,6 +13,7 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<JsonValue> {
+        self.ensure_ownership_writable()?;
         self.conn
             .execute_batch("SAVEPOINT quipu_graph_create_recorded")?;
         let result = (|| {

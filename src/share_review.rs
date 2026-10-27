@@ -8,6 +8,7 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 fn atomic<T>(store: &mut Store, run: impl FnOnce(&mut Store) -> Result<T>) -> Result<T> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT share_review_transition")?;
