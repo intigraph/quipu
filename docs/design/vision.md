@@ -310,8 +310,14 @@ Validation doesn't just say "rejected." It returns:
 | **TypeDB** | Strongest type system, but no RDF/SPARQL, no vector search, MPL license |
 | **Graphiti** | AI-native but no schema enforcement, name collisions, Cypher not SPARQL, vendor-locked to FalkorDB/Neo4j |
 | **Cognee** | OWL validation but advisory (tags invalid, doesn't reject), Python |
-| **TerminusDB** | Schema-first, RDF heritage, but no vector search, no agent integration, WOQL not SPARQL |
+| **TerminusDB** | Schema-first, RDF heritage, git-style versioning. The [12.1 release candidate](https://github.com/terminusdb/terminusdb/releases/tag/v12.1.0-rc1) adds [versioned vector/full-text search](https://terminusdb.com/docs/versioned-search/) and a local MCP server; WOQL, not SPARQL. |
 | **Kuzu** | Embeddable, vector search, MIT — but property graph, RDF support paused |
+
+TerminusDB also documents [agent-memory workflows](https://terminusdb.com/docs/knowledge-graph-for-ai-agents/).
+Quipu's distinctions are native bitemporal valid and transaction time, a SHACL
+write gate, shape-aware three-way merge, and standard SPARQL. See the
+[TerminusDB gap analysis](terminusdb-gap-analysis.md) for evidence and limits;
+the 12.1 search and MCP capabilities above are release-candidate features.
 
 ### What Quipu Would Be
 
