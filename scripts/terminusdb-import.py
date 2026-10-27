@@ -33,8 +33,12 @@ and ``+`` inside a value becomes ``%2B`` (``idgen_lexical`` in json.pl).
 and ``--rebase-schema`` swap the ``terminusdb:///data/`` and
 ``terminusdb:///schema#`` prefixes for your own namespaces.
 
-Stdlib only. The Turtle reader covers what TerminusDB's dump emits (no blank
-nodes are minted by TerminusDB; lists are explicit ``rdf:List`` cons cells).
+Stdlib only. The Turtle reader covers what TerminusDB's dump emits: an
+``@base`` line with relative IRIs under the ``terminusdb:`` scheme (resolved
+per RFC 3986, which ``urllib.parse.urljoin`` does not do for unknown schemes),
+no blank nodes, and explicit ``rdf:List`` cons cells. Numbers come out in
+Turtle shorthand, so ``retype_numbers()`` restores the declared datatype.
+Real exports from terminusdb-server v12.0.8 are in test-fixtures/terminusdb/live/.
 """
 import argparse
 import base64
@@ -134,10 +138,7 @@ class Turtle:
         return ''.join(out)
 
     def resolve(self, ref):
-        ref = self.unescape(ref)
-        if re.match(r'^[A-Za-z][A-Za-z0-9+.\-]*:', ref) or not self.base:
-            return ref
-        return urllib.parse.urljoin(self.base, ref)
+        return resolve_iri(self.base, self.unescape(ref))
 
     def parse(self):
         while self.peek()[0] is not None:
@@ -240,6 +241,56 @@ class Turtle:
         raise TurtleError(f'unexpected {val!r}')
 
 
+URI_PARTS = re.compile(r'^(?:([A-Za-z][A-Za-z0-9+.\-]*):)?(?://([^/?#]*))?([^?#]*)(?:\?([^#]*))?(?:#(.*))?$', re.S)
+
+
+def _remove_dots(path):
+    out = []
+    for seg in path.split('/'):
+        if seg == '..':
+            if len(out) > 1:
+                out.pop()
+        elif seg != '.':
+            out.append(seg)
+    if path.split('/')[-1] in ('.', '..'):
+        out.append('')
+    return '/'.join(out)
+
+
+def resolve_iri(base, ref):
+    """RFC 3986 section 5.2 reference resolution, for any scheme.
+
+    urllib.parse.urljoin only resolves schemes it knows, and TerminusDB dumps
+    use terminusdb:///... bases with relative IRIs (see the module docstring)."""
+    if not base:
+        return ref
+    rs, ra, rp, rq, rf = URI_PARTS.match(ref).groups()
+    if rs:
+        return ref
+    bs, ba, bp, bq, _ = URI_PARTS.match(base).groups()
+    if ra is not None:
+        ta, tp, tq = ra, _remove_dots(rp), rq
+    elif rp == '':
+        ta, tp, tq = ba, bp, rq if rq is not None else bq
+    else:
+        if rp.startswith('/'):
+            tp = _remove_dots(rp)
+        elif ba is not None and bp == '':
+            tp = _remove_dots('/' + rp)
+        else:
+            tp = _remove_dots(bp[:bp.rfind('/') + 1] + rp)
+        ta, tq = ba, rq
+    out = f'{bs}:'
+    if ta is not None:
+        out += '//' + ta
+    out += tp
+    if tq is not None:
+        out += '?' + tq
+    if rf is not None:
+        out += '#' + rf
+    return out
+
+
 def parse_turtle(text, base=''):
     return Turtle(text, base).parse()
 
@@ -327,7 +378,8 @@ class Schema:
 SKIP_PREDICATES = {TYPE} | {SYS + k for k in (
     'key', 'inherits', 'documentation', 'abstract', 'subdocument', 'unfoldable',
     'base', 'value', 'metadata', 'oneOf', 'shared', 'unfold')}
-DATATYPE_NAMESPACES = (XSD, RDF + 'langString', SYS + 'JSON')
+XDD = 'http://terminusdb.com/schema/xdd#'
+DATATYPE_NAMESPACES = (XSD, XDD, RDF + 'langString', RDFS + 'Literal')
 
 
 def property_constraints(schema, range_term, classes, enums, notes, where):
@@ -350,7 +402,8 @@ def property_constraints(schema, range_term, classes, enums, notes, where):
         else:
             # List and Array values are cons/array cells, not the element itself.
             notes.append(f'{where}: {family} of <{target[1] if target else "?"}> left without an element constraint')
-            return (1 if family == 'List' else 0), (1 if family == 'List' else None), {}
+            element = {'element': target[1]} if target and target[0] == 'iri' else {}
+            return (1 if family == 'List' else 0), (1 if family == 'List' else None), element
     if not target or target[0] != 'iri':
         notes.append(f'{where}: unreadable range')
         return lo, hi, {}
@@ -359,10 +412,19 @@ def property_constraints(schema, range_term, classes, enums, notes, where):
         return lo, hi, {'in': enums[t]}
     if t in classes:
         return lo, hi, {'class': t}
+    if t == SYS + 'Unit':
+        # A Unit value is stored as rdf:nil (json_triple_, Value = []).
+        return lo, hi, {'in': [RDF + 'nil']}
+    if t == SYS + 'JSON':
+        # JSON values are linked nodes typed sys:JSON (terminusdb:///json/JSON/SHA1/...),
+        # not literals. The node is checked; the JSON inside it is not.
+        notes.append(f'{where}: sys:JSON checked as a sys:JSON node; its JSON contents are not validated')
+        return lo, hi, {'class': SYS + 'JSON'}
     if t.startswith(DATATYPE_NAMESPACES):
         return lo, hi, {'datatype': t}
-    notes.append(f'{where}: range <{t}> is not a known class or datatype; emitted as sh:class')
-    return lo, hi, {'class': t}
+    notes.append(f'{where}: range <{t}> is not a class, enum or datatype this importer knows; '
+                 'only its cardinality is checked')
+    return lo, hi, {}
 
 
 def translate_schema(triples):
@@ -409,7 +471,57 @@ def translate_schema(triples):
         info['all_props'] = {**inherited, **info['props']}
         if not info['key']:
             info['key'] = next((classes[a]['key'] for a in ancestors(name) if classes[a]['key']), None)
+    for name, info in classes.items():
+        info['subclasses'] = sorted(c for c in classes if name in ancestors(c))
     return classes, enums, notes
+
+
+INTEGER_TYPES = {XSD + t for t in (
+    'integer', 'long', 'int', 'short', 'byte', 'nonNegativeInteger', 'positiveInteger', 'negativeInteger',
+    'nonPositiveInteger', 'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte')}
+NUMERIC_TYPES = INTEGER_TYPES | {XSD + 'decimal', XSD + 'double', XSD + 'float'}
+SHORTHAND_TYPES = {XSD + 'integer', XSD + 'decimal', XSD + 'double'}
+
+
+def retype_numbers(triples, classes):
+    """Give bare Turtle numbers back the datatype the schema declares.
+
+    TerminusDB's dump writes numeric literals in Turtle shorthand: a stored
+    36^^xsd:decimal comes out as `36`, which every Turtle reader types
+    xsd:integer. Without this step the generated sh:datatype refuses the
+    export's own data. Only literals in shorthand types are touched, and only
+    toward a numeric type the property (or its List/Array element) declares."""
+    types, out = {}, {}
+    for s, p, o in triples:
+        if p[1] == TYPE:
+            types.setdefault(s, set()).add(o[1])
+        out.setdefault(s, {}).setdefault(p[1], []).append(o)
+    declared = {}   # (subject, predicate) -> datatype
+
+    def want(subject, pred, dtype):
+        if dtype in NUMERIC_TYPES:
+            declared[(subject, pred)] = dtype
+
+    for s, ts in types.items():
+        for cls in ts:
+            for pred, (_, _, cons) in classes.get(cls, {}).get('all_props', {}).items():
+                want(s, pred, cons.get('datatype'))
+                element = cons.get('element')
+                for cell in out[s].get(pred, []) if element else []:
+                    want(cell, SYS + 'value', element)         # Array cell
+                    seen = set()
+                    while cell[0] == 'iri' and cell[1] != RDF + 'nil' and cell not in seen:
+                        seen.add(cell)                        # List cons chain
+                        want(cell, RDF + 'first', element)
+                        cell = (out.get(cell, {}).get(RDF + 'rest') or [iri(RDF + 'nil')])[0]
+    fixed, count = [], 0
+    for s, p, o in triples:
+        dtype = declared.get((s, p[1]))
+        if (dtype and o[0] == 'lit' and o[2] in SHORTHAND_TYPES and o[2] != dtype
+                and (dtype not in INTEGER_TYPES or re.fullmatch(r'[+-]?\d+', o[1]))):
+            o, count = ('lit', o[1], dtype, None), count + 1
+        fixed.append((s, p, o))
+    return fixed, count
 
 
 def shape_iri(cls):
@@ -442,7 +554,13 @@ def write_shapes(classes, enums):
             if 'datatype' in cons:
                 parts.append(f'sh:datatype {ttl_iri(cons["datatype"])}')
             if 'class' in cons:
-                parts.append(f'sh:class {ttl_iri(cons["class"])}')
+                # A TerminusDB value carries only its most specific rdf:type, and quipu does not
+                # infer rdfs:subClassOf for sh:class, so a parent-class range lists its subclasses.
+                accepted = [cons['class']] + classes.get(cons['class'], {}).get('subclasses', [])
+                if len(accepted) == 1:
+                    parts.append(f'sh:class {ttl_iri(accepted[0])}')
+                else:
+                    parts.append('sh:or ( ' + ' '.join(f'[ sh:class {ttl_iri(c)} ]' for c in accepted) + ' )')
             if 'nodeKind' in cons:
                 parts.append(f'sh:nodeKind {ttl_iri(cons["nodeKind"])}')
             if 'in' in cons:
@@ -464,6 +582,10 @@ CONTAINER_SHAPES = f'''<urn:quipu:terminusdb:ListCellShape> a sh:NodeShape ;
     sh:targetClass <{RDF}List> ;
     sh:property [ sh:path <{RDF}first> ; sh:minCount 1 ; sh:maxCount 1 ] ;
     sh:property [ sh:path <{RDF}rest> ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+<urn:quipu:terminusdb:JSONNodeShape> a sh:NodeShape ;
+    sh:targetClass <{SYS}JSON> ;
+    sh:nodeKind sh:IRI .
 
 <urn:quipu:terminusdb:ArrayCellShape> a sh:NodeShape ;
     sh:targetClass <{SYS}Array> ;
@@ -558,21 +680,37 @@ def load_cli(args, shapes_path, instance_path, instance_nt, source, commit_time)
     return out
 
 
-def replay_log(args, tdb, db_path, rebase):
-    """Post each commit's instance graph, oldest first, as a snapshot replacement."""
+def replay_log(args, tdb, db_path, rebase, classes):
+    """Post each commit's instance graph, oldest first, as a snapshot replacement.
+
+    Quipu keeps valid time to the second; TerminusDB commit times are
+    sub-second. Commits that land in the same second as the previous one are
+    moved to the next free second (reported as time_adjusted), so their order
+    survives. Leading commits with an empty instance graph (a schema-only
+    commit) are skipped. Every commit is checked against the HEAD schema."""
     log = sorted(tdb.log(db_path, args.branch, args.log_count), key=lambda c: float(c['timestamp']))
-    results = []
+    results, last, started = [], None, False
     for commit in log:
         triples = rebase(parse_turtle(tdb.triples(f'{db_path}/local/commit/{commit["identifier"]}', 'instance')))
-        when = iso(commit['timestamp'])
+        triples, retyped = retype_numbers(triples, classes)
+        row = {'commit': commit['identifier'], 'triples': len(triples), 'numbers_retyped': retyped}
+        if not triples and not started:
+            results.append({**row, 'skipped': 'empty instance graph'})
+            continue
+        started = True
+        second = int(float(commit['timestamp']))
+        if last is not None and second <= last:
+            second, row['time_adjusted'] = last + 1, True
+        last = second
+        when = iso(second)
         knot = {'turtle': to_ntriples(triples), 'actor': args.actor,
                 'source': commit_source(db_path, commit['identifier']),
                 'timestamp': when, 'valid_from': when,
                 'replace_snapshot': True, 'snapshot': f'terminusdb:{db_path}/local/branch/{args.branch}'}
         if args.graph:
             knot['graph'] = args.graph
-        resp = quipu_post(args.quipu_url, '/knot', knot, args.quipu_token_env)
-        results.append({'commit': commit['identifier'], 'time': when, 'triples': len(triples), 'quipu': resp})
+        row.update(time=when, quipu=quipu_post(args.quipu_url, '/knot', knot, args.quipu_token_env))
+        results.append(row)
     return results
 
 
@@ -629,6 +767,7 @@ def main(argv=None):
     instance_triples = rebase(parse_turtle(instance_ttl))
     classes, enums, notes = translate_schema(schema_triples)
     shapes = write_shapes(classes, enums)
+    instance_triples, retyped = retype_numbers(instance_triples, classes)
     instance_nt = to_ntriples(instance_triples)
     source = commit_source(db_path, commit_id)
 
@@ -640,6 +779,7 @@ def main(argv=None):
         f.write(instance_nt)
     report = {'source': source, 'commit': commit_id, 'commit_time': commit_time,
               'classes': len(classes), 'enums': len(enums), 'instance_triples': len(instance_triples),
+              'numbers_retyped': retyped,
               'lexical_keys': {c: i['key'][1] for c, i in classes.items() if i['key'] and i['key'][0] == 'Lexical'},
               'not_translated': notes}
     if args.quipu_url and args.replay_log:
@@ -647,7 +787,7 @@ def main(argv=None):
             ap.error('--replay-log needs --server')
         quipu_post(args.quipu_url, '/shapes', {'action': 'load', 'name': args.shapes_name, 'turtle': shapes},
                    args.quipu_token_env)
-        report['replay'] = replay_log(args, tdb, db_path, rebase)
+        report['replay'] = replay_log(args, tdb, db_path, rebase, classes)
     elif args.quipu_url:
         report['quipu'] = load_rest(args, shapes, instance_nt, source, commit_time)
     elif args.quipu_db:

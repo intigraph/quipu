@@ -1,17 +1,8 @@
 [
-  { "@type": "@context", "@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#" },
-  { "@type": "Enum", "@id": "Status", "@value": ["active", "retired"] },
-  { "@type": "Class", "@id": "Entity", "@abstract": [], "name": "xsd:string" },
-  { "@type": "Class", "@id": "Person", "@inherits": "Entity",
-    "@key": { "@type": "Lexical", "@fields": ["name"] },
-    "age": { "@type": "Optional", "@class": "xsd:decimal" },
-    "status": "Status",
-    "friends": { "@type": "Set", "@class": "Person" },
-    "emails": { "@type": "Cardinality", "@class": "xsd:string", "@min_cardinality": 1, "@max_cardinality": 2 },
-    "nicknames": { "@type": "List", "@class": "xsd:string" } },
-  { "@type": "Class", "@id": "Team", "@key": { "@type": "Lexical", "@fields": ["name"] },
-    "name": "xsd:string",
-    "members": { "@type": "Set", "@class": "Person" } },
-  { "@type": "TaggedUnion", "@id": "Contact", "@subdocument": [], "@key": { "@type": "Random" },
-    "email": "xsd:string", "phone": "xsd:string" }
+  {"@type": "@context", "@base": "terminusdb:///data/", "@schema": "terminusdb:///schema#"},
+  {"@type": "Enum", "@id": "Status", "@value": ["active", "retired"]},
+  {"@type": "Class", "@id": "Entity", "@abstract": [], "name": "xsd:string"},
+  {"@type": "Class", "@id": "Person", "@inherits": "Entity", "@key": {"@type": "Lexical", "@fields": ["name"]}, "age": {"@type": "Optional", "@class": "xsd:decimal"}, "status": "Status", "friends": {"@type": "Set", "@class": "Person"}, "emails": {"@type": "Cardinality", "@class": "xsd:string", "@min_cardinality": 1, "@max_cardinality": 2}, "nicknames": {"@type": "List", "@class": "xsd:string"}, "profile": "sys:JSON", "homepage": {"@type": "Optional", "@class": "xdd:url"}, "contact": {"@type": "Optional", "@class": "Contact"}},
+  {"@type": "Class", "@id": "Team", "@key": {"@type": "Lexical", "@fields": ["name"]}, "name": "xsd:string", "members": {"@type": "Set", "@class": "Person"}, "lead": "Entity"},
+  {"@type": "TaggedUnion", "@id": "Contact", "@subdocument": [], "@key": {"@type": "Random"}, "email": "xsd:string", "phone": "xsd:string", "none": "sys:Unit"}
 ]

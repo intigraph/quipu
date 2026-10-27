@@ -1,0 +1,53 @@
+@base <terminusdb:///data/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix woql: <http://terminusdb.com/schema/woql#> .
+@prefix json: <http://terminusdb.com/schema/json#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
+@prefix sys: <http://terminusdb.com/schema/sys#> .
+@prefix api: <http://terminusdb.com/schema/api#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix scm: <../schema#> .
+
+<Array_0VZvBGOeYp2S79t2>
+  a sys:Array ;
+  sys:index "2"^^xsd:nonNegativeInteger ;
+  sys:value 4 .
+
+<Array_9yw_Eq5Ccxhsjubk>
+  a sys:Array ;
+  sys:index "0"^^xsd:nonNegativeInteger ;
+  sys:value 3 .
+
+<Array_QiVIMJVAsqXcGJxf>
+  a sys:Array ;
+  sys:index "1"^^xsd:nonNegativeInteger ;
+  sys:value 1 .
+
+<Cons/nKPaQHnouPXSrcOg>
+  a rdf:List ;
+  rdf:first "The Enchantress of Numbers" ;
+  rdf:rest rdf:nil .
+
+<Person/Ada%20Lovelace>
+  a scm:Person ;
+  scm:age 35 ;
+  scm:emails "ada@example.org" ;
+  scm:name "Ada Lovelace" ;
+  scm:nicknames <Cons/nKPaQHnouPXSrcOg> ;
+  scm:profile <../json/JSON/SHA1/6805b33bf51197e9e3ddee6e2e37da02ba62c3d8> ;
+  scm:scores <Array_0VZvBGOeYp2S79t2> ,
+             <Array_9yw_Eq5Ccxhsjubk> ,
+             <Array_QiVIMJVAsqXcGJxf> ;
+  scm:status scm:Status\/active .
+
+<../json/JSON/SHA1/19822099b3a2a9c62527a601d834872ad76dcc17>
+  a sys:JSON ;
+  json:random "stuff" ;
+  json:that 2 .
+
+<../json/JSON/SHA1/6805b33bf51197e9e3ddee6e2e37da02ba62c3d8>
+  a sys:JSON ;
+  json:some <../json/JSON/SHA1/19822099b3a2a9c62527a601d834872ad76dcc17> .

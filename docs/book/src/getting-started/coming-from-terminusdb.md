@@ -61,16 +61,26 @@ python3 scripts/terminusdb-import.py \
 | `Optional` | `sh:maxCount 1` |
 | `Set` | no count bounds |
 | `Set`/`Cardinality` with `@min_cardinality`, `@max_cardinality`, `@cardinality` | `sh:minCount` / `sh:maxCount` |
-| an `xsd:` range | `sh:datatype` |
-| a class range | `sh:class` |
+| an `xsd:` or `xdd:` range | `sh:datatype` |
+| a class range | `sh:class`; for a class with subclasses, `sh:or` over the class and every subclass |
+| `sys:JSON` | `sh:class sys:JSON` (JSON values are linked nodes, not literals) |
+| `sys:Unit` | `sh:in ( rdf:nil )` (how TerminusDB stores a unit value) |
 | an `Enum` range | `sh:in ( <Enum>/<value> ... )` |
 | `@inherits` | `rdfs:subClassOf`, plus the parent's properties copied onto the child shape |
 | `TaggedUnion` | `sh:xone` over its properties (exactly one present) |
 | `@key` | an `rdfs:comment` on the shape naming the key fields (see below) |
 
-Inherited properties are copied because a TerminusDB document carries only
-its most specific `rdf:type`. A shape that targets only the parent class would
-never see it.
+TerminusDB gives each document only its most specific `rdf:type`, and Quipu
+does not infer `rdfs:subClassOf` when it checks `sh:class`. So inherited
+properties are copied onto the child shape, and a property whose range is a
+parent class (`lead: Entity`) accepts any of the parent's subclasses through
+`sh:or`.
+
+TerminusDB's Turtle writer emits numbers in shorthand: a stored
+`36^^xsd:decimal` comes out as `36`, which any Turtle reader types as
+`xsd:integer`. The importer gives such numbers back the numeric datatype that
+the schema declares for the property (or for its List or Array elements).
+`numbers_retyped` in `import.json` counts how many it changed.
 
 A few things do not translate fully. Each one is listed in
 `import.json` under `not_translated` and printed as a `note:`:
@@ -80,14 +90,20 @@ A few things do not translate fully. Each one is listed in
   `sys:Array` cells, not as the elements themselves. Shapes for both cell
   types are always included, because Quipu refuses an `rdf:type` that no
   loaded shape sanctions.
+- `sys:JSON` values are checked as `sys:JSON` nodes. The JSON inside them is
+  not validated.
 - `@oneOf` is not translated.
 - `Foreign` is kept as a plain IRI reference.
+- A range the importer does not recognise gets only its count bounds, so it
+  never refuses data.
 
-Once the shapes are loaded, they gate every later write. Data that TerminusDB
-would refuse at commit time is refused here too, with the same reasons: a
-missing mandatory field, a value outside the enum, too many values or the
-wrong datatype. A SHACL refusal comes back as HTTP 200 with
-`"conforms": false`. The script treats that as an error and stops.
+Once the shapes are loaded, they gate every later write. The tests show these
+violations refused: a missing mandatory field, too many values, a wrong
+datatype, a value outside an enum and a reference to the wrong class. Anything
+in the list above is checked less strictly than TerminusDB checks it, so
+Quipu will accept some writes that TerminusDB would refuse. A SHACL refusal
+comes back as HTTP 200 with `"conforms": false`. The script treats that as an
+error and stops.
 
 ## IRIs and `@key`
 
@@ -125,19 +141,37 @@ removed are retracted, and every write is stamped with:
 - the commit, as the transaction's `source`.
 
 Afterwards, `valid_at` and `tx` queries answer "what did the data say as of
-commit N". Replay reads the full graph once per commit, so on a long history,
-`--log-count` limits it to the most recent N commits.
+commit N". Some details:
+
+- Quipu keeps valid time to the second, but TerminusDB commit times are
+  sub-second. A commit that lands in the same second as the one before it is
+  moved to the next free second (`time_adjusted` in the report), so the order
+  of commits is kept.
+- Leading commits with an empty instance graph, such as the first,
+  schema-only commit, are skipped.
+- Every commit is checked against the head schema.
+- Replay reads the full graph once per commit, so on a long history,
+  `--log-count` limits it to the most recent N commits.
 
 ## Testing
 
-`scripts/test-terminusdb-import.py` runs offline. The fixtures in
-`test-fixtures/terminusdb/` are built from TerminusDB's documented formats:
-the schema triples come from `json_schema_triple` and its tests in
-`src/core/document/json.pl`, and the log shape from the `/api/log` examples in
-the TerminusDB docs. They were not captured from a running server. When
-`quipu` and `quipu-server` are on `PATH`, the tests also validate against the
-real engine, load the data over REST and replay a two-commit log. CI runs
-them against the binaries it builds.
+`scripts/test-terminusdb-import.py` runs offline against two sets of
+fixtures:
+
+- `test-fixtures/terminusdb/live/`: real exports from a pinned
+  `terminusdb/terminusdb-server:v12.0.8` container. These are the schema
+  graph, the instance graph at every commit, and `/api/log`. The image digest
+  and how to reproduce them are in that directory's README.
+- `test-fixtures/terminusdb/`: fixtures built from TerminusDB's source
+  (`json_schema_triple` in `src/core/document/json.pl`), plus an invalid
+  instance graph.
+
+When `quipu` and `quipu-server` are on `PATH`, the tests also validate every
+real commit with the real engine, load over REST, and replay the real commit
+log. CI runs them against the binaries it builds. To run the end-to-end test
+against a TerminusDB server of your own, set `TERMINUSDB_LIVE_URL`,
+`TERMINUSDB_USER` and `TERMINUSDB_PASSWORD`. In CI, the repository variable
+`TERMINUSDB_LIVE_CI=true` starts the pinned container and runs that test.
 
 See also the [TerminusDB gap analysis](https://github.com/intigraph/quipu/blob/main/docs/design/terminusdb-gap-analysis.md)
 (section G6) and [SHACL Validation](../concepts/shacl-validation.md).

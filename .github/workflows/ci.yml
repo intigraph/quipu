@@ -215,8 +215,16 @@ jobs:
           timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
           timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
           timeout 120 python3 scripts/test-read-process-pool.py target/debug/quipu-server target/debug/quipu
+          # TerminusDB import. Set the repo variable TERMINUSDB_LIVE_CI=true to also run
+          # it against a real, pinned TerminusDB container (test-fixtures/terminusdb/live/README.md).
+          if [ "${{ vars.TERMINUSDB_LIVE_CI }}" = "true" ]; then
+            docker run -d --name tdb -p 127.0.0.1:6363:6363 -e TERMINUSDB_ADMIN_PASS=ci-only \
+              terminusdb/terminusdb-server:v12.0.8@sha256:43061044d1857bb6f1a2f41d7a59ad06ba5f91c03cbc90128d7c0415f32a0916
+            for _ in $(seq 60); do curl -sf -u admin:ci-only http://127.0.0.1:6363/api/info >/dev/null && break; sleep 1; done
+            export TERMINUSDB_LIVE_URL=http://127.0.0.1:6363 TERMINUSDB_USER=admin TERMINUSDB_PASSWORD=ci-only
+          fi
           QUIPU_BIN=target/debug/quipu QUIPU_SERVER_BIN=target/debug/quipu-server \
-            timeout 120 python3 scripts/test-terminusdb-import.py
+            timeout 180 python3 scripts/test-terminusdb-import.py
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the
