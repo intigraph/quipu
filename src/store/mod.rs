@@ -133,6 +133,10 @@ pub struct Store {
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.
     pub(crate) poststate_profile: PoststateProfile,
+    /// Whether `idx_current_g` has the exact current-membership definition,
+    /// memoized against `PRAGMA schema_version` (aegis-ek4): a correlated
+    /// named-graph leaf asks once per outer row.
+    pub(crate) current_g_index: std::cell::Cell<Option<(i64, bool)>>,
     /// OWL write-time constraint policy (aegis-bmqup).
     pub(crate) owl_config: OwlConfig,
     /// Ontology built from the stored ontologies, cached because the write gate
@@ -434,6 +438,15 @@ impl Store {
     /// Prepare a SQL statement against the underlying connection.
     pub(crate) fn prepare(&self, sql: &str) -> Result<rusqlite::Statement<'_>> {
         Ok(self.conn.prepare(sql)?)
+    }
+
+    /// Prepare through the connection's statement cache. For SQL the
+    /// evaluator re-issues once per outer row (a nested-loop BGP step, a
+    /// correlated EXISTS): the text is identical per row and only the bound
+    /// parameters change, so parsing and planning it again for every row was
+    /// most of a board aggregate's time (aegis-ek4).
+    pub(crate) fn prepare_cached(&self, sql: &str) -> Result<rusqlite::CachedStatement<'_>> {
+        Ok(self.conn.prepare_cached(sql)?)
     }
 }
 

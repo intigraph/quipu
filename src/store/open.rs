@@ -232,6 +232,10 @@ impl Store {
 
     fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
         crate::lexical::register(&conn)?;
+        // Per-row SPARQL scans reuse cached statements, one per text and
+        // nesting depth (aegis-ek4); a multi-branch board query needs more
+        // than rusqlite's default 16 before the LRU starts re-preparing.
+        conn.set_prepared_statement_cache_capacity(256);
         // `wal_autocheckpoint` is stated EXPLICITLY rather than left to SQLite's
         // default (aegis-raq1ok). Read the honest caveat before changing it:
         // the deployed store reached a **1.06 GB** WAL against a 5.7 GB
@@ -539,6 +543,7 @@ impl Store {
             write_shapes: None,
             write_reference_graphs: None,
             poststate_profile: PoststateProfile::default(),
+            current_g_index: std::cell::Cell::new(None),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
             owl_cache: None,
