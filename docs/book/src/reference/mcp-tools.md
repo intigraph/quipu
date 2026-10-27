@@ -953,6 +953,7 @@ Proposals require explicit acceptance before taking effect.
 | `proposer` | Yes | Identity of the proposing agent |
 | `rationale` | No | Why this change is needed |
 | `trigger_ref` | No | Validation-failure ref or bead id that triggered this |
+| `migration` | No | Data-migration program run on accept (see [Schema Evolution](../concepts/schema-evolution.md#data-migrations)) |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_list_proposals`
@@ -966,12 +967,16 @@ List schema-evolution proposals, optionally filtered by status.
 ### `quipu_accept_proposal`
 
 Accept a pending schema proposal. Shape proposals are validated before writing.
+A proposal carrying a migration runs it in the same transaction; a refused
+migration leaves the proposal pending and nothing written.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `id` | Yes | Proposal ID to accept |
 | `decided_by` | Yes | Identity of the approver |
 | `note` | No | Optional acceptance note |
+| `dry_run` | No | `true` reports what acceptance would do and accepts nothing |
+| `limit` | No | Dry run: sample facts and violations per list (default 50) |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_reject_proposal`

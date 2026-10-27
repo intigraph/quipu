@@ -70,6 +70,7 @@ mod pack_load;
 mod pack_turtle;
 pub mod path;
 pub mod proposal;
+pub mod proposal_migration;
 pub mod provider;
 pub mod rdf;
 mod rdf_compact;
@@ -173,6 +174,7 @@ pub mod vector_lance;
 pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
+pub mod write_gate;
 
 /// The crate version this build was compiled from.
 ///

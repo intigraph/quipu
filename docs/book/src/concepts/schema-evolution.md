@@ -65,6 +65,64 @@ When a **shape** proposal is accepted, Quipu:
 
 If the Turtle is invalid, the proposal stays **pending** and an error is returned.
 
+### Data Migrations
+
+Changing a shape does not change the facts already stored. Renaming
+`ex:name` to `ex:fullName` would otherwise leave every existing person with a
+value the new shape ignores and without the one it requires. A proposal can
+therefore carry a `migration`: an ordered list of operations, each of which
+Quipu renders to a SPARQL Update template.
+
+| `op` | Fields | Effect |
+|------|--------|--------|
+| `rename_predicate` | `from`, `to` | every `?s <from> ?o` becomes `?s <to> ?o` |
+| `retype_class` | `from`, `to` | every `?s a <from>` becomes `?s a <to>` |
+| `cast_datatype` | `predicate`, `datatype` | each literal value becomes `STRDT(STR(?o), <datatype>)` |
+| `split_property` | `from`, `into: [{predicate, expression}]` | each value `?o` becomes one value per target, computed by a SPARQL expression over `?o` |
+| `merge_property` | `from: [..]`, `to`, optional `expression` | values move to `to`; with `expression`, the sources' values `?v0`, `?v1`, … combine into one |
+| `sparql` | `update` | a raw `DELETE/INSERT … WHERE`, `INSERT DATA` or `DELETE DATA` |
+
+```json
+{
+  "kind": "shape",
+  "target": "people",
+  "diff": "... sh:property [ sh:path ex:fullName ; sh:minCount 1 ] ...",
+  "proposer": "agent/modeller",
+  "migration": [
+    { "op": "rename_predicate", "from": "http://example.org/name", "to": "http://example.org/fullName" },
+    { "op": "cast_datatype", "predicate": "http://example.org/age", "datatype": "http://www.w3.org/2001/XMLSchema#integer" }
+  ]
+}
+```
+
+The program is checked when the proposal is submitted. On accept:
+
+1. Every operation is evaluated against the state before the migration,
+   on the ROOT graph. The program's net change is
+   `(before − deletes) ∪ inserts`.
+2. The proposed shapes are loaded, the decision is recorded, and the change set
+   passes the write gate under the **new** shapes and vocabulary.
+3. The change commits as **one transaction** with source `migration:<id>`.
+   Old facts are superseded: their valid time closes at the decision instant
+   and they are never rewritten, so an as-of read before the migration still
+   returns them.
+
+If any step fails, such as an ill-typed cast like `"abc"` to `xsd:integer` or a
+value the new shapes refuse, the proposal stays pending, the shapes are
+unchanged and no fact is written.
+
+#### Dry run
+
+`quipu_accept_proposal` with `"dry_run": true` accepts nothing and reports:
+
+- `refused_before_migration`: violations the new shapes find in the facts
+  stored today;
+- `migration`: per operation, how many facts it supersedes and writes, plus
+  samples;
+- `refused_after_migration`: violations left once the migration has run;
+- `gate.would_accept`: whether the acceptance would go through, with the reason
+  when it would not.
+
 ### Reject a Proposal
 
 ```json
@@ -100,8 +158,9 @@ agents a clear remediation path instead of a dead-end error.
 
 - The `proposals` table uses a text `diff` column so that SHACL shape diffs and
   future OWL axiom diffs can coexist. The `kind` column disambiguates.
-- Proposals only mutate shape/ontology definitions — they never touch the EAVT
-  fact store directly.
+- Proposals without a migration only mutate shape/ontology definitions. A
+  migration writes facts only through the normal write path, in one
+  transaction attributed to `migration:<id>`.
 - Over MCP and REST there is no default approver: accept and reject refuse a
   request without `decided_by`. The `quipu propose accept|reject` CLI takes
   `--decided-by <id>` (or `--decided-by=<id>`); without the flag the CLI records

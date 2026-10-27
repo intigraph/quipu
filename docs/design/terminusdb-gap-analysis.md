@@ -216,6 +216,9 @@ graphs, the merge paper, and the launch. Kinds: **(a)** feature,
 
 ### G5. Data-migration operations for accepted schema changes. (a), M
 
+> **Status (2026-10-27):** built (aegis-esd). See `src/proposal_migration.rs`
+> and the "Data Migrations" section of the schema-evolution book page.
+
 - **TerminusDB:** typed migration operations (CreateClass, MoveClass,
   MoveClassProperty, CastClassProperty, ChangeKey and others) applied
   atomically with the schema change, plus automatic migration

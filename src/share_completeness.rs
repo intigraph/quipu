@@ -75,6 +75,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("pendant_repo_tombstones", Disposition::Content),
     ("forks", Disposition::Content),
     ("proposals", Disposition::Content),
+    // The migration program a proposal carries (aegis-esd), keyed by proposal.
+    ("proposal_migrations", Disposition::Content),
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
