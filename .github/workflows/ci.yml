@@ -215,6 +215,8 @@ jobs:
           timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
           timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
           timeout 120 python3 scripts/test-read-process-pool.py target/debug/quipu-server target/debug/quipu
+          QUIPU_BIN=target/debug/quipu QUIPU_SERVER_BIN=target/debug/quipu-server \
+            timeout 120 python3 scripts/test-terminusdb-import.py
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the

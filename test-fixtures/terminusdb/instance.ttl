@@ -1,0 +1,26 @@
+# Instance graph for schema.json (GET /api/triples/<org>/<db>/local/branch/main/instance).
+# Lexical-key IRIs follow idgen_lexical (json.pl:454-461): <base><Class>/<encoded key values joined by +>.
+# Enum values are the schema IRIs <Status>/<value>; List values are rdf:List Cons cells (json.pl:2116-2136).
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <terminusdb:///schema#> .
+@prefix data: <terminusdb:///data/> .
+
+<terminusdb:///data/Person/Ada%20Lovelace> a schema:Person ;
+  schema:name "Ada Lovelace"^^xsd:string ;
+  schema:age "36"^^xsd:decimal ;
+  schema:status <terminusdb:///schema#Status/active> ;
+  schema:emails "ada@example.org"^^xsd:string ;
+  schema:friends <terminusdb:///data/Person/Grace%20Hopper> ;
+  schema:nicknames data:Cons\/n1 .
+data:Cons\/n1 a rdf:List ; rdf:first "The Enchantress of Numbers"^^xsd:string ; rdf:rest rdf:nil .
+
+<terminusdb:///data/Person/Grace%20Hopper> a schema:Person ;
+  schema:name "Grace Hopper"^^xsd:string ;
+  schema:status <terminusdb:///schema#Status/retired> ;
+  schema:emails "grace@example.org"^^xsd:string, "amazing.grace@example.org"^^xsd:string ;
+  schema:nicknames rdf:nil .
+
+<terminusdb:///data/Team/Analytical%20Engines> a schema:Team ;
+  schema:name "Analytical Engines"^^xsd:string ;
+  schema:members <terminusdb:///data/Person/Ada%20Lovelace>, <terminusdb:///data/Person/Grace%20Hopper> .
