@@ -35,6 +35,43 @@ Copying the sidecar does not help: its canonical path and host must still match.
 The local marker is excluded from reconstruction shares; explicit restoration
 establishes the destination's own enforcement and epoch after verification.
 
+### Handles that are already open
+
+Opening checks ownership once, but a writable handle opened earlier keeps its
+connection. A later failed adoption (a sticky `pending` marker) or a lost or
+invalid enforced binding must refuse that handle's writes just as a fresh open
+does. Two layers do this:
+
+- **Entrypoint checks.** `Store::ensure_ownership_writable()` re-runs the
+  ownership check. Every fact and schema write entrypoint calls it before it
+  writes anything, so the refusal carries the ownership error and no refusal
+  audit row is written. This covers the transact pipeline and its callers,
+  multi-graph batches, attested writes, the decision deck and nonces, labels,
+  datasets, demotions, recorded graph creation, overlays (create, and every
+  write arm including tombstones), forks, stored queries, freeze/thaw, the
+  shape and ontology registry (load and remove), proposals (insert, accept,
+  reject), replica apply and bootstrap, and share compose, review, promotion
+  and pointer loads.
+- **Commit fence.** Every writable file store also installs a SQLite commit
+  hook. At each outer commit (autocommit statements and outermost `RELEASE`
+  included), while the handle already holds the write lock, it repeats the
+  check through a separate read-only connection and turns a refused commit
+  into a rollback. This covers direct writers with no entrypoint check of
+  their own, such as push subscriptions, attestation bindings, share-current
+  pointers, pending share-query holds, quarantine purge, event consumers and
+  event pruning. It also closes the window between an entrypoint check and the
+  commit, so an adoption that fails concurrently cannot slip one write through.
+  Its refusal surfaces as SQLite's commit-hook constraint error. SQLite leaves
+  a refused outermost `RELEASE` marked as an open transaction; the next
+  entrypoint check on that handle rolls it back.
+
+Derived index maintenance (lexical and substring indexes) and term interning
+run inside the fenced write paths when a write drives them. Run on their own,
+they add only dictionary or index rows that no fact references; on a fenced
+handle their commits are refused by the commit fence as well. In-memory and
+browser stores have no native placement and are INACTIVE, so they install no
+fence.
+
 This is a local placement guard. Host identifiers must be unique. A privileged
 operator who deletes or forges both authority records can defeat it; this is
 not hardware fencing. Stage A deliberately does not enforce ownership on all

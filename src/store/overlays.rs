@@ -166,6 +166,8 @@ impl Store {
             }
         }
 
+        // Interning below already writes; refuse invalid ownership first.
+        self.ensure_ownership_writable()?;
         let overlay_g = self.intern(overlay_iri)?;
         if overlay_g == parent_branch {
             return Err(Error::InvalidValue(
@@ -236,6 +238,9 @@ impl Store {
         value: Value,
         timestamp: &str,
     ) -> Result<i64> {
+        // The Tombstone arm writes its own transaction outside the transact
+        // pipeline, so ownership is checked here for both arms.
+        self.ensure_ownership_writable()?;
         // Reject writes to a non-overlay graph (committed graphs are written via
         // transact/transact_to_graph, not this overlay path).
         let _parent = self.overlay_parent(overlay_g)?;

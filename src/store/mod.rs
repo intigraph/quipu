@@ -16,6 +16,7 @@ pub mod datasets;
 pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
+mod ownership_fence;
 pub use ownership::OwnershipState;
 #[cfg(test)]
 mod ownership_held_handle_tests;
@@ -191,6 +192,9 @@ pub struct Store {
     /// §9.6's `P`). Empty means unattributed, which is NOT the same as
     /// unconstrained — see `enforce_graph_authority`.
     pub(crate) principal_chain: Vec<String>,
+    /// Set by the ownership commit fence when it refuses a commit; the next
+    /// entrypoint check clears any transaction the refusal left open.
+    pub(crate) ownership_fence_tripped: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// True while the store is writing verdict facts. The gate honours it and
     /// skips: a policy targeting `aegis:Verdict` would otherwise deny the
     /// verdict recording its own denial.

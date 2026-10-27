@@ -28,9 +28,61 @@ fn transactions(store: &Store) -> i64 {
         .unwrap()
 }
 
-/// Every refusal must also hold on the other committing entrypoints.
-fn assert_all_writes_refused(store: &mut Store) {
+fn count(store: &Store, table: &str) -> i64 {
+    store
+        .conn
+        .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+        .unwrap()
+}
+
+const SHAPES: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+    <urn:held:Shape> a sh:NodeShape ; sh:targetClass <urn:held:C> .\n";
+
+/// Every refusal must also hold on the other committing entrypoints,
+/// including the direct writers outside the transact pipeline.
+fn assert_all_writes_refused(store: &mut Store, overlay: i64) {
     let before = transactions(store);
+    let (graphs, shapes, ontologies) = (
+        count(store, "graphs"),
+        count(store, "shapes"),
+        count(store, "ontologies"),
+    );
+    let (e, a) = (
+        store.intern("urn:held:e").unwrap(),
+        store.intern("urn:held:n").unwrap(),
+    );
+    assert!(
+        store
+            .overlay_write(
+                overlay,
+                Op::Tombstone,
+                e,
+                a,
+                Value::Int(1),
+                "2026-10-26T00:00:03Z"
+            )
+            .is_err(),
+        "overlay tombstone must refuse"
+    );
+    assert!(
+        store.overlay_create("urn:held:overlay2", 0).is_err(),
+        "overlay create must refuse"
+    );
+    assert!(
+        store
+            .load_shapes("held", SHAPES, "2026-10-26T00:00:04Z")
+            .is_err(),
+        "shape load must refuse"
+    );
+    assert!(
+        store
+            .load_ontology("held", SHAPES, "2026-10-26T00:00:05Z")
+            .is_err(),
+        "ontology load must refuse"
+    );
+    assert_eq!(count(store, "graphs"), graphs);
+    assert_eq!(count(store, "shapes"), shapes);
+    assert_eq!(count(store, "ontologies"), ontologies);
     assert!(write(store, 99).is_err(), "transact must refuse");
     let d = datum(store, 98);
     assert!(
@@ -56,6 +108,7 @@ fn held_handle_refuses_writes_after_failed_adoption_leaves_pending_marker() {
     let mut held = Store::open(p).unwrap();
     assert_eq!(held.ownership_state().unwrap(), OwnershipState::Inactive);
     write(&mut held, 1).unwrap();
+    let overlay = held.overlay_create("urn:held:overlay", 0).unwrap();
 
     // A directory at the sidecar path makes the record install fail after the
     // pending marker committed.
@@ -67,7 +120,7 @@ fn held_handle_refuses_writes_after_failed_adoption_leaves_pending_marker() {
 
     let mut fresh = Store::open(p).unwrap();
     assert!(write(&mut fresh, 2).is_err(), "fresh open refuses");
-    assert_all_writes_refused(&mut held);
+    assert_all_writes_refused(&mut held, overlay);
 }
 
 #[test]
@@ -80,13 +133,14 @@ fn held_handle_refuses_writes_after_enforced_binding_is_lost() {
     let mut held = Store::open(p).unwrap();
     assert_eq!(held.ownership_state().unwrap(), OwnershipState::Enforced);
     write(&mut held, 1).unwrap();
+    let overlay = held.overlay_create("urn:held:overlay", 0).unwrap();
 
     std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
     assert!(held.ownership_state().is_err());
 
     let mut fresh = Store::open(p).unwrap();
     assert!(write(&mut fresh, 2).is_err(), "fresh open refuses");
-    assert_all_writes_refused(&mut held);
+    assert_all_writes_refused(&mut held, overlay);
 }
 
 #[test]
@@ -102,4 +156,108 @@ fn held_inactive_legacy_handles_keep_writing() {
     assert_eq!(first.ownership_state().unwrap(), OwnershipState::Inactive);
     assert!(first.require_ownership().is_err());
     assert_eq!(transactions(&first), 3);
+}
+
+/// The commit fence is the backstop for direct SQL writers that no entrypoint
+/// check covers: on a held handle it refuses every outer commit, and a refused
+/// commit leaves nothing behind.
+#[test]
+fn commit_fence_refuses_direct_writers_on_a_held_handle() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("direct.db");
+    let p = path.to_str().unwrap();
+    drop(Store::open(p).unwrap());
+    Store::adopt(p).unwrap();
+    let held = Store::open(p).unwrap();
+    held.conn
+        .execute("CREATE TABLE direct_probe(x)", [])
+        .unwrap();
+    held.conn
+        .execute("INSERT INTO direct_probe VALUES (1)", [])
+        .unwrap();
+
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
+    assert!(
+        held.conn
+            .execute("INSERT INTO direct_probe VALUES (2)", [])
+            .is_err(),
+        "autocommit write must be refused"
+    );
+    assert!(held.intern("urn:held:never-interned").is_err());
+    // A bookkeeping writer with no entrypoint check of its own.
+    assert!(
+        held.commit_consumer("held-consumer", 1, "2026-10-26T00:00:06Z")
+            .is_err()
+    );
+    held.conn.execute_batch("SAVEPOINT probe").unwrap();
+    held.conn
+        .execute("INSERT INTO direct_probe VALUES (3)", [])
+        .unwrap();
+    assert!(
+        held.conn.execute_batch("RELEASE probe").is_err(),
+        "outermost release must be refused"
+    );
+    // SQLite leaves a refused outermost RELEASE marked as open; the next
+    // entrypoint check refuses and clears it.
+    assert!(held.ensure_ownership_writable().is_err());
+    assert!(
+        held.conn.is_autocommit(),
+        "no transaction stays open after a refused commit"
+    );
+    assert_eq!(count(&held, "direct_probe"), 1);
+    assert_eq!(count(&held, "consumers"), 0, "refused consumer offset");
+    assert_eq!(
+        held.lookup("urn:held:never-interned").unwrap(),
+        None,
+        "refused intern left no term"
+    );
+}
+
+/// A held ENFORCED handle with one overlay, whose binding is then removed.
+fn stale_enforced_handle(dir: &std::path::Path) -> (Store, i64, i64, i64) {
+    let path = dir.join("stale.db");
+    let p = path.to_str().unwrap();
+    drop(Store::open(p).unwrap());
+    Store::adopt(p).unwrap();
+    let mut held = Store::open(p).unwrap();
+    write(&mut held, 1).unwrap();
+    let overlay = held.overlay_create("urn:held:overlay", 0).unwrap();
+    let (e, a) = (
+        held.intern("urn:held:e").unwrap(),
+        held.intern("urn:held:n").unwrap(),
+    );
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
+    assert!(held.ownership_state().is_err());
+    (held, overlay, e, a)
+}
+
+#[test]
+fn stale_handle_refuses_overlay_tombstone() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut held, overlay, e, a) = stale_enforced_handle(dir.path());
+    let before = transactions(&held);
+    let result = held.overlay_write(overlay, Op::Tombstone, e, a, Value::Int(1), "2026-10-27");
+    assert!(result.is_err(), "overlay tombstone must refuse");
+    assert_eq!(transactions(&held), before);
+}
+
+#[test]
+fn stale_handle_refuses_overlay_create() {
+    let dir = tempfile::tempdir().unwrap();
+    let (held, ..) = stale_enforced_handle(dir.path());
+    let graphs = count(&held, "graphs");
+    assert!(held.overlay_create("urn:held:overlay2", 0).is_err());
+    assert_eq!(count(&held, "graphs"), graphs);
+}
+
+#[test]
+fn stale_handle_refuses_shape_load() {
+    let dir = tempfile::tempdir().unwrap();
+    let (held, ..) = stale_enforced_handle(dir.path());
+    assert!(
+        held.load_shapes("held", SHAPES, "2026-10-27T00:00:00Z")
+            .is_err()
+    );
+    assert!(held.ensure_ownership_writable().is_err());
+    assert_eq!(count(&held, "shapes"), 0);
 }

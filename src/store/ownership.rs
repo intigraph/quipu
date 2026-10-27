@@ -115,6 +115,78 @@ fn record(path: &Path) -> Result<Binding> {
     serde_json::from_slice(&bytes).map_err(failure)
 }
 
+/// The ownership check on any connection to the store: the writer's own, or
+/// the separate read-only connection the commit fence uses (see
+/// `ownership_fence`), which may query while the writer holds its lock.
+pub(super) fn state_on(conn: &rusqlite::Connection) -> Result<OwnershipState> {
+    let marked: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='ownership_enforcement')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !marked {
+        // Browser VFS has no native sidecar namespace. This is explicitly
+        // INACTIVE, never a successful ownership/provider check. A sticky
+        // SQLite marker below still refuses there, without a cfg fallback.
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(path) = conn.path().filter(|p| !p.is_empty()) {
+            match fs::symlink_metadata(sidecar(Path::new(path))) {
+                Ok(_) => {
+                    return Err(failure(
+                        "partial ownership record without enforcement marker",
+                    ));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+                Err(e) => return Err(failure(e)),
+            }
+        }
+        return Ok(OwnershipState::Inactive);
+    }
+    let version: Vec<i64> = conn
+        .prepare("SELECT version FROM ownership_enforcement WHERE id=1 AND phase='ready'")?
+        .query_map([], |r| r.get(0))?
+        .collect::<std::result::Result<_, _>>()?;
+    let rows: i64 = conn.query_row("SELECT count(*) FROM ownership_enforcement", [], |r| {
+        r.get(0)
+    })?;
+    if version != [1] || rows != 1 {
+        return Err(failure("malformed enforcement marker"));
+    }
+    verify_binding_on(conn, host)?;
+    Ok(OwnershipState::Enforced)
+}
+
+fn verify_binding_on(
+    conn: &rusqlite::Connection,
+    provider: impl FnOnce() -> Result<String>,
+) -> Result<()> {
+    let path = conn
+        .path()
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| failure("native disk placement unavailable"))?;
+    let canonical = Path::new(path).canonicalize().map_err(failure)?;
+    let binding = record(&canonical)?;
+    let adopted: String = conn.query_row(
+        "SELECT adopted_epoch FROM ownership_enforcement WHERE id=1 AND phase='ready'",
+        [],
+        |r| r.get(0),
+    )?;
+    let store_id: String = conn.query_row(
+        "SELECT store_id FROM store_identity WHERE id = 1",
+        [],
+        |r| r.get(0),
+    )?;
+    if binding.adopted_epoch != adopted
+        || binding.version != 1
+        || binding.host != provider()?
+        || binding.path != canonical
+        || binding.store_id != store_id
+    {
+        return Err(failure("host, canonical path, or store identity differs"));
+    }
+    Ok(())
+}
+
 impl Store {
     pub(super) fn open_owned(
         path: &str,
@@ -138,44 +210,7 @@ impl Store {
     /// The database marker travels with raw copies; removing only the sidecar
     /// cannot turn an enforced copy into an ordinary legacy store.
     pub fn ownership_state(&self) -> Result<OwnershipState> {
-        let marked: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='ownership_enforcement')",
-            [],
-            |r| r.get(0),
-        )?;
-        if !marked {
-            // Browser VFS has no native sidecar namespace. This is explicitly
-            // INACTIVE, never a successful ownership/provider check. A sticky
-            // SQLite marker below still refuses there, without a cfg fallback.
-            #[cfg(not(target_arch = "wasm32"))]
-            if let Some(path) = self.conn.path().filter(|p| !p.is_empty()) {
-                match fs::symlink_metadata(sidecar(Path::new(path))) {
-                    Ok(_) => {
-                        return Err(failure(
-                            "partial ownership record without enforcement marker",
-                        ));
-                    }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
-                    Err(e) => return Err(failure(e)),
-                }
-            }
-            return Ok(OwnershipState::Inactive);
-        }
-        let version: Vec<i64> = self
-            .conn
-            .prepare("SELECT version FROM ownership_enforcement WHERE id=1 AND phase='ready'")?
-            .query_map([], |r| r.get(0))?
-            .collect::<std::result::Result<_, _>>()?;
-        let rows: i64 =
-            self.conn
-                .query_row("SELECT count(*) FROM ownership_enforcement", [], |r| {
-                    r.get(0)
-                })?;
-        if version != [1] || rows != 1 {
-            return Err(failure("malformed enforcement marker"));
-        }
-        self.verify_binding()?;
-        Ok(OwnershipState::Enforced)
+        state_on(&self.conn)
     }
 
     /// Write fence for handles that are ALREADY open. Opening re-checks
@@ -185,6 +220,15 @@ impl Store {
     /// Every committing write entrypoint calls this before it writes anything.
     /// INACTIVE legacy stores stay writable; this grants no ownership capability.
     pub fn ensure_ownership_writable(&self) -> Result<()> {
+        if self
+            .ownership_fence_tripped
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+            && !self.conn.is_autocommit()
+        {
+            // The commit fence refused an outermost RELEASE; its data is
+            // already rolled back, only the open-transaction state remains.
+            self.conn.execute_batch("ROLLBACK")?;
+        }
         self.ownership_state().map(|_| ())
     }
 
@@ -197,35 +241,11 @@ impl Store {
         }
     }
 
-    fn verify_binding(&self) -> Result<()> {
-        self.verify_binding_with(host)
-    }
-
     pub(super) fn verify_binding_with(
         &self,
         provider: impl FnOnce() -> Result<String>,
     ) -> Result<()> {
-        let path = self
-            .conn
-            .path()
-            .filter(|path| !path.is_empty())
-            .ok_or_else(|| failure("native disk placement unavailable"))?;
-        let canonical = Path::new(path).canonicalize().map_err(failure)?;
-        let binding = record(&canonical)?;
-        let adopted: String = self.conn.query_row(
-            "SELECT adopted_epoch FROM ownership_enforcement WHERE id=1 AND phase='ready'",
-            [],
-            |r| r.get(0),
-        )?;
-        if binding.adopted_epoch != adopted
-            || binding.version != 1
-            || binding.host != provider()?
-            || binding.path != canonical
-            || binding.store_id != self.store_id()?
-        {
-            return Err(failure("host, canonical path, or store identity differs"));
-        }
-        Ok(())
+        verify_binding_on(&self.conn, provider)
     }
 
     pub(super) fn bind_creation(&self) -> Result<()> {
