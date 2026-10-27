@@ -71,8 +71,20 @@ Consequences: a dropped fork's name is not reusable, and every fork operation
 
 ## 5. Promotion routes through the gates — why
 
-`quipu fork promote <name>` computes the structural delta fork-vs-ROOT and
-applies it to ROOT as ordinary assert/retract datums. Two layers gate it:
+`quipu fork promote <name>` three-way merges the fork into ROOT and applies
+the merged delta to ROOT as ordinary assert/retract datums. The merge base is
+ROOT as of the fork's `fork_tx`, read with the same as-of predicate creation
+materialized the fork from, so base is exactly the state the fork started at.
+Ours is ROOT now and theirs is the fork now; the slot operator is the share
+merge's (`src/merge3.rs`, described in `docs/paper-merge/`). ROOT writes made
+after the base therefore survive promotion. (Before this, promote applied the
+two-way diff fork-vs-current-ROOT, which silently retracted them; TerminusDB
+gap analysis, gap 1.) A `sh:maxCount` slot both sides changed incompatibly is
+returned as `ForkPromotion::Conflicts` with the share merge's decision
+records, and **nothing is written**; the fork stays `open`. A fork whose
+recorded `fork_tx` is not a usable base (negative, or past the latest
+transaction) is refused with an error rather than merged against a guessed
+base. Two layers then gate the delta:
 
 1. **SHACL first, at the promote call site.** The asserted delta is
    serialized to N-Triples and validated against the stored shapes'

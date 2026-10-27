@@ -5,17 +5,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use oxrdf::{Term, Triple};
+use oxrdf::Triple;
 use oxrdfio::{RdfFormat, RdfParser};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::error::{Error, Result};
 use crate::share::{ShareManifest, manifest_bytes, sha256};
 use crate::store::Store;
 use crate::types::Op;
 
-const SH_PATH: &str = "http://www.w3.org/ns/shacl#path";
-const SH_MAX_COUNT: &str = "http://www.w3.org/ns/shacl#maxCount";
 pub(crate) type Graph = HashSet<Triple>;
 type Slot = (String, String);
 
@@ -27,15 +25,7 @@ pub(crate) struct LoadedShare {
     pub(crate) shapes: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DecisionRecord {
-    pub subject: String,
-    pub predicate: String,
-    pub max_count: usize,
-    pub base: Vec<String>,
-    pub ours: Vec<String>,
-    pub theirs: Vec<String>,
-}
+pub use crate::merge3::DecisionRecord;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ShareStatus {
@@ -178,36 +168,6 @@ pub(crate) fn by_slot(graph: &Graph) -> BTreeMap<Slot, BTreeSet<String>> {
     out
 }
 
-fn max_counts(shapes: &str) -> Result<BTreeMap<String, usize>> {
-    let triples: Vec<Triple> = RdfParser::from_format(RdfFormat::Turtle)
-        .for_reader(shapes.as_bytes())
-        .map(|q| {
-            q.map(Triple::from)
-                .map_err(|e| Error::InvalidValue(format!("shapes.ttl parse: {e}")))
-        })
-        .collect::<Result<_>>()?;
-    let mut paths = BTreeMap::new();
-    let mut bounds = BTreeMap::new();
-    for t in triples {
-        let node = t.subject.to_string();
-        if t.predicate.as_str() == SH_PATH
-            && let Term::NamedNode(path) = &t.object
-        {
-            paths.insert(node.clone(), path.as_str().to_string());
-        }
-        if t.predicate.as_str() == SH_MAX_COUNT
-            && let Term::Literal(v) = &t.object
-            && let Ok(n) = v.value().parse()
-        {
-            bounds.insert(node, n);
-        }
-    }
-    Ok(bounds
-        .into_iter()
-        .filter_map(|(node, n)| paths.get(&node).map(|p| (p.clone(), n)))
-        .collect())
-}
-
 pub(crate) fn merge_graphs(
     base: &Graph,
     ours: &Graph,
@@ -215,39 +175,24 @@ pub(crate) fn merge_graphs(
     shapes: &str,
 ) -> Result<(Graph, Vec<DecisionRecord>)> {
     let (b, o, t) = (by_slot(base), by_slot(ours), by_slot(theirs));
-    let bounds = max_counts(shapes)?;
-    let slots: BTreeSet<_> = b.keys().chain(o.keys()).chain(t.keys()).cloned().collect();
+    let bounds = crate::merge3::max_counts(shapes)?;
     let empty = BTreeSet::new();
+    let (slots, held) =
+        crate::merge3::merge_slots(&b, &o, &t, |slot| bounds.get(&slot.1).copied(), &empty);
+    let conflicts = held
+        .into_iter()
+        .map(|c| DecisionRecord {
+            subject: c.slot.0.clone(),
+            predicate: c.slot.1.clone(),
+            max_count: c.max_count,
+            base: c.base.iter().cloned().collect(),
+            ours: c.ours.iter().cloned().collect(),
+            theirs: c.theirs.iter().cloned().collect(),
+        })
+        .collect();
     let mut merged = Graph::new();
-    let mut conflicts = Vec::new();
-    for slot in slots {
-        let bv = b.get(&slot).unwrap_or(&empty);
-        let ov = o.get(&slot).unwrap_or(&empty);
-        let tv = t.get(&slot).unwrap_or(&empty);
-        let mut values = bv.clone();
-        for removed in bv.difference(ov).chain(bv.difference(tv)) {
-            values.remove(removed);
-        }
-        values.extend(ov.difference(bv).cloned());
-        values.extend(tv.difference(bv).cloned());
-        let bound = bounds.get(&slot.1);
-        let delete_replace = bound == Some(&1)
-            && !bv.is_empty()
-            && ((ov.is_empty() && !tv.is_empty() && tv != bv)
-                || (tv.is_empty() && !ov.is_empty() && ov != bv));
-        let conflict = bound.is_some_and(|n| values.len() > *n) || delete_replace;
-        let chosen = if conflict { bv } else { &values };
-        if conflict {
-            conflicts.push(DecisionRecord {
-                subject: slot.0.clone(),
-                predicate: slot.1.clone(),
-                max_count: bound.copied().unwrap_or(1),
-                base: bv.iter().cloned().collect(),
-                ours: ov.iter().cloned().collect(),
-                theirs: tv.iter().cloned().collect(),
-            });
-        }
-        for value in chosen {
+    for (slot, values) in slots {
+        for value in values {
             let line = format!("{} <{}> {} .", slot.0, slot.1, value);
             merged.extend(parse_graph(&line, "merged triple")?);
         }
