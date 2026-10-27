@@ -263,6 +263,7 @@ graphs, the merge paper, and the launch. Kinds: **(a)** feature,
 This section is the WOQL verdict.
 
 **What WOQL gives its users that SPARQL text does not:**
+
 - Queries are **data** (JSON-LD documents), so programs build, compose,
   store and transform them without string templating.
 - Fluent builders in JS and Python.
@@ -275,6 +276,7 @@ functions. Its graph selection (`From`/`Using`) is weaker than SPARQL's
 dataset model. WOQL also has no standard and no second implementation.
 
 **What Quipu already covers:**
+
 - Recursion and Datalog: `rule_query` over the datafrog reasoner, with
   arbitrary body length and stratified negation, is more than WOQL's tabled
   recursion offers.
@@ -285,6 +287,7 @@ dataset model. WOQL also has no standard and no second implementation.
   server.
 
 **Verdict:**
+
 1. **Do not** implement WOQL or a WOQL→SPARQL translator. Its user base is
    small, it is one maintainer's dialect, and translating it would put a
    second, non-standard query surface in front of the write gate.
