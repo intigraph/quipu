@@ -14,6 +14,8 @@ const USAGE: &str = "usage: quipu fork <tx> [--name <n>] [--timestamp <ISO-8601>
        quipu fork diff <a> <b> [--db <path>]      each side: a fork name, or 'main'
        quipu fork drop <name> [--db <path>]
        quipu fork promote <name> [--db <path>]
+       quipu fork promote <name> --emit-decisions <file.json> [--propose] [--db <path>]
+       quipu fork promote <name> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
 read a fork with:  quipu read \"<sparql>\" --fork <name>";
 
 fn open(db_path: &str) -> Store {
@@ -151,7 +153,57 @@ fn cmd_drop(args: &[String], db_path: &str, name: &str) {
     println!("fork '{name}' dropped (its facts remain as history; the name is not reusable)");
 }
 
+/// `--emit-decisions` / `--decisions`: the reconcile flow for a promotion
+/// that stopped on conflicts (aegis-k7l). False when neither was given.
+fn cmd_promote_decisions(args: &[String], db_path: &str, name: &str) -> bool {
+    use quipu::fork_merge_decisions as fmd;
+    if let Some(out) = flag_value(args, "--emit-decisions") {
+        let store = open(db_path);
+        let mut file = or_die(fmd::emit(&store, name));
+        if args.iter().any(|a| a == "--propose") {
+            file = fmd::propose(file);
+        }
+        let file = quipu::merge_reconcile::ReconcileFile::Fork(file);
+        or_die(
+            file.to_bytes()
+                .and_then(|b| crate::cli_merge::write_atomic(out, &b)),
+        );
+        crate::cli_merge::print_view(&file, out, "text");
+        return true;
+    }
+    if let Some(path) = flag_value(args, "--decisions") {
+        let Some(reviewer) = flag_value(args, "--reviewer") else {
+            eprintln!("fork promote: --decisions requires --reviewer <who>\n{USAGE}");
+            std::process::exit(1);
+        };
+        let bytes = or_die(
+            std::fs::read(path).map_err(|e| quipu::Error::Store(format!("read {path}: {e}"))),
+        );
+        let file: fmd::ForkDecisionFile = or_die(serde_json::from_slice(&bytes).map_err(|e| {
+            quipu::Error::InvalidValue(format!("{path} is not a fork decisions file: {e}"))
+        }));
+        let ts = resolve_timestamp(args);
+        let mut store = open(db_path);
+        let result = or_die(fmd::apply(
+            &mut store,
+            name,
+            &file,
+            &bytes,
+            reviewer,
+            &ts,
+            flag_value(args, "--actor"),
+            args.iter().any(|a| a == "--dry-run"),
+        ));
+        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        return true;
+    }
+    false
+}
+
 fn cmd_promote(args: &[String], db_path: &str, name: &str) {
+    if cmd_promote_decisions(args, db_path, name) {
+        return;
+    }
     let ts = resolve_timestamp(args);
     let mut store = open(db_path);
     match or_die(store.fork_promote(name, &ts, None)) {
@@ -191,6 +243,9 @@ fn cmd_promote(args: &[String], db_path: &str, name: &str) {
                     c.subject, c.predicate, c.max_count, c.base, c.ours, c.theirs
                 );
             }
+            eprintln!(
+                "reconcile: quipu fork promote {name} --emit-decisions <file.json> --propose, then quipu merge show <file.json>"
+            );
             std::process::exit(1);
         }
     }

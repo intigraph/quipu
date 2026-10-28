@@ -369,15 +369,25 @@ complete -c qp -n "__fish_qp_using_subcommand share; and __fish_seen_subcommand_
 complete -c qp -n "__fish_qp_using_subcommand share; and __fish_seen_subcommand_from diff" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand status" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand status" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand merge" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand merge" -l actor -r
-complete -c qp -n "__fish_qp_using_subcommand merge" -l emit-decisions -r
-complete -c qp -n "__fish_qp_using_subcommand merge" -l decisions -r
-complete -c qp -n "__fish_qp_using_subcommand merge" -l reviewer -r
-complete -c qp -n "__fish_qp_using_subcommand merge" -l slot-scoped
-complete -c qp -n "__fish_qp_using_subcommand merge" -l propose
-complete -c qp -n "__fish_qp_using_subcommand merge" -l dry-run
-complete -c qp -n "__fish_qp_using_subcommand merge" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l actor -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l emit-decisions -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l decisions -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l reviewer -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l slot-scoped
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l propose
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -l dry-run
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -a "show" -d 'Show a merge\'s conflicts in the standard layout'
+complete -c qp -n "__fish_qp_using_subcommand merge; and not __fish_seen_subcommand_from show resolve" -a "resolve" -d 'Record one choice on one merge conflict'
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from show" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from show" -l format -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from resolve" -l choose -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from resolve" -l value -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from resolve" -l by -r
+complete -c qp -n "__fish_qp_using_subcommand merge; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand import; and not __fish_seen_subcommand_from delta promote review" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand import; and not __fish_seen_subcommand_from delta promote review" -l source -r
 complete -c qp -n "__fish_qp_using_subcommand import; and not __fish_seen_subcommand_from delta promote review" -l actor -r
@@ -785,7 +795,7 @@ complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcomma
 complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcommand_from list diff drop promote" -a "list" -d 'List named forks'
 complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcommand_from list diff drop promote" -a "diff" -d 'Diff two forks'
 complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcommand_from list diff drop promote" -a "drop" -d 'Drop a named fork'
-complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcommand_from list diff drop promote" -a "promote" -d 'Promote a fork to ROOT'
+complete -c qp -n "__fish_qp_using_subcommand fork; and not __fish_seen_subcommand_from list diff drop promote" -a "promote" -d 'Promote a fork to ROOT, with reviewable conflict decisions'
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from list" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from diff" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
@@ -793,6 +803,13 @@ complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_f
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from drop" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from drop" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l timestamp -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l emit-decisions -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l decisions -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l reviewer -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l actor -r
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l propose
+complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -l dry-run
 complete -c qp -n "__fish_qp_using_subcommand fork; and __fish_seen_subcommand_from promote" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand audit; and not __fish_seen_subcommand_from inventory namespace replay tree inheritance quarantine" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand audit; and not __fish_seen_subcommand_from inventory namespace replay tree inheritance quarantine" -l repo -r

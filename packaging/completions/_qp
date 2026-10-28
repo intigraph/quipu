@@ -669,7 +669,40 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-dir:_default' \
+":: :_qp__subcmd__merge_commands" \
+"*::: :->merge" \
 && ret=0
+
+    case $state in
+    (merge)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-merge-command-$line[2]:"
+        case $line[2] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-decisions-json:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--choose=[]:VALUE:_default' \
+'*--value=[]:VALUE:_default' \
+'*--by=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-decisions-json:_default' \
+':arg-row:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
@@ -1807,6 +1840,13 @@ _arguments "${_arguments_options[@]}" : \
 (promote)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--emit-decisions=[]:VALUE:_default' \
+'*--decisions=[]:VALUE:_default' \
+'*--reviewer=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'--propose[]' \
+'--dry-run[]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-name:_default' \
@@ -2303,7 +2343,7 @@ _qp__subcmd__fork_commands() {
 'list:List named forks' \
 'diff:Diff two forks' \
 'drop:Drop a named fork' \
-'promote:Promote a fork to ROOT' \
+'promote:Promote a fork to ROOT, with reviewable conflict decisions' \
     )
     _describe -t commands 'qp fork commands' commands "$@"
 }
@@ -2563,8 +2603,21 @@ _qp__subcmd__memory__subcmd__receipt_commands() {
 }
 (( $+functions[_qp__subcmd__merge_commands] )) ||
 _qp__subcmd__merge_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'show:Show a merge'\''s conflicts in the standard layout' \
+'resolve:Record one choice on one merge conflict' \
+    )
     _describe -t commands 'qp merge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge__subcmd__resolve_commands] )) ||
+_qp__subcmd__merge__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp merge resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge__subcmd__show_commands] )) ||
+_qp__subcmd__merge__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp merge show commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__merge-driver_commands] )) ||
 _qp__subcmd__merge-driver_commands() {

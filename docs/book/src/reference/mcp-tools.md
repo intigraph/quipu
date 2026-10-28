@@ -6,8 +6,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `knowledge_*` tools, not these.) The [MCP Tool Index](mcp-tool-index.md)
 lists every tool with its parameters, generated from the tool definitions.
 
-The registry (`tool_definitions()`) exposes **81 tools** in a default build, or
-**83** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **82 tools** in a default build, or
+**84** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -166,6 +166,11 @@ It never sets a `decision` and writes nothing.
 incoming share's `parent_share`. A server path is never accepted. REST:
 `POST /merge/decisions`. CLI: `quipu merge <share-dir> --emit-decisions <file> [--propose]`.
 
+`fork: <name>` instead of `incoming` and `base` lists the conflicts of promoting
+that fork (CLI: `quipu fork promote <name> --emit-decisions <file> [--propose]`).
+`present: true` returns `{decisions, presentation, view}`: the standard markdown
+to show the user unchanged, and its JSON form.
+
 ### `quipu_merge_apply`
 
 **WRITE.** Finishes the merge from the decisions file with each row's `decision` set
@@ -180,6 +185,19 @@ that is not an RDF term. It also refuses a field merge-decisions/v1 does not
 define. `dry_run: true` runs every check and returns the counts it would write,
 without writing. REST: `POST /merge/apply`. CLI: `quipu merge <share-dir>
 --decisions <file> --reviewer <who> [--dry-run]`.
+
+With `fork: <name>` it finishes that fork's promotion instead, through the same SHACL
+and write gates as a clean promote. Applying the same decisions a second time returns
+`outcome: "already-applied"` with the original transaction and writes nothing.
+
+### `quipu_merge_resolve`
+
+Records one choice on one row of a decisions file (share or fork) and returns
+`{decisions, presentation, view}`. `choose` is `ours`, `theirs`, `base`, `both` (only
+when ours and theirs together fit the slot's `sh:maxCount`), `value` (with `values`, as
+N-Triples terms) or `defer`; `by` names who decided. The choice is validated against the
+row. It touches no store: pass the returned `decisions` to `quipu_merge_apply`. REST:
+`POST /merge/resolve`. CLI: `quipu merge resolve <file> <row> --choose <choice> --by <who>`.
 
 ### `quipu_knot`
 

@@ -417,6 +417,20 @@ impl Store {
         }
     }
 
+    /// The newest transaction whose source contains `fragment`, if any.
+    /// Used to recognise a decisions file that was already applied.
+    pub fn find_transaction_by_source(&self, fragment: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id FROM transactions WHERE instr(source, ?1) > 0 \
+                 ORDER BY id DESC LIMIT 1",
+                params![fragment],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
     /// Retrieve a transaction by id.
     pub fn get_transaction(&self, tx_id: i64) -> Result<Option<crate::types::Transaction>> {
         let mut stmt = self

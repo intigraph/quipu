@@ -179,6 +179,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // aegis-yavo9c: emits (and optionally proposes) merge decisions from
     // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
     "/merge/decisions",
+    // aegis-k7l: records a choice in the posted decisions file and returns
+    // it; no store access at all.
+    "/merge/resolve",
     // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
     "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)

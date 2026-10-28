@@ -498,6 +498,26 @@ Value options: `--actor <VALUE>`, `--emit-decisions <VALUE>`, `--decisions <VALU
 
 Switches: `--slot-scoped`, `--propose`, `--dry-run`.
 
+### `qp merge show`
+
+Show a merge's conflicts in the standard layout.
+
+```text
+qp merge show <decisions.json>
+```
+
+Value options: `--format <VALUE>`.
+
+### `qp merge resolve`
+
+Record one choice on one merge conflict.
+
+```text
+qp merge resolve <decisions.json> <row>
+```
+
+Value options: `--choose <VALUE>`, `--value <VALUE>`, `--by <VALUE>`.
+
 ## `qp import`
 
 Verify a share into quarantine, then promote or review it.
@@ -1382,11 +1402,15 @@ qp fork drop <name>
 
 ### `qp fork promote`
 
-Promote a fork to ROOT.
+Promote a fork to ROOT, with reviewable conflict decisions.
 
 ```text
 qp fork promote <name>
 ```
+
+Value options: `--timestamp <VALUE>`, `--emit-decisions <VALUE>`, `--decisions <VALUE>`, `--reviewer <VALUE>`, `--actor <VALUE>`.
+
+Switches: `--propose`, `--dry-run`.
 
 ## `qp audit`
 
