@@ -315,9 +315,8 @@ checkout reports revision `unknown` (honest, not pinned); pinning the revision
 into the sdist is OPEN. The shared corpus is
 `tests/fixtures/bindings-conformance/v1.json`, run natively by
 `tests/bindings_conformance.rs` and in Python by `bindings/python/tests`.
-The wheel/sdist workflow (no publish job) is staged at
-`bindings/python/ci/python-bindings.yml` until a workflow-scoped push installs
-it under `.github/workflows/`.
+`.github/workflows/python-bindings.yml` builds and tests wheels and the sdist
+with no publish job.
 
 ## Packaging and release
 

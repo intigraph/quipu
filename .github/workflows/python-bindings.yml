@@ -1,11 +1,3 @@
-# STAGED WORKFLOW: install as .github/workflows/python-bindings.yml.
-# It lives here only because the authoring credential lacks GitHub's
-# `workflow` scope; a workflow-scoped push moves it (git mv) unchanged.
-# Until then nothing runs it, and it must not be read as passing CI.
-#
-# release.yml should also run `scripts/sync-python-binding.py` on the release
-# PR branch (beside the changelog correction step) so the committed binding
-# version follows each bump; that needs the same workflow-scoped push.
 name: Python bindings
 
 # Local wheel + sdist build and installed-artifact tests for `quipu-kg`
@@ -16,6 +8,10 @@ name: Python bindings
 #
 # The tests run against INSTALLED artifacts in fresh virtualenvs, from outside
 # the source tree, so a package that only works from the checkout fails here.
+#
+# Follow-up: release.yml should also run `scripts/sync-python-binding.py` on
+# the release PR branch so the committed binding version follows each bump.
+# Until then every job below syncs before its --locked build.
 
 on:
   pull_request:
