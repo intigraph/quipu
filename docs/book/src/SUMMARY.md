@@ -63,6 +63,7 @@
 
 - [Sharing & Federation](sharing/index.md)
   - [Aligning concepts across graphs](sharing/align.md)
+  - [Reconciling a failed merge](sharing/reconcile.md)
 
 # Architecture
 
