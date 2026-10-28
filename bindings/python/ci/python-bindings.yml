@@ -2,6 +2,10 @@
 # It lives here only because the authoring credential lacks GitHub's
 # `workflow` scope; a workflow-scoped push moves it (git mv) unchanged.
 # Until then nothing runs it, and it must not be read as passing CI.
+#
+# release.yml should also run `scripts/sync-python-binding.py` on the release
+# PR branch (beside the changelog correction step) so the committed binding
+# version follows each bump; that needs the same workflow-scoped push.
 name: Python bindings
 
 # Local wheel + sdist build and installed-artifact tests for `quipu-kg`
@@ -66,6 +70,11 @@ jobs:
             3.12
             3.13
             3.14
+      # release-plz bumps only the root crate. Sync the binding's version and
+      # its Cargo.lock path entry to the core first (registry pins untouched),
+      # so --locked holds and the wheel carries the core's version.
+      - name: Sync binding version with core
+        run: python3 scripts/sync-python-binding.py
       # One build per interpreter; the core crate compiles once and is reused.
       # On Linux this runs in the manylinux container and auditwheel-repairs
       # the result (maturin's platform audit).
@@ -86,6 +95,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # release-plz bumps only the root crate. Sync the binding's version and
+      # its Cargo.lock path entry to the core first (registry pins untouched),
+      # so --locked holds and the wheel carries the core's version.
+      - name: Sync binding version with core
+        run: python3 scripts/sync-python-binding.py
       - uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
@@ -178,6 +192,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+      # release-plz bumps only the root crate. Sync the binding's version and
+      # its Cargo.lock path entry to the core first (registry pins untouched),
+      # so --locked holds and the wheel carries the core's version.
+      - name: Sync binding version with core
+        run: python3 scripts/sync-python-binding.py
       # The core crate is a path dependency, so a blanket `-D warnings` would
       # also judge its feature-subset warnings. Fail on this crate's own
       # diagnostics only (reported relative to bindings/python).

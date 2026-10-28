@@ -60,3 +60,52 @@ def test_a_handle_dropped_on_another_thread_does_not_crash():
     del s
     box = run_in_thread(lambda: holder.pop() and None)
     assert "error" not in box
+
+
+def test_reading_closed_from_another_thread_mid_call_does_not_deadlock():
+    # Review repro (PR #893): the owner's call holds the store mutex while
+    # Python runs (`errors._from_native` building the exception). A second
+    # thread reading `closed` then must not block on that mutex while holding
+    # the GIL. Run in a subprocess so a regression fails by timeout instead
+    # of hanging the suite.
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent(
+        """
+        import threading, time
+        import quipu, quipu.errors as errors
+
+        original = errors._from_native
+        entered = threading.Event()
+
+        def slow(error):
+            entered.set()
+            time.sleep(0.5)  # stands in for any GIL handoff mid-call
+            return original(error)
+
+        errors._from_native = slow
+        s = quipu.Store.memory()
+        seen = []
+
+        def reader():
+            entered.wait(5)
+            seen.append(s.closed)
+
+        t = threading.Thread(target=reader)
+        t.start()
+        try:
+            s.invoke("quipu_update", {})
+        except quipu.UnsupportedCapabilityError:
+            pass
+        t.join(5)
+        assert seen == [False], seen
+        s.close()
+        assert s.closed
+        print("ok")
+        """
+    )
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "ok"

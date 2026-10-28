@@ -79,7 +79,15 @@ class Store:
 
     @classmethod
     def open(cls, path: str | os.PathLike[str]) -> Store:
-        """Open (or create) a file-backed store. Adopted shapes persist."""
+        """Open (or create) a file-backed store. Adopted shapes persist.
+
+        Do not open a database that a running quipu-server is serving. The
+        file stays consistent, but the server never sees these writes in its
+        caches, read models or change feed, and this store runs with default
+        configuration rather than the server's governance, label and SHACL
+        settings. Nothing detects that case yet: use the REST client
+        (``quipu_client``) for a served store. One writer per database file.
+        """
         return cls(_Engine.open(os.fspath(path)))
 
     def close(self) -> None:

@@ -13,7 +13,10 @@ GOOD = '<urn:good> a <urn:Record>; <urn:title> "Before" .'
 def test_import_name_version_and_engine_identity(store):
     caps = store.capabilities()
     assert caps["contract"] == "quipu-bindings/v1"
-    assert caps["version"] == quipu.__version__ == quipu.CORE_VERSION
+    assert caps["version"] == quipu.CORE_VERSION
+    # The wheel's version is the core's; a mismatch means the build skipped
+    # scripts/sync-python-binding.py after a core release bump.
+    assert quipu.__version__ == quipu.CORE_VERSION, "run scripts/sync-python-binding.py"
     assert caps["features"]["shacl"] is True
     assert caps["storage"] == "memory"
     assert caps["full_parity"] is False

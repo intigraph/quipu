@@ -160,6 +160,14 @@ impl Engine {
     /// Open (or create) a file-backed store. Shapes adopted in an earlier
     /// session persist in the file and are enforced again from the first
     /// write; a fresh file starts with no adopted schema, like memory.
+    ///
+    /// Do NOT open a database that a running `quipu-server` (or any other
+    /// writer) is serving. `SQLite` keeps the file consistent, but the server's
+    /// in-process state (term cache, read models, change feed) never sees this
+    /// engine's writes, and this engine runs with default configuration, not
+    /// the server's governance, label or SHACL settings. Nothing detects that
+    /// case yet (no shared writer lock exists): talk to a served store through
+    /// its REST API instead.
     pub fn open(path: &str) -> Result<Self> {
         Ok(Self::governed(Store::open(path)?, "file"))
     }

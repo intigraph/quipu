@@ -8,8 +8,13 @@ bitemporal entity history. No server, no HTTP. For the remote REST client, see
 Not yet on PyPI. Build and install a wheel from this directory:
 
 ```bash
+python3 ../../scripts/sync-python-binding.py   # after a core version bump
 pip install maturin && maturin build --release && pip install target/wheels/quipu_kg-*.whl
 ```
+
+The wheel's version is the core crate's. release-plz bumps only the root
+crate, so the sync script sets this crate's version and refreshes the
+`quipu-ai` path entry in its Cargo.lock (registry pins are untouched).
 
 ```python
 import quipu
@@ -43,6 +48,12 @@ with quipu.Store.open("kg.db") as store:          # or quipu.Store.memory()
 - **Errors** are typed (`quipu.errors`) and carry `code`, `operation`,
   `commit_state`, `retryable` (always `False`) and `details`. Only
   `commit_state == "not_started"` means nothing was written.
+- **One writer per file. Never open a database a running `quipu-server` is
+  serving.** The file stays consistent, but the server's caches, read models
+  and change feed never see this library's writes, and the library runs with
+  default configuration, not the server's governance, label and SHACL
+  settings. Nothing detects this yet. Use the REST client
+  ([`quipu_client`](../../python/README.md)) for a served store.
 - **Threads**: a store belongs to the thread that opened it. Calls from other
   threads raise `quipu.ThreadAffinityError`. Open one store per thread. No
   free-threaded CPython support yet.

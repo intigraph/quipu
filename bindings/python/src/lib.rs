@@ -8,8 +8,11 @@
 //! Thread affinity is explicit, not inferred from the GIL: a handle refuses
 //! any call from a thread other than the one that opened it, with a typed
 //! `ThreadAffinityError` whose `commit_state` is `not_started`. The GIL is
-//! held for the whole call (no `allow_threads`), and no Python code runs
-//! while the store is borrowed.
+//! held for the whole call (no `allow_threads`), but Python code CAN run
+//! while the store mutex is held: building a typed exception calls
+//! `quipu.errors._from_native`, and allocations may run finalizers. Either can
+//! hand the GIL to another thread, so nothing reachable from another thread
+//! may block on that mutex: every acquisition is a `try_lock`.
 
 use std::sync::{Mutex, TryLockError};
 use std::thread::ThreadId;
@@ -145,7 +148,8 @@ impl Engine {
             .map_err(|e| raise_refusal(py, &refusal("open_failed", "open", e.to_string())))
     }
 
-    /// Open (or create) a file-backed store at `path`.
+    /// Open (or create) a file-backed store at `path`. Never a file a running
+    /// quipu-server serves: see `quipu::bindings::Engine::open`.
     #[staticmethod]
     fn open(py: Python<'_>, path: &str) -> PyResult<Self> {
         Facade::open(path)
@@ -200,10 +204,15 @@ impl Engine {
         }
     }
 
-    /// Whether `close` has run.
+    /// Whether `close` has run. Never blocks: a handle mid-call (mutex held,
+    /// possibly with the GIL handed to this thread) is open, so `False`.
     #[getter]
     fn closed(&self) -> bool {
-        self.inner.lock().map_or(true, |guard| guard.is_none())
+        match self.inner.try_lock() {
+            Ok(guard) => guard.is_none(),
+            Err(TryLockError::WouldBlock) => false,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner().is_none(),
+        }
     }
 }
 
