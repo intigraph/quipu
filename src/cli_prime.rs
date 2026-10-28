@@ -106,6 +106,10 @@ pub(crate) fn summarize(path: &str) -> Value {
     };
     let mut out = match read_summary(path, started) {
         Ok(v) => v,
+        Err(rusqlite::Error::InvalidQuery) => json!({
+            "status": "unreadable",
+            "error": "not a quipu store: no summary table could be read",
+        }),
         Err(e) => json!({ "status": "unreadable", "error": e.to_string() }),
     };
     out["path"] = json!(path);
@@ -154,6 +158,17 @@ fn read_summary(path: &str, started: Instant) -> rusqlite::Result<Value> {
             |r| r.get::<_, i64>(0),
         )
         .ok();
+    // Open succeeds lazily on any file; a file that is not a quipu store
+    // (or not SQLite at all) fails every read, which is "unreadable", not an
+    // "ok" store with every field empty.
+    let nothing_read = last_tx.is_none()
+        && graphs.is_null()
+        && shapes.is_null()
+        && ontologies.is_null()
+        && pending.is_none();
+    if nothing_read && started.elapsed() <= DEADLINE {
+        return Err(rusqlite::Error::InvalidQuery);
+    }
     let status = if started.elapsed() > DEADLINE {
         "partial"
     } else {
@@ -311,6 +326,27 @@ mod tests {
         assert!(brief.contains("## Query first"));
         assert!(!brief.contains("## Core commands"));
         assert!(PRIMER.starts_with(&brief));
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_store_is_unreadable() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("garbage.db");
+        std::fs::write(
+            &path,
+            b"this is not sqlite at all, just bytes\n".repeat(200),
+        )
+        .unwrap();
+        let s = summarize(path.to_str().unwrap());
+        assert_eq!(s["status"], "unreadable", "{s}");
+        assert!(render_summary(&s).contains("could not be read"));
+        // A valid SQLite file without quipu's tables is not a store either.
+        let empty = dir.path().join("empty.db");
+        rusqlite::Connection::open(&empty)
+            .unwrap()
+            .execute_batch("CREATE TABLE unrelated(x)")
+            .unwrap();
+        assert_eq!(summarize(empty.to_str().unwrap())["status"], "unreadable");
     }
 
     #[test]

@@ -3,7 +3,6 @@
 
 use std::path::Path;
 use std::process::{Command, Output};
-use std::time::{Duration, Instant};
 
 fn prime(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_quipu"))
@@ -49,9 +48,7 @@ fn live_summary_is_read_only_and_fast() {
             .unwrap();
     }
     let before = std::fs::read(&db).unwrap();
-    let started = Instant::now();
     let out = prime(dir.path(), &["--db", db.to_str().unwrap(), "--json"]);
-    let elapsed = started.elapsed();
     assert!(
         out.status.success(),
         "{}",
@@ -68,8 +65,10 @@ fn live_summary_is_read_only_and_fast() {
         before,
         "prime modified the store"
     );
-    // Process start included; the summary itself is budgeted at 400 ms.
-    assert!(elapsed < Duration::from_secs(1), "prime took {elapsed:?}");
+    // The summary's own clock, against its 400 ms budget. Process start-up
+    // is not prime's to bound and varies by host (over 1 s on some Macs).
+    let elapsed_ms = v["store"]["elapsed_ms"].as_u64().unwrap();
+    assert!(elapsed_ms <= 400, "summary took {elapsed_ms} ms");
 }
 
 #[test]
@@ -83,4 +82,17 @@ fn section_and_brief_select_text() {
     let brief = prime(dir.path(), &["--static", "--brief"]);
     let text = String::from_utf8(brief.stdout).unwrap();
     assert!(text.contains("## Query first") && !text.contains("## Core commands"));
+}
+
+#[test]
+fn a_garbage_db_file_is_reported_unreadable() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("garbage.db");
+    std::fs::write(&db, b"not a database\n".repeat(500)).unwrap();
+    let out = prime(dir.path(), &["--db", db.to_str().unwrap(), "--json"]);
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["store"]["status"], "unreadable", "{v}");
+    let text = prime(dir.path(), &["--db", db.to_str().unwrap()]);
+    assert!(String::from_utf8_lossy(&text.stdout).contains("could not be read"));
 }
