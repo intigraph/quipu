@@ -367,6 +367,8 @@ jobs:
              wasm/explorer/pkg-node/quipu_wasm_explorer.d.ts \
              wasm/explorer/pkg-node/quipu_wasm_explorer_bg.wasm.d.ts \
              "dist/${NODE_NAME}/"
+          cp wasm/explorer/runtime/query-builder.mjs wasm/explorer/runtime/query-terms.mjs \
+             wasm/explorer/runtime/query-builder.d.mts "dist/${NODE_NAME}/"
           cp LICENSE "dist/${NODE_NAME}/"
           cat > "dist/${NODE_NAME}/README.txt" <<'EOF'
           quipu, compiled to wasm and loadable from node with no browser.

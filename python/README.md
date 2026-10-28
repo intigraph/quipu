@@ -36,3 +36,5 @@ Tests run against a stdlib `http.server` stub — no network, no live Quipu:
 ```bash
 python3 -m pytest python/tests -q
 ```
+
+The [typed SPARQL builder](../docs/book/src/reference/query-builder.md) composes immutable queries, preserves temporal request options and saves through the existing stored-query registry.

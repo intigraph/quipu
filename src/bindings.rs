@@ -28,6 +28,18 @@ const OPERATIONS: &[Operation] = &[
         handler: |s, v| crate::tool_query(s, v),
     },
     Operation {
+        name: "quipu_queries",
+        requires_shacl: false,
+        requires_schema: false,
+        handler: |s, v| crate::tool_queries(s, v),
+    },
+    Operation {
+        name: "quipu_ask",
+        requires_shacl: false,
+        requires_schema: false,
+        handler: |s, v| crate::tool_ask(s, v),
+    },
+    Operation {
         name: "quipu_export",
         requires_shacl: false,
         requires_schema: false,
@@ -371,7 +383,7 @@ impl Engine {
 fn writes(operation: &str, input: &Value) -> bool {
     match operation {
         "quipu_knot" | "quipu_episode" | "quipu_set" | "quipu_retract" => true,
-        "quipu_shapes" => matches!(
+        "quipu_shapes" | "quipu_queries" => matches!(
             input.get("action").and_then(Value::as_str),
             Some("load" | "remove")
         ),

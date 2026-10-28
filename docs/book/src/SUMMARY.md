@@ -54,6 +54,7 @@
 - [Atomic source acquisition](reference/acquisition.md)
 - [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)
+- [Typed Query Builders](reference/query-builder.md)
 - [MCP Tools](reference/mcp-tools.md)
   - [MCP Tool Index](reference/mcp-tool-index.md)
 - [Reasoner](reference/reasoner.md)

@@ -25,6 +25,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  query-builders:
+    name: Typed SPARQL client builders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python3 -m pip install pytest
+      - name: Install and exercise the built Python package outside the source tree
+        run: |
+          python3 -m pip install ./python
+          cd "$RUNNER_TEMP"
+          python3 -c 'from quipu_client import Select, Var; assert Select((Var("s"),)).to_request() == {"query": "SELECT ?s WHERE {  }"}'
+      - run: python3 -m pytest python/tests -q
+      - run: node --test tests/query-builder.test.mjs
+      - run: npx --yes --ignore-scripts --package typescript@5.9.3 tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/query-builder-types.mts
+      - run: cargo test --locked --no-default-features --test query_builder
+      - run: cargo test --locked --no-default-features --lib bindings::tests
+
   fmt:
     name: Format
     runs-on: ubuntu-latest

@@ -1,0 +1,12 @@
+{
+  "queries": {
+    "simple": {"query": "SELECT ?s ?label WHERE { ?s <urn:label> ?label . }", "count": 2},
+    "optional": {"query": "SELECT ?s ?next WHERE { ?s <urn:type> <urn:Thing> . OPTIONAL { ?s <urn:link> ?next . } }", "count": 2},
+    "union": {"query": "SELECT ?s WHERE { { ?s <urn:label> \"Alpha\" . } UNION { ?s <urn:label> \"Beta\" . } }", "count": 2},
+    "filter": {"query": "SELECT ?s WHERE { ?s <urn:score> ?n . FILTER ((?n > 1)) }", "count": 1},
+    "path": {"query": "SELECT ?s ?target WHERE { ?s (<urn:link>/(<urn:link>)*) ?target . }", "count": 1},
+    "aggregate": {"query": "SELECT ?type (COUNT(?s) AS ?total) WHERE { ?s <urn:type> ?type . } GROUP BY ?type", "count": 1},
+    "scoped": {"query": "SELECT ?s FROM <urn:missing> WHERE { ?s <urn:type> <urn:Thing> . }", "count": 0}
+  },
+  "literals": ["", "plain", "quote\" and slash\\", "line\nreturn\rtab\t", "{param}", "雪🧶", "\u0000\b\f", "' } # remains data"]
+}
