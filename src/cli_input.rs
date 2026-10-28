@@ -1,4 +1,5 @@
 //! Pure argument admission, before any configuration, credentials or store.
+mod about;
 mod catalogue;
 use catalogue::{SPECS, Spec, is_group};
 
@@ -145,6 +146,9 @@ pub(crate) fn check(args: &[String]) -> Result<Action, String> {
 
 pub(crate) fn print_help(path: &str) {
     println!("Usage: qp {path} [OPTIONS]");
+    if let Some(text) = about::about(path) {
+        println!("{text}");
+    }
     for spec in SPECS.iter().filter(|s| {
         s.path == path
             || s.path
@@ -204,4 +208,34 @@ pub(crate) fn print_scope() {
     println!(
         "-h, --help  Print help and exit. Value options consume the following argument literally."
     );
+}
+
+#[cfg(test)]
+mod about_tests {
+    use super::{about::ABOUT, catalogue::SPECS};
+
+    #[test]
+    fn every_command_has_an_about() {
+        let roots: Vec<&str> = SPECS
+            .iter()
+            .flat_map(|s| {
+                let words: Vec<&str> = s.path.split_whitespace().collect();
+                (1..=words.len()).map(move |n| {
+                    let end = words[..n].iter().map(|w| w.len() + 1).sum::<usize>() - 1;
+                    &s.path[..end]
+                })
+            })
+            .collect();
+        let missing: Vec<_> = roots
+            .iter()
+            .filter(|r| super::about::about(r).is_none())
+            .collect();
+        assert!(missing.is_empty(), "add an ABOUT row for: {missing:?}");
+        let stale: Vec<_> = ABOUT
+            .iter()
+            .filter(|(c, _)| !roots.contains(c))
+            .map(|(c, _)| c)
+            .collect();
+        assert!(stale.is_empty(), "ABOUT names unknown commands: {stale:?}");
+    }
 }
