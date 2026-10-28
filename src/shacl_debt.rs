@@ -14,7 +14,7 @@ use oxrdfio::{RdfFormat, RdfParser};
 
 use crate::error::{Error, Result};
 use crate::shacl_context::{
-    RDF_TYPE, issue_key, repaired, required_paths, store_type_context_in_graph,
+    RDF_TYPE, issue_key, node_term, repaired, required_paths, store_type_context_in_graph,
 };
 use crate::store::Store;
 use crate::types::Value;
@@ -268,8 +268,9 @@ fn types_in(store: &Store, iris: &BTreeSet<String>, scopes: &[i64]) -> Result<St
             for fact in store.entity_facts_in_graph(entity, scope)? {
                 if let (true, Value::Ref(t)) = (fact.attribute == type_attr, &fact.value) {
                     out.push_str(&format!(
-                        "<{iri}> <{RDF_TYPE}> <{}> .\n",
-                        store.resolve(*t)?
+                        "{} <{RDF_TYPE}> {} .\n",
+                        node_term(store, entity)?,
+                        node_term(store, *t)?
                     ));
                 }
             }
@@ -338,7 +339,9 @@ fn describe(store: &Store, iris: &BTreeSet<String>, graphs: &[i64]) -> Result<De
                 if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
                     parts.referenced.insert(store.resolve(*id)?);
                 }
-                parts.lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                parts
+                    .lines
+                    .insert(format!("{} <{attr}> {term} .\n", node_term(store, entity)?));
                 parts.existing.insert(iri.clone());
             }
         }
@@ -494,7 +497,7 @@ pub(crate) fn poststate_preexisting(
                 if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
                     referenced.insert(store.resolve(*id)?);
                 }
-                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                lines.insert(format!("{} <{attr}> {term} .\n", node_term(store, entity)?));
                 existing.insert(iri.clone());
             }
         }

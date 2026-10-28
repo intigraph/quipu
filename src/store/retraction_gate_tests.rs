@@ -314,6 +314,47 @@ fn retraction_touching_a_blank_node_is_judged_not_a_parse_error() {
     assert_eq!(out["retracted"], 1);
 }
 
+/// A judged node that points to a TYPED blank node: the referenced node's
+/// type is context, written `_:b a <T>`, never `<_:b> a <T>` (an N-Triples
+/// parse error that refused the write instead of judging it).
+#[test]
+fn judged_node_pointing_to_a_typed_blank_node_is_judged_not_a_parse_error() {
+    let mut store = store_with(REJECT, "seed");
+    let pet = Value::Ref(store.intern("_:pet1").unwrap());
+    let edge = datum(&mut store, CAROL, "urn:t:pet", pet, Op::Assert);
+    let dog = Value::Ref(store.intern("urn:t:Dog").unwrap());
+    let typed = datum(
+        &mut store,
+        "_:pet1",
+        crate::namespace::RDF_TYPE,
+        dog,
+        Op::Assert,
+    );
+    store
+        .transact(&[edge, typed], TS, None, Some("seed"))
+        .unwrap();
+
+    // Retracting the required name is judged and refused on its merits.
+    let tx = store.latest_tx_id().unwrap();
+    let err = retract_name(&mut store).unwrap_err();
+    assert_refused(&store, &err, tx);
+
+    // Changing it (retract + replacement assert) is judged and allowed.
+    let change = [
+        name(&mut store, Op::Retract),
+        datum(
+            &mut store,
+            CAROL,
+            NAME,
+            Value::Str("Caz".into()),
+            Op::Assert,
+        ),
+    ];
+    store
+        .enforce_retraction_shapes(&change, crate::schema::ROOT_GRAPH, None, None, None)
+        .unwrap();
+}
+
 // ---------------------------------------------------- snapshot replacement
 
 fn episode_v(owner: Option<&str>) -> serde_json::Value {
