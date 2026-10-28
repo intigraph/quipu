@@ -176,6 +176,7 @@ Mint a typed stable entity in a registered namespace, or describe an exact regis
 | `asOf` | string | no |  |
 | `graph` | string | no |  |
 | `iri` | string | no |  |
+| `keys` | object | no | Key-field values by predicate IRI, for minting=key namespaces. Same type + keys = same IRI; a repeat converges without writing. |
 | `label` | string | no |  |
 | `namespace` | string | no |  |
 | `source` | string | no |  |

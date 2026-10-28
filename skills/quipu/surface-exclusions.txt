@@ -81,13 +81,10 @@ mcp quipu_knot_promote Sharing and replication beyond share/import (see the shar
 
 # Bulk and specialised ingest; knot and episode are the agent write paths
 cli ingest Bulk and specialised ingest; knot and episode are the agent write paths
-cli memory Bulk and specialised ingest; knot and episode are the agent write paths
 
 # Bulk and specialised ingest; knot and episode are the agent write paths
 mcp quipu_episodes_complete Bulk and specialised ingest; knot and episode are the agent write paths
-mcp quipu_set Bulk and specialised ingest; knot and episode are the agent write paths
 mcp quipu_update Bulk and specialised ingest; knot and episode are the agent write paths
-mcp quipu_retract_episode Bulk and specialised ingest; knot and episode are the agent write paths
 mcp quipu_retract_source Bulk and specialised ingest; knot and episode are the agent write paths
 
 # Interactive or human-facing output
@@ -106,7 +103,6 @@ mcp quipu_spotlight Interactive or human-facing output
 cli fork Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 
 # Named-graph lifecycle, overlays and forks; graph list is the agent entry point
-mcp quipu_graph_create Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 mcp quipu_graph_label Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 mcp quipu_graph_freeze Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 mcp quipu_graph_thaw Named-graph lifecycle, overlays and forks; graph list is the agent entry point
@@ -126,7 +122,6 @@ cli entity-ref Reasoning, ontologies and alignment, reached once an agent knows 
 # Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_reason Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_load_ontology Reasoning, ontologies and alignment, reached once an agent knows the graph
-mcp quipu_explain Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_align_propose Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_align_decide Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_align_apply Reasoning, ontologies and alignment, reached once an agent knows the graph
@@ -142,11 +137,9 @@ mcp quipu_search_query Further search and lookup variants; quipu_search and quip
 mcp quipu_unified_search Further search and lookup variants; quipu_search and quipu_context come first
 mcp quipu_fragments Further search and lookup variants; quipu_search and quipu_context come first
 mcp quipu_reconcile Further search and lookup variants; quipu_search and quipu_context come first
-mcp quipu_entity Further search and lookup variants; quipu_search and quipu_context come first
 mcp quipu_entity_history Further search and lookup variants; quipu_search and quipu_context come first
 mcp quipu_transactions Further search and lookup variants; quipu_search and quipu_context come first
 mcp quipu_cooccurrence Further search and lookup variants; quipu_search and quipu_context come first
-mcp quipu_export Further search and lookup variants; quipu_search and quipu_context come first
 
 # Event feeds and subscriptions for reactive consumers
 mcp quipu_events Event feeds and subscriptions for reactive consumers
@@ -158,7 +151,6 @@ mcp quipu_workflow_capabilities Event feeds and subscriptions for reactive consu
 
 # Stored queries and proposal review; quipu_ask runs stored queries
 mcp quipu_queries Stored queries and proposal review; quipu_ask runs stored queries
-mcp quipu_list_proposals Stored queries and proposal review; quipu_ask runs stored queries
 mcp quipu_accept_proposal Stored queries and proposal review; quipu_ask runs stored queries
 mcp quipu_reject_proposal Stored queries and proposal review; quipu_ask runs stored queries
 
