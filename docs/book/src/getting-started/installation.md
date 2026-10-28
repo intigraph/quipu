@@ -285,10 +285,14 @@ retain and review the generated plan before applying it:
 
 ```sh
 tambo --version
-tambo plan --profile kg
+tambo init --guided
 tambo apply
 tambo verify
 ```
+
+Select the knowledge-graph (`kg`) profile in the guided interview. For an
+unattended plan, first provide a completed `caboodle-intent.toml`, then run
+`tambo plan --profile kg`; `plan` refuses a fresh directory without that intent.
 
 Read `caboodle-plan.toml` before `apply`. Preserve it and `.caboodle/` to resume
 the same installation. The plan determines the package manager and installed
