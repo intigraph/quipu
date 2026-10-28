@@ -577,7 +577,7 @@ fn large_parent_with_small_changes_is_bounded_by_delta_not_full_result() {
 }
 
 /// `delta.ru` IS the store-wide change-set format (aegis-4mk): one format for
-/// share deltas, `/diff` and `/patch`, so a share delta can be POSTed to
+/// share deltas, `/diff` and `/patch`, so a share delta can be `POST`ed to
 /// `/patch` and a `/diff` reads like a delta.
 #[test]
 fn delta_update_is_a_quipu_changeset_bound_to_its_parent() {

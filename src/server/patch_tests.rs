@@ -89,8 +89,7 @@ fn a_gate_refusal_writes_nothing() {
     .unwrap();
     let head = store.lock().latest_tx_id().unwrap();
     let err = apply(&store, &cs, &Attribution::default())
-        .err()
-        .expect("a non-conforming change-set must be refused");
+        .expect_err("a non-conforming change-set must be refused");
     assert!(format!("{err:?}").contains("SHACL"), "{err:?}");
     assert!(main_state(&store).is_empty());
     assert_eq!(store.lock().latest_tx_id().unwrap(), head);
