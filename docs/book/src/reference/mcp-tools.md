@@ -619,10 +619,28 @@ The stored query text, target identity, and signature inputs are preserved.
 
 ### `quipu_verdict_verify`
 
-Verify a signed Verdict against the Phase-0 root of trust: the signature must
-be valid under the verifier's **registered** public key, and the verifier must
-be authorized to attest the predicate. `trusted` is the conjunction — the
-property a consumer should gate on.
+Verify a signed Verdict against the trust root: the signature must be valid
+under a public key held by a **governed** registration of the verifier, and
+that same registration must authorize the predicate. `trusted` is the
+conjunction — the property a consumer should gate on.
+
+A registration is governed when it carries an asserted ROOT
+`aegis:trustTier` of `"human"` or `"agent"`. Only a trust-root amendment
+signed by an enrolled human key can write, change or remove that marker (or
+anything else on a governed registration), so trust always chains to the
+human trust root (aegis-c97o). A registration without the marker is still
+read and reported, but it never makes a verdict trusted: any writer can create
+one, so trusting it would let a key enroll itself. The result says why:
+
+| Field | Meaning |
+|-------|---------|
+| `trust` | When trusted: `{registration, tier, root}`, where `root.kind` is `bootstrap` (with the bootstrap `record` and key `fingerprint`), `amendment` (with the `amendment` IRI and the `root_signer`), or `gate` (admitted by the gate; no amendment verifies under a current root key) |
+| `untrusted_reason` | When not: `verifier-not-registered`, `signature-invalid`, `registration-not-chained-to-trust-root`, `not-authorized-for-predicate`, or `caller-supplied-instant` |
+| `unchained_registration` | The ungoverned registration whose key verified, if that is why |
+
+`verifier_registered` still reports any ROOT registration of the verifier;
+`verifier_authorized` requires a governed one. To migrate a pre-existing
+registration, see [Endorsing agent registrations](https://github.com/intigraph/quipu/blob/main/docs/runbooks/trust-root-ceremony.md#endorsing-agent-registrations-aegis-c97o).
 
 Registration classes and verifier/key predicates are read under both vocabulary
 namespaces. Conflicting registered keys are refused, rather than choosing one;
@@ -675,9 +693,12 @@ same instant, and a caller-supplied instant leaves it untrusted too.
 
 ### `quipu_verifier_authorized`
 
-Check the Phase-0 verifier registry: may this verifier attest this predicate?
-The discovery half of the governance gate. Registration classes and each
-verifier/attests predicate may independently use the legacy or Quechua vocabulary.
+Check the verifier registry: may this verifier attest this predicate? The
+discovery half of the governance gate. Only a governed registration (one that
+chains to the trust root, as for `quipu_verdict_verify`) authorizes; the
+result's `reason` is `registration-not-chained-to-trust-root` when only an
+ungoverned one grants it. Registration classes and each verifier/attests
+predicate may independently use the legacy or Quechua vocabulary.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|

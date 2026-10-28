@@ -11,10 +11,11 @@
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
-use crate::governance::verifier_registry::{Scope, Witness, registered_keys};
+use crate::governance::verifier_registry::Witness;
 
+pub use super::verdict_verify::tool_verdict_verify;
+use super::verdict_witness::is_registered_verifier;
 pub use super::verdict_witness::tool_verifier_authorized;
-use super::verdict_witness::{is_registered_verifier, witness_from, witness_json};
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
@@ -79,83 +80,6 @@ fn fetch_scalar(store: &Store, subject: &str, local_name: &str) -> Result<Option
         }
         _ => Ok(None),
     }
-}
-
-/// MCP tool: `quipu_verdict_verify` -- verify a signed Verdict against the
-/// root of trust AS OF the signature (signing-plane S1): the signature must be
-/// valid under a key that was registered to the verifier at that instant, AND
-/// that same registration must authorize the predicate. `trusted` is exactly
-/// that conjunction, the property a consumer should gate on.
-///
-/// Input: the verdict fields `{ predicate_id, target_ref, outcome,
-/// evidence_hash, tier?, verifier, signature }`, plus the instant: `verdict`
-/// (the stored verdict's IRI; quipu reads when it was recorded) or
-/// `signed_at`/`tx` (explicit), defaulting to now. Output: `{ signature_valid,
-/// verifier_registered, verifier_authorized, trusted, as_of }`, where
-/// `as_of.basis` is `recorded`, `caller-supplied` or `now`.
-pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue> {
-    let field = |k: &str| -> Result<String> {
-        input
-            .get(k)
-            .and_then(JsonValue::as_str)
-            .map(std::string::ToString::to_string)
-            .ok_or_else(|| Error::InvalidValue(format!("missing '{k}' parameter")))
-    };
-    let predicate_id = field("predicate_id")?;
-    let target_ref = field("target_ref")?;
-    let outcome = field("outcome")?;
-    let evidence_hash = field("evidence_hash")?;
-    let verifier = field("verifier")?;
-    let signature = field("signature")?;
-    let tier = input
-        .get("tier")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("committed");
-    let (witness, basis) = witness_from(store, input, &signature)?;
-
-    let message = crate::signing::verdict_message(
-        &predicate_id,
-        &target_ref,
-        &outcome,
-        &evidence_hash,
-        tier,
-        &verifier,
-    );
-
-    let claim = super::governance_hardware::Claim {
-        verifier: &verifier,
-        predicate_id: &predicate_id,
-        message: &message,
-        signature: &signature,
-    };
-    if let Some(out) = super::governance_hardware::dispatch(store, input, &claim, &witness, basis)?
-    {
-        return Ok(out);
-    }
-
-    let verifies = |keys: &[String]| {
-        keys.iter()
-            .any(|pk| crate::signing::verify_hex(pk, &message, &signature))
-    };
-    let any_keys = registered_keys(store, &verifier, None, &witness, Scope::Root)?;
-    let scoped_keys =
-        registered_keys(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
-
-    let seal_ok = verifies(&scoped_keys);
-    // An ALLOW-list: a basis added later fails closed rather than trusting by default.
-    let trustworthy_basis = matches!(basis, "recorded" | "now");
-    Ok(serde_json::json!({
-        "signature_valid": verifies(&any_keys),
-        "verifier_registered": !any_keys.is_empty(),
-        "verifier_authorized": is_registered_verifier(store, &verifier, &predicate_id, &witness)?,
-        // The key that verifies must be one the AUTHORIZING registration holds,
-        // AND the instant must be one quipu chose. A caller-supplied instant is
-        // a what-if: naming a tx from before a revocation would otherwise make
-        // a revoked key read as trusted.
-        "trusted": trustworthy_basis && seal_ok,
-        "would_verify_as_of_supplied_instant": if trustworthy_basis { JsonValue::Null } else { JsonValue::Bool(seal_ok) },
-        "as_of": witness_json(&witness, basis)
-    }))
 }
 
 /// MCP tool: `quipu_policy_check` -- committed-tier evaluation of a governance
@@ -685,3 +609,7 @@ mod graph_registry_tool_tests {
 #[cfg(test)]
 #[path = "governance_namespace_tests.rs"]
 mod namespace_tests;
+
+#[cfg(test)]
+#[path = "verdict_trust_root_tests.rs"]
+mod verdict_trust_root_tests;

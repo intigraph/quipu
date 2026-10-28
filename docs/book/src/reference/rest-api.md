@@ -2289,18 +2289,22 @@ curl -s localhost:3030/policy/check -X POST \
 
 ### `POST /verifier/authorized`
 
-`{"verifier", "predicate"}` → `{"authorized": bool}`: may this verifier
-attest this predicate, per the Phase-0 verifier registry?
+`{"verifier", "predicate"}` → `{"authorized": bool, "reason"}`: may this
+verifier attest this predicate? Only a registration that chains to the human
+trust root (a governed `aegis:trustTier`) authorizes.
 
 ### `POST /verdict/verify`
 
-Verify a signed Verdict against the Phase-0 root of trust:
+Verify a signed Verdict against the trust root:
 `{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
 "verifier", "signature", "verdict"?, "signed_at"?, "tx"?}` →
 `{"signature_valid", "verifier_registered", "verifier_authorized", "trusted",
-"as_of"}` — `trusted` is the conjunction to gate on. The registry is read as of
-the signature: pass `verdict` (the stored verdict IRI) to use the instant the
-store recorded it.
+"trust", "untrusted_reason", "unchained_registration", "as_of"}` — `trusted`
+is the conjunction to gate on. Only a registration governed by the human trust
+root counts; `trust` names it and its chain, `untrusted_reason` says why not
+(see [`quipu_verdict_verify`](mcp-tools.md#quipu_verdict_verify)). The
+registry is read as of the signature: pass `verdict` (the stored verdict IRI)
+to use the instant the store recorded it.
 
 ## Overlays
 

@@ -99,3 +99,41 @@ pub(crate) fn register_human(
     }
     amend(store, registration, change, timestamp);
 }
+
+/// Endorse an EXISTING registration as `tier` (aegis-c97o): the trust root
+/// signs an amendment adding the ROOT `aegis:trustTier` marker. This is the
+/// migration step for a registration written before the fix.
+pub(crate) fn govern(store: &mut Store, registration: &str, tier: &str, timestamp: &str) {
+    let change = vec![Datum {
+        entity: store.intern(registration).unwrap(),
+        attribute: store.intern(TRUST_TIER).unwrap(),
+        value: Value::Str(tier.into()),
+        valid_from: timestamp.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    }];
+    amend(store, registration, change, timestamp);
+}
+
+/// Retract `registration`'s `predicate` = `value` (asserted from
+/// `asserted_from`) at `timestamp` through a root-signed amendment: rotation
+/// and revocation of a GOVERNED registration go through the gate like any
+/// other change.
+pub(crate) fn amend_retract(
+    store: &mut Store,
+    registration: &str,
+    predicate: &str,
+    value: Value,
+    asserted_from: &str,
+    timestamp: &str,
+) {
+    let change = vec![Datum {
+        entity: store.intern(registration).unwrap(),
+        attribute: store.intern(predicate).unwrap(),
+        value,
+        valid_from: asserted_from.to_string(),
+        valid_to: None,
+        op: Op::Retract,
+    }];
+    amend(store, registration, change, timestamp);
+}
