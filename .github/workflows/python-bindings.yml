@@ -9,9 +9,8 @@ name: Python bindings
 # The tests run against INSTALLED artifacts in fresh virtualenvs, from outside
 # the source tree, so a package that only works from the checkout fails here.
 #
-# Follow-up: release.yml should also run `scripts/sync-python-binding.py` on
-# the release PR branch so the committed binding version follows each bump.
-# Until then every job below syncs before its --locked build.
+# release-pr-daily.yml syncs the committed binding version on the release PR.
+# Every job below also syncs before its --locked build for independent builds.
 
 on:
   pull_request:
