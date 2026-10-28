@@ -169,7 +169,8 @@ incoming share's `parent_share`. A server path is never accepted. REST:
 `fork: <name>` instead of `incoming` and `base` lists the conflicts of promoting
 that fork (CLI: `quipu fork promote <name> --emit-decisions <file> [--propose]`).
 `present: true` returns `{decisions, presentation, view}`: the standard markdown
-to show the user unchanged, and its JSON form.
+to show the user unchanged, and its JSON form (see
+[Reconciling a failed merge](../sharing/reconcile.md)).
 
 ### `quipu_merge_apply`
 

@@ -16,7 +16,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
       "type": "Concept"
     },
     {
@@ -57,7 +57,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
       "type": "DecisionRecord",
       "properties": {
         "status": "active",
