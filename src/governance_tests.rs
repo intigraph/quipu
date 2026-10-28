@@ -200,20 +200,79 @@ fn verdict_without_signature_or_evidence_hash_is_rejected() {
 #[test]
 fn decision_outcome_enum_enforced() {
     let ok = format!(
-        "{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; \
+        "{NS}\naegis:d a aegis:GateApproval ; rdfs:label \"d\" ; \
          aegis:outcome \"approve\" ; aegis:by \"stiwi\" ; aegis:evidenceHash \"h\" .\n"
     );
     assert!(
         validate_shapes(SHAPES, &ok).unwrap().conforms,
-        "valid decision should conform"
+        "valid gate approval should conform"
     );
     let bad = format!(
-        "{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; \
+        "{NS}\naegis:d a aegis:GateApproval ; rdfs:label \"d\" ; \
          aegis:outcome \"maybe\" ; aegis:by \"stiwi\" ; aegis:evidenceHash \"h\" .\n"
     );
     assert!(
         !validate_shapes(SHAPES, &bad).unwrap().conforms,
-        "a non-enum decision outcome must be rejected"
+        "a non-enum gate approval outcome must be rejected"
+    );
+}
+
+// ── GateApproval split (camayoc docs/design/agent-memory-entities.md §1.3) ──
+
+#[test]
+fn gate_approval_refusal_names_each_missing_field() {
+    // The 10/27 bug class: three minCount fields with no sh:message, so the
+    // refusal could not say in plain words what was missing.
+    let data = format!("{NS}\naegis:d a aegis:GateApproval ; rdfs:label \"d\" .\n");
+    let fb = validate_shapes(SHAPES, &data).unwrap();
+    assert!(!fb.conforms);
+    let text = format!("{:?}", fb.results);
+    for field in ["aegis:outcome", "aegis:by", "aegis:evidenceHash"] {
+        assert!(text.contains(field), "refusal must name {field}: {text}");
+    }
+}
+
+/// A memory Decision as camayoc's `record_decision` writes it (camayoc
+/// shapes/agent-memory.shapes.ttl `MemoryDecisionShape`): who ruled is the
+/// IRI `aegis:decidedBy`, and there is no outcome, by or evidenceHash.
+const MEMORY_DECISION: &str = "aegis:mem1 a aegis:Decision ; rdfs:label \"use GateApproval\" ; \
+    aegis:chose \"split the class\" ; aegis:decidedBy aegis:stiwi ; aegis:about aegis:quipu ; \
+    aegis:topic aegis:governance-decision-class ; aegis:sourceKind \"declared\" .\n";
+
+#[test]
+fn a_camayoc_memory_decision_passes_the_governance_shapes() {
+    let fb = validate_shapes(SHAPES, &format!("{NS}\n{MEMORY_DECISION}")).unwrap();
+    assert!(
+        fb.conforms,
+        "the governance shape must no longer refuse a memory Decision: {:#?}",
+        fb.results
+    );
+}
+
+#[test]
+fn a_camayoc_memory_decision_passes_governance_plus_camayoc_core() {
+    // camayoc-core's CamayocDecisionShape (sourceKind, label, chose) is the
+    // other shape set loaded on aegis:Decision in production.
+    let shapes = format!(
+        "{SHAPES}\n{}",
+        include_str!("../tests/fixtures/shapes/camayoc-core-731272ea.ttl")
+    );
+    let fb = validate_shapes(&shapes, &format!("{NS}\n{MEMORY_DECISION}")).unwrap();
+    assert!(fb.conforms, "{:#?}", fb.results);
+}
+
+#[test]
+fn a_pre_split_governance_decision_still_conforms_and_stays_bounded() {
+    let ok = format!(
+        "{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; \
+         aegis:outcome \"approve\" ; aegis:by \"stiwi\" ; aegis:evidenceHash \"h\" .\n"
+    );
+    assert!(validate_shapes(SHAPES, &ok).unwrap().conforms);
+    let bad =
+        format!("{NS}\naegis:d a aegis:Decision ; rdfs:label \"d\" ; aegis:outcome \"maybe\" .\n");
+    assert!(
+        !validate_shapes(SHAPES, &bad).unwrap().conforms,
+        "a governance outcome on aegis:Decision is still bounded for the dual-read release"
     );
 }
 
