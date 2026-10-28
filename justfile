@@ -396,3 +396,13 @@ clients action="test":
               cargo test --locked --no-default-features --lib bindings::tests ;;
         *) echo 'Use: just clients package|types|fmt|check|lint|test' >&2; exit 2 ;;
     esac
+
+# Focused stack prime contract checks (runtime tests use the crew HOME guard).
+prime action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(action)}} in
+        check) cargo check --locked --no-default-features --features shacl --all-targets ;;
+        test) cargo test --locked --no-default-features --features shacl --bin quipu cli_prime:: && cargo test --locked --no-default-features --features shacl --test prime_cli --test prime_sync ;;
+        *) echo 'Use: just prime check|test' >&2; exit 2 ;;
+    esac
