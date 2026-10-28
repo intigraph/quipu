@@ -124,3 +124,7 @@ docs/paper-merge/*.fdb_latexmk
 # Reproducible merge-load runs and generated Node WASM glue.
 benchmark/merge-load/out/
 wasm/explorer/pkg-node/
+
+# The Python bindings build into CARGO_TARGET_DIR or their own target.
+/bindings/python/target/
+/bindings/python/dist/
