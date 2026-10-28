@@ -11,10 +11,12 @@
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
-use crate::governance::verifier_registry::{Scope, Witness, registered_keys};
+use crate::governance::verifier_registry::{Scope, Witness, keyed_registrations};
 
 pub use super::verdict_witness::tool_verifier_authorized;
-use super::verdict_witness::{is_registered_verifier, witness_from, witness_json};
+use super::verdict_witness::{
+    UNCHAINED, is_registered_verifier, trust_json, warn_unchained, witness_from, witness_json,
+};
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
@@ -91,8 +93,10 @@ fn fetch_scalar(store: &Store, subject: &str, local_name: &str) -> Result<Option
 /// evidence_hash, tier?, verifier, signature }`, plus the instant: `verdict`
 /// (the stored verdict's IRI; quipu reads when it was recorded) or
 /// `signed_at`/`tx` (explicit), defaulting to now. Output: `{ signature_valid,
-/// verifier_registered, verifier_authorized, trusted, as_of }`, where
-/// `as_of.basis` is `recorded`, `caller-supplied` or `now`.
+/// verifier_registered, verifier_authorized, trusted, trust, untrusted_reason,
+/// unchained_registration, as_of }`, where `as_of.basis` is `recorded`,
+/// `caller-supplied` or `now`. Only a registration that chains to the human
+/// trust root (aegis-c97o) can make a verdict trusted; `trust` names it.
 pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let field = |k: &str| -> Result<String> {
         input
@@ -133,27 +137,71 @@ pub fn tool_verdict_verify(store: &Store, input: &JsonValue) -> Result<JsonValue
         return Ok(out);
     }
 
-    let verifies = |keys: &[String]| {
-        keys.iter()
-            .any(|pk| crate::signing::verify_hex(pk, &message, &signature))
+    // aegis-c97o: a key is TRUSTED only through a registration that chains to
+    // the human trust root (`Scope::Governed`: an asserted ROOT trust tier,
+    // which only a root-signed amendment can write). Any other ROOT
+    // registration is still read, so the answer can say it exists and why it
+    // does not count, but it never makes a verdict trusted.
+    let verifying = |rows: &[crate::governance::verifier_registry::KeyedRegistration]| {
+        rows.iter()
+            .find(|r| crate::signing::verify_hex(&r.key, &message, &signature))
+            .cloned()
     };
-    let any_keys = registered_keys(store, &verifier, None, &witness, Scope::Root)?;
-    let scoped_keys =
-        registered_keys(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
-
-    let seal_ok = verifies(&scoped_keys);
+    let any_rows = keyed_registrations(store, &verifier, None, &witness, Scope::Root)?;
+    let scoped_rows =
+        keyed_registrations(store, &verifier, Some(&predicate_id), &witness, Scope::Root)?;
+    let governed_rows = keyed_registrations(
+        store,
+        &verifier,
+        Some(&predicate_id),
+        &witness,
+        Scope::Governed,
+    )?;
+    let trusted_by = verifying(&governed_rows);
+    let seal_ok = trusted_by.is_some();
+    let signature_valid = verifying(&any_rows).is_some();
+    let unchained = if seal_ok {
+        None
+    } else {
+        verifying(&scoped_rows)
+    };
     // An ALLOW-list: a basis added later fails closed rather than trusting by default.
     let trustworthy_basis = matches!(basis, "recorded" | "now");
+    let reason = if seal_ok {
+        if trustworthy_basis {
+            JsonValue::Null
+        } else {
+            JsonValue::from("caller-supplied-instant")
+        }
+    } else if any_rows.is_empty() {
+        JsonValue::from("verifier-not-registered")
+    } else if !signature_valid {
+        JsonValue::from("signature-invalid")
+    } else if let Some(row) = &unchained {
+        warn_unchained(&verifier, &row.registration);
+        JsonValue::from(UNCHAINED)
+    } else {
+        JsonValue::from("not-authorized-for-predicate")
+    };
+    let trust = match &trusted_by {
+        Some(row) => trust_json(store, &row.registration, &witness)?,
+        None => JsonValue::Null,
+    };
     Ok(serde_json::json!({
-        "signature_valid": verifies(&any_keys),
-        "verifier_registered": !any_keys.is_empty(),
+        "signature_valid": signature_valid,
+        "verifier_registered": !any_rows.is_empty(),
         "verifier_authorized": is_registered_verifier(store, &verifier, &predicate_id, &witness)?,
-        // The key that verifies must be one the AUTHORIZING registration holds,
-        // AND the instant must be one quipu chose. A caller-supplied instant is
-        // a what-if: naming a tx from before a revocation would otherwise make
-        // a revoked key read as trusted.
+        // The key that verifies must be one the AUTHORIZING, GOVERNED
+        // registration holds, AND the instant must be one quipu chose. A
+        // caller-supplied instant is a what-if: naming a tx from before a
+        // revocation would otherwise make a revoked key read as trusted.
         "trusted": trustworthy_basis && seal_ok,
         "would_verify_as_of_supplied_instant": if trustworthy_basis { JsonValue::Null } else { JsonValue::Bool(seal_ok) },
+        // WHY: which registration, which tier, and how it chains to the trust
+        // root; or why not.
+        "trust": trust,
+        "untrusted_reason": reason,
+        "unchained_registration": unchained.map(|r| r.registration),
         "as_of": witness_json(&witness, basis)
     }))
 }
@@ -685,3 +733,7 @@ mod graph_registry_tool_tests {
 #[cfg(test)]
 #[path = "governance_namespace_tests.rs"]
 mod namespace_tests;
+
+#[cfg(test)]
+#[path = "verdict_trust_root_tests.rs"]
+mod verdict_trust_root_tests;

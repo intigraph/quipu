@@ -111,12 +111,92 @@ pub enum Scope {
     /// supply it, and adding or changing it passes the trust-root gate
     /// (`crate::governance::trust_root`).
     HumanTier,
+    /// Registrations that chain to the trust root (aegis-c97o): ROOT, and
+    /// carrying an ASSERTED `aegis:trustTier` of `"human"` or `"agent"` in
+    /// ROOT. Both markers sit behind the trust-root gate, so every
+    /// registration in this scope was written by an amendment a human
+    /// trust-root key signed. Verdict verification trusts only this scope;
+    /// an unmarked registration is still readable and reported, never
+    /// trusted.
+    Governed,
 }
 
 /// The predicate and value that mark a human trust-root registration.
 pub const TRUST_TIER: &str = "http://aegis.gastown.local/ontology/trustTier";
 /// See [`TRUST_TIER`].
 pub const HUMAN_TIER: &str = "human";
+/// The tier of an agent registration a human trust-root key endorsed
+/// (aegis-c97o). Gated exactly like [`HUMAN_TIER`], but it never verifies a
+/// human decision and never amends the registry.
+pub const AGENT_TIER: &str = "agent";
+
+/// One registration that holds a key: its IRI and the key (hex or, for a
+/// hardware scheme, the scheme's encoding).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyedRegistration {
+    /// The registration entity.
+    pub registration: String,
+    /// The registered public key.
+    pub key: String,
+}
+
+/// The registrations of `verifier` holding a key, in effect at `witness`
+/// (and authorizing `attests`, when given), one row per (registration, key).
+/// The same query as [`registered_keys`], keeping which registration each key
+/// came from so a verifier can say WHY a key is trusted.
+pub fn keyed_registrations(
+    store: &Store,
+    verifier: &str,
+    attests: Option<&str>,
+    witness: &Witness,
+    scope: Scope,
+) -> Result<Vec<KeyedRegistration>> {
+    let mut out = Vec::new();
+    for (e, bytes) in select_rows(store, verifier, attests, witness, scope, true)? {
+        let (Value::Str(key) | Value::Typed { lexical: key, .. }) = Value::from_bytes(&bytes)?
+        else {
+            continue;
+        };
+        let row = KeyedRegistration {
+            registration: store.resolve(e)?,
+            key,
+        };
+        if !out.contains(&row) {
+            out.push(row);
+        }
+    }
+    Ok(out)
+}
+
+/// The trust tier (`"human"` / `"agent"`) asserted on `registration` in ROOT
+/// and in effect at `witness`, or `None` when it is not governed then.
+pub fn governed_tier(
+    store: &Store,
+    registration: &str,
+    witness: &Witness,
+) -> Result<Option<String>> {
+    let (Some(e), Some(tier)) = (store.lookup(registration)?, store.lookup(TRUST_TIER)?) else {
+        return Ok(None);
+    };
+    let mut stmt = store.prepare(
+        "SELECT v FROM facts WHERE e = ?3 AND a = ?4 AND g = 0 AND op = 1 \
+         AND valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1) \
+         AND (?2 IS NULL OR (tx <= ?2 AND (valid_to IS NULL OR retracted_tx > ?2)))",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![witness.at, witness.tx, e, tier], |row| {
+            row.get::<_, Vec<u8>>(0)
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    for bytes in rows {
+        if let Value::Str(t) = Value::from_bytes(&bytes)?
+            && (t == HUMAN_TIER || t == AGENT_TIER)
+        {
+            return Ok(Some(t));
+        }
+    }
+    Ok(None)
+}
 
 /// The hex public keys registered to `verifier`, in effect at `witness`, and,
 /// when `attests` is given, authorized for it by the SAME registration. Every
@@ -167,6 +247,23 @@ fn select(
     scope: Scope,
     with_key: bool,
 ) -> Result<Vec<Vec<u8>>> {
+    Ok(
+        select_rows(store, verifier, attests, witness, scope, with_key)?
+            .into_iter()
+            .map(|(_, v)| v)
+            .collect(),
+    )
+}
+
+/// [`select`], with the registration entity id on every row.
+fn select_rows(
+    store: &Store,
+    verifier: &str,
+    attests: Option<&str>,
+    witness: &Witness,
+    scope: Scope,
+    with_key: bool,
+) -> Result<Vec<(i64, Vec<u8>)>> {
     // Dual-read (aegis-9dpcta): every registry term is matched in BOTH the
     // legacy aegis namespace and its public Quechua twin, independently, so a
     // registration written in either vocabulary (or a mix of the two, during
@@ -233,7 +330,7 @@ fn select(
     // are inlined IN-lists of store term ids.
     let in_effect = |alias: &str| {
         let graph = match scope {
-            Scope::Root | Scope::HumanTier => format!(" AND {alias}.g = 0"),
+            Scope::Root | Scope::HumanTier | Scope::Governed => format!(" AND {alias}.g = 0"),
             Scope::AllGraphs => String::new(),
         };
         format!(
@@ -244,7 +341,7 @@ fn select(
         )
     };
     let mut sql = format!(
-        "SELECT DISTINCT {out} FROM facts t \
+        "SELECT DISTINCT t.e, {out} FROM facts t \
          JOIN facts vr ON vr.e = t.e AND vr.a IN ({verifier_in}) AND vr.v = ?6 AND {vr}",
         out = if with_key {
             "pk.v"
@@ -289,7 +386,7 @@ fn select(
     } else {
         "?4"
     };
-    let tier_attr = if scope == Scope::HumanTier {
+    let tier_attr = if matches!(scope, Scope::HumanTier | Scope::Governed) {
         match store.lookup(TRUST_TIER)? {
             Some(id) => Some(id),
             // Never interned: no human registration can exist.
@@ -300,7 +397,12 @@ fn select(
     };
     if tier_attr.is_some() {
         sql.push_str(&format!(
-            " JOIN facts tr ON tr.e = t.e AND tr.a = ?12 AND tr.v = ?13 AND {}",
+            " JOIN facts tr ON tr.e = t.e AND tr.a = ?12 AND {} AND {}",
+            if scope == Scope::Governed {
+                "tr.v IN (?13, ?14)"
+            } else {
+                "tr.v = ?13"
+            },
             in_effect("tr")
         ));
     }
@@ -313,6 +415,7 @@ fn select(
     let attests_bytes = attests.map(|p| Value::Str(p.to_string()).to_bytes());
     let ed25519_bytes = Value::Str("ed25519".to_string()).to_bytes();
     let tier_bytes = Value::Str(HUMAN_TIER.to_string()).to_bytes();
+    let agent_tier_bytes = Value::Str(AGENT_TIER.to_string()).to_bytes();
     let mut stmt = store.prepare(&sql)?;
     let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![
         ("?1", &witness.at),
@@ -333,10 +436,13 @@ fn select(
     if let Some(t) = &tier_attr {
         params.push(("?12", t));
         params.push(("?13", &tier_bytes));
+        if scope == Scope::Governed {
+            params.push(("?14", &agent_tier_bytes));
+        }
     }
     let rows = stmt
-        .query_map(params.as_slice(), |row| row.get(0))?
-        .collect::<std::result::Result<Vec<Vec<u8>>, _>>()?;
+        .query_map(params.as_slice(), |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<std::result::Result<Vec<(i64, Vec<u8>)>, _>>()?;
     Ok(rows)
 }
 

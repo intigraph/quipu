@@ -49,6 +49,8 @@ fn register(store: &mut Store, key: &SkKey, from: &str) {
         .map(|(p, v)| datum(store, REG, &p, v, from))
         .collect();
     store.transact(&datums, from, None, None).unwrap();
+    // aegis-c97o: only a registration the trust root endorsed is trusted.
+    crate::governance::trust_root::test_support::govern(store, REG, "human", from);
 }
 
 /// Record `signature` on the stored verdict at `ts`.
@@ -64,20 +66,15 @@ fn record(store: &mut Store, signature: &str, ts: &str) {
 }
 
 fn revoke(store: &mut Store, key: &SkKey, until: &str) {
-    let e = store.lookup(REG).unwrap().unwrap();
-    let a = store.lookup(&format!("{NS}publicKey")).unwrap();
-    let (_, n) = store
-        .retract_triples(
-            e,
-            a,
-            Some(&Value::Str(key.openssh_line())),
-            until,
-            None,
-            false,
-            None,
-        )
-        .unwrap();
-    assert_eq!(n, 1);
+    // The registration is governed, so revocation is a root-signed amendment.
+    crate::governance::trust_root::test_support::amend_retract(
+        store,
+        REG,
+        &format!("{NS}publicKey"),
+        Value::Str(key.openssh_line()),
+        T0,
+        until,
+    );
 }
 
 fn verdict(signature: &str) -> serde_json::Value {

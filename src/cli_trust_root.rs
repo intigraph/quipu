@@ -49,15 +49,22 @@ pub fn cmd_trust_root(args: &[String], db_path: &str) {
         Some("challenge") => challenge(args, db_path),
         Some("bootstrap") => bootstrap(args, db_path),
         Some("status") => status(db_path),
+        Some("endorse-challenge") => endorse_challenge(args, db_path),
+        Some("endorse") => endorse(args, db_path),
         _ => {
             eprintln!(
                 "quipu trust-root challenge --verifier NAME --public-key HEX [--db PATH]\n\
                  quipu trust-root bootstrap --verifier NAME --public-key HEX --pop-signature HEX \\\n\
                  \x20   [--attests POLICY]... [--db PATH]\n\
-                 quipu trust-root status [--db PATH]\n\n\
+                 quipu trust-root status [--db PATH]\n\
+                 quipu trust-root endorse-challenge --registration IRI [--tier agent] [--db PATH]\n\
+                 quipu trust-root endorse --registration IRI [--tier agent] --signer NAME \\\n\
+                 \x20   --nonce HEX --signature HEX [--db PATH]\n\n\
                  Enrols the FIRST human trust-root key, once per store, ever. Later keys are\n\
                  amendments signed by an enrolled key. Compare the printed fingerprint with\n\
-                 the device before trusting the result (docs/runbooks/trust-root-ceremony.md)."
+                 the device before trusting the result (docs/runbooks/trust-root-ceremony.md).\n\
+                 endorse makes a verifier registration chain to the trust root, so its\n\
+                 verdicts can verify as trusted (aegis-c97o)."
             );
             std::process::exit(2);
         }
@@ -113,5 +120,53 @@ fn status(db_path: &str) {
     for (registration, verifier, key) in keys {
         let fp = trust_root::fingerprint(&key).unwrap_or_else(|_| "(not an ed25519 key)".into());
         println!("{verifier}\t{fp}\t{registration}");
+    }
+    let pending = trust_root::unendorsed(&store).unwrap_or_else(|e| fail("registry", e));
+    if !pending.is_empty() {
+        println!(
+            "unendorsed   {} (verify nothing until endorsed)",
+            pending.len()
+        );
+        for (registration, verifier) in pending {
+            println!("  {verifier}\t{registration}");
+        }
+    }
+}
+
+fn tier(args: &[String]) -> String {
+    flag(args, "--tier").unwrap_or("agent").to_string()
+}
+
+fn endorse_challenge(args: &[String], db_path: &str) {
+    let store = crate::cli_open::open_store(db_path);
+    let registration = need(args, "--registration");
+    let c = trust_root::endorse_challenge(&store, &registration, &tier(args))
+        .unwrap_or_else(|e| fail("refused", e));
+    println!("registration {registration}");
+    println!("digest       {}", c.digest);
+    println!("nonce        {}", c.nonce);
+    println!(
+        "sign exactly these bytes with an enrolled human trust-root key (no trailing newline):"
+    );
+    println!("{}", String::from_utf8_lossy(&c.message));
+}
+
+fn endorse(args: &[String], db_path: &str) {
+    let mut store = crate::cli_open::open_store(db_path);
+    let registration = need(args, "--registration");
+    match trust_root::endorse(
+        &mut store,
+        &registration,
+        &tier(args),
+        &need(args, "--signer"),
+        &need(args, "--nonce"),
+        &need(args, "--signature"),
+        &quipu::time::now_iso(),
+    ) {
+        Ok(amendment) => {
+            println!("ENDORSED     {registration}");
+            println!("AMENDMENT    {amendment}");
+        }
+        Err(e) => fail("endorse refused", e),
     }
 }

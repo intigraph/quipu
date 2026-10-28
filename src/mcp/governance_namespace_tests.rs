@@ -1,4 +1,5 @@
 use super::*;
+use crate::governance::verifier_registry::registered_keys;
 
 const PUBLIC: &str = "https://scbrown.github.io/quechua/ns#";
 const LEGACY: &str = crate::namespace::DEFAULT_BASE_NS;
@@ -49,7 +50,18 @@ const MODES: [&str; 4] = ["old", "new", "mixed", "both"];
 #[test]
 fn verifier_registration_dual_namespace_reader() {
     for mode in MODES {
-        let store = registry(mode);
+        let mut store = registry(mode);
+        // aegis-c97o: authority needs a trust-root endorsement. The foreign
+        // registration is endorsed too, so its refusal below is the namespace
+        // rule and not the missing endorsement.
+        for reg in ["urn:registry:one", "urn:registry:foreign"] {
+            crate::governance::trust_root::test_support::govern(
+                &mut store,
+                reg,
+                "agent",
+                "2026-01-01T00:00:00Z",
+            );
+        }
         let now = Witness::now();
         assert!(
             is_registered_verifier(&store, "verifier", "predicate", &now).unwrap(),

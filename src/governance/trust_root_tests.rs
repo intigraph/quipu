@@ -650,3 +650,176 @@ fn human_registry_reads_legacy_quechua_and_mixed_terms() {
         }
     }
 }
+
+// ── aegis-c97o: agent-tier registrations sit behind the same gate ──────────
+
+/// An agent registration's datums, marked `trustTier "agent"`.
+fn agent_registration(
+    store: &Store,
+    iri: &str,
+    verifier: &str,
+    key: &str,
+    attests: &str,
+) -> Vec<Datum> {
+    vec![
+        d(
+            store,
+            iri,
+            RDF_TYPE,
+            Value::Ref(store.intern(&ns("VerifierRegistration")).unwrap()),
+            Op::Assert,
+        ),
+        d(store, iri, &ns("verifier"), s(verifier), Op::Assert),
+        d(store, iri, &ns("publicKey"), s(key), Op::Assert),
+        d(store, iri, &ns("attests"), s(attests), Op::Assert),
+        d(store, iri, TRUST_TIER, s(AGENT_TIER), Op::Assert),
+    ]
+}
+
+fn governed_keys(store: &Store, verifier: &str, attests: &str) -> Vec<String> {
+    registered_keys(
+        store,
+        verifier,
+        Some(attests),
+        &Witness::now(),
+        Scope::Governed,
+    )
+    .unwrap()
+}
+
+#[test]
+fn self_enrolling_an_agent_tier_registration_is_refused() {
+    // With no trust root at all, and with one: an unsigned agent-tier marker
+    // never lands.
+    let mut store = Store::open_in_memory().unwrap();
+    let agent = keypair();
+    let reg = "http://ex/reg/self-enrolled";
+    let datums = agent_registration(&store, reg, "agent-x", &pk(&agent), "has-test");
+    let m = refused(store.transact(&datums, TS, Some("agent"), None));
+    assert!(m.contains(reg), "{m}");
+    enrol(&mut store, &keypair());
+    let datums = agent_registration(&store, reg, "agent-x", &pk(&agent), "has-test");
+    refused(store.transact(&datums, TS, Some("agent"), None));
+    assert!(governed_keys(&store, "agent-x", "has-test").is_empty());
+}
+
+#[test]
+fn a_root_signed_agent_registration_is_governed_and_its_edits_are_gated() {
+    let mut store = Store::open_in_memory().unwrap();
+    let stiwi = keypair();
+    enrol(&mut store, &stiwi);
+    let agent = keypair();
+    let reg = "http://ex/reg/yupana";
+    let datums = agent_registration(&store, reg, "yupana", &pk(&agent), "has-test");
+    amend(&mut store, &stiwi, reg, datums).unwrap();
+    assert_eq!(
+        governed_keys(&store, "yupana", "has-test"),
+        vec![pk(&agent)]
+    );
+    // A second key slipped onto the endorsed registration, unsigned: refused.
+    let mallory = keypair();
+    let add = vec![d(
+        &store,
+        reg,
+        &ns("publicKey"),
+        s(&pk(&mallory)),
+        Op::Assert,
+    )];
+    refused(store.transact(&add, TS, Some("agent"), None));
+    // The agent tier never verifies a HUMAN decision.
+    assert!(
+        registered_keys(
+            &store,
+            "yupana",
+            Some("has-test"),
+            &Witness::now(),
+            Scope::HumanTier
+        )
+        .unwrap()
+        .is_empty()
+    );
+    // Revocation by the root ends it.
+    let revoke = vec![d(&store, reg, TRUST_TIER, s(AGENT_TIER), Op::Retract)];
+    amend(&mut store, &stiwi, reg, revoke).unwrap();
+    assert!(governed_keys(&store, "yupana", "has-test").is_empty());
+}
+
+#[test]
+fn an_agent_tier_key_cannot_sign_amendments_even_for_the_trust_root_policy() {
+    let mut store = Store::open_in_memory().unwrap();
+    let stiwi = keypair();
+    enrol(&mut store, &stiwi);
+    let agent = keypair();
+    let reg = "http://ex/reg/agent-amender";
+    let datums = agent_registration(&store, reg, "agent-x", &pk(&agent), TRUST_ROOT_POLICY);
+    amend(&mut store, &stiwi, reg, datums).unwrap();
+    let other = keypair();
+    let reg2 = "http://ex/reg/minted-by-agent";
+    let datums = agent_registration(&store, reg2, "agent-y", &pk(&other), "has-test");
+    let m = refused(amend_with(
+        &mut store,
+        &agent,
+        "agent-x",
+        reg2,
+        datums,
+        &nonce(),
+        None,
+    ));
+    assert!(m.contains(reg2), "{m}");
+}
+
+#[test]
+fn chain_of_names_the_bootstrap_or_the_signing_amendment() {
+    let mut store = Store::open_in_memory().unwrap();
+    let stiwi = keypair();
+    let e = enrol(&mut store, &stiwi);
+    match chain_of(&store, &e.registration).unwrap() {
+        Chain::Bootstrap { fingerprint, .. } => assert_eq!(fingerprint, e.fingerprint),
+        other => panic!("expected the bootstrap, got {other:?}"),
+    }
+    let reg = "http://ex/reg/yupana";
+    let datums = agent_registration(&store, reg, "yupana", &pk(&keypair()), "has-test");
+    amend(&mut store, &stiwi, reg, datums).unwrap();
+    match chain_of(&store, reg).unwrap() {
+        Chain::Amendment { signer, .. } => assert_eq!(signer, "stiwi"),
+        other => panic!("expected an amendment, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_console_endorsement_migrates_a_legacy_registration() {
+    // The documented migration: a registration written before aegis-c97o is
+    // listed as unendorsed, the root signs the challenge, and the endorsement
+    // lands through the gate. A forged signature or a wrong signer does not.
+    let mut store = Store::open_in_memory().unwrap();
+    let stiwi = keypair();
+    enrol(&mut store, &stiwi);
+    let reg = "http://ex/reg/legacy-yupana";
+    let key = pk(&keypair());
+    let mut legacy = agent_registration(&store, reg, "yupana", &key, "has-test");
+    legacy.pop(); // no tier marker: the pre-fix shape
+    store.transact(&legacy, TS, Some("agent"), None).unwrap();
+    assert_eq!(
+        unendorsed(&store).unwrap(),
+        vec![(reg.to_string(), "yupana".to_string())]
+    );
+    assert!(governed_keys(&store, "yupana", "has-test").is_empty());
+
+    let c = endorse_challenge(&store, reg, AGENT_TIER).unwrap();
+    let forged = crate::signing::sign_hex(&keypair(), &c.message);
+    refused(endorse(&mut store, reg, AGENT_TIER, "stiwi", &c.nonce, &forged, TS).map(|_| 0));
+    let sig = crate::signing::sign_hex(&stiwi, &c.message);
+    refused(endorse(&mut store, reg, AGENT_TIER, "mallory", &c.nonce, &sig, TS).map(|_| 0));
+    let amendment = endorse(&mut store, reg, AGENT_TIER, "stiwi", &c.nonce, &sig, TS).unwrap();
+    assert_eq!(governed_keys(&store, "yupana", "has-test"), vec![key]);
+    assert!(unendorsed(&store).unwrap().is_empty());
+    assert_eq!(
+        chain_of(&store, reg).unwrap(),
+        Chain::Amendment {
+            amendment,
+            signer: "stiwi".into()
+        }
+    );
+    assert!(endorse_challenge(&store, "http://ex/not-a-registration", AGENT_TIER).is_err());
+    assert!(endorse_challenge(&store, reg, "root").is_err());
+}

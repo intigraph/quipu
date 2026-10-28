@@ -70,7 +70,7 @@ use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
-use super::verifier_registry::{HUMAN_TIER, TRUST_TIER};
+use super::verifier_registry::{AGENT_TIER, HUMAN_TIER, TRUST_TIER};
 
 /// The policy a human key must attest to amend the registry.
 pub const TRUST_ROOT_POLICY: &str = "urn:quipu:policy:trust-root";
@@ -101,6 +101,18 @@ pub struct Snapshot {
 /// Every entity carrying an asserted ROOT `trustTier "human"` now, with the
 /// digest of its ROOT content.
 fn human_registry(store: &Store) -> Result<BTreeMap<String, String>> {
+    tiered_registry(store, &[HUMAN_TIER])
+}
+
+/// Every GOVERNED entity (asserted ROOT `trustTier` "human" or "agent") now,
+/// with the digest of its ROOT content. This is the set the gate protects
+/// (aegis-c97o): an agent-tier registration is endorsed by a human key, so
+/// changing it needs a signed amendment exactly as a human one does.
+fn governed_registry(store: &Store) -> Result<BTreeMap<String, String>> {
+    tiered_registry(store, &[HUMAN_TIER, AGENT_TIER])
+}
+
+fn tiered_registry(store: &Store, tiers: &[&str]) -> Result<BTreeMap<String, String>> {
     let mut out = BTreeMap::new();
     let Some(tier) = store.lookup(TRUST_TIER)? else {
         return Ok(out);
@@ -109,10 +121,18 @@ fn human_registry(store: &Store) -> Result<BTreeMap<String, String>> {
         "SELECT DISTINCT e FROM facts WHERE a = ?1 AND v = ?2 AND g = 0 \
          AND op = 1 AND valid_to IS NULL",
     )?;
-    let human = Value::Str(HUMAN_TIER.into()).to_bytes();
-    let ids = stmt
-        .query_map(params![tier, human], |row| row.get::<_, i64>(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut ids = Vec::new();
+    for t in tiers {
+        let value = Value::Str((*t).into()).to_bytes();
+        for id in stmt
+            .query_map(params![tier, value], |row| row.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
+        {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
     for id in ids {
         let iri = store.resolve(id)?;
         let digest =
@@ -178,11 +198,14 @@ fn is_registration(store: &Store, entity: &str) -> Result<bool> {
         .any(|f| f.attribute == t && matches!(f.value, Value::Ref(id) if classes.contains(&id))))
 }
 
-/// Record the human-tier registry before a write is staged.
+/// Record the governed registry before a write is staged. Only HUMAN-tier
+/// registrations attesting [`TRUST_ROOT_POLICY`] become amenders: an
+/// agent-tier registration can never sign an amendment, even one that names
+/// the trust-root policy.
 pub(crate) fn snapshot(store: &Store) -> Result<Snapshot> {
-    let registrations = human_registry(store)?;
+    let registrations = governed_registry(store)?;
     let mut amenders = Vec::new();
-    for iri in registrations.keys() {
+    for iri in human_registry(store)?.keys() {
         if !is_registration(store, iri)?
             || !strings(store, iri, &ns("attests"))?
                 .iter()
@@ -215,6 +238,128 @@ pub fn human_keys(store: &Store) -> Result<Vec<(String, String, String)>> {
     Ok(out)
 }
 
+/// How a governed registration chains to the trust root, for a verifier to
+/// report (aegis-c97o). This is PROVENANCE, not the trust decision: trust
+/// comes from the registration being governed at the witness, which only the
+/// gate can make true. The chain is re-checked here (the amendment's
+/// signature against a current human trust-root key, the bootstrap record's
+/// fingerprint against the registration's key) so a hand-written record
+/// cannot be reported as the reason.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Chain {
+    /// Enrolled by the console bootstrap; `record` is the
+    /// `aegis:TrustRootBootstrap` and `fingerprint` the key it enrolled.
+    Bootstrap {
+        /// The bootstrap record.
+        record: String,
+        /// The enrolled key's fingerprint.
+        fingerprint: String,
+    },
+    /// Last admitted by `amendment`, signed by human trust-root `signer`.
+    Amendment {
+        /// The `aegis:RegistryAmendment`.
+        amendment: String,
+        /// The human trust-root verifier that signed it.
+        signer: String,
+    },
+    /// Governed, but no amendment found verifies under a CURRENT human
+    /// trust-root key (the root has rotated since). The gate admitted it.
+    GateOnly,
+}
+
+/// Find the trust-root chain of `registration` (see [`Chain`]).
+pub fn chain_of(store: &Store, registration: &str) -> Result<Chain> {
+    let rdf_type = store.lookup(RDF_TYPE)?;
+    // Bootstrap: a record naming this registration whose fingerprint is the
+    // fingerprint of one of the registration's keys.
+    if let (Some(t), Some(class), Some(enrolled), Some(reg)) = (
+        rdf_type,
+        store.lookup(&ns("TrustRootBootstrap"))?,
+        store.lookup(&ns("enrolled"))?,
+        store.lookup(registration)?,
+    ) {
+        let keys = strings(store, registration, &ns("publicKey"))?;
+        let mut stmt = store.prepare(
+            "SELECT DISTINCT f.e FROM facts f JOIN facts c ON c.e = f.e AND c.a = ?3 \
+             AND c.v = ?4 AND c.g = 0 AND c.op = 1 AND c.valid_to IS NULL \
+             WHERE f.a = ?1 AND f.v = ?2 AND f.g = 0 AND f.op = 1 AND f.valid_to IS NULL",
+        )?;
+        let records = stmt
+            .query_map(
+                params![
+                    enrolled,
+                    Value::Ref(reg).to_bytes(),
+                    t,
+                    Value::Ref(class).to_bytes()
+                ],
+                |row| row.get::<_, i64>(0),
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for id in records {
+            let record = store.resolve(id)?;
+            let Some(fp) = sole(strings(store, &record, &ns("keyFingerprint"))?) else {
+                continue;
+            };
+            if keys.iter().any(|k| fingerprint(k).is_ok_and(|f| f == fp)) {
+                return Ok(Chain::Bootstrap {
+                    record,
+                    fingerprint: fp,
+                });
+            }
+        }
+    }
+    // Amendment: the most recent one naming this registration whose
+    // signature verifies under a current human trust-root key.
+    let (Some(t), Some(class), Some(amends), Some(reg)) = (
+        rdf_type,
+        store.lookup(&ns("RegistryAmendment"))?,
+        store.lookup(&ns("amends"))?,
+        store.lookup(registration)?,
+    ) else {
+        return Ok(Chain::GateOnly);
+    };
+    let mut stmt = store.prepare(
+        "SELECT f.e, MAX(f.tx) FROM facts f JOIN facts c ON c.e = f.e AND c.a = ?3 \
+         AND c.v = ?4 AND c.op = 1 AND c.valid_to IS NULL \
+         WHERE f.a = ?1 AND f.v = ?2 AND f.op = 1 AND f.valid_to IS NULL \
+         GROUP BY f.e ORDER BY MAX(f.tx) DESC",
+    )?;
+    let candidates = stmt
+        .query_map(
+            params![
+                amends,
+                Value::Ref(reg).to_bytes(),
+                t,
+                Value::Ref(class).to_bytes()
+            ],
+            |row| row.get::<_, i64>(0),
+        )?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let amenders = snapshot(store)?.amenders;
+    let store_id = store.store_id()?;
+    for id in candidates {
+        let iri = store.resolve(id)?;
+        let (Some(digest), Some(signer), Some(nonce), Some(signature)) = (
+            sole(strings(store, &iri, &ns("amendedDigest"))?),
+            sole(strings(store, &iri, &ns("amendmentSigner"))?),
+            sole(strings(store, &iri, &ns("amendmentNonce"))?),
+            sole(strings(store, &iri, &ns("amendmentSignature"))?),
+        ) else {
+            continue;
+        };
+        let message = amendment_message(&store_id, registration, &digest, &nonce);
+        if amenders.iter().any(|(verifier, key)| {
+            *verifier == signer && crate::signing::verify_hex(key, &message, &signature)
+        }) {
+            return Ok(Chain::Amendment {
+                amendment: iri,
+                signer,
+            });
+        }
+    }
+    Ok(Chain::GateOnly)
+}
+
 /// The canonical bytes a human key signs to amend `registration`.
 #[must_use]
 pub fn amendment_message(store_id: &str, registration: &str, digest: &str, nonce: &str) -> Vec<u8> {
@@ -228,9 +373,9 @@ pub fn bootstrap_message(store_id: &str, verifier: &str, public_key: &str) -> Ve
 }
 
 /// The digest an amendment must name for `registration` as the pending write
-/// would leave it (`"revoked"` when it would no longer be human-tier).
+/// would leave it (`"revoked"` when it would no longer be governed).
 pub fn pending_digest(store: &Store, registration: &str) -> Result<String> {
-    Ok(human_registry(store)?
+    Ok(governed_registry(store)?
         .remove(registration)
         .unwrap_or_else(|| REVOKED.to_string()))
 }
@@ -285,6 +430,10 @@ pub fn digest_after(store: &Store, registration: &str, datums: &[Datum]) -> Resu
         }
     }
     let mut scratch = Store::open_in_memory()?;
+    // The scratch copy admits what the real store admits: a hardware-scheme
+    // registration is digested only where the operator enabled the schemes.
+    scratch.governance_config_mut().hardware_verdict_schemes =
+        store.governance_config().hardware_verdict_schemes;
     let mut staged = Vec::new();
     for (s, p, o) in &triples {
         let value = match o {
@@ -353,7 +502,7 @@ pub(crate) fn check(
     datums: &[Datum],
     bootstrap: Option<&str>,
 ) -> Result<()> {
-    let after = human_registry(store)?;
+    let after = governed_registry(store)?;
     let mut changed: BTreeMap<&str, String> = BTreeMap::new();
     for (iri, digest) in &after {
         if before.registrations.get(iri) != Some(digest) {
@@ -393,7 +542,7 @@ pub(crate) fn check(
         });
         if !covered {
             return Err(refuse(&format!(
-                "the human trust-root registration {registration} would change (to {digest}) \
+                "the governed (trust-tier) registration {registration} would change (to {digest}) \
                  without an aegis:RegistryAmendment signed by a key enrolled for {TRUST_ROOT_POLICY} \
                  before this write"
             )));
@@ -479,6 +628,156 @@ fn staged_amendments(store: &Store, datums: &[Datum]) -> Result<Vec<Amendment>> 
             nonce,
             signature,
         });
+    }
+    Ok(out)
+}
+
+// ── Endorsing an agent registration (aegis-c97o) ───────────────────────────
+//
+// Verdict verification trusts only GOVERNED registrations. A registration
+// written before that rule (or by any writer since) is endorsed by the trust
+// root: an amendment, signed by an enrolled human key, that adds the ROOT
+// `aegis:trustTier` marker. These two helpers are the console path
+// (`quipu trust-root endorse-challenge` / `endorse`); a client may equally
+// build the same amendment itself with [`digest_after`].
+
+/// What the root signs to endorse a registration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EndorseChallenge {
+    /// The digest the registration will have once endorsed.
+    pub digest: String,
+    /// A fresh single-use nonce.
+    pub nonce: String,
+    /// The exact bytes to sign.
+    pub message: Vec<u8>,
+}
+
+fn endorsement_marker(store: &Store, registration: &str, tier: &str, ts: &str) -> Result<Datum> {
+    if tier != AGENT_TIER && tier != HUMAN_TIER {
+        return Err(Error::InvalidValue(format!(
+            "trust tier must be \"{AGENT_TIER}\" or \"{HUMAN_TIER}\", not \"{tier}\""
+        )));
+    }
+    if !is_registration(store, registration)? {
+        return Err(Error::InvalidValue(format!(
+            "{registration} is not an aegis:VerifierRegistration in ROOT"
+        )));
+    }
+    Ok(Datum {
+        entity: store.intern(registration)?,
+        attribute: store.intern(TRUST_TIER)?,
+        value: Value::Str(tier.into()),
+        valid_from: ts.to_string(),
+        valid_to: None,
+        op: Op::Assert,
+    })
+}
+
+/// The challenge a human trust-root key signs to endorse `registration` as
+/// `tier` (normally `"agent"`).
+pub fn endorse_challenge(
+    store: &Store,
+    registration: &str,
+    tier: &str,
+) -> Result<EndorseChallenge> {
+    let marker = endorsement_marker(store, registration, tier, "1970-01-01T00:00:00Z")?;
+    let digest = digest_after(store, registration, &[marker])?;
+    let mut n = [0u8; 16];
+    ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut n)
+        .map_err(|_| Error::InvalidValue("no randomness for a nonce".into()))?;
+    let nonce = hex::encode(n);
+    let message = amendment_message(&store.store_id()?, registration, &digest, &nonce);
+    Ok(EndorseChallenge {
+        digest,
+        nonce,
+        message,
+    })
+}
+
+/// Write the endorsement: the tier marker plus the signed
+/// `aegis:RegistryAmendment`, in one transaction. The gate verifies it; this
+/// function checks nothing the gate does not. Returns the amendment IRI.
+pub fn endorse(
+    store: &mut Store,
+    registration: &str,
+    tier: &str,
+    signer: &str,
+    nonce: &str,
+    signature: &str,
+    timestamp: &str,
+) -> Result<String> {
+    let marker = endorsement_marker(store, registration, tier, timestamp)?;
+    let digest = digest_after(store, registration, std::slice::from_ref(&marker))?;
+    let amendment = ns(&format!("registry_amendment_{nonce}"));
+    let d = |store: &Store, p: &str, v: Value| -> Result<Datum> {
+        Ok(Datum {
+            entity: store.intern(&amendment)?,
+            attribute: store.intern(p)?,
+            value: v,
+            valid_from: timestamp.to_string(),
+            valid_to: None,
+            op: Op::Assert,
+        })
+    };
+    let datums = vec![
+        marker,
+        d(
+            store,
+            RDF_TYPE,
+            Value::Ref(store.intern(&ns("RegistryAmendment"))?),
+        )?,
+        d(
+            store,
+            &ns("amends"),
+            Value::Ref(store.intern(registration)?),
+        )?,
+        d(store, &ns("amendedDigest"), Value::Str(digest))?,
+        d(store, &ns("amendmentSigner"), Value::Str(signer.into()))?,
+        d(store, &ns("amendmentNonce"), Value::Str(nonce.into()))?,
+        d(
+            store,
+            &ns("amendmentSignature"),
+            Value::Str(signature.into()),
+        )?,
+    ];
+    store.transact(
+        &datums,
+        timestamp,
+        Some("console"),
+        Some("trust-root endorse"),
+    )?;
+    Ok(amendment)
+}
+
+/// ROOT `aegis:VerifierRegistration`s with no governed trust tier now, as
+/// (registration, verifier). These verify nothing until endorsed.
+pub fn unendorsed(store: &Store) -> Result<Vec<(String, String)>> {
+    let governed = governed_registry(store)?;
+    let Some(t) = store.lookup(RDF_TYPE)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for namespace in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
+        let Some(class) = store.lookup(&format!("{namespace}VerifierRegistration"))? else {
+            continue;
+        };
+        let mut stmt = store.prepare(
+            "SELECT DISTINCT e FROM facts WHERE a = ?1 AND v = ?2 AND g = 0 \
+             AND op = 1 AND valid_to IS NULL",
+        )?;
+        let ids = stmt
+            .query_map(params![t, Value::Ref(class).to_bytes()], |row| {
+                row.get::<_, i64>(0)
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for id in ids {
+            let iri = store.resolve(id)?;
+            if governed.contains_key(&iri) || out.iter().any(|(r, _)| *r == iri) {
+                continue;
+            }
+            let verifier = sole(strings(store, &iri, &ns("verifier"))?).unwrap_or_default();
+            out.push((iri, verifier));
+        }
     }
     Ok(out)
 }
