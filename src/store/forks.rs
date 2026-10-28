@@ -339,6 +339,7 @@ impl Store {
                 f.fork_tx
             )));
         }
+        let fork_g = f.g;
         let base = self.root_facts_as_of(f.fork_tx)?;
         let ours = self.current_facts_in_graph(crate::schema::ROOT_GRAPH)?;
         let theirs = self.current_facts_in_graph(f.g)?;
@@ -400,6 +401,9 @@ impl Store {
                     crate::schema::ROOT_GRAPH,
                 )?
             };
+            // Close each replaced ROOT value at the fork's own close time,
+            // as a direct write of the same correction would (aegis-jxxd).
+            self.retime_promoted_closes(tx, fork_g, &diff.removed)?;
             self.conn.execute(
                 "UPDATE forks SET status = 'promoted' WHERE name = ?1",
                 params![name],
@@ -469,3 +473,7 @@ fn validate_fork_name(name: &str) -> Result<()> {
 #[cfg(test)]
 #[path = "forks_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "forks_valid_time_tests.rs"]
+mod valid_time_tests;
