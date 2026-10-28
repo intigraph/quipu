@@ -178,6 +178,36 @@ jobs:
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six
   # required checks for account runners.
+  generated-docs:
+    # Agent surfaces stay current (aegis-t7h): man pages, shell completions and
+    # the book's CLI and MCP indexes must equal what quipu-docgen regenerates
+    # from the command catalogue and the tool definitions, and every CLI verb
+    # and MCP tool must be named in the primer or skill or excluded with a
+    # reason. The primer's skill copy is checked by tests/prime_sync.rs in the
+    # Test jobs. Required through Release correctness.
+    name: Generated docs drift
+    runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-docgen-sources-v1-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docgen-sources-v1-
+      - run: cargo clippy --locked --features docgen --bin quipu-docgen -- -D warnings -A missing-docs
+      - run: cargo test --locked --features docgen --bin quipu-docgen
+      - name: Committed generated docs equal regeneration
+        run: cargo run --locked --features docgen --bin quipu-docgen -- --check
+
   extended-features:
     name: Extended feature surfaces
     if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
@@ -736,7 +766,7 @@ jobs:
   release-correctness:
     name: Release correctness
     if: always()
-    needs: [clippy, test, build, check, shacl-write-path]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

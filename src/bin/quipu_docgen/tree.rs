@@ -1,7 +1,7 @@
 //! A clap `Command` tree built from the CLI catalogue.
 //!
 //! The `quipu` binary parses with `src/cli_input` (store-free admission over
-//! `SPECS`), not clap. This tree exists only so clap_mangen and clap_complete
+//! `SPECS`), not clap. This tree exists only so `clap_mangen` and `clap_complete`
 //! can render that same catalogue; it is never used to parse arguments.
 
 use clap::{Arg, ArgAction, Command};

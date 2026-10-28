@@ -1,12 +1,16 @@
-//! `quipu-docgen`: generate the CLI's man pages and shell completions from the
-//! command catalogue, or check that the committed copies are current.
+//! `quipu-docgen`: generate the CLI's man pages, shell completions and the
+//! book's CLI and MCP indexes from the command catalogue and the MCP tool
+//! definitions, or check that the committed copies are current. Both modes
+//! also check agent-surface coverage (see `coverage`).
 //!
 //! ```text
 //! quipu-docgen [--check] [--root DIR]
 //! ```
 //!
-//! Writes `packaging/man/*.1` and `packaging/completions/*` under DIR (default
-//! the current directory). With `--check` nothing is written: the command exits
+//! Writes `packaging/man/*.1`, `packaging/completions/*`,
+//! `docs/book/src/reference/cli-commands.md` and
+//! `docs/book/src/reference/mcp-tool-index.md` under DIR (default the current
+//! directory). With `--check` nothing is written: the command exits
 //! 1 and names every file that is stale, missing or no longer generated. The
 //! release workflow copies both directories into each archive, and packagers
 //! (Homebrew, .deb) install them from there.
@@ -16,9 +20,11 @@
 
 #[path = "../../cli_input/about.rs"]
 mod about;
+mod book;
 #[path = "../../cli_input/catalogue.rs"]
 #[allow(dead_code)]
 mod catalogue;
+mod coverage;
 mod output;
 mod tree;
 
@@ -41,6 +47,7 @@ fn main() {
     } else {
         output::write(&root, &files)
     };
+    let mut failed = false;
     match result {
         Ok(summary) => println!("{summary}"),
         Err(problems) => {
@@ -48,7 +55,17 @@ fn main() {
             eprintln!(
                 "Regenerate with `cargo run --features docgen --bin quipu-docgen` and commit the result."
             );
-            std::process::exit(1);
+            failed = true;
         }
+    }
+    let uncovered = coverage::check(&root, &quipu::mcp::tool_definitions());
+    if uncovered.is_empty() {
+        println!("every CLI verb and MCP tool is in the primer, the skill or the exclusions");
+    } else {
+        eprintln!("{}", uncovered.join("\n"));
+        failed = true;
+    }
+    if failed {
+        std::process::exit(1);
     }
 }

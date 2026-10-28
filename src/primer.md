@@ -36,6 +36,7 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | `quipu graph list` | List registered named graphs |
 | `quipu stats` / `quipu doctor labels` | Store statistics and a graph-label drift report |
 | `quipu export` | Export RDF from ROOT or one graph |
+| `quipu memory read <owner.json>` | Read versioned file memory (`export`, `commit` for the rest; off unless configured) |
 | `quipu share` / `quipu import` | Hand a graph to another store and verify one in |
 | `quipu mcp` | Serve the MCP tools over stdio |
 
@@ -52,13 +53,20 @@ Run `quipu help <command>` for the exact syntax of any command.
 | `quipu_cord` | List entities by type or predicate |
 | `quipu_impact` | Downstream walk from an entity, optionally counterfactual |
 | `quipu_unravel` | Facts as they were at a point in time |
+| `quipu_entity` | One exact IRI as JSON-LD |
+| `quipu_explain` | Trace a derived fact back to its premises |
+| `quipu_export` | RDF from ROOT, one graph, a provenance group or a CONSTRUCT |
 | `quipu_resolve_entity` | Check for near-duplicate entities before writing |
 | `quipu_shapes` | Inspect the loaded shapes and class vocabulary |
 | `quipu_validate` | Validate RDF against shapes without writing |
 | `quipu_knot` | Assert Turtle facts with SHACL validation |
 | `quipu_episode` | Ingest an episode of nodes and edges |
+| `quipu_set` | Set an entity's predicate to exactly one value |
 | `quipu_retract` | Retract facts for an entity |
+| `quipu_retract_episode` | Retract everything one episode contributed |
+| `quipu_graph_create` | Register a named graph before writing to it |
 | `quipu_graph_list` | List named graphs |
+| `quipu_list_proposals` | List schema change proposals and their status |
 | `quipu_stats` / `quipu_health` | Serving store statistics and liveness |
 
 ## Writing safely
@@ -66,7 +74,7 @@ Run `quipu help <command>` for the exact syntax of any command.
 - Check `quipu_resolve_entity` (or search) first, so you extend an entity instead of duplicating it.
 - Use types and predicates the loaded shapes define; a refusal names the violated shape.
 - Give writes a timestamp and a source you can point back to.
-- Schema changes go through proposals (`quipu propose submit`), not direct shape edits.
+- Schema changes go through proposals (`quipu propose submit`, `quipu_propose_schema_change`), not direct shape edits.
 
 ## Next steps
 
