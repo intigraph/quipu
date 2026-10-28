@@ -51,6 +51,7 @@ python/dist/
 # Census benchmark run outputs (stores, manifests, metrics)
 benchmark/census/out/
 benchmark/mergebench/out/
+benchmark/agent-branches/out/
 
 # DEMM-Bench run outputs (cases, scorer results, summaries)
 benchmark/demm/out/

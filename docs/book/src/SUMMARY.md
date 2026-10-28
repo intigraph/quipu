@@ -93,6 +93,7 @@
 
 - [Public Benchmarks](benchmarks/README.md)
   - [SPARQL 1.1 Conformance](benchmarks/conformance.md)
+  - [Agent-run branches](benchmarks/agent-branches.md)
 
 # Operations
 
