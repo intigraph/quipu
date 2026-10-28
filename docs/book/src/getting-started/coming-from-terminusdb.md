@@ -94,7 +94,7 @@ A few things do not translate fully. Each one is listed in
   not validated.
 - `@oneOf` is not translated.
 - `Foreign` is kept as a plain IRI reference.
-- A range the importer does not recognise gets only its count bounds, so it
+- A range the importer does not recognize gets only its count bounds, so it
   never refuses data.
 
 Once the shapes are loaded, they gate every later write. The tests show these
