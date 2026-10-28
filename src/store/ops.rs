@@ -649,11 +649,15 @@ impl Store {
 
         // Stamp the retraction tx with a distinct source so it is traceable and
         // never re-selected as one of the episode's own assertions.
+        let tag = format!("retract-episode:{episode_name}");
+        // aegis-gxfm: refuse, naming the nodes, if what is left of a node still
+        // typed by another writer misses a value a reject shape requires.
+        self.enforce_retraction_shapes(&datums, 0, Some(&source_tag), actor, Some(&tag))?;
         let tx_id = self.transact_to_graph_scoped(
             &datums,
             timestamp,
             actor,
-            Some(&format!("retract-episode:{episode_name}")),
+            Some(&tag),
             0,
             Some(&source_tag),
         )?;

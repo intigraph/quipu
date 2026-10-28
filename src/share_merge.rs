@@ -294,6 +294,15 @@ pub(crate) fn commit(
         d.op = Op::Retract;
     }
     datums.extend(retracts);
+    // aegis-gxfm: write-time SHACL judges the additions inside `transact`; a
+    // merge (or a decision) that only REMOVES values needs the deletion gate.
+    store.enforce_retraction_shapes_nt(
+        &render(&removals),
+        &render(&additions),
+        crate::schema::ROOT_GRAPH,
+        actor,
+        Some(source),
+    )?;
     let tx_id = store.transact(&datums, timestamp, actor, Some(source))?;
     Ok(MergeResult {
         outcome: "merged".into(),

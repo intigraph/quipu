@@ -315,3 +315,35 @@ fn the_cli_view_names_the_next_commands() {
         "{text}"
     );
 }
+
+/// aegis-gxfm: a decision that only REMOVES values used to skip SHACL, since
+/// write-time validation judges what is asserted. The deletion gate refuses it.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_decision_that_only_removes_a_required_value_is_refused() {
+    let mut store = scenario();
+    store
+        .load_shapes(
+            "status-required",
+            r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <urn:t:> .
+ex:TicketStatusShape a sh:NodeShape ;
+    sh:targetClass ex:Ticket ;
+    sh:property [ sh:path ex:status ; sh:minCount 1 ] .
+"#,
+            TS,
+        )
+        .unwrap();
+    let tx = store.latest_tx_id().unwrap();
+    let (file, bytes) = decided(&store, Choice::Values(Vec::new()));
+    let err = apply(
+        &mut store, "triage", &file, &bytes, "steve", TS, None, false,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("SHACL"), "{err}");
+    assert_eq!(store.latest_tx_id().unwrap(), tx);
+    let (_, status, _) = ids(&store);
+    assert_eq!(root_values(&store, status).len(), 1);
+    assert_eq!(store.fork_lookup("triage").unwrap().unwrap().status, "open");
+}

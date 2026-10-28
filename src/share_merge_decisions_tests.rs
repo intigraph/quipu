@@ -955,3 +955,43 @@ fn both_takes_the_union_and_is_refused_above_max_count() {
         ["\"a\"", "\"b\""]
     );
 }
+
+/// aegis-gxfm: a merge decision that only REMOVES values must still meet the
+/// local reject shapes; write-time SHACL judges only what is asserted.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_decision_that_only_removes_a_required_value_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    local
+        .load_shapes(
+            "status-required",
+            &format!(
+                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                 <urn:t:StatusShape> a sh:NodeShape ; sh:targetNode <{S}> ;\n    \
+                 sh:property [ sh:path <{STATUS}> ; sh:minCount 1 ] .\n"
+            ),
+            "2026-10-07",
+        )
+        .unwrap();
+    local.shacl_config_mut().validate_on_write = true;
+    let before = fact_count(&local);
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(&mut file, &Decision::Values { values: Vec::new() });
+    let err = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "stiwi",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+    assert_eq!(fact_count(&local), before, "nothing written");
+    assert_eq!(values(&local, STATUS), ["\"blocked\""]);
+}

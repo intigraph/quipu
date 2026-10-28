@@ -15,7 +15,9 @@
 //! judged only where it can break a node: a subject losing a value on a
 //! required path must not end up with a violation its pre-state did not have
 //! (aegis-g51c C12). Without that, write-time debt admission would accept a
-//! node made non-conforming by a delete as if it were old debt.
+//! node made non-conforming by a delete as if it were old debt. That deletion
+//! check lives in the store (`Store::enforce_retraction_shapes_nt`) and is the
+//! same one every native retract path uses (aegis-gxfm).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -102,35 +104,18 @@ fn retractions(
     actor: Option<&str>,
     source: &str,
 ) -> Result<(), AppError> {
-    // A new refusal, so it follows `shacl.validate_on_write`: turning the flag
-    // off restores the previous /update behaviour exactly.
-    if !store.shacl_config().validate_on_write {
-        return Ok(());
-    }
-    let Some(stored) = store.get_combined_shapes()? else {
-        return Ok(());
-    };
-    let reject = quipu::shacl::split_shapes_by_policy(&stored).reject;
+    // The store's deletion gate, shared with every native retract path
+    // (aegis-gxfm). It follows `shacl.validate_on_write`: turning the flag off
+    // restores the previous /update behaviour exactly.
     for (iri, removed_nt) in removed {
         let g = graph_id(store, iri)?;
-        let feedback = quipu::shacl_context::retraction_violations_in_graph(
-            store,
-            &reject,
+        store.enforce_retraction_shapes_nt(
             removed_nt,
             asserted.get(iri).map_or("", String::as_str),
             g,
+            actor,
+            Some(source),
         )?;
-        if !feedback.conforms {
-            let reason = format!(
-                "SHACL validation failed: {} violation(s) introduced by a deletion: {}. \
-                 No facts were written",
-                feedback.violations,
-                refusal_detail(&feedback)
-            );
-            let now = quipu::time::now_iso();
-            store.record_gate_refusal("shacl", &reason, g, actor, Some(source), &now);
-            return Err(quipu::Error::InvalidValue(reason).into());
-        }
     }
     Ok(())
 }
