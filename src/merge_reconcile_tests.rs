@@ -241,3 +241,70 @@ fn files_load_by_schema() {
         "{err}"
     );
 }
+
+fn git_fixture() -> ReconcileFile {
+    use crate::git_merge_alias::AliasProposal;
+    ReconcileFile::Git {
+        decisions: GitDecisions {
+            schema: GIT_DECISIONS_SCHEMA.into(),
+            inputs: ["b".into(), "o".into(), "t".into()],
+            conflicts: vec![DecisionRecord {
+                subject: "<urn:t:t42>".into(),
+                predicate: "urn:t:status".into(),
+                max_count: 1,
+                base: vec!["\"open\"".into()],
+                ours: vec!["\"blocked\"".into()],
+                theirs: vec!["\"closed\"".into()],
+            }],
+            aliases: vec![AliasProposal {
+                ours: "<urn:t:a>".into(),
+                theirs: "<urn:t:b>".into(),
+                similarity: 0.95,
+            }],
+            resolutions: BTreeMap::from([("alias:0".to_string(), "reject".to_string())]),
+            resolved_by: BTreeMap::from([(
+                "alias:0".to_string(),
+                "steve at 2026-10-28T00:00:00Z".to_string(),
+            )]),
+        },
+        dir: "qpack".into(),
+        labels: BTreeMap::from([("urn:t:t42".to_string(), "Ticket 42".to_string())]),
+    }
+}
+
+const GIT_TEXT: &str = "\
+Merge needs your decision: qpack 'qpack' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 1 alias proposal, 1 undecided. Nothing has been written.
+
+[conflict:0] Ticket 42 · urn:t:status
+  rule     sh:maxCount 1 on urn:t:status: ours and theirs together hold 2 values
+  base     \"open\"
+  ours     \"blocked\"  (HEAD)
+  theirs   \"closed\"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  (none)
+
+[alias:0] same entity? <urn:t:a> and <urn:t:b> (label similarity 0.950)
+  choose   1) accept  2) reject  3) defer
+  decided  reject (by steve at 2026-10-28T00:00:00Z)
+
+Next: quipu git-merge resolve qpack conflict:0 --choose <ours|theirs|base|defer> --by <you>
+Then: git add qpack && git commit (CI pendant-check re-runs the merge and verifies the result)
+";
+
+#[test]
+fn git_text_layout_snapshot() {
+    let file = git_fixture();
+    let text = render_text(&file.view("qpack/decisions.json", Surface::Cli));
+    assert_eq!(text, GIT_TEXT);
+    // Git choices rewrite the pack, so the pure resolve points at the Git verb.
+    let mut file = file;
+    let err = file
+        .resolve("conflict:0", Choice::Side(Side::Theirs), "steve", "t")
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("quipu git-merge resolve qpack conflict:0"),
+        "{err}"
+    );
+}

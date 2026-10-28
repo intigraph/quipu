@@ -27,6 +27,7 @@ use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
 use crate::fork_merge_decisions::{FORK_DECISIONS_SCHEMA, ForkDecisionFile, decided_values};
+use crate::git_merge::Decisions as GitDecisions;
 use crate::merge3::DecisionRecord;
 use crate::share_merge_decisions::{
     DECISIONS_SCHEMA, DECISIONS_SCHEMA_V1, Decision, DecisionFile, LocalFact, Proposal, Side, union,
@@ -43,7 +44,19 @@ pub enum ReconcileFile {
     Share(DecisionFile),
     /// `quipu fork promote <name> --emit-decisions`.
     Fork(ForkDecisionFile),
+    /// A Git pendant merge's `<qpack>/decisions.json` (`quipu git-merge`).
+    /// Resolved in the repository, because each choice rewrites the pack.
+    Git {
+        decisions: GitDecisions,
+        /// The qpack directory, repository-relative.
+        dir: String,
+        /// `rdfs:label` per IRI, from the pack's `export.nt`.
+        labels: BTreeMap<String, String>,
+    },
 }
+
+/// Schema of a Git pendant `decisions.json`.
+pub const GIT_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/git-decisions/v1";
 
 /// Which surface the "next" commands are written for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +129,51 @@ impl ReconcileFile {
         Self::from_json(value)
     }
 
+    /// Read a decisions file from disk. A Git pendant `decisions.json` is
+    /// read with its qpack directory (its parent) and the pack's labels.
+    ///
+    /// # Errors
+    /// As [`Self::load`], or the file cannot be read.
+    pub fn load_path(path: &std::path::Path) -> Result<Self> {
+        let bytes = std::fs::read(path)
+            .map_err(|e| Error::Store(format!("read {}: {e}", path.display())))?;
+        let value: JsonValue = serde_json::from_slice(&bytes)
+            .map_err(|e| Error::InvalidValue(format!("decisions file is not JSON: {e}")))?;
+        if value.get("schema").and_then(JsonValue::as_str) != Some(GIT_DECISIONS_SCHEMA) {
+            return Self::from_json(value);
+        }
+        let decisions: GitDecisions = serde_json::from_value(value)
+            .map_err(|e| Error::InvalidValue(format!("not a valid Git decisions file: {e}")))?;
+        let parent = path.parent().unwrap_or(std::path::Path::new(""));
+        let labels = std::fs::read_to_string(parent.join("export.nt"))
+            .ok()
+            .and_then(|nt| crate::share_merge::parse_graph(&nt, "export.nt").ok())
+            .map(|g| {
+                // Alias IRIs need labels too; carry them as pseudo-records.
+                let pairs: Vec<DecisionRecord> = decisions
+                    .aliases
+                    .iter()
+                    .map(|a| DecisionRecord {
+                        subject: a.ours.clone(),
+                        predicate: String::new(),
+                        max_count: 0,
+                        base: vec![a.theirs.clone()],
+                        ours: Vec::new(),
+                        theirs: Vec::new(),
+                    })
+                    .collect();
+                let records: Vec<&DecisionRecord> =
+                    decisions.conflicts.iter().chain(&pairs).collect();
+                crate::share_merge_decisions_view::labels(&records, &[&g])
+            })
+            .unwrap_or_default();
+        Ok(Self::Git {
+            decisions,
+            dir: parent.to_string_lossy().into_owned(),
+            labels,
+        })
+    }
+
     /// [`Self::load`] for an already-parsed value.
     ///
     /// # Errors
@@ -134,8 +192,10 @@ impl ReconcileFile {
                 serde_json::from_value(value).map(Self::Share).map_err(bad)
             }
             FORK_DECISIONS_SCHEMA => serde_json::from_value(value).map(Self::Fork).map_err(bad),
-            "https://github.com/scbrown/quipu/git-decisions/v1" => Err(Error::InvalidValue(
-                "a Git pendant decisions.json: resolve it with `quipu pendant-resolve` for now"
+            GIT_DECISIONS_SCHEMA => Err(Error::InvalidValue(
+                "a Git pendant decisions.json is read from its qpack directory: \
+                 `quipu merge show <qpack>/decisions.json`, resolved with \
+                 `quipu git-merge resolve <qpack> <key> --choose <choice> --by <who>`"
                     .into(),
             )),
             other => Err(Error::InvalidValue(format!(
@@ -152,6 +212,7 @@ impl ReconcileFile {
         match self {
             Self::Share(f) => serde_json::to_value(f),
             Self::Fork(f) => serde_json::to_value(f),
+            Self::Git { decisions, .. } => serde_json::to_value(decisions),
         }
         .map_err(|e| Error::Serialization(e.to_string()))
     }
@@ -171,6 +232,7 @@ impl ReconcileFile {
     /// decisions file (a path for the CLI).
     #[must_use]
     pub fn view(&self, file: &str, surface: Surface) -> MergeView {
+        let mut aliases: Vec<AliasCard> = Vec::new();
         let (kind, title, conflicts, apply) = match self {
             Self::Share(f) => {
                 let short = |id: &str| id.chars().take(12).collect::<String>();
@@ -196,6 +258,7 @@ impl ReconcileFile {
                                 decision: row.decision.as_ref(),
                                 decided_by: row.decided_by.as_ref(),
                                 decided_at: row.decided_at.as_ref(),
+                                value: true,
                             },
                             &f.labels,
                         )
@@ -230,6 +293,7 @@ impl ReconcileFile {
                                 decision: row.decision.as_ref(),
                                 decided_by: row.decided_by.as_ref(),
                                 decided_at: row.decided_at.as_ref(),
+                                value: true,
                             },
                             &f.labels,
                         )
@@ -251,21 +315,91 @@ impl ReconcileFile {
                     },
                 )
             }
+            Self::Git {
+                decisions,
+                dir,
+                labels,
+            } => {
+                let by = |key: &str| decisions.resolved_by.get(key).cloned();
+                let cards = decisions
+                    .conflicts
+                    .iter()
+                    .enumerate()
+                    .map(|(i, record)| {
+                        let key = format!("conflict:{i}");
+                        let mut c = card(
+                            RowParts {
+                                id: &key,
+                                record,
+                                ours_by: vec!["HEAD".into()],
+                                theirs_by: vec!["MERGE_HEAD".into()],
+                                proposal: None,
+                                decision: None,
+                                decided_by: None,
+                                decided_at: None,
+                                value: false,
+                            },
+                            labels,
+                        );
+                        c.decision = decisions.resolutions.get(&key).cloned();
+                        c.decided_by = by(&key);
+                        c
+                    })
+                    .collect();
+                aliases = decisions
+                    .aliases
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| {
+                        let key = format!("alias:{i}");
+                        AliasCard {
+                            ours: named(&a.ours, labels),
+                            theirs: named(&a.theirs, labels),
+                            similarity: a.similarity,
+                            choices: vec!["accept".into(), "reject".into(), "defer".into()],
+                            decision: decisions.resolutions.get(&key).cloned(),
+                            decided_by: by(&key),
+                            id: key,
+                        }
+                    })
+                    .collect();
+                (
+                    "git",
+                    format!("qpack '{dir}' (Git merge: MERGE_HEAD -> HEAD)"),
+                    cards,
+                    format!(
+                        "git add {dir} && git commit (CI pendant-check re-runs the merge and verifies the result)"
+                    ),
+                )
+            }
         };
         let conflicts: Vec<ConflictCard> = conflicts;
-        let undecided = conflicts.iter().filter(|c| c.decision.is_none()).count();
+        let undecided = conflicts.iter().filter(|c| c.decision.is_none()).count()
+            + aliases.iter().filter(|a| a.decision.is_none()).count();
+        let first = conflicts
+            .iter()
+            .find(|c| c.decision.is_none())
+            .map(|c| (c.id.clone(), c.choices.clone()))
+            .or_else(|| {
+                aliases
+                    .iter()
+                    .find(|a| a.decision.is_none())
+                    .map(|a| (a.id.clone(), a.choices.clone()))
+            });
         let mut next = Vec::new();
-        if let Some(first) = conflicts.iter().find(|c| c.decision.is_none()) {
-            next.push(match surface {
-                Surface::Cli => format!(
-                    "quipu merge resolve {file} {} --choose <{}> --by <you>",
-                    first.id,
-                    first.choices.join("|")
+        if let Some((id, choices)) = first {
+            next.push(match (surface, self) {
+                (_, Self::Git { dir, .. }) => format!(
+                    "quipu git-merge resolve {dir} {id} --choose <{}> --by <you>",
+                    choices.join("|")
                 ),
-                Surface::Mcp => format!(
-                    "quipu_merge_resolve with the decisions, row: {:?}, choose and by",
-                    first.id
+                (Surface::Cli, _) => format!(
+                    "quipu merge resolve {file} {id} --choose <{}> --by <you>",
+                    choices.join("|")
                 ),
+                (Surface::Mcp, _) => {
+                    format!("quipu_merge_resolve with the decisions, row: {id:?}, choose and by")
+                }
             });
         }
         next.push(apply);
@@ -273,6 +407,7 @@ impl ReconcileFile {
             schema: VIEW_SCHEMA,
             merge: MergeTarget { kind, title },
             conflicts,
+            aliases,
             undecided,
             next,
         }
@@ -316,6 +451,11 @@ impl ReconcileFile {
                     &mut r.decided_by,
                     &mut r.decided_at,
                 )
+            }
+            Self::Git { dir, .. } => {
+                return Err(Error::InvalidValue(format!(
+                    "a Git pendant choice rewrites the pack: run `quipu git-merge resolve {dir} {row} --choose <choice> --by {by}`"
+                )));
             }
         };
         let next = match choice {

@@ -71,7 +71,7 @@ the CLI and inline for MCP.
 |---|---|---|---|
 | emit | `quipu merge <dir> --emit-decisions f.json [--propose]` | `quipu fork promote <name> --emit-decisions f.json [--propose]` | written by `quipu git-merge` as `<qpack>/decisions.json` |
 | show (new) | `quipu merge show f.json [--format text\|md\|json]` | same | `quipu merge show <qpack>/decisions.json` |
-| resolve (new) | `quipu merge resolve f.json <row> --choose <c> --by <who>` | same | same; for Git it also rewrites the qpack (refs from `MERGE_HEAD`), replacing `pendant-resolve` |
+| resolve (new) | `quipu merge resolve f.json <row> --choose <c> --by <who>` | same | same, or `quipu git-merge resolve <qpack> <key>`; it rewrites the qpack (refs from `MERGE_HEAD`); `pendant-resolve` stays for scripts |
 | apply | `quipu merge <dir> --decisions f.json --reviewer <who> [--dry-run]` | `quipu fork promote <name> --decisions f.json --reviewer <who> [--dry-run]` | `git add <qpack>` and commit; CI `pendant-check` |
 
 MCP: `quipu_merge_decisions` and `quipu_merge_apply` take `fork: <name>` as

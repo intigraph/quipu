@@ -4,7 +4,7 @@
 .SH NAME
 quipu\-git\-merge \- Merge pendants from Git snapshots and stop before committing
 .SH SYNOPSIS
-\fBquipu git\-merge\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIref\fR> 
+\fBquipu git\-merge\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIref\fR> [\fIsubcommands\fR]
 .SH DESCRIPTION
 Merge pendants from Git snapshots and stop before committing
 .SH OPTIONS
@@ -17,3 +17,13 @@ Print help
 .TP
 <\fIref\fR>
 
+.SH SUBCOMMANDS
+.TP
+quipu\-git\-merge\-show(1)
+Show a qpack\*(Aqs pending merge decisions in the standard layout
+.TP
+quipu\-git\-merge\-resolve(1)
+Record one choice in the Git merge in progress and rewrite the qpack
+.TP
+quipu\-git\-merge\-help(1)
+Print this message or the help of the given subcommand(s)

@@ -455,8 +455,17 @@ complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -l from -r
 complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -l to -r
 complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -l dry-run
 complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand git-merge" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand git-merge" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "show" -d 'Show a qpack\'s pending merge decisions in the standard layout'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "resolve" -d 'Record one choice in the Git merge in progress and rewrite the qpack'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -l format -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from resolve" -l choose -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from resolve" -l by -r
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand merge-driver" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand merge-driver" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand pendant-resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r

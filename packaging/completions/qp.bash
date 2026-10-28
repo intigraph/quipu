@@ -325,6 +325,12 @@ _qp() {
             qp__subcmd__gate,shadow)
                 cmd="qp__subcmd__gate__subcmd__shadow"
                 ;;
+            qp__subcmd__git__subcmd__merge,resolve)
+                cmd="qp__subcmd__git__subcmd__merge__subcmd__resolve"
+                ;;
+            qp__subcmd__git__subcmd__merge,show)
+                cmd="qp__subcmd__git__subcmd__merge__subcmd__show"
+                ;;
             qp__subcmd__graph,create)
                 cmd="qp__subcmd__graph__subcmd__create"
                 ;;
@@ -1886,13 +1892,61 @@ _qp() {
             return 0
             ;;
         qp__subcmd__git__subcmd__merge)
-            opts="-h --db --help"
+            opts="-h --db --help show resolve"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__git__subcmd__merge__subcmd__resolve)
+            opts="-h --db --choose --by --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --choose)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --by)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__git__subcmd__merge__subcmd__show)
+            opts="-h --db --format --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --format)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
