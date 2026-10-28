@@ -455,3 +455,101 @@ fn mcp_round_trip_propose_dry_run_accept() {
     assert_eq!(accepted["migration_source"], migration_source(id));
     assert!(accepted["migration_tx"].is_i64(), "{accepted}");
 }
+
+/// Review of #896: an expression that closes the BIND and smuggles in a
+/// store-wide `DELETE WHERE` must be refused at submit and never run.
+#[test]
+fn an_expression_cannot_inject_update_operations() {
+    let exploit = "STR(?o)) AS ?split0) } ; DELETE WHERE { ?a ?b ?c } ; \
+                   INSERT DATA { <x> <y> \"z\" } ; DELETE { ?s <q> ?o } WHERE { ?s <name> ?o BIND((1";
+    let split = serde_json::json!([{
+        "op": "split_property", "from": ex("name"),
+        "into": [{ "predicate": ex("given"), "expression": exploit }],
+    }]);
+    let merge = serde_json::json!([{
+        "op": "merge_property", "from": [ex("name")], "to": ex("fullName"),
+        "expression": exploit,
+    }]);
+    let exists = serde_json::json!([{
+        "op": "split_property", "from": ex("name"),
+        "into": [{ "predicate": ex("given"),
+                   "expression": "IF(EXISTS { GRAPH ?g { ?a ?b ?c } }, ?o, ?o)" }],
+    }]);
+    for program in [split, merge, exists] {
+        let err = parse_program(&program).unwrap_err().to_string();
+        assert!(err.contains("expression"), "{err}");
+    }
+    // Run directly (as a stored program would be), it still refuses and the
+    // store is untouched.
+    let mut store = store_with(PEOPLE);
+    let op = MigrationOp::SplitProperty {
+        from: ex("name"),
+        into: vec![SplitTarget {
+            predicate: ex("given"),
+            expression: exploit.into(),
+        }],
+    };
+    let id = propose(&store, &full_name_shape(), &[op]);
+    assert!(
+        store
+            .accept_proposal(id, "approver", DECIDED, None)
+            .is_err()
+    );
+    assert_untouched(&store, id);
+}
+
+#[test]
+fn a_typed_expression_is_reserialized_not_pasted() {
+    let op = MigrationOp::SplitProperty {
+        from: ex("name"),
+        into: vec![SplitTarget {
+            predicate: ex("given"),
+            expression: "STRBEFORE(?o, \" \") # trailing comment".into(),
+        }],
+    };
+    let update = op.checked_render().unwrap();
+    assert!(!update.contains('#'), "{update}");
+}
+
+/// Review of #896: templates read ROOT only, so GRAPH and SERVICE are refused
+/// in the WHERE pattern, including inside EXISTS.
+#[test]
+fn templates_may_not_read_named_graphs() {
+    for update in [
+        "INSERT { ?s <http://x/leaked> ?o } WHERE { GRAPH <http://x/g> { ?s <http://x/secret> ?o } }",
+        "INSERT { ?s <http://x/leaked> ?o } WHERE { GRAPH ?g { ?s <http://x/secret> ?o } }",
+        "INSERT { ?s <http://x/l> ?o } WHERE { ?s <http://x/p> ?o FILTER EXISTS { GRAPH ?g { ?s ?p ?o } } }",
+        "INSERT { ?s <http://x/l> ?o } WHERE { SERVICE <http://x/sparql> { ?s <http://x/p> ?o } }",
+    ] {
+        let program = serde_json::json!([{ "op": "sparql", "update": update }]);
+        let err = parse_program(&program).unwrap_err().to_string();
+        assert!(err.contains("GRAPH") || err.contains("SERVICE"), "{err}");
+    }
+}
+
+#[test]
+fn a_migration_over_the_ceiling_is_refused_in_accept_and_dry_run() {
+    let mut store = store_with(PEOPLE);
+    let id = propose(&store, &full_name_shape(), &[rename()]);
+    guard::with_max_facts(1, || {
+        let err = dry_run(&store, id, 10).unwrap_err().to_string();
+        assert!(err.contains("update_full_copy_max_facts"), "{err}");
+        let err = store
+            .accept_proposal(id, "approver", DECIDED, None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("update_full_copy_max_facts"), "{err}");
+    });
+    assert_untouched(&store, id);
+    // Two matches and four planned facts: a ceiling of 3 still refuses the
+    // program as a whole.
+    guard::with_max_facts(3, || {
+        let err = dry_run(&store, id, 10).unwrap_err().to_string();
+        assert!(err.contains("would change"), "{err}");
+    });
+    guard::with_max_facts(4, || {
+        store
+            .accept_proposal(id, "approver", DECIDED, None)
+            .unwrap();
+    });
+}

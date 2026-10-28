@@ -153,19 +153,23 @@ fn parse(update: &str) -> Result<spargebra::Update> {
         .map_err(template_error)
 }
 
-/// Refuse a template quipu cannot run as a ROOT-graph migration.
-pub(super) fn check_template(update: &str) -> Result<()> {
-    for operation in parse(update)?.operations {
+/// Refuse a template quipu cannot run as a ROOT-graph migration; returns how
+/// many update operations it holds.
+pub(super) fn check_template(update: &str) -> Result<usize> {
+    let operations = parse(update)?.operations;
+    let count = operations.len();
+    for operation in operations {
         match operation {
             GraphUpdateOperation::DeleteInsert {
                 delete,
                 insert,
                 using,
-                ..
+                pattern,
             } => {
                 if using.is_some() {
                     return Err(template_error("USING / WITH is not supported"));
                 }
+                super::guard::check_pattern(&pattern)?;
                 if delete
                     .iter()
                     .any(|q| q.graph_name != GraphNamePattern::DefaultGraph)
@@ -208,7 +212,7 @@ pub(super) fn check_template(update: &str) -> Result<()> {
             }
         }
     }
-    Ok(())
+    Ok(count)
 }
 
 fn has_blank_node(q: &QuadPattern) -> bool {
@@ -224,8 +228,7 @@ pub fn plan(store: &Store, program: &[MigrationOp]) -> Result<MigrationPlan> {
     for (index, op) in program.iter().enumerate() {
         let context =
             |e: Error| Error::InvalidValue(format!("migration op {index} ({}): {e}", op.name()));
-        let update = op.render().map_err(context)?;
-        check_template(&update).map_err(context)?;
+        let update = op.checked_render().map_err(context)?;
         let (d, i) = evaluate(store, &update).map_err(context)?;
         for p in &i {
             check_literal(p).map_err(context)?;
@@ -265,6 +268,9 @@ pub fn plan(store: &Store, program: &[MigrationOp]) -> Result<MigrationPlan> {
         if existing.get(store, &planned)?.is_none() {
             assert.insert(key, planned);
         }
+    }
+    if retract.len() + assert.len() > super::guard::max_facts() {
+        return Err(super::guard::too_large("the migration would change"));
     }
     for (report, (d, i)) in ops.iter_mut().zip(&per_op) {
         report.retracted = d.iter().filter(|k| retract.contains_key(*k)).count();
@@ -320,12 +326,22 @@ fn evaluate(store: &Store, update: &str) -> Result<(Vec<Planned>, Vec<Planned>)>
                 pattern,
                 ..
             } => {
+                // One row past the ceiling is enough to refuse: the read is
+                // bounded before anything is held in memory.
+                let max = super::guard::max_facts();
                 let select = spargebra::Query::Select {
                     dataset: None,
-                    pattern: *pattern,
+                    pattern: spargebra::algebra::GraphPattern::Slice {
+                        inner: pattern,
+                        start: 0,
+                        length: Some(max.saturating_add(1)),
+                    },
                     base_iri: parsed.base_iri.clone(),
                 };
                 let result = crate::sparql::query(store, &select.to_string())?;
+                if result.rows().len() > max {
+                    return Err(super::guard::too_large("the WHERE pattern matches"));
+                }
                 for row in result.rows() {
                     for q in &delete {
                         if let Some(p) = ground(store, q, row)? {

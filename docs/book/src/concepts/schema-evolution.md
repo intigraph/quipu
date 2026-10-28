@@ -95,7 +95,17 @@ Quipu renders to a SPARQL Update template.
 }
 ```
 
-The program is checked when the proposal is submitted. On accept:
+The program is checked when the proposal is submitted:
+
+- templates read and write the ROOT graph only, so `GRAPH`, `SERVICE`, `USING`
+  and `WITH` are refused, including inside `EXISTS`;
+- each `expression` must parse as exactly one SPARQL expression with no
+  `EXISTS`, and the template uses the parsed form, never the submitted text;
+- a migration whose `WHERE` matches, or whose net change touches, more than
+  `server.update_full_copy_max_facts` facts is refused, at accept and in a dry
+  run, before anything is held in memory beyond that ceiling.
+
+On accept:
 
 1. Every operation is evaluated against the state before the migration,
    on the ROOT graph. The program's net change is

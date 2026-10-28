@@ -36,6 +36,8 @@ use crate::store::Store;
 
 #[path = "proposal_migration_apply.rs"]
 mod apply;
+#[path = "proposal_migration_guard.rs"]
+mod guard;
 #[path = "proposal_migration_lexical.rs"]
 mod lexical;
 #[path = "proposal_migration_plan.rs"]
@@ -43,6 +45,7 @@ mod plan;
 
 pub(crate) use apply::accept_with_migration;
 pub use apply::{DryRun, dry_run};
+pub use guard::{max_facts, set_max_facts};
 pub use plan::{MigrationPlan, OpReport, plan};
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -108,6 +111,36 @@ impl MigrationOp {
         }
     }
 
+    /// How many update operations this typed operation renders to; `None`
+    /// for a raw `sparql` template.
+    fn expected_operations(&self) -> Option<usize> {
+        match self {
+            Self::MergeProperty {
+                from,
+                expression: None,
+                ..
+            } => Some(from.len()),
+            Self::Sparql { .. } => None,
+            _ => Some(1),
+        }
+    }
+
+    /// [`Self::render`], checked: the template must pass the ROOT-only
+    /// template rules, and a typed operation must render exactly the
+    /// operations it stands for.
+    pub(crate) fn checked_render(&self) -> Result<String> {
+        let update = self.render()?;
+        let count = plan::check_template(&update)?;
+        if self.expected_operations().is_some_and(|n| n != count) {
+            return Err(Error::InvalidValue(format!(
+                "{} rendered {count} update operations, expected {}",
+                self.name(),
+                self.expected_operations().unwrap_or_default()
+            )));
+        }
+        Ok(update)
+    }
+
     /// The SPARQL Update this operation runs.
     pub fn render(&self) -> Result<String> {
         Ok(match self {
@@ -143,7 +176,10 @@ impl MigrationOp {
                 let (mut insert, mut binds, mut bound) = (Vec::new(), Vec::new(), Vec::new());
                 for (i, target) in into.iter().enumerate() {
                     insert.push(format!("?s {} ?split{i}", iri(&target.predicate)?));
-                    binds.push(format!("BIND(({}) AS ?split{i})", target.expression));
+                    binds.push(format!(
+                        "BIND(({}) AS ?split{i})",
+                        guard::expression(&target.expression)?
+                    ));
                     bound.push(format!("BOUND(?split{i})"));
                 }
                 format!(
@@ -176,6 +212,7 @@ impl MigrationOp {
                         .collect::<Result<Vec<_>>>()?
                         .join(" ;\n"),
                     Some(expression) => {
+                        let expression = guard::expression(expression)?;
                         let patterns = from
                             .iter()
                             .enumerate()
@@ -205,7 +242,7 @@ pub fn parse_program(value: &serde_json::Value) -> Result<Vec<MigrationOp>> {
         ));
     }
     for (index, op) in program.iter().enumerate() {
-        plan::check_template(&op.render()?).map_err(|e| {
+        op.checked_render().map_err(|e| {
             Error::InvalidValue(format!("migration op {index} ({}): {e}", op.name()))
         })?;
     }
