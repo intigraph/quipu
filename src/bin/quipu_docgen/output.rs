@@ -6,7 +6,7 @@ use std::path::Path;
 use clap::Command;
 use clap_complete::Shell;
 
-use crate::tree;
+use crate::{book, tree};
 
 /// Directories this generator owns outright: anything else inside them is
 /// stale output and is removed on write, reported on check.
@@ -15,6 +15,12 @@ pub const OWNED_DIRS: &[&str] = &["packaging/man", "packaging/completions"];
 /// Every generated file, keyed by its path relative to the repository root.
 pub fn generate() -> BTreeMap<String, Vec<u8>> {
     let mut files = BTreeMap::new();
+    files.insert(book::CLI_PAGE.to_string(), book::cli_page().into_bytes());
+    let tools = quipu::mcp::tool_definitions();
+    files.insert(
+        book::MCP_PAGE.to_string(),
+        book::mcp_page(&tools).into_bytes(),
+    );
     let root = tree::build("quipu");
     man_pages(&root, "quipu", "quipu", &mut files);
     for bin in ["quipu", "qp"] {

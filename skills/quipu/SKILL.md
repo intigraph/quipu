@@ -332,7 +332,7 @@ Run `quipu help <command>` for the exact syntax of any command.
 - Check `quipu_resolve_entity` (or search) first, so you extend an entity instead of duplicating it.
 - Use types and predicates the loaded shapes define; a refusal names the violated shape.
 - Give writes a timestamp and a source you can point back to.
-- Schema changes go through proposals (`quipu propose submit`), not direct shape edits.
+- Schema changes go through proposals (`quipu propose submit`, `quipu_propose_schema_change`), not direct shape edits.
 
 #### Next steps
 
