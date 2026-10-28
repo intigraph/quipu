@@ -10,6 +10,10 @@ pub mod applier;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asof_share;
 pub mod bindings;
+pub mod changeset;
+/// Change-sets against a live store: `/diff` and the `/patch` state check.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod changeset_store;
 pub mod compact;
 pub mod config;
 mod config_load;

@@ -1,0 +1,47 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-IMPORT 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-import \- Verify a share into quarantine, then promote or review it
+.SH SYNOPSIS
+\fBquipu import\fR [\fB\-\-db\fR] [\fB\-\-source\fR] [\fB\-\-actor\fR] [\fB\-\-destination\fR] [\fB\-\-query\-namespace\fR] [\fB\-\-replace\-queries\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIshare\-dir\fR> [\fIsubcommands\fR]
+.SH DESCRIPTION
+Verify a share into quarantine, then promote or review it
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-source\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-actor\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-destination\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-query\-namespace\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-replace\-queries\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIshare\-dir\fR>
+
+.SH SUBCOMMANDS
+.TP
+quipu\-import\-delta(1)
+Verify a delta share against its parent share
+.TP
+quipu\-import\-promote(1)
+Promote a staged share into the store
+.TP
+quipu\-import\-review(1)
+Review staged shares awaiting promotion
+.TP
+quipu\-import\-help(1)
+Print this message or the help of the given subcommand(s)

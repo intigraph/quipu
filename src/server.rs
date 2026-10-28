@@ -62,6 +62,8 @@ mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
+#[path = "server/patch.rs"]
+mod patch;
 #[path = "server/point_reads.rs"]
 mod point_reads;
 #[path = "server/process_pool.rs"]
@@ -425,6 +427,8 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
+        .route("/patch", post(patch::patch_post))
+        .route("/diff", get(patch::diff_get))
         .route("/export", post(publication::export))
         .merge(graph_store::routes())
         .route("/share", post(publication::share_payload))

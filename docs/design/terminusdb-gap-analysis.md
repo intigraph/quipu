@@ -197,6 +197,7 @@ graphs, the merge paper, and the launch. Kinds: **(a)** feature,
   This is also the wire format G4 needs.
 - **Touches:** `src/share_delta.rs`, `src/store/changes.rs`, a new route, and
   `docs/book/src/reference/rest-api.md`.
+- **Status:** implemented; format spec in [changeset-format.md](changeset-format.md).
 
 ### G4. Push-back: governed instance-to-instance writes. (a), L
 
