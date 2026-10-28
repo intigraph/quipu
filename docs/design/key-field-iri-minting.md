@@ -30,9 +30,13 @@ All of these must hold; the implementation refuses otherwise.
    `sh:targetClass T` carries `quipu:keyFields ( p1 p2 ... )`, a non-empty RDF
    list of predicate IRIs without repeats. Zero or two keyed shapes for `T`
    refuse.
-3. **Key fields are exactly-one.** The same shape declares each key field with
-   `sh:minCount 1` and `sh:maxCount 1`. That is what lets the shape-aware merge
-   raise a divergent key value as a conflict instead of a union (below).
+3. **Key fields are exactly-one and typed.** The same shape declares each key
+   field with `sh:minCount 1`, `sh:maxCount 1` and a kind: `sh:datatype`
+   `xsd:string`, `xsd:integer` or `xsd:boolean`, or `sh:nodeKind sh:IRI`. The
+   cardinality lets the shape-aware merge raise a divergent key value as a
+   conflict instead of a union (below). The kind stops `5432` and `"5432"` from
+   minting two IRIs; a mint value of the wrong kind refuses. Any other
+   datatype refuses the shape until it has a canonicalizer (see below).
 4. **Identity, not description.** This is a review rule for shape authors, not
    a runtime check. A field qualifies only if a change to its value means a
    different thing. Labels, names, titles, current hosts of a role, owners and
@@ -62,14 +66,19 @@ Labels are never key material. A mint request's `label` is written as
   percent-encoded outside RFC 3986 unreserved characters and joined by `+`. For
   example, `https://public.example/ep/db.lan+5432`. It is readable, but it
   drops the type and datatypes, so the namespace must select exactly one type.
-  Use it only where every key field has a fixed datatype in the shape.
+  The required per-field kind keeps the dropped datatype unambiguous.
 
 Value canonicalization: JSON strings become plain literals, integers become
-`xsd:integer` and booleans become `xsd:boolean`. `{"@id"}` gives an IRI,
-`{"@value","@type"}` a typed literal and `{"@value","@language"}` a
-language-tagged literal (the tag is lower-cased). Floats, decimals, empty
-values and non-canonical integer or boolean spellings (`05432`) refuse. A key
-must have one spelling or writers diverge. Quipu does not case-fold or
+`xsd:integer` and booleans become `xsd:boolean`. `{"@id"}` gives an IRI and
+`{"@value","@type"}` a typed literal of a whitelisted datatype. Key values are
+limited to the kinds that have exactly one spelling per value: plain/`xsd:string`,
+`xsd:integer` (canonical decimal within i64, so `05432`, `+5` and `-0` refuse),
+`xsd:boolean` (`true`/`false`) and IRIs. Everything else refuses, both in the
+shape and in the request: `xsd:dateTime` (`Z` vs `+00:00`), `xsd:int` and other
+derived integers (leading zeros, and a different datatype IRI for the same
+number), decimals, floats, language-tagged strings and empty values. Each can
+join the whitelist only with a canonicalizer and a pinned vector. A key must
+have one spelling or writers diverge. Quipu does not case-fold or
 otherwise normalize strings. If hostnames are case-insensitive in a domain,
 the shape adds a lowercase `sh:pattern` and writers send lower case.
 
@@ -150,10 +159,14 @@ Implemented in `src/entity_key_tests.rs` (in-memory stores only):
 - The pinned hash vector, reproduced outside Rust.
 - A changed key value, a different type, or a string where the other side used
   an integer gives a different IRI.
-- Missing, extra, float, empty, non-canonical, non-scalar and unsupported key
-  values refuse. Typed-object and bare-integer spellings agree.
+- Missing, extra, float, empty, non-canonical, non-scalar, wrong-kind,
+  language-tagged, `xsd:int` and `xsd:dateTime` key values refuse. Typed-object
+  and bare spellings agree. A string port where the shape says integer refuses.
 - Shape contract: no keyed shape, two keyed shapes, `sh:maxCount 2` on a key
-  field, or an unknown strategy refuse.
+  field, a key field without a kind, a non-whitelisted datatype, or an unknown
+  strategy refuse. An IRI-kind key accepts `{"@id"}` and refuses a string.
+- A raw write that puts a live, typed node at the key IRI with a different port
+  makes the mint refuse; this test fails if convergence checks only the type.
 - Gates: a key namespace without `types` refuses at configure. A key namespace
   without keys, keys on an opaque namespace, and keys on resolve all refuse.
 - Mint after retracting the entity refuses rather than reviving it.

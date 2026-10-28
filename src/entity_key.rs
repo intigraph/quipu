@@ -41,8 +41,26 @@ pub enum Strategy {
 pub struct KeySpec {
     /// Key predicate IRIs in declared order (order is part of the derivation).
     pub fields: Vec<String>,
+    /// The declared kind of each field, parallel to `fields`.
+    pub kinds: Vec<KeyKind>,
     /// How the key tuple is spelled in the IRI.
     pub strategy: Strategy,
+}
+
+/// The only key value kinds with a single canonical spelling. Every other
+/// datatype refuses until it has a canonicalizer: `xsd:dateTime` (`Z` vs
+/// `+00:00`), `xsd:int` (leading zeros), decimals and floats all admit two
+/// spellings of one value, which would mint two IRIs for one thing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyKind {
+    /// `sh:nodeKind sh:IRI`.
+    Iri,
+    /// `sh:datatype xsd:string` (plain literal, no language tag).
+    String,
+    /// `sh:datatype xsd:integer`, canonical decimal spelling within i64.
+    Integer,
+    /// `sh:datatype xsd:boolean`, `true` or `false`.
+    Boolean,
 }
 
 fn invalid(message: impl std::fmt::Display) -> Error {
@@ -55,6 +73,9 @@ fn invalid(message: impl std::fmt::Display) -> Error {
 /// strategy, or a key field the same shape does not declare as exactly-one
 /// (`sh:minCount 1` and `sh:maxCount 1`). The cardinality requirement is what
 /// makes a divergent key value a merge conflict instead of a silent union.
+/// Each key field must also declare its kind (`sh:datatype` from the
+/// [`KeyKind`] whitelist, or `sh:nodeKind sh:IRI`), so `5432` and `"5432"`
+/// cannot both mint.
 pub fn key_spec(shapes_turtle: &str, node_type: &str) -> Result<KeySpec> {
     let parser = oxttl::TurtleParser::new()
         .with_base_iri("http://example.org/")
@@ -139,31 +160,56 @@ pub fn key_spec(shapes_turtle: &str, node_type: &str) -> Result<KeySpec> {
         matches!(objects(property, predicate).as_slice(),
             [Term::Literal(l)] if l.value().parse::<i64>() == Ok(1))
     };
-    for field in &fields {
-        let declared = objects(&shape, &format!("{SH}property")).iter().any(|p| {
-            let p = p.to_string();
-            matches!(objects(&p, &format!("{SH}path")).as_slice(),
-                [Term::NamedNode(path)] if path.as_str() == field)
-                && count_is_one(&p, &format!("{SH}minCount"))
-                && count_is_one(&p, &format!("{SH}maxCount"))
-        });
-        if !declared {
-            return Err(invalid(format!(
-                "key field <{field}> must be declared sh:minCount 1 and sh:maxCount 1 on the keyed shape"
-            )));
+    let kind_of = |property: &str| -> Option<KeyKind> {
+        let datatypes = objects(property, &format!("{SH}datatype"));
+        let node_kinds = objects(property, &format!("{SH}nodeKind"));
+        match (datatypes.as_slice(), node_kinds.as_slice()) {
+            ([], [Term::NamedNode(k)]) if k.as_str() == format!("{SH}IRI") => Some(KeyKind::Iri),
+            ([Term::NamedNode(dt)], _) => match dt.as_str() {
+                namespace::XSD_STRING => Some(KeyKind::String),
+                namespace::XSD_INTEGER => Some(KeyKind::Integer),
+                namespace::XSD_BOOLEAN => Some(KeyKind::Boolean),
+                _ => None,
+            },
+            _ => None,
         }
+    };
+    let mut kinds = Vec::new();
+    for field in &fields {
+        let declared = objects(&shape, &format!("{SH}property"))
+            .iter()
+            .map(ToString::to_string)
+            .filter(|p| {
+                matches!(objects(p, &format!("{SH}path")).as_slice(),
+                    [Term::NamedNode(path)] if path.as_str() == field)
+                    && count_is_one(p, &format!("{SH}minCount"))
+                    && count_is_one(p, &format!("{SH}maxCount"))
+            })
+            .find_map(|p| kind_of(&p));
+        let Some(kind) = declared else {
+            return Err(invalid(format!(
+                "key field <{field}> must be declared sh:minCount 1, sh:maxCount 1 and either \
+                 sh:datatype xsd:string|xsd:integer|xsd:boolean or sh:nodeKind sh:IRI on the keyed shape"
+            )));
+        };
+        kinds.push(kind);
     }
-    Ok(KeySpec { fields, strategy })
+    Ok(KeySpec {
+        fields,
+        kinds,
+        strategy,
+    })
 }
 
 /// Turn the request's `keys` object into one RDF term per key field, in the
 /// shape's order. Exactly the declared fields, no more and no fewer.
 ///
 /// Values: a JSON string is a plain literal, an integer is `xsd:integer`, a
-/// boolean is `xsd:boolean`, `{"@id": iri}` is an IRI, `{"@value", "@type"}`
-/// a typed literal and `{"@value", "@language"}` a language-tagged one.
-/// Floats and non-canonical integer/boolean spellings refuse: a key must have
-/// exactly one spelling or two writers diverge.
+/// boolean is `xsd:boolean`, `{"@id": iri}` is an IRI and `{"@value", "@type"}`
+/// a typed literal of a whitelisted datatype. Each value must match the kind
+/// the shape declares. Floats, other datatypes, language tags and
+/// non-canonical spellings refuse: a key must have exactly one spelling or two
+/// writers diverge.
 pub fn key_terms(spec: &KeySpec, keys: &Map<String, Json>) -> Result<Vec<(String, Term)>> {
     let declared: BTreeSet<&str> = spec.fields.iter().map(String::as_str).collect();
     if let Some(extra) = keys.keys().find(|k| !declared.contains(k.as_str())) {
@@ -177,7 +223,30 @@ pub fn key_terms(spec: &KeySpec, keys: &Map<String, Json>) -> Result<Vec<(String
             let value = keys
                 .get(field)
                 .ok_or_else(|| invalid(format!("missing key field <{field}>")))?;
-            Ok((field.clone(), json_term(value)?))
+            Ok::<_, Error>((field.clone(), json_term(value)?))
+        })
+        .zip(&spec.kinds)
+        .map(|(pair, kind)| {
+            let (field, term) = pair?;
+            let matches = match (&term, kind) {
+                (Term::NamedNode(_), KeyKind::Iri) => true,
+                (Term::Literal(l), KeyKind::String) => {
+                    l.language().is_none() && l.datatype().as_str() == namespace::XSD_STRING
+                }
+                (Term::Literal(l), KeyKind::Integer) => {
+                    l.datatype().as_str() == namespace::XSD_INTEGER
+                }
+                (Term::Literal(l), KeyKind::Boolean) => {
+                    l.datatype().as_str() == namespace::XSD_BOOLEAN
+                }
+                _ => false,
+            };
+            if !matches {
+                return Err(invalid(format!(
+                    "value for <{field}> does not match its declared key kind {kind:?}"
+                )));
+            }
+            Ok((field, term))
         })
         .collect()
 }
@@ -194,23 +263,13 @@ fn json_term(value: &Json) -> Result<Term> {
             })?;
             Literal::new_typed_literal(n.to_string(), xsd(namespace::XSD_INTEGER)).into()
         }
-        Json::Object(o) => match (
-            o.get("@id"),
-            o.get("@value"),
-            o.get("@type"),
-            o.get("@language"),
-        ) {
-            (Some(Json::String(iri)), None, None, None) if o.len() == 1 => {
+        Json::Object(o) => match (o.get("@id"), o.get("@value"), o.get("@type")) {
+            (Some(Json::String(iri)), None, None) if o.len() == 1 => {
                 NamedNode::new(iri).map_err(invalid)?.into()
             }
-            (None, Some(Json::String(lexical)), Some(Json::String(dt)), None) if o.len() == 2 => {
+            (None, Some(Json::String(lexical)), Some(Json::String(dt))) if o.len() == 2 => {
                 canonical_lexical(lexical, dt)?;
                 Literal::new_typed_literal(lexical, NamedNode::new(dt).map_err(invalid)?).into()
-            }
-            (None, Some(Json::String(lexical)), None, Some(Json::String(tag))) if o.len() == 2 => {
-                Literal::new_language_tagged_literal(lexical, tag.to_ascii_lowercase())
-                    .map_err(invalid)?
-                    .into()
             }
             _ => return Err(invalid("unsupported key value object")),
         },
@@ -232,8 +291,9 @@ fn canonical_lexical(lexical: &str, datatype: &str) -> Result<()> {
             .parse::<i64>()
             .is_ok_and(|n| n.to_string() == lexical),
         namespace::XSD_BOOLEAN => lexical == "true" || lexical == "false",
-        namespace::XSD_DOUBLE | namespace::XSD_FLOAT | namespace::XSD_DECIMAL => false,
-        _ => true,
+        namespace::XSD_STRING => true,
+        // No canonicalizer yet (dateTime, int, decimal, float, ...): refuse.
+        _ => false,
     };
     if ok {
         Ok(())
@@ -263,10 +323,13 @@ pub fn derive_key(spec: &KeySpec, node_type: &str, terms: &[(String, Term)]) -> 
         Strategy::Lexical => terms
             .iter()
             .map(|(_, term)| {
-                let text = match term {
-                    Term::Literal(l) => l.value().to_string(),
-                    Term::NamedNode(n) => n.as_str().to_string(),
-                    other => other.to_string(),
+                // key_terms only yields literals and IRIs.
+                let text = if let Term::Literal(l) = term {
+                    l.value().to_string()
+                } else if let Term::NamedNode(n) = term {
+                    n.as_str().to_string()
+                } else {
+                    term.to_string()
                 };
                 text.bytes()
                     .map(|b| {

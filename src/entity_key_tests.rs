@@ -8,7 +8,19 @@ const ENDPOINT: &str = "urn:example:Endpoint";
 const HOST: &str = "urn:example:host";
 const PORT: &str = "urn:example:port";
 
+const XSD_STRING: &str = crate::namespace::XSD_STRING;
+const XSD_INTEGER: &str = crate::namespace::XSD_INTEGER;
+
 fn shapes(extra: &str, max: &str) -> String {
+    shapes_kinds(
+        extra,
+        max,
+        &format!("sh:datatype <{XSD_STRING}>"),
+        &format!("sh:datatype <{XSD_INTEGER}>"),
+    )
+}
+
+fn shapes_kinds(extra: &str, max: &str, host_kind: &str, port_kind: &str) -> String {
     format!(
         r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix quipu: <https://quipu.dev/ontology/> .
@@ -16,8 +28,8 @@ fn shapes(extra: &str, max: &str) -> String {
   sh:targetClass <{ENDPOINT}> ;
   quipu:keyFields ( <{HOST}> <{PORT}> ) ;
   {extra}
-  sh:property [ sh:path <{HOST}> ; sh:minCount 1 ; sh:maxCount 1 ] ;
-  sh:property [ sh:path <{PORT}> ; sh:minCount 1 ; sh:maxCount {max} ] .
+  sh:property [ sh:path <{HOST}> ; sh:minCount 1 ; sh:maxCount 1 ; {host_kind} ] ;
+  sh:property [ sh:path <{PORT}> ; sh:minCount 1 ; sh:maxCount {max} ; {port_kind} ] .
 "#
     )
 }
@@ -82,6 +94,7 @@ fn hash_derivation_is_pinned() {
     // derivation needs a new HASH_VERSION, not an edit to this expectation.
     let spec = KeySpec {
         fields: vec![HOST.into(), PORT.into()],
+        kinds: vec![KeyKind::String, KeyKind::Integer],
         strategy: Strategy::Hash,
     };
     let keys = json!({HOST:"db.lan", PORT:5432});
@@ -107,6 +120,7 @@ fn a_changed_key_value_or_type_is_a_different_entity() {
     );
     let spec = KeySpec {
         fields: vec![HOST.into(), PORT.into()],
+        kinds: vec![KeyKind::String, KeyKind::Integer],
         strategy: Strategy::Hash,
     };
     let keys = json!({HOST:"db.lan", PORT:5432});
@@ -115,16 +129,9 @@ fn a_changed_key_value_or_type_is_a_different_entity() {
         derive_key(&spec, ENDPOINT, &terms),
         derive_key(&spec, "urn:example:Socket", &terms)
     );
-    // "5432" the string and 5432 the integer are different keys.
-    let s = key_terms(
-        &spec,
-        json!({HOST:"db.lan", PORT:"5432"}).as_object().unwrap(),
-    )
-    .unwrap();
-    assert_ne!(
-        derive_key(&spec, ENDPOINT, &terms),
-        derive_key(&spec, ENDPOINT, &s)
-    );
+    // "5432" the string cannot mint where the shape declares an integer port,
+    // so 5432 and "5432" never become two IRIs for one endpoint.
+    assert!(mint(&mut store, &json!({HOST:"db.lan", PORT:"5432"})).is_err());
 }
 
 #[test]
@@ -138,14 +145,23 @@ fn malformed_keys_refuse() {
         json!({HOST:"db.lan", PORT:{"@value":"05432","@type":crate::namespace::XSD_INTEGER}}),
         json!({HOST:"db.lan", PORT:{"@value":"1.0","@type":crate::namespace::XSD_DOUBLE}}),
         json!({HOST:["db.lan"], PORT:5432}),
+        json!({HOST:{"@id":"urn:host:db"}, PORT:5432}),
+        json!({HOST:{"@value":"db.lan","@language":"en"}, PORT:5432}),
+        json!({HOST:"db.lan", PORT:{"@value":"05432","@type":"http://www.w3.org/2001/XMLSchema#int"}}),
+        json!({HOST:{"@value":"2026-10-27T00:00:00Z","@type":"http://www.w3.org/2001/XMLSchema#dateTime"}, PORT:5432}),
+        json!({HOST:"db.lan", PORT:true}),
     ] {
         assert!(mint(&mut store, &keys).is_err(), "{keys}");
     }
-    let ok = mint(&mut store, &json!({HOST:{"@id":"urn:host:db"}, PORT:{"@value":"5432","@type":crate::namespace::XSD_INTEGER}})).unwrap();
-    // The typed-object and bare-integer spellings are the same term.
+    let ok = mint(
+        &mut store,
+        &json!({HOST:{"@value":"db.lan","@type":XSD_STRING}, PORT:{"@value":"5432","@type":XSD_INTEGER}}),
+    )
+    .unwrap();
+    // The typed-object and bare spellings are the same terms.
     assert_eq!(
         ok["iri"],
-        mint(&mut store, &json!({HOST:{"@id":"urn:host:db"}, PORT:5432})).unwrap()["iri"]
+        mint(&mut store, &json!({HOST:"db.lan", PORT:5432})).unwrap()["iri"]
     );
 }
 
@@ -163,6 +179,27 @@ fn shape_contract_is_enforced() {
         shapes("", "1")
     );
     assert!(key_spec(&twice, ENDPOINT).is_err());
+    // A key field without a declared kind would let 5432 and "5432" diverge.
+    let untyped = shapes_kinds("", "1", "", &format!("sh:datatype <{XSD_INTEGER}>"));
+    assert!(key_spec(&untyped, ENDPOINT).is_err());
+    // A datatype without a canonicalizer refuses the shape.
+    let date = shapes_kinds(
+        "",
+        "1",
+        "sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>",
+        &format!("sh:datatype <{XSD_INTEGER}>"),
+    );
+    assert!(key_spec(&date, ENDPOINT).is_err());
+    // An IRI-kind key accepts {"@id"} and refuses a string.
+    let iri_host = shapes_kinds(
+        "",
+        "1",
+        "sh:nodeKind sh:IRI",
+        &format!("sh:datatype <{XSD_INTEGER}>"),
+    );
+    let mut iris = store_with(&[ENDPOINT], &iri_host);
+    mint(&mut iris, &json!({HOST:{"@id":"urn:host:db"}, PORT:1})).unwrap();
+    assert!(mint(&mut iris, &json!({HOST:"urn:host:db", PORT:1})).is_err());
     // Unknown strategy.
     let bad = shapes("quipu:keyStrategy \"uuid\" ;", "1");
     assert!(key_spec(&bad, ENDPOINT).is_err());
@@ -242,4 +279,38 @@ fn lexical_keys_are_readable_and_need_a_single_type() {
     assert_eq!(out["iri"], "https://public.example/ep/a%20b%2Bc%2Fd+1");
     let mut wide = store_with(&[ENDPOINT, "urn:example:Socket"], &lexical);
     assert!(mint(&mut wide, &json!({HOST:"db.lan", PORT:5432})).is_err());
+}
+
+#[test]
+fn converge_checks_the_key_values_not_just_the_type() {
+    let ttl = shapes("", "1");
+    let mut store = store_with(&[ENDPOINT], &ttl);
+    let spec = key_spec(&ttl, ENDPOINT).unwrap();
+    let keys = json!({HOST:"db.lan", PORT:5432});
+    let terms = key_terms(&spec, keys.as_object().unwrap()).unwrap();
+    let iri = format!(
+        "https://public.example/ep/{}",
+        derive_key(&spec, ENDPOINT, &terms)
+    );
+    // A raw writer puts a live, correctly typed node at the key IRI with the
+    // wrong port. Converging onto it would bless a mutated identity.
+    let raw = format!(
+        "<{iri}> <{}> <{ENDPOINT}> .\n<{iri}> <{HOST}> \"db.lan\" .\n<{iri}> <{PORT}> \"9999\"^^<{XSD_INTEGER}> .\n",
+        crate::namespace::RDF_TYPE
+    );
+    crate::rdf::ingest_rdf_to_graph(
+        &mut store,
+        raw.as_bytes(),
+        oxrdfio::RdfFormat::NTriples,
+        None,
+        &crate::time::now_iso(),
+        None,
+        Some("raw"),
+        0,
+    )
+    .unwrap();
+    assert!(
+        mint(&mut store, &keys).is_err(),
+        "a key IRI whose key values differ must refuse, not converge"
+    );
 }
