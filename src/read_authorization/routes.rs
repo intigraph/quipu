@@ -91,6 +91,7 @@ const CENSUS: &[&str] = &[
     "/memory/receipt",
     "/merge/apply",
     "/merge/decisions",
+    "/merge/resolve",
     "/metrics",
     "/namespaces",
     "/ontology",

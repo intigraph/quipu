@@ -34,6 +34,11 @@ use super::Store;
 
 type Key = (i64, i64, Vec<u8>);
 
+/// Decided values per conflicting slot `(entity, attribute)`, as the
+/// reconcile flow resolved them (`crate::fork_merge_decisions`). Every key
+/// must be a slot the merge holds in conflict.
+pub type ForkResolutions = HashMap<(i64, i64), Vec<Value>>;
+
 /// What promotion would do to ROOT, or why it cannot.
 pub(super) struct ForkMerge {
     /// Fork facts to assert into ROOT.
@@ -60,11 +65,17 @@ impl Store {
 
     /// Three-way merge of `theirs` (the fork) into `ours` (ROOT) over `base`,
     /// returned as the delta to apply to ROOT.
+    ///
+    /// With `resolved`, each decided conflicting slot takes its decided values
+    /// instead of being held; a decided value no side holds is asserted with
+    /// `timestamp` as its valid time.
     pub(super) fn fork_merge(
         &self,
         base: Vec<Fact>,
         ours: Vec<Fact>,
         theirs: Vec<Fact>,
+        resolved: Option<&ForkResolutions>,
+        timestamp: &str,
     ) -> Result<ForkMerge> {
         let bounds = match self.get_combined_shapes()? {
             Some(shapes) => ShapeBounds::parse(&shapes)?,
@@ -96,7 +107,7 @@ impl Store {
 
         let mut paths: HashMap<i64, Option<String>> = HashMap::new();
         let empty = BTreeSet::new();
-        let (merged, held) = merge_slots(
+        let (mut merged, held) = merge_slots(
             &b,
             &o,
             &t,
@@ -133,8 +144,25 @@ impl Store {
             Ok(out)
         };
         let mut conflicts = Vec::with_capacity(held.len());
+        let mut decided: HashMap<Key, Value> = HashMap::new();
+        let mut used = 0;
         for c in &held {
             let (e, a) = *c.slot;
+            if let Some(chosen) = resolved.and_then(|r| r.get(&(e, a))) {
+                used += 1;
+                let mut set = BTreeSet::new();
+                for v in chosen {
+                    let k = v.term_key();
+                    decided.insert((e, a, k.clone()), v.clone());
+                    set.insert(k);
+                }
+                if set.is_empty() {
+                    merged.remove(&(e, a));
+                } else {
+                    merged.insert((e, a), set);
+                }
+                continue;
+            }
             conflicts.push(DecisionRecord {
                 subject: crate::rdf::value_to_term(self, &Value::Ref(e))?.to_string(),
                 predicate: self.resolve(a)?,
@@ -143,6 +171,12 @@ impl Store {
                 ours: render(e, a, c.ours)?,
                 theirs: render(e, a, c.theirs)?,
             });
+        }
+        if resolved.is_some_and(|r| r.len() != used) {
+            return Err(Error::InvalidValue(
+                "fork merge: a decision names a slot that is not in conflict; nothing was written"
+                    .into(),
+            ));
         }
         if !conflicts.is_empty() {
             return Ok(ForkMerge {
@@ -161,7 +195,26 @@ impl Store {
             let mv = merged.get(&(e, a)).unwrap_or(&empty);
             let ov = o.get(&(e, a)).unwrap_or(&empty);
             for k in mv.difference(ov) {
-                added.push(theirs_facts.remove(&(e, a, k.clone())).ok_or_else(|| {
+                let key = (e, a, k.clone());
+                if let Some(f) = theirs_facts.remove(&key) {
+                    added.push(f);
+                    continue;
+                }
+                if let Some(value) = decided.get(&key) {
+                    // A decided value the fork does not hold (base, or a typed
+                    // value): a new assertion, valid from the promotion.
+                    added.push(Fact {
+                        entity: e,
+                        attribute: a,
+                        value: value.clone(),
+                        tx: 0,
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                        op: crate::types::Op::Assert,
+                    });
+                    continue;
+                }
+                added.push(theirs_facts.remove(&key).ok_or_else(|| {
                     Error::Store(format!(
                         "fork merge: added value on ({e}, {a}) is not a fork fact"
                     ))

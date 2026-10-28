@@ -73,6 +73,7 @@ mcp quipu_import Sharing and replication beyond share/import (see the sharing ch
 mcp quipu_import_promote Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_merge_decisions Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_merge_apply Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_merge_resolve Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_acquire Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_acquire_composed Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_changes Sharing and replication beyond share/import (see the sharing chapter)
