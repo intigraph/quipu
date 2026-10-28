@@ -414,6 +414,7 @@ impl Store {
         dry_run: bool,
     ) -> Result<ForkPromotion> {
         let f = self.require_open_fork(name, "promote")?;
+        let fork_g = f.g;
         let (base, ours, theirs) = self.fork_sides(&f)?;
         let diff = self.fork_merge(base, ours, theirs, decided.map(|d| d.0), timestamp)?;
         if !diff.conflicts.is_empty() {
@@ -486,6 +487,9 @@ impl Store {
                     crate::schema::ROOT_GRAPH,
                 )?
             };
+            // Close each replaced ROOT value at the fork's own close time,
+            // as a direct write of the same correction would (aegis-jxxd).
+            self.retime_promoted_closes(tx, fork_g, &diff.removed)?;
             self.conn.execute(
                 "UPDATE forks SET status = 'promoted' WHERE name = ?1",
                 params![name],
@@ -567,3 +571,7 @@ fn validate_fork_name(name: &str) -> Result<()> {
 #[cfg(test)]
 #[path = "forks_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "forks_valid_time_tests.rs"]
+mod valid_time_tests;

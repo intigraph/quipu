@@ -310,3 +310,67 @@ impl FocusView for IdView<'_> {
             .is_some_and(|p| self.inn.contains(&(*node, p))))
     }
 }
+
+impl Store {
+    /// Re-time the ROOT closes promotion transaction `tx` made (aegis-jxxd).
+    ///
+    /// The write path closes a retracted row at the transaction's timestamp,
+    /// which for a promotion is the promotion instant. A direct write of the
+    /// same correction closes it at the correction's own time. So each ROOT
+    /// row `tx` closed for a `removed` value takes the valid time at which the
+    /// fork closed that value (its latest closed row in the fork graph), and
+    /// transaction time stays the promotion's (`retracted_tx = tx`). A value
+    /// the fork holds no closed row for keeps the promotion instant.
+    pub(super) fn retime_promoted_closes(
+        &self,
+        tx: i64,
+        fork_g: i64,
+        removed: &[Fact],
+    ) -> Result<()> {
+        if tx == 0 || removed.is_empty() {
+            return Ok(());
+        }
+        let mut fork_rows = self.conn.prepare(
+            "SELECT v, valid_to FROM facts \
+             WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1 AND valid_to IS NOT NULL \
+             ORDER BY retracted_tx DESC, rowid DESC",
+        )?;
+        let mut root_rows = self.conn.prepare(
+            "SELECT rowid, v FROM facts \
+             WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1 AND retracted_tx = ?4",
+        )?;
+        let mut set = self
+            .conn
+            .prepare("UPDATE facts SET valid_to = ?1 WHERE rowid = ?2")?;
+        for f in removed {
+            let key = f.value.term_key();
+            let closed: Vec<(Vec<u8>, String)> = fork_rows
+                .query_map(params![fork_g, f.entity, f.attribute], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut close = None;
+            for (v, valid_to) in closed {
+                if Value::from_bytes(&v)?.term_key() == key {
+                    close = Some(valid_to);
+                    break;
+                }
+            }
+            let Some(close) = close else {
+                continue;
+            };
+            let rows: Vec<(i64, Vec<u8>)> = root_rows
+                .query_map(
+                    params![crate::schema::ROOT_GRAPH, f.entity, f.attribute, tx],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?
+                .collect::<rusqlite::Result<_>>()?;
+            for (rowid, v) in rows {
+                if Value::from_bytes(&v)?.term_key() == key {
+                    set.execute(params![close, rowid])?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
