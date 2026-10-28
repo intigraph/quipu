@@ -15,6 +15,7 @@ because a copied number rots silently while its source moves on.
 | Class | What it measures | Published by | Status |
 |---|---|---|---|
 | [SPARQL 1.1 conformance](conformance.md) | Quipu's query engine against the W3C RDF Tests at a pinned revision | this repository | **published**, re-derivable |
+| [Agent-run branches](agent-branches.md) | questions asked, silent losses and as-of correctness when N scripted agents' forks are promoted; Quipu vs TerminusDB 12.0.8 vs the merge paper's strategies | this repository (`benchmark/agent-branches/`) | **published**, re-derivable |
 | [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
 | [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
 | [WatDiv 1M diagnostic](#watdiv-1m-diagnostic-checkpoint) | one-off query latency and process memory on a pinned 1M dataset | this repository (`docs/design/persistence-evidence/watdiv-1m-20260914/`) | **MEASURED, CONTROL-INVALID** — diagnostic only |

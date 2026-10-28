@@ -1,0 +1,194 @@
+{
+  "arms": {
+    "context-merge": {
+      "caught": 17,
+      "manual_merges": 0,
+      "missed": 0,
+      "needed": 17,
+      "promotions": 40,
+      "questions": 422,
+      "rounds": 40,
+      "silent_losses": 0,
+      "unnecessary": 405,
+      "violations": 0,
+      "writes": 520
+    },
+    "git-canonical": {
+      "caught": 26,
+      "manual_merges": 0,
+      "missed": 0,
+      "needed": 26,
+      "promotions": 40,
+      "questions": 188,
+      "rounds": 40,
+      "silent_losses": 0,
+      "unnecessary": 162,
+      "violations": 0,
+      "writes": 520
+    },
+    "lww-theirs": {
+      "caught": 0,
+      "manual_merges": 0,
+      "missed": 34,
+      "needed": 34,
+      "promotions": 40,
+      "questions": 0,
+      "rounds": 40,
+      "silent_losses": 89,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "quipu-promote-2way-pre888": {
+      "caught": 0,
+      "manual_merges": 0,
+      "missed": 15,
+      "needed": 15,
+      "promotions": 40,
+      "questions": 0,
+      "rounds": 40,
+      "silent_losses": 449,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "quipu-promote-3way": {
+      "caught": 40,
+      "manual_merges": 0,
+      "missed": 0,
+      "needed": 40,
+      "promotions": 40,
+      "questions": 40,
+      "rounds": 64,
+      "silent_losses": 0,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "shape-aware": {
+      "caught": 40,
+      "manual_merges": 0,
+      "missed": 0,
+      "needed": 40,
+      "promotions": 40,
+      "questions": 40,
+      "rounds": 40,
+      "silent_losses": 0,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "terminusdb-apply": {
+      "caught": 40,
+      "manual_merges": 3,
+      "missed": 0,
+      "needed": 40,
+      "promotions": 40,
+      "questions": 40,
+      "rounds": 69,
+      "silent_losses": 0,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "triple-3way": {
+      "caught": 0,
+      "manual_merges": 0,
+      "missed": 95,
+      "needed": 95,
+      "promotions": 40,
+      "questions": 0,
+      "rounds": 40,
+      "silent_losses": 39,
+      "unnecessary": 0,
+      "violations": 21,
+      "writes": 520
+    },
+    "two-way": {
+      "caught": 0,
+      "manual_merges": 0,
+      "missed": 15,
+      "needed": 15,
+      "promotions": 40,
+      "questions": 0,
+      "rounds": 40,
+      "silent_losses": 449,
+      "unnecessary": 0,
+      "violations": 0,
+      "writes": 520
+    },
+    "union": {
+      "caught": 0,
+      "manual_merges": 0,
+      "missed": 780,
+      "needed": 780,
+      "promotions": 40,
+      "questions": 0,
+      "rounds": 40,
+      "silent_losses": 249,
+      "unnecessary": 0,
+      "violations": 202,
+      "writes": 520
+    }
+  },
+  "commit": "4a7c565c",
+  "params": {
+    "agents": 8,
+    "edits": 10,
+    "entities": 48,
+    "hot": 4,
+    "overlap": 0.5,
+    "root_writes": 16,
+    "seed": 1
+  },
+  "probes": {
+    "quipu-direct-root": {
+      "belief-before-landing:n": 40,
+      "belief-before-landing:ok": 40,
+      "current:n": 40,
+      "current:ok": 40,
+      "valid-after:n": 40,
+      "valid-after:ok": 40,
+      "valid-before:n": 40,
+      "valid-before:ok": 40
+    },
+    "quipu-promote-2way-pre888": {
+      "belief-before-landing:n": 40,
+      "belief-before-landing:ok": 40,
+      "current:n": 40,
+      "current:ok": 5,
+      "valid-after:n": 40,
+      "valid-after:ok": 0,
+      "valid-before:n": 40,
+      "valid-before:ok": 40
+    },
+    "quipu-promote-3way": {
+      "belief-before-landing:n": 40,
+      "belief-before-landing:ok": 40,
+      "current:n": 40,
+      "current:ok": 40,
+      "valid-after:n": 40,
+      "valid-after:ok": 0,
+      "valid-before:n": 40,
+      "valid-before:ok": 40
+    },
+    "terminusdb-apply": {
+      "belief-before-landing:n": 40,
+      "belief-before-landing:ok": 40,
+      "current:n": 40,
+      "current:ok": 40,
+      "valid-after:n": 40,
+      "valid-after:ok": 40,
+      "valid-before:n": 40,
+      "valid-before:ok": 0
+    }
+  },
+  "seeds": [
+    1,
+    7,
+    42,
+    99,
+    2026
+  ],
+  "terminusdb": "12.0.8"
+}
