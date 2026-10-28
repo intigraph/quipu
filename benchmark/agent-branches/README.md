@@ -21,7 +21,9 @@ just bench agent-branches                                # same as the first lin
 ```
 
 `run.py` builds `examples/agentbranches` (`--features shacl`) and runs it once
-per seed. It then starts `terminusdb/terminusdb-server:v12.0.8` in Docker
+per seed. It then starts TerminusDB v12.0.8 in Docker, pinned by digest
+(`terminusdb/terminusdb-server@sha256:43061044d185…`, see `TDB_DIGEST` in
+`run.py`),
 (port 6366 on localhost), replays each scenario through it, and removes the
 container. If the run pulled the image, it removes the image too. It
 re-scores every Rust arm in Python and stops if the two scorers disagree.
@@ -131,6 +133,14 @@ after every promotion. The real-store pre-#888 promote must equal the model
 The schema mirrors the shapes: `Optional` for the single-valued predicates, and
 `Set` with `@max_cardinality 4` for `tag`. `owner` and `relatedTo` are stored as
 strings rather than document links. Referential integrity is not under test.
+
+## Known bug measured here
+
+Through `fork promote`, every `valid-after` probe is wrong: ROOT answers both
+the old and the corrected value. Promote closes ROOT's superseded value at the
+promote instant, not at the correction's valid time. This is tracked as P0 bug
+aegis-jxxd. `quipu-direct-root` scores 160/160, which isolates the bug to
+promote. Re-run the benchmark when the fix lands.
 
 ## What this cannot establish
 

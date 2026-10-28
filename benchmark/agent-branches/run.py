@@ -31,6 +31,10 @@ import scoring  # noqa: E402
 import terminusdb_arm  # noqa: E402
 
 IMAGE = 'terminusdb/terminusdb-server'
+# Pinned by digest, not tag: a re-pushed tag must not change the arm silently.
+# This is the v12.0.8 image the published results were produced with.
+TDB_VERSION = '12.0.8'
+TDB_DIGEST = 'sha256:43061044d1857bb6f1a2f41d7a59ad06ba5f91c03cbc90128d7c0415f32a0916'
 PROBES = ('valid-before', 'valid-after', 'current', 'belief-before-landing')
 ARM_ORDER = [
     'quipu-promote-3way', 'terminusdb-apply', 'shape-aware', 'git-canonical',
@@ -70,8 +74,8 @@ def build_and_run(seeds, params, out):
 class TerminusDb:
     """A throwaway TerminusDB container; removes what it created."""
 
-    def __init__(self, version, port):
-        self.image = f'{IMAGE}:{version}'
+    def __init__(self, digest, port):
+        self.image = f'{IMAGE}@{digest}'
         self.port = port
         self.name = f'agentbranches-tdb-{os.getpid()}'
         self.pulled = False
@@ -199,7 +203,7 @@ def render(results, tdb_version, commit, params, seeds):
     ]
     if tdb_version:
         lines.append(f'- TerminusDB arm: {tdb_requests} HTTP requests to '
-                     f'`{IMAGE}:v{tdb_version}`; container removed after the run.')
+                     f'`{IMAGE}@{TDB_DIGEST}` (v{tdb_version}); container removed after the run.')
     return '\n'.join(lines) + '\n', {a: dict(totals[a]) for a in totals}, {
         a: {f'{p}:{k}': v for (p, k), v in probe[a].items()} for a in probe}
 
@@ -208,7 +212,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--seeds', default='1,7,42,99,2026')
     ap.add_argument('--no-terminusdb', action='store_true')
-    ap.add_argument('--terminusdb-version', default='v12.0.8')
+    ap.add_argument('--terminusdb-digest', default=TDB_DIGEST,
+                    help='image digest to run (default: the pinned v12.0.8 digest)')
     ap.add_argument('--port', type=int, default=6366)
     ap.add_argument('--out', default=str(HERE / 'out'))
     ap.add_argument('--results', default=str(HERE / 'results'))
@@ -226,8 +231,8 @@ def main():
     if not args.no_terminusdb:
         if not shutil.which('docker'):
             raise SystemExit('docker not found: pass --no-terminusdb to skip the TerminusDB arm')
-        tdb_version = args.terminusdb_version.lstrip('v')
-        with TerminusDb(args.terminusdb_version, args.port) as url:
+        tdb_version = TDB_VERSION if args.terminusdb_digest == TDB_DIGEST else args.terminusdb_digest
+        with TerminusDb(args.terminusdb_digest, args.port) as url:
             for seed, doc in results.items():
                 metrics, probes = terminusdb_arm.run(
                     doc['scenario'], url, 'admin', 'agentbranches', f'agentbranches_{seed}')
@@ -247,7 +252,7 @@ def main():
     (res / 'RESULTS.md').write_text(md)
     (res / 'summary.json').write_text(json.dumps({
         'commit': commit, 'seeds': seeds, 'params': params,
-        'terminusdb': tdb_version, 'arms': totals, 'probes': probes}, indent=2, sort_keys=True) + '\n')
+        'terminusdb': tdb_version, 'terminusdb_image': f'{IMAGE}@{args.terminusdb_digest}', 'arms': totals, 'probes': probes}, indent=2, sort_keys=True) + '\n')
     print(md)
 
 
