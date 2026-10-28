@@ -12,6 +12,8 @@
 //! A missing store, an older schema or an interrupted read degrades to the
 //! static primer with a note; it is never an error.
 
+mod output;
+
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OpenFlags};
@@ -54,9 +56,8 @@ pub(crate) fn sections(primer: &str) -> Vec<&str> {
         .collect()
 }
 
-/// The primer text to print: whole, brief (the first two sections), or one
-/// section chosen by a case-insensitive heading prefix.
-pub(crate) fn select(primer: &str, brief: bool, section: Option<&str>) -> Result<String, String> {
+/// The primer text to print: whole, or one section chosen by heading prefix.
+pub(crate) fn select(primer: &str, section: Option<&str>) -> Result<String, String> {
     let blocks = split(primer);
     if let Some(wanted) = section {
         let needle = wanted.trim().to_lowercase();
@@ -70,9 +71,6 @@ pub(crate) fn select(primer: &str, brief: bool, section: Option<&str>) -> Result
                 sections(primer).join(", ")
             )
         });
-    }
-    if brief {
-        return Ok(blocks.iter().take(3).map(|(_, b)| *b).collect());
     }
     Ok(primer.to_string())
 }
@@ -102,7 +100,11 @@ pub(crate) fn summarize(path: &str) -> Value {
     let started = Instant::now();
     let meta = match std::fs::metadata(path) {
         Ok(m) if m.is_file() => m,
-        _ => return json!({ "path": path, "status": "absent" }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return json!({ "path": path, "status": "absent" });
+        }
+        Ok(_) => return json!({ "path": path, "status": "unreadable", "error": "not a file" }),
+        Err(e) => return json!({ "path": path, "status": "unreadable", "error": e.to_string() }),
     };
     let mut out = match read_summary(path, started) {
         Ok(v) => v,
@@ -118,11 +120,41 @@ pub(crate) fn summarize(path: &str) -> Value {
     out
 }
 
+/// A cold WAL-mode database can create sidecars even on a read-only open.
+/// Use immutable URI mode only when the canonical store's WAL is absent;
+/// a live WAL must remain visible through the ordinary read-only connection.
+fn open_summary(path: &str) -> rusqlite::Result<Connection> {
+    let canonical =
+        std::fs::canonicalize(path).map_err(|_| rusqlite::Error::InvalidPath(path.into()))?;
+    let mut wal = canonical.as_os_str().to_os_string();
+    wal.push("-wal");
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    if matches!(std::fs::metadata(&wal), Err(e) if e.kind() == std::io::ErrorKind::NotFound) {
+        // Encode URI delimiters and UTF-8 bytes, so ?, # and % in a filename
+        // cannot become query parameters or select a different database.
+        let encoded: String = canonical
+            .as_os_str()
+            .as_encoded_bytes()
+            .iter()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || matches!(*b, b'/' | b'.' | b'-' | b'_' | b'~') {
+                    char::from(*b).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect();
+        Connection::open_with_flags(
+            format!("file:{encoded}?mode=ro&immutable=1"),
+            flags | OpenFlags::SQLITE_OPEN_URI,
+        )
+    } else {
+        Connection::open_with_flags(canonical, flags)
+    }
+}
+
 fn read_summary(path: &str, started: Instant) -> rusqlite::Result<Value> {
-    let conn = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
+    let conn = open_summary(path)?;
     conn.pragma_update(None, "query_only", "ON")?;
     conn.busy_timeout(Duration::from_millis(100))?;
     conn.progress_handler(1000, Some(move || started.elapsed() > DEADLINE))?;
@@ -204,17 +236,17 @@ fn names(conn: &Connection, list_sql: &str, count_sql: &str) -> Value {
 /// The live summary as primer-style Markdown.
 pub(crate) fn render_summary(summary: &Value) -> String {
     let path = summary["path"].as_str().unwrap_or("?");
-    let mut out = String::from("\n## Live store\n\n");
+    let mut out = String::from("\n## Live state\n\n");
     match summary["status"].as_str() {
         Some("absent") => {
             out.push_str(&format!(
-                "No store at `{path}`. Pass `--db <path>`, or create one with `quipu knot`.\n"
+                "Store absent: no store at `{path}`. Pass `--db <path>`, or create one with `quipu knot`.\n"
             ));
             return out;
         }
         Some("unreadable") => {
             out.push_str(&format!(
-                "Store at `{path}` could not be read: {}\n",
+                "Store unreadable at `{path}`: {}. Pass `--db <readable-store>`.\n",
                 summary["error"].as_str().unwrap_or("unknown error")
             ));
             return out;
@@ -274,22 +306,24 @@ pub(crate) fn render_summary(summary: &Value) -> String {
 /// Entry point: `quipu prime [--brief] [--section NAME] [--static] [--json] [--db PATH]`.
 pub fn cmd_prime(args: &[String], db_path: &str) {
     let opts = parse(args);
-    let text = select(PRIMER, opts.brief, opts.section).unwrap_or_else(|e| {
+    let text = select(PRIMER, opts.section).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(2);
     });
+    let started = Instant::now();
     let summary = (!opts.offline).then(|| summarize(db_path));
     if opts.json {
-        let value = json!({ "primer": text, "store": summary });
         println!(
             "{}",
-            serde_json::to_string_pretty(&value).unwrap_or_default()
+            output::envelope(&text, opts.brief, summary.as_ref(), started)
         );
-        return;
-    }
-    print!("{text}");
-    if let Some(summary) = summary {
-        print!("{}", render_summary(&summary));
+    } else if opts.brief {
+        print!("{}", output::brief(summary.as_ref()));
+    } else {
+        print!("{text}");
+        if let Some(summary) = summary {
+            print!("{}", render_summary(&summary));
+        }
     }
 }
 
@@ -313,19 +347,10 @@ mod tests {
 
     #[test]
     fn select_by_section_prefix_is_case_insensitive() {
-        let mcp = select(PRIMER, false, Some("mcp")).unwrap();
+        let mcp = select(PRIMER, Some("mcp")).unwrap();
         assert!(mcp.starts_with("## MCP tools"));
         assert!(!mcp.contains("## Writing safely"));
-        assert!(select(PRIMER, false, Some("nope")).is_err());
-    }
-
-    #[test]
-    fn brief_is_title_plus_first_two_sections() {
-        let brief = select(PRIMER, true, None).unwrap();
-        assert!(brief.contains("## What Quipu is"));
-        assert!(brief.contains("## Query first"));
-        assert!(!brief.contains("## Core commands"));
-        assert!(PRIMER.starts_with(&brief));
+        assert!(select(PRIMER, Some("nope")).is_err());
     }
 
     #[test]
@@ -339,7 +364,7 @@ mod tests {
         .unwrap();
         let s = summarize(path.to_str().unwrap());
         assert_eq!(s["status"], "unreadable", "{s}");
-        assert!(render_summary(&s).contains("could not be read"));
+        assert!(render_summary(&s).contains("Store unreadable"));
         // A valid SQLite file without quipu's tables is not a store either.
         // (A pragma, not a table: share_completeness scans the source for
         // every table definition.)
@@ -353,12 +378,26 @@ mod tests {
     }
 
     #[test]
+    fn expired_deadline_reports_partial() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("q.db");
+        drop(quipu::Store::open(path.to_str().unwrap()).unwrap());
+        let summary = read_summary(
+            path.to_str().unwrap(),
+            Instant::now() - DEADLINE - Duration::from_millis(1),
+        )
+        .unwrap();
+        assert_eq!(summary["status"], "partial");
+        assert!(render_summary(&summary).contains("time budget"));
+    }
+
+    #[test]
     fn absent_store_is_reported_not_created() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("missing").join("quipu.db");
         let s = summarize(path.to_str().unwrap());
         assert_eq!(s["status"], "absent");
         assert!(!path.exists() && !path.parent().unwrap().exists());
-        assert!(render_summary(&s).contains("No store at"));
+        assert!(render_summary(&s).contains("Store absent"));
     }
 }
