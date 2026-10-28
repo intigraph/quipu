@@ -384,3 +384,46 @@ fn knot_snapshot_that_drops_a_required_value_is_refused() {
     assert_eq!(store.latest_tx_id().unwrap(), tx);
     assert_eq!(names(&store), 1);
 }
+
+/// The `TerminusDB` history replay: each snapshot swaps a Person's array cells
+/// for new nodes while the Person's required `age` changes. The Person is
+/// judged (it loses a value on a required path) and references the old
+/// cells; their retracted types must not come back as context and make the
+/// removed cells look typed-but-empty.
+#[test]
+fn snapshot_replacing_referenced_nodes_whole_is_allowed() {
+    let shapes = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <urn:t:> .
+ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
+    sh:property [ sh:path ex:age ; sh:minCount 1 ] .
+ex:CellShape a sh:NodeShape ; sh:targetClass ex:Cell ;
+    sh:property [ sh:path ex:index ; sh:minCount 1 ; sh:maxCount 1 ] .
+"#;
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_shapes("cells", shapes, TS).unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+    let version = |cell: &str, age: i64| {
+        format!(
+            "ex:ada a ex:Person ; ex:age {age} ; ex:scores ex:{cell} .\n\
+             ex:{cell} a ex:Cell ; ex:index 0 ."
+        )
+    };
+    knot_snapshot(&mut store, &version("old", 35)).unwrap();
+    knot_snapshot(&mut store, &version("new", 36)).unwrap();
+    let old = store.lookup("urn:t:old").unwrap().unwrap();
+    assert!(
+        store.entity_facts(old).unwrap().is_empty(),
+        "old cell removed whole"
+    );
+    // CONTROL: keeping the old cell typed while dropping its index is refused.
+    let err = knot_snapshot(
+        &mut store,
+        "ex:ada a ex:Person ; ex:age 37 ; ex:scores ex:new .\nex:new a ex:Cell .",
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+}
