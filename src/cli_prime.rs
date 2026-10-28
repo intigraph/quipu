@@ -341,11 +341,14 @@ mod tests {
         assert_eq!(s["status"], "unreadable", "{s}");
         assert!(render_summary(&s).contains("could not be read"));
         // A valid SQLite file without quipu's tables is not a store either.
+        // (A pragma, not a table: share_completeness scans the source for
+        // every table definition.)
         let empty = dir.path().join("empty.db");
         rusqlite::Connection::open(&empty)
             .unwrap()
-            .execute_batch("CREATE TABLE unrelated(x)")
+            .execute_batch("PRAGMA user_version = 7")
             .unwrap();
+        assert!(std::fs::metadata(&empty).unwrap().len() > 0);
         assert_eq!(summarize(empty.to_str().unwrap())["status"], "unreadable");
     }
 
