@@ -4,6 +4,41 @@ Install [Quipu and its companion server](installation.md) before registering a
 client. [Quick Start](quick-start.md) covers direct CLI queries;
 [The AI Agent Builder](../tutorials/agent-builder.md) covers a multi-agent workflow.
 
+## Paste-in setup prompt
+
+Give a coding agent this prompt, with your client and store details filled in:
+
+```text
+Set up Quipu for this project in my coding-agent client: <client>.
+Use this executable directory: <absolute directory>, and this database path
+or HTTP server: <absolute database path or server URL>.
+
+Start at https://github.com/intigraph/quipu/blob/main/docs/book/src/getting-started/agent-setup.md
+and follow its primer, skill and repository-pendant links. Inspect existing
+client configuration and preserve other servers and databases. Explain the planned
+changes before applying them. Use the documented local stdio or HTTP MCP
+connection; keep credentials in private files or the client's secret mechanism,
+never in this conversation. Verify tool discovery and require
+SELECT (1 AS ?connection_control) WHERE {} to return connection_control = 1.
+Do not test writes in a shared store. Read the Quipu skill for query-first
+work. For repository orientation, verify the release pendant and review it
+in a separate local store's quarantine; do not promote it into ROOT without
+my approval. Report the configuration changed, versions used, verification
+results and any unknowns.
+```
+
+Use these agent-facing surfaces alongside the prompt:
+
+- **MCP connection:** [local stdio](#local-stdio-mcp) or
+  [HTTP](#connect-to-an-http-server), with the [MCP tool reference](../reference/mcp-tools.md).
+- **Instructions:** the [Agent Primer](agent-primer.md) and the checked-in
+  [Quipu skill](https://github.com/intigraph/quipu/blob/main/skills/quipu/SKILL.md).
+  The optional [embedded-artifacts skill](https://github.com/intigraph/quipu/blob/main/skills/quipu-embedded-artifacts/SKILL.md)
+  covers graph-backed artifact views; it is not needed for an MCP connection.
+- **Repository knowledge:** the [release repository pendant](https://github.com/intigraph/quipu/releases/latest),
+  its checksum and provenance, and the [verify, quarantine, promote workflow](../sharing/index.md#receiving-verify-quarantine-promote).
+  A pendant supplies source-linked knowledge; it does not configure the client.
+
 ## Local stdio MCP
 
 Keep `quipu` and `quipu-server` from the same release in the same directory.

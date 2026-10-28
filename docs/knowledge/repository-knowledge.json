@@ -46,7 +46,7 @@
       "source": "docs/book/src/getting-started/agent-setup.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-setup.md#local-stdio-mcp",
       "summary": "Local agent clients run quipu mcp over stdio with explicit executable and database paths; it launches the matching sibling server without an HTTP listener.",
-      "source_sha256": "0b9cba098e5a785d2f82029c09e5ef15b357bbdc3b06fd13e25a076cf13ef3eb",
+      "source_sha256": "911c9bf9dbea7c0a02306227c6c1fadbf892fb84d2eee31793330b63b222ee71",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "quipu mcp"
