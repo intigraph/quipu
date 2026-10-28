@@ -153,7 +153,14 @@ impl Header {
             "target-tx" => self.target_tx = Some(tx(value)?),
             "base-share" => self.base_share = Some(value.into()),
             "store-id" => self.store_id = Some(value.into()),
-            "valid-time" => self.valid_time = Some(value.into()),
+            "valid-time" => {
+                let normalized = crate::time::normalize_rfc3339_utc(value).ok_or_else(|| {
+                    Error::InvalidValue(format!(
+                        "changeset header valid-time is not an RFC 3339 timestamp: {value}"
+                    ))
+                })?;
+                self.valid_time = Some(normalized);
+            }
             "source" => self.source = Some(value.into()),
             "shapes-hash" => self.shapes_hash = Some(value.into()),
             "digest" => return Ok(Some(value.into())),
@@ -227,11 +234,17 @@ impl ChangeSet {
         out
     }
 
-    /// SHA-256 (hex) over the RDF Patch `D`/`A` lines: statements only, never
+    /// SHA-256 as bare lowercase hex (no `sha256:` prefix) over the RDF Patch `D`/`A` lines: statements only, never
     /// the header. This is the `delta_sha256` the s24.4 envelope signs.
     #[must_use]
     pub fn digest(&self) -> String {
-        crate::share::sha256(self.patch_body().as_bytes())
+        let prefixed = crate::share::sha256(self.patch_body().as_bytes());
+        // `share::sha256` returns `sha256:<hex>`; the digest is the bare hex and
+        // the wire form adds the prefix exactly once.
+        prefixed
+            .strip_prefix("sha256:")
+            .unwrap_or(&prefixed)
+            .to_string()
     }
 
     /// The SPARQL Update body alone, no header: what any SPARQL 1.1 endpoint

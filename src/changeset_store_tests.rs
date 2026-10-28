@@ -210,3 +210,34 @@ fn a_named_graph_diff_carries_its_graph() {
         .is_err()
     );
 }
+
+#[test]
+fn a_side_over_the_limit_is_refused_by_count_before_any_read() {
+    let mut store = Store::open_in_memory().unwrap();
+    let t1 = ingest(&mut store, &format!("{A} .\n"));
+    ingest(
+        &mut store,
+        &format!("{B} .\n<urn:x:c> <urn:x:p> \"three\" .\n"),
+    );
+    // main holds 3 statements, tx:t1 holds 1.
+    let refused = diff_bounded(&store, &DiffSide::Tx(t1), &DiffSide::Main, None, 2)
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(
+        refused,
+        DiffTooLarge {
+            side: "main".into(),
+            statements: 3,
+            limit: 2,
+        }
+    );
+    // The as-of count matches the as-of read, so a tx side is bounded too.
+    let refused = diff_bounded(&store, &DiffSide::Tx(t1), &DiffSide::Tx(t1), None, 0);
+    assert!(refused.unwrap().is_ok());
+    assert_eq!(store.fact_count_as_of(0, t1).unwrap(), 1);
+    assert!(
+        diff_bounded(&store, &DiffSide::Tx(t1), &DiffSide::Main, None, 3)
+            .unwrap()
+            .is_ok()
+    );
+}

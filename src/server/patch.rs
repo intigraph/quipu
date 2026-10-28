@@ -43,12 +43,43 @@ pub(crate) async fn diff_get(
     let (from, to) = (side("from")?, side("to")?);
     let media = changeset::negotiate(headers.get(header::ACCEPT).and_then(|v| v.to_str().ok()));
     let graph = params.get("graph").cloned();
-    let text = blocking(move || {
+    let limit = super::update::update_full::max_facts();
+    blocking(move || {
         let store = store.read();
-        Ok(changeset_store::diff(&store, &from, &to, graph.as_deref())?.render(media))
+        Ok(diff_response(
+            changeset_store::diff_bounded(&store, &from, &to, graph.as_deref(), limit)?,
+            media,
+        ))
     })
-    .await?;
-    Ok(([(header::CONTENT_TYPE, media)], text).into_response())
+    .await
+}
+
+/// The `/diff` response: the change-set, or a 422 naming the side over the
+/// ceiling (`server.update_full_copy_max_facts`, the same whole-store-copy
+/// ceiling `/update` enforces), written before either side was read.
+pub(crate) fn diff_response(
+    outcome: Result<ChangeSet, changeset_store::DiffTooLarge>,
+    media: &'static str,
+) -> Response {
+    match outcome {
+        Ok(cs) => ([(header::CONTENT_TYPE, media)], cs.render(media)).into_response(),
+        Err(too_large) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            axum::Json(serde_json::json!({
+                "error": "diff_too_large",
+                "side": too_large.side,
+                "statements": too_large.statements,
+                "limit": too_large.limit,
+                "message": format!(
+                    "side {} holds {} statements, over the server's limit of {}; nothing was \
+                     read. Narrow it with graph=, diff a closer pair of transactions, or raise \
+                     server.update_full_copy_max_facts",
+                    too_large.side, too_large.statements, too_large.limit
+                ),
+            })),
+        )
+            .into_response(),
+    }
 }
 
 fn nquads(statements: &[Statement]) -> Vec<String> {

@@ -95,20 +95,31 @@ fn refuse_blank(statements: &BTreeSet<Statement>, what: &str) -> Result<()> {
     }
 }
 
-fn side_facts(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<Vec<Fact>> {
-    let g = match graph {
-        None => crate::schema::ROOT_GRAPH,
-        Some(_) if matches!(side, DiffSide::Fork(_)) => {
-            return Err(Error::InvalidValue(
-                "a fork is its own graph; graph= applies to tx:N and main sides only".into(),
-            ));
-        }
-        Some(iri) => store
+fn side_graph(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<i64> {
+    match (side, graph) {
+        (DiffSide::Fork(name), None) => store.fork_graph_for_read(name),
+        (DiffSide::Fork(_), Some(_)) => Err(Error::InvalidValue(
+            "a fork is its own graph; graph= applies to tx:N and main sides only".into(),
+        )),
+        (_, None) => Ok(crate::schema::ROOT_GRAPH),
+        (_, Some(iri)) => store
             .registered_graph_id(iri)?
-            .ok_or_else(|| Error::InvalidValue(format!("unknown graph IRI: {iri}")))?,
-    };
+            .ok_or_else(|| Error::InvalidValue(format!("unknown graph IRI: {iri}"))),
+    }
+}
+
+/// How many statements a side holds, counted without reading them.
+fn side_count(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<usize> {
+    let g = side_graph(store, side, graph)?;
     match side {
-        DiffSide::Main => store.current_facts_in_graph(g),
+        DiffSide::Tx(tx) => store.fact_count_as_of(g, *tx),
+        _ => store.current_fact_count(g),
+    }
+}
+
+fn side_facts(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<Vec<Fact>> {
+    let g = side_graph(store, side, graph)?;
+    match side {
         DiffSide::Tx(tx) => store.facts_as_of_in_graph(
             &AsOf {
                 tx: Some(*tx),
@@ -116,7 +127,7 @@ fn side_facts(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<Vec
             },
             g,
         ),
-        DiffSide::Fork(name) => store.current_facts_in_graph(store.fork_graph_for_read(name)?),
+        _ => store.current_facts_in_graph(g),
     }
 }
 
@@ -139,8 +150,27 @@ pub fn side_statements(
     Ok(set)
 }
 
+/// A `/diff` side holds more statements than the server's ceiling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffTooLarge {
+    /// The side that is too large, as `tx:N`, `main` or `fork:<name>`.
+    pub side: String,
+    /// How many statements it holds.
+    pub statements: usize,
+    /// The ceiling.
+    pub limit: usize,
+}
+
+fn label(side: &DiffSide) -> String {
+    match side {
+        DiffSide::Tx(tx) => format!("tx:{tx}"),
+        DiffSide::Main => "main".to_string(),
+        DiffSide::Fork(name) => format!("fork:{name}"),
+    }
+}
+
 /// `GET /diff`: the change-set that turns `from` into `to`, in `graph`
-/// (`None` = ROOT).
+/// (`None` = ROOT), unbounded. Servers use [`diff_bounded`].
 ///
 /// # Errors
 /// See [`side_statements`]; also a tx beyond the store's head.
@@ -150,6 +180,22 @@ pub fn diff(
     to: &DiffSide,
     graph: Option<&str>,
 ) -> Result<ChangeSet> {
+    Ok(diff_bounded(store, from, to, graph, 0)?.expect("an unbounded diff is never too large"))
+}
+
+/// [`diff`] refusing, before reading either side, when a side holds more
+/// than `limit` statements (0 = unbounded). Each side is counted with a
+/// `COUNT`, so a refused diff costs no materialization.
+///
+/// # Errors
+/// As [`diff`].
+pub fn diff_bounded(
+    store: &Store,
+    from: &DiffSide,
+    to: &DiffSide,
+    graph: Option<&str>,
+    limit: usize,
+) -> Result<std::result::Result<ChangeSet, DiffTooLarge>> {
     let head = store.latest_tx_id()?;
     let at = |side: &DiffSide| -> Result<i64> {
         match side {
@@ -161,11 +207,18 @@ pub fn diff(
         }
     };
     let (base_tx, target_tx) = (at(from)?, at(to)?);
-    let label = |side: &DiffSide| match side {
-        DiffSide::Tx(tx) => format!("tx:{tx}"),
-        DiffSide::Main => "main".to_string(),
-        DiffSide::Fork(name) => format!("fork:{name}"),
-    };
+    if limit > 0 {
+        for side in [from, to] {
+            let statements = side_count(store, side, graph)?;
+            if statements > limit {
+                return Ok(Err(DiffTooLarge {
+                    side: label(side),
+                    statements,
+                    limit,
+                }));
+            }
+        }
+    }
     let header = Header {
         base_tx: Some(base_tx),
         target_tx: Some(target_tx),
@@ -174,11 +227,11 @@ pub fn diff(
         shapes_hash: Some(shapes_hash(store, base_tx)?),
         ..Header::default()
     };
-    Ok(ChangeSet::from_states(
+    Ok(Ok(ChangeSet::from_states(
         header,
         side_statements(store, from, graph)?,
         side_statements(store, to, graph)?,
-    ))
+    )))
 }
 
 /// SHA-256 of the shape sets in force at `tx`: the header's `shapes-hash`.

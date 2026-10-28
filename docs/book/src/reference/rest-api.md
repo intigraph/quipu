@@ -520,7 +520,12 @@ comment header naming `base-tx`, `target-tx`, `store-id`, `valid-time`,
 `graph=<iri>` to diff a registered named graph instead of ROOT (not with a
 fork side). Send `Accept: application/rdf-patch` for the
 [RDF Patch](https://afs.github.io/rdf-patch/) form; the default is
-`application/sparql-update`. Blank nodes are refused: skolemize first.
+`application/sparql-update`. Blank nodes are refused: skolemize first. A
+side holding more statements than `server.update_full_copy_max_facts` (default
+250000, the same ceiling `/update` uses for a whole-store copy) is refused with
+`422` and `{"error": "diff_too_large", "side", "statements", "limit"}`. The
+sides are counted before either is read; narrow the diff with `graph=` or a
+closer pair of transactions.
 
 ```bash
 curl 'localhost:3030/diff?from=tx:4180&to=main' -H 'Authorization: Bearer <token>'
@@ -556,7 +561,8 @@ with the store first:
 
 Retrying a patch whose response was lost is therefore safe. The header's
 `valid-time` becomes the inserted statements' `valid_from` (default: now).
-Transaction time is always the server's. `source` is recorded as the
+It must be an RFC 3339 timestamp, otherwise the patch is refused with `400`
+before anything is written. Transaction time is always the server's. `source` is recorded as the
 transaction source unless a `source` query parameter overrides it; `actor`
 and `source` parameters work as on `/update`. A declared `digest` that does
 not match the statements is refused. `shapes_hash_matches` reports whether

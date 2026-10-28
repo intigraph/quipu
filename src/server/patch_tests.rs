@@ -200,3 +200,43 @@ fn valid_time_and_source_come_from_the_header() {
     let txs = guard.list_transactions().unwrap();
     assert_eq!(txs.last().unwrap().source.as_deref(), Some("fork:feature"));
 }
+
+#[test]
+fn a_diff_over_the_ceiling_is_a_clear_422() {
+    let store = shared(None);
+    update(&store, SEED);
+    let outcome = quipu::changeset_store::diff_bounded(
+        &store.lock(),
+        &DiffSide::Tx(0),
+        &DiffSide::Main,
+        None,
+        1,
+    )
+    .unwrap();
+    let response = super::diff_response(outcome, SPARQL_UPDATE);
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let bytes = futures::executor::block_on(axum::body::to_bytes(response.into_body(), usize::MAX))
+        .unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "diff_too_large");
+    assert_eq!(body["side"], "main");
+    assert_eq!(body["limit"], 1);
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("update_full_copy_max_facts")
+    );
+}
+
+#[test]
+fn a_bad_valid_time_is_refused_before_anything_is_written() {
+    // Parsing is the gate: /patch parses before it takes the writer lock.
+    let err = ChangeSet::parse(
+        "# quipu-changeset: v1\n# valid-time: not-a-time\n\
+         INSERT DATA { <http://ex.org/v> <http://ex.org/p> \"x\" }",
+        SPARQL_UPDATE,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("valid-time"), "{err}");
+}

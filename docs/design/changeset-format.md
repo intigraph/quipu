@@ -50,26 +50,26 @@ header.
 
 The header is a run of `# key: value` comment lines before the first
 operation. Readers ignore unknown keys. Writers emit keys in the order below.
-Every key except `quipu-changeset` is optional.
+Every key is optional when reading. Writers always emit `quipu-changeset`; a body with no header (an old share delta) reads as v1.
 
 | Key | Meaning |
 |---|---|
-| `quipu-changeset` | Format version, `v1`. Required. |
+| `quipu-changeset` | Format version, `v1`. Any other version is refused. |
 | `base-tx` | Transaction whose state the deletes were read from (the pre-state). |
 | `target-tx` | Transaction whose state the inserts reproduce, when the post-state is a recorded state. |
 | `base-share` | Parent share id, when the pre-state is a share (share deltas). |
 | `store-id` | `store_id` of the store the base was read from. |
-| `valid-time` | ISO-8601 `valid_from` for inserted statements. Defaults to the apply time. Transaction time is always the receiver's. |
+| `valid-time` | RFC 3339 `valid_from` for inserted statements, normalized to UTC (`Z`) on read; anything else is refused. Defaults to the apply time. Transaction time is always the receiver's. |
 | `source` | Provenance label, recorded as the applying transaction's `source`. |
 | `shapes-hash` | SHA-256 of the shape sets the producer had in force, in the as-of-share encoding (`/diff`: at `base-tx`; share deltas: the result share's). It is advisory: the receiver always validates against its own current shapes. |
-| `digest` | `sha256:` plus the digest defined below. When present, it must match or the change-set is refused. |
+| `digest` | `sha256:` once, then the digest defined below as 64 lowercase hex characters. When present, it must match or the change-set is refused. |
 
 `log_epoch` and `base_slice_hash` belong to the signed envelope (s24.4). They
 are not header keys here.
 
 ## Digest
 
-The digest is SHA-256 over the change-set's RDF Patch body lines (`D …` for
+The digest is the lowercase hex SHA-256 over the change-set's RDF Patch body lines (`D …` for
 each delete, then `A …` for each insert, sorted as above, each line ending in
 `\n`). It covers statements only, not the header. That makes it the
 `delta_sha256` the s24.4 envelope signs. The envelope binds base and valid
@@ -118,7 +118,9 @@ first, as `git_merge` already requires.
 
 - `GET /diff?from=&to=`: each side is `tx:N` (ROOT as of transaction N),
   `main` (ROOT now), or `fork:<name>` (a fork now). `graph=<iri>` diffs a
-  named graph instead of ROOT. Shares are files, not store states, so a share
+  named graph instead of ROOT. A side holding more statements than
+  `server.update_full_copy_max_facts` (the `/update` whole-copy ceiling) is
+  refused with `422 diff_too_large`, counted before anything is read. Shares are files, not store states, so a share
   diff is the share delta below rather than a `/diff` side.
 - Share deltas: `delta.ru` is this format, with `base-share` set to the parent
   share. Old header-less deltas still materialize, because the header is a

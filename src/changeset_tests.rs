@@ -173,3 +173,48 @@ fn from_states_is_the_set_difference() {
     assert_eq!(cs.deletes, vec![st("<urn:a> <urn:p> \"1\"")]);
     assert_eq!(cs.inserts, vec![st("<urn:a> <urn:p> \"2\"")]);
 }
+
+/// A producer that follows the spec by hand, not through this module, must be
+/// accepted: one `sha256:` prefix on the wire, bare hex from `digest()`.
+#[test]
+fn a_hand_built_spec_conformant_changeset_is_accepted() {
+    let body_lines = "D <urn:s> <urn:p> \"a\" .\nA <urn:s> <urn:p> \"b\" .\n";
+    let hex = crate::share::sha256(body_lines.as_bytes());
+    let hex = hex.strip_prefix("sha256:").unwrap();
+    assert_eq!(hex.len(), 64);
+    let text = format!(
+        "# quipu-changeset: v1\n# digest: sha256:{hex}\n\
+         DELETE DATA {{\n  <urn:s> <urn:p> \"a\" .\n}};\nINSERT DATA {{\n  <urn:s> <urn:p> \"b\" .\n}};\n"
+    );
+    let cs = ChangeSet::parse(&text, SPARQL_UPDATE).unwrap();
+    assert_eq!(cs.digest(), hex);
+    // And this module writes exactly those bytes back.
+    assert_eq!(cs.to_sparql_update(), text);
+    let patch = format!(
+        "H quipu-changeset \"v1\" .\nH digest \"sha256:{hex}\" .\nTX .\n{body_lines}TC .\n"
+    );
+    assert_eq!(cs.to_rdf_patch(), patch);
+    assert_eq!(ChangeSet::parse(&patch, RDF_PATCH).unwrap(), cs);
+    // A double prefix is a mismatch, not a second accepted spelling.
+    let doubled = text.replace("sha256:", "sha256:sha256:");
+    assert!(ChangeSet::parse(&doubled, SPARQL_UPDATE).is_err());
+}
+
+#[test]
+fn valid_time_must_be_a_timestamp_and_is_normalized() {
+    let err = ChangeSet::parse(
+        "# quipu-changeset: v1\n# valid-time: not-a-time\n",
+        SPARQL_UPDATE,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("valid-time"), "{err}");
+    let cs = ChangeSet::parse(
+        "# quipu-changeset: v1\n# valid-time: 2026-10-01T02:00:00+02:00\n",
+        SPARQL_UPDATE,
+    )
+    .unwrap();
+    assert_eq!(
+        cs.header.valid_time.as_deref(),
+        Some("2026-10-01T00:00:00Z")
+    );
+}
