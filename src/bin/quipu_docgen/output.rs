@@ -67,7 +67,7 @@ fn man_pages(cmd: &Command, page: &str, usage: &str, files: &mut BTreeMap<String
     }
 }
 
-/// clap_mangen writes an empty date as nothing, so `.TH NAME 1  quipu` shifts
+/// `clap_mangen` writes an empty date as nothing, so `.TH NAME 1  quipu` shifts
 /// the source into the date field. Pages carry no date on purpose (a release
 /// must not make them stale), so quote the empty field instead.
 fn quote_empty_date(page: Vec<u8>) -> Vec<u8> {
