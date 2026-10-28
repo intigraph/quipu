@@ -728,6 +728,8 @@ and writes nothing.
 
 ```text
 quipu git-merge <ref>
+quipu git-merge show <dir> [--format text|md|json]
+quipu git-merge resolve <dir> <key> --choose <choice> --by <who>
 quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
 quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
 quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
@@ -771,15 +773,31 @@ These are proposals, never automatic identity assertions. No paid model or
 network call is used. This baseline can miss aliases and can propose false
 matches; the decision belongs to the reviewer.
 
-Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
+Exit 2 means decisions or Git conflicts remain. `git-merge` prints each
+pending pendant in the standard reconcile layout (the same one
+`quipu merge show` prints for share merges and fork promotions), ending with
+the exact next command. Then choose, inside the merge in progress:
+
+```bash
+quipu git-merge resolve pendant conflict:0 --choose ours --by steve
+quipu git-merge resolve pendant alias:0 --choose reject --by steve
+```
+
+`quipu merge show pendant/decisions.json` and
+`quipu merge resolve pendant/decisions.json <key> --choose <choice> --by <who>`
+are the same commands under the shared verb. The refs come from `HEAD` and
+`MERGE_HEAD`; `pendant-resolve` remains for scripts that pass them
+explicitly:
 
 ```bash
 quipu pendant-resolve "$base" "$ours" "$theirs" pendant conflict:0 ours
-quipu pendant-resolve "$base" "$ours" "$theirs" pendant alias:0 reject
 ```
 
-Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
-(add an explicit `owl:sameAs`) or `reject` (keep identities distinct). Resolution
+Conflict choices are `base`, `ours`, `theirs`, `both` (ours and theirs
+together, only within the slot's `sh:maxCount`) or `defer` (clear the choice);
+alias choices are `accept` (add an explicit `owl:sameAs`) or `reject` (keep
+identities distinct). `--by` is recorded beside the choice in `resolved_by`
+for display; the merge result depends on the choices alone. Resolution
 reconstructs the operator result from Git and refuses stale or altered proposal
 records. The last resolution must pass SHACL. It rewrites canonical `export.nt`,
 regenerates both manifests, drops old attestations and the optional derived

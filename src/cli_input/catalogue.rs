@@ -100,6 +100,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("acquire scope", "", 0, 0, "source-store-id graph tx max-vm-steps deadline-ms", ""),
     spec!("migrate-vectors", "", 0, 0, "from to", "dry-run"),
     spec!("git-merge", "<ref>", 1, 1, "", ""),
+    spec!("git-merge show", "<qpack-dir>", 1, 1, "format", ""),
+    spec!("git-merge resolve", "<qpack-dir> <key>", 2, 2, "choose by", ""),
     spec!("merge-driver", "<base> <ours> <theirs> <path>", 4, 4, "", ""),
     spec!("pendant-resolve", "<base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>", 6, 6, "", ""),
     spec!("pendant-check", "<base-ref> <ours-ref> <theirs-ref> <result-ref>", 4, 4, "", "history"),

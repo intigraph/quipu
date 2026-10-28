@@ -909,7 +909,39 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-ref:_default' \
+":: :_qp__subcmd__git-merge_commands" \
+"*::: :->git-merge" \
 && ret=0
+
+    case $state in
+    (git-merge)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-git-merge-command-$line[2]:"
+        case $line[2] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-qpack-dir:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--choose=[]:VALUE:_default' \
+'*--by=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-qpack-dir:_default' \
+':arg-key:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
 ;;
 (merge-driver)
 _arguments "${_arguments_options[@]}" : \
@@ -2381,8 +2413,21 @@ _qp__subcmd__gate__subcmd__shadow_commands() {
 }
 (( $+functions[_qp__subcmd__git-merge_commands] )) ||
 _qp__subcmd__git-merge_commands() {
-    local commands; commands=()
+    local commands; commands=(
+'show:Show a qpack'\''s pending merge decisions in the standard layout' \
+'resolve:Record one choice in the Git merge in progress and rewrite the qpack' \
+    )
     _describe -t commands 'qp git-merge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-merge__subcmd__resolve_commands] )) ||
+_qp__subcmd__git-merge__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp git-merge resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-merge__subcmd__show_commands] )) ||
+_qp__subcmd__git-merge__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp git-merge show commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__graph_commands] )) ||
 _qp__subcmd__graph_commands() {

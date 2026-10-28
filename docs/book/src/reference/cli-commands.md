@@ -676,6 +676,26 @@ Merge pendants from Git snapshots and stop before committing.
 qp git-merge <ref>
 ```
 
+### `qp git-merge show`
+
+Show a qpack's pending merge decisions in the standard layout.
+
+```text
+qp git-merge show <qpack-dir>
+```
+
+Value options: `--format <VALUE>`.
+
+### `qp git-merge resolve`
+
+Record one choice in the Git merge in progress and rewrite the qpack.
+
+```text
+qp git-merge resolve <qpack-dir> <key>
+```
+
+Value options: `--choose <VALUE>`, `--by <VALUE>`.
+
 ## `qp merge-driver`
 
 Low-level Git merge driver for pendant files.

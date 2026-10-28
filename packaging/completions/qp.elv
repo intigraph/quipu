@@ -684,6 +684,21 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand show 'Show a qpack''s pending merge decisions in the standard layout'
+            cand resolve 'Record one choice in the Git merge in progress and rewrite the qpack'
+        }
+        &'qp;git-merge;show'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'format'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;git-merge;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --choose 'choose'
+            cand --by 'by'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;merge-driver'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

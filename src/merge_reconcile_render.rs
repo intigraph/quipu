@@ -20,8 +20,13 @@ pub(super) fn header(v: &MergeView) -> (String, String) {
             format!("Merge decided, ready to apply: {}", v.merge.title)
         },
         format!(
-            "{n} conflict{}, {} undecided. Nothing has been written.",
+            "{n} conflict{}{}, {} undecided. Nothing has been written.",
             if n == 1 { "" } else { "s" },
+            match v.aliases.len() {
+                0 => String::new(),
+                1 => ", 1 alias proposal".into(),
+                a => format!(", {a} alias proposals"),
+            },
             v.undecided
         ),
     )
@@ -70,6 +75,23 @@ pub fn render_text(v: &MergeView) -> String {
         s.push_str(&format!("  choose   {}\n", numbered.join("  ")));
         s.push_str(&format!("  decided  {}\n", decided_line(c)));
     }
+    for a in &v.aliases {
+        s.push_str(&format!(
+            "\n[{}] same entity? {} and {} (label similarity {:.3})\n",
+            a.id,
+            alias_name(&a.ours),
+            alias_name(&a.theirs),
+            a.similarity
+        ));
+        let numbered: Vec<String> = a
+            .choices
+            .iter()
+            .enumerate()
+            .map(|(i, ch)| format!("{}) {ch}", i + 1))
+            .collect();
+        s.push_str(&format!("  choose   {}\n", numbered.join("  ")));
+        s.push_str(&format!("  decided  {}\n", alias_decided(a)));
+    }
     s.push('\n');
     for (i, step) in v.next.iter().enumerate() {
         s.push_str(&format!(
@@ -78,6 +100,22 @@ pub fn render_text(v: &MergeView) -> String {
         ));
     }
     s
+}
+
+pub(super) fn alias_name(n: &Named) -> String {
+    match &n.label {
+        Some(l) => format!("{} ({l})", n.iri),
+        None => n.iri.clone(),
+    }
+}
+
+pub(super) fn alias_decided(a: &AliasCard) -> String {
+    match (&a.decision, &a.decided_by) {
+        (Some(d), Some(by)) => format!("{d} (by {by})"),
+        (Some(d), None) => d.clone(),
+        (None, Some(by)) => format!("(deferred by {by})"),
+        (None, None) => "(none)".into(),
+    }
 }
 
 pub(super) fn code(v: &str) -> String {
@@ -127,6 +165,19 @@ pub fn render_markdown(v: &MergeView) -> String {
         }
         s.push_str(&format!("Decided: {}\n\n", cell(&decided_line(c))));
         for (i, ch) in c.choices.iter().enumerate() {
+            s.push_str(&format!("{}. {ch}\n", i + 1));
+        }
+    }
+    for a in &v.aliases {
+        s.push_str(&format!(
+            "\n#### {}. Same entity? {} and {}\n\nLabel similarity {:.3}. Accept adds `owl:sameAs`.\nDecided: {}\n\n",
+            a.id,
+            cell(&alias_name(&a.ours)),
+            cell(&alias_name(&a.theirs)),
+            a.similarity,
+            cell(&alias_decided(a))
+        ));
+        for (i, ch) in a.choices.iter().enumerate() {
             s.push_str(&format!("{}. {ch}\n", i + 1));
         }
     }

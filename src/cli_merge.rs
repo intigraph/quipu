@@ -99,9 +99,7 @@ fn fail(error: impl std::fmt::Display) -> ! {
 }
 
 fn read_file(path: &str) -> quipu::merge_reconcile::ReconcileFile {
-    std::fs::read(path)
-        .map_err(|e| quipu::Error::Store(format!("read {path}: {e}")))
-        .and_then(|b| quipu::merge_reconcile::ReconcileFile::load(&b))
+    quipu::merge_reconcile::ReconcileFile::load_path(std::path::Path::new(path))
         .unwrap_or_else(|e| fail(e))
 }
 
@@ -140,6 +138,14 @@ pub fn cmd_merge_reconcile(args: &[String]) -> bool {
                 fail("resolve needs --by <who>: the person who chose, or your agent id")
             };
             let mut file = read_file(path);
+            if let quipu::merge_reconcile::ReconcileFile::Git { dir, .. } = &file {
+                // A Git choice rewrites the qpack: same verb, the Git applier.
+                let Some(choice) = flag_value(args, "--choose") else {
+                    fail("resolve needs --choose <choice>")
+                };
+                crate::cli_git_merge::resolve_in_merge(dir, row, choice, by);
+                return true;
+            }
             let choice = quipu::merge_reconcile::Choice::parse(
                 flag_value(args, "--choose"),
                 flag_values(args, "--value"),

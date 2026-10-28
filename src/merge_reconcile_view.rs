@@ -6,11 +6,19 @@ use super::*;
 /// The choices a row offers, in display order.
 #[must_use]
 pub fn choices(record: &DecisionRecord) -> Vec<String> {
+    choices_for(record, true)
+}
+
+/// [`choices`], without `value` where the merge cannot take typed values
+/// (Git pendant merges).
+pub(super) fn choices_for(record: &DecisionRecord, value: bool) -> Vec<String> {
     let mut out = vec!["ours".to_string(), "theirs".into(), "base".into()];
     if union(&record.ours, &record.theirs).len() <= record.max_count {
         out.push("both".into());
     }
-    out.push("value".into());
+    if value {
+        out.push("value".into());
+    }
     out.push("defer".into());
     out
 }
@@ -21,6 +29,10 @@ pub struct MergeView {
     pub schema: &'static str,
     pub merge: MergeTarget,
     pub conflicts: Vec<ConflictCard>,
+    /// Alias proposals (Git pendant merges only): two new IRIs that may name
+    /// one entity. Accept adds `owl:sameAs`; nothing is assumed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<AliasCard>,
     /// Rows without a decision (deferred rows included).
     pub undecided: usize,
     /// The exact next steps, in order.
@@ -64,6 +76,20 @@ pub struct SideView {
 pub struct Suggestion {
     pub choose: String,
     pub reason: String,
+}
+
+/// One alias proposal, as shown to a person.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AliasCard {
+    pub id: String,
+    pub ours: Named,
+    pub theirs: Named,
+    pub similarity: f64,
+    pub choices: Vec<String>,
+    /// `accept`, `reject`, or `None`.
+    pub decision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decided_by: Option<String>,
 }
 
 /// One conflicting slot, as shown to a person.
@@ -147,6 +173,7 @@ pub(super) struct RowParts<'a> {
     pub(super) decision: Option<&'a Decision>,
     pub(super) decided_by: Option<&'a String>,
     pub(super) decided_at: Option<&'a String>,
+    pub(super) value: bool,
 }
 
 pub(super) fn card(p: RowParts<'_>, labels: &BTreeMap<String, String>) -> ConflictCard {
@@ -179,7 +206,7 @@ pub(super) fn card(p: RowParts<'_>, labels: &BTreeMap<String, String>) -> Confli
                 .cloned()
                 .unwrap_or_default(),
         }),
-        choices: choices(r),
+        choices: choices_for(r, p.value),
         decision: decision_text(p.decision),
         decided_by: p.decided_by.cloned(),
         decided_at: p.decided_at.cloned(),
