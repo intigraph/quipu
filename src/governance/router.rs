@@ -16,7 +16,9 @@
 //! 1. The refused attempt **mints a `DecisionRequest`** naming the policy, the
 //!    target, the operator group that can rule, an evidence hash, and an
 //!    `expiresAt` derived from the constraint's reversibility window.
-//! 2. A human signs an `aegis:Decision` bound to the same evidence hash.
+//! 2. A human signs an `aegis:GateApproval` bound to the same evidence hash.
+//!    (Pre-migration rulings typed `aegis:Decision` are still read for one
+//!    release; see [`GATE_RULING_CLASSES`].)
 //! 3. The **next attempt** finds the approval and proceeds.
 //!
 //! So the "hold" is the agent retrying, not the engine waiting. SARC's §5.3
@@ -38,7 +40,7 @@
 //!
 //! A decision is an ATTESTATION, not a fact. Decisions are ordinary writable
 //! facts, so before quipu-5s5 the agent whose write was refused could write its
-//! own `aegis:Decision "approve"` and walk through. The router now trusts a
+//! own `aegis:GateApproval "approve"` and walk through. The router now trusts a
 //! decision only when it is **signed by a registered decider**: the row must
 //! carry an `aegis:signature` over [`decision_message`], verifying under the
 //! `aegis:publicKey` of an `aegis:VerifierRegistration` whose `aegis:verifier`
@@ -127,7 +129,7 @@ impl Ruling {
                 "'{target}' needs a human decision under policy '{policy}'. A \
                  DecisionRequest is open and expires at {expires_at} (unix \
                  seconds), after which it is DENIED. To proceed, have a \
-                 registered decider record a signed aegis:Decision with outcome \
+                 registered decider record a signed aegis:GateApproval with outcome \
                  \"approve\" bound to this request's evidenceHash, then retry."
             ),
             Ruling::Expired => format!(
@@ -139,6 +141,16 @@ impl Ruling {
         }
     }
 }
+
+/// The SPARQL group matching a gate ruling `?d` by class.
+///
+/// New rulings are `aegis:GateApproval`. A ruling recorded before the
+/// GateApproval split is `aegis:Decision` and stays so: `rdf:type` is inside
+/// its seal digest (`decision_seal`), so retyping it would void its verdict.
+/// Readers accept both for one release; the `aegis:Decision` branch is then
+/// dropped. A camayoc memory Decision never matches, because the readers also
+/// require `evidenceHash`, `outcome` and `by`, which a memory Decision lacks.
+pub(crate) const GATE_RULING_CLASSES: &str = "{ ?d a a:GateApproval } UNION { ?d a a:Decision }";
 
 /// Resolve an escalation for `(policy_iri, target_iri)` at `now`.
 ///
@@ -198,7 +210,8 @@ pub(crate) fn resolve_at(
     let dq = format!(
         "PREFIX a: <{DEFAULT_BASE_NS}> \
          SELECT ?d ?outcome ?by ?sig WHERE {{ \
-            ?d a a:Decision ; a:evidenceHash \"{hash}\" ; a:outcome ?outcome ; a:by ?by . \
+            {GATE_RULING_CLASSES} \
+            ?d a:evidenceHash \"{hash}\" ; a:outcome ?outcome ; a:by ?by . \
             OPTIONAL {{ ?d a:signature ?sig }} \
          }}",
         hash = escape(&hash),

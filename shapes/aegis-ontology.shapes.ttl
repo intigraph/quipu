@@ -1825,6 +1825,9 @@ aegis:SSHKey rdfs:subClassOf aegis:Credential .
 # absent from the facts table; `?s a DecisionRecord` applied no inference at all and
 # missed its Decision instance. Their neighbour `aegis:Policy` worked — same file,
 # same commit — which is exactly why the failure was invisible.
+# (Since the GateApproval split, governance.ttl declares
+# `aegis:GateApproval rdfs:subClassOf aegis:DecisionRecord` instead; the
+# memory `aegis:Decision` is no longer a DecisionRecord. Same rule applies.)
 #
 # So: adding a line HERE changes nothing on its own. Assert it too:
 #   POST /knot {"actor":"<you>","turtle":"@prefix aegis: … rdfs:subClassOf … ."}

@@ -49,11 +49,17 @@ fn read_entry(
         ns("evidenceHash"),
         ns("gate"),
     ];
-    let decision_type = store.lookup(&ns("Decision"))?;
+    // A judgment is a gate ruling: aegis:GateApproval, or a pre-split
+    // aegis:Decision read for one release. rdf:type is sealed, so an old
+    // ruling is never retyped. Any other type is refused.
+    let ruling_types = [
+        store.lookup(&ns("GateApproval"))?,
+        store.lookup(&ns("Decision"))?,
+    ];
     let mut typed = false;
     for (predicate, value) in &facts {
         if predicate == RDF_TYPE {
-            if !matches!(value, Value::Ref(id) if Some(*id) == decision_type) {
+            if !matches!(value, Value::Ref(id) if ruling_types.contains(&Some(*id))) {
                 return Err(invalid("unexpected Decision type"));
             }
             typed = true;

@@ -57,6 +57,28 @@ fn judgment(
     kind: Kind,
     predecessor: Option<Predecessor>,
 ) -> (String, String) {
+    judgment_as(
+        store,
+        request,
+        key,
+        decision,
+        kind,
+        predecessor,
+        "GateApproval",
+    )
+}
+
+/// [`judgment`] with an explicit ruling class: `GateApproval` for new
+/// rulings, `Decision` for one sealed before the GateApproval split.
+fn judgment_as(
+    store: &mut Store,
+    request: &Request,
+    key: &ring::signature::Ed25519KeyPair,
+    decision: &str,
+    kind: Kind,
+    predecessor: Option<Predecessor>,
+    class: &str,
+) -> (String, String) {
     let claim = Claim::from(request);
     let record = Record {
         protocol: "quipu.rule-judgment/v1".into(),
@@ -66,12 +88,12 @@ fn judgment(
         disposition: kind,
         predecessor,
     };
-    let class = store.intern(&ns("Decision")).unwrap();
+    let class_id = store.intern(&ns(class)).unwrap();
     put(
         store,
         decision,
         crate::namespace::RDF_TYPE,
-        Value::Ref(class),
+        Value::Ref(class_id),
     );
     put(
         store,
@@ -92,7 +114,7 @@ fn judgment(
         &ns("decisionPolicy"),
         Value::Str(POLICY.into()),
     );
-    // Existing DecisionShape is an approve/reject/changes carrier. The
+    // GateApprovalShape is an approve/reject/changes carrier. The
     // disposition itself is inside the sealed purpose-specific JSON.
     let outcome = "approve";
     put(store, decision, &ns("outcome"), Value::Str(outcome.into()));
@@ -122,7 +144,12 @@ fn judgment(
             .collect::<String>();
         let shapes = format!("{}\n{PROFILE}", include_str!("../../shapes/governance.ttl"));
         let report = crate::validate_shapes(&shapes, &data).unwrap();
-        assert!(report.conforms, "Decision/profile intersection: {report:?}");
+        // The profile admits exactly the two gate-ruling classes.
+        let ruling = matches!(class, "GateApproval" | "Decision");
+        assert_eq!(
+            report.conforms, ruling,
+            "{class}/profile intersection: {report:?}"
+        );
     }
     let presentation = decision_seal::present(store, decision, 3600, NOW).unwrap();
     let signature = crate::signing::sign_hex(key, &presentation.challenge(outcome));
@@ -396,6 +423,76 @@ fn rule_answer_states_withdrawing_marker_cannot_clear_a_deferral() {
     store
         .retract_triples(decision, marker, None, TS, None, false, None)
         .unwrap();
+    assert!(matches!(
+        query(&store, &request).unwrap(),
+        Answer::Unknown { truth: None, .. }
+    ));
+}
+
+#[test]
+fn rule_answer_states_pre_split_sealed_decision_still_answers_and_is_never_retyped() {
+    // A judgment sealed as aegis:Decision before the GateApproval split keeps
+    // answering: readers accept both classes for one release.
+    let (mut store, request, key) = setup(true, false);
+    let (verdict, _) = judgment_as(
+        &mut store,
+        &request,
+        &key,
+        "urn:decision:legacy",
+        Kind::Deferred,
+        None,
+        "Decision",
+    );
+    let Answer::Complete {
+        judgment: Judgment::Deferred { current },
+        ..
+    } = query(&store, &request).unwrap()
+    else {
+        panic!("a pre-split sealed Decision must still answer");
+    };
+    assert!(current.verdicts.contains(&verdict));
+
+    // rdf:type is inside the seal digest, so retyping the old record to
+    // GateApproval voids it. That is why the migration never retypes.
+    let decision = store.intern("urn:decision:legacy").unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let old = Value::Ref(store.intern(&ns("Decision")).unwrap());
+    let new = Value::Ref(store.intern(&ns("GateApproval")).unwrap());
+    let at = |value, op| Datum {
+        entity: decision,
+        attribute: rdf_type,
+        value,
+        valid_from: TS.into(),
+        valid_to: None,
+        op,
+    };
+    store
+        .transact(
+            &[at(old, Op::Retract), at(new, Op::Assert)],
+            TS,
+            None,
+            Some("retype"),
+        )
+        .unwrap();
+    assert!(matches!(
+        query(&store, &request).unwrap(),
+        Answer::Unknown { truth: None, .. }
+    ));
+}
+
+#[test]
+fn rule_answer_states_unrelated_type_is_unknown() {
+    // Accepting two classes is not accepting any class.
+    let (mut store, request, key) = setup(true, false);
+    judgment_as(
+        &mut store,
+        &request,
+        &key,
+        "urn:decision:other",
+        Kind::Deferred,
+        None,
+        "Verdict",
+    );
     assert!(matches!(
         query(&store, &request).unwrap(),
         Answer::Unknown { truth: None, .. }
