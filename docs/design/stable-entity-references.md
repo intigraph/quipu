@@ -65,7 +65,11 @@ RDF write path. It returns the committed IRI and transaction, not a promise of a
 future write. Opaque keys use 128 bits of OS entropy encoded as 26 lower-case
 RFC4648 base32 characters without padding; entropy failure refuses. Repeating a
 mint is a new entity, so an uncertain response must be read back, never blindly
-retried. Label minting is explicit, validated and collision-refusing. Legacy
+retried. Label minting is explicit, validated and collision-refusing. Key
+minting (`minting = "key"`) derives the IRI from shape-declared identity fields
+and converges on repeat; it is allowed only where those fields are the thing's
+identity, never a label or a role's current host
+(`docs/design/key-field-iri-minting.md`). Legacy
 `/episode`, raw RDF and `base_ns` remain compatible; they do not acquire new
 identity semantics. Callers migrating to stable identities use the registered
 mint path and then reference the returned exact IRI.

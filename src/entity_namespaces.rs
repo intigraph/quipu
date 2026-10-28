@@ -84,7 +84,10 @@ impl Namespace {
             || !["public", "private"].contains(&self.visibility.as_str())
             || !audience_valid(&self.audience)
             || public != (self.audience == "public")
-            || !["opaque", "label"].contains(&self.minting.as_str())
+            || !["opaque", "label", "key"].contains(&self.minting.as_str())
+            // Key minting must be scoped to explicit types: a keyed shape on a
+            // type nobody selected must never start minting by accident.
+            || (self.minting == "key" && self.types.is_empty())
         {
             return Err(invalid(
                 "invalid prefix, visibility, audience or minting policy",
