@@ -326,9 +326,9 @@ dataset model. WOQL also has no standard and no second implementation.
 - **Proposal:** a shape-level annotation (for example
   `quipu:keyFields (ex:host ex:port)`) that mints a lexical or hash IRI at
   write time. That prevents aliases instead of repairing them afterward.
-- **Status:** worth building only after `stable-entity-references.md`
-  settles, because it must not contradict "an IRI identifies the thing
-  independently of a label".
+- **Status:** settled as compatible with constraints in
+  `key-field-iri-minting.md`: key fields must be identity, not labels; a
+  minimal `minting = "key"` path ships with it.
 
 ## Not worth copying
 

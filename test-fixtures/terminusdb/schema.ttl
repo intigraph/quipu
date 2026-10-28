@@ -1,0 +1,69 @@
+# The schema graph TerminusDB stores for schema.json, as GET /api/triples/<org>/<db>/local/branch/main/schema
+# serializes it, with absolute IRIs. Built from source, not captured; real exports are in live/.
+# Derived from TerminusDB 0b5549ac, src/core/document/json.pl:
+#   - class/property/type-family triples and node IDs: test(schema_elaborate) (json.pl:5428-5502),
+#     type_family_id/1214, json_schema_predicate_value/1699-1800 (min/max_cardinality as
+#     xsd:nonNegativeInteger, @key -> sys:key node, @abstract/@subdocument -> rdf:nil);
+#   - Enum values as <Enum>/<value> IRIs in an rdf:List under sys:value: enum_value/1132, json.pl:1839-1875;
+#   - sys:inherits: json_triple_/1996; @fields as an rdf:List of Cons cells: list_id_key_context_triple/2116;
+#   - the context node: context_elaborate (json.pl:1339-1440);
+#   - sys:JSON, sys:Unit and xdd: ranges are plain range IRIs like xsd: (json_schema_predicate_value/1800).
+# Route: src/server/routes.pl:376-438 (triples_handler).
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sys: <http://terminusdb.com/schema/sys#> .
+@prefix schema: <terminusdb:///schema#> .
+
+<terminusdb://context> a sys:Context ;
+  sys:base "terminusdb:///data/"^^xsd:string ;
+  sys:schema "terminusdb:///schema#"^^xsd:string .
+
+schema:Status a sys:Enum ;
+  sys:value schema:Cons\/s1 .
+schema:Cons\/s1 a rdf:List ; rdf:first <terminusdb:///schema#Status/active> ; rdf:rest schema:Cons\/s2 .
+schema:Cons\/s2 a rdf:List ; rdf:first <terminusdb:///schema#Status/retired> ; rdf:rest rdf:nil .
+
+schema:Entity a sys:Class ;
+  sys:abstract rdf:nil ;
+  schema:name xsd:string .
+
+schema:Person a sys:Class ;
+  sys:inherits schema:Entity ;
+  sys:key <terminusdb:///schema#Person/key/Lexical/name> ;
+  schema:age <terminusdb:///schema#Person/age/Optional+xsd%3Adecimal> ;
+  schema:status schema:Status ;
+  schema:friends <terminusdb:///schema#Person/friends/Set+Person> ;
+  schema:emails <terminusdb:///schema#Person/emails/Cardinality+xsd%3Astring+1+2> ;
+  schema:nicknames <terminusdb:///schema#Person/nicknames/List+xsd%3Astring> ;
+  schema:profile sys:JSON ;
+  schema:homepage <terminusdb:///schema#Person/homepage/Optional+xdd%3Aurl> ;
+  schema:contact <terminusdb:///schema#Person/contact/Optional+Contact> .
+<terminusdb:///schema#Person/homepage/Optional+xdd%3Aurl> a sys:Optional ; sys:class <http://terminusdb.com/schema/xdd#url> .
+<terminusdb:///schema#Person/contact/Optional+Contact> a sys:Optional ; sys:class schema:Contact .
+<terminusdb:///schema#Person/key/Lexical/name> a sys:Lexical ;
+  sys:fields schema:Cons\/k1 .
+schema:Cons\/k1 a rdf:List ; rdf:first schema:name ; rdf:rest rdf:nil .
+<terminusdb:///schema#Person/age/Optional+xsd%3Adecimal> a sys:Optional ; sys:class xsd:decimal .
+<terminusdb:///schema#Person/friends/Set+Person> a sys:Set ; sys:class schema:Person .
+<terminusdb:///schema#Person/emails/Cardinality+xsd%3Astring+1+2> a sys:Cardinality ;
+  sys:class xsd:string ;
+  sys:min_cardinality "1"^^xsd:nonNegativeInteger ;
+  sys:max_cardinality "2"^^xsd:nonNegativeInteger .
+<terminusdb:///schema#Person/nicknames/List+xsd%3Astring> a sys:List ; sys:class xsd:string .
+
+schema:Team a sys:Class ;
+  sys:key <terminusdb:///schema#Team/key/Lexical/name> ;
+  schema:name xsd:string ;
+  schema:members <terminusdb:///schema#Team/members/Set+Person> ;
+  schema:lead schema:Entity .
+<terminusdb:///schema#Team/key/Lexical/name> a sys:Lexical ; sys:fields schema:Cons\/k2 .
+schema:Cons\/k2 a rdf:List ; rdf:first schema:name ; rdf:rest rdf:nil .
+<terminusdb:///schema#Team/members/Set+Person> a sys:Set ; sys:class schema:Person .
+
+schema:Contact a sys:TaggedUnion ;
+  sys:subdocument rdf:nil ;
+  sys:key <terminusdb:///schema#Contact/key/Random> ;
+  schema:email xsd:string ;
+  schema:phone xsd:string ;
+  schema:none sys:Unit .
+<terminusdb:///schema#Contact/key/Random> a sys:Random .

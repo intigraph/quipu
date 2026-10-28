@@ -18,6 +18,7 @@ pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
+pub mod entity_key;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;
