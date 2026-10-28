@@ -133,6 +133,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-test-sources-v2-${{ matrix.name }}-
       - run: cargo test ${{ matrix.flags }}
+      - name: Inactive SQLite HA profile and authorization controls
+        run: |
+          cargo test ${{ matrix.flags }} --features ha-read-profile --lib ha_read::
+          cargo test ${{ matrix.flags }} --features ha-read-profile --lib read_authorization::
       - name: Free completed test artifacts before OWL
         if: matrix.name == 'shacl'
         run: |

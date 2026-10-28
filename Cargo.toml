@@ -192,6 +192,8 @@ tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_
 
 [features]
 default = ["shacl"]
+# Source-only HA profile: not in default/full, no server/config/packaging caller.
+ha-read-profile = ["rustix/time"]
 # Rudof enables RDF 1.2 terms; every parser/serializer must agree in this
 # feature bundle. Defaultless builds retain their existing RDF 1.1 matches.
 shacl = ["dep:rudof_rdf", "dep:rudof_iri", "dep:shacl_engine", "oxttl/rdf-12", "oxrdfio/rdf-12", "sparesults/sparql-12", "spargebra/sparql-12"]

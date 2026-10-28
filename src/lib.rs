@@ -82,6 +82,9 @@ pub mod follow;
 pub mod follow_http;
 /// Whether a follower may serve reads in place of its primary (aegis-tnh).
 pub mod follow_ready;
+/// Inactive SQLite-only HA read profile; no serving adapter is installed.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+pub mod ha_read;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;
