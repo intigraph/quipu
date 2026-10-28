@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value as JsonValue, json};
 
-use super::plan::{MigrationPlan, Obj, Planned, plan};
+use super::plan::{MigrationPlan, Planned, plan};
 use super::{MigrationOp, migration_source};
 use crate::error::{Error, Result};
 use crate::proposal::{Proposal, ProposalKind, ProposalStatus};
@@ -267,6 +267,7 @@ fn target_queries(shapes_turtle: &str) -> Result<Vec<String>> {
 }
 
 /// The current ROOT facts of `focus`, with `planned` applied when given.
+#[cfg(feature = "shacl")]
 fn focus_triples(
     store: &Store,
     focus: &BTreeSet<String>,
@@ -287,8 +288,8 @@ fn focus_triples(
         };
         for fact in store.entity_facts_in_graph(entity, crate::schema::ROOT_GRAPH)? {
             let object = match fact.value {
-                Value::Ref(id) => Obj::Iri(store.resolve(id)?),
-                other => Obj::Lit(other),
+                Value::Ref(id) => super::plan::Obj::Iri(store.resolve(id)?),
+                other => super::plan::Obj::Lit(other),
             };
             let line = Planned {
                 subject: subject.clone(),

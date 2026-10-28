@@ -71,6 +71,7 @@ pub fn check(
 
 /// The graph id a destination IRI resolves to; a graph this write creates has
 /// no facts of its own yet, so ROOT is its whole context.
+#[cfg(feature = "shacl")]
 fn graph_id(store: &Store, iri: &str) -> Result<i64> {
     Ok(if iri.is_empty() {
         crate::schema::ROOT_GRAPH
