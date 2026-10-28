@@ -112,4 +112,47 @@ assert steps.index(policies[0]) < first_action, "policy must run before release-
 assert "python3 scripts/test_semver_policy.py" in ci
 assert "python3 scripts/check-semver-policy.py" in ci
 
+# aegis-0zr: the release commit's own CI and Release runs are never cancelled by
+# a later push. Both workflows must carry the SAME exemption suffix.
+EXEMPT = ("${{ startsWith(github.event.head_commit.message, 'chore: release v') "
+          "&& format('-{0}', github.sha) || '' }}")
+ci_doc = yaml.load(ci, Loader=UniqueSafeLoader)
+release_doc = yaml.load(release, Loader=UniqueSafeLoader)
+for name, doc in (("ci.yml", ci_doc), ("release.yml", release_doc)):
+    group = doc["concurrency"]["group"]
+    assert group.endswith(EXEMPT), f"{name}: release commits need their own concurrency group"
+    assert doc["concurrency"]["cancel-in-progress"] is True
+
+# aegis-0zr: the cut is verified BEFORE release-plz tags, on the guarded state.
+cut = [s for s in steps if s.get("name") == "Refuse to cut a version whose section misses packaged commits"]
+assert len(cut) == 1, "pre-cut changelog gate required"
+assert cut[0]["if"] == "steps.guard.outputs.state == 'release'"
+assert './scripts/verify-changelog.sh --version "$VERSION"' in cut[0]["run"]
+assert not cut[0].get("continue-on-error", False)
+guard = next(i for i, s in enumerate(steps) if s.get("id") == "guard")
+assert guard < steps.index(cut[0]) < first_action, "gate must sit between guard and release-plz"
+
+# aegis-0zr: the open release PR is re-validated against main on every push.
+fresh = release_jobs["release-pr-freshness"]
+assert fresh["if"] == "github.event_name == 'push'"
+assert "needs" not in fresh, "freshness must not wait on CI"
+assert fresh["permissions"]["statuses"] == "write"
+fresh_run = "\n".join(s.get("run", "") for s in fresh["steps"])
+assert "scripts/release-pr-freshness.sh" in fresh_run
+assert 'context="Release PR freshness"' in fresh_run
+
+# aegis-0zr: the trusted share is its own job; crates.io never waits on it.
+share = release_jobs["repository-share"]
+assert set(share["needs"]) == {"release-plz", "artifacts"}
+assert "TRUSTED_REPOSITORY_SHARE_ENABLED == 'true'" in share["if"]
+assert any(s.get("name") == "Require the trusted repository share" for s in share["steps"])
+for step in release_jobs["artifacts"]["steps"]:
+    assert step.get("name") != "Require the trusted repository share", \
+        "a missing share must not fail Binaries (it skipped crates.io for 0.16.4/0.16.5)"
+assert "repository-share" not in release_jobs["crates"]["needs"]
+assert "repository-share" not in release_jobs["mcp-registry"]["needs"]
+missing_crate = release_jobs["crates-not-published"]
+assert "needs.crates.result != 'success'" in missing_crate["if"]
+assert "releases_created == 'true'" in missing_crate["if"]
+
 print("release CI gate contract: ok")
