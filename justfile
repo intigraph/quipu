@@ -379,3 +379,20 @@ read-process-test server cli:
 installer-check:
     sh -n install.sh
     python3 scripts/test-install-release.py
+
+# Typed Python REST + JavaScript/WASM SPARQL builder controls.
+clients action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{action}}" in
+        package) uv build python ;;
+        types) npx --yes --ignore-scripts --package typescript@5.9.3 tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/query-builder-types.mts ;;
+        fmt) ruff format python/quipu_client python/tests/builder_cases.py python/tests/test_sparql.py ;;
+        check) cargo check --locked --no-default-features --all-targets ;;
+        lint) cargo clippy --locked --no-default-features --all-targets -- -D warnings -A missing-docs ;;
+        test) python3 -m pytest python/tests -q
+              node --test tests/query-builder.test.mjs
+              cargo test --locked --no-default-features --test query_builder
+              cargo test --locked --no-default-features --lib bindings::tests ;;
+        *) echo 'Use: just clients package|types|fmt|check|lint|test' >&2; exit 2 ;;
+    esac

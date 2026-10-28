@@ -21,3 +21,6 @@ Documentation = "https://github.com/intigraph/quipu/tree/main/docs/book/src/refe
 
 [tool.setuptools]
 packages = ["quipu_client"]
+
+[tool.setuptools.package-data]
+quipu_client = ["py.typed"]
