@@ -29,6 +29,9 @@ fn refuse_graph(operation: &str, input: &JsonValue) -> Result<()> {
 /// statement (aegis-arup ask 1 — episode granularity was the finest handle
 /// available, which is what forced a 16x blast radius and the identity-losing
 /// rebuild that followed).
+///
+/// Refused, nothing written, when the retraction leaves a node newly missing a
+/// value a reject shape requires (aegis-gxfm); see the store's retraction gate.
 pub fn tool_retract(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     refuse_graph("/retract", input)?;
     let entity_iri = input
@@ -199,6 +202,14 @@ pub fn tool_set(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
 ///
 /// Idempotent: retracting an already-retracted (or unknown) episode returns
 /// `retracted: 0` and changes nothing.
+///
+/// **Shapes (aegis-gxfm).** The whole retraction is refused, with the
+/// violations listed and nothing written, when it leaves a node that is still
+/// typed (another writer asserts its type, or `preserve` kept it) missing a
+/// value a reject shape requires (`sh:minCount`, `sh:hasValue`). A node the
+/// episode removes entirely is not judged: no shape targets it any more. Emit
+/// shapes only queue `shacl.violation` events. `on_orphan` does not override
+/// this; `shacl.validate_on_write = false` turns the check off store-wide.
 ///
 /// **Auth (hq-azs / hq-otm).** Retraction is a write, and a *more* sensitive one
 /// than assertion — it removes facts from current views. The HTTP route

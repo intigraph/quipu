@@ -438,6 +438,26 @@ impl Store {
             }
         }
 
+        // aegis-gxfm: the retraction side gets the deletion gate, so a promote
+        // that only takes a required value away is refused like an assert.
+        #[cfg(feature = "shacl")]
+        if !diff.removed.is_empty() {
+            let nt = |facts: &[Fact]| -> Result<String> {
+                let bytes = crate::rdf::serialize_facts(self, facts, oxrdfio::RdfFormat::NTriples)?;
+                String::from_utf8(bytes).map_err(|e| {
+                    Error::InvalidValue(format!("fork promote: non-UTF8 N-Triples: {e}"))
+                })
+            };
+            if let Some(feedback) = self.retraction_refusal_nt(
+                &nt(&diff.removed)?,
+                &nt(&diff.added)?,
+                crate::schema::ROOT_GRAPH,
+                !dry_run,
+            )? {
+                return Ok(ForkPromotion::Refused(feedback));
+            }
+        }
+
         let mut datums: Vec<Datum> = Vec::with_capacity(diff.added.len() + diff.removed.len());
         for f in &diff.added {
             datums.push(Datum {
