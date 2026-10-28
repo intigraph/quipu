@@ -1,5 +1,5 @@
 use super::*;
-use crate::governance::verifier_registry::registered_keys;
+use crate::governance::verifier_registry::{Scope, registered_keys};
 
 const PUBLIC: &str = "https://scbrown.github.io/quechua/ns#";
 const LEGACY: &str = crate::namespace::DEFAULT_BASE_NS;

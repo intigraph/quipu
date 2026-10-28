@@ -806,6 +806,13 @@ fn the_console_endorsement_migrates_a_legacy_registration() {
     assert!(governed_keys(&store, "yupana", "has-test").is_empty());
 
     let c = endorse_challenge(&store, reg, AGENT_TIER).unwrap();
+    assert_eq!(
+        c.keys,
+        vec![key.clone()],
+        "the challenge shows what is endorsed"
+    );
+    assert_eq!(c.tier, AGENT_TIER);
+    assert_eq!(c.store_id, store.store_id().unwrap());
     let forged = crate::signing::sign_hex(&keypair(), &c.message);
     refused(endorse(&mut store, reg, AGENT_TIER, "stiwi", &c.nonce, &forged, TS).map(|_| 0));
     let sig = crate::signing::sign_hex(&stiwi, &c.message);

@@ -142,7 +142,19 @@ fn endorse_challenge(args: &[String], db_path: &str) {
     let registration = need(args, "--registration");
     let c = trust_root::endorse_challenge(&store, &registration, &tier(args))
         .unwrap_or_else(|e| fail("refused", e));
+    // What is being endorsed: check every line before signing.
+    println!("store        {}", c.store_id);
     println!("registration {registration}");
+    println!("tier         {}", c.tier);
+    if c.keys.is_empty() {
+        println!("key          (none: the registration holds no aegis:publicKey)");
+    }
+    for key in &c.keys {
+        match trust_root::fingerprint(key) {
+            Ok(fp) => println!("key          {fp}"),
+            Err(_) => println!("key          {key} (not an ed25519 key)"),
+        }
+    }
     println!("digest       {}", c.digest);
     println!("nonce        {}", c.nonce);
     println!(
