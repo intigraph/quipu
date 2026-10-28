@@ -529,6 +529,22 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --dry-run 'dry-run'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand show 'Show a merge''s conflicts in the standard layout'
+            cand resolve 'Record one choice on one merge conflict'
+        }
+        &'qp;merge;show'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'format'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;merge;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --choose 'choose'
+            cand --value 'value'
+            cand --by 'by'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;import'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -1240,7 +1256,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand list 'List named forks'
             cand diff 'Diff two forks'
             cand drop 'Drop a named fork'
-            cand promote 'Promote a fork to ROOT'
+            cand promote 'Promote a fork to ROOT, with reviewable conflict decisions'
         }
         &'qp;fork;list'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -1259,6 +1275,13 @@ set edit:completion:arg-completer[qp] = {|@words|
         }
         &'qp;fork;promote'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --timestamp 'timestamp'
+            cand --emit-decisions 'emit-decisions'
+            cand --decisions 'decisions'
+            cand --reviewer 'reviewer'
+            cand --actor 'actor'
+            cand --propose 'propose'
+            cand --dry-run 'dry-run'
             cand -h 'Print help'
             cand --help 'Print help'
         }

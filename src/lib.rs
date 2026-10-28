@@ -42,6 +42,8 @@ pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
 pub mod merge3;
+/// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
+pub mod merge_reconcile;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
@@ -88,6 +90,8 @@ pub mod follow;
 pub mod follow_http;
 /// Whether a follower may serve reads in place of its primary (aegis-tnh).
 pub mod follow_ready;
+/// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
+pub mod fork_merge_decisions;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;
@@ -232,7 +236,7 @@ pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
 #[cfg(not(target_arch = "wasm32"))]
-pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
+pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions, tool_merge_resolve};
 pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;

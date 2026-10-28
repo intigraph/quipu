@@ -203,6 +203,9 @@
   "/merge/decisions": [
     "post"
   ],
+  "/merge/resolve": [
+    "post"
+  ],
   "/metrics": [
     "get"
   ],

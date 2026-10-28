@@ -403,6 +403,12 @@ _qp() {
             qp__subcmd__memory,receipt)
                 cmd="qp__subcmd__memory__subcmd__receipt"
                 ;;
+            qp__subcmd__merge,resolve)
+                cmd="qp__subcmd__merge__subcmd__resolve"
+                ;;
+            qp__subcmd__merge,show)
+                cmd="qp__subcmd__merge__subcmd__show"
+                ;;
             qp__subcmd__namespaces,apply)
                 cmd="qp__subcmd__namespaces__subcmd__apply"
                 ;;
@@ -1778,13 +1784,33 @@ _qp() {
             return 0
             ;;
         qp__subcmd__fork__subcmd__promote)
-            opts="-h --db --help"
+            opts="-h --db --timestamp --emit-decisions --decisions --reviewer --actor --propose --dry-run --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timestamp)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --emit-decisions)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --decisions)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --reviewer)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --actor)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -2812,7 +2838,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__merge)
-            opts="-h --db --actor --emit-decisions --decisions --reviewer --slot-scoped --propose --dry-run --help"
+            opts="-h --db --actor --emit-decisions --decisions --reviewer --slot-scoped --propose --dry-run --help show resolve"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2853,6 +2879,58 @@ _qp() {
             fi
             case "${prev}" in
                 --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__merge__subcmd__resolve)
+            opts="-h --db --choose --value --by --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --choose)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --value)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --by)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__merge__subcmd__show)
+            opts="-h --db --format --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --format)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

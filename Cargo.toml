@@ -91,6 +91,11 @@ path = "examples/mergebench/main.rs"
 required-features = ["shacl"]
 
 [[example]]
+name = "agentbranches"
+path = "examples/agentbranches/main.rs"
+required-features = ["shacl"]
+
+[[example]]
 name = "merge_load"
 required-features = ["shacl"]
 

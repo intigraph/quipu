@@ -2013,15 +2013,16 @@ fn test_tool_definitions() {
     // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
     assert!(names.contains(&"quipu_merge_decisions"));
     assert!(names.contains(&"quipu_merge_apply"));
+    assert!(names.contains(&"quipu_merge_resolve"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 83);
+        assert_eq!(defs.len(), 84);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 81);
+        assert_eq!(defs.len(), 82);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }

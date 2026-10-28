@@ -348,6 +348,26 @@ decided file before merge.
 
 Plain `quipu merge` without these flags behaves as before.
 
+### Showing and resolving decisions
+
+```text
+quipu merge show <decisions.json> [--format text|md|json]
+quipu merge resolve <decisions.json> <row> --choose ours|theirs|base|both|value|defer [--value <term>]... --by <who>
+```
+
+Both read and edit a decisions file of either merge kind (a share merge or
+a fork promotion) and touch no store. `show` prints the standard layout: one
+block per conflict with the entity and field by label, the rule, base, ours
+and theirs with who changed each and when, the suggestion, and the numbered
+choices, then the exact next command. `--format md` is the same layout for
+chat; `--format json` is its machine form (`merge-view/v1`).
+
+`resolve` records one choice on one row, with `decided_by` and `decided_at`.
+`both` (ours and theirs together) is accepted only when it fits the slot's
+`sh:maxCount`; `value` takes one or more `--value` N-Triples terms; `defer`
+clears the row so apply keeps refusing until it is decided. Applying a
+decisions file a second time reports `already-applied` and writes nothing.
+
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
 ```text
