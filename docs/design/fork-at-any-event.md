@@ -79,9 +79,17 @@ Ours is ROOT now and theirs is the fork now; the slot operator is the share
 merge's (`src/merge3.rs`, described in `docs/paper-merge/`). ROOT writes made
 after the base therefore survive promotion. (Before this, promote applied the
 two-way diff fork-vs-current-ROOT, which silently retracted them; TerminusDB
-gap analysis, gap 1.) A `sh:maxCount` slot both sides changed incompatibly is
-returned as `ForkPromotion::Conflicts` with the share merge's decision
-records, and **nothing is written**; the fork stays `open`. A fork whose
+gap analysis, gap 1.) A slot only one side changed takes that side; only a slot
+both sides changed differently can conflict, and only on a `sh:maxCount`
+bound that applies to its subject: the bound is scoped to the shape's
+targets (`sh:targetClass` with `rdfs:subClassOf`, `sh:targetNode`,
+`sh:targetSubjectsOf`, `sh:targetObjectsOf`, implicit class targets), a
+property shape with no targets anywhere applies to every slot with its path,
+and emit-mode (`quipu:onViolation "emit"`) shapes do not gate. Such a
+conflict is returned as `ForkPromotion::Conflicts` with the share merge's
+decision records, and **nothing is written**; the fork stays `open`.
+Promotion holds base, ROOT and the fork in memory at once, one graph more
+than the old two-way diff. A fork whose
 recorded `fork_tx` is not a usable base (negative, or past the latest
 transaction) is refused with an error rather than merged against a guessed
 base. Two layers then gate the delta:

@@ -480,6 +480,20 @@ fn fork_retraction_still_applies_alongside_new_root_writes() {
     assert!(root_has(&store, alice, age, &Value::Int(30)));
 }
 
+/// Type `node` as `ex:Named`, the class `NAME_MAX_ONE` targets.
+fn make_named(store: &mut Store, node: i64) {
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let named = store.intern("urn:t:Named").unwrap();
+    store
+        .transact(
+            &[datum(node, rdf_type, Value::Ref(named), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+}
+
 const NAME_MAX_ONE: &str = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <urn:t:> .
@@ -492,6 +506,7 @@ ex:NamedShape a sh:NodeShape ;
 #[test]
 fn divergent_max_count_one_edits_conflict_and_write_nothing() {
     let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    make_named(&mut store, alice);
     store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
     let latest = store.latest_tx_id().unwrap();
     let fork = store.fork_create("rename", latest, TS, None).unwrap();
@@ -654,6 +669,7 @@ fn root_delete_versus_fork_replace_on_max_count_one_is_a_conflict() {
     // Share merge flags delete-vs-replace on a single-value slot; fork
     // promotion inherits that rule.
     let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    make_named(&mut store, alice);
     store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
     let latest = store.latest_tx_id().unwrap();
     let fork = store.fork_create("revive", latest, TS, None).unwrap();
@@ -688,4 +704,130 @@ fn root_delete_versus_fork_replace_on_max_count_one_is_a_conflict() {
     assert_eq!(c[0].theirs, vec!["\"v3\"".to_string()]);
     assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
     assert_eq!(store.fork_lookup("revive").unwrap().unwrap().status, "open");
+}
+
+/// Review repro (#888): a pre-existing over-bound value set on a node outside
+/// the shape's target, untouched by either side, must not block promotion.
+#[test]
+fn an_untouched_out_of_target_slot_does_not_block_promotion() {
+    let (mut store, _, (alice, name, _, bob)) = two_epoch_store();
+    store
+        .transact(
+            &[
+                datum(bob, name, Value::Str("b1".into()), Op::Assert),
+                datum(bob, name, Value::Str("b2".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("color", latest, TS, None).unwrap();
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("color", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(root_has(&store, bob, name, &Value::Str("b1".into())));
+    assert!(root_has(&store, bob, name, &Value::Str("b2".into())));
+}
+
+#[test]
+fn a_targeted_slot_conflicts_but_an_untargeted_one_merges() {
+    // NAME_MAX_ONE targets ex:Named. alice is Named, bob is not; both sides
+    // change both names differently. Only alice's slot may conflict.
+    let (mut store, _, (alice, name, _, bob)) = two_epoch_store();
+    make_named(&mut store, alice);
+    store
+        .transact(
+            &[datum(bob, name, Value::Str("b0".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("both", latest, TS, None).unwrap();
+    let edit = |side: &str| {
+        vec![
+            datum(alice, name, Value::Str("v2".into()), Op::Retract),
+            datum(alice, name, Value::Str(format!("a-{side}")), Op::Assert),
+            datum(bob, name, Value::Str("b0".into()), Op::Retract),
+            datum(bob, name, Value::Str(format!("b-{side}")), Op::Assert),
+        ]
+    };
+    store.transact(&edit("root"), TS, None, None).unwrap();
+    store
+        .transact_to_graph(&edit("fork"), TS, None, None, fork.g)
+        .unwrap();
+
+    let out = store.fork_promote("both", TS, None).unwrap();
+    let ForkPromotion::Conflicts(c) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(c.len(), 1, "{c:?}");
+    assert_eq!(c[0].subject, "<urn:t:alice>");
+}
+
+#[test]
+fn an_emit_mode_bound_does_not_hold_promotion() {
+    let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    store
+        .load_shapes(
+            "name-observed",
+            r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <urn:t:> .
+@prefix quipu: <http://quipu.dev/ontology/> .
+
+ex:ObservedName a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf ex:name ;
+    sh:property [ sh:path ex:name ; sh:maxCount 1 ] .
+"#,
+            TS,
+        )
+        .unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("observed", latest, TS, None).unwrap();
+    store
+        .transact(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v4".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v3".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let out = store.fork_promote("observed", TS, None).unwrap();
+    assert!(
+        !matches!(out, ForkPromotion::Conflicts(_)),
+        "an emit-mode shape gated the merge: {out:?}"
+    );
 }

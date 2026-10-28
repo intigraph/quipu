@@ -182,7 +182,7 @@ fn cmd_promote(args: &[String], db_path: &str, name: &str) {
         }
         quipu::ForkPromotion::Conflicts(conflicts) => {
             eprintln!(
-                "promotion held: {} conflicting slot(s) changed on both ROOT and the fork since its base; nothing was written",
+                "promotion held: {} sh:maxCount slot(s) were changed differently on ROOT and in the fork since the fork's base; nothing was written and the fork stays open",
                 conflicts.len()
             );
             for c in &conflicts {

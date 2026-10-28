@@ -11,16 +11,23 @@
 //! - **ours**: ROOT now;
 //! - **theirs**: the fork now.
 //!
-//! The slot semantics (and `sh:maxCount` conflict rules) are the share
-//! merge's, via [`crate::merge3::merge_slots`]; only the term representation
-//! differs (dictionary ids and `term_key` bytes rather than RDF terms).
+//! The slot semantics are the share merge's, via
+//! [`crate::merge3::merge_slots`]: a slot only one side changed takes that
+//! side, and only a slot both sides changed differently can conflict, on an
+//! `sh:maxCount` bound that targets its subject ([`crate::merge3::ShapeBounds`];
+//! emit-mode shapes do not gate). Only the term representation differs
+//! (dictionary ids and `term_key` bytes rather than RDF terms).
+//!
+//! Cost: promotion holds base, ROOT and the fork in memory at once (three
+//! present-state graphs plus their slot maps), one more graph than the old
+//! two-way diff.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use rusqlite::params;
 
 use crate::error::{Error, Result};
-use crate::merge3::{DecisionRecord, Slots, max_counts, merge_slots};
+use crate::merge3::{DecisionRecord, FocusView, ShapeBounds, Slots, merge_slots, reaches};
 use crate::types::{Fact, Value};
 
 use super::Store;
@@ -59,6 +66,16 @@ impl Store {
         ours: Vec<Fact>,
         theirs: Vec<Fact>,
     ) -> Result<ForkMerge> {
+        let bounds = match self.get_combined_shapes()? {
+            Some(shapes) => ShapeBounds::parse(&shapes)?,
+            None => ShapeBounds::default(),
+        };
+        let view = if bounds.is_empty() {
+            IdView::empty(self)
+        } else {
+            IdView::new(self, base.iter().chain(&ours).chain(&theirs))?
+        };
+
         let mut values: HashMap<Key, Value> = HashMap::new();
         let mut slots = |facts: Vec<Fact>, keep: bool| {
             let mut out: Slots<(i64, i64), Vec<u8>> = BTreeMap::new();
@@ -77,26 +94,32 @@ impl Store {
         let (o, mut ours_facts) = slots(ours, true);
         let (t, mut theirs_facts) = slots(theirs, true);
 
-        let bounds = match self.get_combined_shapes()? {
-            Some(shapes) => max_counts(&shapes)?,
-            None => BTreeMap::new(),
-        };
-        let mut attr_bound: HashMap<i64, Option<usize>> = HashMap::new();
-        if !bounds.is_empty() {
-            for &(_, a) in b.keys().chain(o.keys()).chain(t.keys()) {
-                if let std::collections::hash_map::Entry::Vacant(slot) = attr_bound.entry(a) {
-                    slot.insert(bounds.get(&self.resolve(a)?).copied());
-                }
-            }
-        }
+        let mut paths: HashMap<i64, Option<String>> = HashMap::new();
         let empty = BTreeSet::new();
         let (merged, held) = merge_slots(
             &b,
             &o,
             &t,
-            |slot| attr_bound.get(&slot.1).copied().flatten(),
+            |&(e, a)| {
+                if bounds.is_empty() {
+                    return Ok(None);
+                }
+                let path = match paths.get(&a) {
+                    Some(p) => p.clone(),
+                    None => {
+                        let iri = self.resolve(a)?;
+                        let p = bounds.constrains(&iri).then_some(iri);
+                        paths.insert(a, p.clone());
+                        p
+                    }
+                };
+                match path {
+                    Some(p) => bounds.bound(&e, &p, &view),
+                    None => Ok(None),
+                }
+            },
             &empty,
-        );
+        )?;
 
         let render = |e: i64, a: i64, set: &BTreeSet<Vec<u8>>| -> Result<Vec<String>> {
             let mut out = set
@@ -157,5 +180,80 @@ impl Store {
             removed,
             conflicts,
         })
+    }
+}
+
+/// A [`FocusView`] over dictionary ids: the union of base, ROOT and the fork,
+/// for resolving which subjects a shape targets.
+struct IdView<'s> {
+    store: &'s Store,
+    types: HashMap<i64, BTreeSet<i64>>,
+    supers: HashMap<i64, BTreeSet<i64>>,
+    out: HashSet<(i64, i64)>,
+    inn: HashSet<(i64, i64)>,
+}
+
+impl<'s> IdView<'s> {
+    fn empty(store: &'s Store) -> Self {
+        Self {
+            store,
+            types: HashMap::new(),
+            supers: HashMap::new(),
+            out: HashSet::new(),
+            inn: HashSet::new(),
+        }
+    }
+
+    fn new<'f>(store: &'s Store, facts: impl Iterator<Item = &'f Fact>) -> Result<Self> {
+        let rdf_type = store.lookup(crate::namespace::RDF_TYPE)?;
+        let sub_of = store.lookup("http://www.w3.org/2000/01/rdf-schema#subClassOf")?;
+        let mut view = Self::empty(store);
+        for f in facts {
+            view.out.insert((f.entity, f.attribute));
+            if let Value::Ref(o) = f.value {
+                view.inn.insert((o, f.attribute));
+                if Some(f.attribute) == rdf_type {
+                    view.types.entry(f.entity).or_default().insert(o);
+                } else if Some(f.attribute) == sub_of {
+                    view.supers.entry(f.entity).or_default().insert(o);
+                }
+            }
+        }
+        Ok(view)
+    }
+}
+
+impl FocusView for IdView<'_> {
+    type Node = i64;
+
+    fn is_term(&self, node: &i64, term: &str) -> Result<bool> {
+        Ok(crate::rdf::value_to_term(self.store, &Value::Ref(*node))?.to_string() == term)
+    }
+
+    fn instance_of(&self, node: &i64, class: &str) -> Result<bool> {
+        let Some(class) = self.store.lookup(class)? else {
+            return Ok(false);
+        };
+        let start = self.types.get(node).cloned().unwrap_or_default();
+        Ok(reaches(start, &class, |c| {
+            self.supers
+                .get(c)
+                .map(|s| s.iter().copied().collect())
+                .unwrap_or_default()
+        }))
+    }
+
+    fn has_out(&self, node: &i64, predicate: &str) -> Result<bool> {
+        Ok(self
+            .store
+            .lookup(predicate)?
+            .is_some_and(|p| self.out.contains(&(*node, p))))
+    }
+
+    fn has_in(&self, node: &i64, predicate: &str) -> Result<bool> {
+        Ok(self
+            .store
+            .lookup(predicate)?
+            .is_some_and(|p| self.inn.contains(&(*node, p))))
     }
 }
