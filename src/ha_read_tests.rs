@@ -210,6 +210,13 @@ fn complete_cut_tail_and_signed_freshness_are_required_for_data_and_count() {
     let mut s = session(&src, key, &mut p);
     fresh(&src, &mut s, &mut p);
     let first = query(&mut p, &auth, src.latest_tx_id().unwrap()).unwrap();
+    println!(
+        "qualified cut: applied_tx={} lag={} age_bound_ms={} body={}",
+        first.applied_tx,
+        first.verified_lag_txs,
+        first.staleness_bound_ms,
+        String::from_utf8_lossy(&first.body)
+    );
     assert_eq!(first.verified_lag_txs, 0);
     assert_eq!(first.applied_tx, src.latest_tx_id().unwrap());
     assert_eq!(
@@ -232,7 +239,9 @@ fn complete_cut_tail_and_signed_freshness_are_required_for_data_and_count() {
         )
         .unwrap();
     assert!(String::from_utf8(response.body).unwrap().contains("4"));
-    assert!(query(&mut p, &auth, src.latest_tx_id().unwrap() + 1).is_err());
+    let future = query(&mut p, &auth, src.latest_tx_id().unwrap() + 1);
+    println!("future minTx result: {future:?}");
+    assert!(future.is_err());
 }
 
 #[test]

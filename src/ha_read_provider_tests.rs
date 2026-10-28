@@ -97,3 +97,22 @@ fn refused_stream_remains_halted_after_restart() {
     assert!(p.apply_frame("quipu.replicate.session", "{}").is_err());
     assert!(query(&mut p, &policy(), 0).is_err());
 }
+
+#[test]
+fn query_copy_time_cannot_publish_an_expired_freshness_proof() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = source();
+    let key = signing();
+    let c = cut(&src, dir.path());
+    let mut p = profile(Store::open_in_memory().unwrap(), config(&c, &key), &c);
+    let mut s = session(&src, key, &mut p);
+    fresh(&src, &mut s, &mut p);
+    assert!(query(&mut p, &policy(), 0).is_ok());
+    p.after_pin = Some(Box::new(|| tick(1100)));
+    let expired = query(&mut p, &policy(), 0);
+    assert!(
+        matches!(expired, Err(Error::CannotVerify(ref message)) if message.contains("query outlived freshness"))
+    );
+    fresh(&src, &mut s, &mut p);
+    assert!(query(&mut p, &policy(), 0).is_ok());
+}
