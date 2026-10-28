@@ -575,3 +575,38 @@ fn large_parent_with_small_changes_is_bounded_by_delta_not_full_result() {
             .contains("exceeding max_bytes")
     );
 }
+
+/// `delta.ru` IS the store-wide change-set format (aegis-4mk): one format for
+/// share deltas, `/diff` and `/patch`, so a share delta can be `POST`ed to
+/// `/patch` and a `/diff` reads like a delta.
+#[test]
+fn delta_update_is_a_quipu_changeset_bound_to_its_parent() {
+    let parent_store = store("before");
+    let root = tempfile::tempdir().unwrap();
+    let parent_dir = root.path().join("parent");
+    crate::share::share(&parent_store, parent_dir.to_str().unwrap(), &opts()).unwrap();
+    let parent = crate::share_transport::read_reference(parent_dir.to_str().unwrap()).unwrap();
+    let built = build_delta(
+        &store("after"),
+        &parent.manifest.share_id,
+        &parent.manifest.graph_hash,
+        &parent.export_ntriples,
+        &opts(),
+    )
+    .unwrap();
+    assert!(
+        built.update.starts_with("# quipu-changeset: v1\n"),
+        "{}",
+        built.update
+    );
+    let cs =
+        crate::changeset::ChangeSet::parse(&built.update, crate::changeset::SPARQL_UPDATE).unwrap();
+    assert_eq!(
+        cs.header.base_share.as_deref(),
+        Some(parent.manifest.share_id.as_str())
+    );
+    assert_eq!(cs.header.source.as_deref(), Some("share-delta"));
+    assert_eq!(cs.deletes.len(), 1);
+    assert!(cs.deletes[0].triple.contains("\"before\""));
+    assert!(cs.inserts[0].triple.contains("\"after\""));
+}

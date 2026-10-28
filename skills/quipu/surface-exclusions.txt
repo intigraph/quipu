@@ -1,0 +1,158 @@
+# CLI verbs and MCP tools that src/primer.md and skills/quipu/SKILL.md
+# deliberately do not teach. quipu-docgen fails CI when a verb or tool is in
+# neither the primer, the skill nor this list, and when an entry here names
+# nothing or names something the primer or skill already covers.
+# Format: <cli|mcp> <name> <reason>. Every item is still in the generated
+# CLI and MCP indexes in the book.
+
+# Aliases of commands the primer names
+cli load Aliases of commands the primer names
+cli query Aliases of commands the primer names
+
+# Identity and installation, not graph work
+cli version Identity and installation, not graph work
+cli install-alias Identity and installation, not graph work
+
+# Operator administration: signing, attestation, trust roots, decision deck
+cli attest Operator administration: signing, attestation, trust roots, decision deck
+cli signer Operator administration: signing, attestation, trust roots, decision deck
+cli deck Operator administration: signing, attestation, trust roots, decision deck
+cli trust-root Operator administration: signing, attestation, trust roots, decision deck
+
+# Operator administration: signing, attestation, trust roots, decision deck
+mcp quipu_verdict_verify Operator administration: signing, attestation, trust roots, decision deck
+mcp quipu_verifier_authorized Operator administration: signing, attestation, trust roots, decision deck
+
+# Governance and policy authoring; agents meet these as write refusals
+cli policy Governance and policy authoring; agents meet these as write refusals
+cli gate Governance and policy authoring; agents meet these as write refusals
+cli audit Governance and policy authoring; agents meet these as write refusals
+cli path Governance and policy authoring; agents meet these as write refusals
+
+# Governance and policy authoring; agents meet these as write refusals
+mcp quipu_policy_check Governance and policy authoring; agents meet these as write refusals
+mcp quipu_path_cone Governance and policy authoring; agents meet these as write refusals
+mcp quipu_path_backtest Governance and policy authoring; agents meet these as write refusals
+
+# Git and pendant plumbing invoked by Git or CI, not by agents
+cli git-merge Git and pendant plumbing invoked by Git or CI, not by agents
+cli merge-driver Git and pendant plumbing invoked by Git or CI, not by agents
+cli pendant-resolve Git and pendant plumbing invoked by Git or CI, not by agents
+cli pendant-check Git and pendant plumbing invoked by Git or CI, not by agents
+cli diff-textconv Git and pendant plumbing invoked by Git or CI, not by agents
+
+# Harness hook management; the hooks themselves run without agent action
+cli hook Harness hook management; the hooks themselves run without agent action
+cli hooks Harness hook management; the hooks themselves run without agent action
+
+# Store maintenance and migration
+cli db Store maintenance and migration
+cli migrate-vectors Store maintenance and migration
+cli search-index Store maintenance and migration
+cli restore Store maintenance and migration
+cli events Store maintenance and migration
+cli demotions Store maintenance and migration
+
+# Store maintenance and migration
+mcp quipu_embed_backfill Store maintenance and migration
+mcp quipu_embed_backfill_graph Store maintenance and migration
+
+# Sharing and replication beyond share/import (see the sharing chapter)
+cli pack Sharing and replication beyond share/import (see the sharing chapter)
+cli unpack Sharing and replication beyond share/import (see the sharing chapter)
+cli status Sharing and replication beyond share/import (see the sharing chapter)
+cli merge Sharing and replication beyond share/import (see the sharing chapter)
+cli compose Sharing and replication beyond share/import (see the sharing chapter)
+cli acquire Sharing and replication beyond share/import (see the sharing chapter)
+cli follow Sharing and replication beyond share/import (see the sharing chapter)
+cli changes Sharing and replication beyond share/import (see the sharing chapter)
+
+# Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_share Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_import Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_import_promote Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_merge_decisions Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_merge_apply Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_acquire Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_acquire_composed Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_changes Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_knot_stage Sharing and replication beyond share/import (see the sharing chapter)
+mcp quipu_knot_promote Sharing and replication beyond share/import (see the sharing chapter)
+
+# Bulk and specialised ingest; knot and episode are the agent write paths
+cli ingest Bulk and specialised ingest; knot and episode are the agent write paths
+
+# Bulk and specialised ingest; knot and episode are the agent write paths
+mcp quipu_episodes_complete Bulk and specialised ingest; knot and episode are the agent write paths
+mcp quipu_update Bulk and specialised ingest; knot and episode are the agent write paths
+mcp quipu_retract_source Bulk and specialised ingest; knot and episode are the agent write paths
+
+# Interactive or human-facing output
+cli repl Interactive or human-facing output
+cli render Interactive or human-facing output
+cli report Interactive or human-facing output
+cli project Interactive or human-facing output
+
+# Interactive or human-facing output
+mcp quipu_report Interactive or human-facing output
+mcp quipu_project Interactive or human-facing output
+mcp quipu_graph Interactive or human-facing output
+mcp quipu_spotlight Interactive or human-facing output
+
+# Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+cli fork Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+
+# Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_graph_label Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_graph_freeze Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_graph_thaw Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_overlay_create Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_overlay_write Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_overlay_compose Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+mcp quipu_datasets Named-graph lifecycle, overlays and forks; graph list is the agent entry point
+
+# Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli reason Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli ontology Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli align Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli rule-query Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli namespaces Reasoning, ontologies and alignment, reached once an agent knows the graph
+cli entity-ref Reasoning, ontologies and alignment, reached once an agent knows the graph
+
+# Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_reason Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_load_ontology Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_align_propose Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_align_decide Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_align_apply Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_rule_query Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_namespaces Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_entity_ref Reasoning, ontologies and alignment, reached once an agent knows the graph
+
+# Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_hybrid_search Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_search_nodes Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_search_facts Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_search_query Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_unified_search Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_fragments Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_reconcile Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_entity_history Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_transactions Further search and lookup variants; quipu_search and quipu_context come first
+mcp quipu_cooccurrence Further search and lookup variants; quipu_search and quipu_context come first
+
+# Event feeds and subscriptions for reactive consumers
+mcp quipu_events Event feeds and subscriptions for reactive consumers
+mcp quipu_events_commit Event feeds and subscriptions for reactive consumers
+mcp quipu_graph_events Event feeds and subscriptions for reactive consumers
+mcp quipu_graph_events_commit Event feeds and subscriptions for reactive consumers
+mcp quipu_subscriptions Event feeds and subscriptions for reactive consumers
+mcp quipu_workflow_capabilities Event feeds and subscriptions for reactive consumers
+
+# Stored queries and proposal review; quipu_ask runs stored queries
+mcp quipu_queries Stored queries and proposal review; quipu_ask runs stored queries
+mcp quipu_accept_proposal Stored queries and proposal review; quipu_ask runs stored queries
+mcp quipu_reject_proposal Stored queries and proposal review; quipu_ask runs stored queries
+
+# Server identity
+mcp quipu_version Server identity

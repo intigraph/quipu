@@ -30,6 +30,7 @@ pub mod demotions;
 mod demotions_tests;
 pub mod events;
 pub mod forks;
+mod forks_merge;
 pub mod freeze;
 mod freeze_io;
 mod gate;

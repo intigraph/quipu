@@ -577,6 +577,13 @@ jobs:
           cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
           ln -s quipu "dist/${NAME}/qp"
           cp README.md LICENSE "dist/${NAME}/"
+          # Man pages and shell completions, generated from the command
+          # catalogue by quipu-docgen and committed; CI keeps them current.
+          # Packagers install from here: man/*.1 -> share/man/man1, and
+          # completions/ by shell (quipu.bash, _quipu, quipu.fish; qp.* for
+          # the alias).
+          cp -R packaging/man "dist/${NAME}/man"
+          cp -R packaging/completions "dist/${NAME}/completions"
 
           # The binaries carry every feature, and two of them have runtime
           # requirements the archive itself cannot satisfy. Saying so here is
@@ -634,6 +641,8 @@ jobs:
           grep -qx "${NAME}/quipu-server" <<<"${LISTING}"
           grep -qx "${NAME}/qp" <<<"${LISTING}"
           test "$(readlink "dist/${NAME}/qp")" = quipu
+          grep -qx "${NAME}/man/quipu.1" <<<"${LISTING}"
+          grep -qx "${NAME}/completions/_quipu" <<<"${LISTING}"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist
 

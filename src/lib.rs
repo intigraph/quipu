@@ -10,6 +10,10 @@ pub mod applier;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asof_share;
 pub mod bindings;
+pub mod changeset;
+/// Change-sets against a live store: `/diff` and the `/patch` state check.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod changeset_store;
 pub mod compact;
 pub mod config;
 mod config_load;
@@ -18,6 +22,7 @@ pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
+pub mod entity_key;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;
@@ -36,6 +41,7 @@ mod literal_identity;
 pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
+pub mod merge3;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;

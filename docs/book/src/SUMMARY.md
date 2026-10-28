@@ -8,7 +8,9 @@
 - [Installation](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Agent Setup](getting-started/agent-setup.md)
+- [Agent Primer](getting-started/agent-primer.md)
 - [Configuration](getting-started/configuration.md)
+- [Coming from TerminusDB](getting-started/coming-from-terminusdb.md)
 - [Stable Entity References](reference/namespaces.md)
 
 # Concepts
@@ -43,6 +45,7 @@
 # Reference
 
 - [CLI Commands](reference/cli.md)
+  - [CLI Command Index](reference/cli-commands.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
@@ -52,6 +55,7 @@
 - [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)
 - [MCP Tools](reference/mcp-tools.md)
+  - [MCP Tool Index](reference/mcp-tool-index.md)
 - [Reasoner](reference/reasoner.md)
 - [Rust API](reference/api.md)
 

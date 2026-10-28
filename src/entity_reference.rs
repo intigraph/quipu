@@ -18,6 +18,8 @@ struct Request {
     source: Option<String>,
     #[serde(rename = "asOf")]
     as_of: Option<String>,
+    /// Key-field values for `minting = "key"` namespaces, by predicate IRI.
+    keys: Option<serde_json::Map<String, Value>>,
 }
 
 fn required<'a>(value: &'a Option<String>, name: &str) -> Result<&'a str> {
@@ -49,6 +51,11 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
         .map_err(|e| Error::InvalidValue(format!("entity reference: {e}")))?;
     let namespaces = entity_namespaces::list(store)?;
     if request.action == "resolve" {
+        if request.keys.is_some() {
+            return Err(Error::InvalidValue(
+                "resolve takes an exact iri, not keys".into(),
+            ));
+        }
         let iri = required(&request.iri, "iri")?;
         oxrdf::NamedNode::new(iri).map_err(|e| Error::InvalidValue(e.to_string()))?;
         let entry = namespaces
@@ -116,23 +123,48 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
         }
         id
     };
-    let key = if entry.minting == "opaque" {
-        opaque_key()?
-    } else {
-        let label = required(&request.label, "label for label minting")?;
-        if !label
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
-        {
-            return Err(Error::InvalidValue(
-                "label key must contain only letters, digits, - or _".into(),
-            ));
+    if request.keys.is_some() != (entry.minting == "key") {
+        return Err(Error::InvalidValue(
+            "keys are required for, and only accepted by, key-minting namespaces".into(),
+        ));
+    }
+    let mut key_triples = Vec::new();
+    let key = match entry.minting.as_str() {
+        "opaque" => opaque_key()?,
+        "key" => {
+            let shapes = store.get_combined_shapes()?.ok_or_else(|| {
+                Error::InvalidValue("key minting requires a loaded keyed shape".into())
+            })?;
+            let spec = crate::entity_key::key_spec(&shapes, node_type)?;
+            if spec.strategy == crate::entity_key::Strategy::Lexical && entry.types.len() != 1 {
+                return Err(Error::InvalidValue(
+                    "lexical keys omit the type, so the namespace must select exactly one type"
+                        .into(),
+                ));
+            }
+            let keys = request.keys.as_ref().expect("checked above");
+            key_triples = crate::entity_key::key_terms(&spec, keys)?;
+            crate::entity_key::derive_key(&spec, node_type, &key_triples)
         }
-        label.to_string()
+        _ => {
+            let label = required(&request.label, "label for label minting")?;
+            if !label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            {
+                return Err(Error::InvalidValue(
+                    "label key must contain only letters, digits, - or _".into(),
+                ));
+            }
+            label.to_string()
+        }
     };
     let iri = format!("{}{key}", entry.base_iri);
     // The term dictionary outlives retracted facts: IDs are never recycled.
-    if store.lookup(&iri)?.is_some() {
+    if let Some(id) = store.lookup(&iri)? {
+        if entry.minting == "key" {
+            return converge(store, id, graph, &iri, node_type, &key_triples, prefix);
+        }
         return Err(Error::InvalidValue(
             "entity key already allocated; never reuse".into(),
         ));
@@ -145,6 +177,9 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
             oxrdf::Literal::new_simple_literal(label)
         ));
     }
+    for (field, term) in &key_triples {
+        text.push_str(&format!("<{iri}> <{field}> {term} .\n"));
+    }
     let (tx, count) = crate::rdf::ingest_rdf_to_graph(
         store,
         text.as_bytes(),
@@ -155,29 +190,58 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
         request.source.as_deref(),
         graph,
     )?;
-    Ok(json!({"iri":iri,"tx_id":tx,"count":count,"namespace":prefix}))
+    let mut out = json!({"iri":iri,"tx_id":tx,"count":count,"namespace":prefix});
+    if entry.minting == "key" {
+        out["converged"] = json!(false);
+    }
+    Ok(out)
+}
+
+/// A key IRI that already exists is the same entity, so a second writer gets
+/// the existing IRI and writes nothing. It converges only onto a live entity
+/// of the same type carrying exactly these key values in the target graph;
+/// anything else (retracted, other type, other graph, mutated key, a hash
+/// collision) refuses rather than reviving or overwriting identity.
+fn converge(
+    store: &Store,
+    id: i64,
+    graph: i64,
+    iri: &str,
+    node_type: &str,
+    key_triples: &[(String, oxrdf::Term)],
+    prefix: &str,
+) -> Result<Value> {
+    let mut current: std::collections::BTreeMap<String, Vec<oxrdf::Term>> = Default::default();
+    for fact in store.entity_facts_in_graph(id, graph)? {
+        current
+            .entry(store.resolve(fact.attribute)?)
+            .or_default()
+            .push(crate::rdf::value_to_term(store, &fact.value)?);
+    }
+    let typed = current.get(crate::namespace::RDF_TYPE).is_some_and(|ts| {
+        ts.iter()
+            .any(|t| matches!(t, oxrdf::Term::NamedNode(n) if n.as_str() == node_type))
+    });
+    let same_keys = key_triples.iter().all(|(field, term)| {
+        current
+            .get(field)
+            .is_some_and(|vs| vs.as_slice() == [term.clone()])
+    });
+    if !(typed && same_keys) {
+        return Err(Error::InvalidValue(
+            "key IRI exists without a live entity of this type and key in this graph; \
+             restore or supersede it explicitly, never re-mint"
+                .into(),
+        ));
+    }
+    Ok(json!({"iri":iri,"tx_id":null,"count":0,"namespace":prefix,"converged":true}))
 }
 
 fn opaque_key() -> Result<String> {
     let mut bytes = [0u8; 16];
     ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut bytes)
         .map_err(|_| Error::CannotVerify("OS entropy unavailable".into()))?;
-    let mut out = String::new();
-    let alphabet = b"abcdefghijklmnopqrstuvwxyz234567";
-    let mut bits = 0u32;
-    let mut available = 0;
-    for byte in bytes {
-        bits = (bits << 8) | u32::from(byte);
-        available += 8;
-        while available >= 5 {
-            available -= 5;
-            out.push(alphabet[((bits >> available) & 31) as usize] as char);
-        }
-    }
-    if available > 0 {
-        out.push(alphabet[((bits << (5 - available)) & 31) as usize] as char);
-    }
-    Ok(out)
+    Ok(crate::entity_key::base32_lower(&bytes))
 }
 
 /// Shared REST/MCP schemas. Namespace listing is read-only; entity minting is
@@ -199,7 +263,8 @@ pub fn definitions() -> Vec<Value> {
                     "namespace":{"type":"string"},"type":{"type":"string"},
                     "graph":{"type":"string"},"label":{"type":"string"},
                     "iri":{"type":"string"},"source":{"type":"string"},
-                    "asOf":{"type":"string"}}}
+                    "asOf":{"type":"string"},
+                    "keys":{"type":"object","description":"Key-field values by predicate IRI, for minting=key namespaces. Same type + keys = same IRI; a repeat converges without writing."}}}
         }),
     ]
 }

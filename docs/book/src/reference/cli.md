@@ -1,6 +1,8 @@
 # CLI Commands
 
 The `quipu` binary provides a command-line interface for all operations.
+The [CLI Command Index](cli-commands.md) lists every command path with its
+exact syntax, generated from the parser's catalogue.
 
 ## Global Flags
 

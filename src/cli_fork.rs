@@ -180,5 +180,18 @@ fn cmd_promote(args: &[String], db_path: &str, name: &str) {
             }
             std::process::exit(1);
         }
+        quipu::ForkPromotion::Conflicts(conflicts) => {
+            eprintln!(
+                "promotion held: {} sh:maxCount slot(s) were changed differently on ROOT and in the fork since the fork's base; nothing was written and the fork stays open",
+                conflicts.len()
+            );
+            for c in &conflicts {
+                eprintln!(
+                    "  {} <{}> (maxCount {}): base {:?}, ROOT {:?}, fork {:?}",
+                    c.subject, c.predicate, c.max_count, c.base, c.ours, c.theirs
+                );
+            }
+            std::process::exit(1);
+        }
     }
 }

@@ -6,8 +6,15 @@
 //! the fork is queryable exactly like any named graph and evolves as an
 //! independent lineage. Design: `docs/design/fork-at-any-event.md`.
 //!
+//! Promotion is a **three-way merge**, not a diff against current ROOT: base =
+//! ROOT as of the fork's `fork_tx`, ours = ROOT now, theirs = the fork now,
+//! merged with the share merge's slot operator (`crate::merge3`). ROOT writes
+//! made after the fork's base survive; a bounded (`sh:maxCount`) slot both
+//! sides changed incompatibly is reported as a conflict and nothing is
+//! written. See `forks_merge.rs`.
+//!
 //! The load-bearing constraint, stated up front: **promotion re-enters through
-//! the write gates**. `fork_promote` computes the structural delta against ROOT
+//! the write gates**. `fork_promote` computes the merged delta against ROOT
 //! and applies it via `transact_to_graph(..., ROOT)` — the same authority,
 //! placement, policy and OWL gates every ROOT write faces — after validating
 //! the asserted delta against the stored reject-mode SHACL shapes. A refusal
@@ -75,6 +82,10 @@ pub enum ForkPromotion {
     /// SHACL refused the asserted delta. **Nothing was written.**
     #[cfg(feature = "shacl")]
     Refused(crate::shacl::ValidationFeedback),
+    /// ROOT and the fork both changed a `sh:maxCount`-bounded slot since the
+    /// fork's base, incompatibly — the same decision records share merge
+    /// reports. **Nothing was written**; the fork stays `open`.
+    Conflicts(Vec<crate::merge3::DecisionRecord>),
 }
 
 impl Store {
@@ -294,8 +305,15 @@ impl Store {
         Ok(ForkDiff { added, removed })
     }
 
-    /// Promote an open fork: apply its present-state delta to ROOT **through
-    /// the write gates**, then mark it `promoted`.
+    /// Promote an open fork: three-way merge it into ROOT over the fork's
+    /// base (ROOT as of `fork_tx`), apply the merged delta **through the write
+    /// gates**, then mark it `promoted`.
+    ///
+    /// ROOT changes made after the fork's base are kept, not retracted. A
+    /// `sh:maxCount` slot both sides changed incompatibly returns
+    /// [`ForkPromotion::Conflicts`] and writes NOTHING. A fork whose recorded
+    /// base transaction is unusable is refused with an error rather than
+    /// merged against a guessed base.
     ///
     /// The asserted delta is validated against the stored reject-mode SHACL
     /// shapes first (`split_shapes_by_policy` — emit-mode shapes observe, they
@@ -309,8 +327,25 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<ForkPromotion> {
-        let _f = self.require_open_fork(name, "promote")?;
-        let diff = self.fork_diff("main", name)?;
+        let f = self.require_open_fork(name, "promote")?;
+        let latest = self.latest_tx_id()?;
+        if f.fork_tx < 0 || f.fork_tx > latest {
+            return Err(Error::InvalidValue(format!(
+                "cannot promote fork '{name}': it has no usable recorded base \
+                 transaction (fork_tx = {}, latest tx = {latest}). Promotion is a \
+                 three-way merge against ROOT as of the fork's base and will not \
+                 guess one; inspect `quipu fork diff main {name}` and re-apply \
+                 the changes on a fresh fork",
+                f.fork_tx
+            )));
+        }
+        let base = self.root_facts_as_of(f.fork_tx)?;
+        let ours = self.current_facts_in_graph(crate::schema::ROOT_GRAPH)?;
+        let theirs = self.current_facts_in_graph(f.g)?;
+        let diff = self.fork_merge(base, ours, theirs)?;
+        if !diff.conflicts.is_empty() {
+            return Ok(ForkPromotion::Conflicts(diff.conflicts));
+        }
 
         #[cfg(feature = "shacl")]
         if !diff.added.is_empty()
