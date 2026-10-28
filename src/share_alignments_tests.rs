@@ -245,7 +245,7 @@ fn http_directory_fetches_only_fixed_manifest_declared_alignment_member() {
         vec!["manifest.json", "export.nt", "shapes.ttl", ALIGNMENTS_FILE]
     );
 }
-
+#[cfg(all(target_os = "linux", not(target_arch = "wasm32")))] // rustix has no mkfifoat on macOS
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 #[test]
 fn native_producer_inputs_refuse_symlink_fifo_and_oversized_files() {
