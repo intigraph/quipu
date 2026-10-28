@@ -1,0 +1,35 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-SEARCH-INDEX 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-search\-index \- Report, backfill or drop the search indexes
+.SH SYNOPSIS
+\fBquipu search\-index\fR [\fB\-\-db\fR] [\fB\-\-kind\fR] [\fB\-\-batch\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+Report, backfill or drop the search indexes
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-kind\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-batch\-size\fR \fI<VALUE>\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-search\-index\-status(1)
+Report the state of a search index
+.TP
+quipu\-search\-index\-backfill(1)
+Backfill a search index in batches
+.TP
+quipu\-search\-index\-drop(1)
+Drop a search index
+.TP
+quipu\-search\-index\-help(1)
+Print this message or the help of the given subcommand(s)

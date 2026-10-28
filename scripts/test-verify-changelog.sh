@@ -492,6 +492,23 @@ for arm in stale-draft missing-released missing-pending complete-pending; do
     fail=$((fail + 1))
   fi
 done
+# aegis-3xv: a shipped (tagged) section that is wrong must fail the run that cut
+# it, and only that run. Every later push skips it; a run that deferred to the
+# release commit's own run skips it too.
+git -C "$d" show quipu-ai-v1.1.0:Cargo.toml > "$d/Cargo.toml"
+git -C "$d" show quipu-ai-v1.1.0:CHANGELOG.md | grep -vF "[$c]" > "$d/CHANGELOG.md"
+for arm in "released::0" "released:true:1" "defer::0" "release::1"; do
+  IFS=: read -r state created want <<<"$arm"
+  out="$(cd "$d" && STATE="$state" CREATED="$created" GITHUB_STEP_SUMMARY=/dev/null \
+    bash -e -c "$main_step" 2>&1)"; rc=$?
+  if [[ "$rc" -eq "$want" ]]; then
+    echo "  PASS  main workflow shipped-missing state=$state created=${created:-no} (exit $rc)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  main workflow shipped-missing state=$state created=${created:-no}: wanted $want, got $rc: $out" >&2
+    fail=$((fail + 1))
+  fi
+done
 rm -rf "$d"
 
 # The detector's own arms, including its parse-error cases.

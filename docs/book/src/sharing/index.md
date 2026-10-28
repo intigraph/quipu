@@ -502,7 +502,8 @@ refuses outright with "incoming share has no parent_share; three-way merge has n
 base"). Conflicts are detected against the SHACL cardinalities (`max_counts`); on
 conflict Quipu **keeps the base value**, emits a `DecisionRecord`, and the CLI
 exits **2** (`src/cli_pack.rs`, `cmd_merge`). It would rather stop and tell you
-than pick a winner.
+than pick a winner. [Reconciling a failed merge](reconcile.md) is how such a
+merge (or a held fork promotion, or a Git pendant merge) is finished.
 
 ## Federation and SPARQL `SERVICE`
 

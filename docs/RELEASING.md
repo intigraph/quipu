@@ -2,6 +2,13 @@
 
 ## The normal path — nobody dispatches anything
 
+`release-pr-daily.yml` prepares the release PR, corrects its changelog and runs
+`scripts/sync-python-binding.py` on that branch. The correction commits
+`CHANGELOG.md`, `bindings/python/Cargo.toml` and `bindings/python/Cargo.lock`
+together, including when only binding versions changed. A failed sync stops
+before the correction is pushed. The Python-bindings workflow builds and tests
+wheels and an sdist; it does not publish them.
+
 `release-plz` opens a release PR. Merging it to `main` tags the commit it built and the
 `release` workflow publishes the GitHub release and its assets. That is the whole procedure.
 The tag and the built commit agree by construction, because release-plz tags the very commit

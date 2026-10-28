@@ -215,15 +215,22 @@ write) — about 2.4 s per million facts in a debug build.
 Trust concentrates in a small, human-owned surface: `aegis:VerifierRegistration`
 facts carry each verifier's name, hex `aegis:publicKey`, and the predicates it
 `aegis:attests`. A human registers a verifier; quipu never self-registers.
+A registration counts only when it chains to the human trust root: it carries
+an `aegis:trustTier` (`"human"` or `"agent"`) that only an amendment signed by
+an enrolled human key can write. Any writer can create an unmarked
+registration, so an unmarked one never makes a verdict trusted.
 
 - `quipu_verifier_authorized` — may this verifier attest this predicate?
 - `quipu_verdict_verify` — verify a signed verdict's fields against the
   registry. Returns `signature_valid`, `verifier_registered`,
   `verifier_authorized`, and `trusted` = `signature_valid` **AND**
-  `verifier_authorized` — the one property a consumer should gate on.
+  `verifier_authorized` over a governed registration — the one property a
+  consumer should gate on — plus `trust` (which registration and which root)
+  or `untrusted_reason`.
 
-Verification is currently latest-only; the bitemporal key registry (rotation
-with as-of re-verification) is designed but not built.
+Verification is as-of the recorded signature (signing-plane S1); see
+[signing-plane.md](https://github.com/intigraph/quipu/blob/main/docs/design/signing-plane.md) §5 S3b for the trust-root
+rule and how historical verdicts are judged.
 
 ## Transition signatures at the write gate
 

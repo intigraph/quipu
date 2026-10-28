@@ -34,6 +34,7 @@ mod tests;
 mod scope_refusal_tests;
 pub mod tools;
 mod value;
+mod verdict_verify;
 mod verdict_witness;
 
 use serde_json::Value as JsonValue;

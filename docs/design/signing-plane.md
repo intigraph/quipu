@@ -28,11 +28,12 @@ design.
   never an unsigned one**.
 - **Custody**: private keys are host files (`QUIPU_SIGNING_KEY`, 0600,
   generated on first use). Explicitly v1 — not an HSM or secret store.
-- **Trust root, already in-store**: human-authored
-  `aegis:VerifierRegistration` facts carry each verifier's name, public
-  key, and the predicates it may attest. `quipu_verdict_verify` decides
-  `trusted` = signature-valid ∧ registered ∧ authorized — all by query.
-  Quipu never self-registers.
+- **Trust root, already in-store**: `aegis:VerifierRegistration` facts
+  carry each verifier's name, public key, and the predicates it may
+  attest. `quipu_verdict_verify` decides `trusted` = signature-valid ∧
+  registered ∧ authorized — all by query — and, since aegis-c97o (§5 S3b),
+  only over registrations that chain to the human trust root. Quipu never
+  self-registers.
 - **The mirror**: yupana's `src/verdict.rs` states "signing MIRRORS
   quipu's `signing.rs` exactly… Diverge from that scheme and the
   signature would be well-formed but never TRUSTED." Two codebases, one
@@ -334,6 +335,61 @@ instead of a synchronized multi-repo deploy.
 > is the only graph the human tier reads. Amendments and the bootstrap
 > PoP verify ed25519 today; the hardware schemes (.9.2) plug into the same
 > verification point.
+
+### S3b — verdict verification chains to the trust root (aegis-c97o)
+
+> **Implemented.** After S3, only the HUMAN tier was gated. `quipu_verdict_verify`
+> and `quipu_verifier_authorized` still read every ROOT registration
+> (`Scope::Root`), so any writer could enrol its own key with one unsigned
+> write (self-enrollment) and its verdicts verified as `trusted`.
+>
+> - **A second governed tier.** A registration carrying an asserted ROOT
+>   `aegis:trustTier "agent"` is gated exactly like a human one: the gate's
+>   snapshot now covers every governed registration (`"human"` or `"agent"`),
+>   so adding the marker, or changing anything on a marked registration,
+>   needs an `aegis:RegistryAmendment` signed by a human trust-root key
+>   enrolled BEFORE the write. Only human-tier registrations attesting
+>   `urn:quipu:policy:trust-root` can sign amendments; an agent-tier key
+>   cannot, even one that names that policy. Agent-tier keys never verify
+>   a human decision (`Scope::HumanTier` is unchanged).
+> - **Verification reads `Scope::Governed`.** A verdict is `trusted` only
+>   when its key belongs to a registration that was governed AND authorized
+>   the predicate at the witness. The hardware schemes apply the same rule.
+>   Unmarked registrations are still read so the answer can say they exist.
+> - **The answer says why.** `trust` = `{registration, tier, root}`, where
+>   `root.kind` is `bootstrap` (record + fingerprint, re-checked against the
+>   key), `amendment` (the amendment whose signature re-verifies under a
+>   current human trust-root key, and its signer) or `gate` (admitted, but
+>   the signing root key has since rotated). Otherwise `untrusted_reason` is
+>   one of `verifier-not-registered`, `signature-invalid`,
+>   `registration-not-chained-to-trust-root`, `not-authorized-for-predicate`
+>   or `caller-supplied-instant`. The chain is provenance; the trust
+>   decision is the gated marker alone.
+> - **Strict, no grace.** A pre-existing registration verifies nothing until
+>   the root endorses it. A grace period that kept trusting unendorsed
+>   registrations for new verdicts would keep the self-enrollment open for
+>   that release, so there is none. Instead every verification that WOULD
+>   have trusted before logs a warning naming the registration, and
+>   `quipu trust-root status` lists every unendorsed registration. Migration
+>   is `quipu trust-root endorse-challenge` / `endorse`
+>   ([runbook](../runbooks/trust-root-ceremony.md#endorsing-agent-registrations-aegis-c97o)).
+> - **Historical verdicts.** Verification stays as-of the recorded signature
+>   (S1), and the tier marker is read as of that instant too. So endorsement
+>   is NOT retroactive: a verdict recorded while its registration had no
+>   trust-root chain reports `signature_valid: true, trusted: false` forever,
+>   and only verdicts recorded after the endorsement verify as trusted. A
+>   later root revocation (retracting the marker) ends trust for verdicts
+>   recorded after it, and leaves those recorded while the endorsement stood
+>   trusted. Retroactive ratification was rejected: the marker would then
+>   vouch for whatever key the registration held at the old instant,
+>   including one an agent swapped in and out before the root looked.
+> - **Not changed.** The transition gate (shuttle's identity graph, read at
+>   `Scope::AllGraphs`) still trusts its registrations as written; it is the
+>   same class of gap and is tracked separately.
+>
+> Tests: `src/mcp/verdict_trust_root_tests.rs` (self-enrollment, root-signed
+> registration, revocation, the historical rule) and the `aegis-c97o` block in
+> `src/governance/trust_root_tests.rs` (gate, amenders, chain, migration).
 
 "Who signs the registry" (deferred in v1) gets the same answer policies
 got: registration writes go through the write gate under a

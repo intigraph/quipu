@@ -1,0 +1,26 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-POLICY 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-policy \- Draft an advisory policy from an exemplar, or backtest one
+.SH SYNOPSIS
+\fBquipu policy\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Draft an advisory policy from an exemplar, or backtest one
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-policy\-draft(1)
+Draft advisory policy Turtle from an exemplar and an intent
+.TP
+quipu\-policy\-backtest(1)
+Backtest a candidate policy over recorded transactions
+.TP
+quipu\-policy\-help(1)
+Print this message or the help of the given subcommand(s)

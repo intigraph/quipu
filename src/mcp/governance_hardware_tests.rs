@@ -21,8 +21,42 @@ fn ingest(store: &mut Store, ttl: &str) -> crate::error::Result<()> {
         "2026-01-01T00:00:00Z",
         None,
         None,
+    )?;
+    govern_all(store);
+    Ok(())
+}
+
+/// aegis-c97o: only a registration the trust root endorsed is trusted. These
+/// tests are about the schemes, so every registration they write is endorsed
+/// (as human tier) right after it lands.
+fn govern_all(store: &mut Store) {
+    let crate::sparql::QueryResult::Select { rows, .. } = crate::sparql::query(
+        store,
+        "SELECT DISTINCT ?r WHERE { VALUES ?c { \
+         <http://aegis.gastown.local/ontology/VerifierRegistration> \
+         <https://scbrown.github.io/quechua/ns#VerifierRegistration> } ?r a ?c }",
     )
-    .map(|_| ())
+    .unwrap() else {
+        unreachable!()
+    };
+    let now = crate::governance::verifier_registry::Witness::now();
+    for row in rows {
+        let Some(crate::types::Value::Ref(id)) = row.get("r") else {
+            continue;
+        };
+        let iri = store.resolve(*id).unwrap();
+        if crate::governance::verifier_registry::governed_tier(store, &iri, &now)
+            .unwrap()
+            .is_none()
+        {
+            crate::governance::trust_root::test_support::govern(
+                store,
+                &iri,
+                "human",
+                "2026-01-01T00:00:00Z",
+            );
+        }
+    }
 }
 
 fn enabled_store() -> Store {

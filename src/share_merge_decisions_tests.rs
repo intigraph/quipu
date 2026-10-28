@@ -872,3 +872,126 @@ fn inline_slot_scope_requires_explicit_boolean_opt_in() {
     input["slot_scoped"] = serde_json::json!("true");
     assert!(emit_inline(&input).is_err());
 }
+
+/// aegis-k7l: show -> resolve each choice through the shared verb -> apply ->
+/// the shape holds -> re-applying the same file is a no-op.
+#[test]
+fn reconcile_each_choice_end_to_end_and_reapply_is_a_noop() {
+    use crate::merge_reconcile::{Choice, ReconcileFile, Surface, render_text};
+    let cases = [
+        (Choice::Side(Side::Ours), "\"blocked\""),
+        (Choice::Side(Side::Theirs), "\"closed\""),
+        (Choice::Side(Side::Base), "\"open\""),
+        (Choice::Values(vec!["\"wontfix\"".into()]), "\"wontfix\""),
+    ];
+    for (choice, expected) in cases {
+        let root = tempfile::tempdir().unwrap();
+        let (mut local, incoming) = scenario(root.path());
+        let mut file = ReconcileFile::Share(propose(emit_scoped(&local, &incoming).unwrap()));
+        let text = render_text(&file.view("d.json", Surface::Cli));
+        assert!(text.contains("[d1] Thing S · status"), "{text}");
+        assert!(
+            text.contains("Next: quipu merge resolve d.json d1"),
+            "{text}"
+        );
+        file.resolve("d1", choice.clone(), "steve", "2026-10-07T00:03:00Z")
+            .unwrap();
+        let bytes = file.to_bytes().unwrap();
+        let ReconcileFile::Share(decided) = ReconcileFile::load(&bytes).unwrap() else {
+            panic!("not a share file")
+        };
+        let out = apply(
+            &mut local,
+            &incoming,
+            &decided,
+            &bytes,
+            "steve",
+            "2026-10-07T00:04:00Z",
+            None,
+        )
+        .unwrap();
+        assert_eq!(out.merge.outcome, "merged", "{choice:?}");
+        assert_eq!(values(&local, STATUS), [expected], "{choice:?}");
+        assert_eq!(values(&local, TAG), ["\"a\"", "\"ours\"", "\"theirs\""]);
+        assert_eq!(out.applied[0].decided_by.as_deref(), Some("steve"));
+
+        let before = local.latest_tx_id().unwrap();
+        let again = apply(
+            &mut local,
+            &incoming,
+            &decided,
+            &bytes,
+            "steve",
+            "2026-10-07T00:05:00Z",
+            None,
+        )
+        .unwrap();
+        assert_eq!(again.merge.outcome, "already-applied");
+        assert_eq!(again.merge.tx_id, out.merge.tx_id);
+        assert_eq!(local.latest_tx_id().unwrap(), before);
+        assert_eq!(values(&local, STATUS), [expected]);
+    }
+}
+
+#[test]
+fn both_takes_the_union_and_is_refused_above_max_count() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(&mut file, &Decision::Choose { choose: Side::Both });
+    let err = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "steve",
+        "2026-10-07T00:03:00Z",
+        None,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("above sh:maxCount 1"), "{err}");
+    assert_eq!(
+        union(&["\"b\"".into(), "\"a\"".into()], &["\"a\"".into()]),
+        ["\"a\"", "\"b\""]
+    );
+}
+
+/// aegis-gxfm: a merge decision that only REMOVES values must still meet the
+/// local reject shapes; write-time SHACL judges only what is asserted.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_decision_that_only_removes_a_required_value_is_refused() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    local
+        .load_shapes(
+            "status-required",
+            &format!(
+                "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+                 <urn:t:StatusShape> a sh:NodeShape ; sh:targetNode <{S}> ;\n    \
+                 sh:property [ sh:path <{STATUS}> ; sh:minCount 1 ] .\n"
+            ),
+            "2026-10-07",
+        )
+        .unwrap();
+    local.shacl_config_mut().validate_on_write = true;
+    let before = fact_count(&local);
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(&mut file, &Decision::Values { values: Vec::new() });
+    let err = apply(
+        &mut local,
+        &incoming,
+        &file,
+        &bytes,
+        "stiwi",
+        "2026-10-07T01:00:00Z",
+        None,
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+    assert_eq!(fact_count(&local), before, "nothing written");
+    assert_eq!(values(&local, STATUS), ["\"blocked\""]);
+}

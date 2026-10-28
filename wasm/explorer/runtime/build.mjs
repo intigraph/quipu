@@ -29,3 +29,7 @@ for (const [source, target] of [
 ]) {
   await copyFile(source, target);
 }
+
+for (const name of ["query-builder.mjs", "query-terms.mjs", "query-builder.d.mts"]) {
+  await copyFile(name, `dist/${name}`);
+}

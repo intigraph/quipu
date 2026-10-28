@@ -1,0 +1,35 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-IMPORT-REVIEW 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-import\-review \- Review staged shares awaiting promotion
+.SH SYNOPSIS
+\fBquipu import review\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Review staged shares awaiting promotion
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-import\-review\-pending(1)
+List staged shares awaiting review
+.TP
+quipu\-import\-review\-notify(1)
+Report staged shares older than an age threshold to a route
+.TP
+quipu\-import\-review\-rejected(1)
+Mark a staged share rejected, with a reason
+.TP
+quipu\-import\-review\-expired(1)
+Mark a staged share expired, with a reason
+.TP
+quipu\-import\-review\-reopen(1)
+Reopen a rejected or expired staged share
+.TP
+quipu\-import\-review\-help(1)
+Print this message or the help of the given subcommand(s)

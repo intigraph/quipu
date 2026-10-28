@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-SHAPES-LOAD 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-shapes\-load \- Load a named SHACL shapes file; later writes are validated against it
+.SH SYNOPSIS
+\fBquipu shapes load\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIname\fR> <\fIfile.ttl\fR> 
+.SH DESCRIPTION
+Load a named SHACL shapes file; later writes are validated against it
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIname\fR>
+
+.TP
+<\fIfile.ttl\fR>
+

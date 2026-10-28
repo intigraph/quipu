@@ -103,3 +103,104 @@ fn plain_strings_keep_their_lexical_order() {
     let store = store_with(&[("apple", ""), ("pear", "")]);
     assert_eq!(passing(&store, ">", "\"banana\""), vec!["pear"]);
 }
+
+/// Lexical forms of the values that pass `FILTER(<filter>)`, sorted.
+fn passing_filter(store: &Store, filter: &str) -> Vec<String> {
+    let q = format!("SELECT ?t WHERE {{ ?e <urn:t> ?t FILTER({filter}) }}");
+    let mut out: Vec<String> = query(store, &q)
+        .unwrap()
+        .rows()
+        .iter()
+        .map(|r| match &r["t"] {
+            Value::Typed { lexical, .. } | Value::Str(lexical) => lexical.clone(),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+// aegis-u93: an indeterminate comparison is a type error, and NOT of an error
+// is still an error, so `!=`, `!( < )` and `NOT IN` must not let it through.
+#[test]
+fn indeterminate_date_times_fail_under_negation_and_in() {
+    let store = store_with(&[
+        ("2026-10-20T10:00:00", "dateTime"), // untimezoned, within 14h of T
+        ("2026-11-01T00:00:00", "dateTime"), // untimezoned, far after T
+    ]);
+    let far = vec!["2026-11-01T00:00:00"];
+    assert_eq!(passing_filter(&store, &format!("?t != {T}")), far);
+    assert_eq!(passing_filter(&store, &format!("!(?t < {T})")), far);
+    assert_eq!(passing_filter(&store, &format!("?t NOT IN ({T})")), far);
+    assert_eq!(
+        passing_filter(&store, &format!("?t IN ({T})")),
+        Vec::<String>::new()
+    );
+    // IN is a disjunction: a true candidate wins over an erroring one.
+    let near = format!("\"2026-10-20T10:00:00\"^^<{XSD}dateTime>");
+    assert_eq!(
+        passing_filter(&store, &format!("?t IN ({T}, {near})")),
+        vec!["2026-10-20T10:00:00"]
+    );
+    // ...and with no true candidate the error decides: NOT IN still fails.
+    assert_eq!(
+        passing_filter(&store, &format!("?t NOT IN ({T}, \"x\")")),
+        far
+    );
+    // The error is not a stand-in for false: `error || true` is true.
+    assert_eq!(
+        passing_filter(&store, &format!("?t != {T} || true")).len(),
+        2
+    );
+}
+
+#[test]
+fn determinate_date_times_keep_value_semantics_under_equality() {
+    let store = store_with(&[
+        ("2026-10-20T05:00:00-05:00", "dateTime"), // same instant as T
+        ("2026-10-20T10:00:01Z", "dateTime"),      // one second after T
+    ]);
+    assert_eq!(
+        passing_filter(&store, &format!("?t = {T}")),
+        vec!["2026-10-20T05:00:00-05:00"]
+    );
+    assert_eq!(
+        passing_filter(&store, &format!("?t IN ({T})")),
+        vec!["2026-10-20T05:00:00-05:00"]
+    );
+    assert_eq!(
+        passing_filter(&store, &format!("?t != {T}")),
+        vec!["2026-10-20T10:00:01Z"]
+    );
+    assert_eq!(
+        passing_filter(&store, &format!("?t NOT IN ({T})")),
+        vec!["2026-10-20T10:00:01Z"]
+    );
+    assert_eq!(
+        passing_filter(&store, &format!("!(?t < {T})")).len(),
+        2,
+        "neither value is before T"
+    );
+}
+
+#[test]
+fn non_temporal_inequality_is_unchanged() {
+    let store = store_with(&[
+        ("apple", ""),
+        ("pear", ""),
+        ("2026-10-20T10:00:00Z", ""), // a plain string, not a dateTime
+    ]);
+    assert_eq!(
+        passing_filter(&store, "?t != \"apple\""),
+        vec!["2026-10-20T10:00:00Z", "pear"]
+    );
+    assert_eq!(
+        passing_filter(&store, "?t NOT IN (\"apple\")"),
+        vec!["2026-10-20T10:00:00Z", "pear"]
+    );
+    // A plain string against a dateTime is not the same term: `!=` holds.
+    assert_eq!(
+        passing_filter(&store, &format!("?t != {T}")),
+        vec!["2026-10-20T10:00:00Z", "apple", "pear"]
+    );
+}

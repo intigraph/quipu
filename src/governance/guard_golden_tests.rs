@@ -147,7 +147,7 @@ fn rule(store: &mut Store, policy: &str, target: &str, outcome: &str, by: &str) 
     let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, outcome, by));
     let dec = format!("http://ex/decision_{by}");
     let d = vec![
-        a(store, &dec, RDF_TYPE, iri(store, &ns("Decision"))),
+        a(store, &dec, RDF_TYPE, iri(store, &ns("GateApproval"))),
         a(store, &dec, &ns("outcome"), lit(outcome)),
         a(store, &dec, &ns("by"), lit(by)),
         a(store, &dec, &ns("evidenceHash"), lit(&hash)),

@@ -100,3 +100,5 @@ headers, and body per call — no network, no live Quipu:
 ```bash
 python3 -m pytest python/tests -q
 ```
+
+Compose immutable queries and save validated definitions with the [typed SPARQL builder](query-builder.md).

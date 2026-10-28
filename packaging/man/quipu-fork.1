@@ -1,0 +1,41 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-FORK 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-fork \- Create, list, diff, drop or promote named forks of ROOT
+.SH SYNOPSIS
+\fBquipu fork\fR [\fB\-\-db\fR] [\fB\-\-name\fR] [\fB\-\-timestamp\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fItx\fR> [\fIsubcommands\fR]
+.SH DESCRIPTION
+Create, list, diff, drop or promote named forks of ROOT
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-name\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-timestamp\fR \fI<VALUE>\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fItx\fR>
+
+.SH SUBCOMMANDS
+.TP
+quipu\-fork\-list(1)
+List named forks
+.TP
+quipu\-fork\-diff(1)
+Diff two forks
+.TP
+quipu\-fork\-drop(1)
+Drop a named fork
+.TP
+quipu\-fork\-promote(1)
+Promote a fork to ROOT, with reviewable conflict decisions
+.TP
+quipu\-fork\-help(1)
+Print this message or the help of the given subcommand(s)

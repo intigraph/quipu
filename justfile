@@ -141,7 +141,7 @@ paper-merge cmd="build":
         cd docs/paper-merge && rm -f main.aux main.bbl main.blg main.log main.out main.pdf main.fls main.fdb_latexmk; \
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
-# Run a paper benchmark: census, merge, memory, schema (and their report generators).
+# Run a paper benchmark: census, merge, agent-branches, memory, schema (and their report generators).
 # just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
 #   The default model is the scripted `fake` writer: zero spend. A real model
 #   spends budget; see benchmark/census/agent/README.md before running one.
@@ -160,13 +160,15 @@ bench name *args:
         cargo run --quiet --release --example shape_e --features shacl -- {{ args }}; \
     elif [ "{{ name }}" = "schema-report" ]; then \
         python3 benchmark/shapes/render.py {{ args }}; \
+    elif [ "{{ name }}" = "agent-branches" ]; then \
+        python3 benchmark/agent-branches/run.py {{ args }}; \
     elif [ "{{ name }}" = "merge-note" ]; then \
         python3 benchmark/merge-note.py; \
     elif [ "{{ name }}" = "agents" ]; then \
         cargo build --quiet --release --example census && \
         python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agent-branches, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
@@ -377,3 +379,30 @@ read-process-test server cli:
 installer-check:
     sh -n install.sh
     python3 scripts/test-install-release.py
+
+# Typed Python REST + JavaScript/WASM SPARQL builder controls.
+clients action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{action}}" in
+        package) uv build python ;;
+        types) npx --yes --ignore-scripts --package typescript@5.9.3 tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/query-builder-types.mts ;;
+        fmt) ruff format python/quipu_client python/tests/builder_cases.py python/tests/test_sparql.py ;;
+        check) cargo check --locked --no-default-features --all-targets ;;
+        lint) cargo clippy --locked --no-default-features --all-targets -- -D warnings -A missing-docs ;;
+        test) python3 -m pytest python/tests -q
+              node --test tests/query-builder.test.mjs
+              cargo test --locked --no-default-features --test query_builder
+              cargo test --locked --no-default-features --lib bindings::tests ;;
+        *) echo 'Use: just clients package|types|fmt|check|lint|test' >&2; exit 2 ;;
+    esac
+
+# Focused stack prime contract checks (runtime tests use the crew HOME guard).
+prime action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(action)}} in
+        check) cargo check --locked --no-default-features --features shacl --all-targets ;;
+        test) cargo test --locked --no-default-features --features shacl --bin quipu cli_prime:: && cargo test --locked --no-default-features --features shacl --test prime_cli --test prime_sync ;;
+        *) echo 'Use: just prime check|test' >&2; exit 2 ;;
+    esac

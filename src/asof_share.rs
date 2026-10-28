@@ -623,8 +623,8 @@ pub(crate) fn cut_with_control(
 
 #[path = "asof_share/support.rs"]
 mod support;
-pub(crate) use support::{AssertRecord, ReadPhaseGuard};
+pub(crate) use support::{AssertRecord, ReadPhaseGuard, shapes_hash};
 use support::{
     FrozenPack, GraphDigest, TxMeta, check_ceilings, free_bytes, frozen_member, frozen_pack,
-    scan_plan, shapes_hash, spool_usage, wal_len, wal_path,
+    scan_plan, spool_usage, wal_len, wal_path,
 };

@@ -266,6 +266,9 @@ pub(crate) fn promote_subjects_into_graph(
     };
     crate::time::check_request_deadline()?;
     if !changes.is_empty() {
+        // aegis-gxfm: target facts the staging copy lacks are closed here, so
+        // the removal half passes the deletion gate like any retraction.
+        store.enforce_retraction_shapes(&changes, g, None, actor, Some(source))?;
         moved.tx_id = store.transact_to_graph(&changes, timestamp, actor, Some(source), g)?;
     }
     #[cfg(test)]

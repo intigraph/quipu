@@ -70,7 +70,7 @@ use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
-use super::verifier_registry::{HUMAN_TIER, TRUST_TIER};
+use super::verifier_registry::{AGENT_TIER, HUMAN_TIER, TRUST_TIER};
 
 /// The policy a human key must attest to amend the registry.
 pub const TRUST_ROOT_POLICY: &str = "urn:quipu:policy:trust-root";
@@ -101,6 +101,18 @@ pub struct Snapshot {
 /// Every entity carrying an asserted ROOT `trustTier "human"` now, with the
 /// digest of its ROOT content.
 fn human_registry(store: &Store) -> Result<BTreeMap<String, String>> {
+    tiered_registry(store, &[HUMAN_TIER])
+}
+
+/// Every GOVERNED entity (asserted ROOT `trustTier` "human" or "agent") now,
+/// with the digest of its ROOT content. This is the set the gate protects
+/// (aegis-c97o): an agent-tier registration is endorsed by a human key, so
+/// changing it needs a signed amendment exactly as a human one does.
+fn governed_registry(store: &Store) -> Result<BTreeMap<String, String>> {
+    tiered_registry(store, &[HUMAN_TIER, AGENT_TIER])
+}
+
+fn tiered_registry(store: &Store, tiers: &[&str]) -> Result<BTreeMap<String, String>> {
     let mut out = BTreeMap::new();
     let Some(tier) = store.lookup(TRUST_TIER)? else {
         return Ok(out);
@@ -109,10 +121,18 @@ fn human_registry(store: &Store) -> Result<BTreeMap<String, String>> {
         "SELECT DISTINCT e FROM facts WHERE a = ?1 AND v = ?2 AND g = 0 \
          AND op = 1 AND valid_to IS NULL",
     )?;
-    let human = Value::Str(HUMAN_TIER.into()).to_bytes();
-    let ids = stmt
-        .query_map(params![tier, human], |row| row.get::<_, i64>(0))?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut ids = Vec::new();
+    for t in tiers {
+        let value = Value::Str((*t).into()).to_bytes();
+        for id in stmt
+            .query_map(params![tier, value], |row| row.get::<_, i64>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?
+        {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+    }
     for id in ids {
         let iri = store.resolve(id)?;
         let digest =
@@ -178,11 +198,14 @@ fn is_registration(store: &Store, entity: &str) -> Result<bool> {
         .any(|f| f.attribute == t && matches!(f.value, Value::Ref(id) if classes.contains(&id))))
 }
 
-/// Record the human-tier registry before a write is staged.
+/// Record the governed registry before a write is staged. Only HUMAN-tier
+/// registrations attesting [`TRUST_ROOT_POLICY`] become amenders: an
+/// agent-tier registration can never sign an amendment, even one that names
+/// the trust-root policy.
 pub(crate) fn snapshot(store: &Store) -> Result<Snapshot> {
-    let registrations = human_registry(store)?;
+    let registrations = governed_registry(store)?;
     let mut amenders = Vec::new();
-    for iri in registrations.keys() {
+    for iri in human_registry(store)?.keys() {
         if !is_registration(store, iri)?
             || !strings(store, iri, &ns("attests"))?
                 .iter()
@@ -228,9 +251,9 @@ pub fn bootstrap_message(store_id: &str, verifier: &str, public_key: &str) -> Ve
 }
 
 /// The digest an amendment must name for `registration` as the pending write
-/// would leave it (`"revoked"` when it would no longer be human-tier).
+/// would leave it (`"revoked"` when it would no longer be governed).
 pub fn pending_digest(store: &Store, registration: &str) -> Result<String> {
-    Ok(human_registry(store)?
+    Ok(governed_registry(store)?
         .remove(registration)
         .unwrap_or_else(|| REVOKED.to_string()))
 }
@@ -285,6 +308,10 @@ pub fn digest_after(store: &Store, registration: &str, datums: &[Datum]) -> Resu
         }
     }
     let mut scratch = Store::open_in_memory()?;
+    // The scratch copy admits what the real store admits: a hardware-scheme
+    // registration is digested only where the operator enabled the schemes.
+    scratch.governance_config_mut().hardware_verdict_schemes =
+        store.governance_config().hardware_verdict_schemes;
     let mut staged = Vec::new();
     for (s, p, o) in &triples {
         let value = match o {
@@ -353,7 +380,7 @@ pub(crate) fn check(
     datums: &[Datum],
     bootstrap: Option<&str>,
 ) -> Result<()> {
-    let after = human_registry(store)?;
+    let after = governed_registry(store)?;
     let mut changed: BTreeMap<&str, String> = BTreeMap::new();
     for (iri, digest) in &after {
         if before.registrations.get(iri) != Some(digest) {
@@ -393,7 +420,7 @@ pub(crate) fn check(
         });
         if !covered {
             return Err(refuse(&format!(
-                "the human trust-root registration {registration} would change (to {digest}) \
+                "the governed (trust-tier) registration {registration} would change (to {digest}) \
                  without an aegis:RegistryAmendment signed by a key enrolled for {TRUST_ROOT_POLICY} \
                  before this write"
             )));
@@ -606,6 +633,10 @@ pub fn bootstrap(
         fingerprint,
     })
 }
+
+#[path = "trust_root_endorsement.rs"]
+mod endorsement;
+pub use endorsement::{Chain, EndorseChallenge, chain_of, endorse, endorse_challenge, unendorsed};
 
 #[cfg(test)]
 #[path = "trust_root_tests.rs"]

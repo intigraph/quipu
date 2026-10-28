@@ -300,6 +300,24 @@ the import name remains `quipu`. This supersedes the earlier illustrative
 remain unverified; first publication needs the existing one-way release gate.
 Local wheel testing follows the WASM acceptance milestone.
 
+First slice (aegis-gqo.1): `bindings/python` builds `quipu-kg` with PyO3 and
+maturin over `bindings::Engine`, which now also opens file-backed stores
+(`Engine::open(path)`, reported as `storage: "file"`). It exposes
+`Store.memory()`/`Store.open(path)`, context-manager close, shapes, knot,
+episode, set, query (current, `as_of_tx`, `valid_at`) and history, plus the
+low-level `invoke`/`invoke_json` entry points and `capabilities()`. A refused
+knot raises `quipu.ValidationError` with the native SHACL report. Handles
+refuse calls from any thread but the opener with `ThreadAffinityError`
+(`not_started`); the GIL is held for every call. Query results return IRIs and
+plain strings both as `str` because the native JSON does not distinguish them;
+typed IRI results stay an OPEN fidelity row. An sdist built outside a git
+checkout reports revision `unknown` (honest, not pinned); pinning the revision
+into the sdist is OPEN. The shared corpus is
+`tests/fixtures/bindings-conformance/v1.json`, run natively by
+`tests/bindings_conformance.rs` and in Python by `bindings/python/tests`.
+`.github/workflows/python-bindings.yml` builds and tests wheels and the sdist
+with no publish job.
+
 ## Packaging and release
 
 Pin the Rust revision and feature set in every WASM/npm artifact, wheel and

@@ -69,6 +69,7 @@ fn endpoint(name: &str) -> (Method, String) {
         "quipu_align_apply" => "/align/apply",
         "quipu_merge_decisions" => "/merge/decisions",
         "quipu_merge_apply" => "/merge/apply",
+        "quipu_merge_resolve" => "/merge/resolve",
         "quipu_policy_check" => "/policy/check",
         "quipu_verdict_verify" => "/verdict/verify",
         "quipu_verifier_authorized" => "/verifier/authorized",

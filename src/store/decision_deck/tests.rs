@@ -128,6 +128,15 @@ fn accepted_es256_and_eddsa_have_reverifiable_receipts_and_replay_refusal() {
         let stored = s.query_get(&audit.name).unwrap().unwrap();
         let rows = crate::sparql::query(&s, &stored.template).unwrap();
         assert_eq!(rows.rows().len(), 1);
+        // A new governance write is an aegis:GateApproval, never the memory
+        // aegis:Decision (GateApproval split, camayoc agent-memory §1.3).
+        let typed = |class: &str| {
+            crate::sparql::query(&s, &format!("PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?d FROM <{GRAPH}> WHERE {{ ?d a a:{class} }}"))
+                .unwrap()
+                .rows()
+                .len()
+        };
+        assert_eq!((typed("GateApproval"), typed("Decision")), (1, 0));
         println!(
             "{}: accepted one curated revision; audit rows={}; historical signature=true",
             a.scheme().tag(),

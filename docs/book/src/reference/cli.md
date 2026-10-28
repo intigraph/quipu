@@ -1,6 +1,8 @@
 # CLI Commands
 
 The `quipu` binary provides a command-line interface for all operations.
+The [CLI Command Index](cli-commands.md) lists every command path with its
+exact syntax, generated from the parser's catalogue.
 
 ## Global Flags
 
@@ -1095,8 +1097,17 @@ quipu fork drop experiment --db my.db          # terminal; the name is not reusa
 | `<tx> [--name <n>]` | Create: materialize ROOT-as-of-`<tx>` into a new fork (default name `fork-<tx>`) |
 | `list` | Name, fork-tx, status, created-at for every fork |
 | `diff <a> <b>` | Present-state triple diff between two forks (or `main`) |
-| `promote <name>` | Apply the fork's delta to ROOT through the write gates; SHACL refusal leaves ROOT untouched |
+| `promote <name>` | Three-way merge the fork into ROOT through the write gates; a conflict or SHACL refusal leaves ROOT untouched |
+| `promote <name> --emit-decisions <f> [--propose]` | Write the promotion's conflicts as a decisions file; nothing is promoted |
+| `promote <name> --decisions <f> --reviewer <who> [--dry-run]` | Promote with every conflict decided, in one transaction that records the reviewer and the file's hash |
 | `drop <name>` | Close the fork; its facts remain as history, the name is not reusable |
+
+A promotion that stops on conflicts is finished the same way as a share
+merge: emit the decisions, show them (`quipu merge show <f>`), record each
+choice (`quipu merge resolve <f> <row> --choose <choice> --by <who>`), then
+promote with `--decisions`. The file binds each conflicting slot on both
+sides, so a change to either after it was emitted refuses the apply. The
+same file applied twice reports `already-applied` and writes nothing.
 
 Reads: `--fork <name>` on `quipu read`, or the `fork` field on
 `POST /query` / `quipu_query`. Unknown and dropped forks are refused

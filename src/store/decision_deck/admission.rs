@@ -172,7 +172,7 @@ impl Store {
                 "UPDATE deck_credentials SET sign_count=?2 WHERE id=?1",
                 params![receipt.challenge.credential, verified.sign_count],
             )?;
-            let mut datums = vec![typed(store, &receipt.decision, "Decision", ts)?];
+            let mut datums = vec![typed(store, &receipt.decision, "GateApproval", ts)?];
             for (field, value) in [
                 ("outcome", Value::Str(receipt.challenge.choice.clone())),
                 ("by", Value::Str(receipt.challenge.actor.clone())),

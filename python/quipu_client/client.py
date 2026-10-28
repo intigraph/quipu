@@ -14,6 +14,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from .sparql import Select
 from .types import AskResult, EpisodeResult, KnotResult, RetractResult, SetResult
 
 
@@ -222,6 +223,23 @@ class QuipuClient:
         return self._request("POST", "/export", body, raw_response=True)
 
     # --------------------------------------------------------------- writes
+
+    def save_query(
+        self,
+        query: Select,
+        name: str,
+        *,
+        description: str = "",
+        dataset: str | None = None,
+    ) -> dict[str, Any]:
+        """Save through the authenticated, validated, versioned /queries registry.
+
+        No implicit retry or execution; server refusals remain QuipuError.
+        """
+        if not isinstance(query, Select):
+            raise TypeError("save_query requires a typed Select")
+        body = query.stored_definition(name, description=description, dataset=dataset)
+        return self._request("POST", "/queries", body, write=True)
 
     def knot(
         self,

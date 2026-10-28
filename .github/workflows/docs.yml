@@ -18,6 +18,8 @@ on:
       - 'scripts/smoke-datalinks.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      # The Agent Primer page includes the primer source (aegis-t7h).
+      - 'src/primer.md'
   push:
     branches: [main]
     paths:
@@ -30,6 +32,7 @@ on:
       - 'scripts/smoke-datalinks.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      - 'src/primer.md'
   workflow_dispatch:
 
 # Superseded PR runs share a group; every non-PR run keeps its own group.

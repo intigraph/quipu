@@ -60,23 +60,7 @@ pub(super) fn predicate(
     }
     // A same-named index with another partial predicate cannot prove complete
     // current membership. Older stores and alternate profiles retain fallback.
-    let definition: Option<String> = store
-        .conn
-        .query_row(
-            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_g'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let Some(definition) = definition else {
-        return Ok(None);
-    };
-    let normalized: String = definition
-        .chars()
-        .filter(|c| !c.is_ascii_whitespace())
-        .flat_map(char::to_lowercase)
-        .collect();
-    if normalized != "createindexidx_current_gonfacts(g)whereop=1andvalid_toisnull" {
+    if !current_g_index(store)? {
         return Ok(None);
     }
     let graph_param = params.len() + 1;
@@ -86,6 +70,39 @@ pub(super) fn predicate(
             WHERE scope.g=?{graph_param} AND scope.rowid=facts.rowid
             AND scope.op=1 AND scope.valid_to IS NULL)"
     )))
+}
+
+/// Does `idx_current_g` exist with exactly the current-membership definition?
+/// The answer only changes with the schema, so it is memoized against the
+/// schema cookie: a correlated leaf asks once per outer row, and scanning
+/// `sqlite_master` for it was a third of a board aggregate (aegis-ek4).
+fn current_g_index(store: &Store) -> Result<bool> {
+    let version: i64 = store
+        .conn
+        .prepare_cached("PRAGMA main.schema_version")?
+        .query_row([], |row| row.get(0))?;
+    if let Some((seen, exact)) = store.current_g_index.get()
+        && seen == version
+    {
+        return Ok(exact);
+    }
+    let definition: Option<String> = store
+        .conn
+        .prepare_cached(
+            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_g'",
+        )?
+        .query_row([], |row| row.get(0))
+        .optional()?;
+    let exact = definition.is_some_and(|definition| {
+        let normalized: String = definition
+            .chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect();
+        normalized == "createindexidx_current_gonfacts(g)whereop=1andvalid_toisnull"
+    });
+    store.current_g_index.set(Some((version, exact)));
+    Ok(exact)
 }
 
 #[cfg(test)]

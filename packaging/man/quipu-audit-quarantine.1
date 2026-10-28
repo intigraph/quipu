@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-AUDIT-QUARANTINE 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-audit\-quarantine \- List refused\-attempt evidence behind verdicts
+.SH SYNOPSIS
+\fBquipu audit quarantine\fR [\fB\-\-db\fR] [\fB\-\-verdict\fR] [\fB\-\-json\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+List refused\-attempt evidence behind verdicts
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-verdict\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-json\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-audit\-quarantine\-list(1)
+List refused\-attempt evidence, optionally for one verdict
+.TP
+quipu\-audit\-quarantine\-purge(1)
+Purge quarantined evidence by graph, age or all
+.TP
+quipu\-audit\-quarantine\-help(1)
+Print this message or the help of the given subcommand(s)

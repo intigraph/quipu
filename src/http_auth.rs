@@ -123,6 +123,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     "/subscriptions", // push-subscription registry create/list/delete (event-log P2)
     "/datasets",      // named-dataset registry create/remove (quipu #69) + meta-graph mirror
     "/update",        // SPARQL 1.1 Update mutates default and named graphs
+    "/patch",         // aegis-4mk: applies a change-set through the /update gates
     "/queries",       // stored named-query registry load/remove (quipu #79)
     // aegis-06q1r: OWL ontology load/list/remove. `load` both PERSISTS the
     // ontology and MATERIALIZES entailments (new rdf:type / inverse facts), so it
@@ -178,6 +179,9 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // aegis-yavo9c: emits (and optionally proposes) merge decisions from
     // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
     "/merge/decisions",
+    // aegis-k7l: records a choice in the posted decisions file and returns
+    // it; no store access at all.
+    "/merge/resolve",
     // Method-sensitive: GET/HEAD are reads; PUT/POST/DELETE are writes.
     "/rdf-graph-store",
     "/graphs",        // registry listing + kind capability probe (pooled read)
@@ -238,6 +242,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/changes/stream", // read-only transaction replay, including named graphs
     "/feed/ws",      // the same two feeds over one WebSocket; no consumer ACK
     "/changes",      // fact-level change feed (quipu-2ae): pull-only, cursor is a tx id
+    "/diff",         // aegis-4mk: change-set between tx/main/fork states; pure read
     "/spotlight",
     "/fragments",
     "/reconcile",

@@ -1,0 +1,35 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-PROPOSE 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-propose \- List, submit, accept or reject schema change proposals
+.SH SYNOPSIS
+\fBquipu propose\fR [\fB\-\-db\fR] [\fB\-\-status\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+List, submit, accept or reject schema change proposals
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-status\fR \fI<VALUE>\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-propose\-list(1)
+List schema change proposals, optionally by status
+.TP
+quipu\-propose\-submit(1)
+Submit a schema change proposal
+.TP
+quipu\-propose\-accept(1)
+Accept a pending proposal
+.TP
+quipu\-propose\-reject(1)
+Reject a pending proposal
+.TP
+quipu\-propose\-help(1)
+Print this message or the help of the given subcommand(s)

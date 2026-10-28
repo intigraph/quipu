@@ -220,6 +220,11 @@ pub fn driver(repo: &Path, base: &Path, ours: &Path, theirs: &Path, path: &str) 
 
 /// Start a local merge with immutable snapshot context, stopping before commit.
 pub fn merge(repo: &Path, incoming: &str) -> Result<bool> {
+    merge_with_pending(repo, incoming).map(|(ready, _)| ready)
+}
+
+/// [`merge`], also naming each qpack directory left with undecided rows.
+pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<String>)> {
     if !text(repo, &["status", "--porcelain"])?.trim().is_empty() {
         return Err(invalid("git-merge requires a clean worktree/index"));
     }
@@ -274,11 +279,26 @@ pub fn merge(repo: &Path, incoming: &str) -> Result<bool> {
     // Git may skip a driver when one file's bytes match. Reconcile whole qpacks
     // explicitly as well, and leave staging to the reviewer.
     let mut ready = status.success();
+    let mut pending = Vec::new();
     for (dir, mut merged) in plans {
-        ready &= merged.apply(None)?;
+        if !merged.apply(None)? {
+            ready = false;
+            pending.push(dir.clone());
+        }
         write(&safe_dir(repo, &dir)?, &merged)?;
     }
-    Ok(ready)
+    Ok((ready, pending))
+}
+
+/// The base / ours / theirs commits of the merge in progress (`HEAD` and
+/// `MERGE_HEAD`), so a resolve inside `quipu git-merge` needs no refs.
+pub fn merge_refs(repo: &Path) -> Result<[String; 3]> {
+    let ours = commit(repo, "HEAD")?;
+    let theirs = commit(repo, "MERGE_HEAD").map_err(|_| {
+        invalid("no merge in progress (no MERGE_HEAD): start one with `quipu git-merge <ref>`")
+    })?;
+    let base = text(repo, &["merge-base", "--all", &ours, &theirs])?;
+    refs(repo, base.trim(), &ours, &theirs)
 }
 
 /// Recompute the plan from Git, validate a selected decision, and rehash the pack.
@@ -291,12 +311,35 @@ pub fn resolve(
     key: &str,
     choice: &str,
 ) -> Result<bool> {
+    resolve_by(repo, base, ours, theirs, dir, key, choice, None)
+}
+
+/// [`resolve`], recording who chose (`"<who> at <time>"`) beside the choice.
+/// `choice` `defer` clears the key, so the pack stays unresolved.
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_by(
+    repo: &Path,
+    base: &str,
+    ours: &str,
+    theirs: &str,
+    dir: &str,
+    key: &str,
+    choice: &str,
+    by: Option<&str>,
+) -> Result<bool> {
     let r = refs(repo, base, ours, theirs)?;
     let output = safe_dir(repo, dir)?;
     let mut d: Decisions =
         serde_json::from_slice(&std::fs::read(output.join("decisions.json")).map_err(io)?)
             .map_err(io)?;
-    d.resolutions.insert(key.into(), choice.into());
+    if choice == "defer" {
+        d.resolutions.remove(key);
+    } else {
+        d.resolutions.insert(key.into(), choice.into());
+    }
+    if let Some(by) = by {
+        d.resolved_by.insert(key.into(), by.into());
+    }
     let mut merged = build(repo, &r, dir)?;
     let ready = merged.apply(Some(&d))?;
     write(&output, &merged)?;

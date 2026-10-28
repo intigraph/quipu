@@ -356,3 +356,125 @@ fn a_replica_applies_source_data_its_local_shapes_would_refuse() {
     // Validation is restored for anything that is not the applier.
     assert!(replica.store.shacl_config_mut().validate_on_write);
 }
+
+#[test]
+fn a_file_engine_reports_its_storage_and_survives_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bound.db");
+    let path = path.to_str().unwrap();
+    {
+        let engine = Engine::open(path).unwrap();
+        assert_eq!(engine.capabilities()["storage"], "file");
+    }
+    assert_eq!(
+        Engine::open_in_memory().unwrap().capabilities()["storage"],
+        "memory"
+    );
+    #[cfg(feature = "shacl")]
+    {
+        let mut engine = Engine::open(path).unwrap();
+        load_shape(&mut engine);
+        engine
+            .invoke(
+                "quipu_knot",
+                &json!({"timestamp": TS, "turtle": "<urn:kept> a <urn:Record>; <urn:title> \"Kept\" ."}),
+            )
+            .unwrap();
+        drop(engine);
+        let mut reopened = Engine::open(path).unwrap();
+        assert_eq!(reopened.capabilities()["schema_state"], "adopted");
+        let rows = reopened
+            .invoke(
+                "quipu_query",
+                &json!({"query": "SELECT ?s WHERE { ?s a <urn:Record> }"}),
+            )
+            .unwrap();
+        assert_eq!(rows["count"], 1);
+        // The reopened engine still enforces the adopted shape.
+        let bad = reopened.invoke(
+            "quipu_knot",
+            &json!({"timestamp": TS, "turtle": "<urn:bad> a <urn:Record> ."}),
+        );
+        assert!(bad.is_err() || bad.unwrap()["conforms"] == false);
+    }
+}
+
+#[test]
+fn stored_query_binding_persists_validates_versions_and_asks() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("queries.db");
+    let path = path.to_str().unwrap();
+    let mut engine = Engine::open(path).unwrap();
+    let simple = "SELECT ?s WHERE { ?s <urn:p> ?o }";
+    engine.invoke("quipu_queries", &json!({"action":"load","name":"builder_saved","template":simple,"params":[],"timestamp":TS})).unwrap();
+    drop(engine);
+    let mut engine = Engine::open(path).unwrap();
+    assert_eq!(
+        engine
+            .invoke(
+                "quipu_queries",
+                &json!({"action":"get","name":"builder_saved"})
+            )
+            .unwrap()["template"],
+        simple
+    );
+    assert_eq!(
+        engine
+            .invoke("quipu_ask", &json!({"name":"builder_saved"}))
+            .unwrap()["count"],
+        0
+    );
+    let count = "SELECT (COUNT(?s) AS ?n) WHERE { ?s <urn:p> ?o }";
+    engine.invoke("quipu_queries", &json!({"action":"load","name":"builder_saved","template":count,"params":[],"timestamp":"2026-10-21T00:00:00Z"})).unwrap();
+    assert_eq!(
+        engine
+            .invoke(
+                "quipu_queries",
+                &json!({"action":"get","name":"builder_saved"})
+            )
+            .unwrap()["template"],
+        count
+    );
+    assert_eq!(
+        engine
+            .invoke("quipu_ask", &json!({"name":"builder_saved"}))
+            .unwrap()["count"],
+        1
+    );
+    let error = engine
+        .invoke(
+            "quipu_queries",
+            &json!({"action":"load","name":"bad","template":"not SPARQL"}),
+        )
+        .unwrap_err();
+    assert_eq!(error.code, "engine_error");
+    assert!(!error.retryable);
+    assert!(engine.store.query_get("bad").unwrap().is_none());
+}
+
+#[test]
+fn replicas_refuse_query_registry_mutations_before_dispatch() {
+    let source = record_source();
+    let mut engine = Engine::open_in_memory().unwrap();
+    for page in feed_of(&source) {
+        engine
+            .replica_apply_frame("quipu.changes", &page, 1)
+            .unwrap();
+    }
+    for action in ["load", "remove"] {
+        let error = engine
+            .invoke(
+                "quipu_queries",
+                &json!({"action":action,"name":"never","template":"SELECT ?s WHERE { ?s ?p ?o }"}),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "read_only_replica");
+        assert_eq!(error.commit_state, "not_started");
+    }
+    assert!(
+        engine
+            .invoke("quipu_queries", &json!({"action":"list"}))
+            .is_ok()
+    );
+    assert!(engine.store.query_get("never").unwrap().is_none());
+}

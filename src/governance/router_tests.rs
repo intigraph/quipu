@@ -42,8 +42,21 @@ fn register_decider(store: &mut Store, by: &str, policy: &str, public_key_hex: &
 /// Write a decision fact, optionally carrying `signature`. No registration —
 /// callers set that up (or deliberately don't).
 fn write_decision(store: &mut Store, outcome: &str, by: &str, hash: &str, signature: Option<&str>) {
+    write_ruling(store, "GateApproval", outcome, by, hash, signature);
+}
+
+/// [`write_decision`] with an explicit class: `GateApproval` for new rulings,
+/// `Decision` for one recorded before the `GateApproval` split.
+fn write_ruling(
+    store: &mut Store,
+    class: &str,
+    outcome: &str,
+    by: &str,
+    hash: &str,
+    signature: Option<&str>,
+) {
     let iri = format!("http://ex/decision_{outcome}_{by}");
-    let class = Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}Decision")).unwrap());
+    let class = Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}{class}")).unwrap());
     let d = |store: &Store, p: &str, v: Value| Datum {
         entity: store.intern(&iri).unwrap(),
         attribute: store.intern(p).unwrap(),
@@ -112,7 +125,10 @@ fn an_open_request_is_pending_and_names_what_would_resolve_it() {
     assert!(!ruling.permits());
 
     let why = ruling.reason(POLICY, TARGET);
-    assert!(why.contains("aegis:Decision"), "names the remedy: {why}");
+    assert!(
+        why.contains("aegis:GateApproval"),
+        "names the remedy: {why}"
+    );
     assert!(why.contains("approve"), "and the outcome needed: {why}");
     assert!(
         why.contains("DENIED"),
@@ -245,7 +261,7 @@ fn only_an_approval_permits() {
 // ── Signed decisions (quipu-5s5) ─────────────────────────────────────────────
 //
 // Decisions are ordinary writable facts. Before the signature check, the agent
-// whose write was refused could write its own `aegis:Decision "approve"` and
+// whose write was refused could write its own `aegis:GateApproval "approve"` and
 // walk through the gate. Every path below MUST fall through to Pending — a
 // forged decision is not a wrong ruling, it is no ruling at all.
 
@@ -1024,5 +1040,74 @@ fn v1_decisions_do_not_seal_their_content_use_decision_seal() {
     assert_eq!(
         resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap(),
         Ruling::Approved { by: "stiwi".into() }
+    );
+}
+
+// ── GateApproval split (camayoc agent-memory design §1.3) ─────────────────────
+
+#[test]
+fn a_pre_split_signed_decision_still_satisfies_its_request() {
+    // Rulings recorded as aegis:Decision before the split are never retyped
+    // (rdf:type is sealed) and are read for one release beside GateApproval.
+    let mut store = store_with_request(600);
+    let hash = evidence_hash(POLICY, TARGET);
+    let kp = keypair();
+    register_decider(
+        &mut store,
+        "stiwi",
+        POLICY,
+        &crate::signing::public_key_hex(&kp),
+    );
+    let sig = crate::signing::sign_hex(&kp, &decision_message(&hash, "approve", "stiwi"));
+    write_ruling(
+        &mut store,
+        "Decision",
+        "approve",
+        "stiwi",
+        &hash,
+        Some(&sig),
+    );
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW).unwrap(),
+        Some(Ruling::Approved { by: "stiwi".into() }),
+    );
+}
+
+#[test]
+fn a_memory_decision_is_not_a_gate_ruling() {
+    // A camayoc memory Decision (chose, decidedBy; no evidenceHash, outcome or
+    // by) shares the aegis:Decision class but must never satisfy a request.
+    let mut store = store_with_request(600);
+    let iri = store.intern("http://ex/memory_decision").unwrap();
+    let mut datums = Vec::new();
+    for (predicate, value) in [
+        (
+            RDF_TYPE.to_string(),
+            Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}Decision")).unwrap()),
+        ),
+        (
+            format!("{DEFAULT_BASE_NS}chose"),
+            Value::Str("approve it".into()),
+        ),
+        (
+            format!("{DEFAULT_BASE_NS}decidedBy"),
+            Value::Ref(store.intern("http://ex/stiwi").unwrap()),
+        ),
+    ] {
+        datums.push(Datum {
+            entity: iri,
+            attribute: store.intern(&predicate).unwrap(),
+            value,
+            valid_from: TS.to_string(),
+            valid_to: None,
+            op: Op::Assert,
+        });
+    }
+    store.transact(&datums, TS, None, None).unwrap();
+    assert_eq!(
+        resolve(&store, POLICY, TARGET, NOW).unwrap(),
+        Some(Ruling::Pending {
+            expires_at: NOW + 600
+        }),
     );
 }

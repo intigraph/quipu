@@ -54,6 +54,50 @@ an enrolled human key. Nobody can run the bootstrap a second time.
    only one enrolled device, losing it means no key can amend the
    registry, and the bootstrap cannot be re-run.
 
+## Endorsing agent registrations (aegis-c97o)
+
+Verdict verification trusts a verifier key only when its registration
+chains to the trust root. A registration written by a plain graph write
+(every registration from before aegis-c97o, and anything an agent writes
+since) verifies nothing until the root endorses it. There is no grace
+period: until endorsed, its verdicts report `trusted: false` with
+`untrusted_reason: registration-not-chained-to-trust-root`, and the server
+logs a warning naming the registration.
+
+1. List what needs endorsing:
+
+       quipu trust-root status --db <store>
+
+   The `unendorsed` lines are `verifier<TAB>registration`. Check each one
+   is a verifier you recognise, with the key you expect (read the
+   registration's `aegis:publicKey`). Do not endorse anything you cannot
+   account for: endorsing it trusts its key.
+
+2. Get the challenge (the tier defaults to `agent`):
+
+       quipu trust-root endorse-challenge --registration <iri> --db <store>
+
+   It prints the digest, a fresh nonce, and the bytes to sign.
+
+3. Sign those bytes with an enrolled human trust-root key, exactly as
+   printed, with no trailing newline.
+
+4. Write the endorsement:
+
+       quipu trust-root endorse --registration <iri> --signer <your verifier name> \
+           --nonce <nonce> --signature <hex> --db <store>
+
+   The gate refuses it if the signature, the signer, or the registration's
+   content changed since step 2. Re-run step 2 in that case.
+
+After this, any change to that registration (a new key, a rotation, a
+revocation) is itself an amendment. To revoke, sign an amendment that
+retracts the `aegis:trustTier` marker (or the key).
+
+Endorsement is not retroactive. Verdicts recorded before the endorsement
+keep `trusted: false` (their `signature_valid` still reports `true`); only
+verdicts recorded after it verify as trusted.
+
 ## What this does not protect against
 
 Root on the quipu host. Someone who can edit the database file, replace

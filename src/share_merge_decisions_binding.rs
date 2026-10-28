@@ -1,8 +1,9 @@
 //! Current slot values and local provenance used by v2 merge decisions.
 
-use super::{DecisionRecord, LocalFact};
+use super::{DecidedMerge, DecisionFile, DecisionRecord, LocalFact};
 use crate::error::{Error, Result};
 use crate::share::sha256;
+use crate::share_merge::MergeResult;
 use crate::store::Store;
 
 pub(super) fn local_facts(store: &Store, record: &DecisionRecord) -> Result<Vec<LocalFact>> {
@@ -68,4 +69,31 @@ pub(super) fn slot_hash(store: &Store, record: &DecisionRecord) -> Result<String
     ))
     .map_err(|e| Error::Serialization(e.to_string()))?;
     Ok(sha256(&bytes))
+}
+
+/// Idempotent apply: decisions already applied (their hash is on a
+/// transaction's source) are reported, not re-run against a ROOT they changed.
+pub(super) fn already_applied(
+    store: &Store,
+    file: &DecisionFile,
+    decisions_sha256: &str,
+    reviewer: &str,
+) -> Result<Option<DecidedMerge>> {
+    let Some(tx) = store.find_transaction_by_source(&format!("decisions={decisions_sha256}"))?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(DecidedMerge {
+        merge: MergeResult {
+            outcome: "already-applied".into(),
+            tx_id: Some(tx),
+            asserted: 0,
+            retracted: 0,
+            provenance_parents: [String::new(), file.incoming_share.clone()],
+            conflicts: Vec::new(),
+        },
+        reviewer: reviewer.into(),
+        decisions_sha256: decisions_sha256.into(),
+        applied: Vec::new(),
+    }))
 }

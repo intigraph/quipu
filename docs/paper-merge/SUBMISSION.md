@@ -19,6 +19,8 @@ The plain-text abstract below matches the current paper source and rebuilt
 PDF. The schema-evolution study retains its datatype detector miss caught by
 post-merge validation. The accepted public-history ruling remains in force.
 
+Revised 2026-10-27: the introduction's contributions and the conclusion's paragraph order were revised; the abstract is unchanged.
+
 ---
 
 ## 1. Public-history decision — resolved 2026-09-24

@@ -31,8 +31,9 @@ class Manifest(unittest.TestCase):
             "aegis-ontology", "governance", "provenance", "code-entities",
             "contributor-knowledge", "demoted-derivation", "class-subsumption"}
             <= {r["name"] for r in value["load"]})
-        self.assertTrue({"skill-catalogue.ttl", "render.ttl", "rule-editions.ttl", "rule-answers.ttl"}
+        self.assertTrue({"skill-catalogue.ttl", "render.ttl", "rule-editions.ttl", "rule-answers.ttl", "read-policy.ttl"}
                         <= {r["file"] for r in value["exclude"]})
+        self.assertNotIn("read-policy.ttl", {r["file"] for r in value["load"]})
 
     def test_new_file_refuses_until_classified(self):
         self.write()

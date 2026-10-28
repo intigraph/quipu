@@ -14,7 +14,7 @@ use oxrdfio::{RdfFormat, RdfParser};
 
 use crate::error::{Error, Result};
 use crate::shacl_context::{
-    RDF_TYPE, issue_key, repaired, required_paths, store_type_context_in_graph,
+    RDF_TYPE, issue_key, node_term, repaired, required_paths, store_type_context_in_graph,
 };
 use crate::store::Store;
 use crate::types::Value;
@@ -201,11 +201,25 @@ pub fn retraction_violations_in_graph(
     }
     let mut referenced = edited.referenced;
     referenced.extend(describe(store, &subjects, &[crate::schema::ROOT_GRAPH])?.referenced);
-    post.extend(parse_triples(&store_type_context_in_graph(
-        store,
-        &referenced,
-        g,
-    )?)?);
+    // The referenced nodes' types, as they stand AFTER the write: a type this
+    // write retracts from `g` (a replaced snapshot's old node) must not come
+    // back as context, unless another graph the context reads still holds it.
+    // Re-adding it made a node removed whole look typed-but-empty.
+    let removed_set: std::collections::HashSet<&oxrdf::Triple> = removed.iter().collect();
+    let elsewhere: Vec<i64> = store
+        .reference_type_graphs(g)
+        .into_iter()
+        .filter(|&scope| scope != g)
+        .collect();
+    let kept_elsewhere: std::collections::HashSet<oxrdf::Triple> =
+        parse_triples(&types_in(store, &referenced, &elsewhere)?)?
+            .into_iter()
+            .collect();
+    post.extend(
+        parse_triples(&store_type_context_in_graph(store, &referenced, g)?)?
+            .into_iter()
+            .filter(|t| !removed_set.contains(t) || kept_elsewhere.contains(t)),
+    );
     post.extend(parse_triples(asserted_nt)?.into_iter().filter(
         |t| matches!(&t.subject, NamedOrBlankNode::NamedNode(s) if subjects.contains(s.as_str())),
     ));
@@ -237,6 +251,32 @@ pub fn retraction_violations_in_graph(
     feedback.violations = feedback.results.len();
     feedback.conforms = feedback.violations == 0;
     Ok(feedback)
+}
+
+/// The current `rdf:type` facts of `iris` in exactly `scopes`, as N-Triples.
+#[cfg(feature = "shacl")]
+fn types_in(store: &Store, iris: &BTreeSet<String>, scopes: &[i64]) -> Result<String> {
+    let Some(type_attr) = store.lookup(RDF_TYPE)? else {
+        return Ok(String::new());
+    };
+    let mut out = String::new();
+    for iri in iris {
+        let Some(entity) = store.lookup(iri)? else {
+            continue;
+        };
+        for &scope in scopes {
+            for fact in store.entity_facts_in_graph(entity, scope)? {
+                if let (true, Value::Ref(t)) = (fact.attribute == type_attr, &fact.value) {
+                    out.push_str(&format!(
+                        "{} <{RDF_TYPE}> {} .\n",
+                        node_term(store, entity)?,
+                        node_term(store, *t)?
+                    ));
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(feature = "shacl")]
@@ -299,7 +339,9 @@ fn describe(store: &Store, iris: &BTreeSet<String>, graphs: &[i64]) -> Result<De
                 if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
                     parts.referenced.insert(store.resolve(*id)?);
                 }
-                parts.lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                parts
+                    .lines
+                    .insert(format!("{} <{attr}> {term} .\n", node_term(store, entity)?));
                 parts.existing.insert(iri.clone());
             }
         }
@@ -455,7 +497,7 @@ pub(crate) fn poststate_preexisting(
                 if let (Value::Ref(id), true) = (&fact.value, attr != RDF_TYPE) {
                     referenced.insert(store.resolve(*id)?);
                 }
-                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                lines.insert(format!("{} <{attr}> {term} .\n", node_term(store, entity)?));
                 existing.insert(iri.clone());
             }
         }

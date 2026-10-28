@@ -1,0 +1,3027 @@
+#compdef qp
+
+autoload -U is-at-least
+
+_qp() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+":: :_qp_commands" \
+"*::: :->qp" \
+&& ret=0
+    case $state in
+    (qp)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-command-$line[1]:"
+        case $line[1] in
+            (version)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(install-alias)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--bin-dir=[]:VALUE:_default' \
+'--check[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(knot)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--shapes=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--blank-node-scope=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file-ttl:_default' \
+&& ret=0
+;;
+(load)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--shapes=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--blank-node-scope=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file-ttl:_default' \
+&& ret=0
+;;
+(ingest)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--declare-count=[]:VALUE:_default' \
+'*--declare-sha256=[]:VALUE:_default' \
+'*--format=[]:VALUE:_default' \
+'*--chunk=[]:VALUE:_default' \
+'*--base-iri=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--source=[]:VALUE:_default' \
+'*--blank-node-scope=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file:_default' \
+&& ret=0
+;;
+(read)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'*--tx=[]:VALUE:_default' \
+'*--fork=[]:VALUE:_default' \
+'*--entailment=[]:VALUE:_default' \
+'--federation[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-sparql:_default' \
+&& ret=0
+;;
+(query)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'*--tx=[]:VALUE:_default' \
+'*--fork=[]:VALUE:_default' \
+'*--entailment=[]:VALUE:_default' \
+'--federation[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-sparql:_default' \
+&& ret=0
+;;
+(rule-query)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+(cord)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--type=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(unravel)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--tx=[]:VALUE:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(impact)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--hops=[]:VALUE:_default' \
+'*--predicate=[]:VALUE:_default' \
+'--remove[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-entity-IRI:_default' \
+&& ret=0
+;;
+(explain)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--depth=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-subject:_default' \
+':arg-predicate:_default' \
+':arg-object:_default' \
+&& ret=0
+;;
+(project)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--algorithm=[]:VALUE:_default' \
+'*--type=[]:VALUE:_default' \
+'*--predicate=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'*--damping=[]:VALUE:_default' \
+'*--max-iters=[]:VALUE:_default' \
+'*--tolerance=[]:VALUE:_default' \
+'*--from=[]:VALUE:_default' \
+'*--to=[]:VALUE:_default' \
+'*--seed=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(report)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--type=[]:VALUE:_default' \
+'*--predicate=[]:VALUE:_default' \
+'*--hubs=[]:VALUE:_default' \
+'*--surprises=[]:VALUE:_default' \
+'*--questions=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(reason)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--rules=[]:VALUE:_default' \
+'--reactive[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(demotions)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(episode)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--base-ns=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file-json:_default' \
+&& ret=0
+;;
+(retract)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--predicate=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-entity-IRI:_default' \
+&& ret=0
+;;
+(shapes)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__shapes_commands" \
+"*::: :->shapes" \
+&& ret=0
+
+    case $state in
+    (shapes)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-shapes-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(load)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+':arg-file-ttl:_default' \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(namespaces)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__namespaces_commands" \
+"*::: :->namespaces" \
+&& ret=0
+
+    case $state in
+    (namespaces)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-namespaces-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(entity-ref)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__entity-ref_commands" \
+"*::: :->entity-ref" \
+&& ret=0
+
+    case $state in
+    (entity-ref)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-entity-ref-command-$line[1]:"
+        case $line[1] in
+            (mint)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(ontology)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__ontology_commands" \
+"*::: :->ontology" \
+&& ret=0
+
+    case $state in
+    (ontology)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-ontology-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(load)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+':arg-file-ttl:_default' \
+&& ret=0
+;;
+(remove)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(validate)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--shapes=[]:VALUE:_default' \
+'*--data=[]:VALUE:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(repl)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--group-id=[]:VALUE:_default' \
+'*--construct=[]:VALUE:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(render)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--dest=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'*--server=[]:VALUE:_default' \
+'*--query=[]:VALUE:_default' \
+'*--template=[]:VALUE:_default' \
+'*--layout=[]:VALUE:_default' \
+'*--path=[]:VALUE:_default' \
+'--dry-run[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::arg-spec-IRI:_default' \
+&& ret=0
+;;
+(stats)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(prime)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--section=[]:VALUE:_default' \
+'--brief[]' \
+'--static[]' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(search)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--mode=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'*--alpha=[]:VALUE:_default' \
+'*--rrf-k=[]:VALUE:_default' \
+'*--decay=[]:VALUE:_default' \
+'*--anchor=[]:VALUE:_default' \
+'*--anchor-mode=[]:VALUE:_default' \
+'*--direction=[]:VALUE:_default' \
+'*--max-hops=[]:VALUE:_default' \
+'*--via=[]:VALUE:_default' \
+'*--fusion=[]:VALUE:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'*--type=[]:VALUE:_default' \
+'*--group=[]:VALUE:_default' \
+'*--structured-query=[]:VALUE:_default' \
+'*--filters=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--graphs=[]:VALUE:_default' \
+'--explain[]' \
+'--all-graphs[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-query:_default' \
+&& ret=0
+;;
+(search-index)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--kind=[]:VALUE:_default' \
+'*--batch-size=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__search-index_commands" \
+"*::: :->search-index" \
+&& ret=0
+
+    case $state in
+    (search-index)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-search-index-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--kind=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(backfill)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--kind=[]:VALUE:_default' \
+'*--batch-size=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(drop)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--kind=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__doctor_commands" \
+"*::: :->doctor" \
+&& ret=0
+
+    case $state in
+    (doctor)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-doctor-command-$line[1]:"
+        case $line[1] in
+            (labels)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(pack)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--verify=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'*--space=[]:VALUE:_default' \
+'*--name=[]:VALUE:_default' \
+'*--version=[]:VALUE:_default' \
+'*--shapes=[]:VALUE:_default' \
+'*--queries=[]:VALUE:_default' \
+'*--repo=[]:VALUE:_default' \
+'*--repo-sha=[]:VALUE:_default' \
+'*--model-id=[]:VALUE:_default' \
+'*--model-version=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--format=[]:VALUE:_default' \
+'--with-vectors[]' \
+'--full[]' \
+'--allow-missing-embedding-recipe[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::arg-graph-iri:_default' \
+&& ret=0
+;;
+(unpack)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--into=[]:VALUE:_default' \
+'*--expect-repo=[]:VALUE:_default' \
+'*--head-sha=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file-pendant-db:_default' \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--force[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-full-pack:_default' \
+&& ret=0
+;;
+(share)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--output=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--group-id=[]:VALUE:_default' \
+'*--construct=[]:VALUE:_default' \
+'*--shapes=[]:VALUE:_default' \
+'*--queries=[]:VALUE:_default' \
+'*--alignments=[]:VALUE:_default' \
+'*--parent-share=[]:VALUE:_default' \
+'*--since=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--pack-dir=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--attest-key=[]:VALUE:_default' \
+'*--attest-issued-at=[]:VALUE:_default' \
+'*--attest-ttl=[]:VALUE:_default' \
+'*--attest-agent=[]:VALUE:_default' \
+'*--attest-session=[]:VALUE:_default' \
+'*--attest-introducer=[]:VALUE:_default' \
+'*--attest-nonce=[]:VALUE:_default' \
+'*--pointers=[]:VALUE:_default' \
+'--no-shapes[]' \
+'--no-queries[]' \
+'--turtle[]' \
+'--attest[]' \
+'--project[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__share_commands" \
+"*::: :->share" \
+&& ret=0
+
+    case $state in
+    (share)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-share-command-$line[1]:"
+        case $line[1] in
+            (diff)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--format=[]:VALUE:_default' \
+'*--old-shapes=[]:VALUE:_default' \
+'*--new-shapes=[]:VALUE:_default' \
+'*--decisions=[]:VALUE:_default' \
+'--report[]' \
+'--fail-on-introduced[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-old:_default' \
+':arg-new:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-dir:_default' \
+&& ret=0
+;;
+(merge)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--emit-decisions=[]:VALUE:_default' \
+'*--decisions=[]:VALUE:_default' \
+'*--reviewer=[]:VALUE:_default' \
+'--slot-scoped[]' \
+'--propose[]' \
+'--dry-run[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-dir:_default' \
+":: :_qp__subcmd__merge_commands" \
+"*::: :->merge" \
+&& ret=0
+
+    case $state in
+    (merge)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-merge-command-$line[2]:"
+        case $line[2] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-decisions-json:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--choose=[]:VALUE:_default' \
+'*--value=[]:VALUE:_default' \
+'*--by=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-decisions-json:_default' \
+':arg-row:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--source=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--query-namespace=[]:VALUE:_default' \
+'--replace-queries[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-dir:_default' \
+":: :_qp__subcmd__import_commands" \
+"*::: :->import" \
+&& ret=0
+
+    case $state in
+    (import)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-import-command-$line[2]:"
+        case $line[2] in
+            (delta)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--query-namespace=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-parent-share:_default' \
+':arg-delta-share:_default' \
+&& ret=0
+;;
+(promote)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-id:_default' \
+&& ret=0
+;;
+(review)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__import__subcmd__review_commands" \
+"*::: :->review" \
+&& ret=0
+
+    case $state in
+    (review)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-import-review-command-$line[1]:"
+        case $line[1] in
+            (pending)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--after=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(notify)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--after=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'*--age-seconds=[]:VALUE:_default' \
+'*--route=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(rejected)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--reason=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-id:_default' \
+&& ret=0
+;;
+(expired)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--reason=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-id:_default' \
+&& ret=0
+;;
+(reopen)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--reason=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-share-id:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(compose)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--repo=[]:VALUE:_default' \
+'*--shapes-from=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--destination=[]:VALUE:_default' \
+'*--revoke-tombstone=[]:VALUE:_default' \
+'*--pack-key=[]:VALUE:_default' \
+'*--reason=[]:VALUE:_default' \
+'*--use-pointer=[]:VALUE:_default' \
+'*--declaration=[]:VALUE:_default' \
+'*--authority=[]:VALUE:_default' \
+'*--repo-remote=[]:VALUE:_default' \
+'*--pointer-cache=[]:VALUE:_default' \
+'--rollback[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'*::arg-pack:_default' \
+&& ret=0
+;;
+(changes)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--from=[]:VALUE:_default' \
+'*--capture=[]:VALUE:_default' \
+'*--limit=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(follow)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--primary=[]:VALUE:_default' \
+'*--page-txs=[]:VALUE:_default' \
+'*--page-gap-ms=[]:VALUE:_default' \
+'--bootstrap-only[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(acquire)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__acquire_commands" \
+"*::: :->acquire" \
+&& ret=0
+
+    case $state in
+    (acquire)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-acquire-command-$line[1]:"
+        case $line[1] in
+            (scope)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--source-store-id=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--tx=[]:VALUE:_default' \
+'*--max-vm-steps=[]:VALUE:_default' \
+'*--deadline-ms=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(migrate-vectors)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--from=[]:VALUE:_default' \
+'*--to=[]:VALUE:_default' \
+'--dry-run[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(git-merge)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-ref:_default' \
+":: :_qp__subcmd__git-merge_commands" \
+"*::: :->git-merge" \
+&& ret=0
+
+    case $state in
+    (git-merge)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-git-merge-command-$line[2]:"
+        case $line[2] in
+            (show)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--format=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-qpack-dir:_default' \
+&& ret=0
+;;
+(resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--choose=[]:VALUE:_default' \
+'*--by=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-qpack-dir:_default' \
+':arg-key:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(merge-driver)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-base:_default' \
+':arg-ours:_default' \
+':arg-theirs:_default' \
+':arg-path:_default' \
+&& ret=0
+;;
+(pendant-resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-base-ref:_default' \
+':arg-ours-ref:_default' \
+':arg-theirs-ref:_default' \
+':arg-dir:_default' \
+':arg-key:_default' \
+':arg-choice:_default' \
+&& ret=0
+;;
+(pendant-check)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--history[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-base-ref:_default' \
+':arg-ours-ref:_default' \
+':arg-theirs-ref:_default' \
+':arg-result-ref:_default' \
+&& ret=0
+;;
+(diff-textconv)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file:_default' \
+&& ret=0
+;;
+(mcp)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--mcp-token-file=[]:VALUE:_default' \
+'*--bind=[]:VALUE:_default' \
+'*--primary-url=[]:VALUE:_default' \
+'--read-only[]' \
+'--embed-backfill[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(hook)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__hook_commands" \
+"*::: :->hook" \
+&& ret=0
+
+    case $state in
+    (hook)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-hook-command-$line[1]:"
+        case $line[1] in
+            (session-capture)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(hooks)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__hooks_commands" \
+"*::: :->hooks" \
+&& ret=0
+
+    case $state in
+    (hooks)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-hooks-command-$line[1]:"
+        case $line[1] in
+            (bundle)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(install)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--harness=[]:VALUE:_default' \
+'--project[]' \
+'--no-st[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(uninstall)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--harness=[]:VALUE:_default' \
+'--project[]' \
+'--no-st[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--harness=[]:VALUE:_default' \
+'--project[]' \
+'--no-st[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(policy)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__policy_commands" \
+"*::: :->policy" \
+&& ret=0
+
+    case $state in
+    (policy)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-policy-command-$line[1]:"
+        case $line[1] in
+            (draft)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--exemplar=[]:VALUE:_default' \
+'*--name=[]:VALUE:_default' \
+'*--label=[]:VALUE:_default' \
+'*--targets=[]:VALUE:_default' \
+'*--claim=[]:VALUE:_default' \
+'*--class=[]:VALUE:_default' \
+'*--point=[]:VALUE:_default' \
+'*--layer=[]:VALUE:_default' \
+'*--authority=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(backtest)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--last-txs=[]:VALUE:_default' \
+'*--from-tx=[]:VALUE:_default' \
+'*--to-tx=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-candidate-ttl:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(gate)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__gate_commands" \
+"*::: :->gate" \
+&& ret=0
+
+    case $state in
+    (gate)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-gate-command-$line[1]:"
+        case $line[1] in
+            (shadow)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--rules=[]:VALUE:_default' \
+'*--since=[]:VALUE:_default' \
+'*--from-tx=[]:VALUE:_default' \
+'*--to-tx=[]:VALUE:_default' \
+'*--last-txs=[]:VALUE:_default' \
+'*--mode=[]:VALUE:_default' \
+'*--max-txs=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(path)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__path_commands" \
+"*::: :->path" \
+&& ret=0
+
+    case $state in
+    (path)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-path-command-$line[1]:"
+        case $line[1] in
+            (cone)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--via=[]:VALUE:_default' \
+'*--hops=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trajectory-IRI:_default' \
+&& ret=0
+;;
+(backtest)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--omit=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trajectory-IRI:_default' \
+&& ret=0
+;;
+(draft)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--name=[]:VALUE:_default' \
+'*--label=[]:VALUE:_default' \
+'*--via=[]:VALUE:_default' \
+'*--omit=[]:VALUE:_default' \
+'*--by=[]:VALUE:_default' \
+'*--dead-end=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trajectory-IRI:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(align)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__align_commands" \
+"*::: :->align" \
+&& ret=0
+
+    case $state in
+    (align)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-align-command-$line[1]:"
+        case $line[1] in
+            (propose)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--set-id=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-graph-a:_default' \
+':arg-graph-b:_default' \
+&& ret=0
+;;
+(decide)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--decisions=[]:VALUE:_default' \
+'*--reviewer=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-set-tsv:_default' \
+&& ret=0
+;;
+(apply)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph-a=[]:VALUE:_default' \
+'*--graph-b=[]:VALUE:_default' \
+'*--expected-version=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-set-tsv:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(propose)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--status=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__propose_commands" \
+"*::: :->propose" \
+&& ret=0
+
+    case $state in
+    (propose)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-propose-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--status=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(submit)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--proposer=[]:VALUE:_default' \
+'*--rationale=[]:VALUE:_default' \
+'*--trigger=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-kind:_default' \
+':arg-target:_default' \
+':arg-diff-file:_default' \
+&& ret=0
+;;
+(accept)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--decided-by=[]:VALUE:_default' \
+'*--note=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-id:_default' \
+&& ret=0
+;;
+(reject)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--decided-by=[]:VALUE:_default' \
+'*--note=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-id:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(memory)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__memory_commands" \
+"*::: :->memory" \
+&& ret=0
+
+    case $state in
+    (memory)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-memory-command-$line[1]:"
+        case $line[1] in
+            (read)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-owner-json:_default' \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-owner-json:_default' \
+&& ret=0
+;;
+(receipt)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+(commit)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'--local-authority[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(attest)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__attest_commands" \
+"*::: :->attest" \
+&& ret=0
+
+    case $state in
+    (attest)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-attest-command-$line[1]:"
+        case $line[1] in
+            (register)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--agent=[]:VALUE:_default' \
+'*--session=[]:VALUE:_default' \
+'*--public-key=[]:VALUE:_default' \
+'*--introducer=[]:VALUE:_default' \
+'*--issued-at=[]:VALUE:_default' \
+'*--expires-at=[]:VALUE:_default' \
+'--allow-write[]' \
+'--require-v2[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(allow-write)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-session:_default' \
+&& ret=0
+;;
+(deny-write)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-session:_default' \
+&& ret=0
+;;
+(require-v2)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-session:_default' \
+&& ret=0
+;;
+(allow-v1)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-session:_default' \
+&& ret=0
+;;
+(revoke)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-session:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(signer)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__signer_commands" \
+"*::: :->signer" \
+&& ret=0
+
+    case $state in
+    (signer)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-signer-command-$line[1]:"
+        case $line[1] in
+            (enroll)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--credential-id=[]:VALUE:_default' \
+'*--cose-key=[]:VALUE:_default' \
+'*--scheme=[]:VALUE:_default' \
+'*--origin=[]:VALUE:_default' \
+'*--rp-id=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--expires-at=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(enable)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(disable)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(revoke)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-credential-id:_default' \
+&& ret=0
+;;
+(protect-graph)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-IRI:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(deck)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__deck_commands" \
+"*::: :->deck" \
+&& ret=0
+
+    case $state in
+    (deck)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-deck-command-$line[1]:"
+        case $line[1] in
+            (configure)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--origin=[]:VALUE:_default' \
+'*--rp-id=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--author=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(enroll)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--credential-id=[]:VALUE:_default' \
+'*--cose-key=[]:VALUE:_default' \
+'*--scheme=[]:VALUE:_default' \
+'*--expires-at=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(enable)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(disable)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(revoke)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-credential-id:_default' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(trust-root)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__trust-root_commands" \
+"*::: :->trust-root" \
+&& ret=0
+
+    case $state in
+    (trust-root)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-trust-root-command-$line[1]:"
+        case $line[1] in
+            (challenge)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--verifier=[]:VALUE:_default' \
+'*--public-key=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(bootstrap)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--verifier=[]:VALUE:_default' \
+'*--public-key=[]:VALUE:_default' \
+'*--pop-signature=[]:VALUE:_default' \
+'*--attests=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(graph)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__graph_commands" \
+"*::: :->graph" \
+&& ret=0
+
+    case $state in
+    (graph)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-graph-command-$line[1]:"
+        case $line[1] in
+            (create)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(label)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--label=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--kind=[]:VALUE:_default' \
+'*--graph=[]:VALUE:_default' \
+'--frozen[]' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--as=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-db:_default' \
+&& ret=0
+;;
+(freeze)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--out=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(thaw)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--actor=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-iri:_default' \
+&& ret=0
+;;
+(overlay-create)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--input=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(overlay-write)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--input=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(overlay-compose)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--input=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(db)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__db_commands" \
+"*::: :->db" \
+&& ret=0
+
+    case $state in
+    (db)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-db-command-$line[1]:"
+        case $line[1] in
+            (respace)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--into=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(attach)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--list[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(migrate-inferred)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(events)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__events_commands" \
+"*::: :->events" \
+&& ret=0
+
+    case $state in
+    (events)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-events-command-$line[1]:"
+        case $line[1] in
+            (refusals)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(fork)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--name=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-tx:_default' \
+":: :_qp__subcmd__fork_commands" \
+"*::: :->fork" \
+&& ret=0
+
+    case $state in
+    (fork)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-fork-command-$line[2]:"
+        case $line[2] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(diff)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-a:_default' \
+':arg-b:_default' \
+&& ret=0
+;;
+(drop)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+&& ret=0
+;;
+(promote)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--emit-decisions=[]:VALUE:_default' \
+'*--decisions=[]:VALUE:_default' \
+'*--reviewer=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'--propose[]' \
+'--dry-run[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-name:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(audit)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--repo=[]:VALUE:_default' \
+'*--from=[]:VALUE:_default' \
+'*--to=[]:VALUE:_default' \
+'*--yupana=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trace-jsonl:_default' \
+":: :_qp__subcmd__audit_commands" \
+"*::: :->audit" \
+&& ret=0
+
+    case $state in
+    (audit)
+        words=($line[2] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-audit-command-$line[2]:"
+        case $line[2] in
+            (inventory)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(namespace)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(replay)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--delta=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trace-jsonl:_default' \
+&& ret=0
+;;
+(tree)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trace-jsonl:_default' \
+&& ret=0
+;;
+(inheritance)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-trace-jsonl:_default' \
+&& ret=0
+;;
+(quarantine)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--verdict=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__audit__subcmd__quarantine_commands" \
+"*::: :->quarantine" \
+&& ret=0
+
+    case $state in
+    (quarantine)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-audit-quarantine-command-$line[1]:"
+        case $line[1] in
+            (list)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--verdict=[]:VALUE:_default' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(purge)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--before=[]:VALUE:_default' \
+'*--older-than=[]:VALUE:_default' \
+'--all[]' \
+'--json[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_qp_commands] )) ||
+_qp_commands() {
+    local commands; commands=(
+'version:Print the version and source commit' \
+'install-alias:Add the qp alias beside the quipu binary' \
+'knot:Assert Turtle facts, validated against loaded shapes' \
+'load:Assert Turtle facts (alias of knot), or load a project bundle directory' \
+'ingest:Bulk-load an N-Triples, Turtle or N-Quads file into one graph with declared count and digest' \
+'read:Run a SPARQL query, optionally as of a valid time or transaction' \
+'query:Run a SPARQL query (alias of read)' \
+'rule-query:Read typed ROOT support and the admitted judgment for a rule request' \
+'cord:List entities, optionally of one type' \
+'unravel:Show facts as they were at a transaction or valid time' \
+'impact:Walk what depends on an entity, optionally after a speculative removal' \
+'explain:Trace a derived fact back to its premises' \
+'project:Project the graph and run a graph algorithm such as PageRank' \
+'report:Report hubs, surprising links and open questions in the graph' \
+'reason:Run Datalog rules to a fixpoint and persist the derivations' \
+'demotions:Read preserved unsupported demotions without materializing a closure' \
+'episode:Ingest a structured episode of nodes and edges from JSON' \
+'retract:Retract an entity'\''s facts, optionally one predicate; history is kept' \
+'shapes:Load, list or remove the SHACL shapes that guard writes' \
+'namespaces:List or apply the owner namespace registry' \
+'entity-ref:Mint or resolve stable entity references' \
+'ontology:Load, list or remove OWL ontologies (owl feature)' \
+'validate:Validate a data file against a shapes file without writing' \
+'repl:Open an interactive SPARQL prompt' \
+'export:Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query' \
+'render:Render graph data into files in an owned directory' \
+'stats:Show store statistics' \
+'prime:Print the agent primer and a bounded, read-only summary of the store' \
+'search:Search entities by keyword, vector or hybrid ranking' \
+'search-index:Report, backfill or drop the search indexes' \
+'doctor:Report graph-label drift and recommended floors' \
+'pack:Export a graph, or the whole store, as a pack; or verify a pack' \
+'unpack:Merge a published pack into a local graph' \
+'restore:Replace the store with a full pack, binary or text' \
+'share:Write a portable share of a graph, scope or project' \
+'status:Report how a share has diverged from this store' \
+'merge:Merge a share back into ROOT, with reviewable conflict decisions' \
+'import:Verify a share into quarantine, then promote or review it' \
+'compose:Compose verified packs into a named inspection dataset' \
+'changes:Read whole transaction change pages from the change feed' \
+'follow:Keep this database a read-only follower of a primary server' \
+'acquire:Measure the bounded scope of a direct-main graph acquisition' \
+'migrate-vectors:Move stored vectors between backends (lancedb feature)' \
+'git-merge:Merge pendants from Git snapshots and stop before committing' \
+'merge-driver:Low-level Git merge driver for pendant files' \
+'pendant-resolve:Record a resolution choice for one pendant merge conflict' \
+'pendant-check:Check a pendant merge result in CI without a merge driver' \
+'diff-textconv:Render a pack with labels for git diff textconv' \
+'mcp:Serve the MCP tools over stdio through the sibling quipu-server' \
+'hook:Run a harness hook such as session capture' \
+'hooks:Bundle, install, uninstall or check quipu'\''s Claude Code and Codex hooks' \
+'policy:Draft an advisory policy from an exemplar, or backtest one' \
+'gate:Judge a candidate policy set over recorded history without writing' \
+'path:Golden-path analysis\: provenance cone, backtest and draft' \
+'align:Propose, decide and apply cross-graph alignments' \
+'propose:List, submit, accept or reject schema change proposals' \
+'memory:Read, export, receipt or commit versioned file memory' \
+'attest:Register and manage attested session bindings' \
+'signer:Enroll and manage hardware signers for attested writes' \
+'deck:Configure and enroll the Decision Deck' \
+'trust-root:Enroll the first human key of the root of trust' \
+'graph:Create, label, list, import, freeze and thaw named graphs and overlays' \
+'db:Respace, attach or migrate the store file' \
+'events:Read store event records such as refusals' \
+'fork:Create, list, diff, drop or promote named forks of ROOT' \
+'audit:Check traces, namespaces, replays and quarantine against policy' \
+    )
+    _describe -t commands 'qp commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__acquire_commands] )) ||
+_qp__subcmd__acquire_commands() {
+    local commands; commands=(
+'scope:Report the bounded row and byte scope of a direct-main acquisition' \
+    )
+    _describe -t commands 'qp acquire commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__acquire__subcmd__scope_commands] )) ||
+_qp__subcmd__acquire__subcmd__scope_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp acquire scope commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__align_commands] )) ||
+_qp__subcmd__align_commands() {
+    local commands; commands=(
+'propose:Propose scored alignments between two named graphs as an SSSOM set' \
+'decide:Apply reviewer accept and negate decisions to a mapping set' \
+'apply:Materialize decided alignments into a derived alignment graph' \
+    )
+    _describe -t commands 'qp align commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__align__subcmd__apply_commands] )) ||
+_qp__subcmd__align__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp align apply commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__align__subcmd__decide_commands] )) ||
+_qp__subcmd__align__subcmd__decide_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp align decide commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__align__subcmd__propose_commands] )) ||
+_qp__subcmd__align__subcmd__propose_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp align propose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest_commands] )) ||
+_qp__subcmd__attest_commands() {
+    local commands; commands=(
+'register:Register a session binding for attested writes' \
+'list:List registered session bindings' \
+'allow-write:Allow a session to write' \
+'deny-write:Stop a session from writing' \
+'require-v2:Require write-v2 signatures for a session' \
+'allow-v1:Allow write-v1 signatures for a session again' \
+'revoke:Revoke a session binding' \
+    )
+    _describe -t commands 'qp attest commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__allow-v1_commands] )) ||
+_qp__subcmd__attest__subcmd__allow-v1_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest allow-v1 commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__allow-write_commands] )) ||
+_qp__subcmd__attest__subcmd__allow-write_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest allow-write commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__deny-write_commands] )) ||
+_qp__subcmd__attest__subcmd__deny-write_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest deny-write commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__list_commands] )) ||
+_qp__subcmd__attest__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__register_commands] )) ||
+_qp__subcmd__attest__subcmd__register_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest register commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__require-v2_commands] )) ||
+_qp__subcmd__attest__subcmd__require-v2_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest require-v2 commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__attest__subcmd__revoke_commands] )) ||
+_qp__subcmd__attest__subcmd__revoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp attest revoke commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit_commands] )) ||
+_qp__subcmd__audit_commands() {
+    local commands; commands=(
+'inventory:List the policies the audit checks against' \
+'namespace:Report base-namespace drift' \
+'replay:Re-derive a gate decision as of its transaction' \
+'tree:Reassemble the dispatch forest from a trace'\''s principal chains' \
+'inheritance:Check whether inherited constraints stopped applying under delegation' \
+'quarantine:List refused-attempt evidence behind verdicts' \
+    )
+    _describe -t commands 'qp audit commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__inheritance_commands] )) ||
+_qp__subcmd__audit__subcmd__inheritance_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit inheritance commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__inventory_commands] )) ||
+_qp__subcmd__audit__subcmd__inventory_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit inventory commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__namespace_commands] )) ||
+_qp__subcmd__audit__subcmd__namespace_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit namespace commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__quarantine_commands] )) ||
+_qp__subcmd__audit__subcmd__quarantine_commands() {
+    local commands; commands=(
+'list:List refused-attempt evidence, optionally for one verdict' \
+'purge:Purge quarantined evidence by graph, age or all' \
+    )
+    _describe -t commands 'qp audit quarantine commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__quarantine__subcmd__list_commands] )) ||
+_qp__subcmd__audit__subcmd__quarantine__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit quarantine list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__quarantine__subcmd__purge_commands] )) ||
+_qp__subcmd__audit__subcmd__quarantine__subcmd__purge_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit quarantine purge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__replay_commands] )) ||
+_qp__subcmd__audit__subcmd__replay_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit replay commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__audit__subcmd__tree_commands] )) ||
+_qp__subcmd__audit__subcmd__tree_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp audit tree commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__changes_commands] )) ||
+_qp__subcmd__changes_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp changes commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__compose_commands] )) ||
+_qp__subcmd__compose_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp compose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__cord_commands] )) ||
+_qp__subcmd__cord_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp cord commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__db_commands] )) ||
+_qp__subcmd__db_commands() {
+    local commands; commands=(
+'respace:Copy the store into a term space' \
+'attach:List the databases mounted alongside this store' \
+'migrate-inferred:Move engine-derived facts into their companion inferred graphs' \
+    )
+    _describe -t commands 'qp db commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__db__subcmd__attach_commands] )) ||
+_qp__subcmd__db__subcmd__attach_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp db attach commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__db__subcmd__migrate-inferred_commands] )) ||
+_qp__subcmd__db__subcmd__migrate-inferred_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp db migrate-inferred commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__db__subcmd__respace_commands] )) ||
+_qp__subcmd__db__subcmd__respace_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp db respace commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck_commands] )) ||
+_qp__subcmd__deck_commands() {
+    local commands; commands=(
+'configure:Configure the Decision Deck scope (starts disabled)' \
+'enroll:Enroll a Decision Deck credential' \
+'enable:Enable the Decision Deck' \
+'disable:Disable the Decision Deck' \
+'revoke:Revoke a Decision Deck credential' \
+'status:Show Decision Deck configuration and state' \
+    )
+    _describe -t commands 'qp deck commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__configure_commands] )) ||
+_qp__subcmd__deck__subcmd__configure_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck configure commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__disable_commands] )) ||
+_qp__subcmd__deck__subcmd__disable_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck disable commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__enable_commands] )) ||
+_qp__subcmd__deck__subcmd__enable_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck enable commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__enroll_commands] )) ||
+_qp__subcmd__deck__subcmd__enroll_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck enroll commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__revoke_commands] )) ||
+_qp__subcmd__deck__subcmd__revoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck revoke commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__deck__subcmd__status_commands] )) ||
+_qp__subcmd__deck__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp deck status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__demotions_commands] )) ||
+_qp__subcmd__demotions_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp demotions commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__diff-textconv_commands] )) ||
+_qp__subcmd__diff-textconv_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp diff-textconv commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__doctor_commands] )) ||
+_qp__subcmd__doctor_commands() {
+    local commands; commands=(
+'labels:Report graph-label drift and recommended floors' \
+    )
+    _describe -t commands 'qp doctor commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__doctor__subcmd__labels_commands] )) ||
+_qp__subcmd__doctor__subcmd__labels_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp doctor labels commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__entity-ref_commands] )) ||
+_qp__subcmd__entity-ref_commands() {
+    local commands; commands=(
+'mint:Mint a typed stable entity reference from a JSON request' \
+'resolve:Resolve a stable entity reference from a JSON request' \
+    )
+    _describe -t commands 'qp entity-ref commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__entity-ref__subcmd__mint_commands] )) ||
+_qp__subcmd__entity-ref__subcmd__mint_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp entity-ref mint commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__entity-ref__subcmd__resolve_commands] )) ||
+_qp__subcmd__entity-ref__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp entity-ref resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__episode_commands] )) ||
+_qp__subcmd__episode_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp episode commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__events_commands] )) ||
+_qp__subcmd__events_commands() {
+    local commands; commands=(
+'refusals:List recorded write refusals' \
+    )
+    _describe -t commands 'qp events commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__events__subcmd__refusals_commands] )) ||
+_qp__subcmd__events__subcmd__refusals_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp events refusals commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__explain_commands] )) ||
+_qp__subcmd__explain_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp explain commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__export_commands] )) ||
+_qp__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp export commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__follow_commands] )) ||
+_qp__subcmd__follow_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp follow commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__fork_commands] )) ||
+_qp__subcmd__fork_commands() {
+    local commands; commands=(
+'list:List named forks' \
+'diff:Diff two forks' \
+'drop:Drop a named fork' \
+'promote:Promote a fork to ROOT, with reviewable conflict decisions' \
+    )
+    _describe -t commands 'qp fork commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__fork__subcmd__diff_commands] )) ||
+_qp__subcmd__fork__subcmd__diff_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp fork diff commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__fork__subcmd__drop_commands] )) ||
+_qp__subcmd__fork__subcmd__drop_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp fork drop commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__fork__subcmd__list_commands] )) ||
+_qp__subcmd__fork__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp fork list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__fork__subcmd__promote_commands] )) ||
+_qp__subcmd__fork__subcmd__promote_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp fork promote commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__gate_commands] )) ||
+_qp__subcmd__gate_commands() {
+    local commands; commands=(
+'shadow:Judge a candidate policy set over recorded history on a quiescent copy' \
+    )
+    _describe -t commands 'qp gate commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__gate__subcmd__shadow_commands] )) ||
+_qp__subcmd__gate__subcmd__shadow_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp gate shadow commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-merge_commands] )) ||
+_qp__subcmd__git-merge_commands() {
+    local commands; commands=(
+'show:Show a qpack'\''s pending merge decisions in the standard layout' \
+'resolve:Record one choice in the Git merge in progress and rewrite the qpack' \
+    )
+    _describe -t commands 'qp git-merge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-merge__subcmd__resolve_commands] )) ||
+_qp__subcmd__git-merge__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp git-merge resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-merge__subcmd__show_commands] )) ||
+_qp__subcmd__git-merge__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp git-merge show commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph_commands] )) ||
+_qp__subcmd__graph_commands() {
+    local commands; commands=(
+'create:Register a committed named graph' \
+'label:Declare lattice labels on a registered graph' \
+'list:List registered named graphs' \
+'import:Import another store file as a named graph' \
+'freeze:Freeze a graph'\''s full history into a read-only archive pack' \
+'thaw:Restore a frozen graph from its archive pack' \
+'overlay-create:Create an overlay graph bound to a committed parent' \
+'overlay-write:Assert, retract or tombstone a triple in an overlay' \
+'overlay-compose:Resolve an overlay'\''s composed view over its parent' \
+    )
+    _describe -t commands 'qp graph commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__create_commands] )) ||
+_qp__subcmd__graph__subcmd__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph create commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__freeze_commands] )) ||
+_qp__subcmd__graph__subcmd__freeze_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph freeze commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__import_commands] )) ||
+_qp__subcmd__graph__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph import commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__label_commands] )) ||
+_qp__subcmd__graph__subcmd__label_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph label commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__list_commands] )) ||
+_qp__subcmd__graph__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__overlay-compose_commands] )) ||
+_qp__subcmd__graph__subcmd__overlay-compose_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph overlay-compose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__overlay-create_commands] )) ||
+_qp__subcmd__graph__subcmd__overlay-create_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph overlay-create commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__overlay-write_commands] )) ||
+_qp__subcmd__graph__subcmd__overlay-write_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph overlay-write commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__graph__subcmd__thaw_commands] )) ||
+_qp__subcmd__graph__subcmd__thaw_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp graph thaw commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hook_commands] )) ||
+_qp__subcmd__hook_commands() {
+    local commands; commands=(
+'session-capture:Stop hook\: solicit one knowledge episode per session from stdin JSON' \
+    )
+    _describe -t commands 'qp hook commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hook__subcmd__session-capture_commands] )) ||
+_qp__subcmd__hook__subcmd__session-capture_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp hook session-capture commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hooks_commands] )) ||
+_qp__subcmd__hooks_commands() {
+    local commands; commands=(
+'bundle:Print quipu'\''s hook bundle (st.hook-bundle/1)' \
+'install:Install quipu'\''s hooks into Claude Code or Codex' \
+'uninstall:Remove quipu'\''s hooks from Claude Code or Codex' \
+'status:Report whether quipu'\''s hooks are installed' \
+    )
+    _describe -t commands 'qp hooks commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hooks__subcmd__bundle_commands] )) ||
+_qp__subcmd__hooks__subcmd__bundle_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp hooks bundle commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hooks__subcmd__install_commands] )) ||
+_qp__subcmd__hooks__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp hooks install commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hooks__subcmd__status_commands] )) ||
+_qp__subcmd__hooks__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp hooks status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__hooks__subcmd__uninstall_commands] )) ||
+_qp__subcmd__hooks__subcmd__uninstall_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp hooks uninstall commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__impact_commands] )) ||
+_qp__subcmd__impact_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp impact commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import_commands] )) ||
+_qp__subcmd__import_commands() {
+    local commands; commands=(
+'delta:Verify a delta share against its parent share' \
+'promote:Promote a staged share into the store' \
+'review:Review staged shares awaiting promotion' \
+    )
+    _describe -t commands 'qp import commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__delta_commands] )) ||
+_qp__subcmd__import__subcmd__delta_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import delta commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__promote_commands] )) ||
+_qp__subcmd__import__subcmd__promote_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import promote commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review_commands] )) ||
+_qp__subcmd__import__subcmd__review_commands() {
+    local commands; commands=(
+'pending:List staged shares awaiting review' \
+'notify:Report staged shares older than an age threshold to a route' \
+'rejected:Mark a staged share rejected, with a reason' \
+'expired:Mark a staged share expired, with a reason' \
+'reopen:Reopen a rejected or expired staged share' \
+    )
+    _describe -t commands 'qp import review commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review__subcmd__expired_commands] )) ||
+_qp__subcmd__import__subcmd__review__subcmd__expired_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import review expired commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review__subcmd__notify_commands] )) ||
+_qp__subcmd__import__subcmd__review__subcmd__notify_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import review notify commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review__subcmd__pending_commands] )) ||
+_qp__subcmd__import__subcmd__review__subcmd__pending_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import review pending commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review__subcmd__rejected_commands] )) ||
+_qp__subcmd__import__subcmd__review__subcmd__rejected_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import review rejected commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__import__subcmd__review__subcmd__reopen_commands] )) ||
+_qp__subcmd__import__subcmd__review__subcmd__reopen_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp import review reopen commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__ingest_commands] )) ||
+_qp__subcmd__ingest_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp ingest commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__install-alias_commands] )) ||
+_qp__subcmd__install-alias_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp install-alias commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__knot_commands] )) ||
+_qp__subcmd__knot_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp knot commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__load_commands] )) ||
+_qp__subcmd__load_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp load commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__mcp_commands] )) ||
+_qp__subcmd__mcp_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp mcp commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__memory_commands] )) ||
+_qp__subcmd__memory_commands() {
+    local commands; commands=(
+'read:Read a versioned memory file for an owner' \
+'export:Export an owner'\''s memory files as a file-data envelope' \
+'receipt:Compute the receipt a memory commit request would produce' \
+'commit:Commit a versioned memory file change' \
+    )
+    _describe -t commands 'qp memory commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__memory__subcmd__commit_commands] )) ||
+_qp__subcmd__memory__subcmd__commit_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp memory commit commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__memory__subcmd__export_commands] )) ||
+_qp__subcmd__memory__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp memory export commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__memory__subcmd__read_commands] )) ||
+_qp__subcmd__memory__subcmd__read_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp memory read commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__memory__subcmd__receipt_commands] )) ||
+_qp__subcmd__memory__subcmd__receipt_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp memory receipt commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge_commands] )) ||
+_qp__subcmd__merge_commands() {
+    local commands; commands=(
+'show:Show a merge'\''s conflicts in the standard layout' \
+'resolve:Record one choice on one merge conflict' \
+    )
+    _describe -t commands 'qp merge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge__subcmd__resolve_commands] )) ||
+_qp__subcmd__merge__subcmd__resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp merge resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge__subcmd__show_commands] )) ||
+_qp__subcmd__merge__subcmd__show_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp merge show commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__merge-driver_commands] )) ||
+_qp__subcmd__merge-driver_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp merge-driver commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__migrate-vectors_commands] )) ||
+_qp__subcmd__migrate-vectors_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp migrate-vectors commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__namespaces_commands] )) ||
+_qp__subcmd__namespaces_commands() {
+    local commands; commands=(
+'list:List the effective owner namespace registry' \
+'apply:Apply the configured owner namespace registry to the store' \
+    )
+    _describe -t commands 'qp namespaces commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__namespaces__subcmd__apply_commands] )) ||
+_qp__subcmd__namespaces__subcmd__apply_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp namespaces apply commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__namespaces__subcmd__list_commands] )) ||
+_qp__subcmd__namespaces__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp namespaces list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__ontology_commands] )) ||
+_qp__subcmd__ontology_commands() {
+    local commands; commands=(
+'list:List loaded OWL ontologies' \
+'load:Load an OWL ontology and materialize its entailments' \
+'remove:Remove a loaded OWL ontology' \
+    )
+    _describe -t commands 'qp ontology commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__ontology__subcmd__list_commands] )) ||
+_qp__subcmd__ontology__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp ontology list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__ontology__subcmd__load_commands] )) ||
+_qp__subcmd__ontology__subcmd__load_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp ontology load commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__ontology__subcmd__remove_commands] )) ||
+_qp__subcmd__ontology__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp ontology remove commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__pack_commands] )) ||
+_qp__subcmd__pack_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp pack commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__path_commands] )) ||
+_qp__subcmd__path_commands() {
+    local commands; commands=(
+'cone:Compute the provenance cone of a trajectory' \
+'backtest:Backtest a pruned trajectory over recorded history' \
+'draft:Draft a golden-path policy from a trajectory as Turtle for review' \
+    )
+    _describe -t commands 'qp path commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__path__subcmd__backtest_commands] )) ||
+_qp__subcmd__path__subcmd__backtest_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp path backtest commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__path__subcmd__cone_commands] )) ||
+_qp__subcmd__path__subcmd__cone_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp path cone commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__path__subcmd__draft_commands] )) ||
+_qp__subcmd__path__subcmd__draft_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp path draft commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__pendant-check_commands] )) ||
+_qp__subcmd__pendant-check_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp pendant-check commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__pendant-resolve_commands] )) ||
+_qp__subcmd__pendant-resolve_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp pendant-resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__policy_commands] )) ||
+_qp__subcmd__policy_commands() {
+    local commands; commands=(
+'draft:Draft advisory policy Turtle from an exemplar and an intent' \
+'backtest:Backtest a candidate policy over recorded transactions' \
+    )
+    _describe -t commands 'qp policy commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__policy__subcmd__backtest_commands] )) ||
+_qp__subcmd__policy__subcmd__backtest_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp policy backtest commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__policy__subcmd__draft_commands] )) ||
+_qp__subcmd__policy__subcmd__draft_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp policy draft commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__prime_commands] )) ||
+_qp__subcmd__prime_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp prime commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__project_commands] )) ||
+_qp__subcmd__project_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp project commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__propose_commands] )) ||
+_qp__subcmd__propose_commands() {
+    local commands; commands=(
+'list:List schema change proposals, optionally by status' \
+'submit:Submit a schema change proposal' \
+'accept:Accept a pending proposal' \
+'reject:Reject a pending proposal' \
+    )
+    _describe -t commands 'qp propose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__propose__subcmd__accept_commands] )) ||
+_qp__subcmd__propose__subcmd__accept_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp propose accept commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__propose__subcmd__list_commands] )) ||
+_qp__subcmd__propose__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp propose list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__propose__subcmd__reject_commands] )) ||
+_qp__subcmd__propose__subcmd__reject_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp propose reject commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__propose__subcmd__submit_commands] )) ||
+_qp__subcmd__propose__subcmd__submit_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp propose submit commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__query_commands] )) ||
+_qp__subcmd__query_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp query commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__read_commands] )) ||
+_qp__subcmd__read_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp read commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__reason_commands] )) ||
+_qp__subcmd__reason_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp reason commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__render_commands] )) ||
+_qp__subcmd__render_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp render commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__repl_commands] )) ||
+_qp__subcmd__repl_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp repl commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__report_commands] )) ||
+_qp__subcmd__report_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp report commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__restore_commands] )) ||
+_qp__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp restore commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__retract_commands] )) ||
+_qp__subcmd__retract_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp retract commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__rule-query_commands] )) ||
+_qp__subcmd__rule-query_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp rule-query commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__search_commands] )) ||
+_qp__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp search commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__search-index_commands] )) ||
+_qp__subcmd__search-index_commands() {
+    local commands; commands=(
+'status:Report the state of a search index' \
+'backfill:Backfill a search index in batches' \
+'drop:Drop a search index' \
+    )
+    _describe -t commands 'qp search-index commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__search-index__subcmd__backfill_commands] )) ||
+_qp__subcmd__search-index__subcmd__backfill_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp search-index backfill commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__search-index__subcmd__drop_commands] )) ||
+_qp__subcmd__search-index__subcmd__drop_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp search-index drop commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__search-index__subcmd__status_commands] )) ||
+_qp__subcmd__search-index__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp search-index status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__shapes_commands] )) ||
+_qp__subcmd__shapes_commands() {
+    local commands; commands=(
+'list:List the loaded SHACL shapes' \
+'load:Load a named SHACL shapes file; later writes are validated against it' \
+'remove:Remove a named shapes file' \
+    )
+    _describe -t commands 'qp shapes commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__shapes__subcmd__list_commands] )) ||
+_qp__subcmd__shapes__subcmd__list_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp shapes list commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__shapes__subcmd__load_commands] )) ||
+_qp__subcmd__shapes__subcmd__load_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp shapes load commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__shapes__subcmd__remove_commands] )) ||
+_qp__subcmd__shapes__subcmd__remove_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp shapes remove commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__share_commands] )) ||
+_qp__subcmd__share_commands() {
+    local commands; commands=(
+'diff:Diff two packs by entity, or write a PR-review report' \
+    )
+    _describe -t commands 'qp share commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__share__subcmd__diff_commands] )) ||
+_qp__subcmd__share__subcmd__diff_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp share diff commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer_commands] )) ||
+_qp__subcmd__signer_commands() {
+    local commands; commands=(
+'enroll:Enroll a hardware signer credential' \
+'status:Show signer enrollment and enforcement state' \
+'enable:Enable signer enforcement' \
+'disable:Disable signer enforcement' \
+'revoke:Revoke a signer credential' \
+'protect-graph:Permanently require attested writes for a graph' \
+    )
+    _describe -t commands 'qp signer commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__disable_commands] )) ||
+_qp__subcmd__signer__subcmd__disable_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer disable commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__enable_commands] )) ||
+_qp__subcmd__signer__subcmd__enable_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer enable commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__enroll_commands] )) ||
+_qp__subcmd__signer__subcmd__enroll_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer enroll commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__protect-graph_commands] )) ||
+_qp__subcmd__signer__subcmd__protect-graph_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer protect-graph commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__revoke_commands] )) ||
+_qp__subcmd__signer__subcmd__revoke_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer revoke commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__signer__subcmd__status_commands] )) ||
+_qp__subcmd__signer__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp signer status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__stats_commands] )) ||
+_qp__subcmd__stats_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp stats commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__status_commands] )) ||
+_qp__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__trust-root_commands] )) ||
+_qp__subcmd__trust-root_commands() {
+    local commands; commands=(
+'challenge:Issue the proof-of-possession challenge for a first verifier key' \
+'bootstrap:Enroll the first verifier key with its signed challenge' \
+'status:Show the root-of-trust state' \
+    )
+    _describe -t commands 'qp trust-root commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__trust-root__subcmd__bootstrap_commands] )) ||
+_qp__subcmd__trust-root__subcmd__bootstrap_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp trust-root bootstrap commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__trust-root__subcmd__challenge_commands] )) ||
+_qp__subcmd__trust-root__subcmd__challenge_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp trust-root challenge commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__trust-root__subcmd__status_commands] )) ||
+_qp__subcmd__trust-root__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp trust-root status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__unpack_commands] )) ||
+_qp__subcmd__unpack_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp unpack commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__unravel_commands] )) ||
+_qp__subcmd__unravel_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp unravel commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__validate_commands] )) ||
+_qp__subcmd__validate_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp validate commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__version_commands] )) ||
+_qp__subcmd__version_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp version commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_qp" ]; then
+    _qp "$@"
+else
+    compdef _qp qp
+fi
