@@ -21,6 +21,10 @@
 //!   `shacl.violation` events that ride the retraction's own transaction.
 //! - `shacl.validate_on_write = false` restores the previous behaviour exactly.
 //!
+//! Writes that replace rather than only retract run it too: an episode
+//! `replace_snapshot` re-ingest and a share-import promotion into a target
+//! graph both close facts the new payload lacks.
+//!
 //! There is no per-call bypass. The orphan flags (`allow_orphan`, `on_orphan`)
 //! are about node identity, not shapes, and do not override this gate.
 
@@ -28,17 +32,19 @@ use super::{Datum, Store};
 use crate::error::Result;
 
 impl Store {
-    /// Refuse `retracted` (datums leaving `graph`) if it leaves a node newly
-    /// violating a reject shape's floor. `Ok(())` means it may be transacted.
+    /// Refuse a write to `graph` whose `Op::Retract` datums leave a node newly
+    /// violating a reject shape's floor; its `Op::Assert` datums count toward
+    /// the post-state, so a replacement value satisfies the floor. `Ok(())`
+    /// means it may be transacted.
     ///
     /// `scope` is the `retract_source` the transaction will close claims under
-    /// (episode and source retraction). A statement another producer also
-    /// claims stays visible after such a retraction, so it is not judged as
-    /// removed.
+    /// (episode, source and snapshot retraction). A statement another producer
+    /// also claims stays visible after such a retraction, so it is not judged
+    /// as removed.
     #[cfg_attr(not(feature = "shacl"), allow(clippy::unused_self))]
     pub(crate) fn enforce_retraction_shapes(
         &self,
-        retracted: &[Datum],
+        datums: &[Datum],
         graph: i64,
         scope: Option<&str>,
         actor: Option<&str>,
@@ -46,28 +52,45 @@ impl Store {
     ) -> Result<()> {
         #[cfg(feature = "shacl")]
         {
-            if retracted.is_empty() || !self.shacl_config.validate_on_write {
+            use crate::types::Op;
+            if !self.shacl_config.validate_on_write || datums.iter().all(|d| d.op != Op::Retract) {
                 return Ok(());
             }
-            let mut removed = String::new();
-            for datum in retracted {
-                if let Some(scope) = scope
-                    && self.claimed_outside(datum, graph, scope)?
-                {
-                    continue;
-                }
-                let term = crate::rdf::value_to_term(self, &datum.value)?;
-                let subject = self.resolve(datum.entity)?;
-                let predicate = self.resolve(datum.attribute)?;
-                removed.push_str(&format!("<{subject}> <{predicate}> {term} .\n"));
+            let (mut removed, mut asserted) = (String::new(), String::new());
+            for datum in datums {
+                let out = match datum.op {
+                    Op::Retract => {
+                        if let Some(scope) = scope
+                            && self.claimed_outside(datum, graph, scope)?
+                        {
+                            continue;
+                        }
+                        &mut removed
+                    }
+                    Op::Assert => &mut asserted,
+                    // An overlay tombstone is not a graph retraction.
+                    Op::Tombstone => continue,
+                };
+                out.push_str(&self.datum_ntriple(datum)?);
             }
-            self.enforce_retraction_shapes_nt(&removed, "", graph, actor, source)
+            self.enforce_retraction_shapes_nt(&removed, &asserted, graph, actor, source)
         }
         #[cfg(not(feature = "shacl"))]
         {
-            let _ = (retracted, graph, scope, actor, source);
+            let _ = (datums, graph, scope, actor, source);
             Ok(())
         }
+    }
+
+    /// One datum as an N-Triples line. Terms come from the shared
+    /// value-to-term helper, so a blank-node subject or object is `_:b`, never
+    /// an `<_:b>` that would not parse.
+    #[cfg(feature = "shacl")]
+    fn datum_ntriple(&self, datum: &Datum) -> Result<String> {
+        let subject = crate::rdf::value_to_term(self, &crate::types::Value::Ref(datum.entity))?;
+        let object = crate::rdf::value_to_term(self, &datum.value)?;
+        let predicate = self.resolve(datum.attribute)?;
+        Ok(format!("{subject} <{predicate}> {object} .\n"))
     }
 
     /// Does a producer other than `scope` hold a live claim on `datum` in

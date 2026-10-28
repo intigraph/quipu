@@ -291,3 +291,96 @@ fn fork_promote_that_only_removes_a_required_value_is_refused() {
     ));
     assert_eq!(names(&store), 0);
 }
+
+// ------------------------------------------------------------- blank nodes
+
+/// A blank-node subject is written `_:b`, never `<_:b>`: the gate must not
+/// turn every retraction touching one into a parse error.
+#[test]
+fn retraction_touching_a_blank_node_is_judged_not_a_parse_error() {
+    let mut store = Store::open_in_memory().unwrap();
+    let carol = store.intern(CAROL).unwrap();
+    let nick = datum(&mut store, "_:b1", NICK, Value::Str("x".into()), Op::Assert);
+    let edge = datum(&mut store, "_:b1", NAME, Value::Ref(carol), Op::Assert);
+    store
+        .transact(&[nick, edge], TS, None, Some("episode:blank"))
+        .unwrap();
+    store.load_shapes("people", REJECT, TS).unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+    let b1 = store.lookup("_:b1").unwrap().unwrap();
+    let nick = store.lookup(NICK).unwrap().unwrap();
+    store.retract_entity(b1, Some(nick), TS, None).unwrap();
+    let out = crate::tool_retract_episode(&mut store, &json!({"episode": "blank"})).unwrap();
+    assert_eq!(out["retracted"], 1);
+}
+
+// ---------------------------------------------------- snapshot replacement
+
+fn episode_v(owner: Option<&str>) -> serde_json::Value {
+    let mut node = json!({"name": "path-a", "type": "ExecutionPath"});
+    if let Some(owner) = owner {
+        node["properties"] = json!({"owner": owner});
+    }
+    json!({"name": "paths", "nodes": [node], "replace_snapshot": true})
+}
+
+#[test]
+fn episode_snapshot_that_drops_a_required_value_is_refused() {
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    let shapes = format!(
+        "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+         <urn:t:PathShape> a sh:NodeShape ; sh:targetClass <{ns}ExecutionPath> ;\n    \
+         sh:property [ sh:path <{ns}owner> ; sh:minCount 1 ] .\n"
+    );
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_shapes("paths", &shapes, TS).unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+    crate::tool_episode(&mut store, &episode_v(Some("x"))).unwrap();
+    let owner = store.lookup(&format!("{ns}owner")).unwrap().unwrap();
+    let path = store.lookup(&format!("{ns}path-a")).unwrap().unwrap();
+    let owners = |s: &Store| {
+        s.entity_facts(path)
+            .unwrap()
+            .iter()
+            .filter(|f| f.attribute == owner)
+            .count()
+    };
+    assert_eq!(owners(&store), 1);
+    let tx = store.latest_tx_id().unwrap();
+    let err = crate::tool_episode(&mut store, &episode_v(None)).unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+    assert_eq!(store.latest_tx_id().unwrap(), tx);
+    assert_eq!(owners(&store), 1);
+    // A replacement value satisfies the floor.
+    crate::tool_episode(&mut store, &episode_v(Some("y"))).unwrap();
+    assert_eq!(owners(&store), 1);
+}
+
+fn knot_snapshot(store: &mut Store, body: &str) -> crate::Result<serde_json::Value> {
+    crate::tool_knot(
+        store,
+        &json!({
+            "snapshot": "people", "replace_snapshot": true,
+            "turtle": format!("@prefix ex: <urn:t:> . {body}"),
+        }),
+    )
+}
+
+#[test]
+fn knot_snapshot_that_drops_a_required_value_is_refused() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.load_shapes("people", REJECT, TS).unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+    knot_snapshot(&mut store, "ex:carol a ex:Person ; ex:name \"Carol\" .").unwrap();
+    let tx = store.latest_tx_id().unwrap();
+    let err = knot_snapshot(&mut store, "ex:carol a ex:Person .").unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+    assert_eq!(store.latest_tx_id().unwrap(), tx);
+    assert_eq!(names(&store), 1);
+}
