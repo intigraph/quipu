@@ -145,7 +145,7 @@ impl Ruling {
 /// The SPARQL group matching a gate ruling `?d` by class.
 ///
 /// New rulings are `aegis:GateApproval`. A ruling recorded before the
-/// GateApproval split is `aegis:Decision` and stays so: `rdf:type` is inside
+/// `GateApproval` split is `aegis:Decision` and stays so: `rdf:type` is inside
 /// its seal digest (`decision_seal`), so retyping it would void its verdict.
 /// Readers accept both for one release; the `aegis:Decision` branch is then
 /// dropped. A camayoc memory Decision never matches, because the readers also

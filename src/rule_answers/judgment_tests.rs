@@ -69,7 +69,7 @@ fn judgment(
 }
 
 /// [`judgment`] with an explicit ruling class: `GateApproval` for new
-/// rulings, `Decision` for one sealed before the GateApproval split.
+/// rulings, `Decision` for one sealed before the `GateApproval` split.
 fn judgment_as(
     store: &mut Store,
     request: &Request,

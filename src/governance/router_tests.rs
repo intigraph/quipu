@@ -46,7 +46,7 @@ fn write_decision(store: &mut Store, outcome: &str, by: &str, hash: &str, signat
 }
 
 /// [`write_decision`] with an explicit class: `GateApproval` for new rulings,
-/// `Decision` for one recorded before the GateApproval split.
+/// `Decision` for one recorded before the `GateApproval` split.
 fn write_ruling(
     store: &mut Store,
     class: &str,
