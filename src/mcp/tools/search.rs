@@ -14,6 +14,12 @@ use crate::types::Value;
 /// `query` string. When `query` is provided and no `embedding`, the store's
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(crate::search_outcome::Operation::Search, input, || {
+        search(store, input)
+    })
+}
+
+fn search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let confidence = super::search_confidence::Policy::parse(input)?;
     let graph_scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
     if (input.get("structured_query").is_some() || input.get("filters").is_some())
@@ -452,6 +458,14 @@ pub(crate) fn extract_type_filter(sparql: &str) -> Option<String> {
 /// Input: `{ "embedding": [f32...], "query": "text", "sparql": "SELECT ?s WHERE {...}", "limit": N, "valid_at": "..." }`
 /// Output: entities ranked by vector similarity, optionally pre-filtered by SPARQL.
 pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(
+        crate::search_outcome::Operation::HybridSearch,
+        input,
+        || hybrid_search(store, input),
+    )
+}
+
+fn hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let explicit_embedding: Option<Vec<f32>> = input
         .get("embedding")
         .and_then(|v| v.as_array())

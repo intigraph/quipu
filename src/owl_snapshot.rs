@@ -110,7 +110,8 @@ impl Snapshot {
         for (name, turtle, loaded_at) in &ontologies {
             scratch.load_ontology(name, turtle, loaded_at)?;
         }
-        write.commit()?;
+        let committed = write.commit();
+        crate::store::release::settle(&scratch.conn, committed)?;
         read.commit()?;
         Ok(Self {
             scratch,

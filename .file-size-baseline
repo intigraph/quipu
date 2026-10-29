@@ -5,5 +5,5 @@
 # Shrinking this file is the point. See quipu-bu3.
 src/episode/mod.rs 548
 src/graph.rs 514
-src/mcp/named_query.rs 536
+src/mcp/named_query.rs 532
 src/store/labels.rs 633

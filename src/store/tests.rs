@@ -1198,7 +1198,7 @@ fn identity_orphan_planning_obeys_the_store_query_budget() {
 }
 
 #[test]
-fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
+fn explicit_adopt_migrates_a_pre_quad_store_through_the_real_init_path() {
     // Regression for aegis-akb8. The test above calls migrate_named_graphs()
     // DIRECTLY, so it never runs schema::INIT_SQL first — and INIT_SQL is where
     // the real bug lived: its `CREATE INDEX ... ON facts(g, ...)` executed
@@ -1226,6 +1226,8 @@ fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
         .unwrap();
     }
 
+    // Explicit ownership admits the legacy migration; ordinary open is read-only.
+    Store::adopt(path_str).expect("adopt must migrate a pre-quad store");
     // THE regression: this used to return `no such column: g` and abort open.
     let store =
         Store::open(path_str).expect("open() must migrate a pre-quad store, not crash on idx_geav");

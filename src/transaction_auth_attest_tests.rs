@@ -257,6 +257,7 @@ fn a_binding_that_predates_the_grant_migrates_as_share_only() {
         )
         .unwrap();
     }
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let store = Store::open(path.to_str().unwrap()).unwrap();
     let b = store.attestation_binding("legacy").unwrap().unwrap();
     assert!(

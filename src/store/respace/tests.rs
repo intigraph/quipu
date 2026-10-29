@@ -559,6 +559,7 @@ fn original_is_byte_identical_after_respace() {
     {
         let probe = scratch.path("probe.db");
         std::fs::copy(&src, &probe).unwrap();
+        Store::adopt(&probe.to_string_lossy()).unwrap();
         drop(Store::open(&probe.to_string_lossy()).unwrap());
         assert_ne!(
             digest(&probe),

@@ -6,6 +6,7 @@ import json
 import os
 import resource
 import signal
+import sqlite3
 from pathlib import Path
 import shutil
 import subprocess
@@ -169,7 +170,17 @@ def prepare(run, repo, n, seed, replicas):
 def participant(run, base_db, edits, name, same_producer=False):
     db = run.root / f"{name}.db"
     if same_producer:
-        shutil.copyfile(base_db, db)
+        # Preserve the pendant producer, but explicitly give this local branch
+        # a fresh placement/epoch rather than silently writing a raw DB copy.
+        def identity(path):
+            with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+                return (conn.execute("SELECT store_id FROM store_identity").fetchone()[0],
+                        conn.execute("SELECT epoch FROM log_epoch").fetchone()[0])
+        source = identity(base_db)
+        run.cmd([run.cli, "store", "restore", base_db, "--db", db])
+        restored = identity(db)
+        if restored[0] != source[0] or restored[1] == source[1] or identity(base_db) != source:
+            raise AssertionError("explicit Git fixture restore must preserve producer and mint a new epoch without changing source")
     else:
         run.call("seed", db, facts=run.root/"base.nt", shapes=run.root/"shapes.ttl")
     run.edit(db, edits)
