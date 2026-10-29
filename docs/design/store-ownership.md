@@ -84,6 +84,24 @@ operator who deletes or forges both authority records can defeat it; this is
 not hardware fencing. Stage A deliberately does not enforce ownership on all
 legacy copies and does not complete the full ownership acceptance metric.
 
+## Native qualification beyond Stage A
+
+The native ownership fixture composes explicit adoption and restore with the
+actual as-of cut producer, a fresh follower bootstrap and the signed tail. It
+checks that the old follower's facts and cursor do not change across the new
+epoch, that it cannot bootstrap over its existing state, and that a fresh
+follower reaches the destination's scoped facts after a subsequent write.
+In-place adoption ends the old source session with a signed `epoch_end`;
+restoring to a different destination leaves the original source session valid.
+
+These are disposable native-store controls, not production activation. The
+path-copy and wrong-provider negatives do not establish an actual transfer
+between two physical hosts. Native activation still needs its own placement,
+session and follower disposition. Universal enforcement of unowned legacy
+copies is not enabled by these tests. OCI mount/host authority and browser
+physical-host ownership remain unavailable, rather than substitutes for the
+original host-and-path contract.
+
 ## Explicit operations
 
 ```text
