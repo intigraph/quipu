@@ -159,6 +159,8 @@ pub(super) fn candidates(
             return Ok(None);
         }
     }
+    #[cfg(test)]
+    tests::hit();
     let variables = patterns
         .iter()
         .flat_map(super::pattern_util::triple_pattern_vars)

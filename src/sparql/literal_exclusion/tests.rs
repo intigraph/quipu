@@ -6,7 +6,13 @@ use crate::{
 use oxrdfio::RdfFormat;
 use std::cell::Cell;
 
-thread_local! { static DISABLED: Cell<bool> = const { Cell::new(false) }; }
+thread_local! {
+    static DISABLED: Cell<bool> = const { Cell::new(false) };
+    static HITS: Cell<usize> = const { Cell::new(0) };
+}
+pub(super) fn hit() {
+    HITS.set(HITS.get() + 1);
+}
 pub(super) fn disabled() -> bool {
     DISABLED.get()
 }
@@ -88,7 +94,9 @@ fn unknown_status_preserves_rdf_terms_owner_kinds_graphs_and_mixed_value_bags() 
     let s = fixture();
     for owner in ["<http://example.org/owner>", "\"owner\""] {
         let q = text(owner);
+        HITS.set(0);
         let actual = query(&s, &q).unwrap();
+        assert!(HITS.get() > 0, "candidate path was never exercised");
         let original = reference(|| query(&s, &q)).unwrap();
         assert_eq!(bag(actual.rows()), bag(original.rows()));
         assert_eq!(actual.rows().len(), 4); // unknown, numeric, two mixed values
