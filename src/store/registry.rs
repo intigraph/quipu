@@ -89,6 +89,8 @@ impl Store {
 
     /// Close the open row for `name`, then insert a new open row.
     fn load_versioned(&self, table: &str, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        // These rows decide what every later write is validated against.
+        self.ensure_ownership_writable()?;
         let tx = self.latest_tx_id()?;
         self.conn
             .execute_batch(&format!("SAVEPOINT quipu_load_{table}"))?;
@@ -120,14 +122,14 @@ impl Store {
         })();
         match result {
             Ok(()) => {
-                self.conn
-                    .execute_batch(&format!("RELEASE quipu_load_{table}"))?;
+                crate::store::release::release(&self.conn, &format!("quipu_load_{table}"))?;
                 Ok(())
             }
             Err(e) => {
-                let _ = self.conn.execute_batch(&format!(
-                    "ROLLBACK TO quipu_load_{table}; RELEASE quipu_load_{table}"
-                ));
+                let _ = crate::store::release::rollback_release(
+                    &self.conn,
+                    &format!("quipu_load_{table}"),
+                );
                 Err(e)
             }
         }
@@ -135,6 +137,7 @@ impl Store {
 
     /// Close the open row for `name`. Returns whether one was open.
     fn close_versioned(&self, table: &str, name: &str, timestamp: &str) -> Result<bool> {
+        self.ensure_ownership_writable()?;
         let affected = self.conn.execute(
             &format!("UPDATE {table} SET valid_to = ?2 WHERE name = ?1 AND valid_to IS NULL"),
             params![name, timestamp],

@@ -196,6 +196,7 @@ impl Store {
         // delete, frozen_packs row, dataset membership. On any failure the
         // savepoint takes it all back and only the pack file remains — an
         // inert artifact, named in the error.
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_freeze")?;
         let result = (|| -> Result<()> {
             let l = self.label_of_id(g)?;
@@ -234,11 +235,9 @@ impl Store {
             Ok(())
         })();
         match result {
-            Ok(()) => self.conn.execute_batch("RELEASE quipu_freeze")?,
+            Ok(()) => crate::store::release::release(&self.conn, "quipu_freeze")?,
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_freeze; RELEASE quipu_freeze");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_freeze");
                 return Err(Error::Store(format!(
                     "freeze of '{graph_iri}' rolled back ({e}); the pack file \
                      {final_path} remains on disk and can be deleted"
@@ -302,6 +301,7 @@ impl Store {
         // so the import below is the only source of this graph's rows.
         self.unmount_attachment(&alias)?;
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_thaw")?;
         let result = (|| -> Result<(usize, usize)> {
             let (facts, vectors) = super::freeze_io::import_graph_history(self, &path, graph_iri)?;
@@ -344,13 +344,11 @@ impl Store {
         })();
         match result {
             Ok(counts) => {
-                self.conn.execute_batch("RELEASE quipu_thaw")?;
+                crate::store::release::release(&self.conn, "quipu_thaw")?;
                 Ok(counts)
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_thaw; RELEASE quipu_thaw");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_thaw");
                 // Remount so the store composes the archive again — the thaw
                 // failed, but the graph must not vanish.
                 self.mount_attachment(Attachment::read_only(&alias, &path))?;

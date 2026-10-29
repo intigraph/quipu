@@ -15,6 +15,16 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod ownership;
+mod ownership_fence;
+pub(crate) mod release;
+pub use ownership::OwnershipState;
+#[cfg(test)]
+mod ownership_held_handle_tests;
+#[cfg(test)]
+mod ownership_stage_a_tests;
+#[cfg(test)]
+mod ownership_tests;
 mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;

@@ -10,6 +10,7 @@ import init, {
   scenario_import,
   scenario_pack,
   journal_mode,
+  scenario_ownership_refusal,
 } from "./pkg/quipu_wasm_harness.js";
 
 const ready = init();
@@ -33,6 +34,8 @@ onmessage = async (e) => {
       value = JSON.parse(scenario_import(new Uint8Array(bytes)));
     } else if (cmd === "pack") {
       value = Array.from(scenario_pack(path));
+    } else if (cmd === "ownership_refusal") {
+      value = scenario_ownership_refusal(path);
     } else if (cmd === "journal_mode") {
       value = JSON.parse(journal_mode(path));
     } else {

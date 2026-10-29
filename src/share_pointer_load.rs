@@ -134,6 +134,7 @@ impl LazyPacks {
                 cache.put(&digest, &bytes)?;
             }
             let requests = [self.authority.clone(), self.declaration.clone(), request];
+            store.ensure_ownership_writable()?;
             store.conn.execute_batch("SAVEPOINT quipu_pointer_use")?;
             let result = crate::share_compose::compose(store, &requests, Some(0), timestamp, actor)
                 .and_then(|result| {
@@ -147,13 +148,11 @@ impl LazyPacks {
                 });
             match result {
                 Ok(result) => {
-                    store.conn.execute_batch("RELEASE quipu_pointer_use")?;
+                    crate::store::release::release(&store.conn, "quipu_pointer_use")?;
                     Ok(result)
                 }
                 Err(error) => {
-                    store.conn.execute_batch(
-                        "ROLLBACK TO quipu_pointer_use; RELEASE quipu_pointer_use",
-                    )?;
+                    crate::store::release::rollback_release(&store.conn, "quipu_pointer_use")?;
                     store.read_model.borrow_mut().clear();
                     store.term_cache.borrow_mut().clear_persistent();
                     Err(error)
