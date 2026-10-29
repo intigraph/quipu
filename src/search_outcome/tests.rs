@@ -2,18 +2,113 @@ use super::*;
 use serde_json::json;
 
 fn response(candidates: usize, admitted: usize) -> Value {
-    let rows: Vec<_> = (0..candidates).map(|i| json!({"entity":i})).collect();
+    let rows: Vec<_> = (0..candidates)
+        .map(|i| json!({"entity":i,"similarity":0.8}))
+        .collect();
     json!({
         "results":rows, "count":candidates,
         "context_results":rows[..admitted].to_vec(),
         "insufficient_context":admitted == 0,
         "context":{
-            "contract":"quipu-context/v1",
+            "contract":"quipu-context/v1","similarity_floor":0.52,
             "outcome":if admitted == 0 {"NO CONTEXT"} else {"CONTEXT"},
             "reason":if candidates == 0 {"no_candidates"} else if admitted == 0 {"identifier_not_covered"} else {"sufficient_context"},
             "candidate_count":candidates,"admitted_count":admitted
         }
     })
+}
+
+#[test]
+fn context_evidence_requires_a_supported_floor_for_every_outcome() {
+    for (candidates, admitted) in [(0, 0), (2, 0), (2, 1)] {
+        let valid = response(candidates, admitted);
+        let mut missing = valid.clone();
+        missing["context"]
+            .as_object_mut()
+            .unwrap()
+            .remove("similarity_floor");
+        let mut malformed = vec![missing];
+        for floor in [
+            Value::Null,
+            json!(true),
+            json!("0.52"),
+            json!(-1),
+            json!(0.1),
+            json!(0.519),
+            json!(1.1),
+        ] {
+            let mut broken = valid.clone();
+            broken["context"]["similarity_floor"] = floor;
+            malformed.push(broken);
+        }
+        for broken in malformed {
+            let got = classify(Operation::Search, &broken);
+            assert_eq!(got.outcome, Outcome::Unknown, "{broken}");
+            assert_eq!(got.zero_kind, None);
+            assert_eq!(got.admitted_count, None);
+        }
+    }
+}
+
+#[test]
+fn context_evidence_requires_every_admitted_raw_similarity() {
+    for similarity in [
+        Value::Null,
+        json!(true),
+        json!("0.8"),
+        json!(-1),
+        json!(0.1),
+        json!(0.519),
+        json!(1.1),
+    ] {
+        let mut broken = response(2, 2);
+        for key in ["results", "context_results"] {
+            broken[key][1]["similarity"] = similarity.clone();
+            broken[key][1]["score"] = json!(0.99);
+        }
+        let got = classify(Operation::Search, &broken);
+        assert_eq!(got.outcome, Outcome::Unknown, "{broken}");
+        assert_eq!(got.zero_kind, None);
+        assert_eq!(got.admitted_count, None);
+    }
+    let mut missing = response(2, 2);
+    for key in ["results", "context_results"] {
+        missing[key][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("similarity");
+    }
+    let got = classify(Operation::Search, &missing);
+    assert_eq!(got.outcome, Outcome::Unknown);
+    assert_eq!(got.zero_kind, None);
+    assert_eq!(got.admitted_count, None);
+}
+
+#[test]
+fn context_evidence_accepts_inclusive_supported_boundaries() {
+    for floor in [0.52, 0.8, 1.0] {
+        for (candidates, admitted) in [(0, 0), (2, 0), (2, 2)] {
+            let mut valid = response(candidates, admitted);
+            valid["context"]["similarity_floor"] = json!(floor);
+            for key in ["results", "context_results"] {
+                for row in valid[key].as_array_mut().unwrap() {
+                    row["similarity"] = json!(floor);
+                }
+            }
+            let got = classify(Operation::Search, &valid);
+            assert_eq!(
+                got.outcome,
+                if admitted > 0 {
+                    Outcome::Hits
+                } else if candidates == 0 {
+                    Outcome::Empty
+                } else {
+                    Outcome::NoContext
+                }
+            );
+            assert_eq!(got.admitted_count, Some(admitted));
+        }
+    }
 }
 
 #[test]

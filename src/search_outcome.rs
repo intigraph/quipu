@@ -144,6 +144,15 @@ fn search(value: &Value) -> Summary {
     let Some(context) = value.get("context").filter(|c| c.is_object()) else {
         return out;
     };
+    // Match the native context renderer: a ranked score cannot substitute for
+    // the raw admitted similarity, and negative envelopes still need a floor.
+    let Some(floor) = context
+        .get("similarity_floor")
+        .and_then(Value::as_f64)
+        .filter(|f| f.is_finite() && (0.52..=1.0).contains(f))
+    else {
+        return out;
+    };
     let Some(admitted) = objects(value, "context_results") else {
         return out;
     };
@@ -161,7 +170,12 @@ fn search(value: &Value) -> Summary {
             .as_array()
             .unwrap()
             .iter()
-            .all(|row| value["results"].as_array().unwrap().contains(row))
+            .all(|row| {
+                row.get("similarity")
+                    .and_then(Value::as_f64)
+                    .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
+                    && value["results"].as_array().unwrap().contains(row)
+            })
     {
         return out;
     }
