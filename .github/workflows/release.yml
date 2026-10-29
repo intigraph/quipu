@@ -260,6 +260,12 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One freshness check at a time, newest wins. Release-commit runs keep their own
+    # concurrency groups, so without this an older run that finishes late could
+    # overwrite the verdict a newer main already posted (aegis-0zr review, #910).
+    concurrency:
+      group: release-pr-freshness
+      cancel-in-progress: true
     permissions:
       actions: write
       contents: read
@@ -283,15 +289,30 @@ jobs:
             echo "No open release PR — nothing to check."
             exit 0
           fi
-          git fetch --quiet origin "${BR}:refs/remotes/origin/${BR}" || { echo "::warning::could not fetch ${BR}"; exit 0; }
-          rc=0; ./scripts/release-pr-freshness.sh "refs/remotes/origin/${BR}" HEAD || rc=$?
+          # Check the exact commit that was listed, not the mutable branch name: a
+          # regeneration between the list and the fetch would otherwise check one
+          # proposal and publish the verdict on another.
+          git fetch --quiet origin "${OID}" || { echo "::warning::could not fetch ${BR} @ ${OID::8}"; exit 0; }
+          if [ "$(git rev-parse FETCH_HEAD)" != "$OID" ]; then
+            echo "::warning::fetched ${BR} does not match listed ${OID::8}; not checking"
+            exit 0
+          fi
+          rc=0; ./scripts/release-pr-freshness.sh "$OID" HEAD || rc=$?
           case "$rc" in
             0) state=success; desc="Covers every packaged commit on main at ${GITHUB_SHA::8}" ;;
             1) state=failure; desc="Stale: main ${GITHUB_SHA::8} has packaged commits this release does not list" ;;
             *) state=error;   desc="Could not check against main ${GITHUB_SHA::8} (exit ${rc})" ;;
           esac
-          # The status binds to the PR head that was checked. A regenerated PR gets
-          # a new head and is checked again by the next push.
+          # Publish only if nothing moved while we checked. If main advanced, the newer
+          # push run owns the verdict; if the PR was regenerated, its new head is
+          # checked by the next push. Either way this run's answer is stale.
+          now_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha 2>/dev/null || true)"
+          now_head="$(gh pr view "$NUM" --json headRefOid --jq .headRefOid 2>/dev/null || true)"
+          if [ "$now_main" != "$GITHUB_SHA" ] || [ "$now_head" != "$OID" ]; then
+            echo "main or the release PR moved during the check (main ${now_main::8}, PR ${now_head::8}); not publishing this verdict."
+            exit 0
+          fi
+          # The status binds to the exact PR head that was checked.
           gh api "repos/${GITHUB_REPOSITORY}/statuses/${OID}" -f state="$state" \
             -f context="Release PR freshness" -f description="$desc" \
             -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
