@@ -212,17 +212,26 @@ impl Store {
         name: &str,
         timestamp: &str,
     ) -> Result<()> {
+        self.emit_registry_event_with(event_type, name, timestamp, serde_json::json!({}))
+    }
+
+    /// [`Self::emit_registry_event`] with extra payload fields.
+    pub(crate) fn emit_registry_event_with(
+        &self,
+        event_type: &str,
+        name: &str,
+        timestamp: &str,
+        extra: serde_json::Value,
+    ) -> Result<()> {
         let tx = self.latest_tx_id()?;
+        let mut payload = serde_json::json!({ "name": name, "tx": tx });
+        if let (Some(p), serde_json::Value::Object(x)) = (payload.as_object_mut(), extra) {
+            p.extend(x);
+        }
         self.conn.execute(
             "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \
              VALUES (?1, ?2, ?3, NULL, ?4, ?5)",
-            params![
-                event_type,
-                timestamp,
-                name,
-                tx,
-                serde_json::json!({ "name": name, "tx": tx }).to_string()
-            ],
+            params![event_type, timestamp, name, tx, payload.to_string()],
         )?;
         Ok(())
     }

@@ -11,7 +11,7 @@ release = Path(".github/workflows/release.yml").read_text()
 
 assert "  release-correctness:\n" in ci
 assert "    name: Release correctness\n" in ci
-assert "needs: [clippy, test, build, check, shacl-write-path]" in ci
+assert "needs: [clippy, test, build, check, shacl-write-path, generated-docs]" in ci
 aggregate_header = ci[ci.index("  release-correctness:\n") :].split("    runs-on:", 1)[0]
 for excluded in ("source-size", "fmt", "lint-markdown", "build-full", "wasm", "shapes"):
     assert excluded not in aggregate_header, f"housekeeping job {excluded} must not gate release"
@@ -45,6 +45,10 @@ assert combined.get("continue-on-error", False) is False, "combined failures mus
 write_path = jobs["shacl-write-path"]
 assert "if" not in write_path, "SHACL write-path conformance must not be conditional"
 assert write_path.get("continue-on-error", False) is False, "write-path divergence must gate release"
+generated = jobs["generated-docs"]
+assert "if" not in generated, "generated-docs drift must not be conditional"
+assert generated.get("continue-on-error", False) is False, "generated-docs drift must gate release"
+assert any("quipu-docgen -- --check" in step.get("run", "") for step in generated["steps"])
 aggregate = jobs["extended-correctness"]
 assert "source-size" in aggregate["needs"], "combined invariants must gate the aggregate"
 assert aggregate.get("continue-on-error", False) is False, "aggregate failures must gate"

@@ -1,0 +1,50 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-MERGE 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-merge \- Merge a share back into ROOT, with reviewable conflict decisions
+.SH SYNOPSIS
+\fBquipu merge\fR [\fB\-\-db\fR] [\fB\-\-actor\fR] [\fB\-\-emit\-decisions\fR] [\fB\-\-decisions\fR] [\fB\-\-reviewer\fR] [\fB\-\-slot\-scoped\fR] [\fB\-\-propose\fR] [\fB\-\-dry\-run\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIshare\-dir\fR> [\fIsubcommands\fR]
+.SH DESCRIPTION
+Merge a share back into ROOT, with reviewable conflict decisions
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-actor\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-emit\-decisions\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-decisions\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-reviewer\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-slot\-scoped\fR
+
+.TP
+\fB\-\-propose\fR
+
+.TP
+\fB\-\-dry\-run\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIshare\-dir\fR>
+
+.SH SUBCOMMANDS
+.TP
+quipu\-merge\-show(1)
+Show a merge\*(Aqs conflicts in the standard layout
+.TP
+quipu\-merge\-resolve(1)
+Record one choice on one merge conflict
+.TP
+quipu\-merge\-help(1)
+Print this message or the help of the given subcommand(s)

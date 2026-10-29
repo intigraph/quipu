@@ -181,6 +181,9 @@ pub(super) fn count_triple_pattern(
     )
 }
 
+#[path = "triple_scan_cache.rs"]
+mod scan_cache;
+
 fn visit_triple_pattern_limited(
     store: &Store,
     tp: &TriplePattern,
@@ -448,7 +451,7 @@ fn visit_triple_pattern_limited(
     });
     if emit.is_none() {
         return super::count_mmap::scalar(store, || {
-            let mut stmt = store.prepare(&format!("SELECT COUNT(*) FROM ({sql})"))?;
+            let mut stmt = store.prepare_cached(&format!("SELECT COUNT(*) FROM ({sql})"))?;
             let count: i64 = stmt.query_row(param_refs.as_slice(), |row| row.get(0))?;
             usize::try_from(count).map_err(|_| {
                 crate::Error::InvalidValue("COUNT exceeds addressable row count".into())
@@ -465,7 +468,7 @@ fn visit_triple_pattern_limited(
         Some(aliases) => Ok(aliases.get(&id).copied().unwrap_or(id)),
         None => store.canonical_id(id),
     };
-    let mut stmt = store.prepare(&sql)?;
+    let (mut stmt, _nested) = scan_cache::prepare(store, &sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut count = 0;

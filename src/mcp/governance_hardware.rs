@@ -345,8 +345,19 @@ fn verify_hardware_verdict(
                     "user_verified": v.user_verified,
                     "sign_count": v.sign_count,
                 });
-                if authorized {
+                // aegis-c97o: the registration must also chain to the trust
+                // root as of the witness, or it is reported and never trusted.
+                let governed =
+                    crate::governance::verifier_registry::governed_tier(store, &reg.iri, witness)?
+                        .is_some();
+                let mut out = out;
+                if authorized && governed {
+                    out["trust"] = super::verdict_witness::trust_json(store, &reg.iri, witness)?;
                     return Ok(verdict(true, out));
+                }
+                if authorized {
+                    super::verdict_witness::warn_unchained(claim.verifier, &reg.iri);
+                    out["untrusted_reason"] = JsonValue::from(super::verdict_witness::UNCHAINED);
                 }
                 unauthorized.get_or_insert(out);
             }

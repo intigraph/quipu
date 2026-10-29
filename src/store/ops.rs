@@ -659,11 +659,15 @@ impl Store {
 
         // Stamp the retraction tx with a distinct source so it is traceable and
         // never re-selected as one of the episode's own assertions.
+        let tag = format!("retract-episode:{episode_name}");
+        // aegis-gxfm: refuse, naming the nodes, if what is left of a node still
+        // typed by another writer misses a value a reject shape requires.
+        self.enforce_retraction_shapes(&datums, 0, Some(&source_tag), actor, Some(&tag))?;
         let tx_id = self.transact_to_graph_scoped(
             &datums,
             timestamp,
             actor,
-            Some(&format!("retract-episode:{episode_name}")),
+            Some(&tag),
             0,
             Some(&source_tag),
         )?;
@@ -678,14 +682,17 @@ impl Store {
 
     /// Build the retractions needed to replace a producer-owned episode
     /// snapshot, without committing them. The caller combines these datums with
-    /// the replacement assertions in one transaction.
-    pub(crate) fn plan_episode_retraction(
+    /// the replacement assertions (`replacement`, which the plan reads to keep
+    /// renamed nodes to one label; see [`Self::plan_source_replacement`]) in
+    /// one transaction.
+    pub(crate) fn plan_episode_replacement(
         &self,
         episode_name: &str,
         graph: i64,
+        replacement: &[Datum],
     ) -> Result<Vec<Datum>> {
         let source_tag = format!("episode:{episode_name}");
-        self.plan_source_retraction(&source_tag, graph)
+        self.plan_source_replacement(&source_tag, graph, replacement)
     }
 
     /// Build the retractions needed to atomically replace all current facts
@@ -699,6 +706,28 @@ impl Store {
         source_tag: &str,
         graph: i64,
     ) -> Result<Vec<Datum>> {
+        self.plan_source_replacement(source_tag, graph, &[])
+    }
+
+    /// Build the retractions for replacing `source_tag`'s facts with
+    /// `replacement` (the new payload's assertions).
+    ///
+    /// ## Why the replacement has to be seen here (aegis-p9q)
+    ///
+    /// Label retention below protects a node another producer references
+    /// from becoming unnameable. It used to be decided from the OLD facts
+    /// alone, so an owner that RENAMED such a node kept its old label too:
+    /// the caller only cancels retractions whose exact `(e, a, v)` is
+    /// re-asserted, and a renamed value never matches. The node ended with
+    /// two current labels. When the replacement asserts an `rdfs:label` for
+    /// the entity, the node stays named and the old label is retracted;
+    /// retention applies only when the new payload leaves the node unnamed.
+    pub(crate) fn plan_source_replacement(
+        &self,
+        source_tag: &str,
+        graph: i64,
+        replacement: &[Datum],
+    ) -> Result<Vec<Datum>> {
         let facts = {
             let mut stmt = self.conn.prepare(SOURCE_RETRACTION_SQL)?;
             Self::collect_facts(&mut stmt, params![source_tag, graph])?
@@ -710,12 +739,20 @@ impl Store {
         // readers count, and retaining it would make removal invisible.
         let orphans = self.identity_orphans(&facts, source_tag)?;
         let (label_id, _) = self.identity_predicate_ids()?;
+        let relabelled: std::collections::BTreeSet<i64> = replacement
+            .iter()
+            .filter(|d| d.op == Op::Assert && Some(d.attribute) == label_id)
+            .map(|d| d.entity)
+            .collect();
         Ok(facts
             .into_iter()
             .filter(|f| {
-                !orphans
-                    .iter()
-                    .any(|o| o.entity == f.entity && o.lost_label && Some(f.attribute) == label_id)
+                !orphans.iter().any(|o| {
+                    o.entity == f.entity
+                        && o.lost_label
+                        && Some(f.attribute) == label_id
+                        && !relabelled.contains(&o.entity)
+                })
             })
             .map(|f| Datum {
                 entity: f.entity,

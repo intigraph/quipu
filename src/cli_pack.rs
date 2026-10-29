@@ -180,6 +180,9 @@ pub fn cmd_status(args: &[String], db_path: &str) {
 /// `--decisions` it finishes the merge from an operator's decided file
 /// (aegis-yavo9c).
 pub fn cmd_merge(args: &[String], db_path: &str) {
+    if crate::cli_merge::cmd_merge_reconcile(args) {
+        return;
+    }
     let dir = args
         .get(2)
         .filter(|s| !s.starts_with("--"))
@@ -200,6 +203,10 @@ pub fn cmd_merge(args: &[String], db_path: &str) {
         Ok(result) => {
             println!("{}", serde_json::to_string_pretty(&result).unwrap());
             if result.outcome == "conflicts" {
+                eprintln!(
+                    "merge held: {} conflict(s), nothing was written. Reconcile with: quipu merge {dir} --emit-decisions <file.json> --propose, then quipu merge show <file.json>",
+                    result.conflicts.len()
+                );
                 std::process::exit(2);
             }
         }

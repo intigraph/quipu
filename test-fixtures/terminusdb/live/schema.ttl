@@ -1,0 +1,126 @@
+@base <terminusdb:///schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix woql: <http://terminusdb.com/schema/woql#> .
+@prefix json: <http://terminusdb.com/schema/json#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix xdd: <http://terminusdb.com/schema/xdd#> .
+@prefix vio: <http://terminusdb.com/schema/vio#> .
+@prefix sys: <http://terminusdb.com/schema/sys#> .
+@prefix api: <http://terminusdb.com/schema/api#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix doc: <data/> .
+
+doc:Cons\/C0X4t7uZZuCSsmoL
+  a rdf:List ;
+  rdf:first <schema#Status/retired> ;
+  rdf:rest rdf:nil .
+
+doc:Cons\/_cS0jMBM_ZFhrtPn
+  a rdf:List ;
+  rdf:first <schema#name> ;
+  rdf:rest rdf:nil .
+
+doc:Cons\/g3QrfVX83BFPlnlh
+  a rdf:List ;
+  rdf:first <schema#name> ;
+  rdf:rest rdf:nil .
+
+doc:Cons\/r9LqdcWGEg4Hi7Dl
+  a rdf:List ;
+  rdf:first <schema#Status/active> ;
+  rdf:rest doc:Cons\/C0X4t7uZZuCSsmoL .
+
+<schema#Contact>
+  a sys:TaggedUnion ;
+  sys:key <schema#Contact/key/Random> ;
+  sys:subdocument rdf:nil ;
+  <schema#email> xsd:string ;
+  <schema#none> sys:Unit ;
+  <schema#phone> xsd:string .
+
+<schema#Contact/key/Random>
+  a sys:Random .
+
+<schema#Entity>
+  a sys:Class ;
+  sys:abstract rdf:nil ;
+  <schema#name> xsd:string .
+
+<schema#Person>
+  a sys:Class ;
+  sys:inherits <schema#Entity> ;
+  sys:key <schema#Person/key/Lexical/name> ;
+  <schema#age> <schema#Person/age/Optional+xsd%3Adecimal> ;
+  <schema#contact> <schema#Person/contact/Optional+Contact> ;
+  <schema#emails> <schema#Person/emails/Set+xsd%3Astring+1+2> ;
+  <schema#friends> <schema#Person/friends/Set+Person> ;
+  <schema#homepage> <schema#Person/homepage/Optional+xdd%3Aurl> ;
+  <schema#nicknames> <schema#Person/nicknames/List+xsd%3Astring> ;
+  <schema#profile> <schema#Person/profile/Optional+sys%3AJSON> ;
+  <schema#scores> <schema#Person/scores/Array+xsd%3Ainteger> ;
+  <schema#status> <schema#Status> .
+
+<schema#Person/age/Optional+xsd%3Adecimal>
+  a sys:Optional ;
+  sys:class xsd:decimal .
+
+<schema#Person/contact/Optional+Contact>
+  a sys:Optional ;
+  sys:class <schema#Contact> .
+
+<schema#Person/emails/Set+xsd%3Astring+1+2>
+  a sys:Set ;
+  sys:class xsd:string ;
+  sys:max_cardinality "2"^^xsd:nonNegativeInteger ;
+  sys:min_cardinality "1"^^xsd:nonNegativeInteger .
+
+<schema#Person/friends/Set+Person>
+  a sys:Set ;
+  sys:class <schema#Person> .
+
+<schema#Person/homepage/Optional+xdd%3Aurl>
+  a sys:Optional ;
+  sys:class xdd:url .
+
+<schema#Person/key/Lexical/name>
+  a sys:Lexical ;
+  sys:fields doc:Cons\/g3QrfVX83BFPlnlh .
+
+<schema#Person/nicknames/List+xsd%3Astring>
+  a sys:List ;
+  sys:class xsd:string .
+
+<schema#Person/profile/Optional+sys%3AJSON>
+  a sys:Optional ;
+  sys:class sys:JSON .
+
+<schema#Person/scores/Array+xsd%3Ainteger>
+  a sys:Array ;
+  sys:class xsd:integer .
+
+<schema#Status>
+  a sys:Enum ;
+  sys:value doc:Cons\/r9LqdcWGEg4Hi7Dl .
+
+<schema#Team>
+  a sys:Class ;
+  sys:key <schema#Team/key/Lexical/name> ;
+  <schema#lead> <schema#Entity> ;
+  <schema#members> <schema#Team/members/Cardinality+Person+1+5> ;
+  <schema#name> xsd:string .
+
+<schema#Team/key/Lexical/name>
+  a sys:Lexical ;
+  sys:fields doc:Cons\/_cS0jMBM_ZFhrtPn .
+
+<schema#Team/members/Cardinality+Person+1+5>
+  a sys:Cardinality ;
+  sys:class <schema#Person> ;
+  sys:max_cardinality "5"^^xsd:nonNegativeInteger ;
+  sys:min_cardinality "1"^^xsd:nonNegativeInteger .
+
+<terminusdb://context>
+  a sys:Context ;
+  sys:base "terminusdb:///data/" ;
+  sys:schema "terminusdb:///schema#" .

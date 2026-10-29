@@ -11,7 +11,7 @@
 # single SPARQL query.
 #
 # Reuse over invention (per the design's table): Policy extends Directive;
-# Verdict is an Observation; Decision is a DecisionRecord. These already exist in
+# Verdict is an Observation; GateApproval is a DecisionRecord. These already exist in
 # aegis-ontology.shapes.ttl — here we subclass them (RDFS) and add the
 # governance-specific constraints.
 #
@@ -47,7 +47,15 @@
 
 aegis:Policy   rdfs:subClassOf aegis:Directive .       # governed rule / intent
 aegis:Verdict  rdfs:subClassOf aegis:Observation .     # signed, content-bound result
-aegis:Decision rdfs:subClassOf aegis:DecisionRecord .  # human approve / reject / changes
+aegis:GateApproval rdfs:subClassOf aegis:DecisionRecord .  # human approve / reject / changes
+
+# aegis:Decision is camayoc's memory Decision (a ruling on a scoped question:
+# chose, decidedBy, about, topic), not a gate approval. Until the GateApproval
+# split (camayoc docs/design/agent-memory-entities.md §1.3) quipu's governance
+# shape claimed the same class, so no agent could write a memory Decision
+# honestly. Governance now writes aegis:GateApproval; readers still accept a
+# governance aegis:Decision (evidenceHash + outcome + by) for one release, and
+# a sealed aegis:Decision is NEVER retyped: rdf:type is inside its seal digest.
 
 # ═══════════════════════════════════════════════════════════════════
 # Composition types — the workflow graph.
@@ -732,25 +740,27 @@ aegis:VerifierRegistrationShape a sh:NodeShape ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════
-# Decision — a human approve / reject / request-changes, a signed
+# GateApproval — a human approve / reject / request-changes, a signed
 # attested-evidence source (an aegis:DecisionRecord by subclass). Content-
 # bound to what it approved, so an edit after signing goes stale.
 # ═══════════════════════════════════════════════════════════════════
 
-aegis:DecisionShape a sh:NodeShape ;
-    sh:targetClass aegis:Decision ;
+aegis:GateApprovalShape a sh:NodeShape ;
+    sh:targetClass aegis:GateApproval ;
     sh:property [
         sh:path aegis:outcome ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
         sh:in ( "approve" "reject" "changes" ) ;
+        sh:message "A gate approval needs exactly one aegis:outcome: \"approve\", \"reject\" or \"changes\"." ;
     ] ;
     sh:property [
         sh:path aegis:by ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+        sh:message "A gate approval needs exactly one aegis:by: the registered decider who signed it." ;
     ] ;
     sh:property [
         sh:path aegis:gate ;
@@ -762,6 +772,34 @@ aegis:DecisionShape a sh:NodeShape ;
         sh:datatype xsd:string ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+        sh:message "A gate approval needs exactly one aegis:evidenceHash: the hash of the DecisionRequest evidence it rules on." ;
+    ] .
+
+# Pre-migration governance decisions typed aegis:Decision stay readable and
+# writable for one release, and stay typed aegis:Decision forever (see above).
+# This shape keeps the class sanctioned and still bounds the governance fields
+# when they appear, but requires none of them, so a camayoc memory Decision
+# (no outcome, by or evidenceHash) conforms. camayoc's shapes own its fields.
+aegis:LegacyGateDecisionShape a sh:NodeShape ;
+    sh:targetClass aegis:Decision ;
+    sh:property [
+        sh:path aegis:outcome ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:in ( "approve" "reject" "changes" ) ;
+        sh:message "A governance aegis:Decision carries at most one aegis:outcome: \"approve\", \"reject\" or \"changes\". New gate approvals are aegis:GateApproval." ;
+    ] ;
+    sh:property [
+        sh:path aegis:by ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "A governance aegis:Decision carries at most one aegis:by literal. A memory Decision names who ruled on aegis:decidedBy." ;
+    ] ;
+    sh:property [
+        sh:path aegis:evidenceHash ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:message "A governance aegis:Decision carries at most one aegis:evidenceHash." ;
     ] .
 
 # ═══════════════════════════════════════════════════════════════════
@@ -819,7 +857,7 @@ aegis:TrustRootBootstrapShape a sh:NodeShape ;
 # hold a transaction open while a human decides; nothing here blocks a process.
 # What it does is make the refusal actionable: the attempt mints a
 # DecisionRequest naming what was refused and who can rule on it, a human signs
-# an aegis:Decision, and the next attempt succeeds. The "hold" is the agent
+# an aegis:GateApproval, and the next attempt succeeds. The "hold" is the agent
 # retrying, not the engine waiting.
 # ═══════════════════════════════════════════════════════════════════
 

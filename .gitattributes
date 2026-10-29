@@ -31,3 +31,7 @@
 # Preserve the literal PTY recording without relaxing other whitespace checks.
 docs/probes/pr-demos/inferred-registry-filter/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# quipu-docgen output (aegis-t7h): regenerate, do not edit.
+packaging/man/** linguist-generated=true
+packaging/completions/** linguist-generated=true

@@ -1,0 +1,329 @@
+//! Change-sets against a live store: `GET /diff` and the `/patch` state check
+//! (aegis-4mk). The format itself is [`crate::changeset`]; spec in
+//! `docs/design/changeset-format.md`.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use crate::changeset::{ChangeSet, Header, Statement};
+use crate::error::{Error, Result};
+use crate::store::{AsOf, Store};
+use crate::types::Fact;
+
+/// One side of a diff.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiffSide {
+    /// ROOT as of a transaction (`tx:N`, or a bare integer).
+    Tx(i64),
+    /// ROOT now (`main`, `root` or `head`).
+    Main,
+    /// A fork's graph now (`fork:<name>`).
+    Fork(String),
+}
+
+impl DiffSide {
+    /// Parse `tx:N`, `N`, `main`/`root`/`head`, or `fork:<name>`.
+    ///
+    /// # Errors
+    /// Anything else, or a negative tx.
+    pub fn parse(side: &str) -> Result<Self> {
+        let side = side.trim();
+        if ["main", "root", "head"]
+            .iter()
+            .any(|s| side.eq_ignore_ascii_case(s))
+        {
+            return Ok(Self::Main);
+        }
+        if let Some(name) = side.strip_prefix("fork:") {
+            return Ok(Self::Fork(name.to_string()));
+        }
+        let tx = side.strip_prefix("tx:").unwrap_or(side);
+        match tx.parse::<i64>() {
+            Ok(n) if n >= 0 => Ok(Self::Tx(n)),
+            _ => Err(Error::InvalidValue(format!(
+                "diff side must be tx:N, main, or fork:<name>; got {side:?}"
+            ))),
+        }
+    }
+}
+
+/// Render a stored fact as a statement, with literals in canonical form.
+///
+/// # Errors
+/// A term cannot be resolved or is not a valid RDF term.
+pub fn fact_statement(store: &Store, fact: &Fact, graph: Option<&str>) -> Result<Statement> {
+    let quad = oxrdf::Quad::new(
+        crate::rdf::id_to_subject(store, fact.entity)?,
+        crate::rdf::id_to_predicate(store, fact.attribute)?,
+        crate::rdf::value_to_term(store, &fact.value)?,
+        graph_name(graph)?,
+    );
+    Ok(Statement::from_quad(&quad))
+}
+
+fn graph_name(graph: Option<&str>) -> Result<oxrdf::GraphName> {
+    Ok(match graph {
+        Some(g) => oxrdf::GraphName::NamedNode(
+            oxrdf::NamedNode::new(g).map_err(|e| Error::InvalidValue(format!("graph IRI: {e}")))?,
+        ),
+        None => oxrdf::GraphName::DefaultGraph,
+    })
+}
+
+/// A statement as the store would render it: a literal object is mapped
+/// through the store's value model, so `"05"^^xsd:integer` and
+/// `"5"^^xsd:integer` compare equal exactly when the store stores them as one.
+///
+/// # Errors
+/// The statement is not a valid quad.
+pub fn canonical(store: &Store, statement: &Statement) -> Result<Statement> {
+    let mut quad = statement.to_quad()?;
+    if let oxrdf::Term::Literal(lit) = &quad.object {
+        let value = crate::literal_identity::literal_to_value(lit);
+        quad.object = crate::rdf::value_to_term(store, &value)?;
+    }
+    Ok(Statement::from_quad(&quad))
+}
+
+fn refuse_blank(statements: &BTreeSet<Statement>, what: &str) -> Result<()> {
+    match statements.iter().find(|s| s.has_blank_node()) {
+        Some(s) => Err(Error::InvalidValue(format!(
+            "{what} contains a blank node ({}); skolemize it first, a re-applied blank \
+             node mints a new node so the change could not be idempotent",
+            s.nquad()
+        ))),
+        None => Ok(()),
+    }
+}
+
+fn side_graph(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<i64> {
+    match (side, graph) {
+        (DiffSide::Fork(name), None) => store.fork_graph_for_read(name),
+        (DiffSide::Fork(_), Some(_)) => Err(Error::InvalidValue(
+            "a fork is its own graph; graph= applies to tx:N and main sides only".into(),
+        )),
+        (_, None) => Ok(crate::schema::ROOT_GRAPH),
+        (_, Some(iri)) => store
+            .registered_graph_id(iri)?
+            .ok_or_else(|| Error::InvalidValue(format!("unknown graph IRI: {iri}"))),
+    }
+}
+
+/// How many statements a side holds, counted without reading them.
+fn side_count(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<usize> {
+    let g = side_graph(store, side, graph)?;
+    match side {
+        DiffSide::Tx(tx) => store.fact_count_as_of(g, *tx),
+        _ => store.current_fact_count(g),
+    }
+}
+
+fn side_facts(store: &Store, side: &DiffSide, graph: Option<&str>) -> Result<Vec<Fact>> {
+    let g = side_graph(store, side, graph)?;
+    match side {
+        DiffSide::Tx(tx) => store.facts_as_of_in_graph(
+            &AsOf {
+                tx: Some(*tx),
+                valid_at: None,
+            },
+            g,
+        ),
+        _ => store.current_facts_in_graph(g),
+    }
+}
+
+/// A side's statements in `graph` (`None` = ROOT). Forks render into the
+/// default graph: a fork is a lineage of ROOT, so a fork diff reads as a
+/// change to ROOT.
+///
+/// # Errors
+/// Unknown fork or graph, unresolvable term, or a blank node.
+pub fn side_statements(
+    store: &Store,
+    side: &DiffSide,
+    graph: Option<&str>,
+) -> Result<BTreeSet<Statement>> {
+    let set = side_facts(store, side, graph)?
+        .iter()
+        .map(|f| fact_statement(store, f, graph))
+        .collect::<Result<BTreeSet<_>>>()?;
+    refuse_blank(&set, "diff side")?;
+    Ok(set)
+}
+
+/// A `/diff` side holds more statements than the server's ceiling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiffTooLarge {
+    /// The side that is too large, as `tx:N`, `main` or `fork:<name>`.
+    pub side: String,
+    /// How many statements it holds.
+    pub statements: usize,
+    /// The ceiling.
+    pub limit: usize,
+}
+
+fn label(side: &DiffSide) -> String {
+    match side {
+        DiffSide::Tx(tx) => format!("tx:{tx}"),
+        DiffSide::Main => "main".to_string(),
+        DiffSide::Fork(name) => format!("fork:{name}"),
+    }
+}
+
+/// `GET /diff`: the change-set that turns `from` into `to`, in `graph`
+/// (`None` = ROOT), unbounded. Servers use [`diff_bounded`].
+///
+/// # Errors
+/// See [`side_statements`]; also a tx beyond the store's head.
+pub fn diff(
+    store: &Store,
+    from: &DiffSide,
+    to: &DiffSide,
+    graph: Option<&str>,
+) -> Result<ChangeSet> {
+    Ok(diff_bounded(store, from, to, graph, 0)?.expect("an unbounded diff is never too large"))
+}
+
+/// [`diff`] refusing, before reading either side, when a side holds more
+/// than `limit` statements (0 = unbounded). Each side is counted with a
+/// `COUNT`, so a refused diff costs no materialization.
+///
+/// # Errors
+/// As [`diff`].
+pub fn diff_bounded(
+    store: &Store,
+    from: &DiffSide,
+    to: &DiffSide,
+    graph: Option<&str>,
+    limit: usize,
+) -> Result<std::result::Result<ChangeSet, DiffTooLarge>> {
+    let head = store.latest_tx_id()?;
+    let at = |side: &DiffSide| -> Result<i64> {
+        match side {
+            DiffSide::Tx(tx) if *tx > head => Err(Error::InvalidValue(format!(
+                "tx {tx} is beyond the store head {head}"
+            ))),
+            DiffSide::Tx(tx) => Ok(*tx),
+            _ => Ok(head),
+        }
+    };
+    let (base_tx, target_tx) = (at(from)?, at(to)?);
+    if limit > 0 {
+        for side in [from, to] {
+            let statements = side_count(store, side, graph)?;
+            if statements > limit {
+                return Ok(Err(DiffTooLarge {
+                    side: label(side),
+                    statements,
+                    limit,
+                }));
+            }
+        }
+    }
+    let header = Header {
+        base_tx: Some(base_tx),
+        target_tx: Some(target_tx),
+        store_id: Some(store.store_id()?),
+        source: Some(format!("diff:{}..{}", label(from), label(to))),
+        shapes_hash: Some(shapes_hash(store, base_tx)?),
+        ..Header::default()
+    };
+    Ok(Ok(ChangeSet::from_states(
+        header,
+        side_statements(store, from, graph)?,
+        side_statements(store, to, graph)?,
+    )))
+}
+
+/// SHA-256 of the shape sets in force at `tx`: the header's `shapes-hash`.
+///
+/// # Errors
+/// The shapes registry cannot be read.
+pub fn shapes_hash(store: &Store, tx: i64) -> Result<String> {
+    crate::asof_share::shapes_hash(store, tx)
+}
+
+/// What applying a change-set to the store's current state would mean.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PatchState {
+    /// Every delete is absent and every insert present: nothing to write.
+    AlreadyApplied,
+    /// Every delete is present and every insert absent: apply it.
+    Applicable,
+    /// Mixed: some statements are already in their post-state.
+    Conflict {
+        /// Deletes that are already absent.
+        already_deleted: Vec<Statement>,
+        /// Inserts that are already present.
+        already_inserted: Vec<Statement>,
+    },
+}
+
+/// The current statements for each touched `(subject, graph)` pair.
+fn touched_state(store: &Store, cs: &ChangeSet) -> Result<BTreeSet<Statement>> {
+    let mut pairs: BTreeMap<(String, Option<String>), ()> = BTreeMap::new();
+    for s in cs.deletes.iter().chain(&cs.inserts) {
+        let quad = s.to_quad()?;
+        let subject = match &quad.subject {
+            oxrdf::NamedOrBlankNode::NamedNode(n) => n.as_str().to_string(),
+            oxrdf::NamedOrBlankNode::BlankNode(b) => format!("_:{}", b.as_str()),
+        };
+        pairs.insert((subject, s.graph.clone()), ());
+    }
+    let mut out = BTreeSet::new();
+    for (subject, graph) in pairs.keys() {
+        let g = match graph {
+            None => crate::schema::ROOT_GRAPH,
+            Some(iri) => match store.lookup(iri)? {
+                Some(g) => g,
+                None => continue,
+            },
+        };
+        for entity in store.lookup_all(subject)? {
+            for fact in store.entity_facts_in_graph(entity, g)? {
+                out.insert(fact_statement(store, &fact, graph.as_deref())?);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Compare a change-set's touched statements with the store's current state.
+///
+/// # Errors
+/// A statement is malformed or carries a blank node.
+pub fn classify(store: &Store, cs: &ChangeSet) -> Result<PatchState> {
+    let all: BTreeSet<Statement> = cs.deletes.iter().chain(&cs.inserts).cloned().collect();
+    refuse_blank(&all, "changeset")?;
+    let current = touched_state(store, cs)?;
+    let present = |s: &Statement| -> Result<bool> { Ok(current.contains(&canonical(store, s)?)) };
+    let mut already_deleted = Vec::new();
+    for s in &cs.deletes {
+        if !present(s)? {
+            already_deleted.push(s.clone());
+        }
+    }
+    let mut already_inserted = Vec::new();
+    for s in &cs.inserts {
+        if present(s)? {
+            already_inserted.push(s.clone());
+        }
+    }
+    Ok(
+        match (
+            already_deleted.len() == cs.deletes.len() && already_inserted.len() == cs.inserts.len(),
+            already_deleted.is_empty() && already_inserted.is_empty(),
+        ) {
+            // An empty change-set is trivially already applied.
+            (true, _) => PatchState::AlreadyApplied,
+            (false, true) => PatchState::Applicable,
+            (false, false) => PatchState::Conflict {
+                already_deleted,
+                already_inserted,
+            },
+        },
+    )
+}
+
+#[cfg(test)]
+#[path = "changeset_store_tests.rs"]
+mod tests;

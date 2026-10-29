@@ -1,0 +1,217 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu \- AI\-native knowledge graph with strict ontology enforcement
+.SH SYNOPSIS
+\fBquipu\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Quipu stores RDF facts in one SQLite file, queries them with SPARQL, validates writes against SHACL shapes and keeps every fact\*(Aqs transaction and valid time. `qp` is the same binary under its short name. Run `quipu prime` for an agent primer.
+.PP
+Store commands operate on a local database (\-\-db, default .bobbin/quipu/quipu.db; configuration may override it), not the HTTP service. Help never reads configuration or opens a store.
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH SUBCOMMANDS
+.TP
+quipu\-version(1)
+Print the version and source commit
+.TP
+quipu\-install\-alias(1)
+Add the qp alias beside the quipu binary
+.TP
+quipu\-knot(1)
+Assert Turtle facts, validated against loaded shapes
+.TP
+quipu\-load(1)
+Assert Turtle facts (alias of knot), or load a project bundle directory
+.TP
+quipu\-ingest(1)
+Bulk\-load an N\-Triples, Turtle or N\-Quads file into one graph with declared count and digest
+.TP
+quipu\-read(1)
+Run a SPARQL query, optionally as of a valid time or transaction
+.TP
+quipu\-query(1)
+Run a SPARQL query (alias of read)
+.TP
+quipu\-rule\-query(1)
+Read typed ROOT support and the admitted judgment for a rule request
+.TP
+quipu\-cord(1)
+List entities, optionally of one type
+.TP
+quipu\-unravel(1)
+Show facts as they were at a transaction or valid time
+.TP
+quipu\-impact(1)
+Walk what depends on an entity, optionally after a speculative removal
+.TP
+quipu\-explain(1)
+Trace a derived fact back to its premises
+.TP
+quipu\-project(1)
+Project the graph and run a graph algorithm such as PageRank
+.TP
+quipu\-report(1)
+Report hubs, surprising links and open questions in the graph
+.TP
+quipu\-reason(1)
+Run Datalog rules to a fixpoint and persist the derivations
+.TP
+quipu\-demotions(1)
+Read preserved unsupported demotions without materializing a closure
+.TP
+quipu\-episode(1)
+Ingest a structured episode of nodes and edges from JSON
+.TP
+quipu\-retract(1)
+Retract an entity\*(Aqs facts, optionally one predicate; history is kept
+.TP
+quipu\-shapes(1)
+Load, list or remove the SHACL shapes that guard writes
+.TP
+quipu\-namespaces(1)
+List or apply the owner namespace registry
+.TP
+quipu\-entity\-ref(1)
+Mint or resolve stable entity references
+.TP
+quipu\-ontology(1)
+Load, list or remove OWL ontologies (owl feature)
+.TP
+quipu\-validate(1)
+Validate a data file against a shapes file without writing
+.TP
+quipu\-repl(1)
+Open an interactive SPARQL prompt
+.TP
+quipu\-export(1)
+Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query
+.TP
+quipu\-render(1)
+Render graph data into files in an owned directory
+.TP
+quipu\-stats(1)
+Show store statistics
+.TP
+quipu\-prime(1)
+Print the agent primer and a bounded, read\-only summary of the store
+.TP
+quipu\-search(1)
+Search entities by keyword, vector or hybrid ranking
+.TP
+quipu\-search\-index(1)
+Report, backfill or drop the search indexes
+.TP
+quipu\-doctor(1)
+Report graph\-label drift and recommended floors
+.TP
+quipu\-pack(1)
+Export a graph, or the whole store, as a pack; or verify a pack
+.TP
+quipu\-unpack(1)
+Merge a published pack into a local graph
+.TP
+quipu\-restore(1)
+Replace the store with a full pack, binary or text
+.TP
+quipu\-share(1)
+Write a portable share of a graph, scope or project
+.TP
+quipu\-status(1)
+Report how a share has diverged from this store
+.TP
+quipu\-merge(1)
+Merge a share back into ROOT, with reviewable conflict decisions
+.TP
+quipu\-import(1)
+Verify a share into quarantine, then promote or review it
+.TP
+quipu\-compose(1)
+Compose verified packs into a named inspection dataset
+.TP
+quipu\-changes(1)
+Read whole transaction change pages from the change feed
+.TP
+quipu\-follow(1)
+Keep this database a read\-only follower of a primary server
+.TP
+quipu\-acquire(1)
+Measure the bounded scope of a direct\-main graph acquisition
+.TP
+quipu\-migrate\-vectors(1)
+Move stored vectors between backends (lancedb feature)
+.TP
+quipu\-git\-merge(1)
+Merge pendants from Git snapshots and stop before committing
+.TP
+quipu\-merge\-driver(1)
+Low\-level Git merge driver for pendant files
+.TP
+quipu\-pendant\-resolve(1)
+Record a resolution choice for one pendant merge conflict
+.TP
+quipu\-pendant\-check(1)
+Check a pendant merge result in CI without a merge driver
+.TP
+quipu\-diff\-textconv(1)
+Render a pack with labels for git diff textconv
+.TP
+quipu\-mcp(1)
+Serve the MCP tools over stdio through the sibling quipu\-server
+.TP
+quipu\-hook(1)
+Run a harness hook such as session capture
+.TP
+quipu\-hooks(1)
+Bundle, install, uninstall or check quipu\*(Aqs Claude Code and Codex hooks
+.TP
+quipu\-policy(1)
+Draft an advisory policy from an exemplar, or backtest one
+.TP
+quipu\-gate(1)
+Judge a candidate policy set over recorded history without writing
+.TP
+quipu\-path(1)
+Golden\-path analysis: provenance cone, backtest and draft
+.TP
+quipu\-align(1)
+Propose, decide and apply cross\-graph alignments
+.TP
+quipu\-propose(1)
+List, submit, accept or reject schema change proposals
+.TP
+quipu\-memory(1)
+Read, export, receipt or commit versioned file memory
+.TP
+quipu\-attest(1)
+Register and manage attested session bindings
+.TP
+quipu\-signer(1)
+Enroll and manage hardware signers for attested writes
+.TP
+quipu\-deck(1)
+Configure and enroll the Decision Deck
+.TP
+quipu\-trust\-root(1)
+Enroll the first human key of the root of trust
+.TP
+quipu\-graph(1)
+Create, label, list, import, freeze and thaw named graphs and overlays
+.TP
+quipu\-db(1)
+Respace, attach or migrate the store file
+.TP
+quipu\-events(1)
+Read store event records such as refusals
+.TP
+quipu\-fork(1)
+Create, list, diff, drop or promote named forks of ROOT
+.TP
+quipu\-audit(1)
+Check traces, namespaces, replays and quarantine against policy

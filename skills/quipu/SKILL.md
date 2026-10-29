@@ -257,3 +257,146 @@ lost to the next agent; it has to reach the graph.
 
 [graph-extract]: https://github.com/scbrown/camayoc/tree/main/skills/graph-extract
 [graph-report]: https://github.com/scbrown/camayoc/tree/main/skills/graph-report
+
+## Reconciling a failed merge (recipe)
+
+A merge that stopped on a conflict (exit 2 from `quipu merge` or `quipu git-merge`,
+"promotion held" from `quipu fork promote`) has written nothing. Do not retry it, and do not
+edit data to make the conflict go away. Reconcile it:
+
+```bash
+# 1. Emit, with mechanical proposals (pick the line for the merge you ran)
+quipu merge shares/incoming --emit-decisions /tmp/d.json --propose
+quipu fork promote triage --emit-decisions /tmp/d.json --propose
+quipu git-merge topic                      # Git: writes <qpack>/decisions.json itself
+
+# 2. Show the user the standard layout, unedited (md for chat, text for a terminal)
+quipu merge show /tmp/d.json --format md
+
+# 3. Record each answer, or your own choice where the rules below allow it
+quipu merge resolve /tmp/d.json d1 --choose theirs --by steve
+
+# 4. Dry run, apply, verify
+quipu fork promote triage --decisions /tmp/d.json --reviewer steve --dry-run
+quipu fork promote triage --decisions /tmp/d.json --reviewer steve
+quipu merge show /tmp/d.json               # 0 undecided; re-applying reports already-applied
+```
+
+Over MCP: `quipu_merge_decisions` (`propose: true, present: true`; `fork` for a fork), paste
+`presentation` to the user, `quipu_merge_resolve` per answer, then `quipu_merge_apply` with
+`dry_run: true` and again without it.
+
+**When you may decide alone:** every `changed_by` on the row is an agent and you take the
+`suggest`ed choice. Say so in one line ("d1: took theirs, both sides were triage agents").
+**Ask instead** when a person wrote either side, when you cannot tell, for `value` or `both`, and
+for every `sh:maxCount` conflict on human-owned data. Ask once, for all undecided rows, with the
+numbered choices from the layout, and record each answer with `--by <the person>`. A `stale`
+refusal means something moved: emit again and re-ask; never edit hashes.
+
+Full page: [Reconciling a failed merge](https://intigraph.github.io/quipu/sharing/reconcile.html).
+
+## Agent primer
+
+The block below is `quipu prime --static` with headings shifted down one level. With the CLI
+installed, `quipu prime` prints it plus a live summary of the local store.
+
+<!-- BEGIN quipu prime: generated from src/primer.md; regenerate with QUIPU_BLESS_GOLDENS=1 cargo test --test prime_sync -->
+### Quipu agent primer
+
+#### What Quipu is
+
+Quipu is a knowledge graph for agents: RDF facts in one SQLite file, queried with SPARQL.
+Writes are checked against SHACL shapes, so the graph refuses data its vocabulary does not allow.
+Every fact keeps its transaction and valid time, so you can ask what was true at any point.
+ROOT is the default graph; named graphs hold scoped knowledge and are selected explicitly.
+`quipu` (alias `qp`) works on a local store; `quipu mcp` and `quipu-server` serve the same tools to agents.
+
+#### Query first
+
+1. Before you act on an entity, ask the graph what it already knows: `quipu search`, then `quipu read`.
+2. Prefer stored queries (`quipu_ask`) over hand-written SPARQL when one fits.
+3. Declare every PREFIX; the endpoint declares none for you.
+4. Name the dataset: ROOT unless you pass a graph (`FROM`, `FROM NAMED`, or the `graph` field).
+5. Treat an empty or failed answer as unknown, not as proof of absence.
+6. Write only facts you can source, through a validated path (`knot`, `episode`), never by editing the file.
+
+#### Core commands
+
+| Command | Use |
+| --- | --- |
+| `quipu prime` | Print this primer and a summary of the local store |
+| `quipu read "<sparql>"` | Run a SPARQL query (`--valid-at`, `--tx` for time travel; alias `query`) |
+| `quipu search "<text>"` | Keyword search for entities (`--mode` selects vector or hybrid) |
+| `quipu cord --type <IRI>` | List entities, optionally of one type |
+| `quipu impact <IRI>` | Walk what depends on an entity (`--remove` for a what-if) |
+| `quipu unravel --valid-at <date>` | See the graph as it was at a point in time |
+| `quipu explain <s> <p> <o>` | Trace a derived fact back to its premises |
+| `quipu knot <file.ttl>` | Assert Turtle facts, validated against loaded shapes (alias `load`) |
+| `quipu episode <file.json>` | Ingest a structured episode of nodes and edges |
+| `quipu retract <IRI>` | Retract an entity's facts (history is kept) |
+| `quipu validate --shapes <s> --data <d>` | Check data against shapes without writing |
+| `quipu shapes list` | Show the SHACL shapes that guard writes |
+| `quipu graph list` | List registered named graphs |
+| `quipu stats` / `quipu doctor labels` | Store statistics and a graph-label drift report |
+| `quipu export` | Export RDF from ROOT or one graph |
+| `quipu memory read <owner.json>` | Read versioned file memory (`export`, `commit` for the rest; off unless configured) |
+| `quipu share` / `quipu import` | Hand a graph to another store and verify one in |
+| `quipu mcp` | Serve the MCP tools over stdio |
+
+Run `quipu help <command>` for the exact syntax of any command.
+
+#### MCP tools
+
+| Tool | Use |
+| --- | --- |
+| `quipu_search` | Semantic, keyword or hybrid search for entities |
+| `quipu_context` | Entities and facts around a natural-language question |
+| `quipu_query` | SPARQL SELECT, with `valid_at` / `tx` time travel |
+| `quipu_ask` | Run a stored, parameterized query by name (no name lists them) |
+| `quipu_cord` | List entities by type or predicate |
+| `quipu_impact` | Downstream walk from an entity, optionally counterfactual |
+| `quipu_unravel` | Facts as they were at a point in time |
+| `quipu_entity` | One exact IRI as JSON-LD |
+| `quipu_explain` | Trace a derived fact back to its premises |
+| `quipu_export` | RDF from ROOT, one graph, a provenance group or a CONSTRUCT |
+| `quipu_resolve_entity` | Check for near-duplicate entities before writing |
+| `quipu_shapes` | Inspect the loaded shapes and class vocabulary |
+| `quipu_validate` | Validate RDF against shapes without writing |
+| `quipu_knot` | Assert Turtle facts with SHACL validation |
+| `quipu_episode` | Ingest an episode of nodes and edges |
+| `quipu_set` | Set an entity's predicate to exactly one value |
+| `quipu_retract` | Retract facts for an entity |
+| `quipu_retract_episode` | Retract everything one episode contributed |
+| `quipu_graph_create` | Register a named graph before writing to it |
+| `quipu_graph_list` | List named graphs |
+| `quipu_list_proposals` | List schema change proposals and their status |
+| `quipu_stats` / `quipu_health` | Serving store statistics and liveness |
+
+#### Writing safely
+
+- Check `quipu_resolve_entity` (or search) first, so you extend an entity instead of duplicating it.
+- Use types and predicates the loaded shapes define; a refusal names the violated shape.
+- Give writes a timestamp and a source you can point back to.
+- Schema changes go through proposals (`quipu propose submit`, `quipu_propose_schema_change`), not direct shape edits.
+
+#### Reconciling a failed merge
+
+A share merge, fork promotion or Git pendant merge that hits a conflict writes nothing and holds the slot.
+Finish all three the same way:
+
+1. Emit decisions with proposals: `quipu merge <share-dir> --emit-decisions f.json --propose`, `quipu fork promote <name> --emit-decisions f.json --propose`, or `quipu git-merge <ref>` (writes `<qpack>/decisions.json`). MCP: `quipu_merge_decisions` with `propose` and `present`.
+2. Show the user `quipu merge show f.json --format md` (MCP: the `presentation` field) as printed; do not paraphrase it.
+3. Record each choice: `quipu merge resolve f.json <row> --choose ours|theirs|base|both|value|defer --by <who>` (MCP: `quipu_merge_resolve`).
+4. Apply with `--decisions f.json --reviewer <who>`, `--dry-run` first, on the same `quipu merge` or `quipu fork promote` command (MCP: `quipu_merge_apply`); for Git, `git add` the qpack and commit. Re-applying reports `already-applied` and writes nothing.
+
+Decide a row yourself only when every side was written by agents and you take the suggested choice; record your agent id with `--by` and say so.
+Otherwise ask the user once, for all rows, with the numbered choices: always when a person wrote either side or you cannot tell, for `value` and `both`, and for `sh:maxCount` conflicts on human-owned data.
+If apply says the decisions are stale, emit again; never edit the file's hashes.
+
+#### Next steps
+
+- Wire Quipu into your agent: <https://intigraph.github.io/quipu/getting-started/agent-setup.html>
+- Full CLI reference: <https://intigraph.github.io/quipu/reference/cli.html>
+- MCP tool reference: <https://intigraph.github.io/quipu/reference/mcp-tools.html>
+- Reconciling a failed merge: <https://intigraph.github.io/quipu/sharing/reconcile.html>
+<!-- END quipu prime -->

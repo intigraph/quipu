@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-AUDIT-REPLAY 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-audit\-replay \- Re\-derive a gate decision as of its transaction
+.SH SYNOPSIS
+\fBquipu audit replay\fR [\fB\-\-db\fR] [\fB\-\-delta\fR] [\fB\-\-json\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fItrace.jsonl\fR> 
+.SH DESCRIPTION
+Re\-derive a gate decision as of its transaction
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-delta\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-json\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fItrace.jsonl\fR>
+

@@ -28,10 +28,14 @@ permissions:
   pull-requests: write
   contents: write
 
-# Only the newest main commit can produce a release. The CI waiter otherwise
-# occupies one runner for up to 50 minutes per superseded push.
+# Superseded pushes cancel each other: the CI waiter otherwise occupies one
+# runner for up to 50 minutes per superseded push. The release commit itself
+# ("chore: release vX", the release-PR merge) gets a group of its own, so a merge
+# landing seconds later cannot cancel it. That is what happened to 0.16.4
+# (aegis-3xv): #878's push cancelled cb46a8bd's run, the 6eacb65e run cut the
+# release from the newer HEAD, and the shipped 0.16.4 section omits #878.
 concurrency:
-  group: release-${{ github.ref }}
+  group: "release-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
   cancel-in-progress: true
 
 jobs:
@@ -78,10 +82,22 @@ jobs:
     if: github.event_name == 'push' && needs.ci-correctness.outputs.ready == 'true'
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
+      version_state: ${{ steps.guard.outputs.state }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # A later push must not cut a version whose release commit still has its
+      # own run alive: release-plz tags the commit it checked out, so the tag
+      # would include commits the release's changelog section does not list.
+      - name: Defer to the release commit's own run
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/release_commit_guard.py --self-test
+          python3 scripts/release_commit_guard.py "$GITHUB_SHA"
 
       # release-plz refuses a repository where a tracked path is also ignored,
       # even when checkout itself is clean. Catch the repository invariant at
@@ -121,6 +137,7 @@ jobs:
       # Publication keeps its existing credential and artifact outputs.
       - uses: MarcoIeni/release-plz-action@v0.5
         id: release
+        if: steps.guard.outputs.state != 'defer'
         with:
           command: release
         env:
@@ -157,9 +174,26 @@ jobs:
       # still describes an earlier window. Verify the package artifact: a tagged
       # version uses its release boundary; a new version still checks through HEAD.
       # The pending release PR below remains independently checked in full.
+      #
+      # Only the run that cuts a version (or would have) verifies it. Once the
+      # tag exists, its section is shipped history: re-verifying it on every
+      # later push can only repeat a verdict nothing in this lane can repair,
+      # and a red main hides real failures (aegis-3xv: 0.16.4 failed every push
+      # for a day). A deferred run leaves the check to the release commit's run.
       - name: Verify package version on main
+        env:
+          STATE: ${{ needs.release-plz.outputs.version_state }}
+          CREATED: ${{ needs.release-plz.outputs.releases_created }}
         run: |
           VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          if [ "$STATE" = "defer" ]; then
+            echo "${VERSION} is cut by its release commit's own run; nothing to verify here." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$STATE" = "released" ] && [ "$CREATED" != "true" ]; then
+            echo "${VERSION} was already released (tag quipu-ai-v${VERSION}); its section was verified by the run that cut it." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           ./scripts/verify-changelog.sh --version "$VERSION"
 
       # The pending release PR is the artifact that actually gets merged, and it is
@@ -333,6 +367,8 @@ jobs:
              wasm/explorer/pkg-node/quipu_wasm_explorer.d.ts \
              wasm/explorer/pkg-node/quipu_wasm_explorer_bg.wasm.d.ts \
              "dist/${NODE_NAME}/"
+          cp wasm/explorer/runtime/query-builder.mjs wasm/explorer/runtime/query-terms.mjs \
+             wasm/explorer/runtime/query-builder.d.mts "dist/${NODE_NAME}/"
           cp LICENSE "dist/${NODE_NAME}/"
           cat > "dist/${NODE_NAME}/README.txt" <<'EOF'
           quipu, compiled to wasm and loadable from node with no browser.
@@ -577,6 +613,13 @@ jobs:
           cp "target/${TARGET}/release/quipu-server" "dist/${NAME}/"
           ln -s quipu "dist/${NAME}/qp"
           cp README.md LICENSE "dist/${NAME}/"
+          # Man pages and shell completions, generated from the command
+          # catalogue by quipu-docgen and committed; CI keeps them current.
+          # Packagers install from here: man/*.1 -> share/man/man1, and
+          # completions/ by shell (quipu.bash, _quipu, quipu.fish; qp.* for
+          # the alias).
+          cp -R packaging/man "dist/${NAME}/man"
+          cp -R packaging/completions "dist/${NAME}/completions"
 
           # The binaries carry every feature, and two of them have runtime
           # requirements the archive itself cannot satisfy. Saying so here is
@@ -634,6 +677,8 @@ jobs:
           grep -qx "${NAME}/quipu-server" <<<"${LISTING}"
           grep -qx "${NAME}/qp" <<<"${LISTING}"
           test "$(readlink "dist/${NAME}/qp")" = quipu
+          grep -qx "${NAME}/man/quipu.1" <<<"${LISTING}"
+          grep -qx "${NAME}/completions/_quipu" <<<"${LISTING}"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           ls -la dist
 

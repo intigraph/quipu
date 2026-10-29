@@ -142,6 +142,14 @@ pub fn store_type_context(store: &Store, iris: &BTreeSet<String>) -> Result<Stri
     store_type_context_in_graph(store, iris, crate::schema::ROOT_GRAPH)
 }
 
+/// A stored node as an N-Triples term: `<iri>` for an IRI, `_:b` for a blank
+/// node. Formatting the resolved name as `<{iri}>` turned a blank node into
+/// `<_:b>`, which does not parse, so a write touching one was refused with an
+/// RDF parse error instead of being judged.
+pub(crate) fn node_term(store: &Store, entity: i64) -> Result<String> {
+    Ok(crate::rdf::value_to_term(store, &Value::Ref(entity))?.to_string())
+}
+
 /// [`store_type_context`], scoped to the graph a write is landing in (quipu-080).
 ///
 /// The context is the UNION of the target graph's types and ROOT's. That is the
@@ -180,8 +188,8 @@ pub fn store_type_context_in_graph(
                     continue;
                 }
                 if let Value::Ref(type_id) = fact.value {
-                    let type_iri = store.resolve(type_id)?;
-                    lines.insert(format!("<{iri}> <{RDF_TYPE}> <{type_iri}> .\n"));
+                    let (node, class) = (node_term(store, entity)?, node_term(store, type_id)?);
+                    lines.insert(format!("{node} <{RDF_TYPE}> {class} .\n"));
                 }
             }
         }
@@ -337,7 +345,7 @@ pub fn store_property_context_in_graph(
                 let Ok(term) = crate::rdf::value_to_term(store, &fact.value) else {
                     continue;
                 };
-                lines.insert(format!("<{iri}> <{attr}> {term} .\n"));
+                lines.insert(format!("{} <{attr}> {term} .\n", node_term(store, entity)?));
             }
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.16.3"
+version = "0.16.5"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -51,6 +51,14 @@ name = "quipu-server"
 path = "src/server.rs"
 required-features = ["shacl", "onnx", "server"]
 
+# Generates man pages, shell completions and the book's CLI/MCP reference
+# from the command catalogue and tool definitions. Release archives ship its
+# committed output; CI fails when that output is stale (aegis-t7h).
+[[bin]]
+name = "quipu-docgen"
+path = "src/bin/quipu_docgen/main.rs"
+required-features = ["docgen"]
+
 [[bin]]
 name = "seed-fixtures"
 path = "src/bin/seed_fixtures.rs"
@@ -80,6 +88,11 @@ required-features = ["shacl"]
 [[example]]
 name = "mergebench"
 path = "examples/mergebench/main.rs"
+required-features = ["shacl"]
+
+[[example]]
+name = "agentbranches"
+path = "examples/agentbranches/main.rs"
 required-features = ["shacl"]
 
 [[example]]
@@ -158,6 +171,12 @@ arrow-schema = { version = "57", optional = true }
 futures = { version = "0.3", optional = true }
 ort = { version = "=2.0.0-rc.11", default-features = false, features = ["std", "ndarray", "load-dynamic"], optional = true }
 tokenizers = { version = "0.21", optional = true }
+# `quipu-docgen` only: the CLI itself parses with the catalogue in
+# src/cli_input, and these build a clap tree from it for clap_mangen and
+# clap_complete. Never linked into quipu or quipu-server.
+clap = { version = "4.5", default-features = false, features = ["std", "string", "help", "usage"], optional = true }
+clap_mangen = { version = "0.2", optional = true }
+clap_complete = { version = "4.5", optional = true }
 ndarray = { version = "0.16", optional = true }
 
 # The store-free Git qpack merge (`src/git_merge*.rs`) writes outputs atomically
@@ -243,6 +262,9 @@ full = ["shacl", "owl", "onnx", "reactive-reasoner", "server"]
 # quipu-server on a user's PATH (aegis-wd3m38). Build them with
 # `--features dev-tools`.
 dev-tools = ["shacl"]
+# `quipu-docgen`: man pages, completions and generated reference pages. `owl`
+# so the MCP index lists every tool a release (`full`) serves.
+docgen = ["shacl", "owl", "dep:clap", "dep:clap_mangen", "dep:clap_complete"]
 
 [lints.rust]
 unsafe_code = "deny"

@@ -10,10 +10,13 @@ repos:
       # upstream-quipu-regime.patch is a `git am` artifact: blank context
       # lines in a unified diff are a single space, which these two hooks
       # strip, silently corrupting the byte-exact patch.
+      # packaging/man and packaging/completions are quipu-docgen output,
+      # checked byte-for-byte against regeneration in CI; roff and the
+      # completion generators emit trailing spaces and blank final lines.
       - id: trailing-whitespace
-        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch)$
+        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch|packaging/(man|completions)/.*)$
       - id: end-of-file-fixer
-        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch)$
+        exclude: ^(docs/book/mermaid\.min\.js|benchmark/demm/upstream-quipu-regime\.patch|packaging/(man|completions)/.*)$
       - id: check-yaml
       - id: check-json
         types: [json]

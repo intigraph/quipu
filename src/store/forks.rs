@@ -6,8 +6,15 @@
 //! the fork is queryable exactly like any named graph and evolves as an
 //! independent lineage. Design: `docs/design/fork-at-any-event.md`.
 //!
+//! Promotion is a **three-way merge**, not a diff against current ROOT: base =
+//! ROOT as of the fork's `fork_tx`, ours = ROOT now, theirs = the fork now,
+//! merged with the share merge's slot operator (`crate::merge3`). ROOT writes
+//! made after the fork's base survive; a bounded (`sh:maxCount`) slot both
+//! sides changed incompatibly is reported as a conflict and nothing is
+//! written. See `forks_merge.rs`.
+//!
 //! The load-bearing constraint, stated up front: **promotion re-enters through
-//! the write gates**. `fork_promote` computes the structural delta against ROOT
+//! the write gates**. `fork_promote` computes the merged delta against ROOT
 //! and applies it via `transact_to_graph(..., ROOT)` — the same authority,
 //! placement, policy and OWL gates every ROOT write faces — after validating
 //! the asserted delta against the stored reject-mode SHACL shapes. A refusal
@@ -26,6 +33,7 @@ use crate::error::{Error, Result};
 use crate::namespace::{QUIPU_FORK, QUIPU_FORK_TX, RDF_TYPE};
 use crate::types::{Fact, Op, Value};
 
+pub use super::forks_merge::ForkResolutions;
 use super::{Datum, Store};
 
 /// IRI prefix fork graphs are minted under: `urn:quipu:fork:<name>`.
@@ -75,6 +83,10 @@ pub enum ForkPromotion {
     /// SHACL refused the asserted delta. **Nothing was written.**
     #[cfg(feature = "shacl")]
     Refused(crate::shacl::ValidationFeedback),
+    /// ROOT and the fork both changed a `sh:maxCount`-bounded slot since the
+    /// fork's base, incompatibly — the same decision records share merge
+    /// reports. **Nothing was written**; the fork stays `open`.
+    Conflicts(Vec<crate::merge3::DecisionRecord>),
 }
 
 impl Store {
@@ -293,8 +305,15 @@ impl Store {
         Ok(ForkDiff { added, removed })
     }
 
-    /// Promote an open fork: apply its present-state delta to ROOT **through
-    /// the write gates**, then mark it `promoted`.
+    /// Promote an open fork: three-way merge it into ROOT over the fork's
+    /// base (ROOT as of `fork_tx`), apply the merged delta **through the write
+    /// gates**, then mark it `promoted`.
+    ///
+    /// ROOT changes made after the fork's base are kept, not retracted. A
+    /// `sh:maxCount` slot both sides changed incompatibly returns
+    /// [`ForkPromotion::Conflicts`] and writes NOTHING. A fork whose recorded
+    /// base transaction is unusable is refused with an error rather than
+    /// merged against a guessed base.
     ///
     /// The asserted delta is validated against the stored reject-mode SHACL
     /// shapes first (`split_shapes_by_policy` — emit-mode shapes observe, they
@@ -308,8 +327,98 @@ impl Store {
         timestamp: &str,
         actor: Option<&str>,
     ) -> Result<ForkPromotion> {
-        let _f = self.require_open_fork(name, "promote")?;
-        let diff = self.fork_diff("main", name)?;
+        self.promote_fork(name, timestamp, actor, None, false)
+    }
+
+    /// The conflicts promoting `name` would stop on now, with the fork's
+    /// registry row. Writes nothing.
+    pub fn fork_conflicts(
+        &self,
+        name: &str,
+    ) -> Result<(ForkInfo, Vec<crate::merge3::DecisionRecord>)> {
+        let f = self.require_open_fork(name, "inspect")?;
+        let (base, ours, theirs) = self.fork_sides(&f)?;
+        let merge = self.fork_merge(base, ours, theirs, None, "")?;
+        Ok((f, merge.conflicts))
+    }
+
+    /// Promote with every conflicting slot decided (the reconcile flow,
+    /// `crate::fork_merge_decisions`). The transaction's source and the
+    /// `fork.promoted` event name the reviewer and the decisions hash, so the
+    /// same decisions are recognised if applied again. `dry_run` runs every
+    /// check, including SHACL, and writes nothing (`tx` is `0`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn fork_promote_resolved(
+        &mut self,
+        name: &str,
+        resolutions: &ForkResolutions,
+        decisions_sha256: &str,
+        reviewer: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+        dry_run: bool,
+    ) -> Result<ForkPromotion> {
+        self.promote_fork(
+            name,
+            timestamp,
+            actor,
+            Some((resolutions, decisions_sha256, reviewer)),
+            dry_run,
+        )
+    }
+
+    /// The transaction a decided promotion of `name` with these decisions
+    /// committed under (`0` for an empty delta), if one did.
+    pub fn fork_promoted_by(&self, name: &str, decisions_sha256: &str) -> Result<Option<i64>> {
+        let needle = format!("\"decisions\":\"{decisions_sha256}\"");
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT payload FROM events WHERE type = 'fork.promoted' AND subject = ?1 \
+                 AND instr(payload, ?2) > 0 ORDER BY rowid DESC LIMIT 1",
+                params![name, needle],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?
+            .and_then(|p| serde_json::from_str::<serde_json::Value>(&p).ok())
+            .map(|v| v["promote_tx"].as_i64().unwrap_or(0)))
+    }
+
+    fn fork_sides(&self, f: &ForkInfo) -> Result<(Vec<Fact>, Vec<Fact>, Vec<Fact>)> {
+        let name = &f.name;
+        let latest = self.latest_tx_id()?;
+        if f.fork_tx < 0 || f.fork_tx > latest {
+            return Err(Error::InvalidValue(format!(
+                "cannot promote fork '{name}': it has no usable recorded base \
+                 transaction (fork_tx = {}, latest tx = {latest}). Promotion is a \
+                 three-way merge against ROOT as of the fork's base and will not \
+                 guess one; inspect `quipu fork diff main {name}` and re-apply \
+                 the changes on a fresh fork",
+                f.fork_tx
+            )));
+        }
+        Ok((
+            self.root_facts_as_of(f.fork_tx)?,
+            self.current_facts_in_graph(crate::schema::ROOT_GRAPH)?,
+            self.current_facts_in_graph(f.g)?,
+        ))
+    }
+
+    fn promote_fork(
+        &mut self,
+        name: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+        decided: Option<(&ForkResolutions, &str, &str)>,
+        dry_run: bool,
+    ) -> Result<ForkPromotion> {
+        let f = self.require_open_fork(name, "promote")?;
+        let fork_g = f.g;
+        let (base, ours, theirs) = self.fork_sides(&f)?;
+        let diff = self.fork_merge(base, ours, theirs, decided.map(|d| d.0), timestamp)?;
+        if !diff.conflicts.is_empty() {
+            return Ok(ForkPromotion::Conflicts(diff.conflicts));
+        }
 
         #[cfg(feature = "shacl")]
         if !diff.added.is_empty()
@@ -324,6 +433,26 @@ impl Store {
             let feedback =
                 crate::shacl_context::validate_with_store_context(self, &split.reject, &turtle)?;
             if !feedback.conforms {
+                return Ok(ForkPromotion::Refused(feedback));
+            }
+        }
+
+        // aegis-gxfm: the retraction side gets the deletion gate, so a promote
+        // that only takes a required value away is refused like an assert.
+        #[cfg(feature = "shacl")]
+        if !diff.removed.is_empty() {
+            let nt = |facts: &[Fact]| -> Result<String> {
+                let bytes = crate::rdf::serialize_facts(self, facts, oxrdfio::RdfFormat::NTriples)?;
+                String::from_utf8(bytes).map_err(|e| {
+                    Error::InvalidValue(format!("fork promote: non-UTF8 N-Triples: {e}"))
+                })
+            };
+            if let Some(feedback) = self.retraction_refusal_nt(
+                &nt(&diff.removed)?,
+                &nt(&diff.added)?,
+                crate::schema::ROOT_GRAPH,
+                !dry_run,
+            )? {
                 return Ok(ForkPromotion::Refused(feedback));
             }
         }
@@ -351,6 +480,19 @@ impl Store {
             });
         }
 
+        if dry_run {
+            return Ok(ForkPromotion::Promoted {
+                tx: 0,
+                asserted: diff.added.len(),
+                retracted: diff.removed.len(),
+            });
+        }
+        let source = match decided {
+            Some((_, sha, reviewer)) => {
+                format!("fork-promote:{name};decisions={sha};reviewer={reviewer}")
+            }
+            None => format!("fork-promote:{name}"),
+        };
         self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_fork_promote")?;
         let result = (|| -> Result<i64> {
@@ -361,15 +503,30 @@ impl Store {
                     &datums,
                     timestamp,
                     actor,
-                    Some(&format!("fork-promote:{name}")),
+                    Some(&source),
                     crate::schema::ROOT_GRAPH,
                 )?
             };
+            // Close each replaced ROOT value at the fork's own close time,
+            // as a direct write of the same correction would (aegis-jxxd).
+            self.retime_promoted_closes(tx, fork_g, &diff.removed)?;
             self.conn.execute(
                 "UPDATE forks SET status = 'promoted' WHERE name = ?1",
                 params![name],
             )?;
-            self.emit_registry_event("fork.promoted", name, timestamp)?;
+            match decided {
+                Some((_, sha, reviewer)) => self.emit_registry_event_with(
+                    "fork.promoted",
+                    name,
+                    timestamp,
+                    serde_json::json!({
+                        "decisions": sha,
+                        "reviewer": reviewer,
+                        "promote_tx": tx,
+                    }),
+                )?,
+                None => self.emit_registry_event("fork.promoted", name, timestamp)?,
+            }
             Ok(tx)
         })();
 
@@ -432,3 +589,7 @@ fn validate_fork_name(name: &str) -> Result<()> {
 #[cfg(test)]
 #[path = "forks_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "forks_valid_time_tests.rs"]
+mod valid_time_tests;

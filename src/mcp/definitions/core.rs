@@ -102,32 +102,49 @@ pub(super) fn defs() -> Vec<JsonValue> {
         // proposes decisions, and the single writer that applies them.
         serde_json::json!({
             "name": "quipu_merge_decisions",
-            "description": "READ. The conflicts of merging an incoming share into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to ROOT's graph hash. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. Writes nothing.",
+            "description": "READ. The conflicts of merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to what was reviewed. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. present:true returns {decisions, presentation, view}: the standard markdown to show the user, unchanged. Writes nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." },
-                    "slot_scoped": { "type": "boolean", "default": false, "description": "Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes." }
-                },
-                "required": ["incoming", "base"]
+                    "slot_scoped": { "type": "boolean", "default": false, "description": "Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes." },
+                    "fork": { "type": "string", "description": "A fork whose promotion stopped on conflicts, instead of incoming + base." },
+                    "present": { "type": "boolean", "description": "Also return the standard presentation (markdown + JSON view)." }
+                }
             }
         }),
         serde_json::json!({
             "name": "quipu_merge_apply",
-            "description": "WRITE. Finish a share merge: the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (ROOT or the share moved), more values than sh:maxCount, or a value that is not an RDF term.",
+            "description": "WRITE. Finish a share merge (incoming + base) or a fork promotion (fork): the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (either side moved), more values than sh:maxCount, a value that is not an RDF term, or (forks) a SHACL refusal. Applying the same decisions again returns outcome already-applied and writes nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "incoming": { "type": "object", "description": "The share to merge. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
                     "base": { "type": "object", "description": "Its parent share. Inline, as /import takes it.", "properties": { "manifest": { "type": "object" }, "export_ntriples": { "type": "string" }, "shapes_turtle": { "type": "string" } }, "required": ["manifest", "export_ntriples", "shapes_turtle"] },
-                    "decisions": { "type": "object", "description": "The file from merge_decisions with each row's decision set: {choose: ours|theirs|base} or {values: [N-Triples terms]}." },
+                    "decisions": { "type": "object", "description": "The file from merge_decisions with each row's decision set (quipu_merge_resolve): {choose: ours|theirs|base|both} or {values: [N-Triples terms]}." },
                     "reviewer": { "type": "string", "description": "Who decided. Recorded in provenance." },
                     "actor": { "type": "string", "description": "Who is applying." },
-                    "dry_run": { "type": "boolean", "description": "Run every check and report the counts it would write; write nothing." }
+                    "dry_run": { "type": "boolean", "description": "Run every check and report the counts it would write; write nothing." },
+                    "fork": { "type": "string", "description": "Apply to this fork's promotion, instead of incoming + base." }
                 },
-                "required": ["incoming", "base", "decisions", "reviewer"]
+                "required": ["decisions", "reviewer"]
+            }
+        }),
+        serde_json::json!({
+            "name": "quipu_merge_resolve",
+            "description": "Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Choices: ours, theirs, base, both (only within sh:maxCount), value (with values), defer. Validates the choice against the row; touches no store. Apply with quipu_merge_apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "decisions": { "type": "object", "description": "The decisions file from quipu_merge_decisions." },
+                    "row": { "type": "string", "description": "The row id, e.g. d1." },
+                    "choose": { "type": "string", "enum": ["ours", "theirs", "base", "both", "value", "defer"] },
+                    "values": { "type": "array", "items": { "type": "string" }, "description": "N-Triples terms, with choose: value." },
+                    "by": { "type": "string", "description": "Who decided: the person who chose, or the agent id when the agent rules allow it." }
+                },
+                "required": ["decisions", "row", "by"]
             }
         }),
         serde_json::json!({
@@ -145,7 +162,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "graph": { "type": "string", "description": "Named-graph IRI to write into. Must already be registered committed-class (graph_create). Unknown IRI is an error, never interned. Omit for ROOT." },
                     "replace_snapshot": { "type": "boolean", "description": "Replace the prior facts written under this snapshot key (diffed: unchanged facts stay live). Requires 'snapshot'." },
                     "blank_node_scope": { "type": "string", "description": "Explicit document scope: distinct IDs separate identical loads; the same ID shares nodes across graphs only for identical input bytes." },
-                    "snapshot": { "type": "string", "description": "Stable producer key scoping replace_snapshot (e.g. 'bobbin-chunks:myrepo'). Scoped to the target graph." }
+                    "snapshot": { "type": "string", "description": "Stable producer key (e.g. 'bobbin-chunks:myrepo'). Facts written with it, with or without replace_snapshot, are owned by source 'snapshot:<key>' and a later replace under the same key retracts them; 'source' is then ignored. Scoped to the target graph." }
                 },
                 "required": ["turtle"]
             }

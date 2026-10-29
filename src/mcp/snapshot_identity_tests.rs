@@ -190,3 +190,251 @@ fn replacing_one_partition_leaves_untouched_file_facts_unchanged() {
         before
     );
 }
+
+fn labels(store: &Store, name: &str) -> Vec<String> {
+    let mut out: Vec<String> = facts(store, name)
+        .into_iter()
+        .filter(|f| {
+            store.resolve(f.attribute).unwrap() == "http://www.w3.org/2000/01/rdf-schema#label"
+        })
+        .map(|f| match f.value {
+            crate::types::Value::Str(s) => s,
+            other => format!("{other:?}"),
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// aegis-p9q: the owner RENAMES a node another producer still references. The
+/// replacement names the node itself, so the old label has no orphan to
+/// protect and must go: exactly the new label remains.
+#[test]
+fn owner_rename_of_foreign_referenced_node_keeps_only_the_new_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(labels(&store, "section"), vec!["New name".to_string()]);
+    // The foreign reference is untouched.
+    let foreign = facts(&store, "foreign");
+    assert_eq!(foreign.len(), 1, "foreign producer's fact must survive");
+}
+
+/// Existing intent, pinned beside the rename case: when the owner REMOVES a
+/// foreign-referenced node, its old label is retained so the reference is not
+/// left unnameable.
+#[test]
+fn owner_removal_of_foreign_referenced_node_retains_old_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(&mut store, "docs:owner", "ex:other a ex:Section .", AFTER);
+    assert_eq!(labels(&store, "section"), vec!["Old name".to_string()]);
+    // A replacement that keeps the node but drops its label also leaves it
+    // unnamed, so retention still applies.
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(&mut store, "docs:owner", "ex:section a ex:Section .", AFTER);
+    assert_eq!(labels(&store, "section"), vec!["Old name".to_string()]);
+}
+
+/// No foreign reference: a rename has always replaced the label outright.
+#[test]
+fn owner_rename_without_foreign_reference_retracts_old_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(labels(&store, "section"), vec!["New name".to_string()]);
+}
+
+/// A label another producer asserted on the same node is not the snapshot's
+/// to retract, rename or not.
+#[test]
+fn owner_rename_leaves_foreign_owned_label_alone() {
+    let mut store = Store::open_in_memory().unwrap();
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"Old name\" .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:other",
+        "ex:section rdfs:label \"Alias\" . ex:foreign ex:cites ex:section .",
+        BEFORE,
+    );
+    publish(
+        &mut store,
+        "docs:owner",
+        "ex:section a ex:Section ; rdfs:label \"New name\" .",
+        AFTER,
+    );
+    assert_eq!(
+        labels(&store, "section"),
+        vec!["Alias".to_string(), "New name".to_string()]
+    );
+}
+
+fn append(store: &mut Store, input: serde_json::Value) -> serde_json::Value {
+    let mut input = input;
+    input["turtle"] = serde_json::json!(format!(
+        "@prefix ex: <http://example.org/> . {}",
+        input["turtle"].as_str().unwrap()
+    ));
+    let result = tool_knot(store, &input).unwrap();
+    assert_eq!(result["conforms"], true);
+    result
+}
+
+fn tx_sources(store: &Store) -> Vec<String> {
+    store
+        .conn
+        .prepare("SELECT coalesce(source, 'NULL') FROM transactions ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get::<_, String>(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect()
+}
+
+fn statuses(store: &Store, name: &str) -> Vec<String> {
+    facts(store, name)
+        .into_iter()
+        .filter(|f| store.resolve(f.attribute).unwrap() == "http://example.org/status")
+        .map(|f| match f.value {
+            crate::types::Value::Str(s) => s,
+            other => format!("{other:?}"),
+        })
+        .collect()
+}
+
+/// A non-replace write carrying `snapshot` is owned by that snapshot, so a
+/// later replace under the key retracts it: one status value, not two.
+#[test]
+fn append_under_snapshot_key_is_retracted_by_a_later_replace() {
+    let mut store = Store::open_in_memory().unwrap();
+    let out = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"applied\" .",
+            "snapshot": "jobs", "actor": "hammond", "source": "patrol",
+            "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(out["snapshot"], "jobs");
+    assert_eq!(out["source"], "snapshot:jobs");
+    publish(
+        &mut store,
+        "jobs",
+        "ex:role ex:status \"interviewing\" .",
+        AFTER,
+    );
+    assert_eq!(statuses(&store, "role"), vec!["interviewing".to_string()]);
+    assert_eq!(tx_sources(&store), vec!["snapshot:jobs", "snapshot:jobs"]);
+}
+
+/// Without a snapshot key the old source rules hold: an explicit `source`
+/// wins, else `knot:<actor>`; a blank key counts as no key.
+#[test]
+fn append_without_snapshot_key_keeps_its_source() {
+    let mut store = Store::open_in_memory().unwrap();
+    let named = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:a ex:status \"x\" .", "actor": "hammond",
+            "source": "patrol", "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(named["source"], "patrol");
+    assert!(named["snapshot"].is_null());
+    let derived = append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:b ex:status \"x\" .", "actor": "hammond",
+            "snapshot": "  ", "timestamp": BEFORE,
+        }),
+    );
+    assert_eq!(derived["source"], "knot:hammond");
+    assert!(derived["snapshot"].is_null());
+    assert_eq!(tx_sources(&store), vec!["patrol", "knot:hammond"]);
+}
+
+/// A replace under one key never touches facts appended under another key or
+/// written without one.
+#[test]
+fn replace_under_one_key_leaves_other_keys_and_sources_alone() {
+    let mut store = Store::open_in_memory().unwrap();
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"applied\" .",
+            "snapshot": "jobs", "timestamp": BEFORE,
+        }),
+    );
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"screened\" .",
+            "snapshot": "other", "timestamp": BEFORE,
+        }),
+    );
+    append(
+        &mut store,
+        serde_json::json!({
+            "turtle": "ex:role ex:status \"noted\" .",
+            "actor": "hammond", "timestamp": BEFORE,
+        }),
+    );
+    publish(&mut store, "jobs", "ex:role ex:status \"offer\" .", AFTER);
+    let mut got = statuses(&store, "role");
+    got.sort();
+    assert_eq!(got, vec!["noted", "offer", "screened"]);
+}

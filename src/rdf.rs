@@ -98,7 +98,7 @@ pub fn value_to_term(store: &Store, value: &Value) -> Result<OxTerm> {
 }
 
 /// Resolve a fact's entity id back to an oxrdf subject.
-fn id_to_subject(store: &Store, id: i64) -> Result<NamedOrBlankNode> {
+pub(crate) fn id_to_subject(store: &Store, id: i64) -> Result<NamedOrBlankNode> {
     let iri = store.resolve(id)?;
     if let Some(bnode_id) = iri.strip_prefix(BLANK_PREFIX) {
         Ok(NamedOrBlankNode::BlankNode(
@@ -113,7 +113,7 @@ fn id_to_subject(store: &Store, id: i64) -> Result<NamedOrBlankNode> {
 }
 
 /// Resolve a fact's attribute id back to an oxrdf `NamedNode`.
-fn id_to_predicate(store: &Store, id: i64) -> Result<NamedNode> {
+pub(crate) fn id_to_predicate(store: &Store, id: i64) -> Result<NamedNode> {
     let iri = store.resolve(id)?;
     NamedNode::new(&iri).map_err(|e| Error::InvalidValue(format!("bad predicate IRI: {e}")))
 }

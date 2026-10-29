@@ -20,6 +20,7 @@
 //!   quipu import delta <parent-share> <delta-share>  Verify a delta chain
 //!   quipu import promote <share-id> [--actor <id>]  Promote a staged share
 //!   quipu stats [--db <path>]            Show store statistics
+//!   quipu prime [--brief] [--section <name>] [--static] [--json]  Agent primer + store summary
 //!   quipu acquire scope --source-store-id <id> --graph <iri>... --max-vm-steps N --deadline-ms N
 //!                                        Bounded read-only row/byte scope of a direct-main acquisition
 //!   quipu policy draft|backtest ...       Draft an advisory policy from an exemplar; backtest it pre-creation
@@ -73,6 +74,7 @@ mod cli_pack;
 mod cli_path;
 mod cli_pointer;
 mod cli_policy;
+mod cli_prime;
 mod cli_propose;
 mod cli_quarantine;
 mod cli_render;
@@ -212,6 +214,7 @@ fn main() {
         "export" => cli_export::cmd_export(&args, db_path),
         "namespaces" | "entity-ref" => cli_namespaces::run(&args, db_path),
         "memory" => cli_memory_files::command(&args),
+        "prime" => cli_prime::cmd_prime(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
@@ -391,6 +394,7 @@ fn print_usage() {
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
+    qp prime [--brief] [--section <name>] [--static] [--json] [--db <path>]  Agent primer + live store summary
     qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
     qp ingest <file> --graph <iri> --timestamp <ISO-8601> --declare-count <n> --declare-sha256 <hex> [--format nt|ttl|nq] [--chunk N] [--db <path>]

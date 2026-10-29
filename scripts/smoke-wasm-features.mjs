@@ -98,7 +98,14 @@ try {
       catch (error) { const detail = JSON.parse(String(error)); refused = detail.details?.kind === "validation_failed"; }
       const result = JSON.parse(invoke("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
       const raw = invoke("quipu_entity_history", {iri: "urn:good"});
-      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw};
+      const builder = await import("/pkg/runtime/query-builder.mjs");
+      const query = new builder.Select([new builder.Var("s")]).where(
+        new builder.Triple(new builder.Var("s"), new builder.Iri("urn:title"), new builder.Literal("Before")));
+      const built = JSON.parse(query.execute(db));
+      const saved = JSON.parse(query.save(db, "browser_builder_saved"));
+      const asked = JSON.parse(invoke("quipu_ask", {name:"browser_builder_saved"}));
+      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw,
+        builderCount: built.count, builderSaved: saved.loaded, builderAsked: asked.count};
     } finally { db.free(); }
   });
   assert.equal(memoryDatabase.caps.storage, "memory");
@@ -106,6 +113,9 @@ try {
   assert.equal(memoryDatabase.committed, true);
   assert.equal(memoryDatabase.refused, true);
   assert.equal(memoryDatabase.count, 1);
+  assert.equal(memoryDatabase.builderCount, 1);
+  assert.equal(memoryDatabase.builderSaved, "browser_builder_saved");
+  assert.equal(memoryDatabase.builderAsked, 1);
   assert.match(memoryDatabase.raw, /9007199254740993/);
   assert.doesNotMatch(memoryDatabase.raw, /9007199254740992/);
   console.log("PASS fresh shared Database governed write/refusal/no-leak/lossless browser history");

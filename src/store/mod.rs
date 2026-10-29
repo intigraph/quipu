@@ -40,6 +40,7 @@ pub mod demotions;
 mod demotions_tests;
 pub mod events;
 pub mod forks;
+mod forks_merge;
 pub mod freeze;
 mod freeze_io;
 mod gate;
@@ -73,6 +74,7 @@ pub mod respace;
 mod respace_map;
 mod retract_triples;
 mod retraction;
+mod retraction_gate;
 mod search_scope_policy;
 mod serialize;
 mod set;
@@ -143,6 +145,10 @@ pub struct Store {
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.
     pub(crate) poststate_profile: PoststateProfile,
+    /// Whether `idx_current_g` has the exact current-membership definition,
+    /// memoized against `PRAGMA schema_version` (aegis-ek4): a correlated
+    /// named-graph leaf asks once per outer row.
+    pub(crate) current_g_index: std::cell::Cell<Option<(i64, bool)>>,
     /// OWL write-time constraint policy (aegis-bmqup).
     pub(crate) owl_config: OwlConfig,
     /// Ontology built from the stored ontologies, cached because the write gate
@@ -422,6 +428,20 @@ impl Store {
         }
     }
 
+    /// The newest transaction whose source contains `fragment`, if any.
+    /// Used to recognise a decisions file that was already applied.
+    pub fn find_transaction_by_source(&self, fragment: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id FROM transactions WHERE instr(source, ?1) > 0 \
+                 ORDER BY id DESC LIMIT 1",
+                params![fragment],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
     /// Retrieve a transaction by id.
     pub fn get_transaction(&self, tx_id: i64) -> Result<Option<crate::types::Transaction>> {
         let mut stmt = self
@@ -444,6 +464,15 @@ impl Store {
     /// Prepare a SQL statement against the underlying connection.
     pub(crate) fn prepare(&self, sql: &str) -> Result<rusqlite::Statement<'_>> {
         Ok(self.conn.prepare(sql)?)
+    }
+
+    /// Prepare through the connection's statement cache. For SQL the
+    /// evaluator re-issues once per outer row (a nested-loop BGP step, a
+    /// correlated EXISTS): the text is identical per row and only the bound
+    /// parameters change, so parsing and planning it again for every row was
+    /// most of a board aggregate's time (aegis-ek4).
+    pub(crate) fn prepare_cached(&self, sql: &str) -> Result<rusqlite::CachedStatement<'_>> {
+        Ok(self.conn.prepare_cached(sql)?)
     }
 }
 

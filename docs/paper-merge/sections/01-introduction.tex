@@ -56,7 +56,12 @@ is deliberate.
         against the shipped operator, which reproduces the synthetic arm's
         blind spot on real data and quantifies the benefit on a class that
         production surfaced nothing of (\S\ref{sec:replay}).
+  \item A study of evolving shape contracts that merges the declarations
+        before the data, which handles the tested cardinality changes and
+        shows that a datatype change escapes the conflict detector and is
+        caught only by post-merge validation (\S\ref{sec:schema}).
   \item A stated limit --- alias divergence is invisible to triple-level merge
         --- reported as a measured false-negative column rather than excluded
-        from the benchmark (\S\ref{sec:limits}).
+        from the benchmark, with a separate entity-resolution stage tested
+        against it (\S\ref{sec:limits}).
 \end{enumerate}

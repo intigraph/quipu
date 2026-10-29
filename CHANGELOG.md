@@ -4,6 +4,68 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-10-28
+
+### Added
+
+- *(import)* TerminusDB import - schema to SHACL, instance to one episode, log replay (#890)([c13aa83](https://github.com/scbrown/quipu/commit/c13aa833acbf5c0d0d962e6d8a0c67cd7159cc66))
+- *(entity-ref)* Key-field IRI minting, settled against stable entity references (G9) (#891)([4f345cf](https://github.com/scbrown/quipu/commit/4f345cfc939766b2b4d5c783bcb83035e603022b))
+- *(cli)* Quipu prime prints the agent primer and a bounded store summary (#892)([9315e0b](https://github.com/scbrown/quipu/commit/9315e0b3728ca318ce86ddebfe6b275788866969))
+- *(cli)* Generated man pages and shell completions (#895)([41a0572](https://github.com/scbrown/quipu/commit/41a057222c7edee30781fd8d14d0d82f581a44f3))
+- Quipu-changeset v1 format, GET /diff and idempotent POST /patch (#894)([54b1784](https://github.com/scbrown/quipu/commit/54b17844ab1eecb7316934e1c9a540125303776d))
+- *(docs)* Generated CLI and MCP indexes and a CI drift gate (#897)([73d6452](https://github.com/scbrown/quipu/commit/73d645228534363a2ed1ecb06eb13b9bb8bb993b))
+- *(python)* Quipu-kg local library over the shared engine facade (#893)([d38abc6](https://github.com/scbrown/quipu/commit/d38abc6edefacb37cdd0cb79732bfc24b9734b88))
+- *(merge)* One reconcile path: merge show/resolve, fork promote decisions, standard layout ( 1/3) (#899)([83c555e](https://github.com/scbrown/quipu/commit/83c555ea5f0d7bd7b126399b49e4976c4462bced))
+
+
+
+
+
+### Fixed
+
+- *(store)* Snapshot replace retracts the old label of a renamed node (#881)([e6aca8b](https://github.com/scbrown/quipu/commit/e6aca8be96cd4ca674aaf83c2d6c0dac1970dc81))
+- *(sparql)* Propagate indeterminate dateTime errors through !=, ! and NOT IN (#882)([3209115](https://github.com/scbrown/quipu/commit/320911584accef69b8b530bdefc9d4632153514d))
+- *(knot)* A snapshot key on an append write owns its facts (#883)([22a5833](https://github.com/scbrown/quipu/commit/22a58330f2e655a68d87e9bfe0326b33a5e8de02))
+- *(sparql)* ORDER BY sorts temporals by value, totally (#884)([4f829da](https://github.com/scbrown/quipu/commit/4f829daf6c5e11ba0fe78c82194f75c9bdaacb64))
+- *(forks)* Promote by three-way merge over the fork's base (P0 data integrity) (#888)([4a7c565](https://github.com/scbrown/quipu/commit/4a7c565c21c9cb91fbe3097686709d603a3fb402))
+
+
+
+### Bench
+
+- Agent-run branches demo and benchmark, with a TerminusDB arm (#898)([a0b5e3d](https://github.com/scbrown/quipu/commit/a0b5e3d12ca8d14f05ad07279101027e53fe8e03))
+
+### Perf
+
+- *(sparql)* Reuse per-row scan statements in board aggregates (#885)([ef94a93](https://github.com/scbrown/quipu/commit/ef94a93578835e793b261dd6f3c2928ced6515f0))
+
+## [0.16.4] - 2026-10-27
+
+### Added
+
+- *(cli)* Expose local attested-write signer operations (#862)([b305795](https://github.com/scbrown/quipu/commit/b3057958ab0a6e581d593b9a65e4f7c30d182cdf))
+- *(replica)* GET /replica/ready says whether a follower may serve in its primary's place (#854)([c015325](https://github.com/scbrown/quipu/commit/c01532521c073e95ac492d1674be02fbcad96b91))
+- *(reads)* Enforce owner-local grants with bounded scoped views (#867)([2f3805a](https://github.com/scbrown/quipu/commit/2f3805af0efe3ceed4a3af49ec8c44e6542fdb49))
+
+
+
+### Fixed
+
+- *(relay)* Authenticate upstream streams and challenges from a private file (#864)([f40f53f](https://github.com/scbrown/quipu/commit/f40f53f49217e84724daf30420c5cb49fedd9c2d))
+- *(sparql)* Pin a read snapshot for each query (#873)([8b4e383](https://github.com/scbrown/quipu/commit/8b4e383586147d344a8e20997903ad8166ff2c6f))
+
+### Miscellaneous
+
+- *(conformance)* Re-derive ledgers at 268641e4 (#863)([0d0b769](https://github.com/scbrown/quipu/commit/0d0b769d7311304583de2815c8f35b8e480b1991))
+- *(conformance)* Re-derive ledgers at b3057958 (#866)([ed28f6e](https://github.com/scbrown/quipu/commit/ed28f6e51d68a4a1717ca322b8557e7fc7615a67))
+- *(conformance)* Re-derive ledgers at c0153252 (#869)([7247da4](https://github.com/scbrown/quipu/commit/7247da4aa08e596d8563ea29dc090a3d36f6facb))
+- *(conformance)* Re-derive ledgers at 2f3805af (#870)([e4ede32](https://github.com/scbrown/quipu/commit/e4ede323402cfcb0068d613d95d3fc4acd5f712e))
+- *(conformance)* Re-derive ledgers at b70d1e4d (#877)([79bda9b](https://github.com/scbrown/quipu/commit/79bda9b3838ad5a9d077bb45483d8f4dc2177330))
+
+### Testing
+
+- *(sparql)* Separate volatile NOW from plan parity (#875)([b70d1e4](https://github.com/scbrown/quipu/commit/b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc))
+
 ## [0.16.3] - 2026-10-25
 
 ### Added
