@@ -225,11 +225,12 @@ pub fn plan(store: &Store, program: &[MigrationOp]) -> Result<MigrationPlan> {
     let mut inserts: BTreeMap<Key, Planned> = BTreeMap::new();
     let mut per_op: Vec<(Vec<Key>, Vec<Key>)> = Vec::new();
     let mut ops = Vec::new();
+    let mut remaining = super::guard::max_facts();
     for (index, op) in program.iter().enumerate() {
         let context =
             |e: Error| Error::InvalidValue(format!("migration op {index} ({}): {e}", op.name()));
         let update = op.checked_render().map_err(context)?;
-        let (d, i) = evaluate(store, &update).map_err(context)?;
+        let (d, i) = evaluate(store, &update, &mut remaining).map_err(context)?;
         for p in &i {
             check_literal(p).map_err(context)?;
         }
@@ -315,7 +316,11 @@ impl Existing {
 
 /// The deletes and inserts of every operation in `update`, each over the
 /// pre-migration state.
-fn evaluate(store: &Store, update: &str) -> Result<(Vec<Planned>, Vec<Planned>)> {
+fn evaluate(
+    store: &Store,
+    update: &str,
+    remaining: &mut usize,
+) -> Result<(Vec<Planned>, Vec<Planned>)> {
     let parsed = parse(update)?;
     let (mut deletes, mut inserts) = (Vec::new(), Vec::new());
     for operation in parsed.operations {
@@ -345,50 +350,67 @@ fn evaluate(store: &Store, update: &str) -> Result<(Vec<Planned>, Vec<Planned>)>
                 for row in result.rows() {
                     for q in &delete {
                         if let Some(p) = ground(store, q, row)? {
-                            deletes.push(p);
+                            bounded_push(&mut deletes, p, remaining)?;
                         }
                     }
                     for q in &insert {
                         if let Some(p) = instantiate(store, q, row)? {
-                            inserts.push(p);
+                            bounded_push(&mut inserts, p, remaining)?;
                         }
                     }
                 }
             }
             GraphUpdateOperation::InsertData { data } => {
                 for q in data {
-                    inserts.push(Planned {
-                        subject: match &q.subject {
-                            oxrdf::NamedOrBlankNode::NamedNode(n) => n.as_str().to_owned(),
-                            blank @ oxrdf::NamedOrBlankNode::BlankNode(_) => blank.to_string(),
+                    bounded_push(
+                        &mut inserts,
+                        Planned {
+                            subject: match &q.subject {
+                                oxrdf::NamedOrBlankNode::NamedNode(n) => n.as_str().to_owned(),
+                                blank @ oxrdf::NamedOrBlankNode::BlankNode(_) => blank.to_string(),
+                            },
+                            predicate: q.predicate.as_str().to_owned(),
+                            object: constant_object(&q.object),
                         },
-                        predicate: q.predicate.as_str().to_owned(),
-                        object: constant_object(&q.object),
-                    });
+                        remaining,
+                    )?;
                 }
             }
             GraphUpdateOperation::DeleteData { data } => {
                 for q in data {
-                    deletes.push(Planned {
-                        subject: q.subject.as_str().to_owned(),
-                        predicate: q.predicate.as_str().to_owned(),
-                        object: match &q.object {
-                            spargebra::term::GroundTerm::NamedNode(n) => {
-                                Obj::Iri(n.as_str().to_owned())
-                            }
-                            spargebra::term::GroundTerm::Literal(l) => {
-                                Obj::Lit(crate::literal_identity::literal_to_value(l))
-                            }
-                            #[cfg(feature = "shacl")]
-                            spargebra::term::GroundTerm::Triple(_) => continue,
+                    bounded_push(
+                        &mut deletes,
+                        Planned {
+                            subject: q.subject.as_str().to_owned(),
+                            predicate: q.predicate.as_str().to_owned(),
+                            object: match &q.object {
+                                spargebra::term::GroundTerm::NamedNode(n) => {
+                                    Obj::Iri(n.as_str().to_owned())
+                                }
+                                spargebra::term::GroundTerm::Literal(l) => {
+                                    Obj::Lit(crate::literal_identity::literal_to_value(l))
+                                }
+                                #[cfg(feature = "shacl")]
+                                spargebra::term::GroundTerm::Triple(_) => continue,
+                            },
                         },
-                    });
+                        remaining,
+                    )?;
                 }
             }
             _ => return Err(template_error("unsupported operation")),
         }
     }
     Ok((deletes, inserts))
+}
+
+/// Bound materialized facts across the entire program, before deduplication.
+fn bounded_push(facts: &mut Vec<Planned>, fact: Planned, remaining: &mut usize) -> Result<()> {
+    *remaining = remaining
+        .checked_sub(1)
+        .ok_or_else(|| super::guard::too_large("the migration would change or materialize"))?;
+    facts.push(fact);
+    Ok(())
 }
 
 // The wildcard also covers quoted triples, which exist only with `shacl` (RDF 1.2).

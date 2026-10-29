@@ -553,3 +553,33 @@ fn a_migration_over_the_ceiling_is_refused_in_accept_and_dry_run() {
             .unwrap();
     });
 }
+
+/// Deduplicating the final change set must not hide oversized intermediate work.
+#[test]
+fn repeated_template_facts_are_bounded_before_netting() {
+    let store = store_with(PEOPLE);
+    let triple = "<http://example.org/new> <http://example.org/p> 1 . ";
+    let cases = [
+        vec![MigrationOp::Sparql {
+            update: format!("INSERT DATA {{ {} }}", triple.repeat(4)),
+        }],
+        vec![MigrationOp::Sparql {
+            update: format!("INSERT {{ {} }} WHERE {{}}", triple.repeat(4)),
+        }],
+        vec![
+            MigrationOp::Sparql {
+                update: format!("INSERT DATA {{ {triple} }}"),
+            };
+            4
+        ],
+    ];
+    for program in cases {
+        guard::with_max_facts(3, || {
+            let err = plan(&store, &program).unwrap_err().to_string();
+            assert!(err.contains("update_full_copy_max_facts"), "{err}");
+        });
+        guard::with_max_facts(4, || {
+            assert_eq!(plan(&store, &program).unwrap().assert_count(), 1);
+        });
+    }
+}

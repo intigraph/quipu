@@ -101,9 +101,11 @@ The program is checked when the proposal is submitted:
   and `WITH` are refused, including inside `EXISTS`;
 - each `expression` must parse as exactly one SPARQL expression with no
   `EXISTS`, and the template uses the parsed form, never the submitted text;
-- a migration whose `WHERE` matches, or whose net change touches, more than
-  `server.update_full_copy_max_facts` facts is refused, at accept and in a dry
-  run, before anything is held in memory beyond that ceiling.
+- a migration whose `WHERE` matches, or whose program materializes, more than
+  `server.update_full_copy_max_facts` facts is refused at accept and in a dry
+  run. The shared program budget counts deletes and inserts before netting,
+  including duplicate facts and facts that cancel out. Split larger programs
+  into smaller migrations.
 
 On accept:
 
