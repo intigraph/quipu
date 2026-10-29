@@ -1861,7 +1861,9 @@ never reported as the same thing.
 ### `POST /propose`
 
 Submit a schema-evolution proposal. Body: `kind`, `target`, `diff`, `proposer`,
-optional `rationale`, `trigger_ref`, `timestamp`.
+optional `rationale`, `trigger_ref`, `migration`, `timestamp`. `migration`
+is a data-migration program run when the proposal is accepted; see
+[Schema Evolution](../concepts/schema-evolution.md#data-migrations).
 
 ### `POST /proposals`
 
@@ -1871,7 +1873,10 @@ List schema-evolution proposals. Body: optional `status`
 ### `POST /proposal/accept`
 
 Accept a pending proposal. Body: `id`, `decided_by` (required), optional
-`note`, `timestamp`.
+`note`, `timestamp`. A proposal carrying a migration runs it in the same
+transaction and the response adds `migration_source` and `migration_tx`.
+With `"dry_run": true` (and optional `limit`) nothing is accepted and the
+response is the dry-run report.
 
 ### `POST /proposal/reject`
 
