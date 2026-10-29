@@ -165,7 +165,12 @@ pub fn eval_pattern_seeded(
                     match super::filter_drive::try_eval(store, expr, inner, inner_ctx, inner_seed)?
                     {
                         Some(driven) => driven,
-                        None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                        None => match super::literal_exclusion::candidates(
+                            store, expr, inner, inner_ctx, inner_seed,
+                        )? {
+                            Some(candidates) => candidates,
+                            None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                        },
                     }
                 }
             };
