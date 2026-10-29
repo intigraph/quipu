@@ -119,6 +119,28 @@ pub(super) fn candidates(
     let NamedNodePattern::NamedNode(predicate) = &property.predicate else {
         return Ok(None);
     };
+    // A global property scan must not replace a cheap, selective owner lookup.
+    // Prove a non-type constant anchor is already large using a bounded ordinary
+    // lookup; small/empty owners retain their existing plan.
+    let Some(anchor) = patterns.iter().find(|p| {
+        !std::ptr::eq(*p, property)
+            && matches!(&p.predicate, NamedNodePattern::NamedNode(n)
+                if n.as_str() != crate::namespace::RDF_TYPE)
+    }) else {
+        return Ok(None);
+    };
+    if super::triple::eval_triple_pattern_limited(
+        store,
+        anchor,
+        seed,
+        ctx,
+        Some(super::filter_drive::MIN_DRIVER_ROWS + 1),
+    )?
+    .len()
+        <= super::filter_drive::MIN_DRIVER_ROWS
+    {
+        return Ok(None);
+    }
     let ids = store.lookup_all(predicate.as_str())?;
     let [predicate] = ids.as_slice() else {
         return Ok(None);

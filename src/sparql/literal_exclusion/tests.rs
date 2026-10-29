@@ -52,7 +52,7 @@ fn put(s: &mut Store, g: &str, data: &str) {
     )
     .unwrap();
 }
-fn fixture() -> Store {
+fn fixture_with_closed(count: usize) -> Store {
     let mut s = Store::open_in_memory().unwrap();
     let mut text = String::new();
     for (name, values) in [
@@ -76,6 +76,19 @@ fn fixture() -> Store {
         for value in values {
             text += &format!("<http://example.org/{name}> <http://example.org/status> {value} .\n");
         }
+    }
+    // A dense closed owner proves the optimizer's cost admission. These rows
+    // must not leak into the open/default compatibility result.
+    for i in 0..count {
+        text += &format!(
+            "<http://example.org/closed{i}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/T> .\n"
+        );
+        text += &format!(
+            "<http://example.org/closed{i}> <http://example.org/owner> <http://example.org/owner> .\n"
+        );
+        text += &format!("<http://example.org/closed{i}> <http://example.org/owner> \"owner\" .\n");
+        text +=
+            &format!("<http://example.org/closed{i}> <http://example.org/status> \"closed\" .\n");
     }
     put(&mut s, "http://example.org/g", &text);
     put(
@@ -167,4 +180,24 @@ fn compatibility_union_keeps_missing_unknown_and_legacy_literal_owners() {
             );
         }
     }
+}
+
+fn fixture() -> Store {
+    fixture_with_closed(4100)
+}
+
+#[test]
+fn selective_owners_do_not_pay_for_a_global_property_scan() {
+    let s = fixture_with_closed(0);
+    let q = text("\"owner\"");
+    HITS.set(0);
+    let actual = query(&s, &q).unwrap();
+    assert_eq!(
+        HITS.get(),
+        0,
+        "small owner incorrectly admitted to global scan"
+    );
+    let original = reference(|| query(&s, &q)).unwrap();
+    assert_eq!(bag(actual.rows()), bag(original.rows()));
+    assert_eq!(actual.rows().len(), 4);
 }
