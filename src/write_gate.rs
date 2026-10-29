@@ -66,7 +66,7 @@ pub fn check(
     if removed.is_empty() {
         return Ok(None);
     }
-    check_retractions(store, shapes, asserted, removed)
+    check_retractions(store, asserted, removed)
 }
 
 /// The graph id a destination IRI resolves to; a graph this write creates has
@@ -154,30 +154,19 @@ fn check_shapes(
 #[cfg(feature = "shacl")]
 fn check_retractions(
     store: &Store,
-    shapes: Option<&str>,
     asserted: &TriplesByGraph,
     removed: &TriplesByGraph,
 ) -> Result<Option<Refusal>> {
-    // A newer refusal than the shapes gate, so it follows
-    // `shacl.validate_on_write`: turning the flag off restores the previous
-    // /update behaviour exactly.
-    if !store.shacl_config().validate_on_write {
-        return Ok(None);
-    }
-    let Some(stored) = shapes else {
-        return Ok(None);
-    };
-    let reject = crate::shacl::split_shapes_by_policy(stored).reject;
+    // Preserve the native store's current deletion gate, including emit-policy
+    // observations. Return refusal evidence for the caller to record after rollback.
     for (iri, removed_nt) in removed {
         let g = graph_id(store, iri)?;
-        let feedback = crate::shacl_context::retraction_violations_in_graph(
-            store,
-            &reject,
+        if let Some(feedback) = store.retraction_refusal_nt(
             removed_nt,
             asserted.get(iri).map_or("", String::as_str),
             g,
-        )?;
-        if !feedback.conforms {
+            true,
+        )? {
             return Ok(Some(Refusal {
                 gate: "shacl",
                 reason: format!(
@@ -196,7 +185,6 @@ fn check_retractions(
 #[cfg(not(feature = "shacl"))]
 fn check_retractions(
     _store: &Store,
-    _shapes: Option<&str>,
     _asserted: &TriplesByGraph,
     _removed: &TriplesByGraph,
 ) -> Result<Option<Refusal>> {

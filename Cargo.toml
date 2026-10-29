@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.16.4"
+version = "0.16.5"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -88,6 +88,11 @@ required-features = ["shacl"]
 [[example]]
 name = "mergebench"
 path = "examples/mergebench/main.rs"
+required-features = ["shacl"]
+
+[[example]]
+name = "agentbranches"
+path = "examples/agentbranches/main.rs"
 required-features = ["shacl"]
 
 [[example]]

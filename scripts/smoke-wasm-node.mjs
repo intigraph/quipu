@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
+import { pathToFileURL } from "node:url";
 
 const bundleDir = process.argv[2];
 if (!bundleDir) {
@@ -107,6 +108,9 @@ const mod = require(entry);
 
 check("the bundle exports Explorer", typeof mod.Explorer === "function", typeof mod.Explorer);
 check("the bundle exports a general Database", typeof mod.Database === "function", typeof mod.Database);
+const builder = await import(pathToFileURL(join(resolve(bundleDir), "query-builder.mjs")).href);
+const savedBuilder = new builder.Select([new builder.Var("s")]).where(
+  new builder.Triple(new builder.Var("s"), new builder.Iri("urn:title"), new builder.Literal("Before")));
 const database = new mod.Database();
 const databaseCaps = JSON.parse(database.capabilities());
 check("general Database reports memory and incomplete parity", databaseCaps.storage === "memory"
@@ -121,6 +125,13 @@ invokeDatabase("quipu_shapes", {action: "load", name: "general-database",
 const databaseWrite = JSON.parse(invokeDatabase("quipu_knot", {
   turtle: '<urn:good> a <urn:Record>; <urn:title> "Before"; <urn:n> 9007199254740993 .'}));
 check("fresh Database admits a governed write", databaseWrite.tx_id > 0);
+check("packaged JS builder executes through native WASM", JSON.parse(savedBuilder.execute(database)).count === 1);
+check("packaged JS builder saves to native query registry", JSON.parse(savedBuilder.save(database, "builder_saved")).loaded === "builder_saved");
+check("saved query is found through native ask", JSON.parse(database.invoke("quipu_ask", JSON.stringify({name:"builder_saved"}))).count === 1);
+let builderRefused = false;
+try { database.invoke("quipu_queries", JSON.stringify({action:"load",name:"builder_bad",template:"not SPARQL"})); }
+catch (error) { builderRefused = JSON.parse(String(error)).code === "engine_error"; }
+check("malformed stored builder query preserves native refusal", builderRefused);
 let databaseRefusal = false;
 try {
   databaseRefusal = JSON.parse(invokeDatabase("quipu_knot", {turtle: "<urn:bad> a <urn:Record> ."})).conforms === false;

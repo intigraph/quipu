@@ -64,6 +64,7 @@ pub mod respace;
 mod respace_map;
 mod retract_triples;
 mod retraction;
+mod retraction_gate;
 mod search_scope_policy;
 mod serialize;
 mod set;
@@ -415,6 +416,20 @@ impl Store {
             Some(row) => Ok(row.get(0)?),
             None => Ok(0),
         }
+    }
+
+    /// The newest transaction whose source contains `fragment`, if any.
+    /// Used to recognise a decisions file that was already applied.
+    pub fn find_transaction_by_source(&self, fragment: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id FROM transactions WHERE instr(source, ?1) > 0 \
+                 ORDER BY id DESC LIMIT 1",
+                params![fragment],
+                |r| r.get(0),
+            )
+            .optional()?)
     }
 
     /// Retrieve a transaction by id.

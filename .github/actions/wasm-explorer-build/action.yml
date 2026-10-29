@@ -127,6 +127,8 @@ runs:
         # which is the property that makes "the page and the CLI agree" extend
         # to headless agents.
         wasm-bindgen --target nodejs --out-dir pkg-node "$WASM"
+        cp runtime/query-builder.mjs runtime/query-terms.mjs runtime/query-builder.d.mts pkg/
+        cp runtime/query-builder.mjs runtime/query-terms.mjs runtime/query-builder.d.mts pkg-node/
 
         # ASSERT THE PROPERTY, NOT THE MECHANISM.
         #

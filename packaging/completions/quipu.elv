@@ -529,6 +529,22 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --dry-run 'dry-run'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand show 'Show a merge''s conflicts in the standard layout'
+            cand resolve 'Record one choice on one merge conflict'
+        }
+        &'quipu;merge;show'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'format'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;merge;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --choose 'choose'
+            cand --value 'value'
+            cand --by 'by'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'quipu;import'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -666,6 +682,21 @@ set edit:completion:arg-completer[quipu] = {|@words|
         }
         &'quipu;git-merge'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand show 'Show a qpack''s pending merge decisions in the standard layout'
+            cand resolve 'Record one choice in the Git merge in progress and rewrite the qpack'
+        }
+        &'quipu;git-merge;show'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'format'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;git-merge;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --choose 'choose'
+            cand --by 'by'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -1240,7 +1271,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand list 'List named forks'
             cand diff 'Diff two forks'
             cand drop 'Drop a named fork'
-            cand promote 'Promote a fork to ROOT'
+            cand promote 'Promote a fork to ROOT, with reviewable conflict decisions'
         }
         &'quipu;fork;list'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -1259,6 +1290,13 @@ set edit:completion:arg-completer[quipu] = {|@words|
         }
         &'quipu;fork;promote'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --timestamp 'timestamp'
+            cand --emit-decisions 'emit-decisions'
+            cand --decisions 'decisions'
+            cand --reviewer 'reviewer'
+            cand --actor 'actor'
+            cand --propose 'propose'
+            cand --dry-run 'dry-run'
             cand -h 'Print help'
             cand --help 'Print help'
         }

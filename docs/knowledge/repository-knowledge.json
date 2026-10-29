@@ -16,7 +16,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "316a97f8d621045fae8e6a1f64358004379ab3babd6d2dc3a7c606695bd637c3",
+      "source_sha256": "5ac8433c3347def563a176b0dc5e3907e97742ecc5b48dfcea1e02bedcd7ed1f",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -46,7 +46,7 @@
       "source": "docs/book/src/getting-started/agent-setup.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-setup.md#local-stdio-mcp",
       "summary": "Local agent clients run quipu mcp over stdio with explicit executable and database paths; it launches the matching sibling server without an HTTP listener.",
-      "source_sha256": "0b9cba098e5a785d2f82029c09e5ef15b357bbdc3b06fd13e25a076cf13ef3eb",
+      "source_sha256": "911c9bf9dbea7c0a02306227c6c1fadbf892fb84d2eee31793330b63b222ee71",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "quipu mcp"
@@ -57,7 +57,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
       "type": "DecisionRecord",
       "properties": {
         "status": "active",
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "d3d93eab2c9548202b44ccfe2840f785ec4d0aa06a037879aa962d45fa518c1d",
+      "source_sha256": "97ec0759ecda7c63b1bbf4d50b1593da0d17a2824764aa6ad655582d27468aa2",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

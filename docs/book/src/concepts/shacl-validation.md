@@ -207,6 +207,27 @@ repair. This is not whole-store conformance checking or automatic revalidation
 of every dependent node after changing a schema, class hierarchy, or target
 relation. Standalone `validate` remains a check of the supplied data only.
 
+## Retractions
+
+A retraction asserts nothing, so it gets its own check: a delete must not
+leave a node missing a value a shape requires. Every path that removes values
+runs it: `/retract` (`quipu_retract`, `quipu retract`, the Python binding),
+`/episode/retract`, `/retract/source`, SPARQL `DELETE`, `quipu fork promote`
+(plain or with decisions) and share merges (plain or with decisions).
+
+Only subjects losing a value on a path with `sh:minCount >= 1` or
+`sh:hasValue` are judged, on their whole stored description before and
+after. A violation the node already had is old debt and does not block. A node
+removed entirely (type included) has no shape targeting it, so retracting an
+entity whole stays allowed. A statement another producer also claims stays
+visible after an episode or source retraction, so it is not judged as removed.
+
+Reject shapes refuse the whole write: nothing is written and the error lists
+the violations. Emit shapes never block; they queue `shacl.violation`
+events. There is no per-call bypass (`allow_orphan` and `on_orphan` govern
+node identity, not shapes); `shacl.validate_on_write = false` turns the check
+off for the store.
+
 ## Supported Constraints
 
 | Constraint | What it checks |

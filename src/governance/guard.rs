@@ -583,7 +583,7 @@ fn evaluate_one(
                  DecisionRequest expired with no ruling and was denied \
                  (declared default-deny). This attempt has opened a fresh \
                  request; have an authorized operator record a signed \
-                 aegis:Decision with outcome \"approve\" bound to its \
+                 aegis:GateApproval with outcome \"approve\" bound to its \
                  evidenceHash, then retry.{}",
                 policy.policy_iri,
                 policy.exemplar_citation()
@@ -604,7 +604,7 @@ fn evaluate_one(
             Err(Error::PolicyDenied(format!(
                 "'{entity_iri}' needs a human decision under policy '{}'. A \
                  DecisionRequest has been opened; have a registered decider record \
-                 a signed aegis:Decision with outcome \"approve\" bound to its \
+                 a signed aegis:GateApproval with outcome \"approve\" bound to its \
                  evidenceHash, then retry.{}",
                 policy.policy_iri,
                 policy.exemplar_citation()

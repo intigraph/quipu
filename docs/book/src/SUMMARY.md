@@ -54,6 +54,7 @@
 - [Atomic source acquisition](reference/acquisition.md)
 - [Explicit substring search](reference/substring-search.md)
 - [Python Client](reference/python-client.md)
+- [Typed Query Builders](reference/query-builder.md)
 - [MCP Tools](reference/mcp-tools.md)
   - [MCP Tool Index](reference/mcp-tool-index.md)
 - [Reasoner](reference/reasoner.md)
@@ -63,6 +64,7 @@
 
 - [Sharing & Federation](sharing/index.md)
   - [Aligning concepts across graphs](sharing/align.md)
+  - [Reconciling a failed merge](sharing/reconcile.md)
 
 # Architecture
 
@@ -93,6 +95,7 @@
 
 - [Public Benchmarks](benchmarks/README.md)
   - [SPARQL 1.1 Conformance](benchmarks/conformance.md)
+  - [Agent-run branches](benchmarks/agent-branches.md)
 
 # Operations
 

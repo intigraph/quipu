@@ -693,15 +693,22 @@ impl Store {
 
     /// Return the full history of a specific entity+attribute pair.
     pub fn attribute_history(&self, entity: i64, attribute: i64) -> Result<Vec<Fact>> {
+        self.attribute_history_in_graph(entity, attribute, crate::schema::ROOT_GRAPH)
+    }
+
+    /// [`Self::attribute_history`] in ONE graph (`g = 0` is ROOT).
+    pub fn attribute_history_in_graph(
+        &self,
+        entity: i64,
+        attribute: i64,
+        g: i64,
+    ) -> Result<Vec<Fact>> {
         let mut stmt = self.conn.prepare(
             "SELECT e, a, v, tx, valid_from, valid_to, op FROM facts \
              WHERE e = ?1 AND a = ?2 AND g = ?3 \
              ORDER BY tx",
         )?;
-        Self::collect_facts(
-            &mut stmt,
-            params![entity, attribute, crate::schema::ROOT_GRAPH],
-        )
+        Self::collect_facts(&mut stmt, params![entity, attribute, g])
     }
 
     // -- Internal --

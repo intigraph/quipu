@@ -295,6 +295,15 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             }
             let mut datums = retained;
             datums.append(&mut assertions);
+            // aegis-gxfm: what the new snapshot lacks is retracted; the
+            // deletion gate keeps that from stripping a required value.
+            store.enforce_retraction_shapes(
+                &datums,
+                graph,
+                Some(&source_tag),
+                actor,
+                Some(&source_tag),
+            )?;
             let tx_id = store.transact_to_graph_scoped(
                 &datums,
                 timestamp,

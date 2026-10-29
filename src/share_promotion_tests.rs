@@ -420,3 +420,62 @@ fn dry_run_never_creates_the_target_graph_and_refuses_root() {
     request.target_graph = None;
     assert!(promote_import(&mut store, &request, TS, None).is_err());
 }
+
+/// aegis-gxfm: promotion closes target facts the staging copy lacks; that
+/// removal passes the deletion gate like any retraction.
+#[cfg(feature = "shacl")]
+#[test]
+fn subject_move_that_drops_a_required_value_is_refused() {
+    let (mut store, mut request, [a, _, _]) = move_setup();
+    request.retire_from = None;
+    let inbox = store.lookup(INBOX).unwrap().unwrap();
+    let staging = store
+        .lookup(&format!("urn:quipu:import:staging:{}", &SHARE[7..]))
+        .unwrap()
+        .unwrap();
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let item = store.intern("https://example.org/Item").unwrap();
+    let owner = store.intern("https://example.org/owner").unwrap();
+    let typed = Datum {
+        entity: a,
+        attribute: rdf_type,
+        value: Value::Ref(item),
+        valid_from: TS.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    let owned = Datum {
+        attribute: owner,
+        value: Value::Str("x".into()),
+        ..typed.clone()
+    };
+    store
+        .transact_to_graph(&[typed.clone(), owned], TS, None, Some("inbox"), inbox)
+        .unwrap();
+    store
+        .transact_to_graph(&[typed], TS, None, Some("pack"), staging)
+        .unwrap();
+    store
+        .load_shapes(
+            "items",
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+             <urn:t:ItemShape> a sh:NodeShape ; sh:targetClass <https://example.org/Item> ;\n    \
+             sh:property [ sh:path <https://example.org/owner> ; sh:minCount 1 ] .\n",
+            TS,
+        )
+        .unwrap();
+    store.shacl_config_mut().validate_on_write = true;
+    let err = promote_import(&mut store, &request, TS, None).unwrap_err();
+    assert!(
+        err.to_string().contains("introduced by a deletion"),
+        "{err}"
+    );
+    let owners = store
+        .current_facts_in_graph(inbox)
+        .unwrap()
+        .iter()
+        .filter(|f| f.attribute == owner)
+        .count();
+    assert_eq!(owners, 1, "nothing written");
+    assert_eq!(promoted_reviews(&store), 0);
+}

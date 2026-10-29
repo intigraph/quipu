@@ -35,7 +35,6 @@ mcp quipu_path_cone Governance and policy authoring; agents meet these as write 
 mcp quipu_path_backtest Governance and policy authoring; agents meet these as write refusals
 
 # Git and pendant plumbing invoked by Git or CI, not by agents
-cli git-merge Git and pendant plumbing invoked by Git or CI, not by agents
 cli merge-driver Git and pendant plumbing invoked by Git or CI, not by agents
 cli pendant-resolve Git and pendant plumbing invoked by Git or CI, not by agents
 cli pendant-check Git and pendant plumbing invoked by Git or CI, not by agents
@@ -61,7 +60,6 @@ mcp quipu_embed_backfill_graph Store maintenance and migration
 cli pack Sharing and replication beyond share/import (see the sharing chapter)
 cli unpack Sharing and replication beyond share/import (see the sharing chapter)
 cli status Sharing and replication beyond share/import (see the sharing chapter)
-cli merge Sharing and replication beyond share/import (see the sharing chapter)
 cli compose Sharing and replication beyond share/import (see the sharing chapter)
 cli acquire Sharing and replication beyond share/import (see the sharing chapter)
 cli follow Sharing and replication beyond share/import (see the sharing chapter)
@@ -71,8 +69,6 @@ cli changes Sharing and replication beyond share/import (see the sharing chapter
 mcp quipu_share Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_import Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_import_promote Sharing and replication beyond share/import (see the sharing chapter)
-mcp quipu_merge_decisions Sharing and replication beyond share/import (see the sharing chapter)
-mcp quipu_merge_apply Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_acquire Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_acquire_composed Sharing and replication beyond share/import (see the sharing chapter)
 mcp quipu_changes Sharing and replication beyond share/import (see the sharing chapter)
@@ -98,9 +94,6 @@ mcp quipu_report Interactive or human-facing output
 mcp quipu_project Interactive or human-facing output
 mcp quipu_graph Interactive or human-facing output
 mcp quipu_spotlight Interactive or human-facing output
-
-# Named-graph lifecycle, overlays and forks; graph list is the agent entry point
-cli fork Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 
 # Named-graph lifecycle, overlays and forks; graph list is the agent entry point
 mcp quipu_graph_label Named-graph lifecycle, overlays and forks; graph list is the agent entry point

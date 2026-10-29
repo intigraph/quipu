@@ -66,6 +66,9 @@ pub(super) fn commit(
         };
         let source = format!("episode:{}", episode.name);
         let tx = if episode.replace_snapshot {
+            // aegis-gxfm: the replacement closes what v2 lacks; that removal
+            // must not leave a still-typed node missing a required value.
+            store.enforce_retraction_shapes(&datums, graph, Some(&source), actor, Some(&source))?;
             store.transact_snapshot(&datums, timestamp, actor, &source, graph)?
         } else {
             store.transact_to_graph(&datums, timestamp, actor, Some(&source), graph)?

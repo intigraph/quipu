@@ -258,6 +258,43 @@ lost to the next agent; it has to reach the graph.
 [graph-extract]: https://github.com/scbrown/camayoc/tree/main/skills/graph-extract
 [graph-report]: https://github.com/scbrown/camayoc/tree/main/skills/graph-report
 
+## Reconciling a failed merge (recipe)
+
+A merge that stopped on a conflict (exit 2 from `quipu merge` or `quipu git-merge`,
+"promotion held" from `quipu fork promote`) has written nothing. Do not retry it, and do not
+edit data to make the conflict go away. Reconcile it:
+
+```bash
+# 1. Emit, with mechanical proposals (pick the line for the merge you ran)
+quipu merge shares/incoming --emit-decisions /tmp/d.json --propose
+quipu fork promote triage --emit-decisions /tmp/d.json --propose
+quipu git-merge topic                      # Git: writes <qpack>/decisions.json itself
+
+# 2. Show the user the standard layout, unedited (md for chat, text for a terminal)
+quipu merge show /tmp/d.json --format md
+
+# 3. Record each answer, or your own choice where the rules below allow it
+quipu merge resolve /tmp/d.json d1 --choose theirs --by steve
+
+# 4. Dry run, apply, verify
+quipu fork promote triage --decisions /tmp/d.json --reviewer steve --dry-run
+quipu fork promote triage --decisions /tmp/d.json --reviewer steve
+quipu merge show /tmp/d.json               # 0 undecided; re-applying reports already-applied
+```
+
+Over MCP: `quipu_merge_decisions` (`propose: true, present: true`; `fork` for a fork), paste
+`presentation` to the user, `quipu_merge_resolve` per answer, then `quipu_merge_apply` with
+`dry_run: true` and again without it.
+
+**When you may decide alone:** every `changed_by` on the row is an agent and you take the
+`suggest`ed choice. Say so in one line ("d1: took theirs, both sides were triage agents").
+**Ask instead** when a person wrote either side, when you cannot tell, for `value` or `both`, and
+for every `sh:maxCount` conflict on human-owned data. Ask once, for all undecided rows, with the
+numbered choices from the layout, and record each answer with `--by <the person>`. A `stale`
+refusal means something moved: emit again and re-ask; never edit hashes.
+
+Full page: [Reconciling a failed merge](https://intigraph.github.io/quipu/sharing/reconcile.html).
+
 ## Agent primer
 
 The block below is `quipu prime --static` with headings shifted down one level. With the CLI
@@ -342,9 +379,24 @@ Run `quipu help <command>` for the exact syntax of any command.
 - Give writes a timestamp and a source you can point back to.
 - Schema changes go through proposals (`quipu propose submit`, `quipu_propose_schema_change`), not direct shape edits.
 
+#### Reconciling a failed merge
+
+A share merge, fork promotion or Git pendant merge that hits a conflict writes nothing and holds the slot.
+Finish all three the same way:
+
+1. Emit decisions with proposals: `quipu merge <share-dir> --emit-decisions f.json --propose`, `quipu fork promote <name> --emit-decisions f.json --propose`, or `quipu git-merge <ref>` (writes `<qpack>/decisions.json`). MCP: `quipu_merge_decisions` with `propose` and `present`.
+2. Show the user `quipu merge show f.json --format md` (MCP: the `presentation` field) as printed; do not paraphrase it.
+3. Record each choice: `quipu merge resolve f.json <row> --choose ours|theirs|base|both|value|defer --by <who>` (MCP: `quipu_merge_resolve`).
+4. Apply with `--decisions f.json --reviewer <who>`, `--dry-run` first, on the same `quipu merge` or `quipu fork promote` command (MCP: `quipu_merge_apply`); for Git, `git add` the qpack and commit. Re-applying reports `already-applied` and writes nothing.
+
+Decide a row yourself only when every side was written by agents and you take the suggested choice; record your agent id with `--by` and say so.
+Otherwise ask the user once, for all rows, with the numbered choices: always when a person wrote either side or you cannot tell, for `value` and `both`, and for `sh:maxCount` conflicts on human-owned data.
+If apply says the decisions are stale, emit again; never edit the file's hashes.
+
 #### Next steps
 
 - Wire Quipu into your agent: <https://intigraph.github.io/quipu/getting-started/agent-setup.html>
 - Full CLI reference: <https://intigraph.github.io/quipu/reference/cli.html>
 - MCP tool reference: <https://intigraph.github.io/quipu/reference/mcp-tools.html>
+- Reconciling a failed merge: <https://intigraph.github.io/quipu/sharing/reconcile.html>
 <!-- END quipu prime -->

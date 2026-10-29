@@ -584,6 +584,24 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show a merge''s conflicts in the standard layout')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Record one choice on one merge conflict')
+            break
+        }
+        'qp;merge;show' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;merge;resolve' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'choose')
+            [CompletionResult]::new('--value', '--value', [CompletionResultType]::ParameterName, 'value')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import' {
@@ -737,6 +755,23 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;git-merge' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show a qpack''s pending merge decisions in the standard layout')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Record one choice in the Git merge in progress and rewrite the qpack')
+            break
+        }
+        'qp;git-merge;show' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;git-merge;resolve' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'choose')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1389,7 +1424,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List named forks')
             [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Diff two forks')
             [CompletionResult]::new('drop', 'drop', [CompletionResultType]::ParameterValue, 'Drop a named fork')
-            [CompletionResult]::new('promote', 'promote', [CompletionResultType]::ParameterValue, 'Promote a fork to ROOT')
+            [CompletionResult]::new('promote', 'promote', [CompletionResultType]::ParameterValue, 'Promote a fork to ROOT, with reviewable conflict decisions')
             break
         }
         'qp;fork;list' {
@@ -1412,6 +1447,13 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;fork;promote' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--emit-decisions', '--emit-decisions', [CompletionResultType]::ParameterName, 'emit-decisions')
+            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'decisions')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'reviewer')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--propose', '--propose', [CompletionResultType]::ParameterName, 'propose')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

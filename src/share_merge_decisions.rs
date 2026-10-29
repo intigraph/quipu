@@ -124,6 +124,8 @@ pub enum Side {
     Ours,
     Theirs,
     Base,
+    /// Ours and theirs together; refused above the slot's `sh:maxCount`.
+    Both,
 }
 
 /// An operator's resolution: one side's values, or explicit values.
@@ -405,8 +407,15 @@ fn chosen(row: &DecisionRow) -> Result<Vec<String>> {
             choose: Side::Theirs,
         }) => r.theirs.clone(),
         Some(Decision::Choose { choose: Side::Base }) => r.base.clone(),
+        Some(Decision::Choose { choose: Side::Both }) => union(&r.ours, &r.theirs),
         Some(Decision::Values { values }) => values.clone(),
     })
+}
+
+/// Ours and theirs together, sorted and without repeats.
+pub(crate) fn union(ours: &[String], theirs: &[String]) -> Vec<String> {
+    let set: std::collections::BTreeSet<&String> = ours.iter().chain(theirs).collect();
+    set.into_iter().cloned().collect()
 }
 
 /// Commit the clean merge plus every decided slot, atomically.
@@ -498,6 +507,10 @@ fn plan_pair(
         )));
     }
     check_fields(file_bytes)?;
+    let decisions_sha256 = sha256(file_bytes);
+    if let Some(done) = binding::already_applied(store, file, &decisions_sha256, reviewer)? {
+        return Ok(done);
+    }
     let i = inputs(store, pair)?;
     let stale = |what: &str| {
         Error::InvalidValue(format!(
@@ -590,7 +603,6 @@ fn plan_pair(
             decided_at: row.decided_at.clone(),
         });
     }
-    let decisions_sha256 = sha256(file_bytes);
     let parents = [i.ours_hash, i.incoming.manifest.share_id.clone()];
     let source = format!(
         "share-merge:parents={},{};decisions={decisions_sha256};reviewer={reviewer}",

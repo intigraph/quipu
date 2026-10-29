@@ -2,7 +2,7 @@
 
 # MCP Tool Index
 
-All 83 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
+All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
 
 ## `quipu_accept_proposal`
 
@@ -484,27 +484,42 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 
 ## `quipu_merge_apply`
 
-WRITE. Finish a share merge: the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (ROOT or the share moved), more values than sh:maxCount, or a value that is not an RDF term.
+WRITE. Finish a share merge (incoming + base) or a fork promotion (fork): the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (either side moved), more values than sh:maxCount, a value that is not an RDF term, or (forks) a SHACL refusal. Applying the same decisions again returns outcome already-applied and writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `actor` | string | no | Who is applying. |
-| `base` | object | yes | Its parent share. Inline, as /import takes it. |
-| `decisions` | object | yes | The file from merge_decisions with each row's decision set: {choose: ours\|theirs\|base} or {values: [N-Triples terms]}. |
+| `base` | object | no | Its parent share. Inline, as /import takes it. |
+| `decisions` | object | yes | The file from merge_decisions with each row's decision set (quipu_merge_resolve): {choose: ours\|theirs\|base\|both} or {values: [N-Triples terms]}. |
 | `dry_run` | boolean | no | Run every check and report the counts it would write; write nothing. |
-| `incoming` | object | yes | The share to merge. Inline, as /import takes it. |
+| `fork` | string | no | Apply to this fork's promotion, instead of incoming + base. |
+| `incoming` | object | no | The share to merge. Inline, as /import takes it. |
 | `reviewer` | string | yes | Who decided. Recorded in provenance. |
 
 ## `quipu_merge_decisions`
 
-READ. The conflicts of merging an incoming share into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to ROOT's graph hash. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. Writes nothing.
+READ. The conflicts of merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to what was reviewed. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. present:true returns {decisions, presentation, view}: the standard markdown to show the user, unchanged. Writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `base` | object | yes | Its parent share. Inline, as /import takes it. |
-| `incoming` | object | yes | The share to merge. Inline, as /import takes it. |
+| `base` | object | no | Its parent share. Inline, as /import takes it. |
+| `fork` | string | no | A fork whose promotion stopped on conflicts, instead of incoming + base. |
+| `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `present` | boolean | no | Also return the standard presentation (markdown + JSON view). |
 | `propose` | boolean | no | Fill each row's proposal (never its decision). |
 | `slot_scoped` | boolean | no | Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes. |
+
+## `quipu_merge_resolve`
+
+Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Choices: ours, theirs, base, both (only within sh:maxCount), value (with values), defer. Validates the choice against the row; touches no store. Apply with quipu_merge_apply.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `by` | string | yes | Who decided: the person who chose, or the agent id when the agent rules allow it. |
+| `choose` | string: `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `decisions` | object | yes | The decisions file from quipu_merge_decisions. |
+| `row` | string | yes | The row id, e.g. d1. |
+| `values` | array | no | N-Triples terms, with choose: value. |
 
 ## `quipu_namespaces`
 

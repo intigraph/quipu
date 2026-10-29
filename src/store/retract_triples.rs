@@ -134,6 +134,14 @@ impl Store {
         // measured) — the most common source in the store, and attributable to
         // nobody. Caller's key wins; the fallback names the actor.
         let tag = super::source_tag::resolve("retract", actor, source);
+        // aegis-gxfm: the post-state must still meet every reject shape's floor.
+        self.enforce_retraction_shapes(
+            &datums,
+            crate::schema::ROOT_GRAPH,
+            None,
+            actor,
+            Some(&tag),
+        )?;
         let tx_id = self.transact(&datums, timestamp, actor, Some(&tag))?;
         Ok((tx_id, count))
     }
