@@ -133,3 +133,37 @@ fn unknown_status_fallback_preserves_large_candidate_sets_and_limit_ordering() {
 fn text_query() -> String {
     text("\"owner\"")
 }
+
+#[test]
+fn compatibility_union_keeps_missing_unknown_and_legacy_literal_owners() {
+    let s = fixture();
+    for owner in ["<http://example.org/owner>", "\"owner\""] {
+        let q = format!(
+            r#"SELECT ?s WHERE {{ GRAPH <http://example.org/g> {{
+            {{ ?s <http://example.org/owner> {owner}; a <http://example.org/T>; <http://example.org/status> "open" }}
+            UNION {{ ?s <http://example.org/owner> {owner}; a <http://example.org/T>; <http://example.org/status> ?v
+                FILTER(isLiteral(?v) && STR(?v) NOT IN ("open","closed")) }}
+            UNION {{ ?s <http://example.org/owner> {owner}; a <http://example.org/T>
+                FILTER NOT EXISTS {{ ?s <http://example.org/status> ?v FILTER(isLiteral(?v) && sameTerm(?v, STR(?v))) }} }}
+        }} }}"#
+        );
+        let actual = query(&s, &q).unwrap();
+        let original = reference(|| query(&s, &q)).unwrap();
+        assert_eq!(bag(actual.rows()), bag(original.rows()));
+        for name in [
+            "known", "unknown", "missing", "ref", "language", "typed", "mixed",
+        ] {
+            let id = s
+                .lookup(&format!("http://example.org/{name}"))
+                .unwrap()
+                .unwrap();
+            assert!(
+                actual
+                    .rows()
+                    .iter()
+                    .any(|r| r.get("s") == Some(&crate::Value::Ref(id))),
+                "lost {name}"
+            );
+        }
+    }
+}

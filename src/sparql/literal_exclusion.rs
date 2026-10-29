@@ -154,7 +154,13 @@ pub(super) fn candidates(
     let mut subjects = Vec::new();
     while let Some(row) = cursor.next()? {
         super::pattern_util::check_eval_budget(ctx, subjects.len(), 0)?;
-        subjects.push(row.get::<_, i64>(0)?);
+        let subject = row.get::<_, i64>(0)?;
+        // A seed would canonicalize legacy dictionary aliases. Repeating it
+        // once per physical alias could multiply the original solution bag.
+        if subject <= 0 || store.lookup_all(&store.resolve(subject)?)?.len() != 1 {
+            return Ok(None);
+        }
+        subjects.push(subject);
         if subjects.len() > MAX_SUBJECTS {
             return Ok(None);
         }
