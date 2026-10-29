@@ -204,7 +204,7 @@ pub(super) fn candidates(
         .flat_map(super::pattern_util::triple_pattern_vars)
         .fold(Vec::new(), |mut vars, var| {
             if !vars.contains(&var) {
-                vars.push(var)
+                vars.push(var);
             };
             vars
         });
