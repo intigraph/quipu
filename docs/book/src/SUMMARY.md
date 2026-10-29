@@ -99,6 +99,7 @@
 
 # Operations
 
+- [Search outcome accounting](reference/search-outcomes.md)
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)
 - [Related work](reference/related-work.md)

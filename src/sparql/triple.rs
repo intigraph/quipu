@@ -101,18 +101,18 @@ pub fn eval_bgp(
             // one row beyond its remaining budget, then refuse before retaining
             // an oversized relation; never silently truncate a query result.
             let budget = ctx
-                .row_cap
+                .materialization_cap
                 .map(|cap| cap.saturating_sub(new_rows.len()).saturating_add(1));
             let limit = match (remaining, budget) {
                 (Some(a), Some(b)) => Some(a.min(b)),
                 (a, b) => a.or(b),
             };
             let matches = eval_triple_pattern_limited(store, tp, existing, ctx, limit)?;
-            super::pattern_util::check_eval_budget(
-                ctx,
-                i,
-                new_rows.len().saturating_add(matches.len()),
-            )?;
+            if let Some(cap) = ctx.materialization_cap
+                && new_rows.len().saturating_add(matches.len()) > cap
+            {
+                return Err(crate::Error::QueryComplexity { limit: cap });
+            }
             new_rows.extend(matches);
         }
         result_rows = new_rows;

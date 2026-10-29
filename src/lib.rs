@@ -57,6 +57,7 @@ pub mod replica_provider;
 pub mod replicate_source;
 pub mod replicate_wire;
 mod search_graph_scope;
+pub mod search_outcome;
 pub mod search_trace;
 pub mod substring;
 pub mod transaction_auth;

@@ -254,10 +254,20 @@ impl Store {
     pub fn set_proposal_migration(&self, proposal_id: i64, program: &[MigrationOp]) -> Result<()> {
         let json = serde_json::to_string(program)
             .map_err(|e| Error::InvalidValue(format!("migration program: {e}")))?;
-        self.conn.execute(
-            "INSERT OR REPLACE INTO proposal_migrations (proposal_id, program) VALUES (?1, ?2)",
+        self.ensure_ownership_writable()?;
+        // One statement binds replacement to the still-pending decision, so
+        // an accepted proposal always retains the program it actually ran.
+        let changed = self.conn.execute(
+            "INSERT INTO proposal_migrations (proposal_id, program)
+             SELECT id, ?2 FROM proposals WHERE id = ?1 AND status = 'pending'
+             ON CONFLICT(proposal_id) DO UPDATE SET program = excluded.program",
             params![proposal_id, json],
         )?;
+        if changed == 0 {
+            return Err(Error::InvalidValue(format!(
+                "proposal {proposal_id} not found or no longer pending; migration program is immutable"
+            )));
+        }
         Ok(())
     }
 

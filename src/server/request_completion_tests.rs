@@ -8,6 +8,7 @@ fn completion<'a>(
     logs: Arc<Mutex<Vec<String>>>,
 ) -> Completion<'a> {
     Completion {
+        search: None,
         id: 7,
         client: "test-client".into(),
         task: "unattributed".into(),

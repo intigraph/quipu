@@ -75,6 +75,7 @@ pub(super) fn bounded_query(
     };
     let context = crate::sparql::TemporalContext {
         row_cap: Some(row_cap),
+        materialization_cap: Some(row_cap),
         ..crate::sparql::TemporalContext::default()
     };
     crate::sparql::query_temporal(store, query, &context).map_err(|error| match error {

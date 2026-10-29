@@ -607,3 +607,175 @@ fn filtered_where_intermediates_share_the_migration_ceiling() {
         assert!(err.contains("max_join_rows"), "{err}");
     });
 }
+
+// Lex non-author probes: isolated stores, no remote calls or runtime adoption.
+#[test]
+fn lex_review_cast_rejects_invalid_xsd_value_spaces() {
+    let mut invalid_accepted = Vec::new();
+    for (lexical, datatype) in [
+        ("-1", "unsignedInt"),
+        ("256", "unsignedByte"),
+        ("0", "positiveInteger"),
+        ("2026-02-31", "date"),
+    ] {
+        let turtle = format!("@prefix ex: <{EX}> . ex:alice a ex:Person; ex:age \"{lexical}\" .");
+        let mut store = store_with(&turtle);
+        let id = propose(
+            &store,
+            &shape("sh:closed false"),
+            &[MigrationOp::CastDatatype {
+                predicate: ex("age"),
+                datatype: format!("{}{datatype}", crate::namespace::XSD),
+            }],
+        );
+        let preview = dry_run(&store, id, 10);
+        let accepted = store.accept_proposal(id, "lex-review-fixture", DECIDED, None);
+        eprintln!(
+            "CAST {lexical:?} -> xsd:{datatype}: preview={preview:?}; acceptance={accepted:?}; stored={:?}",
+            objects(&store, &ex("alice"), &ex("age"))
+        );
+        if accepted.is_ok() {
+            invalid_accepted.push((lexical, datatype));
+        }
+    }
+    assert!(
+        invalid_accepted.is_empty(),
+        "invalid XSD values accepted and persisted: {invalid_accepted:?}"
+    );
+}
+
+#[test]
+fn lex_review_valid_xsd_cast_control() {
+    let mut store =
+        store_with("@prefix ex: <http://example.org/> . ex:alice a ex:Person; ex:age \"255\" .");
+    let id = propose(
+        &store,
+        &shape("sh:closed false"),
+        &[MigrationOp::CastDatatype {
+            predicate: ex("age"),
+            datatype: format!("{}unsignedByte", crate::namespace::XSD),
+        }],
+    );
+    assert_eq!(
+        dry_run(&store, id, 10).unwrap()["gate"]["would_accept"],
+        true
+    );
+    store
+        .accept_proposal(id, "lex-review-fixture", DECIDED, None)
+        .unwrap();
+    assert!(
+        matches!(&objects(&store, &ex("alice"), &ex("age"))[0], Value::Typed { lexical, datatype } if lexical == "255" && datatype.ends_with("unsignedByte"))
+    );
+}
+
+#[test]
+fn lex_review_dry_run_matches_validation_off_delete() {
+    let mut store = store_with(PEOPLE);
+    store.shacl_config_mut().validate_on_write = false;
+    let id = propose(
+        &store,
+        &shape("sh:property [ sh:path ex:name; sh:minCount 1 ]"),
+        &[MigrationOp::Sparql {
+            update: format!(
+                "DELETE DATA {{ <{}> <{}> \"Alice Smith\" }}",
+                ex("alice"),
+                ex("name")
+            ),
+        }],
+    );
+    let report = dry_run(&store, id, 10).unwrap();
+    let acceptance = store.accept_proposal(id, "lex-review-fixture", DECIDED, None);
+    eprintln!("validation_off preview={report}; acceptance={acceptance:?}");
+    assert_eq!(
+        report["gate"]["would_accept"].as_bool().unwrap(),
+        acceptance.is_ok(),
+        "dry-run must agree with actual acceptance under the same config"
+    );
+}
+
+#[test]
+fn lex_review_refused_commit_leaves_connection_usable() {
+    let mut store = store_with(PEOPLE);
+    let id = propose(&store, &full_name_shape(), &[rename()]);
+    // The existing ownership fence produces precisely this SQLite veto. This
+    // in-memory hook injects the same code at the outermost RELEASE, offline.
+    store.conn.commit_hook(Some(|| true)).unwrap();
+    let result = store.accept_proposal(id, "lex-review-fixture", DECIDED, None);
+    eprintln!(
+        "commit veto result={result:?}; autocommit={}",
+        store.conn.is_autocommit()
+    );
+    assert!(result.is_err());
+    assert!(
+        store.conn.is_autocommit(),
+        "refused outer RELEASE must settle the dead transaction"
+    );
+    store.conn.commit_hook(None::<fn() -> bool>).unwrap();
+    assert_eq!(
+        store.get_proposal(id).unwrap().unwrap().status,
+        ProposalStatus::Pending
+    );
+    let next = propose(&store, &full_name_shape(), &[rename()]);
+    assert_eq!(
+        store.get_proposal(next).unwrap().unwrap().status,
+        ProposalStatus::Pending
+    );
+    assert!(
+        store.conn.is_autocommit(),
+        "subsequent write commits normally"
+    );
+}
+
+#[test]
+fn lex_review_decided_program_is_immutable() {
+    let mut store = store_with(PEOPLE);
+    let original = vec![rename()];
+    let id = propose(&store, &full_name_shape(), &original);
+    store
+        .accept_proposal(id, "lex-review-fixture", DECIDED, None)
+        .unwrap();
+    let replacement = [MigrationOp::Sparql {
+        update: "DELETE DATA { <http://example.org/x> <http://example.org/p> 1 }".into(),
+    }];
+    let changed = store.set_proposal_migration(id, &replacement);
+    eprintln!(
+        "post-accept replacement={changed:?}; now={:?}",
+        store.get_proposal_migration(id).unwrap()
+    );
+    assert!(
+        changed.is_err(),
+        "accepted program must remain the one whose migration transaction was committed"
+    );
+    assert_eq!(store.get_proposal_migration(id).unwrap(), Some(original));
+}
+
+#[test]
+fn lex_review_existing_release_helper_settles_same_veto() {
+    let store = store_with(PEOPLE);
+    let id = propose(&store, &full_name_shape(), &[rename()]);
+    store
+        .conn
+        .execute_batch("SAVEPOINT lex_review_control")
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE proposals SET decision_note='control' WHERE id=?1",
+            [id],
+        )
+        .unwrap();
+    store.conn.commit_hook(Some(|| true)).unwrap();
+    assert!(crate::store::release::release(&store.conn, "lex_review_control").is_err());
+    assert!(
+        store.conn.is_autocommit(),
+        "existing release helper must settle the same veto"
+    );
+    assert!(
+        store
+            .get_proposal(id)
+            .unwrap()
+            .unwrap()
+            .decision_note
+            .is_none()
+    );
+}

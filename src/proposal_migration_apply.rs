@@ -80,16 +80,19 @@ pub(crate) fn accept_with_migration(
     })();
     match result {
         Ok(tx) => {
-            store
-                .conn
-                .execute_batch("RELEASE quipu_proposal_migration")?;
+            if let Err(error) =
+                crate::store::release::release(&store.conn, "quipu_proposal_migration")
+            {
+                store.clear_pending_write_events();
+                return Err(error.into());
+            }
             Ok(tx)
         }
         Err(error) => {
-            store.conn.execute_batch(
-                "ROLLBACK TO quipu_proposal_migration; RELEASE quipu_proposal_migration",
-            )?;
+            let rollback =
+                crate::store::release::rollback_release(&store.conn, "quipu_proposal_migration");
             store.clear_pending_write_events();
+            rollback?;
             let error = match refused {
                 Some(refusal) => refusal.record(store, Some(decided_by), &source),
                 None => error,
@@ -133,11 +136,10 @@ pub fn dry_run(store: &Store, id: i64, limit: usize) -> Result<DryRun> {
         }
         judge(store, &proposal, &planned, limit)
     })();
-    store
-        .conn
-        .execute_batch("ROLLBACK TO quipu_proposal_dry_run; RELEASE quipu_proposal_dry_run")?;
-    // The gate may queue emit-shape advisories; a dry run writes nothing.
+    let rollback = crate::store::release::rollback_release(&store.conn, "quipu_proposal_dry_run");
+    // Clear even when the empty release itself is vetoed and settled.
     store.clear_pending_write_events();
+    rollback?;
     report
 }
 
@@ -172,7 +174,8 @@ fn judge(
         .iter()
         .filter(|r| touched.contains(r.focus_node.as_str()) && !seen.contains(&issue_key(r)))
         .collect();
-    let gate = match (gate, introduced.is_empty()) {
+    let validate = store.shacl_config().validate_on_write;
+    let gate = match (gate, introduced.is_empty() || !validate) {
         (Some(reason), _) => json!({ "would_accept": false, "reason": reason }),
         (None, false) => json!({
             "would_accept": false,
