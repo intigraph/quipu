@@ -35,6 +35,7 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | `quipu shapes list` | Show the SHACL shapes that guard writes |
 | `quipu graph list` | List registered named graphs |
 | `quipu stats` / `quipu doctor labels` | Store statistics and a graph-label drift report |
+| `quipu store status` | Inspect native ownership; explicit `store adopt` / `store restore` mint a new epoch, while ordinary legacy opens remain INACTIVE |
 | `quipu export` | Export RDF from ROOT or one graph |
 | `quipu memory read <owner.json>` | Read versioned file memory (`export`, `commit` for the rest; off unless configured) |
 | `quipu share` / `quipu import` | Hand a graph to another store and verify one in |

@@ -115,6 +115,7 @@ pub struct NewProposal<'a> {
 impl Store {
     /// Insert a new schema change proposal. Returns the proposal id.
     pub fn insert_proposal(&self, input: &NewProposal<'_>) -> Result<i64> {
+        self.ensure_ownership_writable()?;
         self.conn.execute(
             "INSERT INTO proposals (kind, target, diff, rationale, proposer, trigger_ref, status, created_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7)",
@@ -200,6 +201,7 @@ impl Store {
         decided_at: &str,
         note: Option<&str>,
     ) -> Result<(Proposal, Option<i64>)> {
+        self.ensure_ownership_writable()?;
         let proposal = self
             .get_proposal(id)?
             .ok_or_else(|| Error::InvalidValue(format!("proposal {id} not found")))?;
@@ -269,6 +271,7 @@ impl Store {
         decided_at: &str,
         note: &str,
     ) -> Result<Proposal> {
+        self.ensure_ownership_writable()?;
         let proposal = self
             .get_proposal(id)?
             .ok_or_else(|| Error::InvalidValue(format!("proposal {id} not found")))?;

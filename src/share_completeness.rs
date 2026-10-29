@@ -135,6 +135,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // store mints its own on first open, and a follower holding a cursor into
     // the original sees the epoch change and re-bootstraps (local-sync-mode §5).
     ("log_epoch", Disposition::Excluded),
+    // Local sticky authority must not travel as a restored placement grant.
+    ("ownership_enforcement", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never
