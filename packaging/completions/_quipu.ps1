@@ -24,6 +24,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('store', 'store', [CompletionResultType]::ParameterValue, 'Inspect native ownership, or explicitly adopt or restore a disk store')
             [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Print the version and source commit')
             [CompletionResult]::new('install-alias', 'install-alias', [CompletionResultType]::ParameterValue, 'Add the qp alias beside the quipu binary')
             [CompletionResult]::new('knot', 'knot', [CompletionResultType]::ParameterValue, 'Assert Turtle facts, validated against loaded shapes')
@@ -90,6 +91,33 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Read store event records such as refusals')
             [CompletionResult]::new('fork', 'fork', [CompletionResultType]::ParameterValue, 'Create, list, diff, drop or promote named forks of ROOT')
             [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Check traces, namespaces, replays and quarantine against policy')
+            break
+        }
+        'quipu;store' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Report inactive or enforced native store ownership without adopting')
+            [CompletionResult]::new('adopt', 'adopt', [CompletionResultType]::ParameterValue, 'Bind an existing native store to this host and path with a fresh epoch')
+            [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Restore a SQLite snapshot to a new path and explicitly adopt it')
+            break
+        }
+        'quipu;store;status' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;store;adopt' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;store;restore' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'quipu;version' {
