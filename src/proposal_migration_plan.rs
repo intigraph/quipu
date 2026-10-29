@@ -343,7 +343,7 @@ fn evaluate(
                     },
                     base_iri: parsed.base_iri.clone(),
                 };
-                let result = crate::sparql::query(store, &select.to_string())?;
+                let result = super::guard::bounded_query(store, &select.to_string())?;
                 if result.rows().len() > max {
                     return Err(super::guard::too_large("the WHERE pattern matches"));
                 }

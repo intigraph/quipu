@@ -583,3 +583,27 @@ fn repeated_template_facts_are_bounded_before_netting() {
         });
     }
 }
+
+/// A late filter must not hide oversized WHERE intermediates behind LIMIT.
+#[test]
+fn filtered_where_intermediates_share_the_migration_ceiling() {
+    let facts = (0..10)
+        .map(|i| format!("<http://example.org/item/{i}> <http://example.org/p> {i} .\n"))
+        .collect::<String>();
+    let mut store = store_with(&facts);
+    let program = [MigrationOp::Sparql {
+        update: "INSERT { ?s <http://example.org/q> ?o } WHERE { ?s <http://example.org/p> ?o FILTER(?o + 1 > 100) }".into(),
+    }];
+    guard::with_max_facts(3, || {
+        let err = plan(&store, &program).unwrap_err().to_string();
+        assert!(err.contains("update_full_copy_max_facts"), "{err}");
+    });
+    guard::with_max_facts(10, || {
+        assert_eq!(plan(&store, &program).unwrap().assert_count(), 0);
+    });
+    store.search_config_mut().max_join_rows = 2;
+    guard::with_max_facts(10, || {
+        let err = plan(&store, &program).unwrap_err().to_string();
+        assert!(err.contains("max_join_rows"), "{err}");
+    });
+}

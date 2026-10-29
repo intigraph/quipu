@@ -60,6 +60,31 @@ pub(super) fn too_large(what: &str) -> Error {
     ))
 }
 
+/// Apply the migration ceiling to intermediate WHERE bindings as well as
+/// final solutions. LIMIT alone cannot bound a FILTER, join or DISTINCT input.
+pub(super) fn bounded_query(
+    store: &crate::store::Store,
+    query: &str,
+) -> Result<crate::sparql::QueryResult> {
+    let migration_limit = max_facts();
+    let configured = store.search_config().max_join_rows;
+    let row_cap = if configured == 0 {
+        migration_limit
+    } else {
+        configured.min(migration_limit)
+    };
+    let context = crate::sparql::TemporalContext {
+        row_cap: Some(row_cap),
+        ..crate::sparql::TemporalContext::default()
+    };
+    crate::sparql::query_temporal(store, query, &context).map_err(|error| match error {
+        Error::QueryComplexity { limit } if limit == migration_limit => {
+            too_large("the WHERE evaluation materializes")
+        }
+        other => other,
+    })
+}
+
 fn refuse(message: &str) -> Error {
     Error::InvalidValue(format!("migration template: {message}"))
 }

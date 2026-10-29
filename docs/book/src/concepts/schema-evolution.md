@@ -105,7 +105,9 @@ The program is checked when the proposal is submitted:
   `server.update_full_copy_max_facts` facts is refused at accept and in a dry
   run. The shared program budget counts deletes and inserts before netting,
   including duplicate facts and facts that cancel out. Split larger programs
-  into smaller migrations.
+  into smaller migrations. Intermediate WHERE bindings also carry a row
+  budget, so a filter or join may be refused even when its final result is
+  small. A stricter native `max_join_rows` setting still takes precedence.
 
 On accept:
 
