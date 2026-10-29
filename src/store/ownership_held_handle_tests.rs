@@ -351,3 +351,79 @@ fn writes_after_a_refused_outer_commit_persist_or_fail() {
         .unwrap();
     assert_eq!(persisted, 3);
 }
+
+#[test]
+fn review_legacy_handle_adopted_then_unlinked_refuses_bookkeeping() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("later-owned.db");
+    let p = path.to_str().unwrap();
+    let held = Store::open(p).unwrap();
+    assert_eq!(held.ownership_state().unwrap(), OwnershipState::Inactive);
+    // No writes on held: the old lazy fence had not opened its reader yet.
+    Store::adopt(p).unwrap();
+    assert_eq!(held.ownership_state().unwrap(), OwnershipState::Enforced);
+    std::fs::remove_file(&path).unwrap();
+    assert!(held.ownership_state().is_err());
+    let result = held.commit_consumer("review-consumer", 1, "2026-10-29T00:00:00Z");
+    assert!(
+        result.is_err(),
+        "ENFORCED held handle accepted bookkeeping commit after its path disappeared: {result:?}"
+    );
+}
+
+#[test]
+fn review_genuinely_inactive_unlinked_handle_keeps_bookkeeping_compatibility() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy-unlinked.db");
+    let held = Store::open(path.to_str().unwrap()).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    held.commit_consumer("review-legacy", 1, "2026-10-29T00:00:00Z")
+        .unwrap();
+}
+
+#[test]
+fn pending_adoption_then_unlink_refuses_direct_bookkeeping() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pending-unlinked.db");
+    let p = path.to_str().unwrap();
+    let held = Store::open(p).unwrap();
+    let sidecar = path.with_extension("db.ownership.json");
+    std::fs::create_dir(&sidecar).unwrap();
+    assert!(Store::adopt(p).is_err());
+    std::fs::remove_dir(&sidecar).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(held.ownership_state().is_err());
+    assert!(held.commit_consumer("pending", 1, "2026-10-29").is_err());
+    assert_eq!(count(&held, "consumers"), 0);
+    assert!(held.conn.is_autocommit());
+}
+
+#[test]
+fn later_adoption_unlink_and_lost_binding_refuses_direct_sql() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("adopted-unlinked.db");
+    let p = path.to_str().unwrap();
+    let held = Store::open(p).unwrap();
+    Store::adopt(p).unwrap();
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(
+        held.conn
+            .execute("INSERT INTO consumers VALUES ('direct', 1, 'now')", [])
+            .is_err()
+    );
+    assert_eq!(count(&held, "consumers"), 0);
+}
+
+#[test]
+fn inactive_unlinked_handle_keeps_writing_after_prior_commits() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("legacy-written.db");
+    let held = Store::open(path.to_str().unwrap()).unwrap();
+    held.commit_consumer("legacy", 1, "2026-10-29").unwrap();
+    std::fs::remove_file(&path).unwrap();
+    held.commit_consumer("legacy", 2, "2026-10-29").unwrap();
+    held.commit_consumer("legacy", 3, "2026-10-29").unwrap();
+    assert_eq!(held.ownership_state().unwrap(), OwnershipState::Inactive);
+    assert_eq!(count(&held, "consumers"), 1);
+}

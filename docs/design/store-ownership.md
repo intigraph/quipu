@@ -56,7 +56,12 @@ does. Two layers do this:
   hook. At each outer commit (autocommit statements and outermost `RELEASE`
   included), while the handle already holds the write lock, it repeats the
   check through a separate read-only connection and turns a refused commit
-  into a rollback. This covers direct writers with no entrypoint check of
+  into a rollback. The reader opens and reads the schema when the fence is
+  installed, initializing its WAL access before any unlink. Each check starts
+  a fresh read transaction: later adoption is visible even if the database
+  path subsequently disappears, while genuinely legacy unlinked handles stay
+  writable. A missing or failed reader refuses; no cached INACTIVE state can
+  authorize a commit. This covers direct writers with no entrypoint check of
   their own, such as push subscriptions, attestation bindings, share-current
   pointers, pending share-query holds, quarantine purge, event consumers and
   event pruning. It also closes the window between an entrypoint check and the

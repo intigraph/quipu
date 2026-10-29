@@ -33,31 +33,26 @@ pub(super) fn commit_fence(conn: &Connection) -> Option<impl FnMut() -> bool + S
         return None;
     }
     let path = conn.path().filter(|p| !p.is_empty())?.to_owned();
-    // A store file unlinked while open (a dropped temporary file, say) cannot
-    // be opened again. Nothing can adopt or bind a path that no longer exists,
-    // so such a handle keeps the state it opened with: INACTIVE stays
-    // writable, and ENFORCED (whose binding needs the path) refuses.
-    let opened_inactive = matches!(
-        super::ownership::state_on(conn),
-        Ok(super::OwnershipState::Inactive)
-    );
-    let mut reader: Option<Connection> = None;
-    Some(move || {
-        if reader.is_none() {
-            reader = Connection::open_with_flags(
-                &path,
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )
-            .and_then(|c| c.execute_batch("PRAGMA query_only=ON;").map(|()| c))
-            .ok();
-        }
-        match reader.as_ref() {
-            Some(reader) => super::ownership::state_on(reader).is_err(),
-            None => {
-                let gone = std::fs::symlink_metadata(&path)
-                    .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound);
-                !(gone && opened_inactive)
-            }
-        }
+    // Open AND read the schema now. Merely opening a read-only connection
+    // leaves its WAL reader lazy: the first query after unlink then fails,
+    // even for a genuinely INACTIVE legacy store. Warming the reader keeps
+    // access to the original database/WAL while still starting a fresh read
+    // transaction at each commit, so later adoption cannot hide behind the
+    // state observed when this handle opened.
+    let reader = Connection::open_with_flags(
+        &path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .and_then(|c| {
+        c.execute_batch("PRAGMA query_only=ON;")?;
+        c.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+            r.get::<_, i64>(0)
+        })?;
+        Ok(c)
+    })
+    .ok();
+    Some(move || match reader.as_ref() {
+        Some(reader) => super::ownership::state_on(reader).is_err(),
+        None => true,
     })
 }
