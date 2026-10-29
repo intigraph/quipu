@@ -17,6 +17,8 @@ use tower::ServiceExt as _;
 
 #[path = "mcp_transport/input.rs"]
 mod input;
+#[path = "mcp_transport/observation.rs"]
+mod observation;
 #[cfg(test)]
 #[path = "mcp_transport/parity_tests.rs"]
 mod parity_tests;
@@ -110,11 +112,12 @@ impl McpServer {
         }
     }
 
-    async fn dispatch(
+    async fn dispatch_observed(
         &self,
         name: &str,
         input: Value,
         headers: &HeaderMap,
+        observation: &observation::Observation,
     ) -> Result<CallToolResult, ErrorData> {
         let tool = self
             .tools
@@ -169,15 +172,28 @@ impl McpServer {
             ("application/json", input.to_string())
         };
         let mut builder = Request::builder()
+            .extension(crate::search_outcome::observation::Surface::Mcp)
             .method(method)
             .uri(path)
             .header("content-type", content_type)
             .header("accept", "application/json")
             .header("x-quipu-client", "native-mcp");
-        for key in ["authorization", "x-quipu-task"] {
+        for key in [
+            "authorization",
+            "x-quipu-task",
+            "x-quipu-agent",
+            "x-quipu-session",
+            "x-quipu-harness",
+            "x-quipu-host",
+            "x-quipu-model",
+            "x-quipu-purpose",
+        ] {
             if let Some(value) = headers.get(key) {
                 builder = builder.header(key, value);
             }
+        }
+        if let Some(call) = &observation.call {
+            builder = builder.extension(call.clone());
         }
         let request = builder
             .body(Body::from(body))
@@ -189,11 +205,20 @@ impl McpServer {
             .await
             .map_err(|_| ErrorData::internal_error("tool dispatch failed", None))?;
         let success = response.status().is_success();
+        if let Some(call) = &observation.call {
+            call.transport_finished(response.status().as_u16(), None);
+        }
         let bytes = axum::body::to_bytes(response.into_body(), 64 * 1024 * 1024)
             .await
             .map_err(|_| ErrorData::internal_error("tool response exceeds limit", None))?;
         let text = String::from_utf8(bytes.to_vec())
             .map_err(|_| ErrorData::internal_error("tool response is not text", None))?;
+        if success
+            && let Some(call) = &observation.call
+            && let Ok(value) = serde_json::from_str(&text)
+        {
+            call.response(&input, &value);
+        }
         let text = if success && name == "quipu_search" {
             match search_context::render(&text) {
                 Ok(text) => text,

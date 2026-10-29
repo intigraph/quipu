@@ -53,6 +53,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^scripts/(build-replay-corpus|test_replay_credentials)\.py$
+      - id: search-outcome-replay
+        name: search outcome replay contract
+        entry: python3 -B scripts/test_search_outcome_replay.py
+        language: system
+        pass_filenames: false
+        files: ^scripts/(search-outcome-replay|test_search_outcome_replay)\.py$
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --check

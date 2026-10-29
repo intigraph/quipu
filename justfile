@@ -65,6 +65,10 @@ deploy-server:
 test *args="":
     cargo test {{args}}
 
+# Offline replay controls: restart, deduplication, corruption and private files.
+test-search-outcome-replay:
+    python3 -B scripts/test_search_outcome_replay.py
+
 # Run linter
 lint:
     cargo clippy -- -D warnings -A missing-docs
