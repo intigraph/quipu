@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -105,6 +107,33 @@ class ReplayTests(unittest.TestCase):
             REPLAY.connect(self.state)
         self.db = sqlite3.connect(self.state)
 
+    def test_zero_kinds_require_observed_counts_and_reasons_are_bounded(self):
+        summaries = [
+            {"outcome":"empty", "zero_kind":"no_candidates", "candidate_count":0},
+            {"outcome":"no_context", "zero_kind":"all_rejected", "candidate_count":2, "admitted_count":0},
+            {"outcome":"empty", "zero_kind":"empty_rows", "result_count":0},
+            {"outcome":"error", "zero_kind":"empty_rows", "result_count":0},
+            {"outcome":"unknown", "zero_kind":"no_candidates", "candidate_count":0},
+            {"outcome":"empty", "zero_kind":"empty_rows"},
+            {"outcome":"empty", "zero_kind":"no_candidates", "candidate_count":False},
+        ]
+        records = []
+        for identity, summary in enumerate(summaries, 1):
+            record = json.loads(event(identity))
+            record["summary"] = summary
+            record["details"] = {"context_reason":"private-unbounded-reason-sentinel"}
+            records.append(json.dumps(record) + "\n")
+        self.write("".join(records).encode())
+        health = REPLAY.replay(self.journal, self.db)
+        self.assertEqual(self.db.execute("SELECT sum(value) FROM zeros").fetchone()[0], 3)
+        output = REPLAY.metrics(self.db, health)
+        for kind in ["no_candidates", "all_rejected", "empty_rows"]:
+            self.assertIn(f'kind="{kind}"}} 1', output)
+        self.assertIn('reason="other"', output)
+        self.assertNotIn("private-unbounded-reason-sentinel", output)
+        REPLAY.replay(self.journal, self.db)
+        self.assertEqual(self.db.execute("SELECT sum(value) FROM zeros").fetchone()[0], 3)
+
     def test_insecure_source_and_cross_directory_state_are_refused(self):
         self.write(event(1))
         self.source.chmod(0o644)
@@ -118,6 +147,21 @@ class ReplayTests(unittest.TestCase):
         self.source.symlink_to(self.state)
         with self.assertRaises(OSError):
             REPLAY.replay(self.journal, self.db)
+
+    def test_cli_preserves_health_output_and_nonzero_exit_on_corruption(self):
+        self.write(event(1))
+        command = [sys.executable, "-B", str(Path(__file__).with_name("search-outcome-replay.py")),
+                   "--journal-dir", str(self.journal), "--state", str(self.root / "cli.sqlite")]
+        first = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn('outcome="empty"} 1', first.stdout)
+        with self.source.open("ab") as stream:
+            stream.write(b'{"schema":"future"}\n')
+        failed = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertEqual(failed.returncode, 2)
+        self.assertIn("quipu_search_journal_errors 1", failed.stdout)
+        self.assertIn('outcome="empty"} 1', failed.stdout)
+        self.assertNotIn(str(self.root), failed.stdout + failed.stderr)
 
 
 if __name__ == "__main__":

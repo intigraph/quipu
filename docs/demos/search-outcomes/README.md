@@ -6,7 +6,8 @@ not exercise a running search server or establish installed capture coverage.
 The baseline `fd93c2b0b3c2eb77e2375935bedf7ac49c3106e0` lacks the replay command.
 The candidate consumes one successful empty query, one failed query and an
 identical duplicate. Watch the separate `empty` and `error` series both remain
-one, then stay unchanged after reopening state and replaying the same journal.
+one. The validated `empty_rows` zero counter is one; the error contributes no
+zero. All totals stay unchanged after reopening state and replaying the same journal.
 
 Reproduce from the repository root:
 

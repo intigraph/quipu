@@ -19,6 +19,8 @@ import time
 SURFACES = {"library", "cli_local", "http", "mcp"}
 OPERATIONS = {"search", "hybrid_search", "search_nodes", "search_facts", "search_query", "query", "named_query"}
 OUTCOMES = {"hits", "empty", "no_context", "error", "timeout", "refused", "unknown"}
+REASONS = {"no_result_above_floor", "top_result_below_floor", "identifier_not_covered",
+           "insufficient_term_coverage", "subject_not_covered", "query_too_long", "query_terms_unavailable"}
 FILE = re.compile(r"search-[0-9a-f]{32}\.jsonl\Z")
 IDENTITY = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -43,7 +45,7 @@ def connect(path):
         os.close(fd)
     db = sqlite3.connect(path, timeout=1)
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1):
+    if version not in (0, 2):
         db.close()
         raise ValueError("unsupported consumer state version")
     db.executescript("""
@@ -57,12 +59,18 @@ def connect(path):
         CREATE TABLE IF NOT EXISTS counts (
             surface TEXT, operation TEXT, outcome TEXT, value INTEGER NOT NULL,
             PRIMARY KEY(surface,operation,outcome));
+        CREATE TABLE IF NOT EXISTS zeros (
+            surface TEXT, operation TEXT, kind TEXT, value INTEGER NOT NULL,
+            PRIMARY KEY(surface,operation,kind));
+        CREATE TABLE IF NOT EXISTS misses (
+            surface TEXT, operation TEXT, reason TEXT, value INTEGER NOT NULL,
+            PRIMARY KEY(surface,operation,reason));
     """)
     if version == 0:
         if db.execute("SELECT 1 FROM events LIMIT 1").fetchone():
             db.close()
             raise ValueError("legacy nonempty consumer state needs explicit migration")
-        db.execute("PRAGMA user_version=1")
+        db.execute("PRAGMA user_version=2")
     return db
 
 
@@ -78,7 +86,32 @@ def validate(raw):
     if surface not in SURFACES or operation not in OPERATIONS or outcome not in OUTCOMES:
         raise ValueError("unknown bounded label")
     digest = hashlib.sha256(raw).hexdigest()
-    return identity, digest, surface, operation, outcome
+    kind = zero_kind(summary)
+    reason = None
+    if outcome in {"empty", "no_context"}:
+        reason = {"no_candidates": "no_candidates", "empty_rows": "empty_rows"}.get(kind)
+        if reason is None:
+            details = event.get("details")
+            reported = details.get("context_reason") if isinstance(details, dict) else None
+            reason = reported if isinstance(reported, str) and reported in REASONS else (
+                "unknown" if reported is None else "other")
+    return (identity, digest, surface, operation, outcome), kind, reason
+
+
+def zero_kind(summary):
+    def count(key):
+        value = summary.get(key)
+        return value if type(value) is int and value >= 0 else None
+    outcome, kind = summary.get("outcome"), summary.get("zero_kind")
+    if outcome == "empty" and kind == "no_candidates" and count("candidate_count") == 0:
+        return kind
+    if outcome == "empty" and kind == "empty_rows" and count("result_count") == 0:
+        return kind
+    candidates = count("candidate_count")
+    if (outcome == "no_context" and kind == "all_rejected" and candidates is not None
+            and candidates > 0 and count("admitted_count") == 0):
+        return kind
+    return None
 
 
 def cursors(db):
@@ -141,7 +174,7 @@ def replay(directory, db, max_records=1000, max_files=128):
                         partial += 1
                     break
                 try:
-                    event = validate(raw)
+                    event, kind, reason = validate(raw)
                     prior = db.execute("SELECT digest FROM events WHERE id=?", (event[0],)).fetchone()
                     if prior and prior[0] != event[1]:
                         raise ValueError("conflicting logical identity")
@@ -154,6 +187,14 @@ def replay(directory, db, max_records=1000, max_files=128):
                         db.execute("""INSERT INTO counts VALUES (?,?,?,1)
                             ON CONFLICT(surface,operation,outcome)
                             DO UPDATE SET value=value+1""", event[2:])
+                        if kind is not None:
+                            db.execute("""INSERT INTO zeros VALUES (?,?,?,1)
+                                ON CONFLICT(surface,operation,kind)
+                                DO UPDATE SET value=value+1""", (*event[2:4], kind))
+                        if reason is not None:
+                            db.execute("""INSERT INTO misses VALUES (?,?,?,1)
+                                ON CONFLICT(surface,operation,reason)
+                                DO UPDATE SET value=value+1""", (*event[2:4], reason))
                     db.execute("UPDATE files SET offset=? WHERE name=?", (source.tell(), name))
                 processed += 1
         with db:
@@ -173,6 +214,12 @@ def metrics(db, health):
         "SELECT surface,operation,outcome,value FROM counts ORDER BY 1,2,3"
     ):
         lines.append(f'quipu_search_journal_requests_total{{surface="{surface}",operation="{operation}",outcome="{outcome}"}} {count}')
+    for table, family, label in [("zeros", "zero_results", "kind"), ("misses", "miss_reasons", "reason")]:
+        lines.append(f"# TYPE quipu_search_journal_{family}_total counter")
+        for surface, operation, value, count in db.execute(
+            f"SELECT surface,operation,{label},value FROM {table} ORDER BY 1,2,3"
+        ):
+            lines.append(f'quipu_search_journal_{family}_total{{surface="{surface}",operation="{operation}",{label}="{value}"}} {count}')
     for key, value in health.items():
         lines.extend([f"# TYPE quipu_search_journal_{key} gauge", f"quipu_search_journal_{key} {value}"])
     lines.extend(["# TYPE quipu_search_journal_scan_timestamp_seconds gauge",

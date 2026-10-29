@@ -36,7 +36,10 @@ def main():
         source = journal / f"search-{1:032x}.jsonl"
         events = [
             {"schema": "quipu-search-outcome/v1", "logical_call_id": f"{number:032x}",
-             "surface": "cli_local", "operation": "query", "summary": {"outcome": outcome}}
+             "surface": "cli_local", "operation": "query", "summary": {
+                 "outcome": outcome, "zero_kind": "empty_rows" if outcome == "empty" else None,
+                 "candidate_count": None, "admitted_count": None,
+                 "result_count": 0 if outcome == "empty" else None}}
             for number, outcome in [(1, "empty"), (2, "error")]
         ]
         source.write_text("".join(json.dumps(event) + "\n" for event in events + events[:1]))
@@ -48,11 +51,13 @@ def main():
             print("AFTER: " + json.dumps(health, sort_keys=True))
             print(reader.metrics(db, health).split("# TYPE quipu_search_journal_records_processed")[0], end="")
             assert db.execute("SELECT count(*) FROM events").fetchone()[0] == 2
+            assert db.execute("SELECT sum(value) FROM zeros").fetchone()[0] == 1
         print("RESTART: reopen consumer state and replay the same source.")
         with reader.connect(state) as db:
             health = reader.replay(journal, db)
             assert health["records_processed"] == 0
             assert db.execute("SELECT count(*) FROM events").fetchone()[0] == 2
+            assert db.execute("SELECT sum(value) FROM zeros").fetchone()[0] == 1
             print(f"records_processed={health['records_processed']}; unique_outcomes=2; errors={health['errors']}")
     print("PASS: failed query remains error; duplicate/restart do not increase unique outcomes.")
 

@@ -95,8 +95,13 @@ rotates between bounded runs; directory enumeration refuses coverage beyond
 exhaustion is a visible refusal requiring explicit archival/migration planning.
 
 The reader prints Prometheus text and never executes a captured query or contacts
-a service. `quipu_search_journal_requests_total` is cumulative, deduplicated
-consumer state, with a separate metric name from live process counters. Do not
+a service. Consumer state format is version 2. Its cumulative, deduplicated
+families are `quipu_search_journal_requests_total`,
+`quipu_search_journal_zero_results_total` and
+`quipu_search_journal_miss_reasons_total`. Zero kinds require the same observed
+counts as live counters; missing counts, booleans, unknowns and failures never
+become zeros. Reasons use the fixed vocabulary. These names are separate from
+live process counters. Do not
 sum these families: HTTP/MCP events can appear in both. Filter by surface when
 combining standalone CLI/library journal counts with live server counts.
 Resetting consumer state resets these counters and discards deduplication history.
