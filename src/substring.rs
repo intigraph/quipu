@@ -110,7 +110,7 @@ fn atomic(conn: &rusqlite::Connection, body: impl FnOnce() -> Result<()>) -> Res
     if result.is_err() {
         conn.execute_batch("ROLLBACK TO substring_change")?;
     }
-    conn.execute_batch("RELEASE substring_change")?;
+    crate::store::release::release(conn, "substring_change")?;
     result
 }
 impl Store {

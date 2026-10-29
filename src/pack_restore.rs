@@ -246,6 +246,8 @@ pub fn restore(pack_path: &str, destination: &str, force: bool) -> Result<Restor
     )?;
     drop(conn);
 
+    // An explicit restore owns a new placement and must not reuse its source epoch.
+    crate::store::Store::adopt(destination)?;
     let restored = Connection::open(destination)?;
     let tables: i64 = restored.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
@@ -338,6 +340,8 @@ fn restore_text(dir: &str, destination: &str, force: bool) -> Result<RestoreRepo
     drop(conn);
     cleanup();
 
+    // An explicit restore owns a new placement and must not reuse its source epoch.
+    crate::store::Store::adopt(destination)?;
     let restored = Connection::open(destination)?;
     let tables: i64 = restored.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",

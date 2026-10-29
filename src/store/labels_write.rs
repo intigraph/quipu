@@ -158,6 +158,7 @@ impl Store {
 
         // One savepoint over BOTH writes. `transact_to_graph` opens its own
         // `quipu_transact` inside this one — the same nesting `speculate` uses.
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_set_label")?;
         let result = (|| -> Result<i64> {
             let tx =
@@ -196,13 +197,11 @@ impl Store {
 
         match result {
             Ok(tx) => {
-                self.conn.execute_batch("RELEASE quipu_set_label")?;
+                crate::store::release::release(&self.conn, "quipu_set_label")?;
                 Ok(tx)
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_set_label; RELEASE quipu_set_label");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_set_label");
                 Err(e)
             }
         }

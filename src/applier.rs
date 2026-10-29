@@ -503,6 +503,7 @@ fn apply_one_tx(
         let graph = record["graph"].as_str().unwrap_or("ROOT").to_string();
         by_graph.entry(graph).or_default().push(record);
     }
+    store.ensure_ownership_writable()?;
     store.conn.execute_batch("SAVEPOINT replica_apply")?;
     let result = (|| -> Result<Option<String>> {
         if first {
@@ -542,13 +543,11 @@ fn apply_one_tx(
     })();
     match result {
         Ok(None) => {
-            store.conn.execute_batch("RELEASE replica_apply")?;
+            crate::store::release::release(&store.conn, "replica_apply")?;
             Ok(None)
         }
         other => {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO replica_apply; RELEASE replica_apply")?;
+            crate::store::release::rollback_release(&store.conn, "replica_apply")?;
             other
         }
     }

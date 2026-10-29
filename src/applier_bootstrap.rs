@@ -172,9 +172,7 @@ impl Applier {
     /// Roll back a share in progress, if any: nothing of it stays written.
     pub(super) fn abort_share(&mut self, store: &Store) -> Result<()> {
         if self.share.take().is_some() {
-            store
-                .conn
-                .execute_batch("ROLLBACK TO replica_bootstrap; RELEASE replica_bootstrap")?;
+            crate::store::release::rollback_release(&store.conn, "replica_bootstrap")?;
         }
         Ok(())
     }
@@ -214,6 +212,7 @@ impl Applier {
             )));
         }
         store.conn.execute_batch(LINES_DDL)?;
+        store.ensure_ownership_writable()?;
         store.conn.execute_batch("SAVEPOINT replica_bootstrap")?;
         self.share = Some(ShareStream {
             chain,
@@ -257,9 +256,10 @@ impl Applier {
              ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
             params![share.source.store_id, share.source.log_epoch, share.watermark],
         )?;
+        crate::store::release::release(&store.conn, "replica_bootstrap")?;
         store
             .conn
-            .execute_batch("RELEASE replica_bootstrap; DELETE FROM temp.replica_share_lines")?;
+            .execute_batch("DELETE FROM temp.replica_share_lines")?;
         self.progress = Some(Progress {
             source: share.source,
             source_tx: share.watermark,
@@ -274,9 +274,7 @@ impl Applier {
 /// mid-share, so a new applier on the same store starts clean.
 pub(super) fn discard_open_share(store: &Store) -> Result<()> {
     if !store.conn.is_autocommit() {
-        store
-            .conn
-            .execute_batch("ROLLBACK TO replica_bootstrap; RELEASE replica_bootstrap")?;
+        crate::store::release::rollback_release(&store.conn, "replica_bootstrap")?;
     }
     Ok(())
 }

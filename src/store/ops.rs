@@ -102,6 +102,9 @@ impl Store {
         expected: &[super::conditional::ExpectedValue],
         set: Option<&super::conditional::SetExpectation>,
     ) -> Result<i64> {
+        // Ownership is revalidated on this handle, before any gate can write an
+        // audit row: a handle opened earlier must not outlive invalid ownership.
+        self.ensure_ownership_writable()?;
         // Normal graph/authority gates precede the savepoint. Conditional
         // callers share this exact pipeline and its post-rollback evidence.
         self.assert_write_target_allowed(graph, source)?;
@@ -141,7 +144,19 @@ impl Store {
                 let counts = staged.counts;
                 // Taken before `staged` moves into after_commit_hooks below.
                 let effective = staged.effective.take();
-                self.conn.execute_batch("RELEASE quipu_transact")?;
+                if let Err(error) = crate::store::release::release(&self.conn, "quipu_transact") {
+                    // The commit itself was refused (e.g. by the ownership
+                    // fence) and nothing landed: run the same cleanup as the
+                    // error path, but record no verdicts or refusal for a
+                    // write that passed its gates and was never committed.
+                    self.set_write_in_progress(false);
+                    self.pending_refusal = None;
+                    self.clear_pending_write_events();
+                    self.pending_verdicts.clear();
+                    self.pending_requests.clear();
+                    self.pending_quarantine = None;
+                    return Err(error.into());
+                }
                 self.after_commit_hooks(datums, staged, timestamp, source, graph)?;
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
@@ -182,9 +197,7 @@ impl Store {
             Err(e) => {
                 // Undo the staged datums and the transaction row; the store is
                 // left byte-identical to before this call (no partial mutation).
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_transact; RELEASE quipu_transact");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_transact");
                 // The suspended model never observed rolled-back rows.
                 self.set_write_in_progress(false);
                 // Take the staged refusal BEFORE flushing verdicts: the flush
@@ -399,10 +412,7 @@ impl Store {
             .and_then(|_| f(self));
 
         // Always rollback: speculative state must not persist.
-        match self
-            .conn
-            .execute_batch("ROLLBACK TO speculate; RELEASE speculate")
-        {
+        match crate::store::release::rollback_release(&self.conn, "speculate") {
             Ok(()) => result,
             Err(rollback_err) => match result {
                 Err(e) => Err(e),

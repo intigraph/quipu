@@ -32,21 +32,20 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<Vec<(i64, i64)>> {
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_multi_graph")?;
         let mut txs = Vec::with_capacity(batches.len());
         for (graph, datums) in batches {
             match self.transact_to_graph(datums, timestamp, actor, source, *graph) {
                 Ok(tx) => txs.push((*graph, tx)),
                 Err(error) => {
-                    self.conn.execute_batch(
-                        "ROLLBACK TO quipu_multi_graph; RELEASE quipu_multi_graph",
-                    )?;
+                    crate::store::release::rollback_release(&self.conn, "quipu_multi_graph")?;
                     self.read_model.borrow_mut().clear();
                     return Err(error);
                 }
             }
         }
-        self.conn.execute_batch("RELEASE quipu_multi_graph")?;
+        crate::store::release::release(&self.conn, "quipu_multi_graph")?;
         Ok(txs)
     }
 }
