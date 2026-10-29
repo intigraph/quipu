@@ -1,7 +1,7 @@
 {
   "benchmark": "W3C SPARQL 1.2 query tests (all dawgt:Proposed at the pinned revision)",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc",
+  "quipu_revision": "11764d3a54720662c4d520c87b0ba88be18688c9",
   "scope": "cases needing RDF 1.2 grammar or terms are enumerated, not run; the rest are run",
   "totals": {
     "all": {
@@ -71,7 +71,7 @@
       "kind": "QueryEvaluationTest",
       "approval": "Proposed",
       "status": "failed",
-      "diagnostic": "query error: SPARQL parse error: error at 5:1: expected one of The SELECT contains an expression with a variable that is unbound, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"a3652255706a8882e4a348835c02d953\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 5:1: expected one of The SELECT contains an expression with a variable that is unbound, [_]"
     },
     {
       "class": "sparql12",
@@ -2477,6 +2477,6 @@
       "reason": "not wired: the syntax runner scores the 1.1 syntax manifest only"
     }
   ],
-  "generated_at": "2026-10-26T06:16:46Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/40278471124"
+  "generated_at": "2026-10-29T12:06:35Z",
+  "generated_by": "https://github.com/intigraph/quipu/actions/runs/40869489886"
 }
