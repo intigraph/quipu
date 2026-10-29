@@ -157,7 +157,17 @@ pub(super) fn candidates(
         let subject = row.get::<_, i64>(0)?;
         // A seed would canonicalize legacy dictionary aliases. Repeating it
         // once per physical alias could multiply the original solution bag.
-        if subject <= 0 || store.lookup_all(&store.resolve(subject)?)?.len() != 1 {
+        if subject <= 0 {
+            return Ok(None);
+        }
+        let name = match store.resolve(subject) {
+            Ok(name) => name,
+            // A speculative candidate outside the owner relation must not
+            // introduce a decoder error the ordinary BGP never encounters.
+            Err(crate::Error::UnknownTerm(_) | crate::Error::InvalidValue(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if store.lookup_all(&name)?.len() != 1 {
             return Ok(None);
         }
         subjects.push(subject);

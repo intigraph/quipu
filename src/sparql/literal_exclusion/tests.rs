@@ -57,6 +57,7 @@ fn fixture() -> Store {
     let mut text = String::new();
     for (name, values) in [
         ("known", vec!["\"open\""]),
+        ("closed", vec!["\"closed\""]),
         ("unknown", vec!["\"weird\""]),
         ("language", vec!["\"open\"@en"]),
         (
