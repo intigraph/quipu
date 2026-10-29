@@ -283,7 +283,11 @@ fn declines_where_driving_could_cost_more_or_change_the_answer() {
     // A small original driver is already cheap.
     let (small, _dir) = fixture(2_000, true);
     assert_eq!(driven(&small, &plain(window)).1, 0);
-    let (store, _dir) = fixture(12_000, true);
+    let (mut store, _dir) = fixture(12_000, true);
+    // This compares semantic parity with a deliberately unoptimized plan,
+    // not its wall-clock speed on a shared test host. Budget refusal has its
+    // own controls; keep the normal row ceiling for both plans here.
+    store.search_config_mut().query_timeout_ms = 0;
     for text in [
         // The filter keeps most rows: the probes saved cannot pay for the scan.
         plain("?end >= \"2026-01-01T00:00:00Z\"^^xsd:dateTime"),

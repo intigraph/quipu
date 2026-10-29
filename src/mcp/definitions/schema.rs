@@ -32,6 +32,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "rationale": { "type": "string", "description": "Why this change is needed" },
                     "proposer": { "type": "string", "description": "Identity of the proposing agent" },
                     "trigger_ref": { "type": "string", "description": "Validation failure ref or bead id that triggered this proposal" },
+                    "migration": {
+                        "type": "array",
+                        "description": "Optional data-migration program run as ONE transaction (source migration:<id>) when the proposal is accepted. Each item has an 'op': rename_predicate {from,to}; retype_class {from,to}; cast_datatype {predicate,datatype}; split_property {from, into:[{predicate,expression}]} (expressions over ?o); merge_property {from:[..], to, expression?} (expression over ?v0,?v1,..); sparql {update} (DELETE/INSERT WHERE, INSERT DATA or DELETE DATA on the ROOT graph). Old facts are superseded, not rewritten.",
+                        "items": { "type": "object" }
+                    },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
                 },
                 "required": ["kind", "target", "diff", "proposer"]
@@ -49,13 +54,15 @@ pub(super) fn defs() -> Vec<JsonValue> {
         }),
         serde_json::json!({
             "name": "quipu_accept_proposal",
-            "description": "Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table.",
+            "description": "Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "id": { "type": "integer", "description": "Proposal ID to accept" },
                     "decided_by": { "type": "string", "description": "Identity of the approver (required; there is no default)" },
                     "note": { "type": "string", "description": "Optional acceptance note" },
+                    "dry_run": { "type": "boolean", "description": "Report what acceptance would do without accepting (default false)" },
+                    "limit": { "type": "integer", "description": "Dry run: maximum sample facts and violations per list (default 50, max 1000)" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
                 },
                 "required": ["id", "decided_by"]

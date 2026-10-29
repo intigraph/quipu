@@ -70,7 +70,7 @@ fn list_proposals_all_and_filtered() {
 #[test]
 #[cfg(feature = "shacl")]
 fn accept_shape_proposal_validates_turtle() {
-    let store = test_store();
+    let mut store = test_store();
     let valid_turtle = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <http://example.org/> .
@@ -111,7 +111,7 @@ ex:PersonShape a sh:NodeShape ;
 #[test]
 #[cfg(feature = "shacl")]
 fn accept_invalid_turtle_keeps_pending() {
-    let store = test_store();
+    let mut store = test_store();
     let id = store
         .insert_proposal(&NewProposal {
             kind: &ProposalKind::Shape,
@@ -168,7 +168,7 @@ fn reject_proposal() {
 #[test]
 #[cfg(feature = "shacl")]
 fn cannot_accept_already_rejected() {
-    let store = test_store();
+    let mut store = test_store();
     let id = store
         .insert_proposal(&NewProposal {
             kind: &ProposalKind::Shape,
@@ -192,7 +192,7 @@ fn cannot_accept_already_rejected() {
 #[test]
 #[cfg(feature = "shacl")]
 fn accept_then_write_passes_validation() {
-    let store = test_store();
+    let mut store = test_store();
     let shape_turtle = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <http://example.org/> .

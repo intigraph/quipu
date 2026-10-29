@@ -6,12 +6,14 @@ All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl`
 
 ## `quipu_accept_proposal`
 
-Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table.
+Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `decided_by` | string | yes | Identity of the approver (required; there is no default) |
+| `dry_run` | boolean | no | Report what acceptance would do without accepting (default false) |
 | `id` | integer | yes | Proposal ID to accept |
+| `limit` | integer | no | Dry run: maximum sample facts and violations per list (default 50, max 1000) |
 | `note` | string | no | Optional acceptance note |
 | `timestamp` | string | no | ISO-8601 timestamp |
 
@@ -621,6 +623,7 @@ Submit a schema evolution proposal (new shape, class, property, or ontology chan
 | --- | --- | --- | --- |
 | `diff` | string | yes | Turtle fragment or JSON patch describing the change |
 | `kind` | string: `shape`, `ontology`, `class`, `property` | yes | Kind of schema change |
+| `migration` | array | no | Optional data-migration program run as ONE transaction (source migration:&lt;id>) when the proposal is accepted. Each item has an 'op': rename_predicate {from,to}; retype_class {from,to}; cast_datatype {predicate,datatype}; split_property {from, into:[{predicate,expression}]} (expressions over ?o); merge_property {from:[..], to, expression?} (expression over ?v0,?v1,..); sparql {update} (DELETE/INSERT WHERE, INSERT DATA or DELETE DATA on the ROOT graph). Old facts are superseded, not rewritten. |
 | `proposer` | string | yes | Identity of the proposing agent |
 | `rationale` | string | no | Why this change is needed |
 | `target` | string | yes | Shape name, class IRI, or property IRI being changed |
