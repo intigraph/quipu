@@ -851,3 +851,42 @@ fn dense_historical_object_lookup_does_not_walk_payload_history() {
             .unwrap();
     assert_eq!(missing, result);
 }
+
+#[test]
+fn unbound_predicate_presence_keeps_reads_on_covering_indexes() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(a)];
+    let membership = predicate(
+        &store,
+        &ctx,
+        &pattern,
+        &Bindings::new(),
+        &[graph],
+        &mut params,
+    )
+    .unwrap()
+    .unwrap_or_else(|| "g=?2".into());
+    let sql = format!(
+        "SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND {membership} AND op=1 AND valid_to IS NULL"
+    );
+    assert_eq!(
+        table_columns(&store, &sql, &[a, graph]),
+        0,
+        "preflight absence must not fetch fact payload pages"
+    );
+    let present = format!(
+        "SELECT (\"yes\" AS ?probe) WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> ?v }} }} LIMIT 1"
+    );
+    assert_eq!(query(&store, &present).unwrap().rows().len(), 1);
+    let missing = format!(
+        "SELECT (\"yes\" AS ?probe) WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}missing> ?v }} }} LIMIT 1"
+    );
+    assert!(query(&store, &missing).unwrap().rows().is_empty());
+}

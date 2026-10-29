@@ -49,7 +49,10 @@ pub(super) fn predicate(
                 .is_some_and(|value| !matches!(value, crate::Value::Ref(id) if *id < 0)),
             _ => false,
         };
-    if (!text_leaf && !bound_leaf && !object_leaf)
+    let predicate_leaf = plain_predicate_leaf(pattern, seed)
+        && ctx.string_narrows.is_none()
+        && matches!(&ctx.graph, super::GraphScope::Named(active) if active.as_slice() == graphs);
+    if (!text_leaf && !bound_leaf && !object_leaf && !predicate_leaf)
         || store.has_attachments()
         || ctx.valid_at.is_some()
         || ctx.as_of_tx.is_some()
@@ -205,22 +208,7 @@ fn dense_plain_object(store: &Store, pattern: &TriplePattern, seed: &Bindings) -
     if rows <= DENSE_ROWS {
         return Ok(false);
     }
-    let definition: Option<String> = store
-        .conn
-        .query_row(
-            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_aev'",
-            [],
-            |r| r.get(0),
-        )
-        .optional()?;
-    let exact = definition.is_some_and(|sql| {
-        sql.chars()
-            .filter(|c| !c.is_ascii_whitespace())
-            .flat_map(char::to_lowercase)
-            .collect::<String>()
-            == "createindexidx_current_aevonfacts(a,e,v)whereop=1andvalid_toisnull"
-    });
-    if !exact {
+    if !current_aev_index(store)? {
         return Ok(false);
     }
     // Refuse a global current scan whose size was not proved modest. Neither
@@ -234,4 +222,60 @@ fn dense_plain_object(store: &Store, pattern: &TriplePattern, seed: &Bindings) -
         ))?
         .query_row([predicate], |r| r.get(0))?;
     Ok(current <= MAX_CURRENT_ROWS)
+}
+
+fn current_aev_index(store: &Store) -> Result<bool> {
+    let definition: Option<String> = store
+        .conn
+        .query_row(
+            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_aev'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(definition.is_some_and(|sql| {
+        sql.chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+            == "createindexidx_current_aevonfacts(a,e,v)whereop=1andvalid_toisnull"
+    }))
+}
+
+fn plain_predicate_leaf(pattern: &TriplePattern, seed: &Bindings) -> bool {
+    seed.is_empty()
+        && matches!(
+            (&pattern.subject, &pattern.predicate, &pattern.object),
+            (
+                TermPattern::Variable(_),
+                NamedNodePattern::NamedNode(_),
+                TermPattern::Variable(_)
+            )
+        )
+}
+
+/// Preflight absence still scans all matches when none belongs to the graph.
+/// Intersect current covering indexes by the same physical row instead of
+/// faulting every candidate's wide fact payload just to inspect graph membership.
+pub(super) fn predicate_source(
+    store: &Store,
+    ctx: &TemporalContext,
+    pattern: &TriplePattern,
+    seed: &Bindings,
+) -> Result<Option<&'static str>> {
+    if !plain_predicate_leaf(pattern, seed)
+        || store.has_attachments()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.entails_rdfs
+        || !matches!(&ctx.graph, super::GraphScope::Named(graphs) if graphs.len()==1 && graphs[0]>0)
+    {
+        return Ok(None);
+    }
+    if current_g_index(store)? && current_aev_index(store)? {
+        Ok(Some("facts INDEXED BY idx_current_aev"))
+    } else {
+        Ok(None)
+    }
 }
