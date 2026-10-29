@@ -108,7 +108,7 @@ fn current_g_index(store: &Store) -> Result<bool> {
 #[cfg(test)]
 mod tests;
 
-/// A strict value-leading source for an object-bound local leaf.
+/// Choose a covering source for a current, object-bound local leaf.
 pub(super) fn object_source(
     store: &Store,
     ctx: &TemporalContext,
@@ -157,5 +157,81 @@ pub(super) fn object_source(
     if normalized != "createindexidx_vaetonfacts(v,a,e,valid_from)" {
         return Ok(None);
     }
+    if dense_plain_object(store, pattern, seed)? {
+        return Ok(Some("facts INDEXED BY idx_current_aev"));
+    }
     Ok(Some("facts INDEXED BY idx_vaet"))
+}
+
+/// A value seek is cheap until a common literal carries a large history. Prove
+/// that case from the covering value index before considering the current-only
+/// predicate index; absent/selective owners and identifiers keep point seeks.
+fn dense_plain_object(store: &Store, pattern: &TriplePattern, seed: &Bindings) -> Result<bool> {
+    const DENSE_ROWS: i64 = 4096;
+    const MAX_CURRENT_ROWS: i64 = 262_144;
+    let Some(value @ crate::Value::Str(_)) =
+        super::pattern_util::resolve_object_pattern(store, &pattern.object, seed)?
+    else {
+        return Ok(false);
+    };
+    let NamedNodePattern::NamedNode(predicate) = &pattern.predicate else {
+        return Ok(false);
+    };
+    let ids = store.lookup_all(predicate.as_str())?;
+    let [predicate] = ids.as_slice() else {
+        return Ok(false);
+    };
+    let aliases = store.literal_aliases(&value, false)?;
+    let mut parameters: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(*predicate)];
+    let placeholders = aliases
+        .into_iter()
+        .map(|bytes| {
+            parameters.push(Box::new(bytes) as Box<dyn rusqlite::types::ToSql>);
+            format!("?{}", parameters.len())
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    // No op/valid_to filter here: both columns live off the value index. This
+    // bounded, index-only probe measures history without fetching its pages.
+    let sql = format!(
+        "SELECT COUNT(*) FROM (SELECT 1 FROM facts INDEXED BY idx_vaet
+        WHERE a=?1 AND v IN ({placeholders}) LIMIT {})",
+        DENSE_ROWS + 1
+    );
+    let rows: i64 = store.prepare(&sql)?.query_row(
+        rusqlite::params_from_iter(parameters.iter().map(std::convert::AsRef::as_ref)),
+        |r| r.get(0),
+    )?;
+    if rows <= DENSE_ROWS {
+        return Ok(false);
+    }
+    let definition: Option<String> = store
+        .conn
+        .query_row(
+            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_aev'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let exact = definition.is_some_and(|sql| {
+        sql.chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+            == "createindexidx_current_aevonfacts(a,e,v)whereop=1andvalid_toisnull"
+    });
+    if !exact {
+        return Ok(false);
+    }
+    // Refuse a global current scan whose size was not proved modest. Neither
+    // the admission probe nor the chosen scan may grow with unlimited history.
+    let current: i64 = store
+        .prepare(&format!(
+            "SELECT COUNT(*) FROM
+        (SELECT 1 FROM facts INDEXED BY idx_current_aev WHERE a=?1
+        AND op=1 AND valid_to IS NULL LIMIT {})",
+            MAX_CURRENT_ROWS + 1
+        ))?
+        .query_row([predicate], |r| r.get(0))?;
+    Ok(current <= MAX_CURRENT_ROWS)
 }
