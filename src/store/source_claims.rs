@@ -81,7 +81,7 @@ impl Store {
             if datum.op == Op::Retract {
                 for bytes in self.literal_aliases(&datum.value, false)? {
                     let count = close.execute(params![
-                        timestamp,
+                        datum.valid_to.as_deref().unwrap_or(timestamp),
                         datum.entity,
                         datum.attribute,
                         bytes,
