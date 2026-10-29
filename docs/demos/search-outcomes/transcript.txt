@@ -1,0 +1,14 @@
+Script started on 2026-10-28 23:43:11-04:00 [COMMAND="python3 -B docs/demos/search-outcomes/probe.py" <not executed on terminal>]
+Target: source checkout with synthetic private journals; no installed-service claim.
+BEFORE fd93c2b0b3c2eb77e2375935bedf7ac49c3106e0: durable outcome replay command is absent.
+INPUT: one successful empty query, one failed query, one identical duplicate.
+AFTER: {"backlog_bytes": 0, "errors": 0, "files_inspected": 1, "files_uninspected": 0, "partial_tails": 0, "records_processed": 3, "source_gaps": 0}
+# HELP quipu_search_journal_requests_total Unique durable outcomes; do not add to live request counters.
+# TYPE quipu_search_journal_requests_total counter
+quipu_search_journal_requests_total{surface="cli_local",operation="query",outcome="empty"} 1
+quipu_search_journal_requests_total{surface="cli_local",operation="query",outcome="error"} 1
+RESTART: reopen consumer state and replay the same source.
+records_processed=0; unique_outcomes=2; errors=0
+PASS: failed query remains error; duplicate/restart do not increase unique outcomes.
+
+Script done on 2026-10-28 23:43:13-04:00 [COMMAND_EXIT_CODE="0"]

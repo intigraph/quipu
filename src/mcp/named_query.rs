@@ -444,7 +444,12 @@ fn catalog_json(store: &Store) -> JsonValue {
 ///
 /// Output includes `truncated: false`: the entire evaluated result is returned.
 /// A template's LIMIT selects its answer; it is not response truncation.
-pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+pub use observed::tool_ask;
+#[path = "named_query/observed.rs"]
+mod observed;
+use observed::json_to_param_str;
+
+fn ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let name = match input.get("name").and_then(JsonValue::as_str) {
         Some(name) if name != "list" => name,
         _ => return Ok(catalog_json(store)),
@@ -519,16 +524,6 @@ pub fn tool_ask(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         "count": rows.len(),
         "truncated": false,
     }))
-}
-
-/// Coerce a JSON parameter value to its string form for rendering.
-fn json_to_param_str(v: &JsonValue) -> Option<String> {
-    match v {
-        JsonValue::String(s) => Some(s.clone()),
-        JsonValue::Number(n) => Some(n.to_string()),
-        JsonValue::Bool(b) => Some(b.to_string()),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
