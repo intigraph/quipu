@@ -103,6 +103,17 @@ A participating in retirement. No per-commit network RPC or expiring lease is
 selected. A witness outage blocks new admission/handoff, not a still-active
 owner's already admitted local commits. Local journal loss blocks those commits.
 
+The executable model makes the witness's intermediate states explicit: reserve
+the exact request before the local barrier, then record completed source
+retirement externally **before exposing a usable receipt**. Startup responses
+bind this phase/reservation as well as the tuple and nonce. An unresolved
+reservation blocks an ordinary source process restart; its exact retirement can
+resume through the bounded internal transition path. An already admitted running
+A remains writable until the actual local barrier. Without these distinctions,
+old source host/journal bytes could restart A after receipt publication but before
+the witness names B. These are candidate model/schema requirements, not a
+provisioned witness or activated startup protocol.
+
 Full host/journal/witness rollback, cloned native identities, and pre-fencing
 binaries are not certified safe. Recovery must retain read-only/non-owner mode
 until current external authority is reconciled. Deployment must prevent a

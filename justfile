@@ -183,6 +183,7 @@ demo name="explorer":
     case {{quote(name)}} in
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
+        ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
         cast-filter) cargo run --quiet --locked --no-default-features --example cast_filter_profile -- examples/cast-filter-profile.rq 6000 ;;
         explorer)
             rm -f /tmp/quipu-demo.db
