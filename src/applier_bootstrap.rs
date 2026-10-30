@@ -61,7 +61,7 @@ impl BootstrapTrust {
 
     fn accepts(&self, manifest: &Json, signature: Option<&str>) -> bool {
         let (Ok(manifest), Some(signature)) = (
-            serde_json::from_value::<crate::asof_share::Manifest>(manifest.clone()),
+            serde_json::from_value::<crate::replica_manifest::Manifest>(manifest.clone()),
             signature,
         ) else {
             return false;
@@ -70,9 +70,9 @@ impl BootstrapTrust {
             && manifest.source.log_epoch == self.source.log_epoch
             && manifest.scope_digest == self.scope_digest
             && manifest.policy_digest == self.policy_digest
-            && crate::asof_share::manifest_bytes(&manifest)
+            && crate::replica_manifest::manifest_bytes(&manifest)
                 .is_ok_and(|bytes| crate::share::sha256(&bytes) == self.manifest_sha256)
-            && crate::asof_share::verify_manifest(&manifest, &self.public_key_hex, signature)
+            && crate::replica_manifest::verify_manifest(&manifest, &self.public_key_hex, signature)
     }
 }
 

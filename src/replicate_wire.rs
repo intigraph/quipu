@@ -212,7 +212,7 @@ pub fn records_digest(records: &[serde_json::Value]) -> String {
     hex::encode(Sha256::digest(encoded.as_bytes()))
 }
 
-fn canonical(value: &serde_json::Value) -> String {
+pub(crate) fn canonical(value: &serde_json::Value) -> String {
     use serde_json::Value;
     match value {
         Value::Object(map) => {
