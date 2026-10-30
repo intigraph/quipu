@@ -1,7 +1,6 @@
 --- a/src/ownership_handoff_model/state.rs
 +++ b/src/ownership_handoff_model/state.rs
-@@ -145,15 +145,8 @@
- 
+@@ -146,12 +146,5 @@
      // Critical prerequisite for witness retirement and usable receipts. The mutant removes THIS
      // check; the model explorer must then find two writable placements.
 -    pub(super) fn require_retired(&self, certificate: &Certificate) -> ModelResult<()> {
@@ -16,5 +15,3 @@
 +    pub(super) fn require_retired(&self, _certificate: &Certificate) -> ModelResult<()> {
 +        Ok(())
      }
- 
-     pub(super) fn fresh_start(
