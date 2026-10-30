@@ -146,6 +146,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // key and manifest. Copying it would admit a different reconstruction as
     // that receiver without independently establishing its trust contract.
     ("replica_bootstrap_admission", Disposition::Excluded),
+    // Source-local logical replication generation and delivery journal. A
+    // reconstruction has its own epoch and must explicitly initialize a new
+    // journal; inheriting these would claim continuity with another source.
+    ("store_replication_state", Disposition::Excluded),
+    ("store_replication_changes", Disposition::Excluded),
     // The digests of the transactions that cursor applied, kept to tell an
     // exact redelivery from a changed one. They belong to the same cursor and
     // mean nothing without it: excluded with it.

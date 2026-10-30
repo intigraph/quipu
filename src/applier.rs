@@ -54,6 +54,8 @@ use crate::types::{Op, Value};
 mod chunk;
 #[path = "applier_digest.rs"]
 mod digest;
+#[path = "applier_logical.rs"]
+mod logical;
 #[path = "applier_map.rs"]
 pub mod map;
 #[path = "applier_record.rs"]
@@ -168,6 +170,8 @@ pub enum Outcome {
 
 /// The applier for one replica store.
 pub struct Applier {
+    logical: Option<logical::Cursor>,
+    logical_trust: Option<crate::store_replica::SnapshotTrust>,
     progress: Option<Progress>,
     chunk: Option<Chunk>,
     /// An as-of share being streamed into the store, inside its savepoint.
@@ -190,6 +194,7 @@ impl Applier {
     /// [`Error::Sqlite`] if the progress record cannot be read.
     pub fn open(store: &Store) -> Result<Self> {
         store.conn.execute_batch(PROGRESS_DDL)?;
+        let logical = logical::prepare(store)?;
         store.conn.execute_batch(digest::APPLIED_TX_DDL)?;
         store.conn.execute_batch(digest::STOP_DDL)?;
         store.conn.execute_batch(map::MAP_DDL)?;
@@ -214,6 +219,8 @@ impl Applier {
         let stream = stream::Stream::load(store, progress.as_ref().map(|p| &p.source))?;
         let bootstrap_admission = bootstrap::load_admission(store)?;
         Ok(Self {
+            logical,
+            logical_trust: None,
             stream,
             progress,
             chunk: None,
@@ -243,6 +250,12 @@ impl Applier {
         data: &str,
         now_ms: u64,
     ) -> Result<Outcome> {
+        if self.logical.is_some() || self.logical_trust.is_some() {
+            self.end_session();
+            return Ok(refused(
+                "logical store replicas require the signed composite-cursor protocol",
+            ));
+        }
         // The lineage this replica held before the frame. Any Rebootstrap ends
         // it (a signed epoch_end, an unframeable transaction, or a different
         // source seen on reconnect), so a relay ends its children on it too.
