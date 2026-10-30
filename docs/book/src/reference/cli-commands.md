@@ -292,6 +292,14 @@ Resolve a stable entity reference from a JSON request.
 qp entity-ref resolve <request.json>
 ```
 
+### `qp entity-ref verify`
+
+Verify a current key IRI against its local key triples.
+
+```text
+qp entity-ref verify <request.json>
+```
+
 ## `qp ontology`
 
 Load, list or remove OWL ontologies (owl feature).

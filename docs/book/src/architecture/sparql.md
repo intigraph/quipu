@@ -108,6 +108,13 @@ forms and joins retain their existing complexity limits.
 | isIRI | `FILTER(isIRI(?o))` |
 | IN / NOT IN | `FILTER(?name IN ("Alice", "Bob"))` |
 
+Implemented XSD constructors (`string`, `integer`, `decimal`, `float`, `double`,
+`boolean` and `dateTime`) are deterministic casts. A selective leading FILTER
+using one can drive a BGP before the other properties are hydrated, just as an
+equivalent typed-literal bound can. Unknown extension functions and casts with
+volatile arguments retain the conservative plan. Invalid casts keep their
+existing type-error behavior; this optimization does not change query budgets.
+
 ### RDFS Inference
 
 Quipu supports RDFS subclass inference for `rdf:type` queries. If you define:

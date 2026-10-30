@@ -55,7 +55,7 @@ strings alone do not establish that two binaries contain the same code.
 
 ## Commands
 
-### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve`
+### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve|verify`
 
 List or explicitly apply the configured namespace registry, then mint stable
 entity identities or resolve reference descriptors. See [entity namespaces](namespaces.md)

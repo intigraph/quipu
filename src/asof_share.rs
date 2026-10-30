@@ -26,12 +26,6 @@ use crate::feed_parts::{PartBuilder, PartsSummary, RecordTooLarge};
 use crate::types::Value;
 use crate::{Error, Result, Store};
 
-/// Contract version of the manifest.
-pub const SCHEMA: &str = "quipu-asof-share/v1";
-
-/// The single read rule in force until per-graph read authorization exists.
-pub const POLICY: &str = "quipu-asof-policy/write-class-principal/v1";
-
 /// The default graph's name in a request, a record and the manifest.
 pub const ROOT: &str = "ROOT";
 
@@ -100,9 +94,10 @@ impl Default for Limits {
     }
 }
 
-#[path = "asof_share/manifest.rs"]
-mod manifest;
-pub use manifest::{Completeness, GraphCompleteness, Manifest, Producer, Source};
+pub use crate::replica_manifest::{
+    Completeness, GraphCompleteness, Manifest, POLICY, Producer, SCHEMA, Source, manifest_bytes,
+    manifest_message, sign_manifest, verify_manifest,
+};
 
 #[path = "asof_share/scope.rs"]
 mod scope;
@@ -210,16 +205,6 @@ impl From<std::io::Error> for CutError {
 
 fn invalid(message: impl Into<String>) -> CutError {
     CutError::Refused(Error::InvalidValue(message.into()))
-}
-
-/// Compact UTF-8 JSON with sorted keys, the share-manifest encoding.
-///
-/// # Errors
-///
-/// Serialization failure.
-pub fn manifest_bytes(manifest: &Manifest) -> Result<Vec<u8>> {
-    let value = serde_json::to_value(manifest).map_err(|e| Error::InvalidValue(e.to_string()))?;
-    serde_json::to_vec(&value).map_err(|e| Error::InvalidValue(e.to_string()))
 }
 
 /// The scope digest of [`Manifest::scope_digest`]: SHA-256 over the compact

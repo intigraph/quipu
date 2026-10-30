@@ -172,6 +172,8 @@ pub struct Applier {
     chunk: Option<Chunk>,
     /// An as-of share being streamed into the store, inside its savepoint.
     share: Option<bootstrap::ShareStream>,
+    bootstrap_trust: Option<bootstrap::BootstrapTrust>,
+    bootstrap_admission: Option<String>,
     last_frame_ms: Option<u64>,
     stopped: Option<Outcome>,
     stream: stream::Stream,
@@ -210,11 +212,14 @@ impl Applier {
             )
             .optional()?;
         let stream = stream::Stream::load(store, progress.as_ref().map(|p| &p.source))?;
+        let bootstrap_admission = bootstrap::load_admission(store)?;
         Ok(Self {
             stream,
             progress,
             chunk: None,
             share: None,
+            bootstrap_trust: None,
+            bootstrap_admission,
             last_frame_ms: None,
             stopped: digest::load_stop(store)?,
         })
@@ -246,7 +251,23 @@ impl Applier {
             .as_ref()
             .map(|p| p.source.clone())
             .or_else(|| self.stream.covered().cloned());
-        let outcome = self.apply_frame_inner(store, event, data, now_ms)?;
+        let result = self.apply_frame_inner(store, event, data, now_ms);
+        if self.bootstrap_trust.is_some()
+            && matches!(
+                &result,
+                Err(_)
+                    | Ok(Outcome::Refused { .. }
+                        | Outcome::Resume { .. }
+                        | Outcome::Rebootstrap { .. }
+                        | Outcome::Stopped { .. }
+                        | Outcome::Revoked { .. })
+            )
+        {
+            self.abort_share(store)?;
+            self.chunk = None;
+            self.end_session();
+        }
+        let outcome = result?;
         if let (Outcome::Rebootstrap { reason }, Some(held)) = (&outcome, held) {
             map::record_end(store, &held, reason)?;
         }
@@ -261,6 +282,9 @@ impl Applier {
         now_ms: u64,
     ) -> Result<Outcome> {
         self.last_frame_ms = Some(now_ms);
+        if let Some(outcome) = self.check_bootstrap_frame(event) {
+            return Ok(outcome);
+        }
         if let Some(stopped) = self.stopped.clone() {
             // A new source still comes first: it means a new replica.
             let changed = serde_json::from_str::<Json>(data)
@@ -605,7 +629,7 @@ pub(crate) fn live_digest(store: &Store) -> std::collections::BTreeSet<String> {
 
 #[path = "applier_bootstrap.rs"]
 mod bootstrap;
-pub use bootstrap::share_graph_digest;
+pub use bootstrap::{BootstrapTrust, share_graph_digest};
 
 #[cfg(test)]
 #[path = "applier_tests.rs"]

@@ -311,6 +311,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
             cand mint 'Mint a typed stable entity reference from a JSON request'
             cand resolve 'Resolve a stable entity reference from a JSON request'
+            cand verify 'Verify a current key IRI against its local key triples'
         }
         &'quipu;entity-ref;mint'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -318,6 +319,11 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
         }
         &'quipu;entity-ref;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;entity-ref;verify'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

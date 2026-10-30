@@ -23,6 +23,7 @@ pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
 pub mod entity_key;
+mod entity_key_guard;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;
@@ -52,6 +53,9 @@ mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+/// Portable bootstrap manifest and signature verification, including WASM.
+#[path = "asof_share/manifest.rs"]
+pub mod replica_manifest;
 pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
@@ -94,6 +98,8 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+/// Experimental pure ownership-handoff model; no Store or runtime integration.
+pub mod ownership_handoff_model;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;

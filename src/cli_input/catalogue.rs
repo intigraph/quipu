@@ -62,6 +62,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("namespaces apply", "", 0, 0, "", ""),
     spec!("entity-ref mint", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref resolve", "<request.json>", 1, 1, "", ""),
+    spec!("entity-ref verify", "<request.json>", 1, 1, "", ""),
     spec!("ontology", "", 0, 0, "", ""),
     spec!("ontology list", "", 0, 0, "", ""),
     spec!("ontology load", "<name> <file.ttl>", 2, 2, "", ""),

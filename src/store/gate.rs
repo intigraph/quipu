@@ -136,23 +136,7 @@ impl Store {
             }
         }
 
-        let mut closed = 0usize;
-        // quipu #83: stamp the retracting tx here TOO. This is the SECOND
-        // fact-closing site; fixing only `close_assertion` would leave every
-        // functional-property supersede invisible to as-of-tx, in exactly the
-        // way the whole defect describes.
-        let mut close_other = self.conn.prepare(
-            "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
-             WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
-        )?;
-        // The close needs the same immutable op=0 row an explicit retract
-        // writes. Without it the change feed shows the new value and never the
-        // end of the old one, so a replica built from the feed keeps both
-        // (local-sync-mode.md F1).
-        let mut retract_row = self.conn.prepare(
-            "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7) ON CONFLICT(e, a, v, tx) DO NOTHING",
-        )?;
+        let mut closures = Vec::new();
         for ((entity, attribute), values) in &proposed {
             // AMBIGUOUS BATCH: two distinct values for one functional property in
             // a single write. Superseding here would silently pick whichever the
@@ -170,22 +154,63 @@ impl Store {
             )?.query_map(params![entity, attribute, graph], |row| row.get(0))?.collect::<std::result::Result<_,_>>()?;
             for bytes in existing {
                 if crate::Value::from_bytes(&bytes)?.term_key() != *new_value {
-                    let count = close_other
-                        .execute(params![timestamp, entity, attribute, bytes, graph, tx_id])?;
-                    if count > 0 {
-                        retract_row.execute(params![
-                            entity,
-                            attribute,
-                            bytes,
-                            graph,
-                            tx_id,
-                            timestamp,
-                            Op::Retract as i32
-                        ])?;
-                    }
-                    closed += count;
+                    closures.push((*entity, *attribute, bytes));
                 }
             }
+        }
+        // Supersedes are writes too: validate their exact implicit retractions
+        // against the old key contract before closing any fact. Checking only
+        // the input assertions misses an unselected type replacing rdf:type.
+        if !closures.is_empty() {
+            let retractions = closures
+                .iter()
+                .map(|(entity, attribute, bytes)| {
+                    Ok(Datum {
+                        entity: *entity,
+                        attribute: *attribute,
+                        value: crate::Value::from_bytes(bytes)?,
+                        op: Op::Retract,
+                        valid_from: timestamp.to_string(),
+                        valid_to: None,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            crate::entity_key_guard::check_write(self, graph, &retractions)
+                .map_err(|e| self.stash_refusal("key-identity", e, datums.len()))?;
+        }
+
+        let mut closed = 0usize;
+        // quipu #83: stamp the retracting tx here TOO. This is the SECOND
+        // fact-closing site; fixing only `close_assertion` would leave every
+        // functional-property supersede invisible to as-of-tx, in exactly the
+        // way the whole defect describes.
+        let mut close_other = self.conn.prepare(
+            "UPDATE facts SET valid_to = ?1, retracted_tx = ?6 \
+             WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = ?5 AND op = 1 AND valid_to IS NULL",
+        )?;
+        // The close needs the same immutable op=0 row an explicit retract
+        // writes. Without it the change feed shows the new value and never the
+        // end of the old one, so a replica built from the feed keeps both
+        // (local-sync-mode.md F1).
+        let mut retract_row = self.conn.prepare(
+            "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7) ON CONFLICT(e, a, v, tx) DO NOTHING",
+        )?;
+        for (entity, attribute, bytes) in closures {
+            let count =
+                close_other.execute(params![timestamp, entity, attribute, bytes, graph, tx_id])?;
+            if count > 0 {
+                retract_row.execute(params![
+                    entity,
+                    attribute,
+                    bytes,
+                    graph,
+                    tx_id,
+                    timestamp,
+                    Op::Retract as i32
+                ])?;
+            }
+            closed += count;
         }
         Ok(closed)
     }

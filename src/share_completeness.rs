@@ -142,6 +142,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // of its own: carrying it would let the copy splice a feed it never
     // bootstrapped from. Excluded, like the epoch it is bound to.
     ("replica_progress", Disposition::Excluded),
+    // A receiver's pinned bootstrap descriptor admits exactly its own source,
+    // key and manifest. Copying it would admit a different reconstruction as
+    // that receiver without independently establishing its trust contract.
+    ("replica_bootstrap_admission", Disposition::Excluded),
     // The digests of the transactions that cursor applied, kept to tell an
     // exact redelivery from a changed one. They belong to the same cursor and
     // mean nothing without it: excluded with it.
