@@ -222,14 +222,17 @@ complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcom
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -f -a "mint" -d 'Mint a typed stable entity reference from a JSON request'
-complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -f -a "resolve" -d 'Resolve a stable entity reference from a JSON request'
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "mint" -d 'Mint a typed stable entity reference from a JSON request'
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "resolve" -d 'Resolve a stable entity reference from a JSON request'
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "verify" -d 'Verify a current key IRI against its local key triples'
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from mint" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from mint" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from verify" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand entity-ref; and __fish_seen_subcommand_from verify" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -f -a "list" -d 'List loaded OWL ontologies'

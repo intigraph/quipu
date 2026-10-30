@@ -23,6 +23,7 @@ pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
 pub mod entity_key;
+mod entity_key_guard;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;

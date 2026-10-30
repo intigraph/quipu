@@ -170,11 +170,11 @@ Read the existing entity-history endpoint for an exact IRI. Its current MAIN-his
 
 ## `quipu_entity_ref`
 
-Mint a typed stable entity in a registered namespace, or describe an exact registered reference without fetching. Uncertain mint responses must be reconciled, never blindly retried.
+Mint a typed stable entity, resolve a registered reference or verify a local key IRI against its key triples without fetching. Uncertain mint responses must be reconciled, never blindly retried.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `action` | string: `mint`, `resolve` | yes |  |
+| `action` | string: `mint`, `resolve`, `verify` | yes |  |
 | `asOf` | string | no |  |
 | `graph` | string | no |  |
 | `iri` | string | no |  |

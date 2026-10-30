@@ -376,6 +376,14 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-request-json:_default' \
 && ret=0
 ;;
+(verify)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -2366,6 +2374,7 @@ _qp__subcmd__entity-ref_commands() {
     local commands; commands=(
 'mint:Mint a typed stable entity reference from a JSON request' \
 'resolve:Resolve a stable entity reference from a JSON request' \
+'verify:Verify a current key IRI against its local key triples' \
     )
     _describe -t commands 'qp entity-ref commands' commands "$@"
 }
@@ -2378,6 +2387,11 @@ _qp__subcmd__entity-ref__subcmd__mint_commands() {
 _qp__subcmd__entity-ref__subcmd__resolve_commands() {
     local commands; commands=()
     _describe -t commands 'qp entity-ref resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__entity-ref__subcmd__verify_commands] )) ||
+_qp__subcmd__entity-ref__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp entity-ref verify commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__episode_commands] )) ||
 _qp__subcmd__episode_commands() {
