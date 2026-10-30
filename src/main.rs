@@ -414,7 +414,7 @@ COMMANDS:
     qp episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     qp retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     qp namespaces list|apply [--db <path>]
-    qp entity-ref mint|resolve <request.json> [--db <path>]
+    qp entity-ref mint|resolve|verify <request.json> [--db <path>]
     qp shapes load|list|remove [--db <path>]
     qp policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
     qp policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]

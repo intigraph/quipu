@@ -84,6 +84,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("namespaces apply", "Apply the configured owner namespace registry to the store"),
     ("entity-ref mint", "Mint a typed stable entity reference from a JSON request"),
     ("entity-ref resolve", "Resolve a stable entity reference from a JSON request"),
+    ("entity-ref verify", "Verify a current key IRI against its local key triples"),
     ("ontology list", "List loaded OWL ontologies"),
     ("ontology load", "Load an OWL ontology and materialize its entailments"),
     ("ontology remove", "Remove a loaded OWL ontology"),
