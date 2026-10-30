@@ -71,6 +71,7 @@ mod join;
 #[cfg(test)]
 mod left_bind_join_tests;
 mod limited_scan;
+mod literal_exclusion;
 mod progress;
 mod read_snapshot;
 #[cfg(test)]
