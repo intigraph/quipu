@@ -68,14 +68,14 @@ pub(crate) fn check_write(store: &Store, graph: i64, datums: &[Datum]) -> Result
         for datum in writes {
             let predicate = store.resolve(datum.attribute)?;
             for (ty, spec) in &contracts {
-                if predicate == crate::namespace::RDF_TYPE {
-                    if let Value::Ref(id) = &datum.value {
-                        let value = store.resolve(*id)?;
-                        if (value == *ty && datum.op != Op::Assert)
-                            || (ns.types.contains(&value) && value != *ty)
-                        {
-                            return Err(refused("cannot change a key IRI's identity type"));
-                        }
+                if predicate == crate::namespace::RDF_TYPE
+                    && let Value::Ref(id) = &datum.value
+                {
+                    let value = store.resolve(*id)?;
+                    if (value == *ty && datum.op != Op::Assert)
+                        || (ns.types.contains(&value) && value != *ty)
+                    {
+                        return Err(refused("cannot change a key IRI's identity type"));
                     }
                 }
                 if spec.fields.contains(&predicate) {
