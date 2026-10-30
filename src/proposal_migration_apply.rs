@@ -58,7 +58,7 @@ pub(crate) fn accept_with_migration(
         // As without a migration: shapes load only where SHACL is compiled in.
         #[cfg(feature = "shacl")]
         if proposal.kind == ProposalKind::Shape {
-            store.load_shapes(&proposal.target, &proposal.diff, decided_at)?;
+            store.load_shapes_enclosed(&proposal.target, &proposal.diff, decided_at)?;
         }
         store.mark_proposal_accepted(proposal.id, decided_by, decided_at, note)?;
         let shapes = store.get_combined_shapes()?;
@@ -132,7 +132,11 @@ pub fn dry_run(store: &Store, id: i64, limit: usize) -> Result<DryRun> {
         .execute_batch("SAVEPOINT quipu_proposal_dry_run")?;
     let report = (|| -> Result<JsonValue> {
         if proposal.kind == ProposalKind::Shape {
-            store.load_shapes(&proposal.target, &proposal.diff, &crate::time::now_iso())?;
+            store.load_shapes_enclosed(
+                &proposal.target,
+                &proposal.diff,
+                &crate::time::now_iso(),
+            )?;
         }
         judge(store, &proposal, &planned, limit)
     })();

@@ -350,3 +350,104 @@ fn preparation_without_shacl_cannot_admit_mapping_writes() {
     assert_eq!(store.latest_tx_id().unwrap(), before);
     assert!(store.shape_mapping_receipt(&mapping.id).unwrap().is_none());
 }
+
+/// A schema proposal accepted with a migration loads its shapes inside the
+/// migration's savepoint, where the flagging settlement cannot open its own
+/// transaction. Closing a decided pin there must be refused with nothing
+/// written, never land without its `MappingRecord`; the same proposal without
+/// a migration still flags through the atomic settlement.
+#[cfg(feature = "shacl")]
+#[test]
+fn enclosed_migration_cannot_close_a_decided_pin_without_its_settlement() {
+    use crate::proposal::{NewProposal, ProposalKind, ProposalStatus};
+    use crate::proposal_migration::MigrationOp;
+
+    let (mut store, mapping) = fixture();
+    apply(&mut store, &mapping);
+    let propose = |store: &Store, target: &str| {
+        store
+            .insert_proposal(&NewProposal {
+                kind: &ProposalKind::Shape,
+                target,
+                diff: NEW,
+                rationale: None,
+                proposer: "agent/test",
+                trigger_ref: None,
+                created_at: AT,
+            })
+            .unwrap()
+    };
+    let program = [MigrationOp::RenamePredicate {
+        from: "urn:fixture:unusedFrom".into(),
+        to: "urn:fixture:unusedTo".into(),
+    }];
+    let events = |store: &Store| -> i64 {
+        store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+            .unwrap()
+    };
+    let pinned = store
+        .current_shape_pins(RegistryKind::Shapes, "fixture")
+        .unwrap();
+
+    let id = propose(&store, "fixture");
+    store.set_proposal_migration(id, &program).unwrap();
+    let before = events(&store);
+    let dry = crate::proposal_migration::dry_run(&store, id, 10).unwrap_err();
+    assert!(dry.to_string().contains("own mapping settlement"), "{dry}");
+    let refused = store
+        .accept_proposal_with_migration(id, ACTOR, NEXT, None)
+        .unwrap_err();
+    assert!(
+        refused.to_string().contains("own mapping settlement"),
+        "{refused}"
+    );
+    assert_eq!(
+        store.get_proposal(id).unwrap().unwrap().status,
+        ProposalStatus::Pending
+    );
+    assert_eq!(
+        store
+            .current_shape_pins(RegistryKind::Shapes, "fixture")
+            .unwrap(),
+        pinned
+    );
+    assert_eq!(
+        store
+            .shape_mapping_receipt(&mapping.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        "decided"
+    );
+    assert_eq!(events(&store), before, "a refused acceptance emits nothing");
+    assert!(store.conn.is_autocommit());
+
+    // An unpinned shape set still loads inside the migration savepoint.
+    let other = propose(&store, "unpinned");
+    store.set_proposal_migration(other, &program).unwrap();
+    crate::proposal_migration::dry_run(&store, other, 10).unwrap();
+    let (accepted, _) = store
+        .accept_proposal_with_migration(other, ACTOR, NEXT, None)
+        .unwrap();
+    assert_eq!(accepted.status, ProposalStatus::Accepted);
+    assert!(
+        !store
+            .current_shape_pins(RegistryKind::Shapes, "unpinned")
+            .unwrap()
+            .is_empty()
+    );
+
+    // Without a migration the pinned load settles atomically and flags.
+    let plain = propose(&store, "fixture");
+    store.accept_proposal(plain, ACTOR, NEXT, None).unwrap();
+    assert_eq!(
+        store
+            .shape_mapping_receipt(&mapping.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        "flagged"
+    );
+}

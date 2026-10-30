@@ -37,7 +37,7 @@ fn concurrent_allocation_cannot_race_a_shape_contract_edit() {
     // reservation (BEGIN IMMEDIATE), so a key allocation cannot interleave
     // between the identity check and the shape contract edit.
     let mut raced = None;
-    let replayed = store
+    store
         .mapping_atomic(
             "urn:quipu:principal:test",
             |store| {
@@ -46,12 +46,13 @@ fn concurrent_allocation_cannot_race_a_shape_contract_edit() {
                     &mut writer,
                     &json!({"action":"mint","namespace":"ep","type":ty,"keys":{host:"db.example"}}),
                 ));
-                Ok(crate::store::mapping_atomic::Preparation::<(), ()>::Replay(()))
+                Ok(crate::store::mapping_atomic::Preparation::<(), ()>::Replay(
+                    (),
+                ))
             },
             |_, (), _, _| unreachable!("a replay preparation never writes"),
         )
         .unwrap();
-    assert_eq!(replayed, ());
     assert!(
         matches!(raced, Some(Err(crate::Error::Sqlite(rusqlite::Error::SqliteFailure(error, _))))
             if error.code == rusqlite::ErrorCode::DatabaseBusy),

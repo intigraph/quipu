@@ -45,7 +45,7 @@ fn assertions_and_type_removal_cannot_evade_the_key_guard() {
 
 #[test]
 fn shape_freeze_compares_effective_contract_and_retains_history() {
-    let (store, iri) = allocated();
+    let (mut store, iri) = allocated();
     // Default hash and explicit hash are the same derivation. Unrelated
     // constraints may evolve; a lexical/order/kind change cannot.
     store
@@ -90,7 +90,7 @@ fn shape_freeze_compares_effective_contract_and_retains_history() {
         store.remove_shapes("endpoint").is_err(),
         "retirement cannot unfreeze identity"
     );
-    let empty = store_with(&[ENDPOINT], &shapes("", "1"));
+    let mut empty = store_with(&[ENDPOINT], &shapes("", "1"));
     empty
         .load_shapes(
             "endpoint",

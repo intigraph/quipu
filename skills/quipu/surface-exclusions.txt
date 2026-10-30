@@ -118,6 +118,9 @@ mcp quipu_load_ontology Reasoning, ontologies and alignment, reached once an age
 mcp quipu_align_propose Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_align_decide Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_align_apply Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_mapping_propose Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_mapping_decide Reasoning, ontologies and alignment, reached once an agent knows the graph
+mcp quipu_mapping_apply Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_rule_query Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_namespaces Reasoning, ontologies and alignment, reached once an agent knows the graph
 mcp quipu_entity_ref Reasoning, ontologies and alignment, reached once an agent knows the graph

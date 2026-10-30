@@ -64,6 +64,25 @@ impl Store {
         .map(|_| ())
     }
 
+    /// [`Self::load_shapes`] inside the caller's open transaction (a schema
+    /// proposal's migration savepoint, or its dry run). Refuses a load that
+    /// would have to flag a decided mapping; see
+    /// [`Self::mapping_registry_change_enclosed`].
+    pub(crate) fn load_shapes_enclosed(
+        &self,
+        name: &str,
+        turtle: &str,
+        timestamp: &str,
+    ) -> Result<()> {
+        self.mapping_registry_change_enclosed(
+            crate::shape_mapping::RegistryKind::Shapes,
+            name,
+            Some(turtle),
+            timestamp,
+        )
+        .map(|_| ())
+    }
+
     /// Close a stored shape graph's current version. **Never deletes** — the
     /// history stays queryable, which is the whole point of #71.
     pub fn remove_shapes(&mut self, name: &str) -> Result<bool> {
