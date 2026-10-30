@@ -95,6 +95,8 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+/// Experimental pure ownership-handoff model; no Store or runtime integration.
+pub mod ownership_handoff_model;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;
