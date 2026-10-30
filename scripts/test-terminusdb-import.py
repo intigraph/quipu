@@ -38,6 +38,7 @@ import json
 import os
 import shutil
 import socket
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -60,6 +61,30 @@ QUIPU_SERVER = os.environ.get('QUIPU_SERVER_BIN') or shutil.which('quipu-server'
 LOG = json.loads((LIVE / 'log.json').read_text())          # newest first, as /api/log returns it
 HEAD = LOG[0]['identifier']
 ADA, GRACE = D + 'Person/Ada%20Lovelace', D + 'Person/Grace%20Hopper'
+
+
+def one_import_after_its_shape_settlement(changes, transactions, loaded, source, shapes_name):
+    """The CLI load's transaction, identified by its own ingest completion
+    marker rather than by position, after checking that the load is ONE write
+    sourced from the commit and that the only other transaction is the shape
+    load's settlement, named by its `shapes.loaded` receipt and carrying no
+    facts. Raises AssertionError otherwise."""
+    marked = {r['tx'] for r in changes if r['attribute'] == 'urn:quipu:ingest:complete'}
+    if len(marked) != 1:
+        raise AssertionError(f'expected one ingest completion transaction, got {sorted(marked)}')
+    (import_tx,) = marked
+    pairs = {(r['source'], r['tx']) for r in changes}
+    if pairs != {(source, import_tx)}:
+        raise AssertionError(f'every change must be the import transaction {import_tx} from {source}: {pairs}')
+    if len(loaded) != 1:
+        raise AssertionError(f'expected one shapes.loaded receipt, got {len(loaded)}')
+    shape_tx, receipt = loaded[0]
+    if (receipt.get('tx'), receipt.get('name'), receipt.get('registry')) != (shape_tx, shapes_name, 'shapes'):
+        raise AssertionError(f'shapes.loaded receipt does not name its transaction {shape_tx}: {receipt}')
+    expected = [(shape_tx, 'quipu:shape-mapping'), (import_tx, source)]
+    if [tuple(t[:2]) for t in transactions] != expected:
+        raise AssertionError(f'transactions must be the shape settlement then the import: {transactions}')
+    return import_tx
 
 
 def run_main(argv):
@@ -227,12 +252,70 @@ class QuipuValidates(unittest.TestCase):
                   '--graph', 'urn:terminusdb:admin:people'])
         changes = json.loads(subprocess.run([QUIPU, 'changes', '--db', f'{work}/q.db'],
                                             capture_output=True, text=True, check=True).stdout)['records']
-        self.assertEqual({(r['source'], r['tx']) for r in changes},
-                         {(f'terminusdb:admin/people/local/commit/{HEAD}', 1)})
+        db = sqlite3.connect(f'file:{work}/q.db?mode=ro', uri=True)
+        try:
+            transactions = db.execute('SELECT id, source, timestamp FROM transactions ORDER BY id').fetchall()
+            loaded = [(tx, json.loads(payload)) for tx, payload in db.execute(
+                "SELECT tx_id, payload FROM events WHERE type = 'shapes.loaded' ORDER BY offset")]
+        finally:
+            db.close()
+        import_tx = one_import_after_its_shape_settlement(
+            changes, transactions, loaded, f'terminusdb:admin/people/local/commit/{HEAD}', 'terminusdb')
+        # transaction time and valid time are both the commit time
+        commit_time = tdb.iso(LOG[0]['timestamp'])
+        self.assertEqual(dict((t[0], t[2]) for t in transactions)[import_tx], commit_time)
+        self.assertEqual({r['valid_from'] for r in changes}, {commit_time})
         expected = len(tdb.parse_turtle(live_instance().read_text()))
         # every instance fact, plus quipu ingest's own completion marker on the graph
         self.assertEqual(sum(r['entity'].startswith('terminusdb:///') for r in changes), expected)
         self.assertIn('urn:quipu:ingest:complete', {r['attribute'] for r in changes})
+
+
+class ImportTransactionIdentity(unittest.TestCase):
+    """The checker the CLI load test relies on, refused on each wrong shape."""
+    SOURCE = 'terminusdb:admin/people/local/commit/c'
+
+    def good(self):
+        changes = [{'source': self.SOURCE, 'tx': 2, 'attribute': 'urn:x:name'},
+                   {'source': self.SOURCE, 'tx': 2, 'attribute': 'urn:quipu:ingest:complete'}]
+        transactions = [(1, 'quipu:shape-mapping', 't1'), (2, self.SOURCE, 't2')]
+        loaded = [(1, {'tx': 1, 'name': 'terminusdb', 'registry': 'shapes'})]
+        return changes, transactions, loaded
+
+    def check(self, changes, transactions, loaded):
+        return one_import_after_its_shape_settlement(changes, transactions, loaded, self.SOURCE, 'terminusdb')
+
+    def test_accepts_the_settlement_then_the_import(self):
+        self.assertEqual(self.check(*self.good()), 2)
+
+    def test_refuses_a_fact_in_the_shape_settlement(self):
+        changes, transactions, loaded = self.good()
+        changes.append({'source': 'quipu:shape-mapping', 'tx': 1, 'attribute': 'urn:x:name'})
+        self.assertRaises(AssertionError, self.check, changes, transactions, loaded)
+
+    def test_refuses_an_import_split_over_two_transactions(self):
+        changes, transactions, loaded = self.good()
+        changes.append({'source': self.SOURCE, 'tx': 3, 'attribute': 'urn:x:name'})
+        transactions.append((3, self.SOURCE, 't3'))
+        self.assertRaises(AssertionError, self.check, changes, transactions, loaded)
+
+    def test_refuses_a_receipt_naming_another_transaction(self):
+        changes, transactions, _ = self.good()
+        self.assertRaises(AssertionError, self.check, changes, transactions,
+                          [(1, {'tx': 2, 'name': 'terminusdb', 'registry': 'shapes'})])
+
+    def test_refuses_an_unexplained_extra_transaction(self):
+        changes, transactions, loaded = self.good()
+        transactions.insert(1, (2, 'other', 't'))
+        transactions[2] = (3, self.SOURCE, 't3')
+        for r in changes:
+            r['tx'] = 3
+        self.assertRaises(AssertionError, self.check, changes, transactions, loaded)
+
+    def test_refuses_an_import_without_its_completion_marker(self):
+        changes, transactions, loaded = self.good()
+        changes.pop()
+        self.assertRaises(AssertionError, self.check, changes, transactions, loaded)
 
 
 # ---- an HTTP double serving the live fixtures on /api/log and /api/triples ----

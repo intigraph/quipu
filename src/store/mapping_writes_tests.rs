@@ -1,6 +1,7 @@
 //! Master-only lifecycle controls: real registry changes, graph writes and rollback.
 use super::*;
 use crate::shape_mapping::Correspondence;
+use crate::shape_mapping::RegistryKind;
 
 const OLD: &str = "<urn:fixture:Ticket> <http://www.w3.org/2000/01/rdf-schema#label> \"old\" .";
 #[cfg(feature = "shacl")]

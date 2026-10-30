@@ -11,6 +11,8 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 
 #[path = "ops_post_commit.rs"]
 mod post_commit;
+#[path = "ops_speculate.rs"]
+mod speculate;
 
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
@@ -429,40 +431,6 @@ impl Store {
             #[cfg(feature = "reactive-reasoner")]
             retracts,
         })
-    }
-
-    /// Execute `f` against a speculative fork of the store with `hypothetical`
-    /// datums applied. The fork is discarded after `f` returns — the underlying
-    /// store is never mutated. Useful for counterfactual impact analysis
-    /// ("what would break if I removed this?").
-    ///
-    /// Implementation: wraps the hypothetical write and query in a `SQLite`
-    /// `SAVEPOINT` that is always rolled back. Because [`transact`](Store::transact)
-    /// uses nested savepoints, observers (including the reactive reasoner) fire
-    /// normally inside the speculative fork, so derived facts are recomputed.
-    pub fn speculate<F, R>(&mut self, hypothetical: &[Datum], timestamp: &str, f: F) -> Result<R>
-    where
-        F: FnOnce(&Store) -> Result<R>,
-    {
-        self.conn.execute_batch("SAVEPOINT speculate")?;
-
-        let result = self
-            .transact(
-                hypothetical,
-                timestamp,
-                Some("speculate"),
-                Some("speculate"),
-            )
-            .and_then(|_| f(self));
-
-        // Always rollback: speculative state must not persist.
-        match crate::store::release::rollback_release(&self.conn, "speculate") {
-            Ok(()) => result,
-            Err(rollback_err) => match result {
-                Err(e) => Err(e),
-                Ok(_) => Err(rollback_err.into()),
-            },
-        }
     }
 
     /// Set `(entity, predicate)` to exactly `value`: retract every current
