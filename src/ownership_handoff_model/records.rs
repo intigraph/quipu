@@ -165,7 +165,7 @@ impl Certificate {
     pub fn validate(&self) -> ModelResult<()> {
         self.request.validate()?;
         require(
-            self.cut.transaction <= i64::MAX as u64,
+            i64::try_from(self.cut.transaction).is_ok(),
             "source transaction exceeds SQLite range",
         )?;
         digest(&self.cut.facts)?;

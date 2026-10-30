@@ -44,7 +44,7 @@ pub enum Payload {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
-    /// Must equal RECORD_VERSION; unknown versions refuse.
+    /// Must equal `RECORD_VERSION`; unknown versions refuse.
     pub version: u16,
     /// Explicit typed payload with no permissive legacy fallback.
     pub payload: Payload,
