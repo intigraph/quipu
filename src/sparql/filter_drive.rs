@@ -518,15 +518,18 @@ fn stable_vars(expr: &Expression, vars: &mut HashSet<String>) -> bool {
         }
         Expression::Coalesce(list) => list.iter().all(|e| stable_vars(e, vars)),
         Expression::FunctionCall(function, args) => {
-            !matches!(
-                function,
+            // spargebra represents our implemented XSD casts as Custom too.
+            // Rejecting them makes date-bound filters hydrate the whole BGP.
+            let stable = match function {
+                Function::Custom(name) => super::casts::is_cast(name.as_str()),
                 Function::Rand
-                    | Function::Now
-                    | Function::Uuid
-                    | Function::StrUuid
-                    | Function::BNode
-                    | Function::Custom(_)
-            ) && args.iter().all(|e| stable_vars(e, vars))
+                | Function::Now
+                | Function::Uuid
+                | Function::StrUuid
+                | Function::BNode => false,
+                _ => true,
+            };
+            stable && args.iter().all(|e| stable_vars(e, vars))
         }
         Expression::Exists(_) => false,
     }
