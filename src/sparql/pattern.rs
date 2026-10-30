@@ -162,10 +162,16 @@ pub fn eval_pattern_seeded(
                 Some(candidates) => candidates,
                 // aegis-xacr: scan the pattern the filter can judge first.
                 None => {
-                    match super::filter_drive::try_eval(store, expr, inner, inner_ctx, inner_seed)?
-                    {
-                        Some(driven) => driven,
-                        None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                    match super::literal_exclusion::candidates(
+                        store, expr, inner, inner_ctx, inner_seed,
+                    )? {
+                        Some(candidates) => candidates,
+                        None => match super::filter_drive::try_eval(
+                            store, expr, inner, inner_ctx, inner_seed,
+                        )? {
+                            Some(driven) => driven,
+                            None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                        },
                     }
                 }
             };

@@ -29,6 +29,10 @@ Do not start store enforcement before the journal, rollback and lock-order
 contracts are reviewed. File the concrete source carrier after design acceptance;
 this plan does not dispatch an unbounded implementation or select a new principal.
 
+The [executable model and candidate record contract](ownership-handoff-model.md)
+describe that source-only P0 implementation and its remaining assumptions.
+They do not activate store enforcement or satisfy native/runtime acceptance.
+
 ## Phases and proof gates
 
 | Phase | Deliverable | Required proof before advancing |
