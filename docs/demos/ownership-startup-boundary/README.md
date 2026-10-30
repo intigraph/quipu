@@ -39,4 +39,5 @@ scriptreplay --log-out output.log --log-timing timing.log
 
 Use `--divisor 0.05` to slow this short fixture run.
 
-The transcript preserves the recorded output; playback uses the original timing.
+The transcript normalizes CRLF line endings for text tools. The compressed
+recording and timing retain their original bytes.
