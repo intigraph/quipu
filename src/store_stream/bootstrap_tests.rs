@@ -107,6 +107,14 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         )
         .unwrap();
     assert!(legacy.query_get(&query.name).unwrap().is_none());
+    println!(
+        "fixture source query present: {}",
+        source.query_get(&query.name).unwrap().is_some()
+    );
+    println!(
+        "scoped live-fact baseline query: {:?}",
+        legacy.query_get(&query.name).unwrap()
+    );
     initialize(&source).unwrap();
     let mut spool = Vec::new();
     let receipt = write_snapshot(&source, &mut spool, 1024 * 1024).unwrap();
@@ -155,6 +163,13 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         Some(retained_graph)
     );
     assert!(occupied_applier.progress().is_none());
+    println!(
+        "destination-owned graph preserved: {}",
+        occupied
+            .registered_graph_id("urn:public:destination-owned")
+            .unwrap()
+            == Some(retained_graph)
+    );
     let original_terms: i64 = replica
         .conn
         .query_row("SELECT count(*) FROM terms", [], |r| r.get(0))
@@ -182,6 +197,10 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         .query_row("SELECT count(*) FROM terms", [], |r| r.get(0))
         .unwrap();
     assert_eq!(retained_terms, original_terms);
+    println!(
+        "interrupted bootstrap cursor: {:?}",
+        applier.logical_revision()
+    );
     assert!(matches!(
         applier
             .bootstrap_logical_store(
@@ -202,6 +221,7 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
     let before = replica.conn.total_changes();
     let actual = crate::mcp::named_query::tool_ask(&replica, &request).unwrap();
     assert_eq!(actual["rows"], expected["rows"]);
+    println!("logical bootstrap query rows: {}", actual["rows"]);
     assert!(!actual["rows"].as_array().unwrap().is_empty(), "{actual}");
     assert_eq!(
         replica.conn.total_changes(),
@@ -248,6 +268,10 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         .query_load(&changed_query, "2026-01-05T00:00:00Z")
         .unwrap();
     assert_eq!(source.latest_tx_id().unwrap(), fact_head);
+    println!(
+        "metadata-only fact head: {fact_head} -> {}",
+        source.latest_tx_id().unwrap()
+    );
     let tail = read_revision(&source, since, 100).unwrap();
     let mut broken = tail.clone();
     broken.changes.last_mut().unwrap().table = "unadmitted-table".into();
@@ -258,6 +282,10 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
             .is_err()
     );
     assert_eq!(applier.logical_revision(), Some(since));
+    println!(
+        "malformed signed tail retained journal cursor: {}",
+        applier.logical_revision().unwrap()
+    );
     assert_eq!(
         replica.query_get("logical_status").unwrap(),
         source.query_get("logical_status").unwrap().map(|mut q| {
@@ -285,6 +313,14 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
     let changed_actual = crate::mcp::named_query::tool_ask(&replica, &request).unwrap();
     assert_ne!(changed_actual["rows"], expected["rows"]);
     assert_eq!(changed_actual["rows"], changed_expected["rows"]);
+    println!(
+        "signed metadata tail query rows: {}",
+        changed_actual["rows"]
+    );
+    println!(
+        "journal cursor: {since} -> {}",
+        applier.logical_revision().unwrap()
+    );
     assert_eq!(replica.conn.total_changes(), before);
     let later = source.graph_create("urn:public:later").unwrap();
     source
