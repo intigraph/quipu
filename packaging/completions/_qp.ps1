@@ -344,6 +344,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('mint', 'mint', [CompletionResultType]::ParameterValue, 'Mint a typed stable entity reference from a JSON request')
             [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Resolve a stable entity reference from a JSON request')
+            [CompletionResult]::new('verify', 'verify', [CompletionResultType]::ParameterValue, 'Verify a current key IRI against its local key triples')
             break
         }
         'qp;entity-ref;mint' {
@@ -353,6 +354,12 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             break
         }
         'qp;entity-ref;resolve' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;entity-ref;verify' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

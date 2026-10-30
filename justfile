@@ -182,6 +182,7 @@ demo name="explorer":
     set -euo pipefail
     case {{quote(name)}} in
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         explorer)
             rm -f /tmp/quipu-demo.db
             cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
