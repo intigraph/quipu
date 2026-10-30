@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "97e90b3689bd8fff0e0691ba6105ef8dfaf3534664c18e68a4ea12bb5f9af979",
+      "source_sha256": "a1134d791d4d05072af3dfb32f9c349526014a9031691da90a37e2b75c708993",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "fd6beff9172bd71db1b26c246f5bb1593500a45951920508aacf3b16cedc499d",
+      "source_sha256": "42e6f4661f025fb79b9470f5b3f1ed259c227d29c984a151bc6e824b52f07014",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"

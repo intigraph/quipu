@@ -332,6 +332,7 @@ pub struct BearerPolicy {
     current: Option<String>,
     previous: Option<ExpiringBearer>,
     named: crate::crew_credentials::CredentialRegistry,
+    replication_only: crate::crew_credentials::CredentialRegistry,
 }
 
 #[derive(Clone)]
@@ -381,6 +382,7 @@ impl BearerPolicy {
             current,
             previous,
             named: crate::crew_credentials::CredentialRegistry::default(),
+            replication_only: crate::crew_credentials::CredentialRegistry::default(),
         })
     }
 
@@ -389,6 +391,40 @@ impl BearerPolicy {
     pub fn with_named(mut self, named: crate::crew_credentials::CredentialRegistry) -> Self {
         self.named = named;
         self
+    }
+
+    /// A separate verifier registry grants only the full-store replication
+    /// transport. These credentials are never looked up by graph-write auth.
+    ///
+    /// # Errors
+    /// An empty registry or any credential shared with ordinary writer authority.
+    pub fn with_replication_only(
+        mut self,
+        registry: crate::crew_credentials::CredentialRegistry,
+    ) -> Result<Self, &'static str> {
+        let shared_collision = self.current.as_ref().is_some_and(|token| {
+            registry
+                .authenticate(Some(&format!("Bearer {token}")))
+                .is_some()
+        }) || self.previous.as_ref().is_some_and(|previous| {
+            registry
+                .authenticate(Some(&format!("Bearer {}", previous.token)))
+                .is_some()
+        });
+        if registry.is_empty() || registry.overlaps(&self.named) || shared_collision {
+            return Err("replication credentials must be nonempty and distinct from writers");
+        }
+        self.replication_only = registry;
+        Ok(self)
+    }
+
+    /// Look up only the dedicated replication transport identity.
+    #[must_use]
+    pub fn replication_principal(
+        &self,
+        header: Option<&str>,
+    ) -> Option<crate::crew_credentials::CrewPrincipal> {
+        self.replication_only.authenticate(header)
     }
 
     /// Identity lookup never uses caller-declared metadata.
@@ -425,6 +461,14 @@ pub fn authorize_bearers(
     auth_header: Option<&str>,
     now_epoch_secs: u64,
 ) -> Authorization {
+    // This lower-level API has no route to prove replication admission.
+    // Only the HTTP adapter can grant the three exact replication operations.
+    if policy.replication_principal(auth_header).is_some() {
+        return Authorization {
+            decision: AccessDecision::Unauthorized,
+            generation: None,
+        };
+    }
     if !is_write {
         return Authorization {
             decision: AccessDecision::Allow,
