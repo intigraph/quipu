@@ -370,6 +370,55 @@ fn stale_local_bytes_missing_journal_and_ambiguous_install_do_not_admit() {
 }
 
 #[test]
+fn source_host_rollback_between_publication_and_destination_admission_cannot_restart_a() {
+    let a = initial();
+    let c = certificate(a.clone(), "B");
+    let steps = handoff(&c, "epoch-B");
+    let published = steps
+        .iter()
+        .position(|step| matches!(step, Action::Publish(_)))
+        .unwrap()
+        + 1;
+    let mut model = Model::new(a.clone()).unwrap();
+    run(&mut model, &steps[..published]);
+    model
+        .apply(&Action::Crash(a.owner.clone()), observed())
+        .unwrap();
+    model
+        .apply(
+            &Action::RestoreLocal {
+                placement: a.owner.clone(),
+                journal: Some(Box::new(Journal::Active {
+                    authority: a.clone(),
+                })),
+                data: Some(a.clone()),
+            },
+            observed(),
+        )
+        .unwrap();
+    let restarted = model.apply(
+        &Action::Restart {
+            authority: a.clone(),
+            nonce: "rollback-window".into(),
+            challenge: "rollback-window".into(),
+        },
+        observed(),
+    );
+    run(&mut model, &steps[published..]);
+    eprintln!(
+        "RECOVERY source_restart={} admitted_owners={}",
+        restarted.is_ok(),
+        model.writable().len()
+    );
+    assert!(
+        restarted.is_err(),
+        "a published retirement must block old-source startup before B owns"
+    );
+    assert!(!model.can_commit(&a));
+    assert_eq!(model.writable().len(), 1);
+}
+
+#[test]
 fn return_to_old_placement_requires_new_handoff_epoch_and_generation() {
     let mut model = Model::new(initial()).unwrap();
     let first = certificate(initial(), "B");
