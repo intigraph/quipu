@@ -3,7 +3,7 @@
 The [recording](output.log.gz), [timing](timing.log) and
 [transcript](transcript.txt) run the same disposable SQLite library probe on
 base `ad2cc8878f1e52439fb04ede96eb8a8d684ecdfc` and candidate
-`8a836e4ffac1cd45f0aa7e826c8ab3a3640e1476`.
+`25589910d5d5adfa44096b4543492c2be8572930`.
 
 Watch `writable_startup` and `explicit_adoption`: both change from ADMITTED to
 REFUSED when the fixture contains the reserved handoff-enrollment marker.

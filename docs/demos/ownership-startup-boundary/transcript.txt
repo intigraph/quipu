@@ -1,4 +1,4 @@
-Script started on 2026-10-30 12:09:07-04:00 [COMMAND="bash docs/demos/ownership-startup-boundary/probe.sh" <not executed on terminal>]
+Script started on 2026-10-30 13:04:29-04:00 [COMMAND="bash docs/demos/ownership-startup-boundary/probe.sh" <not executed on terminal>]
 BASE: same disposable SQLite input; no witness or enrollment adapter
 fixture=private-disposable-sqlite witness=NONE enrollment_api=NONE
 unenrolled_startup=ADMITTED
@@ -18,4 +18,4 @@ explicit_adoption=REFUSED
 readonly_inspection=AVAILABLE
 
 
-Script done on 2026-10-30 12:09:07-04:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-10-30 13:04:31-04:00 [COMMAND_EXIT_CODE="0"]
