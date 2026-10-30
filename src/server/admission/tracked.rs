@@ -22,7 +22,7 @@ where
     };
     let work = registry.start(lane, quipu::metrics::inflight::Phase::Waiting);
     let acquire = admission.acquire();
-    let acquired = if matches!(kind, "point-read" | "episode-read") {
+    let acquired = if matches!(kind, "point-read" | "episode-read" | "heavy-read") {
         if let Some(deadline) = deadline {
             let remaining = deadline.remaining_millis();
             let limit_ms = u128::from(remaining) + started.elapsed().as_millis();
