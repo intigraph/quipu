@@ -1,38 +1,19 @@
-//! Verdict signing — v1 root-of-trust crypto for the governance plane ("the
-//! loom", Phase 0). ed25519 (via `ring`), host-file key custody.
+//! Quipu's application adapter to the published shared signing implementation.
 //!
-//! A verdict is an ATTESTATION, not a claim: it is signed by a verifier
-//! identity, and Quipu trusts it only if that identity's public key is
-//! registered (human-authored `aegis:VerifierRegistration`) for the attested
-//! predicate. Signing makes the verdict reproducible-AND-authenticated; the
-//! registry concentrates trust into a small, human-owned surface.
-//!
-//! ## v1 scope — HARDEN LATER
-//!
-//! - **Key custody is a host file** (path from `QUIPU_SIGNING_KEY` or the config
-//!   default), created 0600 on first use. NOT an HSM / secret store / TPM.
-//! - **One signing identity** ("quipu", the committed-tier verifier). Per-verifier
-//!   keys, key rotation, and multi-verifier custody are follow-ons.
-//! - **The registry is not itself signed** — "who signs the registry" (the human
-//!   trust root / N-of-M) is deferred. A human registers quipu's public key; quipu
-//!   never self-registers (that would let it vouch for itself).
-//!
-//! These are deliberate v1 defaults (Stiwi: "do v1 to harden"), not oversights.
+//! The shared crate owns v1 message bytes, Ed25519 encoding and host-file I/O.
+//! Quipu retains its key-path convention and its registration/authorization
+//! checks. Signature validity alone is never authorization. Replication and
+//! session/share envelopes retain their own canonical domain-separated messages.
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::error::Result;
+#[cfg(not(target_arch = "wasm32"))]
+use ring::signature::Ed25519KeyPair;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-#[cfg(not(target_arch = "wasm32"))]
-use ring::rand::SystemRandom;
-use ring::signature::{ED25519, Ed25519KeyPair, KeyPair, UnparsedPublicKey};
+pub use quipu_signing::{SigningIdentity, public_key_hex, sign_hex, verdict_message, verify_hex};
 
-#[cfg(not(target_arch = "wasm32"))]
-use crate::error::{Error, Result};
-
-/// Load the ed25519 signing keypair from `path` (PKCS#8), generating and
-/// persisting a fresh one (0600) if the file does not exist. v1 host-file
-/// custody — the private key sits on disk; protect the path with filesystem
-/// permissions until a real secret store lands.
 /// Where the host-file signing key lives: `$QUIPU_SIGNING_KEY`, else
 /// `.quipu/verifier.pk8`.
 ///
@@ -49,133 +30,17 @@ pub fn default_key_path() -> std::path::PathBuf {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_or_generate(path: &Path) -> Result<Ed25519KeyPair> {
-    let pkcs8: Vec<u8> = if path.exists() {
-        std::fs::read(path).map_err(|e| Error::Store(format!("read signing key: {e}")))?
-    } else {
-        let rng = SystemRandom::new();
-        let doc = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|_| Error::Store("generate signing key".into()))?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| Error::Store(format!("mkdir for signing key: {e}")))?;
-        }
-        std::fs::write(path, doc.as_ref())
-            .map_err(|e| Error::Store(format!("write signing key: {e}")))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
-        }
-        doc.as_ref().to_vec()
-    };
-    Ed25519KeyPair::from_pkcs8(&pkcs8)
-        .map_err(|_| Error::Store("parse signing key (bad PKCS#8)".into()))
+    quipu_signing::load_or_generate(path).map_err(Into::into)
 }
 
-/// Hex-encoded public key of a keypair (goes into the registry so a human can
-/// register this verifier's identity, and into a verdict so it round-trips).
-#[must_use]
-pub fn public_key_hex(keypair: &Ed25519KeyPair) -> String {
-    hex::encode(keypair.public_key().as_ref())
-}
-
-/// Sign `message`, returning a hex-encoded ed25519 signature.
-#[must_use]
-pub fn sign_hex(keypair: &Ed25519KeyPair, message: &[u8]) -> String {
-    hex::encode(keypair.sign(message).as_ref())
-}
-
-/// Verify a hex signature over `message` against a hex ed25519 public key.
-/// Returns false on any decode/verify failure (never panics).
-#[must_use]
-pub fn verify_hex(public_key_hex: &str, message: &[u8], signature_hex: &str) -> bool {
-    let (Ok(pk), Ok(sig)) = (hex::decode(public_key_hex), hex::decode(signature_hex)) else {
-        return false;
-    };
-    UnparsedPublicKey::new(&ED25519, pk)
-        .verify(message, &sig)
-        .is_ok()
-}
-
-/// The canonical byte string signed for a verdict. Deterministic field order so
-/// the signature is reproducible: any verifier re-derives the exact same message
-/// from the verdict fields and checks the signature (checked, not trusted).
-#[must_use]
-pub fn verdict_message(
-    predicate_id: &str,
-    target_ref: &str,
-    outcome: &str,
-    evidence_hash: &str,
-    tier: &str,
-    verifier: &str,
-) -> Vec<u8> {
-    format!("v1|{predicate_id}|{target_ref}|{outcome}|{evidence_hash}|{tier}|{verifier}")
-        .into_bytes()
-}
-
-/// A loaded signing identity: the keypair plus the verifier name it attests as.
-/// Held by the `Store` so `policy_check` can sign verdicts.
-pub struct SigningIdentity {
-    keypair: Ed25519KeyPair,
-    /// The verifier name this identity attests as (v1: "quipu").
-    pub verifier: String,
-}
-
-impl SigningIdentity {
-    #[must_use]
-    pub fn new(keypair: Ed25519KeyPair, verifier: impl Into<String>) -> Self {
-        Self {
-            keypair,
-            verifier: verifier.into(),
-        }
-    }
-
-    /// Load (or generate) a host-file key and wrap it as `verifier`.
-    /// On wasm there is no host file — construct via [`SigningIdentity::new`]
-    /// from key bytes instead.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn load(path: &Path, verifier: impl Into<String>) -> Result<Self> {
-        Ok(Self::new(load_or_generate(path)?, verifier))
-    }
-
-    #[must_use]
-    pub fn public_key_hex(&self) -> String {
-        public_key_hex(&self.keypair)
-    }
-
-    /// Sign an arbitrary canonical message (hex signature). For records whose
-    /// message is defined next to the record — the denial quarantine's seal —
-    /// rather than here; a verdict signs through [`Self::sign_verdict`].
-    #[must_use]
-    pub fn sign(&self, message: &[u8]) -> String {
-        sign_hex(&self.keypair, message)
-    }
-
-    /// Sign a verdict, returning its hex signature over the canonical message.
-    #[must_use]
-    pub fn sign_verdict(
-        &self,
-        predicate_id: &str,
-        target_ref: &str,
-        outcome: &str,
-        evidence_hash: &str,
-        tier: &str,
-    ) -> String {
-        let msg = verdict_message(
-            predicate_id,
-            target_ref,
-            outcome,
-            evidence_hash,
-            tier,
-            &self.verifier,
-        );
-        sign_hex(&self.keypair, &msg)
-    }
-}
+#[cfg(test)]
+#[path = "signing_shared_tests.rs"]
+mod shared_tests;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ring::rand::SystemRandom;
 
     #[test]
     fn sign_roundtrips_and_rejects_tampering() {

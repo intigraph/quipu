@@ -298,6 +298,36 @@ class Contract(unittest.TestCase):
                 step["if"] = condition[len(prefix) : -1]
         self.assertEqual(actual, baseline["steps"])
 
+    def test_root_admission_requires_exact_published_lock_identity(self):
+        (self.root / "Cargo.toml").write_text('[dependencies]\nquipu-signing="=0.1.0"\n')
+        lock = self.root / "Cargo.lock"
+        def write_lock(**changes):
+            package = {"name": module.NAME, "version": module.VERSION,
+                       "source": module.REGISTRY_SOURCE, "checksum": module.ADMITTED_CHECKSUM}
+            package.update(changes)
+            lock.write_text("version = 4\n[[package]]\n" + "".join(
+                f"{key}={json.dumps(value)}\n" for key, value in package.items()))
+        write_lock()
+        result = subprocess.run(
+            ["python3", str(SCRIPT), "root-ready", "--root", str(self.root)],
+            check=False, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["checksum"], module.ADMITTED_CHECKSUM)
+        for changes in ({"checksum": "0" * 64}, {"version": "0.1.1"},
+                        {"source": "git+https://example.invalid/fixture"},
+                        {"name": "other-package"}):
+            with self.subTest(changes=changes):
+                write_lock(**changes)
+                with self.assertRaises(ValueError):
+                    module.root_acquisition(self.root)
+        write_lock()
+        lock.write_text(lock.read_text() + lock.read_text().split("version = 4\n", 1)[1])
+        with self.assertRaises(ValueError):
+            module.root_acquisition(self.root)
+        lock.write_text('version=4\n[[package]]\nname="quipu-signing"\nversion="0.1.0"\n')
+        with self.assertRaises(ValueError):
+            module.root_acquisition(self.root)
+
     def test_dependency_first_blocks_unqualified_root_and_has_no_publish_retry(self):
         self.assertFalse(module.root_dependency(self.root))
         manifest = self.root / "Cargo.toml"
