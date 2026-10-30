@@ -1,0 +1,8 @@
+PREFIX schema: <https://schema.org/>
+PREFIX seeds: <https://seeds.local/ontology/>
+PREFIX q: <https://scbrown.github.io/quechua/ns#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?record ?g ?e ?t ?title ?reason WHERE {
+{ SELECT ("event" AS ?record) ?g ?e ?t ?title ?reason WHERE { VALUES ?g { <https://example.org/project/board> <https://example.org/project/board#seeds-ephemeral> } GRAPH ?g { ?e schema:endTime ?t ; a schema:Action ; seeds:status "closed" ; q:outcome "done" ; schema:name ?title ; schema:result ?reason . FILTER(?t>=xsd:dateTime('2026-10-29T01:30:20Z') && ?t<xsd:dateTime('2026-10-30T01:30:20Z')) FILTER(STRLEN(STR(?reason))>0) FILTER NOT EXISTS { ?e schema:keywords "inbox" } FILTER(!REGEX(STR(?title),'^[[:space:]]*(inbox:|mail:)','i')) } } ORDER BY DESC(?t) ?e LIMIT 101 }
+UNION { VALUES ?g { <https://example.org/project/board> <https://example.org/project/board#seeds-ephemeral> } GRAPH ?g {} BIND("coverage" AS ?record) }
+} LIMIT 104
