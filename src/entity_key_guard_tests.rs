@@ -283,3 +283,88 @@ fn named_graph_keys_are_guarded_and_verification_does_not_fall_back_to_root() {
     );
     assert_eq!(store.latest_tx_id().unwrap(), before);
 }
+
+#[cfg(feature = "owl")]
+#[test]
+fn reviewer_unselected_type_cannot_supersede_identity() {
+    let (mut store, iri) = allocated();
+    let rdf = crate::namespace::RDF_TYPE;
+    store
+        .load_ontology(
+            "type-functional",
+            &format!("<{rdf}> a <http://www.w3.org/2002/07/owl#FunctionalProperty> ."),
+            &crate::time::now_iso(),
+        )
+        .unwrap();
+    store.invalidate_owl_cache();
+    store.owl_config.validate_on_write = true;
+    let entity = store.lookup(&iri).unwrap().unwrap();
+    let attribute = store.lookup(rdf).unwrap().unwrap();
+    let other = store.intern("urn:example:UnselectedType").unwrap();
+    let result = store.transact(
+        &[crate::store::Datum {
+            entity,
+            attribute,
+            value: crate::Value::Ref(other),
+            op: crate::Op::Assert,
+            valid_from: crate::time::now_iso(),
+            valid_to: None,
+        }],
+        &crate::time::now_iso(),
+        None,
+        None,
+    );
+    let facts = store.entity_facts(entity).unwrap();
+    let selected = store.lookup(ENDPOINT).unwrap().unwrap();
+    let selected_live = facts
+        .iter()
+        .filter(|f| f.attribute == attribute && f.value == crate::Value::Ref(selected))
+        .count();
+    let other_live = facts
+        .iter()
+        .filter(|f| f.attribute == attribute && f.value == crate::Value::Ref(other))
+        .count();
+    let verify = tool_entity_ref(&mut store, &json!({"action":"verify","iri":iri}));
+    eprintln!(
+        "REVIEWER accepted={} selected_live={} other_live={} verify_ok={}",
+        result.is_ok(),
+        selected_live,
+        other_live,
+        verify.is_ok()
+    );
+    assert!(
+        result.is_err(),
+        "an implicit functional supersede must not retire the selected identity type"
+    );
+    assert!(result.unwrap_err().to_string().contains("key identity"));
+    assert_eq!(selected_live, 1, "refusal preserves the selected type");
+    assert_eq!(other_live, 0, "the replacement assertion rolls back");
+    assert_eq!(verify.unwrap()["verified"], true);
+}
+
+#[test]
+fn reviewer_unselected_additional_type_without_supersede_is_allowed() {
+    let (mut store, iri) = allocated();
+    let entity = store.lookup(&iri).unwrap().unwrap();
+    let attribute = store.lookup(crate::namespace::RDF_TYPE).unwrap().unwrap();
+    let other = store.intern("urn:example:UnselectedType").unwrap();
+    store
+        .transact(
+            &[crate::store::Datum {
+                entity,
+                attribute,
+                value: crate::Value::Ref(other),
+                op: crate::Op::Assert,
+                valid_from: crate::time::now_iso(),
+                valid_to: None,
+            }],
+            &crate::time::now_iso(),
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        tool_entity_ref(&mut store, &json!({"action":"verify","iri":iri})).unwrap()["verified"],
+        true
+    );
+}
