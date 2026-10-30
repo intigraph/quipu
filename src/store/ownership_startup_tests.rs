@@ -147,6 +147,44 @@ fn stage_a_ownership_cannot_authorize_a_marked_handoff_store() {
 }
 
 #[test]
+fn entrypoint_observation_revokes_the_pin_before_a_commit_hook_runs() {
+    for observation in ["state", "writable", "owner"] {
+        let (_dir, path) = database();
+        drop(Store::open(&path).unwrap());
+        Store::adopt(&path).unwrap();
+        let held = Store::open(&path).unwrap();
+        held.require_ownership().unwrap();
+        held.conn
+            .execute_batch("CREATE TABLE probe(value TEXT)")
+            .unwrap();
+        let external = Connection::open(&path).unwrap();
+        external.execute_batch(MARK).unwrap();
+        match observation {
+            "state" => assert!(held.ownership_state().is_err()),
+            "writable" => assert!(held.ensure_ownership_writable().is_err()),
+            "owner" => assert!(held.require_ownership().is_err()),
+            _ => unreachable!(),
+        }
+        external
+            .execute_batch("DROP TABLE ownership_handoff_enrollment")
+            .unwrap();
+        assert!(
+            held.conn
+                .execute("INSERT INTO probe VALUES ('revived')", [])
+                .is_err(),
+            "{observation} must revoke before any commit hook runs"
+        );
+        assert!(held.require_ownership().is_err());
+        assert_eq!(
+            held.conn
+                .query_row("SELECT count(*) FROM probe", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+}
+
+#[test]
 fn check_latch_contention_refuses_without_deadlock_or_partial_write() {
     let (_dir, path) = database();
     let store = Store::open(&path).unwrap();

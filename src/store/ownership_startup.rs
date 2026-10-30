@@ -21,9 +21,13 @@ pub(super) fn enrolled(conn: &Connection) -> rusqlite::Result<bool> {
 
 pub(super) fn require_unenrolled(conn: &Connection) -> Result<()> {
     if enrolled(conn)? {
-        return Err(Error::PolicyDenied(
-            "store handoff: enrolled startup requires a protected journal and fresh authenticated external admission; writable startup is unavailable".into(),
-        ));
+        return Err(unavailable());
     }
     Ok(())
+}
+
+pub(super) fn unavailable() -> Error {
+    Error::PolicyDenied(
+        "store handoff: enrolled startup requires a protected journal and fresh authenticated external admission; writable startup is unavailable".into(),
+    )
 }

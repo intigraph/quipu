@@ -1,5 +1,6 @@
 //! Explicit disk-store ownership. A copy is inspectable, never silently adopted.
 use super::Store;
+use super::ownership_fence::CommitFence;
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -118,8 +119,19 @@ fn record(path: &Path) -> Result<Binding> {
 /// The ownership check on any connection to the store: the writer's own, or
 /// the separate read-only connection the commit fence uses (see
 /// `ownership_fence`), which may query while the writer holds its lock.
-pub(super) fn state_on(conn: &rusqlite::Connection) -> Result<OwnershipState> {
-    super::ownership_startup::require_unenrolled(conn)?;
+pub(super) fn state_on(
+    conn: &rusqlite::Connection,
+    pin: Option<&CommitFence>,
+) -> Result<OwnershipState> {
+    if pin.is_some_and(CommitFence::revoked) {
+        return Err(super::ownership_startup::unavailable());
+    }
+    if super::ownership_startup::enrolled(conn)? {
+        if let Some(pin) = pin {
+            pin.revoke();
+        }
+        return Err(super::ownership_startup::unavailable());
+    }
     let marked: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='ownership_enforcement')",
         [],
@@ -212,7 +224,7 @@ impl Store {
     /// The database marker travels with raw copies; removing only the sidecar
     /// cannot turn an enforced copy into an ordinary legacy store.
     pub fn ownership_state(&self) -> Result<OwnershipState> {
-        state_on(&self.conn)
+        state_on(&self.conn, self.ownership_fence.as_deref())
     }
 
     /// Write fence for handles that are ALREADY open. Opening re-checks

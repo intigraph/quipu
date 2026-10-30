@@ -59,28 +59,27 @@ impl CommitFence {
         self.revoked.load(Ordering::Acquire)
     }
 
+    /// An entrypoint may see enrollment and refuse before reaching COMMIT.
+    /// That observation must revoke the same pin the callbacks retain.
+    pub(super) fn revoke(&self) {
+        self.revoked.store(true, Ordering::Release);
+    }
+
     pub(super) fn refuses(&self) -> bool {
         // Never block from a commit hook: the writer lock is already held.
         let Ok(reader) = self.reader.try_lock() else {
             return true;
         };
-        // Check under the same latch that publishes revocation. Otherwise a
-        // concurrent checker could read false, pause across revocation and
-        // marker rollback, then accidentally revive the old admission.
+        // Do not carry a pre-latch false read across another check's
+        // revocation. Entrypoints can also revoke without this reader latch;
+        // recheck the monotonic pin after the SQL observation below.
         if self.revoked() {
             return true;
         }
         let Some(reader) = reader.as_ref() else {
             return true;
         };
-        match super::ownership_startup::enrolled(reader) {
-            Ok(true) => {
-                self.revoked.store(true, Ordering::Release);
-                true
-            }
-            Ok(false) => super::ownership::state_on(reader).is_err(),
-            Err(_) => true,
-        }
+        super::ownership::state_on(reader, Some(self)).is_err() || self.revoked()
     }
 
     #[cfg(test)]

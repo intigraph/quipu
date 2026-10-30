@@ -37,8 +37,10 @@ per-handle legacy-admission pin. The ordinary installer and `set_commit_wake`
 clone that same object. The wake installer cannot re-open a reader or replace
 a revoked admission with a fresh one.
 
-Each outer commit checks a fresh independent reader transaction. On observing
-enrollment, the fence permanently revokes that handle's legacy admission.
+Each outer commit checks a fresh independent reader transaction. Ownership
+inspection and write-entrypoint checks share the same pin: an early refusal
+revokes it even when no commit hook runs. On observing enrollment, either path
+permanently revokes that disk writer's legacy admission.
 Removing/restoring the database marker afterward or reinstalling the callback
 cannot revive it. Autocommit, explicit COMMIT and outermost RELEASE refuse;
 the existing rollback-on-refused-release helper ends the doomed transaction.
