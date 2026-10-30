@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file.
 - *(auth)* Isolate replication transport credentials from writers (#928)([66319f8](https://github.com/scbrown/quipu/commit/66319f82d314423ad10b6cfa5fa54759e2844f26))
 - *(replication)* Pin signed bootstrap and transaction bodies (#930)([3943cd3](https://github.com/scbrown/quipu/commit/3943cd305e8d271a7ed481493ba22a307fa675a8))
 
+
+
 ### Fixed
 
 - *(shacl)* Every retract path runs the deletion gate (#908)([bfdcf31](https://github.com/scbrown/quipu/commit/bfdcf31796fee7f0a092a6d1633671d1552e7a36))
@@ -25,6 +27,8 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* Recognize built-in casts in filtered BGP planning (#932)([cae3d13](https://github.com/scbrown/quipu/commit/cae3d13620a38c6a7292f143a370c8d37abb00d9))
 - *(replication)* Preserve retraction valid-time closes (#926)([11f1159](https://github.com/scbrown/quipu/commit/11f11593759af43c6ca6f0dffbb7f18e2c182a3e))
 - *(entity-ref)* Preserve allocated key identities (#933)([2134930](https://github.com/scbrown/quipu/commit/21349300281dadfbf40c78257b46eccc1498f6f2))
+
+
 
 ### Testing
 
