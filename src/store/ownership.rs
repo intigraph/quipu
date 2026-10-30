@@ -119,6 +119,7 @@ fn record(path: &Path) -> Result<Binding> {
 /// the separate read-only connection the commit fence uses (see
 /// `ownership_fence`), which may query while the writer holds its lock.
 pub(super) fn state_on(conn: &rusqlite::Connection) -> Result<OwnershipState> {
+    super::ownership_startup::require_unenrolled(conn)?;
     let marked: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name='ownership_enforcement')",
         [],
@@ -193,6 +194,7 @@ impl Store {
         attachments: &[super::attach::Attachment],
     ) -> Result<Self> {
         let conn = rusqlite::Connection::open(path)?;
+        super::ownership_startup::require_unenrolled(&conn)?;
         let inspected = Self::with_connection(conn);
         // Check before any schema migration. Invalid sticky/partial state is
         // inspectable only; selecting a default constructor cannot downgrade it.
@@ -220,6 +222,15 @@ impl Store {
     /// Every committing write entrypoint calls this before it writes anything.
     /// INACTIVE legacy stores stay writable; this grants no ownership capability.
     pub fn ensure_ownership_writable(&self) -> Result<()> {
+        if self
+            .ownership_fence
+            .as_ref()
+            .is_some_and(|fence| fence.revoked())
+        {
+            return Err(Error::PolicyDenied(
+                "store handoff: this handle's admission was revoked; authenticated enrolled startup is unavailable".into(),
+            ));
+        }
         self.ownership_state().map(|_| ())
     }
 
@@ -291,6 +302,7 @@ impl Store {
             &path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
         )?;
+        super::ownership_startup::require_unenrolled(&conn)?;
         host()?;
         let recognizable: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('facts', 'attestation_bindings'))",
@@ -341,6 +353,11 @@ impl Store {
     /// Restore a consistent SQLite snapshot to a new destination, then adopt it.
     /// Existing destinations are refused; the source is never modified.
     pub fn restore(source: &str, destination: &str) -> Result<String> {
+        let conn = rusqlite::Connection::open_with_flags(
+            source,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        super::ownership_startup::require_unenrolled(&conn)?;
         let target = Path::new(destination);
         let reserved = fs::OpenOptions::new()
             .write(true)
@@ -349,10 +366,6 @@ impl Store {
             .map_err(failure)?;
         drop(reserved);
         (|| {
-            let conn = rusqlite::Connection::open_with_flags(
-                source,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )?;
             conn.execute("VACUUM INTO ?1", [destination])?;
             Self::adopt(destination)
         })()
