@@ -153,8 +153,8 @@ A failed batch rolls back atomically. This deliberately also refuses an
 in-place retract/reassert of an identical key; add supersession links to a new
 entity rather than retiring its key facts through a raw write.
 
-Once a registered key namespace has a typed subject in any graph, shape loads
-and removals must retain that type's effective key contract: ordered fields,
+Once a configured or retained key namespace has a typed subject in any graph,
+shape loads and removals must retain that type's effective key contract: ordered fields,
 value kinds, exactly-one constraints and strategy. Historical assertions retain
 this protection after retirement. Equivalent shape spelling, explicit default
 hash and unrelated shape edits remain allowed. Before allocation, the contract
@@ -164,8 +164,8 @@ allocation invalidates a stale shape edit instead of letting it commit.
 
 After importing/promoting a share, a receiver may explicitly check a reference
 with `entity-ref verify` (REST/MCP action `verify`). It uses the receiver's
-registered owner namespace and current local shapes/triples, validates the RDF
-kinds and recomputes the exact IRI. This read-only check never imports, repairs,
+configured or retained owner namespace and current local shapes/triples,
+validates the RDF kinds and recomputes the exact IRI. This read-only check never imports, repairs,
 allocates, fetches a resolver or trusts namespace policy from the incoming RDF.
 It is optional; import itself does not silently enable verification or change
 its acceptance policy. Only `iri` and optional exact `graph` are accepted.
