@@ -46,10 +46,15 @@ pub struct Model {
 }
 
 impl Model {
-    /// Start from an ASSUMED already enrolled and admitted owner. This does not
-    /// enroll, sign, provision or open an actual store.
+    /// Start from an ASSUMED already enrolled/admitted generation-zero owner.
+    /// Mid-chain recovery must retain history, never reseed this constructor.
+    /// This does not enroll, sign, provision or open an actual store.
     pub fn new(authority: Authority) -> ModelResult<Self> {
         authority.validate()?;
+        require(
+            authority.generation == 0,
+            "cannot seed a model without prior authority history",
+        )?;
         let owner = authority.owner.clone();
         Ok(Self {
             head: authority.clone(),

@@ -101,6 +101,8 @@ impl Authority {
 pub struct Request {
     /// Globally retained operation ID, not reusable for another payload.
     pub operation: String,
+    /// Existing operator whose current transition grant must be checked.
+    pub operator: String,
     /// Exact expected current authority, including predecessor and scope.
     pub source: Authority,
     /// One destination; another placement needs another admitted handoff.
@@ -115,6 +117,7 @@ impl Request {
     /// Check the tuple, destination and exact successor relationship.
     pub fn validate(&self) -> ModelResult<()> {
         identifier(&self.operation)?;
+        identifier(&self.operator)?;
         identifier(&self.profile)?;
         self.source.validate()?;
         self.destination.validate()?;
@@ -161,6 +164,10 @@ impl Certificate {
     /// Check content shape; authentication remains a separate prerequisite.
     pub fn validate(&self) -> ModelResult<()> {
         self.request.validate()?;
+        require(
+            self.cut.transaction <= i64::MAX as u64,
+            "source transaction exceeds SQLite range",
+        )?;
         digest(&self.cut.facts)?;
         digest(&self.cut.artifact)
     }

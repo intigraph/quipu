@@ -9,7 +9,8 @@ old-A writer counterexample or enroll any store.
 
 ## Assumptions and observations
 
-`Model::new` assumes one already admitted owner and consistent durable state.
+`Model::new` assumes one already admitted generation-zero owner and consistent
+durable state. It rejects mid-chain reseeding without retained authority history.
 It is not an enrollment or recovery API. `Observations` are explicit model
 oracles: authentication of the exact body under an existing profile, current
 operator/source/destination transition grants, and availability of an external
@@ -20,7 +21,9 @@ Unknown observations default to false and refuse admission.
 The authority tuple binds full-store lineage/unit, generation, epoch, existing
 principal, native-placement digest, policy revision and predecessor retirement.
 Scoped graph ownership is not modeled. Each operation additionally binds a
-destination, exact successor generation and existing profile revision.
+destination, existing operator, exact successor generation and existing profile
+revision. Requests require distinct source/destination placements; returning to
+an old placement requires a later handoff with a new generation and epoch.
 
 The witness and nonce ledger are assumed durable and outside a local restore.
 They cannot remotely supersede a still-active source. Whole-witness rollback,

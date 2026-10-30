@@ -25,6 +25,7 @@ fn certificate(source: Authority, destination: &str) -> Certificate {
     Certificate {
         request: Request {
             operation: format!("op-{destination}-{}", source.generation),
+            operator: "existing-operator".into(),
             successor_generation: source.generation + 1,
             source,
             destination: placement(
@@ -273,6 +274,12 @@ fn full_artifact_policy_profile_and_startup_challenge_are_required() {
             .is_err()
     );
     run(&mut model, &steps[5..8]);
+    let changed_epoch = Action::Pending {
+        certificate: c.clone(),
+        epoch: "different-pending-epoch".into(),
+        artifact: c.cut.artifact,
+    };
+    assert!(model.apply(&changed_epoch, observed()).is_err());
     let wrong = Action::Activate {
         certificate: c,
         epoch: "epoch-B".into(),
@@ -388,6 +395,7 @@ fn return_to_old_placement_requires_new_handoff_epoch_and_generation() {
     let mut exhausted = initial();
     exhausted.generation = u64::MAX;
     exhausted.predecessor = Some([8; 32]);
+    assert!(Model::new(exhausted.clone()).is_err());
     let mut invalid = first.request;
     invalid.source = exhausted;
     invalid.successor_generation = 0;
