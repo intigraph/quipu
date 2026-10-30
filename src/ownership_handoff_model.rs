@@ -6,10 +6,14 @@
 //! call this module. Physical durability, signatures and native placement still
 //! require separately reviewed adapters and acceptance.
 
+mod actions;
+mod codec;
 mod records;
 mod state;
 mod transitions;
 
+pub use actions::*;
+pub use codec::*;
 pub use records::*;
 pub use state::*;
 pub use transitions::*;

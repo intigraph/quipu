@@ -62,6 +62,7 @@ fn handoff(c: &Certificate, epoch: &str) -> Vec<Action> {
         Action::Barrier(c.request.clone()),
         Action::Seal(c.clone()),
         Action::Retire(c.clone()),
+        Action::FenceWitness(c.clone()),
         Action::Publish(c.clone()),
         Action::Pending {
             certificate: c.clone(),
@@ -105,21 +106,21 @@ fn retirement_precedes_receipt_and_destination_admission() {
     assert_eq!(model, before);
     model.apply(&steps[1], observed()).unwrap();
     assert!(!model.can_commit(&a)); // The already-open handle is fenced.
-    for action in &steps[2..8] {
+    for action in &steps[2..9] {
         model.apply(action, observed()).unwrap();
         assert!(model.writable().is_empty()); // Zero owners is safe.
     }
-    let outcome = model.apply(&steps[8], observed()).unwrap();
+    let outcome = model.apply(&steps[9], observed()).unwrap();
     let b = c.successor("epoch-B").unwrap();
     assert!(model.can_commit(&b));
     assert!(!model.can_commit(&a));
     assert_eq!(model.writable(), vec![&b]);
-    assert_eq!(model.apply(&steps[8], observed()).unwrap(), outcome);
+    assert_eq!(model.apply(&steps[9], observed()).unwrap(), outcome);
     model
         .apply(&Action::Crash(b.owner.clone()), observed())
         .unwrap();
     // A duplicate receipt readback does NOT recreate a writer after a crash.
-    assert_eq!(model.apply(&steps[8], observed()).unwrap(), outcome);
+    assert_eq!(model.apply(&steps[9], observed()).unwrap(), outcome);
     assert!(!model.can_commit(&b));
 }
 
@@ -144,8 +145,8 @@ fn every_crash_boundary_keeps_retirement_and_requires_fresh_start() {
             nonce: "fresh-A".into(),
             challenge: "fresh-A".into(),
         };
-        assert_eq!(model.apply(&restart, observed()).is_ok(), prefix < 2);
-        if prefix >= 2 {
+        assert_eq!(model.apply(&restart, observed()).is_ok(), prefix == 0);
+        if prefix >= 1 {
             assert!(!model.can_commit(&a));
         }
         if prefix == steps.len() {
@@ -156,7 +157,7 @@ fn every_crash_boundary_keeps_retirement_and_requires_fresh_start() {
             };
             model.apply(&restart, observed()).unwrap();
             assert!(model.can_commit(&b));
-        } else if prefix >= 2 {
+        } else if prefix >= 1 {
             // Recovery may inspect/resume the SAME interrupted operation, not unretire.
             run(&mut model, &steps[prefix..]);
             assert!(model.can_commit(&b));
@@ -255,7 +256,7 @@ fn full_artifact_policy_profile_and_startup_challenge_are_required() {
     ] {
         assert!(model.apply(&steps[0], bad).is_err());
     }
-    run(&mut model, &steps[..5]);
+    run(&mut model, &steps[..6]);
     let wrong = Action::Pending {
         certificate: c.clone(),
         epoch: "epoch-B".into(),
@@ -276,7 +277,7 @@ fn full_artifact_policy_profile_and_startup_challenge_are_required() {
             )
             .is_err()
     );
-    run(&mut model, &steps[5..8]);
+    run(&mut model, &steps[6..9]);
     let changed_epoch = Action::Pending {
         certificate: c.clone(),
         epoch: "different-pending-epoch".into(),
@@ -291,9 +292,9 @@ fn full_artifact_policy_profile_and_startup_challenge_are_required() {
     };
     let before = model.clone();
     assert!(model.apply(&wrong, observed()).is_err());
-    assert!(model.apply(&steps[8], Observations::default()).is_err());
+    assert!(model.apply(&steps[9], Observations::default()).is_err());
     assert_eq!(model, before);
-    model.apply(&steps[8], observed()).unwrap();
+    model.apply(&steps[9], observed()).unwrap();
 }
 
 #[test]
@@ -425,7 +426,7 @@ fn return_to_old_placement_requires_new_handoff_epoch_and_generation() {
     run(&mut model, &handoff(&first, "epoch-B"));
     let second = certificate(first.successor("epoch-B").unwrap(), "A");
     let steps = handoff(&second, "epoch-A-2");
-    run(&mut model, &steps[..5]);
+    run(&mut model, &steps[..6]);
     assert!(
         model
             .apply(
@@ -438,7 +439,7 @@ fn return_to_old_placement_requires_new_handoff_epoch_and_generation() {
             )
             .is_err()
     );
-    run(&mut model, &steps[5..]);
+    run(&mut model, &steps[6..]);
     let a2 = second.successor("epoch-A-2").unwrap();
     assert!(model.can_commit(&a2));
     assert!(!model.can_commit(&initial()));
@@ -473,6 +474,30 @@ fn exploration_actions() -> Vec<Action> {
         nonce: "restart-A".into(),
         challenge: "restart-A".into(),
     });
+    actions.push(Action::RestoreLocal {
+        placement: initial().owner,
+        journal: Some(Box::new(Journal::Active {
+            authority: initial(),
+        })),
+        data: Some(initial()),
+    });
+    actions.push(Action::RestoreLocal {
+        placement: initial().owner,
+        journal: None,
+        data: Some(initial()),
+    });
+    actions.push(Action::RestoreData {
+        placement: initial().owner,
+        data: None,
+    });
+    actions.push(Action::RestoreData {
+        placement: placement("B", 2),
+        data: None,
+    });
+    actions.push(Action::RestoreData {
+        placement: placement("C", 3),
+        data: None,
+    });
     actions
 }
 
@@ -487,7 +512,7 @@ fn bounded_enumeration_never_admits_two_writers() {
             model.writable().len() <= 1,
             "split owner; action indices {trace:?}"
         );
-        if trace.len() == 12 {
+        if trace.len() == 16 {
             continue;
         }
         for (index, action) in actions.iter().enumerate() {
@@ -505,7 +530,7 @@ fn bounded_enumeration_never_admits_two_writers() {
         }
     }
     eprintln!(
-        "MODEL enumerated {} distinct states, 24 actions, depth 12",
+        "MODEL enumerated {} distinct states, 31 actions, depth 16",
         seen.len()
     );
     assert!(
@@ -517,9 +542,9 @@ fn bounded_enumeration_never_admits_two_writers() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]
-    fn arbitrary_action_orders_preserve_exclusivity_and_refusal_atomicity(indices in prop::collection::vec(0usize..24,0..80)) {
+    fn arbitrary_action_orders_preserve_exclusivity_and_refusal_atomicity(indices in prop::collection::vec(0usize..31,0..80)) {
         let mut model=Model::new(initial()).unwrap();let actions=exploration_actions();
-        prop_assert_eq!(actions.len(),24);
+        prop_assert_eq!(actions.len(),31);
         for index in indices {
             let before=model.clone();
             if model.apply(&actions[index],observed()).is_err() {prop_assert_eq!(&model,&before);}
@@ -528,10 +553,15 @@ proptest! {
     }
 
     #[test]
-    fn record_roundtrip_and_digest_ignore_json_key_order(id in "[a-zA-Z0-9_:-]{1,32}", generation in 0u64..u64::MAX, kind in 0usize..8) {
+    fn record_roundtrip_and_digest_ignore_json_key_order(id in "[a-zA-Z0-9_:-]{1,32}", generation in 0u64..u64::MAX, kind in 0usize..9, witness_phase in 0usize..3) {
         let mut a=initial();a.store_id=id;a.generation=generation;
         a.predecessor=if generation==0 {None} else {Some([7;32])};
         let c=certificate(a.clone(),"B");let successor=c.successor("epoch-B").unwrap();
+        let head = match witness_phase {
+            0 => WitnessHead::Active { authority:a.clone() },
+            1 => WitnessHead::Reserved { request:c.request.clone() },
+            _ => WitnessHead::Retired { certificate:c.clone() },
+        };
         let payload=match kind {
             0=>Payload::Journal{journal:Journal::Active{authority:a}},
             1=>Payload::Journal{journal:Journal::Retiring{request:c.request.clone()}},
@@ -540,7 +570,8 @@ proptest! {
             4=>Payload::Operation{request:c.request.clone()},
             5=>Payload::Retirement{certificate:c.clone()},
             6=>Payload::Activation{activation:Activation{certificate:c.clone(),authority:successor}},
-            _=>Payload::Startup{authority:successor,nonce:"fresh-challenge".into()},
+            7=>Payload::Startup{head:head.clone(),nonce:"fresh-challenge".into()},
+            _=>Payload::Witness{head},
         };
         let record=Record{version:RECORD_VERSION,payload};
         let bytes=record.encode().unwrap();

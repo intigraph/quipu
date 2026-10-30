@@ -48,6 +48,13 @@ fn main() {
         "before_retirement old_A_can_commit={}",
         model.can_commit(&a)
     );
+    let early_witness = model
+        .apply(&Action::FenceWitness(c.clone()), observations)
+        .is_ok();
+    println!(
+        "premature_witness_retirement={}",
+        if early_witness { "RECORDED" } else { "REFUSED" }
+    );
     let early = model
         .apply(&Action::Publish(c.clone()), observations)
         .is_ok();
@@ -60,6 +67,7 @@ fn main() {
             Action::Barrier(c.request.clone()),
             Action::Seal(c.clone()),
             Action::Retire(c.clone()),
+            Action::FenceWitness(c.clone()),
             Action::Publish(c.clone()),
         ] {
             model.apply(&action, observations).unwrap();

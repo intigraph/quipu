@@ -32,7 +32,7 @@ impl Observations {
 /// separate actions, not a claim that real journal/data fsyncs are atomic.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Model {
-    pub(super) head: Authority,
+    pub(super) head: WitnessHead,
     pub(super) journal: BTreeMap<Placement, Journal>,
     pub(super) data: BTreeMap<Placement, Authority>,
     pub(super) operations: BTreeMap<String, Request>,
@@ -57,7 +57,9 @@ impl Model {
         )?;
         let owner = authority.owner.clone();
         Ok(Self {
-            head: authority.clone(),
+            head: WitnessHead::Active {
+                authority: authority.clone(),
+            },
             journal: BTreeMap::from([(
                 owner.clone(),
                 Journal::Active {
@@ -75,8 +77,8 @@ impl Model {
         })
     }
 
-    /// Current external head in the model; reading it is not witness contact.
-    pub fn head(&self) -> &Authority {
+    /// Full external phase/head in the model; reading it is not witness contact.
+    pub fn witness_head(&self) -> &WitnessHead {
         &self.head
     }
 
@@ -130,7 +132,18 @@ impl Model {
         )
     }
 
-    // Critical usable-receipt boundary. The retained source mutant removes THIS
+    pub(super) fn current_transfer(&self, certificate: &Certificate) -> bool {
+        self.head
+            == WitnessHead::Reserved {
+                request: certificate.request.clone(),
+            }
+            || self.head
+                == WitnessHead::Retired {
+                    certificate: certificate.clone(),
+                }
+    }
+
+    // Critical prerequisite for witness retirement and usable receipts. The mutant removes THIS
     // check; the model explorer must then find two writable placements.
     pub(super) fn require_retired(&self, certificate: &Certificate) -> ModelResult<()> {
         require(
@@ -154,7 +167,7 @@ impl Model {
         Record {
             version: RECORD_VERSION,
             payload: Payload::Startup {
-                authority: authority.clone(),
+                head: self.head.clone(),
                 nonce: nonce.into(),
             },
         }
@@ -164,8 +177,11 @@ impl Model {
             "stale or mismatched startup nonce",
         )?;
         require(
-            self.head == *authority,
-            "startup proof is not the current external head",
+            self.head
+                == WitnessHead::Active {
+                    authority: authority.clone(),
+                },
+            "startup head is stale, reserved or retired",
         )
     }
 }

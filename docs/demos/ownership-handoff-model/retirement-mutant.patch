@@ -1,8 +1,8 @@
 --- a/src/ownership_handoff_model/state.rs
 +++ b/src/ownership_handoff_model/state.rs
-@@ -132,15 +132,8 @@
+@@ -145,15 +145,8 @@
  
-     // Critical usable-receipt boundary. The retained source mutant removes THIS
+     // Critical prerequisite for witness retirement and usable receipts. The mutant removes THIS
      // check; the model explorer must then find two writable placements.
 -    pub(super) fn require_retired(&self, certificate: &Certificate) -> ModelResult<()> {
 -        require(

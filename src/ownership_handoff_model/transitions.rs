@@ -1,71 +1,5 @@
 use super::*;
 
-/// Model actions expose separate durable boundaries for crash enumeration.
-/// No variant calls Store, filesystem, signing, IPC or a network service.
-#[derive(Clone, Debug)]
-#[allow(missing_docs)]
-pub enum Action {
-    /// Reserve one exact destination and successor without fencing source writes.
-    Prepare(Request),
-    /// Persist the irreversible source-local barrier.
-    Barrier(Request),
-    /// Persist the data retirement/cut/outbox while the journal remains RETIRING.
-    Seal(Certificate),
-    /// Complete the agreeing protected source journal.
-    Retire(Certificate),
-    /// Expose a usable certificate only after source retirement is durable.
-    Publish(Certificate),
-    /// Persist destination PENDING, bound to the inspected full artifact.
-    Pending {
-        certificate: Certificate,
-        epoch: String,
-        artifact: Digest,
-    },
-    /// Install the matching data/placement tuple; still no writer admission.
-    Install {
-        certificate: Certificate,
-        artifact: Digest,
-    },
-    /// Serialize the external predecessor CAS after matching destination install.
-    AdvanceWitness(Certificate),
-    /// Atomically model receipt consumption plus ACTIVE/result journal write.
-    Activate {
-        certificate: Certificate,
-        epoch: String,
-        nonce: String,
-        challenge: String,
-    },
-    /// Drop process admission, retaining every modeled durable record.
-    Crash(Placement),
-    /// Restart ONLY with agreeing records and a fresh externally current proof.
-    Restart {
-        authority: Authority,
-        nonce: String,
-        challenge: String,
-    },
-    /// Fixture-only old DB/sidecar restoration, including under a held handle.
-    RestoreData {
-        placement: Placement,
-        data: Option<Authority>,
-    },
-    /// Fixture-only local host/journal rollback after the process has stopped.
-    /// The external head and its nonce ledger are deliberately not rolled back.
-    RestoreLocal {
-        placement: Placement,
-        journal: Option<Box<Journal>>,
-        data: Option<Authority>,
-    },
-}
-
-/// A model step's result. Historical activation replay does not start a process.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Outcome {
-    /// State recorded or exact idempotent retry; no authority token issued.
-    Recorded,
-    /// Retained immutable activation result, possibly a historical readback.
-    Activation(Box<Activation>),
-}
-
 impl Model {
     pub(super) fn step(
         &mut self,
@@ -81,7 +15,11 @@ impl Model {
                     return Ok(Outcome::Recorded);
                 }
                 require(
-                    self.head == r.source && self.can_commit(&r.source),
+                    self.head
+                        == WitnessHead::Active {
+                            authority: r.source.clone(),
+                        }
+                        && self.can_commit(&r.source),
                     "stale predecessor or unavailable source",
                 )?;
                 require(
@@ -89,17 +27,30 @@ impl Model {
                     "successor already reserved",
                 )?;
                 self.operations.insert(r.operation.clone(), r.clone());
+                self.head = WitnessHead::Reserved { request: r.clone() };
             }
             Action::Barrier(r) => {
                 observations.authorized()?;
                 self.reserved(r)?;
-                require(self.head == r.source, "stale predecessor")?;
+                require(
+                    self.head == WitnessHead::Reserved { request: r.clone() },
+                    "stale predecessor",
+                )?;
                 if self.journal.get(&r.source.owner)
                     == Some(&Journal::Retiring { request: r.clone() })
                 {
                     return Ok(Outcome::Recorded);
                 }
-                require(self.can_commit(&r.source), "source is not admitted ACTIVE")?;
+                // Bounded internal retirement may resume after a process crash;
+                // this is NOT admission of ordinary source writes.
+                require(
+                    self.journal.get(&r.source.owner)
+                        == Some(&Journal::Active {
+                            authority: r.source.clone(),
+                        })
+                        && self.data.get(&r.source.owner) == Some(&r.source),
+                    "source records disagree",
+                )?;
                 self.journal.insert(
                     r.source.owner.clone(),
                     Journal::Retiring { request: r.clone() },
@@ -109,6 +60,7 @@ impl Model {
                 observations.authorized()?;
                 c.validate()?;
                 self.reserved(&c.request)?;
+                require(self.current_transfer(c), "stale retirement operation")?;
                 require(
                     self.journal.get(&c.request.source.owner)
                         == Some(&Journal::Retiring {
@@ -131,6 +83,7 @@ impl Model {
                 if self.journal.get(&c.request.source.owner) == Some(&retired) {
                     return Ok(Outcome::Recorded);
                 }
+                require(self.current_transfer(c), "stale retirement operation")?;
                 require(
                     self.journal.get(&c.request.source.owner)
                         == Some(&Journal::Retiring {
@@ -141,6 +94,29 @@ impl Model {
                 )?;
                 self.journal.insert(c.request.source.owner.clone(), retired);
             }
+            Action::FenceWitness(c) => {
+                observations.admission()?;
+                c.validate()?;
+                self.reserved(&c.request)?;
+                self.require_retired(c)?;
+                if self.head
+                    == (WitnessHead::Retired {
+                        certificate: c.clone(),
+                    })
+                {
+                    return Ok(Outcome::Recorded);
+                }
+                require(
+                    self.head
+                        == WitnessHead::Reserved {
+                            request: c.request.clone(),
+                        },
+                    "witness predecessor CAS refused",
+                )?;
+                self.head = WitnessHead::Retired {
+                    certificate: c.clone(),
+                };
+            }
             Action::Publish(c) => {
                 observations.authorized()?;
                 c.validate()?;
@@ -150,7 +126,13 @@ impl Model {
                     return Ok(Outcome::Recorded);
                 }
                 self.require_retired(c)?;
-                require(self.head == c.request.source, "stale predecessor")?;
+                require(
+                    self.head
+                        == WitnessHead::Retired {
+                            certificate: c.clone(),
+                        },
+                    "external retirement not durable",
+                )?;
                 self.published
                     .insert(c.request.operation.clone(), c.clone());
             }
@@ -177,7 +159,13 @@ impl Model {
                 if self.journal.get(&c.request.destination) == Some(&pending) {
                     return Ok(Outcome::Recorded);
                 }
-                require(self.head == c.request.source, "stale predecessor")?;
+                require(
+                    self.head
+                        == WitnessHead::Retired {
+                            certificate: c.clone(),
+                        },
+                    "stale retirement head",
+                )?;
                 require(!self.epochs.contains(epoch), "epoch already used")?;
                 require(
                     match self.journal.get(&c.request.destination) {
@@ -207,6 +195,17 @@ impl Model {
                     return Err("destination not PENDING".into());
                 };
                 require(certificate == c, "different pending operation")?;
+                require(
+                    self.head
+                        == WitnessHead::Retired {
+                            certificate: c.clone(),
+                        }
+                        || self.head
+                            == WitnessHead::Active {
+                                authority: successor.clone(),
+                            },
+                    "stale install",
+                )?;
                 self.data
                     .insert(c.request.destination.clone(), successor.clone());
             }
@@ -224,14 +223,23 @@ impl Model {
                     certificate == c && self.data.get(&c.request.destination) == Some(successor),
                     "install is incomplete",
                 )?;
-                if self.head == *successor {
+                if self.head
+                    == (WitnessHead::Active {
+                        authority: successor.clone(),
+                    })
+                {
                     return Ok(Outcome::Recorded);
                 }
                 require(
-                    self.head == c.request.source,
+                    self.head
+                        == WitnessHead::Retired {
+                            certificate: c.clone(),
+                        },
                     "witness predecessor CAS refused",
                 )?;
-                self.head = successor.clone();
+                self.head = WitnessHead::Active {
+                    authority: successor.clone(),
+                };
             }
             Action::Activate {
                 certificate: c,

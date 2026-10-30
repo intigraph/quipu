@@ -26,7 +26,11 @@ revision. Requests require distinct source/destination placements; returning to
 an old placement requires a later handoff with a new generation and epoch.
 
 The witness and nonce ledger are assumed durable and outside a local restore.
-They cannot remotely supersede a still-active source. Whole-witness rollback,
+The witness retains ACTIVE, RESERVED and RETIRED phases, not just an owner tuple.
+An unresolved reservation blocks ordinary source restart; an existing running A
+can still commit until its actual local barrier. The exact internal retirement
+can resume without admitting unrelated source writes. The witness cannot remotely
+supersede a still-active source. Whole-witness rollback,
 cloned running processes/native identities, hostile privileged writes and
 pre-fencing binaries remain outside the supported model. There is no clock or
 timeout transition, lease, profile provisioning or network coordinator here.
@@ -35,15 +39,18 @@ timeout transition, lease, profile provisioning or network coordinator here.
 
 The actions distinguish these steps:
 
-1. Reserve one immutable operation per predecessor; A can still commit.
+1. Externally reserve one immutable operation per predecessor; running A can
+   still commit, but ambiguous ordinary source restart refuses.
 2. Persist A's RETIRING barrier; every held A handle now refuses.
 3. Seal the source data retirement/cut/outbox under that barrier.
 4. Complete the agreeing RETIRED protected-journal record.
-5. Publish the usable retirement body only after both records agree.
-6. Persist B PENDING against the exact published retirement and full artifact.
-7. Install B's proposed data/placement tuple without admitting writes.
-8. Advance the external predecessor CAS to that exact successor.
-9. Consume the receipt and persist B ACTIVE/result, with a fresh nonce-bound
+5. Durably record source retirement at the witness, still naming no active B.
+6. Publish the usable retirement body only after both local records agree and
+   the external retirement is durable.
+7. Persist B PENDING against the exact published retirement and full artifact.
+8. Install B's proposed data/placement tuple without admitting writes.
+9. Advance the external predecessor CAS to that exact successor.
+10. Consume the receipt and persist B ACTIVE/result, with a fresh nonce-bound
    current-head admission. A stays retired.
 
 Each action is one **abstract atomic durable step**, not an implementation of
@@ -78,7 +85,8 @@ with these tagged payloads:
 | OPERATION | Immutable request and globally retained operation ID |
 | RETIREMENT | Full request plus sealed transaction coordinate, fact-cut digest and full-artifact digest |
 | ACTIVATION | Full retirement body plus exact successor tuple/result |
-| STARTUP | Externally current tuple plus challenge nonce |
+| WITNESS | Explicit ACTIVE tuple, RESERVED operation, or RETIRED certificate |
+| STARTUP | Full externally current witness phase/head plus challenge nonce |
 
 `Record::decode` bounds input at 64 KiB, rejects unknown versions, unknown or
 duplicate fields, malformed digests, empty/control-containing identifiers,

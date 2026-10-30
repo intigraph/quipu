@@ -9,7 +9,7 @@ pub const MAX_RECORD_BYTES: usize = 65_536;
 /// SHA-256 identity of model content or an externally inspected artifact.
 pub type Digest = [u8; 32];
 
-fn identifier(value: &str) -> ModelResult<()> {
+pub(super) fn identifier(value: &str) -> ModelResult<()> {
     require(
         !value.is_empty()
             && value.len() <= 512
@@ -205,6 +205,44 @@ pub struct Activation {
     pub authority: Authority,
 }
 
+/// Externally durable head INCLUDING admission phase, not just an owner tuple.
+/// A prepared reservation prevents ambiguous old-source process restart;
+/// already admitted running A may continue until its actual local barrier.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(
+    tag = "phase",
+    rename_all = "SCREAMING_SNAKE_CASE",
+    deny_unknown_fields
+)]
+pub enum WitnessHead {
+    /// No unresolved handoff from this tuple; a fresh process may seek admission.
+    Active {
+        /// Current tuple.
+        authority: Authority,
+    },
+    /// One immutable successor reserved; ordinary source restart refuses.
+    Reserved {
+        /// Current predecessor and exact operation.
+        request: Request,
+    },
+    /// Source retirement externally recorded before a receipt can be exposed.
+    Retired {
+        /// Exact completed retirement, not a replacement-owner grant.
+        certificate: Certificate,
+    },
+}
+
+impl WitnessHead {
+    /// Validate shape; the actual witness's authenticity/durability is external.
+    pub fn validate(&self) -> ModelResult<()> {
+        match self {
+            Self::Active { authority } => authority.validate(),
+            Self::Reserved { request } => request.validate(),
+            Self::Retired { certificate } => certificate.validate(),
+        }
+    }
+}
+
 /// Candidate protected-journal states. Missing state is never legacy INACTIVE.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "role", rename_all = "SCREAMING_SNAKE_CASE", deny_unknown_fields)]
@@ -231,103 +269,4 @@ pub enum Journal {
         /// Only proposed successor.
         successor: Authority,
     },
-}
-
-/// Candidate record payloads, not a runtime transport or on-disk migration.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "SCREAMING_SNAKE_CASE", deny_unknown_fields)]
-pub enum Payload {
-    /// Protected role record.
-    Journal {
-        /// Candidate role.
-        journal: Journal,
-    },
-    /// Reserved request/idempotency ledger entry.
-    Operation {
-        /// Immutable operation.
-        request: Request,
-    },
-    /// Retained source cut/outbox record.
-    Retirement {
-        /// Candidate completed retirement.
-        certificate: Certificate,
-    },
-    /// Durable destination result and receipt consumption.
-    Activation {
-        /// Idempotent result.
-        activation: Activation,
-    },
-    /// Fresh startup response body; authentication is not implemented here.
-    Startup {
-        /// Exact externally current head.
-        authority: Authority,
-        /// Nonce bound to the current challenge.
-        nonce: String,
-    },
-}
-
-/// Strict, bounded record envelope. Decoding never starts a writer.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Record {
-    /// Must equal RECORD_VERSION; unknown versions refuse.
-    pub version: u16,
-    /// Explicit typed payload with no permissive legacy fallback.
-    pub payload: Payload,
-}
-
-impl Record {
-    /// Validate a candidate's internal relationships, not external truth.
-    pub fn validate(&self) -> ModelResult<()> {
-        require(self.version == RECORD_VERSION, "unknown record version")?;
-        match &self.payload {
-            Payload::Operation { request } => request.validate(),
-            Payload::Retirement { certificate } => certificate.validate(),
-            Payload::Startup { authority, nonce } => {
-                authority.validate()?;
-                identifier(nonce)
-            }
-            Payload::Activation { activation } => {
-                activation.authority.validate()?;
-                require(
-                    activation
-                        .certificate
-                        .successor(&activation.authority.epoch)?
-                        == activation.authority,
-                    "activation tuple disagrees with retirement",
-                )
-            }
-            Payload::Journal { journal } => match journal {
-                Journal::Active { authority } => authority.validate(),
-                Journal::Retiring { request } => request.validate(),
-                Journal::Retired { certificate } => certificate.validate(),
-                Journal::Pending {
-                    certificate,
-                    successor,
-                } => {
-                    successor.validate()?;
-                    require(
-                        certificate.successor(&successor.epoch)? == *successor,
-                        "pending tuple disagrees",
-                    )
-                }
-            },
-        }
-    }
-
-    /// Encode deterministic typed JSON after validation.
-    pub fn encode(&self) -> ModelResult<Vec<u8>> {
-        self.validate()?;
-        let bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
-        require(bytes.len() <= MAX_RECORD_BYTES, "oversized record")?;
-        Ok(bytes)
-    }
-
-    /// Decode strictly, including unknown/duplicate fields and nested relations.
-    pub fn decode(bytes: &[u8]) -> ModelResult<Self> {
-        require(bytes.len() <= MAX_RECORD_BYTES, "oversized record")?;
-        let record: Self = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
-        record.validate()?;
-        Ok(record)
-    }
 }
