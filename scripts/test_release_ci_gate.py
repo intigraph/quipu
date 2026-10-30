@@ -2,6 +2,9 @@
 """Static contract connecting CI correctness to Release."""
 
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import yaml
 from wait_release_correctness import DEFERRED_JOB
 
@@ -140,6 +143,84 @@ assert fresh["permissions"]["statuses"] == "write"
 fresh_run = "\n".join(s.get("run", "") for s in fresh["steps"])
 assert "scripts/release-pr-freshness.sh" in fresh_run
 assert 'context="Release PR freshness"' in fresh_run
+
+# Execute the actual workflow body: unreadable discovery is not known absence,
+# and unreadable current refs must never be treated as an ordinary moved ref.
+fresh_script = next(s["run"] for s in fresh["steps"]
+                    if s.get("name") == "Check the open release PR against current main")
+with tempfile.TemporaryDirectory() as directory:
+    fixture = Path(directory)
+    (fixture / "scripts").mkdir()
+    freshness = fixture / "scripts/release-pr-freshness.sh"
+    freshness.write_text('#!/bin/sh\nexit "${CHECK_EXIT:-0}"\n')
+    freshness.chmod(0o700)
+    gh = fixture / "gh"
+    gh.write_text('''#!/bin/bash
+set -eu
+case "$1 $2" in
+  'pr list')
+    [ "$CASE" != discovery-error ] || { echo 'synthetic discovery failure' >&2; exit 1; }
+    [ "$CASE" != empty ] || { printf '  \\n'; exit 0; }
+    [ "$CASE" != discovery-malformed ] || { echo release-plz-test; exit 0; }
+    printf 'release-plz-test %s 7\\n' "$OID" ;;
+  'pr view')
+    [ "$CASE" != head-error ] || exit 1
+    [ "$CASE" != head-empty ] || exit 0
+    if [ "$CASE" = head-moved ]; then echo "$OTHER"; else echo "$OID"; fi ;;
+  'api repos/example/repo/commits/main')
+    [ "$CASE" != main-error ] || exit 1
+    [ "$CASE" != main-empty ] || exit 0
+    if [ "$CASE" = main-moved ]; then echo "$OTHER"; else echo "$GITHUB_SHA"; fi ;;
+  'api repos/example/repo/statuses/'*)
+    printf '%s\\n' "$*" >> "$STATUS_LOG"
+    [ "$CASE" != status-error ] ;;
+  'run list')
+    [ "$CASE" != busy-error ] || exit 1
+    echo 1 ;;
+  'workflow run') echo 'unexpected dispatch' >&2; exit 99 ;;
+  *) echo "unexpected gh call: $*" >&2; exit 99 ;;
+esac
+''')
+    gh.chmod(0o700)
+    git = fixture / "git"
+    git.write_text('''#!/bin/bash
+set -eu
+case "$1" in
+  fetch) [ "$CASE" != fetch-error ] ;;
+  rev-parse) if [ "$CASE" = fetch-mismatch ]; then echo "$OTHER"; else echo "$OID"; fi ;;
+  *) exit 99 ;;
+esac
+''')
+    git.chmod(0o700)
+    for case in ("empty", "discovery-error", "discovery-malformed", "fetch-error", "fetch-mismatch",
+                 "main-error", "head-error", "main-empty", "head-empty",
+                 "main-moved", "head-moved", "success", "check-error", "status-error",
+                 "stale-busy", "busy-error"):
+        status = fixture / "status.log"
+        status.unlink(missing_ok=True)
+        env = {**os.environ, "PATH": str(fixture) + os.pathsep + os.environ["PATH"],
+               "CASE": case, "OID": "a" * 40, "OTHER": "b" * 40,
+               "GITHUB_SHA": "c" * 40, "GITHUB_REPOSITORY": "example/repo",
+               "GITHUB_SERVER_URL": "https://example.invalid", "GITHUB_RUN_ID": "1",
+               "GITHUB_STEP_SUMMARY": str(fixture / "summary"),
+               "STATUS_LOG": str(status), "CHECK_EXIT": (
+                   "2" if case == "check-error" else "1" if case in ("stale-busy", "busy-error") else "0")}
+        result = subprocess.run(["bash", "-c", fresh_script], cwd=fixture,
+                                env=env, capture_output=True, text=True)
+        expected_error = case.endswith("error") or case in (
+            "discovery-malformed", "fetch-mismatch", "main-empty", "head-empty")
+        assert (result.returncode != 0) == expected_error, (case, result)
+        assert ("No open release PR" in result.stdout) == (case == "empty"), (case, result)
+        assert status.exists() == (case in (
+            "success", "check-error", "status-error", "stale-busy", "busy-error")), (case, result)
+        assert "unexpected dispatch" not in result.stderr, (case, result)
+        if status.exists():
+            record = status.read_text()
+            assert "statuses/" + "a" * 40 in record
+            expected_state = ("error" if case == "check-error" else
+                              "failure" if case in ("stale-busy", "busy-error") else "success")
+            assert "state=" + expected_state in record
+        print(f"release PR discovery control: {case}: ok")
 
 # aegis-0zr: the trusted share is its own job; crates.io never waits on it.
 share = release_jobs["repository-share"]

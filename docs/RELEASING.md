@@ -69,20 +69,21 @@ commit that was tagged shipped those two PRs, but the section did not list them.
 
 ### The trusted repository share
 
-The `repository-share` job does not build the pendant. It waits for the trusted
-producer, which is the goldblum role `quipu_share_producer`: a systemd user timer,
-`quipu-share-producer.timer`, on the crew host **vati**, which reads live policy
-from quipu.svc. If vati is off, that job fails with "Trusted repository share
+The `repository-share` job does not build the pendant. It waits for the
+configured trusted producer, which runs on its own host and reads live outward
+policy from its configured endpoint. Hosted runners never receive that policy.
+If the producer is unavailable, this job fails with "Trusted repository share
 missing". It is a separate job, so crates.io and the MCP Registry are no longer
 skipped because of it (they were for 0.16.4 and 0.16.5).
 
-The producer serves only the **latest** release. A release that was superseded
-before vati came back never gets a share from the timer. 0.16.4 is in that state.
+The producer serves only the **latest** release. A release superseded before the
+producer recovers never gets a share from its schedule. 0.16.4 is in that state.
 
-Recovery, once vati is up:
+Recover the producer using the private operations runbook, then wait for its
+normal scheduled run or use that runbook's scoped recovery command. Once its
+assets are uploaded, inspect them and rerun only the waiting job:
 
 ```sh
-ssh vati systemctl --user start quipu-share-producer.service   # or wait <=5 min
 gh release view quipu-ai-v<v> --json assets --jq '.assets[].name' | grep repository.pendant
 gh run rerun <release-run-id> --job <repository-share job id>  # rebuilds nothing
 ```

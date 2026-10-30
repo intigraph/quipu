@@ -282,20 +282,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -uo pipefail
-          read -r BR OID NUM < <(gh pr list --state open --json headRefName,headRefOid,number \
-            --jq '[.[] | select(.headRefName | startswith("release-plz"))][0] // {} | "\(.headRefName // "") \(.headRefOid // "") \(.number // "")"')
-          if [ -z "${BR:-}" ]; then
+          set -euo pipefail
+          if ! listed="$(gh pr list --state open --json headRefName,headRefOid,number \
+            --jq '[.[] | select(.headRefName | startswith("release-plz"))][0] // {} | "\(.headRefName // "") \(.headRefOid // "") \(.number // "")"')"; then
+            echo "::error::Could not discover the open release PR; freshness is unknown."
+            exit 1
+          fi
+          read -r BR OID NUM <<< "$listed"
+          if [ -z "$BR$OID$NUM" ]; then
             echo "No open release PR — nothing to check."
             exit 0
+          fi
+          if [[ "$BR" != release-plz* || ! "$OID" =~ ^[0-9a-f]{40}$ || ! "$NUM" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid release PR discovery response; freshness is unknown."
+            exit 1
           fi
           # Check the exact commit that was listed, not the mutable branch name: a
           # regeneration between the list and the fetch would otherwise check one
           # proposal and publish the verdict on another.
-          git fetch --quiet origin "${OID}" || { echo "::warning::could not fetch ${BR} @ ${OID::8}"; exit 0; }
+          git fetch --quiet origin "${OID}" || { echo "::error::could not fetch ${BR} @ ${OID::8}"; exit 1; }
           if [ "$(git rev-parse FETCH_HEAD)" != "$OID" ]; then
-            echo "::warning::fetched ${BR} does not match listed ${OID::8}; not checking"
-            exit 0
+            echo "::error::fetched ${BR} does not match listed ${OID::8}; not checking"
+            exit 1
           fi
           rc=0; ./scripts/release-pr-freshness.sh "$OID" HEAD || rc=$?
           case "$rc" in
@@ -306,8 +314,15 @@ jobs:
           # Publish only if nothing moved while we checked. If main advanced, the newer
           # push run owns the verdict; if the PR was regenerated, its new head is
           # checked by the next push. Either way this run's answer is stale.
-          now_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha 2>/dev/null || true)"
-          now_head="$(gh pr view "$NUM" --json headRefOid --jq .headRefOid 2>/dev/null || true)"
+          if ! now_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" ||
+             ! now_head="$(gh pr view "$NUM" --json headRefOid --jq .headRefOid)"; then
+            echo "::error::Could not reread main and the release PR; not publishing a verdict."
+            exit 1
+          fi
+          if [[ ! "$now_main" =~ ^[0-9a-f]{40}$ || ! "$now_head" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid current revision response; not publishing a verdict."
+            exit 1
+          fi
           if [ "$now_main" != "$GITHUB_SHA" ] || [ "$now_head" != "$OID" ]; then
             echo "main or the release PR moved during the check (main ${now_main::8}, PR ${now_head::8}); not publishing this verdict."
             exit 0
@@ -838,17 +853,16 @@ jobs:
   # THE TRUSTED REPOSITORY SHARE, AS ITS OWN JOB (aegis-0zr).
   #
   # The pendant triplet is NOT built here. The trusted producer uploads it: the
-  # goldblum role quipu_share_producer, a systemd user timer
-  # (quipu-share-producer.timer, every 5 min) on the trusted crew host vati,
-  # which fetches live outward policy from quipu.svc. Hosted runners never
+  # configured trusted producer, scheduled every five minutes on its own host,
+  # which fetches live outward policy from its configured endpoint. Hosted runners never
   # receive that policy. This job only waits for the upload and verifies it.
   #
   # It used to be the last step of the x86_64 Linux Binaries job, so a host that
-  # was simply off (vati, 2026-10-27/28) failed "Binaries" and thereby skipped
+  # was unavailable failed "Binaries" and thereby skipped
   # crates.io and the MCP Registry: 0.16.4 and 0.16.5 never reached crates.io
   # while the release page looked shipped. crates.io does not consume the share,
   # so it no longer waits on it. This job stays red until the share lands and
-  # verifies, which is the producer's delivery alarm (docs/runbooks in goldblum).
+  # verifies, which is the producer's delivery alarm (private operations runbook).
   #
   # It verifies against the RELEASED x86_64 archive, downloaded and checksummed,
   # not a fresh build, because the provenance receipt binds the binary's sha256.
@@ -905,7 +919,7 @@ jobs:
               complete=true
               break
             fi
-            [ "$attempt" = 1 ] && echo "Waiting up to 40 min for ${PACK} from the trusted producer (vati: quipu-share-producer.timer)."
+            [ "$attempt" = 1 ] && echo "Waiting up to 40 min for ${PACK} from the configured trusted producer."
             sleep 30
           done
           if [[ "$complete" != true ]]; then
@@ -913,14 +927,14 @@ jobs:
               echo "### Trusted repository share missing for ${TAG}"
               echo
               echo "No \`${PACK}\` (+ \`.sha256\`, \`.provenance.json\`) appeared on the release within 40 minutes."
-              echo "It is uploaded by the trusted producer, not by this workflow: the goldblum role"
-              echo "\`quipu_share_producer\` (systemd user timer \`quipu-share-producer.timer\` on vati, policy from quipu.svc)."
-              echo "Most likely vati is down or the timer is held/failing. The producer only serves the LATEST release."
+              echo "It is uploaded by the configured trusted producer, not by this workflow."
+              echo "Check its host, schedule and policy endpoint using the private operations runbook."
+              echo "The producer may be unavailable, held or failing. It only serves the LATEST release."
               echo
               echo "Native binaries, wasm and crates.io do not wait on this job. Once the share is uploaded,"
               echo "re-run THIS job only (it rebuilds nothing). See docs/RELEASING.md."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error title=Trusted repository share missing::${PACK} was not uploaded within 40 min. The trusted producer (goldblum quipu_share_producer, quipu-share-producer.timer on vati) did not run or failed; check that vati is up, then re-run this job. crates.io was not gated on this."
+            echo "::error title=Trusted repository share missing::${PACK} was not uploaded within 40 min. The configured trusted producer did not run or failed; check its host and schedule using the private operations runbook, then re-run this job. crates.io was not gated on this."
             exit 1
           fi
           # The released x86_64 archive, checksummed, is the binary the producer
