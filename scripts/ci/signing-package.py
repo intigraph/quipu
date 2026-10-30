@@ -23,6 +23,10 @@ VERSION = "0.1.0"
 MANIFEST = "crates/quipu-signing/Cargo.toml"
 OPT_IN = "prepare-quipu-signing-0.1.0"
 MAX_ARCHIVE = 16 * 1024 * 1024
+# Published immutable release, independently read back from crates.io on 2026-10-30.
+# Its VCS receipt binds 3943cd305e8d271a7ed481493ba22a307fa675a8.
+ADMITTED_CHECKSUM = "9590d3ae3ad7383f3b3325fd7649e873f26026460fc9767251028aa2a00c6575"
+REGISTRY_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 
 
 def refuse(message: str) -> None:
@@ -236,6 +240,30 @@ def root_dependency(root: Path) -> bool:
     return found
 
 
+def root_acquisition(root: Path) -> dict:
+    """Require Cargo's exact registry resolution to the qualified immutable bytes.
+
+    Cargo authenticates downloaded contents against this lock checksum. This
+    offline preflight never fetches, publishes, or grants publisher authority.
+    Caller-supplied preparation/registry fixtures cannot replace the lock.
+    """
+    lock = root / "Cargo.lock"
+    if not lock.is_file():
+        refuse("actual distribution acquisition: exact shared registry readback required in Cargo.lock")
+    packages = tomllib.loads(lock.read_text()).get("package", [])
+    matches = [package for package in packages if package.get("name") == NAME]
+    if len(matches) != 1 or any(
+        matches[0].get(key) != expected
+        for key, expected in (
+            ("version", VERSION), ("source", REGISTRY_SOURCE),
+            ("checksum", ADMITTED_CHECKSUM),
+        )
+    ):
+        refuse("actual distribution acquisition must lock the admitted registry version/checksum")
+    return {"route": "qualified-root", "shared_dependency": True,
+            "name": NAME, "version": VERSION, "checksum": ADMITTED_CHECKSUM}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -256,8 +284,10 @@ def main() -> int:
         if args.command == "select":
             print(select(args.name, args.manifest, args.opt_in))
             return 0
-        if args.command == "root-ready" and not root_dependency(args.root):
-            print(json.dumps({"route": "legacy-root", "shared_dependency": False}))
+        if args.command == "root-ready":
+            result = (root_acquisition(args.root) if root_dependency(args.root)
+                      else {"route": "legacy-root", "shared_dependency": False})
+            print(json.dumps(result, sort_keys=True))
             return 0
         if args.command == "prepare":
             if select(args.name, args.manifest, args.opt_in) != "shared-preparation":
@@ -281,11 +311,6 @@ def main() -> int:
                 read_json(args.registry_version),
                 args.archive.read_bytes(),
             )
-            if args.command == "root-ready":
-                refuse(
-                    "offline byte verification cannot admit a shared root dependency; "
-                    "actual distribution acquisition/publisher admission remains required"
-                )
         print(json.dumps(result, sort_keys=True, indent=2))
         return 0
     except (
