@@ -97,7 +97,7 @@ ex:L a sh:NodeShape ;
 
 #[test]
 fn loading_a_recursive_set_is_refused_and_the_registry_is_unchanged() {
-    let store = crate::Store::open_in_memory().unwrap();
+    let mut store = crate::Store::open_in_memory().unwrap();
     let err = store
         .load_shapes("recursive", RECURSIVE, "2026-10-22T00:00:00Z")
         .unwrap_err()
@@ -111,7 +111,7 @@ fn loading_a_recursive_set_is_refused_and_the_registry_is_unchanged() {
 
 #[test]
 fn a_cycle_spanning_two_loaded_sets_is_refused_at_the_second_load() {
-    let store = crate::Store::open_in_memory().unwrap();
+    let mut store = crate::Store::open_in_memory().unwrap();
     let first = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .
         ex:A a sh:NodeShape ; sh:property [ sh:path ex:p ; sh:node ex:B ] .";
     let second = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .
@@ -137,7 +137,7 @@ fn a_cycle_spanning_two_loaded_sets_is_refused_at_the_second_load() {
 fn replacing_a_set_is_judged_without_its_old_version() {
     // Reloading the same name replaces it; the old version must not combine with
     // the new one into a phantom cycle.
-    let store = crate::Store::open_in_memory().unwrap();
+    let mut store = crate::Store::open_in_memory().unwrap();
     let v1 = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .
         ex:A a sh:NodeShape ; sh:property [ sh:path ex:p ; sh:node ex:B ] .";
     let v2 = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix ex: <http://example.org/> .

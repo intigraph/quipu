@@ -159,6 +159,7 @@ pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod promotion_control;
+pub mod shape_mapping;
 pub mod share_alignments;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
@@ -244,6 +245,7 @@ pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
+pub use mcp::mapping::{tool_mapping_apply, tool_mapping_decide, tool_mapping_propose};
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions, tool_merge_resolve};
 pub use mcp::named_query::tool_ask;

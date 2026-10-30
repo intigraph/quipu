@@ -44,7 +44,7 @@ fn events(store: &Store, kind: &str) -> Vec<crate::store::events::EventRow> {
         .events_after(0, 100, Some(&[kind.to_string()]), None)
         .unwrap()
 }
-fn adopt(store: &Store) {
+fn adopt(store: &mut Store) {
     store.load_shapes("foreign-reviewed", "@prefix sh: <http://www.w3.org/ns/shacl#> . <https://example.org/shape> a sh:NodeShape ; sh:targetClass <https://foreign.example/Unknown> .",TS).unwrap();
 }
 #[test]
@@ -92,7 +92,7 @@ fn quarantine_replay_ages_once_then_adoption_and_promotion_resolve() {
         .is_err()
     );
     assert!(events(&store, "import.promoted").is_empty());
-    adopt(&store);
+    adopt(&mut store);
     assert!(
         import_share(&mut store, &request, TS, None)
             .unwrap()
@@ -212,7 +212,7 @@ fn rejected_expired_reopened_state_survives_event_pruning_and_restart() {
 fn promotion_event_failure_leaves_root_unchanged_and_can_retry() {
     let mut store = receiver();
     let request = request();
-    adopt(&store);
+    adopt(&mut store);
     import_share(&mut store, &request, TS, None).unwrap();
     let before = store.current_facts().unwrap().len();
     let promote = PromoteImportRequest {

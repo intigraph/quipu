@@ -2,7 +2,7 @@
 
 # MCP Tool Index
 
-All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
+All 87 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
 
 ## `quipu_accept_proposal`
 
@@ -481,6 +481,36 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 | `name` | string | no | Ontology name (required for load/remove) |
 | `timestamp` | string | no | ISO-8601 timestamp |
 | `turtle` | string | no | OWL ontology in Turtle format (required for load) |
+
+## `quipu_mapping_apply`
+
+WRITE. Apply or retire a decided mapping with exact expected_digest. Both graphs must already exist; existing graph authority/validation gates remain. Records the actual lifecycle decision and MappingRecord in the same tx. Exact replay does not reopen retirement. No consumer or replica activation.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string: `apply`, `retire` | yes |  |
+| `actor` | string | yes |  |
+| `expected_digest` | string | yes |  |
+| `mapping` | varies | yes | Decided mapping object for apply, mapping IRI string for retire. |
+| `operations_graph` | string | no | Existing committed audit graph; default urn:quipu:graph:operations. Only for apply. |
+
+## `quipu_mapping_decide`
+
+READ. Pure explicit per-row accept/decline decisions bound to the whole proposal digest. Every full correspondence key needs exactly one decision. Returns the selected mapping and expected_digest; declared reviewer is provenance, not a credential.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `decisions` | array | yes |  |
+| `proposal` | object | yes |  |
+| `reviewer` | string | yes |  |
+
+## `quipu_mapping_propose`
+
+READ. Qualify explicit one-hop schema correspondences, existing named scope and exact current shape/ontology pins. Returns a digest-bound proposal. Creates no graphs or transactions and performs no automatic matching.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mapping` | object | yes |  |
 
 ## `quipu_merge_apply`
 

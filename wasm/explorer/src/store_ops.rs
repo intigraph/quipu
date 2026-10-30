@@ -26,7 +26,7 @@ impl Explorer {
     /// Merely listing or reading shapes does not add an edit-log entry.
     pub fn shapes(&mut self, input: &str) -> Result<String, JsValue> {
         let input: serde_json::Value = serde_json::from_str(input).map_err(err_js)?;
-        let result = quipu::tool_shapes(&self.store, &input).map_err(features::engine_error)?;
+        let result = quipu::tool_shapes(&mut self.store, &input).map_err(features::engine_error)?;
         if matches!(
             input.get("action").and_then(serde_json::Value::as_str),
             Some("load" | "remove")
