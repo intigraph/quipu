@@ -84,6 +84,13 @@ operator who deletes or forges both authority records can defeat it; this is
 not hardware fencing. Stage A deliberately does not enforce ownership on all
 legacy copies and does not complete the full ownership acceptance metric.
 
+An untouched original host can still commit after another host adopts its copy.
+The proposed [source retirement and handoff](ownership-handoff.md) and
+[phased plan](ownership-handoff-plan.md) address that separate authority boundary.
+They preserve non-destructive restore and require explicit source retirement
+before destination ownership; an offline source leaves a non-owner fork.
+These documents do not implement or activate that protocol.
+
 ## Native qualification beyond Stage A
 
 The native ownership fixture composes explicit adoption and restore with the
