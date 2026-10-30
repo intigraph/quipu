@@ -10,6 +10,34 @@ before the implementation lands.
 
 ## 1. Principles
 
+### Opt-in signed bootstrap admission
+
+The implemented `applier::BootstrapTrust` descriptor pins the source's public
+Ed25519 key, store identity, log epoch, scope and policy digests, and the exact
+canonical manifest SHA-256. Install it with
+`Applier::require_signed_bootstrap` before feeding a cut. The descriptor must
+come from the operator's admitted configuration; a key or hash received in the
+cut is not authority. A restarted applier requires the same descriptor again.
+
+An as-of response carries `manifest_signature`, signed by the source's existing
+stream key. Verification precedes any staging write. The descriptor digest,
+facts and progress commit atomically; interrupted or invalid cuts roll back.
+This opt-in profile rejects unsigned legacy frames and unknown frame kinds.
+
+New stream sources also sign each transaction's canonical record digest, or
+the completed chunk-chain digest, binding the session, source, epoch, scope,
+frame sequence and source transaction. Single transactions and chunk commits
+use distinct signature kinds. An applier configured with `BootstrapTrust`
+requires these signatures before applying a transaction or committing a chunk.
+A missing or invalid signature clears the session and freshness proof without
+advancing progress. Legacy callers that do not select this profile retain their
+existing compatibility behavior.
+
+These checks authenticate the supported cut and tail. They do not expand the
+explicit graph scope, include subsequently registered graphs, copy stored-query
+definitions or prove provider, search-generation or history completeness. They
+do not authorize a whole-store standby or read routing on their own.
+
 - **No I/O inside.** The applier never opens a socket or reads a file.
   The caller fetches the bootstrap artifact and feeds frames from whatever
   transport it has (SSE, the WebSocket of `event-push.md`, a relay, a test
