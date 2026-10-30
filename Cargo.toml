@@ -114,6 +114,8 @@ name = "pendant_revoke_fixture"
 required-features = ["shacl"]
 
 [dependencies]
+# Immutable first shared signing release, independently acquired and checksum-qualified.
+quipu-signing = "=0.1.0"
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
