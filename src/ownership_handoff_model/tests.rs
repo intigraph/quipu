@@ -225,6 +225,9 @@ fn conflicting_requests_skipped_generations_and_changed_retries_refuse() {
     assert_eq!(model, before);
     run(&mut model, &handoff(&c, "epoch-B")[1..]);
     let before = model.clone();
+    let mut stale = c.request.clone();
+    stale.operation = "new-operation-stale-predecessor".into();
+    assert!(model.apply(&Action::Prepare(stale), observed()).is_err());
     let changed = Action::Activate {
         certificate: c,
         epoch: "different-epoch".into(),
