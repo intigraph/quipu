@@ -16,6 +16,7 @@ All notable changes to this project will be documented in this file.
 - *(proposal)* Schema-change proposals carry data migrations, with dry run (#896)([11764d3](https://github.com/scbrown/quipu/commit/11764d3a54720662c4d520c87b0ba88be18688c9))
 - *(auth)* Isolate replication transport credentials from writers (#928)([66319f8](https://github.com/scbrown/quipu/commit/66319f82d314423ad10b6cfa5fa54759e2844f26))
 - *(replication)* Pin signed bootstrap and transaction bodies (#930)([3943cd3](https://github.com/scbrown/quipu/commit/3943cd305e8d271a7ed481493ba22a307fa675a8))
+- *(ownership)* Model source retirement and strict authority records (#939)([320f524](https://github.com/scbrown/quipu/commit/320f52457a309ea8b11372532f2c8aa9b8bc134c))
 
 
 
@@ -33,6 +34,10 @@ All notable changes to this project will be documented in this file.
 ### Testing
 
 - *(store)* Qualify ownership rebootstrap and subsequent tail (#921)([8770ac1](https://github.com/scbrown/quipu/commit/8770ac1f573695bec277ff274d1660e02b27a83b))
+
+### Perf
+
+- *(sparql)* Bring owner/status discovery under the 2s target (#925)([ad2cc88](https://github.com/scbrown/quipu/commit/ad2cc8878f1e52439fb04ede96eb8a8d684ecdfc))
 
 ## [0.16.5] - 2026-10-28
 
