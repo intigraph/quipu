@@ -414,3 +414,16 @@ prime action="test":
         test) cargo test --locked --no-default-features --features shacl --bin quipu cli_prime:: && cargo test --locked --no-default-features --features shacl --test prime_cli --test prime_sync ;;
         *) echo 'Use: just prime check|test' >&2; exit 2 ;;
     esac
+
+# Qualify the published shared signing dependency and its nested consumer locks.
+signing command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{command}}" in
+        locks)
+            for manifest in Cargo.toml bindings/python/Cargo.toml wasm/explorer/Cargo.toml wasm/harness/Cargo.toml; do
+                cargo update --workspace --manifest-path "$manifest"
+            done ;;
+        package-controls) python3 scripts/ci/test_signing_package.py ;;
+        *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
+    esac

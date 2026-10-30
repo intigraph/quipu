@@ -1751,6 +1751,7 @@ dependencies = [
  "oxttl",
  "parking_lot",
  "petgraph 0.7.1",
+ "quipu-signing",
  "regex",
  "ring",
  "rudof_iri",
@@ -1778,6 +1779,17 @@ dependencies = [
  "pyo3",
  "quipu-ai",
  "serde_json",
+]
+
+[[package]]
+name = "quipu-signing"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9590d3ae3ad7383f3b3325fd7649e873f26026460fc9767251028aa2a00c6575"
+dependencies = [
+ "hex",
+ "ring",
+ "sha2",
 ]
 
 [[package]]
