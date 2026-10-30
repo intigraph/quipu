@@ -16,7 +16,6 @@ pub use actions::*;
 pub use codec::*;
 pub use records::*;
 pub use state::*;
-pub use transitions::*;
 
 /// A model refusal. No runtime authority is created by this result type.
 pub type ModelResult<T> = std::result::Result<T, String>;

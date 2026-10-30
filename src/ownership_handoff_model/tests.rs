@@ -623,4 +623,22 @@ fn strict_schema_rejects_unknown_missing_duplicate_oversized_and_inconsistent_re
     let mut c = certificate(initial(), "B");
     c.request.profile = "\nunknown".into();
     assert!(c.validate().is_err());
+    let mut c = certificate(initial(), "B");
+    c.cut.transaction = u64::MAX;
+    assert!(c.validate().is_err());
+    let startup = Record {
+        version: RECORD_VERSION,
+        payload: Payload::Startup {
+            head: WitnessHead::Active {
+                authority: initial(),
+            },
+            nonce: "fresh".into(),
+        },
+    };
+    let mut bare_tuple = serde_json::to_value(startup).unwrap();
+    bare_tuple["payload"]["head"] = serde_json::to_value(initial()).unwrap();
+    assert!(
+        Record::decode(&serde_json::to_vec(&bare_tuple).unwrap()).is_err(),
+        "a legacy bare tuple must not erase the witness phase"
+    );
 }
