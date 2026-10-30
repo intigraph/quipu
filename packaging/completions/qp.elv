@@ -21,6 +21,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+            cand store 'Inspect native ownership, or explicitly adopt or restore a disk store'
             cand version 'Print the version and source commit'
             cand install-alias 'Add the qp alias beside the quipu binary'
             cand knot 'Assert Turtle facts, validated against loaded shapes'
@@ -87,6 +88,29 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand events 'Read store event records such as refusals'
             cand fork 'Create, list, diff, drop or promote named forks of ROOT'
             cand audit 'Check traces, namespaces, replays and quarantine against policy'
+        }
+        &'qp;store'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand status 'Report inactive or enforced native store ownership without adopting'
+            cand adopt 'Bind an existing native store to this host and path with a fresh epoch'
+            cand restore 'Restore a SQLite snapshot to a new path and explicitly adopt it'
+        }
+        &'qp;store;status'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;store;adopt'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;store;restore'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;version'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -287,6 +311,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --help 'Print help'
             cand mint 'Mint a typed stable entity reference from a JSON request'
             cand resolve 'Resolve a stable entity reference from a JSON request'
+            cand verify 'Verify a current key IRI against its local key triples'
         }
         &'qp;entity-ref;mint'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -294,6 +319,11 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --help 'Print help'
         }
         &'qp;entity-ref;resolve'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;entity-ref;verify'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

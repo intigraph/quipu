@@ -263,6 +263,35 @@ requires the proxy to select the corresponding downstream Quipu credential.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
+### Replication-only identities
+
+`[quipu.server].replication_credentials_file` selects a **separate** version-1
+verifier registry for an operator-authorized full-store standby. Its entries use
+the same verifier format above, but never enter the graph-writer registry.
+A matching credential authorizes only `POST /share/asof`,
+`POST /replicate/stream` and `POST /replicate/challenge`. Other methods, paths,
+graph mutations and ordinary reads refuse that presented credential rather than
+falling back to anonymous access. This does not change existing public reads
+made without that credential. It is not the tenant scoped-read/lease profile.
+
+The source must retain write authentication. An absent, empty or invalid
+configured replication registry prevents startup, as does overlap with a current,
+previous or named writer credential. An unreadable writer registry cannot be
+ignored when separation must be verified. Replica, relay, read-only and scoped
+serving profiles and strict session-key-only mode refuse this bearer source-only
+setting. Omission changes no policy.
+The registry is captured at startup; atomic candidate validation and a normal
+restart are required for installation or revocation. A credential has bearer
+possession semantics: bind issuance and secret delivery to the admitted standby
+host; a caller-supplied hostname is not host authentication.
+
+This grants transport access, not proof of a complete replica. Bootstrap/cut
+identity, source signing-key pinning, exact graph scope, retained history,
+provider completeness, atomic shared-applier progress and challenge freshness
+remain separate admission gates. Do not use the unsigned legacy follow path,
+silently omit unsupported graphs, or enable read traffic from a successful
+authentication check. No credentials are issued by configuring this file.
+
 For a coherent, pinned source receipt, use `POST /acquire` for a single file,
 or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
 providers. The latter uses a separate version-gated contract and refuses
@@ -1861,7 +1890,9 @@ never reported as the same thing.
 ### `POST /propose`
 
 Submit a schema-evolution proposal. Body: `kind`, `target`, `diff`, `proposer`,
-optional `rationale`, `trigger_ref`, `timestamp`.
+optional `rationale`, `trigger_ref`, `migration`, `timestamp`. `migration`
+is a data-migration program run when the proposal is accepted; see
+[Schema Evolution](../concepts/schema-evolution.md#data-migrations).
 
 ### `POST /proposals`
 
@@ -1871,7 +1902,10 @@ List schema-evolution proposals. Body: optional `status`
 ### `POST /proposal/accept`
 
 Accept a pending proposal. Body: `id`, `decided_by` (required), optional
-`note`, `timestamp`.
+`note`, `timestamp`. A proposal carrying a migration runs it in the same
+transaction and the response adds `migration_source` and `migration_tx`.
+With `"dry_run": true` (and optional `limit`) nothing is accepted and the
+response is the dry-run report.
 
 ### `POST /proposal/reject`
 
@@ -2698,3 +2732,13 @@ unknown axis values, and empty labels are errors. Create first via
 `GET /graphs` returns each row's `creation` together with class/lifecycle/labels.
 The [MCP-only recipe](../recipes/named-graph-mcp.md) exercises the same handlers
 without a REST client.
+
+### Local ownership staging
+
+Stage A keeps legacy disk/browser/container startup and ordinary replication
+requests explicitly INACTIVE; they do not confer ownership authority. The local
+CLI `quipu store status --db <path>` reports this state without adoption.
+Explicit native adoption persists a sticky `ownership_enforcement` marker;
+its authority and filesystem binding are excluded from reconstruction shares.
+Malformed/partial enforced state refuses instead of falling back to INACTIVE.
+No ownership HTTP route, activation default or backend identity fallback is added.

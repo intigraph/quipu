@@ -10,6 +10,10 @@ use rusqlite::params;
 use super::{AsOf, Store};
 use crate::error::Result;
 
+#[cfg(test)]
+#[path = "key_shape_edit_tests.rs"]
+mod key_shape_edit_tests;
+
 impl Store {
     // -- Shape storage --
 
@@ -21,6 +25,10 @@ impl Store {
     /// exactly one. Emits a `shapes.loaded` event carrying the tx watermark —
     /// before this, the audit spine had **no record that the rules changed**.
     pub fn load_shapes(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        self.guard_shape_edit(|| self.load_shapes_checked(name, turtle, timestamp))
+    }
+
+    fn load_shapes_checked(&self, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
         // A recursive set must never reach the registry: every write validates
         // against the combined loaded shapes, so it would refuse ALL writes
         // (aegis-ahu0). Checked against the sets it will be combined with, since
@@ -31,7 +39,9 @@ impl Store {
             .filter(|(n, _, _)| n != name)
             .map(|(_, t, _)| t)
             .collect();
-        crate::shacl_cycles::refuse_cyclic_shapes(&format!("{}\n{turtle}", others.join("\n")))?;
+        let candidate = format!("{}\n{turtle}", others.join("\n"));
+        crate::shacl_cycles::refuse_cyclic_shapes(&candidate)?;
+        crate::entity_key_guard::check_shapes(self, &candidate)?;
         self.load_versioned("shapes", name, turtle, timestamp)?;
         self.emit_registry_event("shapes.loaded", name, timestamp)
     }
@@ -39,11 +49,40 @@ impl Store {
     /// Close a stored shape graph's current version. **Never deletes** — the
     /// history stays queryable, which is the whole point of #71.
     pub fn remove_shapes(&self, name: &str) -> Result<bool> {
+        self.guard_shape_edit(|| self.remove_shapes_checked(name))
+    }
+
+    fn remove_shapes_checked(&self, name: &str) -> Result<bool> {
+        let candidate = self
+            .list_shapes()?
+            .into_iter()
+            .filter(|(n, _, _)| n != name)
+            .map(|(_, t, _)| t)
+            .collect::<Vec<_>>()
+            .join("\n");
+        crate::entity_key_guard::check_shapes(self, &candidate)?;
         let closed = self.close_versioned("shapes", name, &crate::time::now_iso())?;
         if closed {
             self.emit_registry_event("shapes.removed", name, &crate::time::now_iso())?;
         }
         Ok(closed)
+    }
+
+    /// Keep allocation evidence and the registry edit in one SQLite snapshot.
+    /// A concurrent writer invalidating that snapshot must cause a busy refusal,
+    /// never let a stale identity check authorize a different contract.
+    fn guard_shape_edit<T>(&self, edit: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.ensure_ownership_writable()?;
+        const SCOPE: &str = "quipu_key_shape_edit";
+        self.conn.execute_batch(&format!("SAVEPOINT {SCOPE}"))?;
+        let result = edit().and_then(|value| {
+            super::release::release(&self.conn, SCOPE)?;
+            Ok(value)
+        });
+        if result.is_err() {
+            let _ = super::release::rollback_release(&self.conn, SCOPE);
+        }
+        result
     }
 
     /// Get the CURRENT stored shapes as a list of (name, turtle, `loaded_at`).
@@ -89,6 +128,8 @@ impl Store {
 
     /// Close the open row for `name`, then insert a new open row.
     fn load_versioned(&self, table: &str, name: &str, turtle: &str, timestamp: &str) -> Result<()> {
+        // These rows decide what every later write is validated against.
+        self.ensure_ownership_writable()?;
         let tx = self.latest_tx_id()?;
         self.conn
             .execute_batch(&format!("SAVEPOINT quipu_load_{table}"))?;
@@ -120,14 +161,14 @@ impl Store {
         })();
         match result {
             Ok(()) => {
-                self.conn
-                    .execute_batch(&format!("RELEASE quipu_load_{table}"))?;
+                crate::store::release::release(&self.conn, &format!("quipu_load_{table}"))?;
                 Ok(())
             }
             Err(e) => {
-                let _ = self.conn.execute_batch(&format!(
-                    "ROLLBACK TO quipu_load_{table}; RELEASE quipu_load_{table}"
-                ));
+                let _ = crate::store::release::rollback_release(
+                    &self.conn,
+                    &format!("quipu_load_{table}"),
+                );
                 Err(e)
             }
         }
@@ -135,6 +176,7 @@ impl Store {
 
     /// Close the open row for `name`. Returns whether one was open.
     fn close_versioned(&self, table: &str, name: &str, timestamp: &str) -> Result<bool> {
+        self.ensure_ownership_writable()?;
         let affected = self.conn.execute(
             &format!("UPDATE {table} SET valid_to = ?2 WHERE name = ?1 AND valid_to IS NULL"),
             params![name, timestamp],

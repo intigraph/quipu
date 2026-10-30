@@ -27,7 +27,48 @@ _qp() {
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:qp-command-$line[1]:"
         case $line[1] in
-            (version)
+            (store)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__store_commands" \
+"*::: :->store" \
+&& ret=0
+
+    case $state in
+    (store)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-store-command-$line[1]:"
+        case $line[1] in
+            (status)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(adopt)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(restore)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-source-db:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(version)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -328,6 +369,14 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (resolve)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-request-json:_default' \
+&& ret=0
+;;
+(verify)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -2008,6 +2057,7 @@ esac
 (( $+functions[_qp_commands] )) ||
 _qp_commands() {
     local commands; commands=(
+'store:Inspect native ownership, or explicitly adopt or restore a disk store' \
 'version:Print the version and source commit' \
 'install-alias:Add the qp alias beside the quipu binary' \
 'knot:Assert Turtle facts, validated against loaded shapes' \
@@ -2324,6 +2374,7 @@ _qp__subcmd__entity-ref_commands() {
     local commands; commands=(
 'mint:Mint a typed stable entity reference from a JSON request' \
 'resolve:Resolve a stable entity reference from a JSON request' \
+'verify:Verify a current key IRI against its local key triples' \
     )
     _describe -t commands 'qp entity-ref commands' commands "$@"
 }
@@ -2336,6 +2387,11 @@ _qp__subcmd__entity-ref__subcmd__mint_commands() {
 _qp__subcmd__entity-ref__subcmd__resolve_commands() {
     local commands; commands=()
     _describe -t commands 'qp entity-ref resolve commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__entity-ref__subcmd__verify_commands] )) ||
+_qp__subcmd__entity-ref__subcmd__verify_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp entity-ref verify commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__episode_commands] )) ||
 _qp__subcmd__episode_commands() {
@@ -2974,6 +3030,30 @@ _qp__subcmd__stats_commands() {
 _qp__subcmd__status_commands() {
     local commands; commands=()
     _describe -t commands 'qp status commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__store_commands] )) ||
+_qp__subcmd__store_commands() {
+    local commands; commands=(
+'status:Report inactive or enforced native store ownership without adopting' \
+'adopt:Bind an existing native store to this host and path with a fresh epoch' \
+'restore:Restore a SQLite snapshot to a new path and explicitly adopt it' \
+    )
+    _describe -t commands 'qp store commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__store__subcmd__adopt_commands] )) ||
+_qp__subcmd__store__subcmd__adopt_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp store adopt commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__store__subcmd__restore_commands] )) ||
+_qp__subcmd__store__subcmd__restore_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp store restore commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__store__subcmd__status_commands] )) ||
+_qp__subcmd__store__subcmd__status_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp store status commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__trust-root_commands] )) ||
 _qp__subcmd__trust-root_commands() {

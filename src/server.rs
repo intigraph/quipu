@@ -87,6 +87,8 @@ mod replica;
 mod request_middleware;
 #[path = "server/scoped_reads.rs"]
 mod scoped_reads;
+#[path = "server/search_observation.rs"]
+mod search_observation;
 #[path = "server/service_description.rs"]
 mod service_description;
 #[path = "server/snapshot_upload.rs"]

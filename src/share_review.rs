@@ -8,20 +8,17 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 fn atomic<T>(store: &mut Store, run: impl FnOnce(&mut Store) -> Result<T>) -> Result<T> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT share_review_transition")?;
     match run(store) {
         Ok(value) => {
-            store
-                .conn
-                .execute_batch("RELEASE share_review_transition")?;
+            crate::store::release::release(&store.conn, "share_review_transition")?;
             Ok(value)
         }
         Err(error) => {
-            store.conn.execute_batch(
-                "ROLLBACK TO share_review_transition; RELEASE share_review_transition",
-            )?;
+            crate::store::release::rollback_release(&store.conn, "share_review_transition")?;
             store.read_model.borrow_mut().clear();
             store.term_cache.borrow_mut().clear_persistent();
             Err(error)

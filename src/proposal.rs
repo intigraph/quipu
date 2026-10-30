@@ -115,6 +115,7 @@ pub struct NewProposal<'a> {
 impl Store {
     /// Insert a new schema change proposal. Returns the proposal id.
     pub fn insert_proposal(&self, input: &NewProposal<'_>) -> Result<i64> {
+        self.ensure_ownership_writable()?;
         self.conn.execute(
             "INSERT INTO proposals (kind, target, diff, rationale, proposer, trigger_ref, status, created_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7)",
@@ -176,15 +177,31 @@ impl Store {
     }
 
     /// Accept a proposal. For shape proposals, validates the Turtle diff then
-    /// writes it to the `shapes` table. Returns the updated proposal.
-    #[cfg(feature = "shacl")]
+    /// writes it to the `shapes` table. A proposal carrying a migration program
+    /// (aegis-esd) also runs it, in the same savepoint, as one transaction with
+    /// source `migration:<id>`; a refused migration leaves the proposal pending
+    /// and nothing written. Returns the updated proposal.
     pub fn accept_proposal(
-        &self,
+        &mut self,
         id: i64,
         decided_by: &str,
         decided_at: &str,
         note: Option<&str>,
     ) -> Result<Proposal> {
+        self.accept_proposal_with_migration(id, decided_by, decided_at, note)
+            .map(|(proposal, _)| proposal)
+    }
+
+    /// [`Store::accept_proposal`], also returning the migration's transaction
+    /// id when the proposal carried a migration that wrote anything.
+    pub fn accept_proposal_with_migration(
+        &mut self,
+        id: i64,
+        decided_by: &str,
+        decided_at: &str,
+        note: Option<&str>,
+    ) -> Result<(Proposal, Option<i64>)> {
+        self.ensure_ownership_writable()?;
         let proposal = self
             .get_proposal(id)?
             .ok_or_else(|| Error::InvalidValue(format!("proposal {id} not found")))?;
@@ -197,6 +214,7 @@ impl Store {
         }
 
         // For shape proposals, validate the Turtle before accepting.
+        #[cfg(feature = "shacl")]
         if proposal.kind == ProposalKind::Shape {
             // First, verify the diff is syntactically valid Turtle.
             validate_turtle_syntax(&proposal.diff)?;
@@ -207,49 +225,42 @@ impl Store {
                     "proposed shape Turtle is invalid, proposal remains pending: {e}"
                 ))
             })?;
-
-            // Write the shape to the shapes table.
-            self.load_shapes(&proposal.target, &proposal.diff, decided_at)?;
         }
 
-        self.conn.execute(
-            "UPDATE proposals SET status = 'accepted', decided_by = ?1, decided_at = ?2, decision_note = ?3 \
-             WHERE id = ?4",
-            params![decided_by, decided_at, note, id],
-        )?;
+        let mut migration_tx = None;
+        if let Some(program) = self.get_proposal_migration(id)? {
+            migration_tx = crate::proposal_migration::accept_with_migration(
+                self, &proposal, &program, decided_by, decided_at, note,
+            )?;
+        } else {
+            // Without the shacl feature a shape proposal records the decision only.
+            #[cfg(feature = "shacl")]
+            if proposal.kind == ProposalKind::Shape {
+                self.load_shapes(&proposal.target, &proposal.diff, decided_at)?;
+            }
+            self.mark_proposal_accepted(id, decided_by, decided_at, note)?;
+        }
 
-        self.get_proposal(id)?
-            .ok_or_else(|| Error::InvalidValue(format!("proposal {id} vanished after update")))
+        let proposal = self
+            .get_proposal(id)?
+            .ok_or_else(|| Error::InvalidValue(format!("proposal {id} vanished after update")))?;
+        Ok((proposal, migration_tx))
     }
 
-    /// Accept a proposal (non-SHACL build — no Turtle validation).
-    #[cfg(not(feature = "shacl"))]
-    pub fn accept_proposal(
+    /// Record the acceptance decision on the proposal row.
+    pub(crate) fn mark_proposal_accepted(
         &self,
         id: i64,
         decided_by: &str,
         decided_at: &str,
         note: Option<&str>,
-    ) -> Result<Proposal> {
-        let proposal = self
-            .get_proposal(id)?
-            .ok_or_else(|| Error::InvalidValue(format!("proposal {id} not found")))?;
-
-        if proposal.status != ProposalStatus::Pending {
-            return Err(Error::InvalidValue(format!(
-                "proposal {id} is already {}",
-                proposal.status.as_str()
-            )));
-        }
-
+    ) -> Result<()> {
         self.conn.execute(
             "UPDATE proposals SET status = 'accepted', decided_by = ?1, decided_at = ?2, decision_note = ?3 \
              WHERE id = ?4",
             params![decided_by, decided_at, note, id],
         )?;
-
-        self.get_proposal(id)?
-            .ok_or_else(|| Error::InvalidValue(format!("proposal {id} vanished after update")))
+        Ok(())
     }
 
     /// Reject a proposal with a reason.
@@ -260,6 +271,7 @@ impl Store {
         decided_at: &str,
         note: &str,
     ) -> Result<Proposal> {
+        self.ensure_ownership_writable()?;
         let proposal = self
             .get_proposal(id)?
             .ok_or_else(|| Error::InvalidValue(format!("proposal {id} not found")))?;

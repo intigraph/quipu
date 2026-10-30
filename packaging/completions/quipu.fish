@@ -26,6 +26,7 @@ end
 
 complete -c quipu -n "__fish_quipu_needs_command" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_needs_command" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "store" -d 'Inspect native ownership, or explicitly adopt or restore a disk store'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "version" -d 'Print the version and source commit'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "install-alias" -d 'Add the qp alias beside the quipu binary'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "knot" -d 'Assert Turtle facts, validated against loaded shapes'
@@ -92,6 +93,17 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "db" -d 'Respace, attach
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "events" -d 'Read store event records such as refusals'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "fork" -d 'Create, list, diff, drop or promote named forks of ROOT'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "audit" -d 'Check traces, namespaces, replays and quarantine against policy'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -f -a "status" -d 'Report inactive or enforced native store ownership without adopting'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -f -a "adopt" -d 'Bind an existing native store to this host and path with a fresh epoch'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -f -a "restore" -d 'Restore a SQLite snapshot to a new path and explicitly adopt it'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from status" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from status" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from adopt" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from adopt" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from restore" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand store; and __fish_seen_subcommand_from restore" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand version" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand version" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand install-alias" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
@@ -210,14 +222,17 @@ complete -c quipu -n "__fish_quipu_using_subcommand namespaces; and __fish_seen_
 complete -c quipu -n "__fish_quipu_using_subcommand namespaces; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand namespaces; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -f -a "mint" -d 'Mint a typed stable entity reference from a JSON request'
-complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve" -f -a "resolve" -d 'Resolve a stable entity reference from a JSON request'
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "mint" -d 'Mint a typed stable entity reference from a JSON request'
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "resolve" -d 'Resolve a stable entity reference from a JSON request'
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and not __fish_seen_subcommand_from mint resolve verify" -f -a "verify" -d 'Verify a current key IRI against its local key triples'
 complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from mint" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from mint" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from resolve" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from verify" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand entity-ref; and __fish_seen_subcommand_from verify" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand ontology; and not __fish_seen_subcommand_from list load remove" -f -a "list" -d 'List loaded OWL ontologies'

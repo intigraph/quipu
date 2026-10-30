@@ -275,3 +275,74 @@ fn limited_scope_refuses_unsafe_shapes_and_restores_after_failure() {
     assert!(result.is_err());
     assert!(!limited_scan::active());
 }
+
+#[test]
+fn one_seed_cannot_exceed_an_explicit_materialization_budget() {
+    let mut store = Store::open_in_memory().unwrap();
+    let data = (0..10)
+        .map(|i| format!("<http://example.org/s{i}> <http://example.org/p> {i} .\n"))
+        .collect::<String>();
+    ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let text = "SELECT ?s WHERE { ?s <http://example.org/p> ?o }";
+    let ctx = crate::sparql::TemporalContext {
+        row_cap: Some(3),
+        materialization_cap: Some(3),
+        ..crate::sparql::TemporalContext::default()
+    };
+    let error = crate::sparql::query_temporal(&store, text, &ctx).unwrap_err();
+    assert!(matches!(error, crate::Error::QueryComplexity { limit: 3 }));
+    let limited = format!("{text} LIMIT 3");
+    assert_eq!(
+        crate::sparql::query_temporal(&store, &limited, &ctx)
+            .unwrap()
+            .rows()
+            .len(),
+        3
+    );
+    let exact = crate::sparql::TemporalContext {
+        row_cap: Some(10),
+        materialization_cap: Some(10),
+        ..ctx
+    };
+    assert_eq!(
+        crate::sparql::query_temporal(&store, text, &exact)
+            .unwrap()
+            .rows()
+            .len(),
+        10
+    );
+}
+
+#[test]
+fn ordinary_filtered_scan_keeps_existing_join_budget_semantics() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.search_config_mut().max_join_rows = 3;
+    let data = (0..10)
+        .map(|i| format!("<http://example.org/s{i}> <http://example.org/p> {i} .\n"))
+        .collect::<String>();
+    ingest_rdf(
+        &mut store,
+        data.as_bytes(),
+        RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let result = crate::sparql::query(
+        &store,
+        "SELECT ?s WHERE { ?s ?p ?o FILTER((CONTAINS(STR(?s), \"s7\")) || false) }",
+    )
+    .unwrap();
+    assert_eq!(result.rows().len(), 1);
+}

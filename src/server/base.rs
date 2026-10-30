@@ -53,6 +53,7 @@ pub(crate) fn load_config(args: &[String]) -> quipu::QuipuConfig {
         });
     }
     super::update::update_full::set_max_facts(config.server.update_full_copy_max_facts);
+    quipu::proposal_migration::set_max_facts(config.server.update_full_copy_max_facts);
     config
 }
 

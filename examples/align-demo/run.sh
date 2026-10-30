@@ -42,9 +42,10 @@ graph_b="https://b.example/graph"
 "$quipu" knot "$fixtures/store-b.ttl" --graph "$graph_b" --db "$b_db" >/dev/null
 
 # Two nodes, one thing. This is the state an import leaves you in.
+# Parse only stdout: query diagnostics and outcome observations belong to stderr.
 "$quipu" query \
   'SELECT ?s WHERE { GRAPH ?g { ?s <http://www.w3.org/2000/01/rdf-schema#label> "bobbin-release" } } ORDER BY ?s' \
-  --db "$b_db" > "$work/before.txt" 2>&1
+  --db "$b_db" > "$work/before.txt" 2> "$work/before.stderr"
 
 # --- REFUSAL: a graph IRI that is not in the store is not an empty graph -------
 # Recorded here because the reassuring reading of a typo is "0 candidates"
@@ -69,7 +70,7 @@ decide_version=$(sed -n 's/^expected-version: \([^ ]*\).*/\1/p' "$work/decide.tx
 # --- QUERY ACROSS BOTH ---------------------------------------------------------
 "$quipu" query \
   'SELECT ?other WHERE { GRAPH ?g { <https://a.example/bobbin-release> <http://www.w3.org/2002/07/owl#sameAs> ?other } }' \
-  --db "$b_db" > "$work/after.txt" 2>&1
+  --db "$b_db" > "$work/after.txt" 2> "$work/after.stderr"
 
 python3 - "$work" "$typo_rc" "$propose_version" "$decide_version" <<'SUMMARY' > "$work/actual.txt"
 import pathlib, re, sys

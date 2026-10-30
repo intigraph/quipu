@@ -65,6 +65,19 @@ pub fn regenerated() -> Vec<&'static str> {
         .collect()
 }
 
+/// Local sticky placement is not reconstruction content, including its lazy
+/// schema. Dropping it from both formats preserves portable content identity
+/// across explicit restore/adoption without changing historical table hashing.
+pub(crate) fn prune_excluded_table(conn: &Connection, table: &str) -> Result<()> {
+    let verb = if table == "ownership_enforcement" {
+        "DROP TABLE"
+    } else {
+        "DELETE FROM"
+    };
+    conn.execute(&format!("{verb} \"{table}\""), [])?;
+    Ok(())
+}
+
 /// Build a lossless whole-store pack at `out_path`.
 ///
 /// # Errors
@@ -124,7 +137,7 @@ pub fn pack_full(
             // `pack_loads` is created lazily by the unpack path, so a store
             // that never loaded a pack simply does not have it.
             if present.iter().any(|t| t == table) {
-                conn.execute(&format!("DELETE FROM \"{table}\""), [])?;
+                prune_excluded_table(&conn, table)?;
                 pruned.push(table);
             }
         }

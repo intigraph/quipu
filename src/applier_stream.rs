@@ -152,7 +152,16 @@ impl Stream {
 impl Applier {
     /// Pin the source's stream public key (hex ed25519) and the scope digest
     /// this replica holds. Signed stream frames are refused until this is set.
+    /// A signed-bootstrap descriptor also fixes both values. An attempted
+    /// mismatch clears stream trust and ends the session rather than widening it.
     pub fn trust_stream(&mut self, public_key_hex: &str, scope_digest: &str) {
+        if self.bootstrap_trust.as_ref().is_some_and(|trust| {
+            trust.public_key_hex != public_key_hex || trust.scope_digest != scope_digest
+        }) {
+            self.stream.trust = None;
+            self.end_session();
+            return;
+        }
         self.stream.trust = Some(Trust {
             public_key_hex: public_key_hex.to_string(),
             scope: scope_digest.to_string(),
@@ -261,6 +270,19 @@ impl Applier {
             }
             event::TX_PART => Ok(self.chunk_part(data)),
             event::TX_COMMIT => {
+                if self.bootstrap_trust.is_some()
+                    && !self.transaction_signed(
+                        &frame,
+                        frame["digest"].as_str().unwrap_or_default(),
+                        true,
+                    )
+                {
+                    self.chunk = None;
+                    self.end_session();
+                    return Ok(refused(
+                        "transaction commit is not signed by the pinned source",
+                    ));
+                }
                 let tx = self.chunk.as_ref().map(|c| c.source_tx);
                 let outcome = self.commit_chunk(store, data)?;
                 self.sent(tx, &outcome);
@@ -389,9 +411,45 @@ impl Applier {
                 "tx frame records do not all belong to its source tx",
             ));
         }
+        if self.bootstrap_trust.is_some()
+            && !self.transaction_signed(
+                frame,
+                &crate::replicate_wire::records_digest(&records),
+                false,
+            )
+        {
+            self.end_session();
+            return Ok(refused(
+                "transaction body is not signed by the pinned source",
+            ));
+        }
         let outcome = self.apply_records(store, &source, &records)?;
         self.sent(Some(tx), &outcome);
         Ok(outcome)
+    }
+
+    fn transaction_signed(&self, frame: &Json, digest: &str, chunked: bool) -> bool {
+        let (Some((scope, source)), Some(session), Some(frame_seq), Some(source_tx)) = (
+            self.signing_context(frame),
+            frame["session"].as_str(),
+            frame["frame_seq"].as_u64(),
+            frame["source_tx"].as_i64(),
+        ) else {
+            return false;
+        };
+        self.signed_by_source(
+            frame,
+            &Signed::Transaction {
+                session,
+                store_id: &source.store_id,
+                log_epoch: &source.log_epoch,
+                scope: &scope,
+                frame_seq,
+                source_tx,
+                digest,
+                chunked,
+            },
+        )
     }
 
     fn stream_coverage(&mut self, store: &Store, frame: &Json) -> Result<Outcome> {

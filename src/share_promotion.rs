@@ -22,6 +22,7 @@ pub(crate) fn promote_snapshot(
     actor: Option<&str>,
     source: &str,
 ) -> Result<(i64, usize, usize)> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT quipu_snapshot_promotion")?;
@@ -33,15 +34,11 @@ pub(crate) fn promote_snapshot(
     })();
     match result {
         Ok(value) => {
-            store
-                .conn
-                .execute_batch("RELEASE quipu_snapshot_promotion")?;
+            crate::store::release::release(&store.conn, "quipu_snapshot_promotion")?;
             Ok(value)
         }
         Err(error) => {
-            store.conn.execute_batch(
-                "ROLLBACK TO quipu_snapshot_promotion; RELEASE quipu_snapshot_promotion",
-            )?;
+            crate::store::release::rollback_release(&store.conn, "quipu_snapshot_promotion")?;
             store.read_model.borrow_mut().clear();
             Err(error)
         }

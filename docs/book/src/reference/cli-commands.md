@@ -4,6 +4,36 @@
 
 Every `quipu` command path with its syntax, generated from the same catalogue that admits arguments, so it cannot list a command the binary refuses or miss one it accepts. `qp` is the same binary. Every command also takes `--db <path>` (default `.bobbin/quipu/quipu.db`). For explanations and examples see [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.
 
+## `qp store`
+
+Inspect native ownership, or explicitly adopt or restore a disk store.
+
+Subcommands: `store status`, `store adopt`, `store restore`.
+
+### `qp store status`
+
+Report inactive or enforced native store ownership without adopting.
+
+```text
+qp store status
+```
+
+### `qp store adopt`
+
+Bind an existing native store to this host and path with a fresh epoch.
+
+```text
+qp store adopt
+```
+
+### `qp store restore`
+
+Restore a SQLite snapshot to a new path and explicitly adopt it.
+
+```text
+qp store restore <source.db>
+```
+
 ## `qp version`
 
 Print the version and source commit.
@@ -260,6 +290,14 @@ Resolve a stable entity reference from a JSON request.
 
 ```text
 qp entity-ref resolve <request.json>
+```
+
+### `qp entity-ref verify`
+
+Verify a current key IRI against its local key triples.
+
+```text
+qp entity-ref verify <request.json>
 ```
 
 ## `qp ontology`

@@ -199,6 +199,9 @@ _qp() {
             qp,status)
                 cmd="qp__subcmd__status"
                 ;;
+            qp,store)
+                cmd="qp__subcmd__store"
+                ;;
             qp,trust-root)
                 cmd="qp__subcmd__trust__subcmd__root"
                 ;;
@@ -306,6 +309,9 @@ _qp() {
                 ;;
             qp__subcmd__entity__subcmd__ref,resolve)
                 cmd="qp__subcmd__entity__subcmd__ref__subcmd__resolve"
+                ;;
+            qp__subcmd__entity__subcmd__ref,verify)
+                cmd="qp__subcmd__entity__subcmd__ref__subcmd__verify"
                 ;;
             qp__subcmd__events,refusals)
                 cmd="qp__subcmd__events__subcmd__refusals"
@@ -496,6 +502,15 @@ _qp() {
             qp__subcmd__signer,status)
                 cmd="qp__subcmd__signer__subcmd__status"
                 ;;
+            qp__subcmd__store,adopt)
+                cmd="qp__subcmd__store__subcmd__adopt"
+                ;;
+            qp__subcmd__store,restore)
+                cmd="qp__subcmd__store__subcmd__restore"
+                ;;
+            qp__subcmd__store,status)
+                cmd="qp__subcmd__store__subcmd__status"
+                ;;
             qp__subcmd__trust__subcmd__root,bootstrap)
                 cmd="qp__subcmd__trust__subcmd__root__subcmd__bootstrap"
                 ;;
@@ -512,7 +527,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1508,7 +1523,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__entity__subcmd__ref)
-            opts="-h --db --help mint resolve"
+            opts="-h --db --help mint resolve verify"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1544,6 +1559,24 @@ _qp() {
             return 0
             ;;
         qp__subcmd__entity__subcmd__ref__subcmd__resolve)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__entity__subcmd__ref__subcmd__verify)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -4504,6 +4537,78 @@ _qp() {
         qp__subcmd__status)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__store)
+            opts="-h --db --help status adopt restore"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__store__subcmd__adopt)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__store__subcmd__restore)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__store__subcmd__status)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

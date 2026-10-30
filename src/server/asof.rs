@@ -94,15 +94,20 @@ pub(crate) async fn share_asof(
         let _phase = phase;
         sweep_expired(&dir);
         let store = store.read();
-        Ok(quipu::asof_share::cut(
-            &store,
-            &request,
-            &dir,
-            &Limits::default(),
-        ))
+        let cut = quipu::asof_share::cut(&store, &request, &dir, &Limits::default());
+        match cut {
+            Ok(cut) => {
+                let signature = store
+                    .signing_identity()
+                    .map(|identity| quipu::asof_share::sign_manifest(&cut.manifest, &identity))
+                    .transpose()?;
+                Ok(Ok((cut, signature)))
+            }
+            Err(error) => Ok(Err(error)),
+        }
     })
     .await;
-    let cut = match result {
+    let (cut, signature) = match result {
         Ok(Ok(cut)) => cut,
         Ok(Err(CutError::Aborted(reason))) => {
             return unavailable("cut_aborted", &json!({"reason": reason.as_str()}));
@@ -110,7 +115,7 @@ pub(crate) async fn share_asof(
         Ok(Err(CutError::Refused(error))) => return AppError::from(error).into_response(),
         Err(error) => return error.into_response(),
     };
-    stream_cut(cut, slot)
+    stream_cut(cut, slot, signature.as_deref())
 }
 
 /// Spools a crashed or abandoned send left behind.
@@ -155,7 +160,7 @@ struct Sending {
 }
 
 /// A cut small enough for one frame: `quipu.asof` {manifest, records}.
-fn single_frame(cut: &Cut) -> Option<FeedFrame> {
+fn single_frame(cut: &Cut, signature: Option<&str>) -> Option<FeedFrame> {
     if cut.parts.parts > 1 {
         return None;
     }
@@ -163,7 +168,9 @@ fn single_frame(cut: &Cut) -> Option<FeedFrame> {
         Some(line) => serde_json::from_str::<serde_json::Value>(line).ok()?["records"].clone(),
         None => json!([]),
     };
-    let data = json!({"manifest": cut.manifest, "records": records}).to_string();
+    let data = json!({"manifest": cut.manifest, "records": records,
+        "manifest_signature": signature})
+    .to_string();
     quipu::feed_parts::fits_frame_len(data.len()).then_some(FeedFrame {
         event: "quipu.asof",
         id: Some(cut.manifest.watermark_tx),
@@ -171,8 +178,12 @@ fn single_frame(cut: &Cut) -> Option<FeedFrame> {
     })
 }
 
-fn stream_cut(cut: Cut, slot: tokio::sync::OwnedSemaphorePermit) -> Response {
-    if let Some(frame) = single_frame(&cut) {
+fn stream_cut(
+    cut: Cut,
+    slot: tokio::sync::OwnedSemaphorePermit,
+    signature: Option<&str>,
+) -> Response {
+    if let Some(frame) = single_frame(&cut, signature) {
         let spool = Spool(cut.spool);
         let output = futures::stream::once(async move {
             let _spool = spool;
@@ -195,6 +206,7 @@ fn stream_cut(cut: Cut, slot: tokio::sync::OwnedSemaphorePermit) -> Response {
             "source": source,
             "manifest": cut.manifest,
             "manifest_sha256": cut.manifest_sha256,
+            "manifest_signature": signature,
         })
         .to_string(),
     };

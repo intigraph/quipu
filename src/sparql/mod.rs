@@ -248,6 +248,11 @@ pub struct TemporalContext {
     /// disables). A join explosion is stopped the moment it is recognizable
     /// instead of burning the whole wall-clock budget at 100% CPU.
     pub row_cap: Option<usize>,
+    /// Explicit ceiling on a single scan's materialized bindings. Migration
+    /// planning sets this as well as the join budget, because even one seed
+    /// may exceed its work ceiling before a FILTER discards the rows. Ordinary
+    /// reads retain their existing join-budget behavior when this is absent.
+    pub materialization_cap: Option<usize>,
     /// LIMIT pushdown (quipu-0lr): stop producing BGP solutions once this
     /// many exist. Installed by the `Slice` operator ONLY when every operator
     /// between it and the BGP leaf is prefix-safe (`Project`/`Reduced`), so

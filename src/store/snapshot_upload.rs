@@ -182,7 +182,8 @@ pub fn stage_snapshot_part(store: &mut Store, input: &JsonValue) -> Result<JsonV
         params![upload_id],
         |row| row.get(0),
     )?;
-    tx.commit()?;
+    let committed = tx.commit();
+    crate::store::release::settle(&store.conn, committed)?;
     Ok(serde_json::json!({
         "upload_id": upload_id, "part_number": part_number, "received_parts": received,
         "total_parts": total_parts, "idempotent": idempotent,

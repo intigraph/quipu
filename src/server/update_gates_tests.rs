@@ -193,3 +193,34 @@ fn deleting_an_optional_value_is_not_gated() {
     .unwrap();
     assert_eq!(held(&shared, "http://ex.org/d"), 2);
 }
+
+/// The shared proposal/update gate retains the native store's emit policy.
+#[test]
+fn deleting_a_required_value_under_emit_policy_records_one_event() {
+    let profile = PROFILE.replace(
+        "sh:targetClass ex:Action ;",
+        "sh:targetClass ex:Action ; <http://quipu.dev/ns#onViolation> \"emit\" ;",
+    );
+    let shared = store(Some(&profile));
+    apply_update_as(
+        &shared,
+        &insert("http://ex.org/emit", "http://ex.org/Action", true),
+        false,
+    )
+    .unwrap();
+    apply_update_as(
+        &shared,
+        "DELETE DATA { <http://ex.org/emit> <http://ex.org/sourceKind> \"observed\" }",
+        false,
+    )
+    .unwrap();
+    assert_eq!(held(&shared, "http://ex.org/emit"), 1);
+    let events = shared.lock().events_after(0, 1000, None, None).unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.event_type == "shacl.violation")
+            .count(),
+        1
+    );
+}

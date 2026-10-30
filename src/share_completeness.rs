@@ -75,6 +75,8 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("pendant_repo_tombstones", Disposition::Content),
     ("forks", Disposition::Content),
     ("proposals", Disposition::Content),
+    // The migration program a proposal carries (aegis-esd), keyed by proposal.
+    ("proposal_migrations", Disposition::Content),
     ("term_spaces", Disposition::Content),
     ("schema_terms", Disposition::Content),
     ("store_identity", Disposition::Content),
@@ -133,11 +135,17 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // store mints its own on first open, and a follower holding a cursor into
     // the original sees the epoch change and re-bootstraps (local-sync-mode §5).
     ("log_epoch", Disposition::Excluded),
+    // Local sticky authority must not travel as a restored placement grant.
+    ("ownership_enforcement", Disposition::Excluded),
     // A replica's cursor into ONE source's history (the shared applier,
     // aegis-s24.2). A share of the replica is a different copy with no cursor
     // of its own: carrying it would let the copy splice a feed it never
     // bootstrapped from. Excluded, like the epoch it is bound to.
     ("replica_progress", Disposition::Excluded),
+    // A receiver's pinned bootstrap descriptor admits exactly its own source,
+    // key and manifest. Copying it would admit a different reconstruction as
+    // that receiver without independently establishing its trust contract.
+    ("replica_bootstrap_admission", Disposition::Excluded),
     // The digests of the transactions that cursor applied, kept to tell an
     // exact redelivery from a changed one. They belong to the same cursor and
     // mean nothing without it: excluded with it.
