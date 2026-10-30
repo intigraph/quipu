@@ -1,0 +1,23 @@
+Script started on 2026-10-30 12:36:58-04:00 [COMMAND="bash /tmp/release-mechanics-demo/run.sh" <not executed on terminal>]
+Base ad8de357: verify-changelog.sh --version 0.16.6 (same repository and tags)
+release-window: quipu-ai-v0.16.5..quipu-ai-v0.16.6; 0 bare subjects explicitly documented
+changelog-verify: version 0.16.6, range quipu-ai-v0.16.5..quipu-ai-v0.16.6
+  git-cliff commits: 18 · documented in CHANGELOG: 17 · missing: 1 · extra: 0
+FAIL — the newest CHANGELOG section is missing commits git-cliff attributes to this release:
+  - ad8de35 chore: release v0.16.6 (#914)
+OK — no duplicated bullets or category headings in 71 section(s).
+
+Fix: regenerate with the tool that is correct here —
+  git-cliff --config cliff.toml quipu-ai-v0.16.5..quipu-ai-v0.16.6
+and replace the 0.16.6 section with its output
+Observed base exit: 1
+Candidate: just changelog-verify --version 0.16.6
+[1m./scripts/verify-changelog.sh --version 0.16.6[0m
+release-window: quipu-ai-v0.16.5..quipu-ai-v0.16.6; 0 bare subjects explicitly documented
+changelog-verify: version 0.16.6, range quipu-ai-v0.16.5..quipu-ai-v0.16.6
+  git-cliff commits: 18 · documented in CHANGELOG: 17 · missing: 0 · extra: 0
+OK — no duplicated bullets or category headings in 71 section(s).
+OK — the 0.16.6 section matches git-cliff exactly (18 commit(s), none missing, none extra).
+Observed candidate exit: 0; source-only verification, no release writes.
+
+Script done on 2026-10-30 12:37:00-04:00 [COMMAND_EXIT_CODE="0"]

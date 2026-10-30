@@ -143,6 +143,23 @@ missing="$(printf '%s\n' "$missing" | while read -r h; do
   mech="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$MECHANICS_RE" || true)"
   # Every file it touched is release mechanics, and it touched at least one.
   if [[ "$files" -gt 0 && "$files" -eq "$mech" ]]; then continue; fi
+  # The Python crate pins the core version too. Admit its synchronization only
+  # for the exact canonical release subject (including GitHub's squash suffix),
+  # matching this section, and version-only edits to the four Cargo files.
+  subject="$(git log -1 --format=%s "$h")"
+  release_subject="chore: release v${newest_ver}"
+  suffix="${subject#"$release_subject"}"
+  binding_mech="$(git show --name-only --format= "$h" | grep -cE '^(CHANGELOG\.md|Cargo\.(toml|lock)|bindings/python/Cargo\.(toml|lock))$' || true)"
+  if [[ "$subject" == "$release_subject" || ( "$subject" == "$release_subject"* && "$suffix" =~ ^\ \(#[0-9]+\)$ ) ]]; then
+    if [[ "$files" -gt 0 && "$files" -eq "$binding_mech" ]]; then
+      old_version="$(git show "${h}^:Cargo.toml" | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
+      version_diff="$(git diff "${h}^" "$h" --unified=0 -- Cargo.toml Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock | grep -E '^[+-]' | grep -vE '^(---|\+\+\+)' || true)"
+      unexpected="$(printf '%s\n' "$version_diff" | grep -vFx -- "-version = \"${old_version}\"" | grep -vFx -- "+version = \"${newest_ver}\"" || true)"
+      core_version="$(git show "${h}:Cargo.toml" | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
+      binding_version="$(git show "${h}:bindings/python/Cargo.toml" | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
+      if [[ -n "$version_diff" && -z "$unexpected" && "$core_version" == "$newest_ver" && "$binding_version" == "$newest_ver" ]]; then continue; fi
+    fi
+  fi
   echo "$h"
 done)"
 
