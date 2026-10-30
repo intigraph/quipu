@@ -17,7 +17,14 @@ use crate::{SharedStore, StoreHandle};
 const G: &str = "https://example.org/project/board";
 
 fn app() -> (Router, String) {
+    app_with_signer(None)
+}
+
+fn app_with_signer(signer: Option<Arc<quipu::signing::SigningIdentity>>) -> (Router, String) {
     let mut store = quipu::Store::open_in_memory().unwrap();
+    if let Some(signer) = signer {
+        store.set_signing_identity(signer);
+    }
     let graph = store.graph_create(G).unwrap();
     quipu::rdf::ingest_rdf_to_graph(
         &mut store,
@@ -85,6 +92,57 @@ fn events(body: &str) -> Vec<(String, Option<String>, String)> {
 
 /// The read-phase lock is process-wide; route tests take turns.
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[tokio::test]
+async fn signed_cut_route_binds_completed_manifest_to_the_source_key() {
+    let _serial = SERIAL.lock().await;
+    let temp = tempfile::tempdir().unwrap();
+    let signer = Arc::new(
+        quipu::signing::SigningIdentity::load(&temp.path().join("synthetic-key"), "fixture")
+            .unwrap(),
+    );
+    let key = signer.public_key_hex();
+    let (app, identity) = app_with_signer(Some(signer));
+    let (status, _, body) = post_cut(app, json!({"graphs":[G],"expected_store_id":identity})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let frames = events(&body);
+    assert_eq!(frames.len(), 1);
+    let data: Value = serde_json::from_str(&frames[0].2).unwrap();
+    let manifest: quipu::asof_share::Manifest =
+        serde_json::from_value(data["manifest"].clone()).unwrap();
+    let signature = data["manifest_signature"].as_str().unwrap();
+    assert!(quipu::asof_share::verify_manifest(
+        &manifest, &key, signature
+    ));
+    let mut changed = manifest.clone();
+    changed.watermark_tx += 1;
+    assert!(!quipu::asof_share::verify_manifest(
+        &changed, &key, signature
+    ));
+    let mut replica = quipu::Store::open_in_memory().unwrap();
+    let mut applier = quipu::applier::Applier::open(&replica).unwrap();
+    applier
+        .require_signed_bootstrap(quipu::applier::BootstrapTrust {
+            public_key_hex: key,
+            source: quipu::applier::Source {
+                store_id: manifest.source.store_id.clone(),
+                log_epoch: manifest.source.log_epoch.clone(),
+            },
+            scope_digest: manifest.scope_digest.clone(),
+            policy_digest: manifest.policy_digest.clone(),
+            manifest_sha256: format!(
+                "sha256:{:x}",
+                Sha256::digest(quipu::asof_share::manifest_bytes(&manifest).unwrap())
+            ),
+        })
+        .unwrap();
+    assert!(matches!(
+        applier
+            .apply_frame(&mut replica, &frames[0].0, &frames[0].2, 1)
+            .unwrap(),
+        quipu::applier::Outcome::Bootstrapped { .. }
+    ));
+}
 
 /// Busy first, then a real cut, then a refusal.
 #[tokio::test]

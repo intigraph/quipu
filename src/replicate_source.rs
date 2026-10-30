@@ -421,8 +421,10 @@ impl Session {
     /// it does not fit. `false` when a single record exceeds a part.
     fn tx_frames(&mut self, tx: i64, records: &[Json], out: &mut Vec<Frame>) -> bool {
         let seq = self.seq + 1;
+        let body_digest = crate::replicate_wire::records_digest(records);
+        let signature = self.transaction_signature(seq, tx, &body_digest, false);
         let data = json!({"session": self.id, "frame_seq": seq, "source": self.source(),
-                          "source_tx": tx, "records": records})
+                          "source_tx": tx, "records": records, "signature": signature})
         .to_string();
         if self.part_max_len.is_none() && fits_frame_len(data.len()) {
             self.seq = seq;
@@ -462,14 +464,34 @@ impl Session {
             });
         }
         let commit = self.next_seq();
+        let signature = self.transaction_signature(commit, tx, &summary.digest, true);
         out.push(Frame {
             event: event::TX_COMMIT,
             data: json!({"session": self.id, "frame_seq": commit, "source_tx": tx,
                          "digest": summary.digest, "since": self.since,
-                         "source": self.source()})
+                         "source": self.source(), "signature": signature})
             .to_string(),
         });
         true
+    }
+
+    fn transaction_signature(
+        &self,
+        frame_seq: u64,
+        source_tx: i64,
+        digest: &str,
+        chunked: bool,
+    ) -> String {
+        self.identity.sign(&message(&Signed::Transaction {
+            session: &self.id,
+            store_id: &self.store_id,
+            log_epoch: &self.log_epoch,
+            scope: &self.scope,
+            frame_seq,
+            source_tx,
+            digest,
+            chunked,
+        }))
     }
 
     fn coverage_frame(&mut self, watermark: i64, nonce: Option<[u8; 16]>) -> Frame {

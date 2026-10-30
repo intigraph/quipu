@@ -260,8 +260,19 @@ fn converge_refuses_retracted_or_mutated_identity() {
         .unwrap()
         .to_string();
     let id = store.lookup(&iri).unwrap().unwrap();
+    assert!(
+        store
+            .retract_entity(id, None, &crate::time::now_iso(), None)
+            .is_err()
+    );
+    // Retained pre-guard history may already contain a retired key. The mint
+    // path still must not revive it; this SQL only constructs that old fixture.
     store
-        .retract_entity(id, None, &crate::time::now_iso(), None)
+        .conn
+        .execute(
+            "UPDATE facts SET valid_to=?1 WHERE e=?2 AND op=1",
+            rusqlite::params![crate::time::now_iso(), id],
+        )
         .unwrap();
     assert!(
         mint(&mut store, &keys).is_err(),
@@ -314,3 +325,83 @@ fn converge_checks_the_key_values_not_just_the_type() {
         "a key IRI whose key values differ must refuse, not converge"
     );
 }
+
+#[test]
+fn raw_key_replacement_refuses_atomically_but_labels_and_reassertions_work() {
+    let mut store = store_with(&[ENDPOINT], &shapes("", "1"));
+    let iri = mint(&mut store, &json!({HOST:"db.example", PORT:5432})).unwrap()["iri"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let e = store.lookup(&iri).unwrap().unwrap();
+    let a = store.intern(PORT).unwrap();
+    let datum = |value, op| crate::store::Datum {
+        entity: e,
+        attribute: a,
+        value,
+        op,
+        valid_from: crate::time::now_iso(),
+        valid_to: None,
+    };
+    let before = store.latest_tx_id().unwrap();
+    let error = store.transact(
+        &[
+            datum(crate::Value::Int(5432), crate::Op::Retract),
+            datum(crate::Value::Int(5433), crate::Op::Assert),
+        ],
+        &crate::time::now_iso(),
+        None,
+        None,
+    );
+    assert!(
+        error.is_err(),
+        "a key identity must not be replaced in place"
+    );
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+    store
+        .transact(
+            &[datum(crate::Value::Int(5432), crate::Op::Assert)],
+            &crate::time::now_iso(),
+            None,
+            None,
+        )
+        .unwrap();
+    let label = store.intern(crate::namespace::RDFS_LABEL).unwrap();
+    store
+        .transact(
+            &[crate::store::Datum {
+                entity: e,
+                attribute: label,
+                value: crate::Value::Str("renamed".into()),
+                op: crate::Op::Assert,
+                valid_from: crate::time::now_iso(),
+                valid_to: None,
+            }],
+            &crate::time::now_iso(),
+            None,
+            None,
+        )
+        .unwrap();
+}
+
+#[test]
+fn loaded_key_contract_cannot_change_or_disappear_after_allocation() {
+    let mut store = store_with(&[ENDPOINT], &shapes("", "1"));
+    mint(&mut store, &json!({HOST:"db.example", PORT:5432})).unwrap();
+    let before = store.get_combined_shapes().unwrap();
+    assert!(
+        store
+            .load_shapes(
+                "endpoint",
+                &shapes("quipu:keyStrategy \"lexical\" ;", "1"),
+                &crate::time::now_iso()
+            )
+            .is_err()
+    );
+    assert_eq!(store.get_combined_shapes().unwrap(), before);
+    assert!(store.remove_shapes("endpoint").is_err());
+    assert_eq!(store.get_combined_shapes().unwrap(), before);
+}
+
+#[path = "entity_key_guard_tests.rs"]
+mod guard_tests;

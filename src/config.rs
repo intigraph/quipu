@@ -667,6 +667,10 @@ pub struct ServerConfig {
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
+    /// Verifier-only full-store replication identities. This is a distinct
+    /// registry, never a source of graph-write or scoped-read grants.
+    pub replication_credentials_file: Option<String>,
+
     /// Temporary previous bearer accepted during a bounded credential-rotation
     /// grace window. Requires `auth_token` and an absolute
     /// `previous_auth_token_expires_at_epoch_secs`; the server refuses invalid
@@ -759,6 +763,7 @@ impl Default for ServerConfig {
             auth_token: None,
             session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
+            replication_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
             read_only: false,

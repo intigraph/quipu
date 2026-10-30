@@ -310,6 +310,9 @@ _qp() {
             qp__subcmd__entity__subcmd__ref,resolve)
                 cmd="qp__subcmd__entity__subcmd__ref__subcmd__resolve"
                 ;;
+            qp__subcmd__entity__subcmd__ref,verify)
+                cmd="qp__subcmd__entity__subcmd__ref__subcmd__verify"
+                ;;
             qp__subcmd__events,refusals)
                 cmd="qp__subcmd__events__subcmd__refusals"
                 ;;
@@ -1520,7 +1523,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__entity__subcmd__ref)
-            opts="-h --db --help mint resolve"
+            opts="-h --db --help mint resolve verify"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1556,6 +1559,24 @@ _qp() {
             return 0
             ;;
         qp__subcmd__entity__subcmd__ref__subcmd__resolve)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__entity__subcmd__ref__subcmd__verify)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
