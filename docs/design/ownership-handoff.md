@@ -133,6 +133,9 @@ B presents an authenticated request bound to the expected current tuple, full
 scope, operation ID, request digest, destination principal and native placement.
 Only already admitted principals and signing/verifier profiles may participate.
 If destination placement or verifier distribution is unavailable, refuse.
+Possessing a stream-signing key does not grant ownership-transition authority.
+Recheck the operator and destination's current grants at retirement and again
+at destination admission; a signed receipt is not a permanent permission grant.
 Preparation permits an inspected copy or non-owner fork; it grants no writes
 into the canonical base and no ownership-authorized stream.
 
@@ -225,6 +228,9 @@ separate. Local intent IDs/transaction IDs are never issued as canonical source
 coordinates. Preserve origin principal, operation/delta digest, graph scope,
 base generation/epoch/cut, valid-time data and signing evidence when available.
 Unauthenticated proposals remain explicitly untrusted; storage is not admission.
+The first implementation uses a separate local intent store with its own local
+identity. Do not punch an overlay-write exception through the canonical store's
+commit fence or reuse its inherited `store_id` for an intent feed.
 
 Submission follows [local sync merge-back](local-sync-mode.md#7-overlay-and-merge-back)
 and [changeset envelopes](changeset-format.md), not two-way `fork_promote`.
