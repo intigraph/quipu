@@ -127,6 +127,17 @@ impl CredentialRegistry {
     pub fn is_empty(&self) -> bool {
         self.credentials.is_empty()
     }
+
+    /// A restricted verifier must not also appear in a more privileged registry.
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
+        self.credentials.iter().any(|a| {
+            other
+                .credentials
+                .iter()
+                .any(|b| a.token_sha256 == b.token_sha256 || a.credential_id == b.credential_id)
+        })
+    }
 }
 
 #[cfg(test)]
