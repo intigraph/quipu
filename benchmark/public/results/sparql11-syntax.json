@@ -1,8 +1,8 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 approved query syntax",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc",
-  "quipu_version": "quipu 0.16.3\ngit_sha: b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc\ngit_dirty: false",
+  "quipu_revision": "cf03e657b39ca284633285c070c3d83969ff336a",
+  "quipu_version": "quipu 0.16.6\ngit_sha: cf03e657b39ca284633285c070c3d83969ff336a\ngit_dirty: false",
   "scope": "parser syntax only; evaluation and protocol excluded",
   "totals": {
     "passed": 86,
@@ -295,63 +295,63 @@
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, SELECT * is not authorized with GROUP BY, STR, SUM, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"ef2c007519f846ea85d5b6ecf6df1bf2\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, SELECT * is not authorized with GROUP BY, STR, SUM, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
     },
     {
       "test": "syn-bad-02.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, STR, SUM, The SELECT contains a variable that is unbound, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"5fe95e04b9cfb473efcd29361b395896\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 3:1: expected one of \"$\", \"(\", \":\", \"<\", \"?\", ABS, AVG, DAY, IRI, MAX, MD5, MIN, NOT, NOW, STR, SUM, The SELECT contains a variable that is unbound, URI, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}'], [_]"
     },
     {
       "test": "syn-bad-03.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 2:1: expected one of Duplicated variable name in SELECT, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"f394c06244c71c518cf7638cc67f5592\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 2:1: expected one of Duplicated variable name in SELECT, [_]"
     },
     {
       "test": "syn-bad-04.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:18: expected NOT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"38a39a34d5ce8e6281a4c5d5ff9ecb0a\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:18: expected NOT"
     },
     {
       "test": "syn-bad-05.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:16: expected DISTINCT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"1d59c48805ee29ca52eadd0f4fb31535\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:16: expected DISTINCT"
     },
     {
       "test": "syn-bad-06.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:23: expected ENCODE_FOR_URI"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"706dd84f69858e011af1e7ffdc2c69da\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:23: expected ENCODE_FOR_URI"
     },
     {
       "test": "syn-bad-07.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:23: expected OPTIONAL"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"6deb184c35e16bcfa0d9d8b3597992c9\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:23: expected OPTIONAL"
     },
     {
       "test": "syn-bad-08.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:29: expected OPTIONAL"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"6fdbc8de9694b23a41342b7bd747e4c3\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:29: expected OPTIONAL"
     },
     {
       "test": "syntax-bindings-09.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:20: expected one of HAVING, OFFSET, OPTIONAL, VALUES"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"e825c46de0ab21798378598ff96ab1da\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:20: expected one of HAVING, OFFSET, OPTIONAL, VALUES"
     },
     {
       "test": "qname-escape-02.rq",
@@ -407,21 +407,21 @@
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 8:1: expected one of BIND, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"393b6dbb8fda2864b5629cd22c7b9e2c\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 8:1: expected one of BIND, [_]"
     },
     {
       "test": "syntax-BINDscope7.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 10:1: expected one of BIND, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"99daf79de16e05224c750ea688db06f0\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 10:1: expected one of BIND, [_]"
     },
     {
       "test": "syntax-BINDscope8.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 11:1: expected [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"6c1fb92f4a616a15fb5595abc295814e\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 11:1: expected [_]"
     },
     {
       "test": "syntax-propertyPaths-01.rq",
@@ -442,7 +442,7 @@
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 5:1: expected one of LATERAL, SERVICE, The SELECT overrides an existing variable using an expression, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"123ada272fffe80747b3ff0299d89efe\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 5:1: expected one of LATERAL, SERVICE, The SELECT overrides an existing variable using an expression, [_]"
     },
     {
       "test": "syntax-SELECTscope3.rq",
@@ -519,91 +519,91 @@
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 2:11: expected \"<\""
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"8de9c1f8eb6af76f18e7190ccf930f94\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 2:11: expected \"<\""
     },
     {
       "test": "syn-bad-pname-02.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 2:11: expected \"<\""
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"3d486c6f92d8a1f470977122da53f665\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 2:11: expected \"<\""
     },
     {
       "test": "syn-bad-pname-03.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"ab284da69b1e09db300c53c901f92f9d\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
     },
     {
       "test": "syn-bad-pname-04.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"867110460e6dc510a59e51afdb555fa1\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 2:10: expected CONSTRUCT"
     },
     {
       "test": "syn-bad-pname-05.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"42b05c056e4a874953e72c0a3f0f42ea\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
     },
     {
       "test": "syn-bad-pname-06.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected OPTIONAL"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"10e1aad46dee9e172d47049a37ef7935\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 6:1: expected OPTIONAL"
     },
     {
       "test": "syn-bad-pname-07.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"70cd80e922dd7a2558428ba83561e309\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 1:10: expected CONSTRUCT"
     },
     {
       "test": "syn-bad-pname-08.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected OPTIONAL"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"d5000fc03853b4cb3f5f39c5eb0ac3a7\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 4:11: expected OPTIONAL"
     },
     {
       "test": "syn-bad-pname-09.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected one of \"!\", \"$\", \"(\", \":\", \"<\", \"?\", \"^\", \"a\", OPTIONAL, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}']"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"216470ec0d71013ce84604b4b6d07425\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 4:11: expected one of \"!\", \"$\", \"(\", \":\", \"<\", \"?\", \"^\", \"a\", OPTIONAL, ['A' ..= 'Z' | 'a' ..= 'z' | '\\u{00C0}'..='\\u{00D6}' | '\\u{00D8}'..='\\u{00F6}'\n| '\\u{00F8}'..='\\u{02FF}' | '\\u{0370}'..='\\u{037D}' | '\\u{037F}'..='\\u{1FFF}'\n| '\\u{200C}'..='\\u{200D}' | '\\u{2070}'..='\\u{218F}' | '\\u{2C00}'..='\\u{2FEF}'\n| '\\u{3001}'..='\\u{D7FF}' | '\\u{F900}'..='\\u{FDCF}' | '\\u{FDF0}'..='\\u{FFFD}']"
     },
     {
       "test": "syn-bad-pname-10.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"065bf4a4afce7e3e0825829beac0a10b\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
     },
     {
       "test": "syn-bad-pname-11.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"2e1233eb87618cd9fa67c7ce9ee4d846\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
     },
     {
       "test": "syn-bad-pname-12.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"abfb5d4be1fcf683b8211f0d0939e490\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 6:1: expected one of LATERAL, SERVICE, [_]"
     },
     {
       "test": "syn-bad-pname-13.rq",
       "expect": "reject",
       "observed": "reject",
       "passed": true,
-      "diagnostic": "query error: SPARQL parse error: error at 4:11: expected OPTIONAL"
+      "diagnostic": "{\"event\":\"search_outcome\",\"logical_call_id\":\"3f73f56e711afe71b73abe625303614b\",\"operation\":\"query\",\"status\":null,\"summary\":{\"admitted_count\":null,\"candidate_count\":null,\"outcome\":\"error\",\"result_count\":null,\"zero_kind\":null},\"surface\":\"cli_local\"}\nquery error: SPARQL parse error: error at 4:11: expected OPTIONAL"
     },
     {
       "test": "syn-pp-in-collection.rq",
@@ -613,6 +613,6 @@
       "diagnostic": ""
     }
   ],
-  "generated_at": "2026-10-26T06:16:14Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/40278471124"
+  "generated_at": "2026-10-30T17:31:54Z",
+  "generated_by": "https://github.com/intigraph/quipu/actions/runs/41098323840"
 }
