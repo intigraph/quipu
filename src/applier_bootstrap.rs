@@ -19,7 +19,7 @@
 
 use std::collections::BTreeMap;
 
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde_json::Value as Json;
 use sha2::{Digest, Sha256};
 
@@ -29,6 +29,67 @@ use crate::store::Store;
 
 /// The share schema this applier accepts.
 pub const SHARE_SCHEMA: &str = "quipu-asof-share/v1";
+
+/// Operator-admitted bootstrap descriptor. Every field is pinned outside the
+/// received cut; a frame's own key or manifest hash is never a trust root.
+#[derive(Debug, Clone)]
+pub struct BootstrapTrust {
+    /// Source stream signing key, hexadecimal Ed25519 public bytes only.
+    pub public_key_hex: String,
+    /// Exact admitted source lineage and log epoch.
+    pub source: Source,
+    /// Exact admitted data/context graph scope digest.
+    pub scope_digest: String,
+    /// Exact admitted source read policy digest.
+    pub policy_digest: String,
+    /// Exact admitted cut's canonical manifest SHA-256, including its prefix.
+    pub manifest_sha256: String,
+}
+
+impl BootstrapTrust {
+    fn digest(&self) -> String {
+        crate::share::sha256(
+            serde_json::json!({
+                "key": self.public_key_hex, "store": self.source.store_id,
+                "epoch": self.source.log_epoch, "scope": self.scope_digest,
+                "policy": self.policy_digest, "manifest": self.manifest_sha256,
+            })
+            .to_string()
+            .as_bytes(),
+        )
+    }
+
+    fn accepts(&self, manifest: &Json, signature: Option<&str>) -> bool {
+        let (Ok(manifest), Some(signature)) = (
+            serde_json::from_value::<crate::asof_share::Manifest>(manifest.clone()),
+            signature,
+        ) else {
+            return false;
+        };
+        manifest.source.store_id == self.source.store_id
+            && manifest.source.log_epoch == self.source.log_epoch
+            && manifest.scope_digest == self.scope_digest
+            && manifest.policy_digest == self.policy_digest
+            && crate::asof_share::manifest_bytes(&manifest)
+                .is_ok_and(|bytes| crate::share::sha256(&bytes) == self.manifest_sha256)
+            && crate::asof_share::verify_manifest(&manifest, &self.public_key_hex, signature)
+    }
+}
+
+pub(super) fn load_admission(store: &Store) -> Result<Option<String>> {
+    store.conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS replica_bootstrap_admission \
+        (id INTEGER PRIMARY KEY CHECK(id = 1), descriptor_digest TEXT NOT NULL)",
+    )?;
+    Ok(store
+        .conn
+        .query_row(
+            "SELECT descriptor_digest FROM replica_bootstrap_admission WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
 
 /// SHA-256 over one graph's records as the share manifest states them: each
 /// record as compact UTF-8 JSON with recursively sorted keys, the lines
@@ -79,6 +140,77 @@ pub(super) struct ShareStream {
 }
 
 impl Applier {
+    pub(super) fn check_bootstrap_frame(&self, event: &str) -> Option<Outcome> {
+        if self.bootstrap_admission.is_some() && self.bootstrap_trust.is_none() {
+            return Some(refused(
+                "reopened signed bootstrap requires its admitted descriptor",
+            ));
+        }
+        if self.bootstrap_trust.is_some() {
+            use crate::replicate_wire::event as signed;
+            let bootstrap = matches!(
+                event,
+                "quipu.asof" | "quipu.asof.begin" | "quipu.asof.part" | "quipu.asof.commit"
+            );
+            let stream = [
+                signed::SESSION,
+                signed::TX,
+                signed::TX_BEGIN,
+                signed::TX_PART,
+                signed::TX_COMMIT,
+                signed::COVERAGE,
+                signed::CONTROL,
+            ]
+            .contains(&event);
+            if !bootstrap && !stream {
+                return Some(refused(
+                    "signed bootstrap admission forbids unsigned or unknown frames",
+                ));
+            }
+            if self.progress.is_none() && !bootstrap {
+                return Some(refused(
+                    "the admitted signed bootstrap must complete before replay",
+                ));
+            }
+        }
+        None
+    }
+
+    /// Require a signed, exact admitted cut before bootstrap can open a local
+    /// savepoint. Reinstall this descriptor after reopening the applier; it is
+    /// caller configuration, never inferred from persisted data or the wire.
+    /// This does not qualify full-store/provider closure or current freshness.
+    ///
+    /// # Errors
+    /// Refuses changing bootstrap authority once bootstrap or replay has begun.
+    pub fn require_signed_bootstrap(&mut self, trust: BootstrapTrust) -> Result<()> {
+        if self.share.is_some()
+            || self.chunk.is_some()
+            || self.session().is_some()
+            || self.bootstrap_trust.is_some()
+        {
+            return Err(crate::Error::InvalidValue(
+                "bootstrap authority is already fixed".into(),
+            ));
+        }
+        if let Some(progress) = &self.progress {
+            if progress.source != trust.source
+                || self.bootstrap_admission.as_deref() != Some(trust.digest().as_str())
+            {
+                return Err(crate::Error::InvalidValue(
+                    "persisted bootstrap does not match admitted authority".into(),
+                ));
+            }
+        } else if self.bootstrap_admission.is_some() {
+            return Err(crate::Error::InvalidValue(
+                "bootstrap admission has no committed progress".into(),
+            ));
+        }
+        self.trust_stream(&trust.public_key_hex, &trust.scope_digest);
+        self.bootstrap_trust = Some(trust);
+        Ok(())
+    }
+
     /// One frame of an as-of share. Only an empty replica can be bootstrapped.
     ///
     /// A store error while a share is open rolls the WHOLE share back before
@@ -108,7 +240,12 @@ impl Applier {
         match event {
             "quipu.asof" => {
                 self.abort_share(store)?;
-                if let Some(outcome) = self.start_share(store, &frame["manifest"], None)? {
+                if let Some(outcome) = self.start_share(
+                    store,
+                    &frame["manifest"],
+                    None,
+                    frame["manifest_signature"].as_str(),
+                )? {
                     return Ok(outcome);
                 }
                 if let Some(outcome) = self.write_share(store, records)? {
@@ -129,7 +266,12 @@ impl Applier {
                     return Ok(refused("share begin frame is incomplete"));
                 };
                 let chain = Chunk::new(watermark, parts, count, digest, false);
-                if let Some(outcome) = self.start_share(store, &frame["manifest"], Some(chain))? {
+                if let Some(outcome) = self.start_share(
+                    store,
+                    &frame["manifest"],
+                    Some(chain),
+                    frame["manifest_signature"].as_str(),
+                )? {
                     return Ok(outcome);
                 }
                 Ok(Outcome::Buffered {
@@ -184,7 +326,17 @@ impl Applier {
         store: &Store,
         manifest: &Json,
         chain: Option<Chunk>,
+        signature: Option<&str>,
     ) -> Result<Option<Outcome>> {
+        if self
+            .bootstrap_trust
+            .as_ref()
+            .is_some_and(|trust| !trust.accepts(manifest, signature))
+        {
+            return Ok(Some(refused(
+                "bootstrap does not match the signed admitted descriptor",
+            )));
+        }
         if let Some(p) = &self.progress {
             return Ok(Some(refused(&format!(
                 "bootstrap needs an empty replica; this one follows {}/{} at {}",
@@ -256,6 +408,13 @@ impl Applier {
              ON CONFLICT(id) DO UPDATE SET store_id = ?1, log_epoch = ?2, source_tx = ?3",
             params![share.source.store_id, share.source.log_epoch, share.watermark],
         )?;
+        let admission = self.bootstrap_trust.as_ref().map(BootstrapTrust::digest);
+        if let Some(digest) = &admission {
+            store.conn.execute(
+                "INSERT INTO replica_bootstrap_admission (id, descriptor_digest) VALUES (1, ?1)",
+                [digest],
+            )?;
+        }
         crate::store::release::release(&store.conn, "replica_bootstrap")?;
         store
             .conn
@@ -264,6 +423,7 @@ impl Applier {
             source: share.source,
             source_tx: share.watermark,
         });
+        self.bootstrap_admission = admission;
         Ok(Outcome::Bootstrapped {
             source_tx: share.watermark,
         })

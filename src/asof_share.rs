@@ -107,6 +107,8 @@ pub use manifest::{Completeness, GraphCompleteness, Manifest, Producer, Source};
 #[path = "asof_share/scope.rs"]
 mod scope;
 pub use scope::{refuse_frozen, resolve_graphs, scope_lists};
+mod signature;
+pub use signature::{manifest_message, sign_manifest, verify_manifest};
 
 /// A finished cut: the manifest and the spool its parts were written to.
 #[derive(Debug)]

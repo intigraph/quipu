@@ -5,7 +5,9 @@
 //! frames (one source transaction each, or a chunked one), `coverage` frames
 //! and `control` frames. Every frame has a `frame_seq`, strictly increasing
 //! from 0 within its session. The `session`, `coverage` and `control` frames
-//! are signed by the source's stream key over [`message`]: a coverage frame is
+//! are signed by the source's stream key over [`message`]. New sources also
+//! sign transaction bodies and chunk commits; strict-bootstrap clients require
+//! those signatures. A coverage frame is
 //! an assertion by its signer, never an inference from silence.
 //!
 //! The signed bytes are the domain tag [`DOMAIN`], the frame kind, then each
@@ -37,6 +39,25 @@ pub mod event {
 /// The fields a stream signature covers, in signing order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Signed<'a> {
+    /// An authenticated transaction body (single frame or chunk commit).
+    Transaction {
+        /// Session id.
+        session: &'a str,
+        /// Persistent source store.
+        store_id: &'a str,
+        /// Source log epoch.
+        log_epoch: &'a str,
+        /// Pinned replication scope.
+        scope: &'a str,
+        /// Position of the transaction or commit frame.
+        frame_seq: u64,
+        /// Source transaction being applied.
+        source_tx: i64,
+        /// Digest of canonical records or the chunk chain.
+        digest: &'a str,
+        /// Distinguishes a chunk commit from a single-frame transaction.
+        chunked: bool,
+    },
     /// The opening frame of a session.
     Session {
         /// The session id.
@@ -90,6 +111,31 @@ pub enum Signed<'a> {
 #[must_use]
 pub fn message(frame: &Signed<'_>) -> Vec<u8> {
     let (kind, fields): (&str, Vec<String>) = match frame {
+        Signed::Transaction {
+            session,
+            store_id,
+            log_epoch,
+            scope,
+            frame_seq,
+            source_tx,
+            digest,
+            chunked,
+        } => (
+            if *chunked {
+                "transaction.commit"
+            } else {
+                "transaction"
+            },
+            vec![
+                (*session).into(),
+                (*store_id).into(),
+                (*log_epoch).into(),
+                (*scope).into(),
+                frame_seq.to_string(),
+                source_tx.to_string(),
+                (*digest).into(),
+            ],
+        ),
         Signed::Session {
             session,
             store_id,
@@ -156,6 +202,38 @@ pub fn message(frame: &Signed<'_>) -> Vec<u8> {
         out.extend_from_slice(field.as_bytes());
     }
     out
+}
+
+/// Digest the complete ordered single-frame transaction body.
+#[must_use]
+pub fn records_digest(records: &[serde_json::Value]) -> String {
+    use sha2::{Digest, Sha256};
+    let encoded = canonical(&serde_json::Value::Array(records.to_vec()));
+    hex::encode(Sha256::digest(encoded.as_bytes()))
+}
+
+fn canonical(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<_> = map.keys().collect();
+            keys.sort();
+            format!(
+                "{{{}}}",
+                keys.into_iter()
+                    .map(|key| {
+                        format!("{}:{}", Value::String(key.clone()), canonical(&map[key]))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(canonical).collect::<Vec<_>>().join(",")
+        ),
+        other => other.to_string(),
+    }
 }
 
 /// Whether `signature_hex` is `public_key_hex`'s signature over `frame`.
