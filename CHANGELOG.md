@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-10-30
+
+### Added
+
+- *(clients)* Typed SPARQL query builder for Python and JS (#907)([3439064](https://github.com/scbrown/quipu/commit/3439064a9d8194f1446ec5bf743433174261db11))
+- *(prime)* Align quipu prime to the stack prime contract (#909)([c694ae7](https://github.com/scbrown/quipu/commit/c694ae7655f4a785314a2a1c07a1c42231c04f23))
+- *(governance)* Split gate rulings into aegis:GateApproval; free aegis:Decision for memory (#911)([5e9b1bb](https://github.com/scbrown/quipu/commit/5e9b1bb90ea17f3a733f8873475c6e1cfc2ac345))
+- *(store)* Stage explicit ownership with inactive legacy defaults (#876)([8b8bf82](https://github.com/scbrown/quipu/commit/8b8bf8272d4c412cb7c7f4426b628cdde48ac858))
+- *(search)* Record semantic retrieval outcomes and replay durable journals (#917)([6ba582d](https://github.com/scbrown/quipu/commit/6ba582d19e405a977d7bda5ac1f5c09702993bb9))
+- *(proposal)* Schema-change proposals carry data migrations, with dry run (#896)([11764d3](https://github.com/scbrown/quipu/commit/11764d3a54720662c4d520c87b0ba88be18688c9))
+- *(auth)* Isolate replication transport credentials from writers (#928)([66319f8](https://github.com/scbrown/quipu/commit/66319f82d314423ad10b6cfa5fa54759e2844f26))
+- *(replication)* Pin signed bootstrap and transaction bodies (#930)([3943cd3](https://github.com/scbrown/quipu/commit/3943cd305e8d271a7ed481493ba22a307fa675a8))
+- *(ownership)* Model source retirement and strict authority records (#939)([320f524](https://github.com/scbrown/quipu/commit/320f52457a309ea8b11372532f2c8aa9b8bc134c))
+
+
+
+### Fixed
+
+- *(shacl)* Every retract path runs the deletion gate (#908)([bfdcf31](https://github.com/scbrown/quipu/commit/bfdcf31796fee7f0a092a6d1633671d1552e7a36))
+- *(shacl)* Deletion gate judges a node that points to a typed blank node (#912)([78485ae](https://github.com/scbrown/quipu/commit/78485ae2a25425be9b79bd6a69bc2bc16ed42a1a))
+- *(signing)* Verdict verification trusts only registrations chained to the trust root (#913)([4d82727](https://github.com/scbrown/quipu/commit/4d82727f4bac43b719b58a8606e3b4ac83a256dd))
+- *(sparql)* Recognize built-in casts in filtered BGP planning (#932)([cae3d13](https://github.com/scbrown/quipu/commit/cae3d13620a38c6a7292f143a370c8d37abb00d9))
+- *(replication)* Preserve retraction valid-time closes (#926)([11f1159](https://github.com/scbrown/quipu/commit/11f11593759af43c6ca6f0dffbb7f18e2c182a3e))
+- *(entity-ref)* Preserve allocated key identities (#933)([2134930](https://github.com/scbrown/quipu/commit/21349300281dadfbf40c78257b46eccc1498f6f2))
+
+
+
+### Testing
+
+- *(store)* Qualify ownership rebootstrap and subsequent tail (#921)([8770ac1](https://github.com/scbrown/quipu/commit/8770ac1f573695bec277ff274d1660e02b27a83b))
+
+### Perf
+
+- *(sparql)* Bring owner/status discovery under the 2s target (#925)([ad2cc88](https://github.com/scbrown/quipu/commit/ad2cc8878f1e52439fb04ede96eb8a8d684ecdfc))
+
 ## [0.16.5] - 2026-10-28
 
 ### Added
