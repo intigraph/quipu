@@ -17,8 +17,16 @@ on:
 # CD consumes only the newest main commit. Cancel superseded runs on every ref
 # so an old 22-job matrix cannot starve the six checks gating the current head.
 # Pushes run only those six; release-only surfaces run on PRs and nightly.
+#
+# EXCEPT the release commit ("chore: release vX", the release-PR merge), which
+# gets a group of its own, exactly as in release.yml (aegis-3xv). Release
+# publishes only on a green "Release correctness" for its exact SHA, so
+# cancelling the release commit's CI strands the release: #906 landed seconds
+# after 4fe4d08b (chore: release v0.16.5), cancelled its "Test (shacl)", its
+# Release run failed, and a later run cut 0.16.5 from 9f5bc69a instead
+# (aegis-0zr). Keep this suffix identical to release.yml's.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: "ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
   cancel-in-progress: true
 
 env:
@@ -541,6 +549,15 @@ jobs:
           python3 scripts/test_rearm_release_correctness.py
           python3 scripts/test_semver_policy.py
           python3 scripts/check-semver-policy.py
+
+      # The changelog guard, the pre-cut gate and the release PR freshness check
+      # (aegis-0zr) were exercised only by release.yml after a merge, so a PR that
+      # broke them landed before anything ran them. Run the hermetic suite here.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Prove the changelog guard, pre-cut gate and freshness check
+        run: ./scripts/test-verify-changelog.sh
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'

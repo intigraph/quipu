@@ -136,7 +136,10 @@ missing="$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || t
 # with the guard still green. Observed live on #60: a fix(ci) commit that also
 # touched CHANGELOG.md was dropped from the required set, and the section
 # release-plz generated for it documents nothing but an unresolvable placeholder.
-MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock)$'
+# The Python binding's manifest and lock joined the release commit with #902
+# (aegis-sw4): release-pr-daily syncs their version to the crate's. Without them
+# here every release commit read as content and failed its own verify (aegis-0zr).
+MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock|bindings/python/Cargo\.toml|bindings/python/Cargo\.lock)$'
 missing="$(printf '%s\n' "$missing" | while read -r h; do
   [[ -z "$h" ]] && continue
   files="$(git show --name-only --format= "$h" 2>/dev/null | grep -c . || true)"
