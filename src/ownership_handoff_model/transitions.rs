@@ -52,7 +52,7 @@ pub enum Action {
     /// The external head and its nonce ledger are deliberately not rolled back.
     RestoreLocal {
         placement: Placement,
-        journal: Option<Journal>,
+        journal: Option<Box<Journal>>,
         data: Option<Authority>,
     },
 }
@@ -63,7 +63,7 @@ pub enum Outcome {
     /// State recorded or exact idempotent retry; no authority token issued.
     Recorded,
     /// Retained immutable activation result, possibly a historical readback.
-    Activation(Activation),
+    Activation(Box<Activation>),
 }
 
 impl Model {
@@ -168,7 +168,7 @@ impl Model {
                         old.certificate == *c && old.authority == successor,
                         "changed activation retry",
                     )?;
-                    return Ok(Outcome::Activation(old.clone()));
+                    return Ok(Outcome::Activation(Box::new(old.clone())));
                 }
                 let pending = Journal::Pending {
                     certificate: c.clone(),
@@ -248,7 +248,7 @@ impl Model {
                         "changed activation retry",
                     )?;
                     // Readback is NOT restart: never recreate process admission.
-                    return Ok(Outcome::Activation(old.clone()));
+                    return Ok(Outcome::Activation(Box::new(old.clone())));
                 }
                 self.fresh_start(&authority, nonce, challenge, observations)?;
                 require(
@@ -274,7 +274,7 @@ impl Model {
                 self.admitted.insert(authority.owner.clone(), authority);
                 self.consumed
                     .insert(c.request.operation.clone(), result.clone());
-                return Ok(Outcome::Activation(result));
+                return Ok(Outcome::Activation(Box::new(result)));
             }
             Action::Crash(owner) => {
                 self.admitted.remove(owner);
@@ -311,11 +311,12 @@ impl Model {
                     Record {
                         version: RECORD_VERSION,
                         payload: Payload::Journal {
-                            journal: journal.clone(),
+                            journal: journal.as_ref().clone(),
                         },
                     }
                     .validate()?;
-                    self.journal.insert(placement.clone(), journal.clone());
+                    self.journal
+                        .insert(placement.clone(), journal.as_ref().clone());
                 } else {
                     self.journal.remove(placement);
                 }

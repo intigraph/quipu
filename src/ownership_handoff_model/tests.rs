@@ -320,9 +320,9 @@ fn stale_local_bytes_missing_journal_and_ambiguous_install_do_not_admit() {
         .apply(
             &Action::RestoreLocal {
                 placement: a.owner.clone(),
-                journal: Some(Journal::Active {
+                journal: Some(Box::new(Journal::Active {
                     authority: a.clone(),
-                }),
+                })),
                 data: Some(a.clone()),
             },
             observed(),
