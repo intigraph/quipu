@@ -17,7 +17,7 @@
 import { chromium } from "playwright";
 import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync, existsSync }
+import { mkdtempSync, mkdirSync, copyFileSync, cpSync, writeFileSync, readFileSync, rmSync, existsSync }
   from "node:fs";
 import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
@@ -386,4 +386,17 @@ if (failures.length) {
   console.error(`\n${failures.length} check(s) failed: ${failures.join(", ")}`);
   process.exit(1);
 }
+// Exercise the actual page with this same native-minted pack and built engine.
+const defaultSite = join(work, "default-site");
+cpSync(join(repo, "docs/book/src/explore"), defaultSite, { recursive: true });
+mkdirSync(join(defaultSite, "pkg"), { recursive: true });
+for (const file of ["quipu_wasm_explorer.js", "quipu_wasm_explorer_bg.wasm"]) {
+  copyFileSync(join(bundleDir, file), join(defaultSite, "pkg", file));
+}
+cpSync(process.env.RUNTIME_DIR || join(repo, "wasm/explorer/runtime/dist"),
+  join(defaultSite, "pkg/runtime"), { recursive: true });
+copyFileSync(join(work, packName), join(defaultSite, "repository.pendant.tar.gz"));
+execFileSync(process.execPath, [join(repo, "scripts/prepare-explorer-default.mjs"), defaultSite], { stdio: "inherit" });
+execFileSync(process.execPath, [join(repo, "scripts/test-explore-default.cjs")],
+  { stdio: "inherit", env: { ...process.env, SITE_DIR: defaultSite } });
 console.log("\nall checks passed");
