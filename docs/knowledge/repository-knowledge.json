@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ba70b50ed387df53982cf471d2b3d3ed5e0c1152bea3996e5b76a9c84531e314",
+      "source_sha256": "dba9773bb34882491014ca5ecbb3ca9d7d79fbe3756fd41e05cc5e66722ba4fd",
       "properties": {
         "startHereOrder": 2
       }
