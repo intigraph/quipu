@@ -16,6 +16,7 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
       # The Agent Primer page includes the primer source (aegis-t7h).
@@ -30,6 +31,7 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
       - 'src/primer.md'
@@ -141,6 +143,14 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.63.0
           npx playwright install --with-deps chromium
           node scripts/smoke-datalinks.cjs
+
+      - name: Verify explorer loading and retry in a browser
+        env:
+          SITE_DIR: docs/book/book/explore
+          OUT_DIR: ${{ runner.temp }}/explore-loading
+        run: |
+          bash scripts/check-explorer-published.test.sh
+          xvfb-run -a node scripts/test-explore-loading.cjs
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

@@ -1,3 +1,4 @@
+import { createLoadExperience } from "./loading.js";
 import { createPackLoader } from "./pack-loader.js";
 import { createEngineApi } from "./engine-api.js";
 import { createConstellation } from "./constellation.js";
@@ -40,21 +41,25 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 
 // ---------------------------------------------------------------- worker RPC
 
-const worker = new Worker("./worker.js", { type: "module" });
-let nextId = 1;
+let worker = null, workerFailed = false, nextId = 1;
 const pending = new Map();
-worker.onmessage = (e) => {
-  const { id, ok, result, error, validation } = e.data;
-  const p = pending.get(id);
-  pending.delete(id);
-  if (!p) return;
-  ok ? p.resolve(result) : p.reject(Object.assign(new Error(error), validation ? { validation } : {}));
-};
-worker.onerror = (e) => {
-  for (const p of pending.values()) p.reject(new Error(e.message || "worker failed"));
-  pending.clear();
-  fail(`The wasm worker failed to start: ${e.message || "unknown error"}`);
-};
+function startWorker() {
+  workerFailed = false;
+  worker = new Worker("./worker.js", { type: "module" });
+  worker.onmessage = (e) => {
+    const { id, ok, result, error, validation } = e.data;
+    const p = pending.get(id);
+    pending.delete(id);
+    if (!p) return;
+    ok ? p.resolve(result) : p.reject(Object.assign(new Error(error), validation ? { validation } : {}));
+  };
+  worker.onerror = (e) => {
+    workerFailed = true;
+    for (const p of pending.values()) p.reject(new Error(e.message || "worker failed"));
+    pending.clear();
+    fail(`The wasm worker failed to start: ${e.message || "unknown error"}`);
+  };
+}
 const ask = (msg) =>
   new Promise((resolve, reject) => {
     const id = nextId++;
@@ -758,30 +763,7 @@ async function runSparql() {
 const loadPack = createPackLoader({ ask, constellation, renderProvenance, status, fmt,
   renderTypes, renderBrowser, refreshExport, runSparql, reportReleaseFreshness, initialQuestion: CANNED[0] });
 
-async function boot() {
-  const bundle = await fetch("./pkg/quipu_wasm_explorer_bg.wasm", { method: "HEAD" })
-    .then((r) => r.ok, () => false);
-
-  try {
-    window.__quipuBuild = await ask({ cmd: "version" });
-  } catch (err) {
-    if (!bundle) {
-      fail("The WebAssembly bundle is not on this site yet. It is attached to a GitHub release "
-        + "and staged here by the docs build, so this page goes live with the first release that "
-        + "carries it — nothing is broken, and your browser is fine. Meanwhile the pack itself is "
-        + "here: see the repository for how to explore it with the quipu CLI.");
-      const link = el("p", { style: "margin-top:10px" },
-        el("a", { href: "https://github.com/intigraph/quipu/releases/latest",
-          text: "Latest release →" }));
-      $("#status").append(link);
-      return;
-    }
-    const unsupported = typeof WebAssembly === "undefined" || typeof Worker === "undefined";
-    fail(unsupported
-      ? "This page needs WebAssembly and module workers. Try a current Chrome, Firefox or Safari."
-      : `The WebAssembly worker did not start: ${err.message}`);
-    return;
-  }
+function setupControls() {
   setQuery(CANNED[0].sparql, CANNED[0].name);
   $("#run").addEventListener("click", runSparql);
   const canned = $("#canned");
@@ -802,38 +784,29 @@ async function boot() {
   $("#file-input").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    await loadPack(await file.arrayBuffer(), file.name).catch((err) => fail(String(err.message)));
+    await loader.loadFile(file);
   });
   $("#url-load").addEventListener("click", async () => {
     const url = $("#url-input").value.trim();
     if (!url) return;
-    status(`Fetching ${url}…`);
-    try {
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      await loadPack(await r.arrayBuffer(), url);
-    } catch (err) {
-      fail(`Could not load ${url}: ${err.message}. If this is a GitHub release asset, the `
-        + `browser refuses it — those are served without CORS headers.`);
-    }
+    await loader.loadUrl(url);
   });
 
-  // The pack this site ships. Staged into the book by the docs workflow from
-  // the newest release, so it is a real release artifact and not a fixture.
-  status("Fetching this repository's knowledge pack…");
-  let bytes;
-  try {
-    const r = await fetch("./repository.pendant.tar.gz");
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    bytes = await r.arrayBuffer();
-  } catch (err) {
-    fail("The repository pack is not staged on this site yet — it is attached by the docs build "
-      + "from the newest GitHub release. You can still load a .pendant.tar.gz from your own disk "
-      + "with the file picker above.");
-    return;
-  }
-  await loadPack(bytes, "this site's copy of the latest release pack")
-    .catch((err) => fail(String(err.message)));
 }
 
-boot();
+const loader = createLoadExperience({
+  ensureEngine: async () => {
+    if (typeof Worker === "undefined" || typeof WebAssembly === "undefined") {
+      throw new Error("This page needs WebAssembly and module workers. Try a current Chrome, Firefox or Safari.");
+    }
+    if (!worker || workerFailed) { worker?.terminate(); startWorker(); }
+    try {
+      window.__quipuBuild = await ask({ cmd: "version" });
+      $("#build-chip").textContent = `v${window.__quipuBuild.version ?? "unknown"}`;
+    }
+    catch (error) { workerFailed = true; throw error; }
+  },
+  loadPack, onEngineReady: setupControls, status,
+});
+// Same released artifact and verification path; retries repeat this load.
+loader.loadUrl("./repository.pendant.tar.gz", "this site's copy of the latest release pack");
