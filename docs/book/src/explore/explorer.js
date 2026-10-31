@@ -1,4 +1,6 @@
 import { createLoadExperience } from "./loading.js";
+import { renderLoadProgress } from "./worker-progress.js";
+import { renderProvenance as showProvenance } from "./provenance.js";
 import { createPackLoader } from "./pack-loader.js";
 import { createEngineApi } from "./engine-api.js";
 import { createConstellation } from "./constellation.js";
@@ -39,7 +41,6 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 `;
 
-// ---------------------------------------------------------------- worker RPC
 
 let worker = null, workerFailed = false, nextId = 1;
 const pending = new Map();
@@ -47,6 +48,7 @@ function startWorker() {
   workerFailed = false;
   worker = new Worker("./worker.js", { type: "module" });
   worker.onmessage = (e) => {
+    if (e.data.type === "quipu:load-progress") { renderLoadProgress(e.data); return; }
     const { id, ok, result, error, validation } = e.data;
     const p = pending.get(id);
     pending.delete(id);
@@ -60,6 +62,7 @@ function startWorker() {
     fail(`The wasm worker failed to start: ${e.message || "unknown error"}`);
   };
 }
+
 const ask = (msg) =>
   new Promise((resolve, reject) => {
     const id = nextId++;
@@ -69,7 +72,6 @@ const ask = (msg) =>
 
 const query = (sparql) => ask({ cmd: "query", sparql });
 
-// ------------------------------------------------------------------ helpers
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, attrs = {}, ...kids) => {
@@ -101,45 +103,6 @@ const cell = (v) => (v && typeof v === "object" ? JSON.stringify(v) : String(v ?
 const rows = (result) => (result && Array.isArray(result.rows) ? result.rows : []);
 
 // --------------------------------------------------------------- provenance
-
-function renderProvenance(report, source, timings) {
-  const build = window.__quipuBuild ?? { version: "?", git_sha: "?" };
-  const m = report.manifest;
-  const imp = report.import;
-  const facts = [
-    ["Producer", `quipu ${m.producer.version}`],
-    ["Explorer build", `quipu ${build.version} (${String(build.git_sha).slice(0, 12)})`],
-    ["Pack built", m.created_at],
-    ["Graph hash", m.graph_hash],
-    ["Share id", m.share_id],
-    ["Canonicalization", m.canonicalization ?? "(none declared)"],
-    ["Tx anchor", String(m.tx_anchor)],
-    ["Source", source],
-    ["Import outcome", imp.outcome],
-    ["Triples accepted", fmt(imp.triples.accepted)],
-    ["Quarantined", fmt(imp.triples.quarantined)],
-    ["Off-vocabulary types", imp.validation.off_vocabulary.length
-      ? imp.validation.off_vocabulary.map(short).join(", ")
-      : "none"],
-    ["Promotion", report.promotion
-      ? `${report.promotion.outcome} (tx ${report.promotion.tx_id}, ${fmt(report.promotion.triples)} triples)`
-      : `refused — ${imp.promotion.blockers.join(", ") || "not eligible"}`],
-    ["Load time", `${(timings.load / 1000).toFixed(1)} s in this tab`],
-  ];
-  const dl = $("#provenance");
-  dl.replaceChildren();
-  for (const [k, v] of facts) {
-    dl.append(el("dt", { text: k }), el("dd", { class: "mono", text: v }));
-  }
-
-  // Say what this build did NOT check, rather than letting `conforms: true`
-  // read as a clean bill of health it did not earn.
-  $("#shacl-note").textContent = report.shacl_compiled
-    ? "SHACL is compiled into this build, and the report above is a real validation result."
-    : "SHACL is NOT compiled into this browser build, so “conforms” above is a default, not a "
-      + "finding. The vocabulary check (off-vocabulary types) DID run — it does not need the "
-      + "SHACL engine. Run `quipu import` locally for the full validation.";
-}
 
 // Release metadata is the one cross-origin call on this page: api.github.com
 // sends `access-control-allow-origin: *`, while release-asset DOWNLOADS send no
@@ -454,7 +417,7 @@ function editNote(text, bad = false) {
   note.classList.toggle("bad", bad);
 }
 
-async function refreshExport() {
+async function refreshExport({ lazy = false } = {}) {
   // Any write invalidates a delta computed before it. Clearing rather than
   // silently recomputing, because the reader reviewed the OLD one and must not
   // be able to open GitHub with something they never saw.
@@ -473,6 +436,10 @@ async function refreshExport() {
     dl.replaceChildren(el("p", { class: "muted", text:
       "Export is live from the start — an unedited store exports the pack it came from. "
       + "Make an edit above and the share id and graph hash below will change." }));
+  }
+  if (lazy) {
+    dl.replaceChildren(el("p", { class: "muted", text: "Open Export manifest to compute this store's current hashes." }));
+    return;
   }
   try {
     // Worth timing and showing: the graph hash is RDFC-1.0 over the whole
@@ -760,6 +727,7 @@ async function runSparql() {
 
 // ------------------------------------------------------------------- boot
 
+const renderProvenance = (report, source, timings) => showProvenance(report, source, timings, { fmt, short });
 const loadPack = createPackLoader({ ask, constellation, renderProvenance, status, fmt,
   renderTypes, renderBrowser, refreshExport, runSparql, reportReleaseFreshness, initialQuestion: CANNED[0] });
 
@@ -777,9 +745,22 @@ function setupControls() {
     }));
   }
   registerServer();
+  $("#validate-pack").addEventListener("click", async event => {
+    const button = event.currentTarget, result = $("#pack-validation-result");
+    button.disabled = true; result.textContent = "Validating the original pack in this tab…";
+    try {
+      const report = await ask({ cmd: "validatePack" });
+      result.textContent = report.import.validation.conforms ? "The original pack conforms to its shapes."
+        : "The original pack has validation findings. " + JSON.stringify(report.import.validation.report);
+    } catch (error) { result.textContent = `Validation failed: ${error.message}`; }
+    finally { button.disabled = false; }
+  });
   $("#pr-prepare").addEventListener("click", prepareDelta);
   $("#pr-go").addEventListener("click", proposeAsPr);
   $("#download-pack").addEventListener("click", downloadPack);
+  $("#export-details").addEventListener("toggle", event => {
+    if (event.currentTarget.open) refreshExport();
+  });
   $("#download-nt").addEventListener("click", downloadNtriples);
   $("#file-input").addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
@@ -808,5 +789,5 @@ const loader = createLoadExperience({
   },
   loadPack, onEngineReady: setupControls, status,
 });
-// Same released artifact and verification path; retries repeat this load.
-loader.loadUrl("./repository.pendant.tar.gz", "this site's copy of the latest release pack");
+// The default is pinned by this Pages build; selected packs use full receiving.
+loader.loadUrl("./repository.pendant.tar.gz", "this site's copy of the latest release pack", { defaultPack: true });

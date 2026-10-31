@@ -149,6 +149,8 @@
       </div>
     </section></dialog>
   <details id="pack-provenance"><summary>Pack provenance and validation</summary><section>
+  <button id="validate-pack">Validate pack</button>
+  <p id="pack-validation-result" role="status"></p>
     <h2>Provenance <span class="note">— what you are actually looking at</span></h2>
     <div class="body">
       <dl id="provenance"></dl>
@@ -166,7 +168,7 @@
           Download your graph and edits as a verified share pack, with its history preserved.
           <a href="../sharing/">See how to import it locally.</a>
         </p>
-        <details><summary>Export manifest</summary><dl id="export-manifest"></dl></details>
+        <details id="export-details"><summary>Export manifest</summary><dl id="export-manifest"></dl></details>
         <div class="row">
           <button class="go" id="download-pack">Download .pendant.tar.gz</button>
           <button id="download-nt">Download export.nt</button>

@@ -5,7 +5,7 @@ const $ = (selector) => document.querySelector(selector);
 // The same receiving pipeline serves standalone and embedded presentations.
 export function createPackLoader({ ask, constellation, renderProvenance, status, fmt,
   renderTypes, renderBrowser, refreshExport, runSparql, reportReleaseFreshness, initialQuestion }) {
-  return async function loadPack(bytes, source) {
+  return async function loadPack(bytes, source, { defaultPack = false } = {}) {
     const embed = new URLSearchParams(location.search).get("embed") === "1";
     const cache = embed ? await mapCache(bytes, window.__quipuBuild) : null;
     const saved = cache?.read();
@@ -21,7 +21,7 @@ export function createPackLoader({ ask, constellation, renderProvenance, status,
     const t0 = performance.now();
     let report;
     try {
-      report = await ask({ cmd: "load", bytes, source });
+      report = await ask({ cmd: "load", bytes, source, defaultPack });
     } catch (error) {
       if (saved) { $("main").hidden = true; cache.remove(); }
       unlock?.();
@@ -37,17 +37,17 @@ export function createPackLoader({ ask, constellation, renderProvenance, status,
     const load = performance.now() - t0;
     renderProvenance(report, source, { load });
     loaded(report);
-    status(`Loaded ${fmt(report.import.triples.accepted)} triples — everything below is a live `
-      + `query against this tab's copy.`);
+    status(`Loaded ${fmt(report.import.triples.accepted)} triples. The graph is ready for queries and edits in this tab.`);
     $("main").hidden = false;
     await renderTypes();
-    await constellation.load(null, cache && report.promotion?.outcome === "promoted"
+    const defaultViews = report.receiving?.mode === "producer-validated" ? report.defaultViews : null;
+    await constellation.load(defaultViews, cache && report.promotion?.outcome === "promoted"
       ? async (snapshot) => {
         const edits = await ask({ cmd: "editLog" });
         if (Array.isArray(edits) && !edits.length) cache.write(snapshot);
-      } : null);
+      } : null, { verified: !!defaultViews });
     await renderBrowser();
-    await refreshExport();
+    await refreshExport({ lazy: true });
     setQuery(initialQuestion.sparql, initialQuestion.name);
     $("#starter-questions button")?.setAttribute("aria-pressed", "true");
     await runSparql();

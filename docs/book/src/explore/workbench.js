@@ -35,6 +35,7 @@ function verdict(out, heading, refusal, probe, reason) {
 
 export function loadStarted(bytes) {
   report = null;
+  $("#pack-validation-result").textContent = "";
   for (const step of document.querySelectorAll("#load-cord li")) {
     step.classList.remove("done");
     step.querySelector("span").textContent = "Waiting";
@@ -54,12 +55,13 @@ export function loaded(value) {
   // loadQpack returns only after manifest/payload verification. Stage and
   // promotion have separate reported outcomes; don't turn a quarantine red
   // into a green "promoted" knot.
-  stage("verify", true, "Manifest hashes checked");
+  const published = value.receiving?.mode === "producer-validated";
+  stage("verify", true, published ? "Published pack digest checked" : "Manifest hashes checked");
   stage("stage", value.import.outcome === "staged",
-    `${value.import.triples.quarantined.toLocaleString()} quarantined`);
+    `${published ? "At publication: " : ""}${value.import.triples.quarantined.toLocaleString()} quarantined`);
   const promoted = value.promotion?.outcome === "promoted";
   stage("promote", promoted, promoted
-    ? `${value.promotion.triples.toLocaleString()} triples`
+    ? `${published ? "Restored: " : ""}${value.promotion.triples.toLocaleString()} triples`
     : "Not promoted");
   $("#build-chip").textContent = `v${window.__quipuBuild?.version ?? "unknown"}`;
   $("#pack-chip").textContent = promoted
