@@ -1,0 +1,12 @@
+Script started on 2026-10-31 17:08:49-04:00 [COMMAND="bash run.sh" <not executed on terminal>]
+BEFORE: deployed Pages at base 46a26acd (released legacy engine)
+GET default-pack-proof.js: export default null;
+GET default-store.db.gz: HTTP 404
+AFTER: isolated published-book fixture, same base + docs workflow patch
+default-pack-proof.js schema: quipu.explorer-default/v1
+default-store.db.gz bytes: 39920237
+default-store.db.gz sha256: 054b2ebfa9416bd274307247cfa62779bc9f110b1ca64a9ef6783700c04421de
+PASS: Pages output contains required proof and immutable store.
+This is candidate build output, not live deployment acceptance.
+
+Script done on 2026-10-31 17:08:49-04:00 [COMMAND_EXIT_CODE="0"]
