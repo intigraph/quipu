@@ -552,6 +552,7 @@ impl Store {
             resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
+            import_policy_config: crate::config::ImportPolicyConfig::default(),
             shacl_config: ShaclConfig::default(),
             projection_defs: Vec::new(),
             write_shapes: None,
