@@ -83,7 +83,7 @@ const server = http.createServer((request, response) => {
     });
     check("published graph views equal independent live native queries", viewsMatch);
     const edited = await page.evaluate(async () => {
-      const subject = (await window.quipu.query("SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label } LIMIT 1")).rows[0]?.s;
+      const subject = (await window.quipu.query("SELECT (STR(?s) AS ?subject) WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label } LIMIT 1")).rows[0]?.subject;
       if (!subject) throw Error("missing label control");
       await window.quipu.set(subject, "http://www.w3.org/2000/01/rdf-schema#label", { str: "snapshot-cache-isolation-control" });
       return (await window.quipu.query('SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#label> "snapshot-cache-isolation-control" }')).rows.length;
