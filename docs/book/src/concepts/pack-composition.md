@@ -13,8 +13,9 @@ quipu compose ./operations-pack ./repository-pack \
 The command returns JSON and exits 0 for an admitted union, 2 for a retained,
 quarantined union, or 1 for a refusal. Exit 2 means the composition is available
 for inspection in quarantine, not that no data was written. Integrity and
-shape-selection errors refuse the whole operation. Internal shares require
-explicit `--destination internal`, as on the import path.
+shape-selection errors refuse the whole operation. Composition still requires
+an explicit `--destination internal` for internal shares whose payload fails the
+outward scrub. Plain `quipu import` no longer does: it reads the stamp itself.
 
 ## Identity and provenance
 

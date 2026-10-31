@@ -167,6 +167,16 @@ impl Store {
         &mut self.owl_config
     }
 
+    /// The share-import policy, `[quipu.import]` (aegis-zev).
+    pub fn import_policy_config(&self) -> &crate::config::ImportPolicyConfig {
+        &self.import_policy_config
+    }
+
+    /// Mutable share-import policy.
+    pub fn import_policy_config_mut(&mut self) -> &mut crate::config::ImportPolicyConfig {
+        &mut self.import_policy_config
+    }
+
     /// Get a mutable reference to the governance enforcement config.
     pub fn governance_config_mut(&mut self) -> &mut GovernanceConfig {
         &mut self.governance_config

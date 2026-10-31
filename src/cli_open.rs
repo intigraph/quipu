@@ -80,6 +80,11 @@ pub fn open_store(db_path: &str) -> Store {
     // the server and ignored by `quipu knot`, which refused every write the
     // operator had opted out of validating.
     store.shacl_config_mut().clone_from(&config().shacl);
+    // `[quipu.import]` (aegis-zev): `quipu import` must honour refuse_internal
+    // exactly as the server does.
+    store
+        .import_policy_config_mut()
+        .clone_from(&config().import_policy);
     // Pure reads and backups do not need to construct an inference session.
     // Import/share and ordinary writes must use the configured provider.
     let command = std::env::args().nth(1).unwrap_or_default();
