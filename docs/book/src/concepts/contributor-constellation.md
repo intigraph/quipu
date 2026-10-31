@@ -111,3 +111,17 @@ export, so adding contributor knowledge does not disable proposing an edit.
 The default remote delta budget remains 8 MiB. During release publication, docs
 allow missing, not-yet-staged assets for 30 minutes. Once staged, every asset
 must be published byte-for-byte; beyond the grace a missing asset fails.
+
+The default pack is validated while Pages stages the release. That build pins
+the exact pack, engine, shapes, and validated store. The page checks those bytes
+before restoring the store, so startup does not repeat full SHACL validation.
+Validation findings, including advisory warnings, remain in the provenance panel.
+“Validate pack” runs the full checks again in the browser. Loading another pack
+always uses the full receiving path, with progress while it validates.
+
+An immutable store cache speeds repeat visits. Edits remain local to the tab and
+never replace the default cache. Initial graph views are computed by the same
+engine from that exact store; subsequent queries and edits use the live store.
+Export hashes are computed when you open the export manifest or download a pack.
+Older engine releases keep the full receiving path until they support validated
+store snapshots. A source change does not enable the fast path on the live site.

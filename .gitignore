@@ -95,6 +95,7 @@ docs/book/src/datalinks/demo.pendant.tar.gz
 # Rust and the repo carries no binaries.
 docs/book/src/explore/pkg/
 docs/book/src/explore/repository.pendant.tar.gz
+docs/book/src/explore/default-store.db.gz
 
 # Beads / Dolt files (added by bd init)
 .dolt/
