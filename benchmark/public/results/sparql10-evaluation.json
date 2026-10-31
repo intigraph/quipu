@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc",
-  "quipu_version": "quipu 0.16.3\ngit_sha: b70d1e4dafc53d9c196d192ea03bc4b5a688f3fc\ngit_dirty: false",
-  "generated_at": "2026-10-26T06:16:45Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/40278471124",
+  "quipu_revision": "46a26acddee30c6f23e0033bab79ef1e47468f8f",
+  "quipu_version": "quipu 0.16.6\ngit_sha: 46a26acddee30c6f23e0033bab79ef1e47468f8f\ngit_dirty: false",
+  "generated_at": "2026-10-31T20:36:38Z",
+  "generated_by": "https://github.com/intigraph/quipu/actions/runs/41239351770",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
@@ -25,8 +25,8 @@
   "classes": {
     "sparql10-query": {
       "cases": 242,
-      "failed": 30,
-      "passed": 202,
+      "failed": 29,
+      "passed": 203,
       "unsupported": 10
     }
   },
@@ -468,8 +468,8 @@
       "manifest": "../sparql10/open-world/manifest.ttl",
       "query": "../sparql10/open-world/date-2.rq",
       "result": "../sparql10/open-world/date-2-result.srx",
-      "status": "failed",
-      "diagnostic": "actual result differs from expected multiset"
+      "status": "passed",
+      "diagnostic": ""
     },
     {
       "class": "sparql10-query",
