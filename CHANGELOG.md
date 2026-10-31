@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-10-31
+
+### Changed
+
+- *(signing)* Consume the published shared signing crate (#942)([cf03e65](https://github.com/scbrown/quipu/commit/cf03e657b39ca284633285c070c3d83969ff336a))
+
 ## [0.16.6] - 2026-10-30
 
 ### Added
