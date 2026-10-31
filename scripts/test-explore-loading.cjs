@@ -18,6 +18,11 @@ const mime = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/jav
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
+    if (url.pathname === "/embed-host") {
+      res.setHeader("content-type", "text/html");
+      res.end('<iframe src="/?embed=1"></iframe><script>window.states=[];addEventListener("message",e=>{if(e.origin===location.origin&&e.source===document.querySelector("iframe").contentWindow&&e.data.type==="quipu:state")window.states.push(e.data);});</script>');
+      return;
+    }
     let name = decodeURIComponent(url.pathname);
     if (name.endsWith("/")) name += "index.html";
     if (name === "/selected.pendant.tar.gz") name = "/repository.pendant.tar.gz";
@@ -87,6 +92,8 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     const page = await context.newPage();
     await page.addInitScript(() => {
       window.loadStates = [];
+      window.protocolMessages = [];
+      addEventListener("message", e => { if (e.data?.type === "quipu:state") window.protocolMessages.push(e.data); });
       new MutationObserver(() => {
         const state = document.querySelector("#graph-loader")?.dataset.state;
         if (state && window.loadStates.at(-1) !== state) window.loadStates.push(state);
@@ -190,6 +197,27 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     check("CORS-hidden encoding cannot invent a percentage", await page.locator("#loading-progress").getAttribute("value") === null
       && !(await page.locator("#loading-bytes").innerText()).includes("%"));
     await ready(page);
+    check("standalone explorer does not broadcast state", (await page.evaluate(() => window.protocolMessages)).length === 0);
+    await context.close();
+
+    mode = { failPack: 1 };
+    ({ page, context } = await open());
+    await page.goto(new URL("embed-host", target).href);
+    const embedded = page.frames().find(frame => frame !== page.mainFrame());
+    await embedded.waitForSelector('#graph-loader[data-state="error"]', { timeout: 120000 });
+    await page.waitForFunction(() => window.states.some(s => s.state === "error"));
+    let messages = await page.evaluate(() => window.states);
+    check("embed failure broadcasts error without false ready", !messages.some(s => s.state === "ready")
+      && messages.at(-1).stage === "error" && messages.at(-1).pendant === "repository");
+    mode = {};
+    await embedded.click("#loading-retry");
+    await ready(embedded);
+    await page.waitForFunction(() => window.states.at(-1)?.state === "ready");
+    messages = await page.evaluate(() => window.states);
+    check("embed real import emits all loading stages then ready", ["engine", "pendant", "indexing"].every(stage =>
+      messages.some(s => s.state === "loading" && s.stage === stage))
+      && messages.at(-1).stage === "ready"
+      && messages.every(s => Object.keys(s).sort().join() === "pendant,stage,state,type"));
     await context.close();
   } finally {
     fs.writeFileSync(path.join(out, "results.json"), JSON.stringify({ baseline, results }, null, 2));

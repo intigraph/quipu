@@ -13,10 +13,15 @@ const bytes = (n) => n < 1024 ? `${n} B` : n < 1048576
 
 export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, status }) {
   const panel = $("#graph-loader");
-  let busy = false, controlsReady = false, retry = null;
+  let busy = false, controlsReady = false, retry = null, pendant = null;
   function stage(state) {
     panel.dataset.state = state;
     document.documentElement.dataset.loadState = state;
+    if (new URLSearchParams(location.search).get("embed") === "1" && window.parent !== window) {
+      // State only: never disclose a selected file name, URL credentials or graph.
+      window.parent.postMessage({ type: "quipu:state", state: state === "ready" || state === "error"
+        ? state : "loading", pendant, stage: state }, "*");
+    }
     panel.hidden = state === "ready";
     panel.setAttribute("aria-busy", String(state !== "ready" && state !== "error"));
     $("#loading-detail").textContent = messages[state] ?? "";
@@ -42,6 +47,7 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
   async function run(read, source) {
     if (busy) return;
     busy = true;
+    pendant = source === "this site's copy of the latest release pack" ? "repository" : "selected";
     retry = () => run(read, source);
     $("main").hidden = true;
     $("#status").classList.remove("bad");

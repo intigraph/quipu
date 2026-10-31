@@ -9,7 +9,9 @@ with a successful query against the imported graph.
 
 Baseline source: `cf03e657b39ca284633285c070c3d83969ff336a`.
 The PR body pins the candidate revision containing this recording; the
-[SHA-256 manifest](source-sha256.txt) identifies the tested source bytes.
+[SHA-256 manifest](source-sha256.txt) identifies the current tested source bytes.
+The recording predates the embedded state-message addition; that addition changes
+the parent protocol and leaves this visible loading sequence unchanged.
 Both use the released Quipu 0.16.6 WASM engine
 (`ad8de357521acdbd9f7a0175a37b7c20d3a21f5c`) and its repository pendant.
 This is source-checkout browser evidence, not a claim that Pages is deployed.
