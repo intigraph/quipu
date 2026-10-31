@@ -19,6 +19,8 @@ on:
       - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      - 'scripts/prepare-explorer-default.mjs'
+      - 'scripts/test-explore-default.cjs'
       # The Agent Primer page includes the primer source (aegis-t7h).
       - 'src/primer.md'
   push:
@@ -34,6 +36,8 @@ on:
       - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      - 'scripts/prepare-explorer-default.mjs'
+      - 'scripts/test-explore-default.cjs'
       - 'src/primer.md'
   workflow_dispatch:
 
@@ -112,6 +116,9 @@ jobs:
             test -s "$DEST/$FILE" || { echo "missing staged explorer asset: $FILE"; exit 1; }
           done
 
+      - name: Prepare the validated default store and build-pinned proof
+        run: node scripts/prepare-explorer-default.mjs docs/book/src/explore --allow-legacy
+
       - name: Build book
         run: mdbook build docs/book
 
@@ -151,6 +158,9 @@ jobs:
         run: |
           bash scripts/check-explorer-published.test.sh
           xvfb-run -a node scripts/test-explore-loading.cjs
+          if test -s docs/book/book/explore/default-store.db.gz; then
+            node scripts/test-explore-default.cjs
+          fi
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

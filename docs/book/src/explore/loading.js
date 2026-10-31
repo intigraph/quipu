@@ -44,16 +44,16 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       $("#loading-bytes").textContent = `${bytes(received)} downloaded`;
     }
   }
-  async function run(read, source) {
+  async function run(read, source, kind = "selected") {
     if (busy) return;
     busy = true;
-    pendant = source === "this site's copy of the latest release pack" ? "repository" : "selected";
-    retry = () => run(read, source);
+    pendant = kind;
+    retry = () => run(read, source, kind);
     $("main").hidden = true;
     $("#status").classList.remove("bad");
     $("#loading-title").textContent = "Opening your knowledge graph";
     $("#loading-retry").hidden = true;
-    for (const node of document.querySelectorAll("#url-load, #file-input")) node.disabled = true;
+    for (const node of document.querySelectorAll("#url-load, #file-input, #validate-pack")) node.disabled = true;
     progress(0, 0);
     stage("engine");
     try {
@@ -62,7 +62,7 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       stage("pendant");
       const data = await read(progress);
       stage("indexing");
-      await loadPack(data, source);
+      await loadPack(data, source, { defaultPack: pendant === "repository" });
       stage("ready");
     } catch (error) {
       const failedAt = panel.dataset.state;
@@ -78,12 +78,12 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       $("#status").classList.add("bad");
     } finally {
       busy = false;
-      for (const node of document.querySelectorAll("#url-load, #file-input")) node.disabled = !controlsReady;
+      for (const node of document.querySelectorAll("#url-load, #file-input, #validate-pack")) node.disabled = !controlsReady;
     }
   }
   $("#loading-retry").addEventListener("click", () => retry?.());
   return {
-    loadUrl: (url, source = url) => run(async (report) => {
+    loadUrl: (url, source = url, { defaultPack = false } = {}) => run(async (report) => {
       const response = await fetch(url);
       if (!response.ok) throw new Error(`Pendant download failed (HTTP ${response.status}). Check the URL or connection and try again.`);
       const encoding = response.headers.get("content-encoding");
@@ -111,7 +111,7 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       let offset = 0;
       for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength; }
       return data.buffer;
-    }, source),
+    }, source, defaultPack ? "repository" : "selected"),
     loadFile: (file) => run(async (report) => {
       const data = await file.arrayBuffer();
       report(data.byteLength, file.size);
