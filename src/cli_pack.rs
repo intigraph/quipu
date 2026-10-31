@@ -300,7 +300,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             request.actor = actor.map(String::from);
             request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
             let mut store = quipu::Store::open_in_memory()?;
-            crate::cli_open::configure_embeddings(&mut store);
+            crate::cli_open::configure_transient_import(&mut store);
             quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
         });
         match imported {
@@ -385,7 +385,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             crate::cli_open::open_store(db_path)
         };
         if transient {
-            crate::cli_open::configure_embeddings(&mut store);
+            crate::cli_open::configure_transient_import(&mut store);
         }
         quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
     });

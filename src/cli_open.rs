@@ -106,6 +106,18 @@ pub fn open_store(db_path: &str) -> Store {
     store
 }
 
+/// Apply the operator's import-time policy to a transient (in-memory) import
+/// store: the embedding provider AND `[quipu.import]` (aegis-zev). A transient
+/// archive, URL or delta import must refuse exactly what a `--db` or directory
+/// import of the same share refuses; review of #954 found the archive arm
+/// staging a share the directory arm refused under `refuse_internal = true`.
+pub fn configure_transient_import(store: &mut Store) {
+    store
+        .import_policy_config_mut()
+        .clone_from(&config().import_policy);
+    configure_embeddings(store);
+}
+
 /// Apply the same provider policy to explicitly transient import stores.
 pub fn configure_embeddings(store: &mut Store) {
     match quipu::embedding_runtime::configure_provider(store, &config().embedding) {
