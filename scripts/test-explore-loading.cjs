@@ -59,14 +59,14 @@ const corsServer = http.createServer(async (_req, res) => {
   res.end();
 });
 
-// Headed Chromium can briefly lack a capturable compositor surface on CI.
+// CI has reported a capture protocol error before its first screenshot.
 // Retry only that protocol error; state assertions and a persistent failure remain fatal.
 async function screenshot(page, options) {
   for (let attempt = 0; ; attempt++) {
     try { return await page.screenshot(options); }
     catch (error) {
       if (attempt === 2 || !error.message.includes("Unable to capture screenshot")) throw error;
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await page.waitForTimeout(100);
     }
   }
 }
@@ -78,7 +78,7 @@ function check(name, value) { assert(value, name); results.push(name); console.l
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   await new Promise((resolve) => corsServer.listen(0, "127.0.0.1", resolve));
   const target = process.env.TARGET_URL || `http://127.0.0.1:${server.address().port}/`;
-  browser = await chromium.launch({ headless: false,
+  browser = await chromium.launch({ headless: process.env.CI === "true",
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
   async function open({ video = false, mobile = false } = {}) {
     const context = await browser.newContext({ viewport: mobile
