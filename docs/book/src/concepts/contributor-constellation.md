@@ -1,6 +1,11 @@
 # Explore the contributor constellation
 
 Open [Explore](../explore/.) to follow the ideas behind Quipu into the code.
+
+The loading panel follows engine startup, pendant download, and graph indexing.
+Download percentages use the response size when available; otherwise the panel
+shows transferred bytes. Once the graph is ready, the workbench appears. If
+loading fails, **Try again** repeats the selected load without leaving the page.
 The repository pack includes the vision, source-backed episodes, design decisions,
 a trust directive, and the book's chapter order alongside indexed code and docs.
 The vision remains an aspiration; each decision links to its own evidence and

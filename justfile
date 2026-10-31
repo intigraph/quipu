@@ -295,6 +295,11 @@ explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
     node scripts/test-explore-cords.cjs {{args}}
 
+# Staged loader and retry acceptance against the real browser engine.
+explorer-loading *args:
+    bash scripts/check-explorer-published.test.sh
+    node scripts/test-explore-loading.cjs {{args}}
+
 # Presentation acceptance against the same staged browser engine.
 explorer-presentation *args:
     node scripts/test-explore-presentation.cjs {{args}}

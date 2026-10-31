@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-load-state="engine">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quipu — Explore a knowledge graph</title>
 <link rel="stylesheet" href="./constellation.css">
 <link rel="stylesheet" href="./workbench.css">
 <link rel="stylesheet" href="./presentation.css">
+<link rel="stylesheet" href="./loading.css">
 </head>
 <body>
 <div class="wrap">
@@ -41,6 +42,23 @@
   </section>
 </div>
 <div id="status" role="status" aria-live="polite">Starting the WebAssembly worker…</div>
+<section id="graph-loader" data-state="engine" aria-labelledby="loading-title" aria-busy="true">
+  <div class="loading-mark" aria-hidden="true">◉</div>
+  <h2 id="loading-title">Opening your knowledge graph</h2>
+  <p id="loading-detail" role="status" aria-live="polite">Starting the engine in your browser…</p>
+  <ol aria-label="Loading stages">
+    <li data-stage="engine" aria-current="step">Engine</li>
+    <li data-stage="pendant">Pendant</li>
+    <li data-stage="indexing">Indexing</li>
+    <li data-stage="ready">Ready</li>
+  </ol>
+  <div id="loading-download" hidden>
+    <progress id="loading-progress" max="100" aria-label="Pendant download"></progress>
+    <output id="loading-bytes"></output>
+  </div>
+  <button id="loading-retry" hidden>Try again</button>
+  <noscript>Enable JavaScript to open the interactive graph.</noscript>
+</section>
 <main hidden>
 <div class="bench">
   <aside class="pane starters"><h2>Start here</h2><div id="starter-questions"></div>
