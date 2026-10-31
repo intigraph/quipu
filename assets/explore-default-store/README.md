@@ -6,6 +6,8 @@ it is still loading when the excerpt ends. The complete measured run reached
 ready at **37.373 s**. [After](after.webm) restores the build-validated default
 store and reaches ready at **1.260 s**, then answers a real native query.
 Download the WebMs if the repository viewer does not play them inline.
+Native frame extraction verified both clips; headless video-frame capture was
+unreliable in the test environment.
 
 These are source-checkout fixtures served over local HTTP, not installed Pages
 acceptance. Base UI: `b6cf8acdcc2ed47386937f7a5c724887099a13d0`, with released
@@ -13,7 +15,7 @@ engine `ad8de357521acdbd9f7a0175a37b7c20d3a21f5c` (0.16.6).
 Recorded candidate UI: `567630d03511e3f4f23d288682e4762407c51398`, with a locally
 built, stripped candidate engine. Its build metadata says `git_sha: unknown`;
 [source and runtime hashes](source-sha256.txt) identify the actual recorded files.
-The following media/caption commit leaves the implementation unchanged.
+The media and caption commits leave the implementation unchanged.
 [Recorded results](recorded-results.json) retain both real query controls.
 
 A separate DevTools run on this candidate observed the actual ready-state marker
