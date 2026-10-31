@@ -59,6 +59,18 @@ const corsServer = http.createServer(async (_req, res) => {
   res.end();
 });
 
+// Headed Chromium can briefly lack a capturable compositor surface on CI.
+// Retry only that protocol error; state assertions and a persistent failure remain fatal.
+async function screenshot(page, options) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await page.screenshot(options); }
+    catch (error) {
+      if (attempt === 2 || !error.message.includes("Unable to capture screenshot")) throw error;
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    }
+  }
+}
+
 let browser;
 const results = [];
 function check(name, value) { assert(value, name); results.push(name); console.log("PASS", name); }
@@ -96,26 +108,26 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     if (baseline) {
       check("before: workbench hidden during engine startup", await page.locator("main").getAttribute("hidden") !== null);
       check("before: no canvas loading panel", await page.locator("#graph-loader").count() === 0);
-      await page.screenshot({ path: path.join(out, "before.png"), fullPage: true });
+      await screenshot(page, { path: path.join(out, "before.png"), fullPage: true });
       await ready(page);
     } else {
       await page.waitForSelector('#graph-loader[data-state="engine"]');
       check("engine has a prominent loading panel", (await page.locator("#graph-loader").boundingBox()).height >= 300);
-      await page.screenshot({ path: path.join(out, "engine.png"), fullPage: true });
+      await screenshot(page, { path: path.join(out, "engine.png"), fullPage: true });
       await page.waitForFunction(() => {
         const p = document.querySelector("#loading-progress");
         return document.querySelector("#graph-loader").dataset.state === "pendant" && p.value > 0 && p.value < 100;
       });
       check("pendant percentage reflects an in-flight byte stream", (await page.locator("#loading-bytes").innerText()).includes("%"));
-      await page.screenshot({ path: path.join(out, "pendant.png"), fullPage: true });
+      await screenshot(page, { path: path.join(out, "pendant.png"), fullPage: true });
       await page.waitForSelector('#graph-loader[data-state="indexing"]');
       check("import and indexing stay visibly in progress", await page.locator("#graph-loader").getAttribute("aria-busy") === "true");
-      await page.screenshot({ path: path.join(out, "indexing.png"), fullPage: true });
+      await screenshot(page, { path: path.join(out, "indexing.png"), fullPage: true });
       await ready(page);
       check("observed all actual loading stages in order", JSON.stringify(await page.evaluate(() => window.loadStates))
         === JSON.stringify(["engine", "pendant", "indexing", "ready"]));
       check("ready dismisses the loading panel", !(await page.locator("#graph-loader").isVisible()));
-      await page.screenshot({ path: path.join(out, "ready.png"), fullPage: true });
+      await screenshot(page, { path: path.join(out, "ready.png"), fullPage: true });
       fs.writeFileSync(path.join(out, "engine.json"), JSON.stringify(await page.evaluate(() => window.__quipuBuild), null, 2));
     }
     const video = page.video();
@@ -135,7 +147,7 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     const mobilePanel = await page.locator("#graph-loader").boundingBox();
     check("mobile loading stages stay above the fold", mobilePanel.y + mobilePanel.height <= page.viewportSize().height);
     check("reduced motion removes pulsing", await page.locator(".loading-mark").evaluate((e) => getComputedStyle(e).animationName) === "none");
-    await page.screenshot({ path: path.join(out, "mobile.png"), fullPage: true });
+    await screenshot(page, { path: path.join(out, "mobile.png"), fullPage: true });
     await ready(page);
     await context.close();
 
@@ -148,7 +160,7 @@ function check(name, value) { assert(value, name); results.push(name); console.l
       check(`${kind}: visible error and retry, no false ready`, await page.locator("#loading-retry").isVisible()
         && !(await page.locator("main").isVisible())
         && !(await page.evaluate(() => window.loadStates)).includes("ready"));
-      await page.screenshot({ path: path.join(out, `${kind}.png`), fullPage: true });
+      await screenshot(page, { path: path.join(out, `${kind}.png`), fullPage: true });
       mode = {};
       await page.click("#loading-retry");
       await ready(page);
