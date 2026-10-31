@@ -211,7 +211,11 @@ const workerSource = readFileSync(join(repo, "docs/book/src/explore/worker.js"),
   .replaceAll("import.meta.url", JSON.stringify("https://fixture.invalid/worker.js"));
 const relayHistory = async (iri, parse = JSON.parse) => {
   let reply;
-  const context = vm.createContext({ init: () => Promise.resolve(), __receiver: ops,
+  // This relay-only VM supplies stripped browser imports; the receiver above
+  // is already native-loaded. Site byte-pin initialization is covered by the
+  // real-worker browser smoke, not this entityHistory dispatch check.
+  const context = vm.createContext({ init: () => Promise.resolve(),
+    initializeEngine: (init) => init(), __receiver: ops,
     JSON: { parse, stringify: JSON.stringify },
     postMessage: (message) => { reply = structuredClone(message); } });
   vm.runInContext(`${workerSource}\nexplorer=__receiver;`, context);
