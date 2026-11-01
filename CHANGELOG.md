@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-11-01
+
+### Added
+
+- *(share)* Import reads the internal destination stamp itself (#954)([d707ec6](https://github.com/scbrown/quipu/commit/d707ec62fe105f3296143321e681aec8daa46f28))
+
+### Changed
+
+- *(signing)* Consume the published shared signing crate (#942)([cf03e65](https://github.com/scbrown/quipu/commit/cf03e657b39ca284633285c070c3d83969ff336a))
+
+
+
+### Fixed
+
+- *(store)* Refuse enrolled startup before migrations and retain writer revocation (#947)([8eaf183](https://github.com/scbrown/quipu/commit/8eaf1831cad75ec0ba3f9e13c7223feac8f9886e))
+
+
+
+### Perf
+
+- *(explore)* Restore the build-validated default store (#955)([46a26ac](https://github.com/scbrown/quipu/commit/46a26acddee30c6f23e0033bab79ef1e47468f8f))
+
 ## [0.16.6] - 2026-10-30
 
 ### Added
