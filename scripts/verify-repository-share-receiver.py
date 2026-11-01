@@ -103,9 +103,33 @@ def catalogue_controls(binary, work):
                 raise RuntimeError("altered catalogue passed acceptance")
 
 
+def internal_names(export):
+    # Entities publish under their w3id names (aegis-ro425e.18). The internal
+    # name may appear only as the object of the owl:sameAs link back to it.
+    same_as = "<http://www.w3.org/2002/07/owl#sameAs>"
+    renamed = linked = 0
+    for line in export.read_text().splitlines():
+        parts = line.split(" ", 2)
+        if len(parts) < 3:
+            continue
+        subject, predicate, rest = parts
+        if subject.startswith(f"<{AEGIS}"):
+            raise RuntimeError(f"internal entity name published as a subject: {subject}")
+        if subject.startswith("<https://w3id.org/intigraph/"):
+            renamed += 1
+        if predicate == same_as and rest.startswith(f"<{AEGIS}"):
+            linked += 1
+        elif predicate != "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>" and re.match(
+                rf"<{re.escape(AEGIS)}(code|doc|chunk)/|<{re.escape(AEGIS)}repo_", rest):
+            raise RuntimeError(f"internal entity name published as an object: {rest[:120]}")
+    if not renamed or not linked:
+        raise RuntimeError("no w3id entity names or former-name links in the share")
+
+
 def verify(binary, share, db, work):
     if re.search(r"(^|[^A-Za-z0-9_])aegis-[A-Za-z0-9]", (share / "export.nt").read_text()):
         raise RuntimeError("internal work identifiers escaped the public scope")
+    internal_names(share / "export.nt")
     query = (
         "SELECT (STR(?rule) AS ?iri) WHERE { ?rule a "
         "<http://aegis.gastown.local/ontology/InternalIdentifierPattern> }"

@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -30,6 +31,45 @@ class NativeReadTest(unittest.TestCase):
                        'iri\n----\n\n1 results\n'):
             with self.subTest(output=output), self.assertRaises(RuntimeError):
                 self.read(output)
+
+
+class InternalNameTest(unittest.TestCase):
+    A = "http://aegis.gastown.local/ontology/"
+    W = "https://w3id.org/intigraph/quipu/id/"
+    SAME = "<http://www.w3.org/2002/07/owl#sameAs>"
+    TYPE = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
+
+    def check(self, *lines):
+        with tempfile.TemporaryDirectory() as work:
+            export = Path(work) / "export.nt"
+            export.write_text("\n".join(lines) + "\n")
+            RECEIVER.internal_names(export)
+
+    def positive(self):
+        return [
+            f"<{self.W}doc/README.md> {self.TYPE} <{self.A}Document> .",
+            f"<{self.W}doc/README.md> {self.SAME} <{self.A}doc/quipu/README.md> .",
+            f"<{self.W}chunk/README.md#C1> <{self.A}inDocument> <{self.W}doc/README.md> .",
+            f'<{self.W}chunk/README.md#C1> <{self.A}mentions> "{self.A}doc/quipu/x" .',
+        ]
+
+    def test_renamed_and_linked_share_passes(self):
+        self.check(*self.positive())
+
+    def test_internal_names_and_missing_links_refuse(self):
+        for bad in (
+            [f"<{self.A}doc/quipu/README.md> {self.TYPE} <{self.A}Document> ."],
+            [f"<{self.A}repo_quipu> {self.TYPE} <{self.A}GitRepo> ."],
+            [f"<{self.W}chunk/x> <{self.A}inDocument> <{self.A}doc/quipu/README.md> ."],
+            [f"<{self.W}doc/x> <{self.A}touchesRepo> <{self.A}repo_quipu> ."],
+        ):
+            with self.subTest(bad=bad), self.assertRaises(RuntimeError):
+                self.check(*self.positive(), *bad)
+        unlinked = [line for line in self.positive() if self.SAME not in line]
+        with self.assertRaises(RuntimeError):
+            self.check(*unlinked)
+        with self.assertRaises(RuntimeError):
+            self.check()
 
 
 if __name__ == "__main__":

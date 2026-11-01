@@ -29,7 +29,7 @@ const server = http.createServer((req,res) => {
     const size=await page.locator("#graph circle").evaluateAll(ns=>[...new Set(ns.map(n=>n.getAttribute("r")))]);
     assert(size.length>1,"degree must change knot size in populated graph");
     const index=await page.locator("#graph [data-edge]").evaluateAll(lines=>lines.findIndex(line=>{
-      const e=JSON.parse(line.dataset.edge);return e.from==="https://quipu.dev/knowledge/vision"
+      const e=JSON.parse(line.dataset.edge);return ["https://w3id.org/intigraph/quipu/id/idea/vision","https://quipu.dev/knowledge/vision"].includes(e.from)
         && e.rel==="https://quipu.dev/knowledge/guides";
     }));
     assert(index>=0,"positive control: vision guides a decision");

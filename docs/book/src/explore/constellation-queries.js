@@ -4,10 +4,11 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 `;
 export function constellationQueries(prefixes = DEFAULT_PREFIXES) {
-  const K = "https://quipu.dev/knowledge/";
+  // Contributor ideas: their w3id names, or the former names in older packs.
+  const K = "https://quipu.dev/knowledge/", ID = "https://w3id.org/intigraph/quipu/id/idea/";
   return { knowledge: `${prefixes}
 SELECT ?subject ?predicate ?object WHERE {
-  ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${K}"))
+  ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${ID}") || STRSTARTS(STR(?s), "${K}"))
   BIND(STR(?s) AS ?subject) BIND(STR(?p) AS ?predicate) BIND(STR(?o) AS ?object)
 } LIMIT 2000`, files: `${prefixes} SELECT ?subject ?kind ?path WHERE {
         ?s rdf:type ?type ; aegis:filePath ?path .
