@@ -454,3 +454,25 @@ fn a_round_trip_keeps_blank_node_count() {
     assert_eq!(blanks(&target), blanks(&source));
     assert_eq!(blanks(&target), 1);
 }
+
+#[test]
+fn an_explicit_id_spelled_like_a_position_keeps_its_own_nodes() {
+    // Block 0 is explicitly `#1`; block 1 is anonymous, so its position is 1.
+    let text = "---\nid: urn:test:twins\ntitle: Twins\ntype: databook\nversion: 1.0.0\ncreated: 2026-11-01\nprocess:\n  transformer: t\n---\n\n\
+        <!-- databook:id: #1 -->\n<!-- databook:graph: urn:g:one -->\n```turtle\n_:x <urn:p> \"same\" .\n```\n\n\
+        <!-- databook:graph: urn:g:one -->\n```turtle\n_:x <urn:p> \"same\" .\n```\n";
+    let mut store = Store::open_in_memory().unwrap();
+    import(&mut store, text, &import_opts()).unwrap();
+    let first = subjects(&store, "urn:g:one");
+    assert_eq!(
+        first.len(),
+        2,
+        "explicit `#1` and position 1 are different blocks"
+    );
+    import(&mut store, text, &import_opts()).unwrap();
+    assert_eq!(
+        subjects(&store, "urn:g:one"),
+        first,
+        "and stay stable on re-import"
+    );
+}

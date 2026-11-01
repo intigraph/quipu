@@ -242,8 +242,10 @@ fn block_quads(block: &Block, format: RdfFormat) -> Result<Vec<Quad>> {
 }
 
 /// Blank-node names for one block. They derive from the document's id and
-/// version, the block's key (its `databook:id`, else its position) and its
-/// payload, plus each node's order of first appearance in the block. So
+/// version, the block's key and its payload, plus each node's order of first
+/// appearance in the block. The key is the block's `databook:id`, or else its
+/// position, and its kind is hashed separately: an explicit id spelled like a
+/// position (`#1`) cannot stand in for the anonymous block at that position. So
 /// importing the same document again gives the same nodes; no two blocks share
 /// a node, even with identical payloads; and one `trig` block keeps a node shared
 /// across the graphs it names.
@@ -253,14 +255,20 @@ struct BlockNodes {
 }
 
 impl BlockNodes {
-    fn new(book: &DataBook, key: &str, payload: &str) -> Self {
+    fn new(book: &DataBook, block: &Block, index: usize) -> Self {
+        let (kind, key) = match block.id() {
+            Some(id) => ("databook:id", id.to_string()),
+            None => ("position", index.to_string()),
+        };
         let mut hash = Sha256::new();
+        // Every part is length-prefixed, so the encoding is injective.
         for part in [
             "quipu-databook-bnodes-v1",
             &book.header.id,
             &book.header.version,
-            key,
-            payload,
+            kind,
+            &key,
+            &block.payload,
         ] {
             hash.update((part.len() as u64).to_be_bytes());
             hash.update(part.as_bytes());
@@ -334,10 +342,7 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
                     .or(block.meta.get("graph").map(String::as_str))
                     .or(book.header.named_graph.as_deref())
                     .unwrap_or(ROOT_GRAPH_IRI);
-                let key = block
-                    .id()
-                    .map_or_else(|| format!("#{index}"), str::to_string);
-                let mut nodes = BlockNodes::new(&book, &key, &block.payload);
+                let mut nodes = BlockNodes::new(&book, block, index);
                 for quad in block_quads(block, format)? {
                     let target = match (&quad.graph_name, opts.graph) {
                         (GraphName::NamedNode(g), None) => g.as_str().to_string(),
