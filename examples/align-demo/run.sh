@@ -67,15 +67,30 @@ decide_version=$(sed -n 's/^expected-version: \([^ ]*\).*/\1/p' "$work/decide.tx
 "$quipu" align apply "$work/decided.tsv" --graph-a "$graph_a" --graph-b "$graph_b" \
   --expected-version "$decide_version" --actor demo-operator --db "$b_db" > "$work/apply.txt" 2>&1
 
+# --- EXPORT AS STANDARD SSSOM (aegis-blt) --------------------------------------
+# The working set carries full IRIs and no licence; export is the separate,
+# read-only step that writes what another SSSOM tool can load. Prefixes and
+# the licence are the operator's to declare, so a missing licence is refused.
+export_flags=(--license "https://creativecommons.org/publicdomain/zero/1.0/"
+  --prefix "A=https://a.example/" --prefix "B=https://b.example/"
+  --prefix "demo=https://demo.example/agent/" --author-prefix demo)
+"$quipu" align export "$work/decided.tsv" "${export_flags[@]}" --out "$work/export.sssom.tsv" 2>/dev/null
+"$quipu" align export "$work/decided.tsv" "${export_flags[@]}" --format ttl --out "$work/export.sssom.ttl" 2>/dev/null
+set +e
+"$quipu" align export "$work/decided.tsv" --prefix "A=https://a.example/" > "$work/nolicence.txt" 2>&1
+nolicence_rc=$?
+set -e
+
 # --- QUERY ACROSS BOTH ---------------------------------------------------------
 "$quipu" query \
   'SELECT ?other WHERE { GRAPH ?g { <https://a.example/bobbin-release> <http://www.w3.org/2002/07/owl#sameAs> ?other } }' \
   --db "$b_db" > "$work/after.txt" 2> "$work/after.stderr"
 
-python3 - "$work" "$typo_rc" "$propose_version" "$decide_version" <<'SUMMARY' > "$work/actual.txt"
+python3 - "$work" "$typo_rc" "$propose_version" "$decide_version" "$nolicence_rc" <<'SUMMARY' > "$work/actual.txt"
 import pathlib, re, sys
 work = pathlib.Path(sys.argv[1]); typo_rc = sys.argv[2]
 propose_version, decide_version = sys.argv[3], sys.argv[4]
+nolicence_rc = sys.argv[5]
 
 def rows(name):
     """`quipu query` prints a TABLE, not JSON: header, dashes, rows, blank, 'N results'."""
@@ -111,6 +126,24 @@ print("6. APPLY                same_as={} written={} derived_graph_created={}".f
 print("7. QUERY ACROSS BOTH    sameAs={}".format(names("after.txt")))
 print("8. BOUNDARY             the alignment is a fact in its own graph, not an edit to either source")
 print("9. DERIVED GRAPH        quipu computed and created it; nobody had to name it in advance")
+
+tsv = (work / "export.sssom.tsv").read_text().splitlines()
+meta = [l[1:] for l in tsv if l.startswith("#")]
+table = [l.split("\t") for l in tsv if not l.startswith("#")]
+head, body = table[0], table[1:]
+col = lambda row, name: row[head.index(name)] if name in head else ""
+ids = [col(r, s) for r in body for s in ("subject_id", "predicate_id", "object_id")]
+curies = all(":" in i and "://" not in i for i in ids)
+dated = all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", col(r, "mapping_date")) for r in body if col(r, "author_id"))
+print("10. EXPORT SSSOM/TSV    rows={} curies_only={} license={} author={} dated={}".format(
+    len(body), str(curies).lower(), str(any(m.startswith("license: ") for m in meta)).lower(),
+    ",".join(sorted({col(r, "author_id") for r in body if col(r, "author_id")})) or "none",
+    str(dated).lower()))
+ttl = (work / "export.sssom.ttl").read_text()
+print("11. EXPORT SSSOM/RDF    mapping_set={} axioms={}".format(
+    str(" a sssom:MappingSet" in ttl).lower(), ttl.count(" a owl:Axiom")))
+print("12. NO LICENCE REFUSED  exit={} refused={}".format(
+    nolicence_rc, str("--license" in (work / "nolicence.txt").read_text()).lower()))
 SUMMARY
 
 if [[ ${1:-} == --check ]]; then

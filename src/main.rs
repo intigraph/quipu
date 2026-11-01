@@ -482,6 +482,7 @@ COMMANDS:
     qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
     qp align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
+    qp align export <set.tsv> --license <iri> [--format tsv|ttl] [--prefix <name>=<iri>]... [--author-prefix <name>] [--out <file>]
     qp status <share-dir> [--db <path>]
     qp merge <share-dir> [--actor <id>] [--db <path>]
     qp merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]

@@ -20,6 +20,7 @@ fn mapping(subject: &str, object: &str) -> Mapping {
         author_id: None,
         quipu_review: None,
         quipu_reviewed_by: None,
+        mapping_date: None,
     }
 }
 

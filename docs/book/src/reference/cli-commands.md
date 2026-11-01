@@ -934,7 +934,7 @@ Switches: `--json`.
 
 Propose, decide and apply cross-graph alignments.
 
-Subcommands: `align propose`, `align decide`, `align apply`.
+Subcommands: `align propose`, `align decide`, `align apply`, `align export`.
 
 ### `qp align propose`
 
@@ -965,6 +965,16 @@ qp align apply <set.tsv>
 ```
 
 Value options: `--graph-a <VALUE>`, `--graph-b <VALUE>`, `--expected-version <VALUE>`, `--actor <VALUE>`.
+
+### `qp align export`
+
+Export a mapping set as standard SSSOM TSV or RDF Turtle.
+
+```text
+qp align export <set.tsv>
+```
+
+Value options: `--license <VALUE>`, `--format <VALUE>`, `--prefix <VALUE>`, `--author-prefix <VALUE>`, `--out <VALUE>`.
 
 ## `qp propose`
 

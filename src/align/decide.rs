@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 
 use crate::error::{Error, Result};
 
-use super::sssom::{MappingSet, Review};
+use super::sssom::{MappingSet, Review, is_xsd_date};
 
 /// What the operator said about one candidate pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +137,34 @@ impl DecideReport {
 /// * a decision names a row that already carries a judgement (that is a
 ///   retraction, not a decision).
 pub fn decide(set: &MappingSet, decisions: &[DecisionRow], reviewer: &str) -> Result<DecideReport> {
+    decide_dated(set, decisions, reviewer, None)
+}
+
+/// [`decide`], also stamping SSSOM `mapping_date` on every row it rules on.
+///
+/// `mapping_date` is the day the operator ruled, as an `xsd:date`
+/// (`YYYY-MM-DD`). It is stamped on accepted, negated AND declined rows: all
+/// three record when the pair was seen. A row this call does not touch keeps
+/// whatever date it had, so re-deciding a set never re-dates earlier rulings.
+///
+/// # Errors
+///
+/// Everything [`decide`] refuses, plus a `mapping_date` that is not
+/// `YYYY-MM-DD` — refused rather than written, because an SSSOM reader would
+/// either reject the set or read a different day.
+pub fn decide_dated(
+    set: &MappingSet,
+    decisions: &[DecisionRow],
+    reviewer: &str,
+    mapping_date: Option<&str>,
+) -> Result<DecideReport> {
+    if let Some(date) = mapping_date
+        && !is_xsd_date(date)
+    {
+        return Err(Error::InvalidValue(format!(
+            "mapping_date {date:?} is not an xsd:date (YYYY-MM-DD)"
+        )));
+    }
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue(
             "a decision needs a reviewer: the derived triple carries it as provenance, \
@@ -203,6 +231,9 @@ pub fn decide(set: &MappingSet, decisions: &[DecisionRow], reviewer: &str) -> Re
                 mapping.quipu_review = Some(Review::Declined);
                 mapping.quipu_reviewed_by = Some(reviewer.to_string());
             }
+        }
+        if let Some(date) = mapping_date {
+            mapping.mapping_date = Some(date.to_string());
         }
         seen.insert(key, ());
         applied += 1;
