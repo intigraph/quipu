@@ -43,8 +43,8 @@ mod lexical;
 #[path = "proposal_migration_plan.rs"]
 mod plan;
 
-pub(crate) use apply::accept_with_migration;
 pub use apply::{DryRun, dry_run};
+pub(crate) use apply::{Issue, accept_with_migration, issue_key, refusals, target_queries};
 pub use guard::{max_facts, set_max_facts};
 pub use plan::{MigrationPlan, OpReport, plan};
 

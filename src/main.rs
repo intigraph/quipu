@@ -76,6 +76,7 @@ mod cli_pointer;
 mod cli_policy;
 mod cli_prime;
 mod cli_propose;
+mod cli_propose_plan;
 mod cli_quarantine;
 mod cli_render;
 mod cli_rule_answers;

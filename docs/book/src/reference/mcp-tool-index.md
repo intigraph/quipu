@@ -6,15 +6,18 @@ All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl`
 
 ## `quipu_accept_proposal`
 
-Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through.
+Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through. Before accepting, a blast-radius plan is computed and returned as 'plan'; a plan whose risk score exceeds risk_threshold, or that cannot be determined, is refused unless accept_risk=true with a risk_reason (recorded in the decision note).
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
+| `accept_risk` | boolean | no | Accept a failing or undetermined plan anyway; requires risk_reason |
 | `decided_by` | string | yes | Identity of the approver (required; there is no default) |
 | `dry_run` | boolean | no | Report what acceptance would do without accepting (default false) |
 | `id` | integer | yes | Proposal ID to accept |
 | `limit` | integer | no | Dry run: maximum sample facts and violations per list (default 50, max 1000) |
 | `note` | string | no | Optional acceptance note |
+| `risk_reason` | string | no | Why the risk is accepted; recorded in the decision note |
+| `risk_threshold` | integer | no | Refuse when the plan's risk score is above this (0-100; default 40 or QUIPU_PROPOSAL_RISK_THRESHOLD) |
 | `timestamp` | string | no | ISO-8601 timestamp |
 
 ## `quipu_acquire`
@@ -469,6 +472,8 @@ List schema evolution proposals, optionally filtered by status (pending, accepte
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
+| `plan` | boolean | no | Attach a blast-radius plan to each pending proposal: affected classes/properties, instances that would newly fail SHACL, stored queries and named graphs/snapshots using changed terms, and a 0-100 risk score with its inputs (default false; writes nothing) |
+| `risk_threshold` | integer | no | Plan: score above which the verdict is fail (0-100; default 40 or QUIPU_PROPOSAL_RISK_THRESHOLD) |
 | `status` | string: `pending`, `accepted`, `rejected` | no | Filter by proposal status (default: all) |
 
 ## `quipu_load_ontology`

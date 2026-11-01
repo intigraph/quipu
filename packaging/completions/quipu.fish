@@ -82,7 +82,7 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "policy" -d 'Draft an ad
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "gate" -d 'Judge a candidate policy set over recorded history without writing'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "path" -d 'Golden-path analysis: provenance cone, backtest and draft'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "align" -d 'Propose, decide and apply cross-graph alignments'
-complete -c quipu -n "__fish_quipu_needs_command" -f -a "propose" -d 'List, submit, accept or reject schema change proposals'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "propose" -d 'List, submit, plan, accept or reject schema change proposals'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "memory" -d 'Read, export, receipt or commit versioned file memory'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "attest" -d 'Register and manage attested session bindings'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "signer" -d 'Enroll and manage hardware signers for attested writes'
@@ -602,13 +602,14 @@ complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subco
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -l expected-version -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -l actor -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l status -r
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "list" -d 'List schema change proposals, optionally by status'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "submit" -d 'Submit a schema change proposal'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "accept" -d 'Accept a pending proposal'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "reject" -d 'Reject a pending proposal'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -l status -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "list" -d 'List schema change proposals, optionally by status'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "submit" -d 'Submit a schema change proposal'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "plan" -d 'Report a pending proposal\'s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "accept" -d 'Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "reject" -d 'Reject a pending proposal'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -l status -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
@@ -617,9 +618,16 @@ complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_sub
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -l rationale -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -l trigger -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l format -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l risk-threshold -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l decided-by -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l note -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l reason -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l risk-threshold -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l accept-risk
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l decided-by -r

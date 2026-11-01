@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-PROPOSE-PLAN 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-propose\-plan \- Report a pending proposal\*(Aqs blast radius and 0\-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined
+.SH SYNOPSIS
+\fBquipu propose plan\fR [\fB\-\-db\fR] [\fB\-\-format\fR] [\fB\-\-risk\-threshold\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIid\fR> 
+.SH DESCRIPTION
+Report a pending proposal\*(Aqs blast radius and 0\-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-format\fR \fI<VALUE>\fR
+
+.TP
+\fB\-\-risk\-threshold\fR \fI<VALUE>\fR
+
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIid\fR>
+

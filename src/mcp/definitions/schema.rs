@@ -48,13 +48,15 @@ pub(super) fn defs() -> Vec<JsonValue> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "description": "Filter by proposal status (default: all)" }
+                    "status": { "type": "string", "enum": ["pending", "accepted", "rejected"], "description": "Filter by proposal status (default: all)" },
+                    "plan": { "type": "boolean", "description": "Attach a blast-radius plan to each pending proposal: affected classes/properties, instances that would newly fail SHACL, stored queries and named graphs/snapshots using changed terms, and a 0-100 risk score with its inputs (default false; writes nothing)" },
+                    "risk_threshold": { "type": "integer", "description": "Plan: score above which the verdict is fail (0-100; default 40 or QUIPU_PROPOSAL_RISK_THRESHOLD)" }
                 }
             }
         }),
         serde_json::json!({
             "name": "quipu_accept_proposal",
-            "description": "Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through.",
+            "description": "Accept a pending schema proposal. For shape proposals, validates the Turtle before writing to the shapes table. A proposal carrying a migration runs it in the same transaction; a refused migration leaves the proposal pending and nothing written. With dry_run=true nothing is accepted: the report lists existing facts the new shapes would refuse, what the migration would change, and whether acceptance would go through. Before accepting, a blast-radius plan is computed and returned as 'plan'; a plan whose risk score exceeds risk_threshold, or that cannot be determined, is refused unless accept_risk=true with a risk_reason (recorded in the decision note).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -63,6 +65,9 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "note": { "type": "string", "description": "Optional acceptance note" },
                     "dry_run": { "type": "boolean", "description": "Report what acceptance would do without accepting (default false)" },
                     "limit": { "type": "integer", "description": "Dry run: maximum sample facts and violations per list (default 50, max 1000)" },
+                    "risk_threshold": { "type": "integer", "description": "Refuse when the plan's risk score is above this (0-100; default 40 or QUIPU_PROPOSAL_RISK_THRESHOLD)" },
+                    "accept_risk": { "type": "boolean", "description": "Accept a failing or undetermined plan anyway; requires risk_reason" },
+                    "risk_reason": { "type": "string", "description": "Why the risk is accepted; recorded in the decision note" },
                     "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
                 },
                 "required": ["id", "decided_by"]

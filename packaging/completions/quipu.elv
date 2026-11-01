@@ -77,7 +77,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand gate 'Judge a candidate policy set over recorded history without writing'
             cand path 'Golden-path analysis: provenance cone, backtest and draft'
             cand align 'Propose, decide and apply cross-graph alignments'
-            cand propose 'List, submit, accept or reject schema change proposals'
+            cand propose 'List, submit, plan, accept or reject schema change proposals'
             cand memory 'Read, export, receipt or commit versioned file memory'
             cand attest 'Register and manage attested session bindings'
             cand signer 'Enroll and manage hardware signers for attested writes'
@@ -933,7 +933,8 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --help 'Print help'
             cand list 'List schema change proposals, optionally by status'
             cand submit 'Submit a schema change proposal'
-            cand accept 'Accept a pending proposal'
+            cand plan 'Report a pending proposal''s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined'
+            cand accept 'Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason'
             cand reject 'Reject a pending proposal'
         }
         &'quipu;propose;list'= {
@@ -950,10 +951,20 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;propose;plan'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'format'
+            cand --risk-threshold 'risk-threshold'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;propose;accept'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --decided-by 'decided-by'
             cand --note 'note'
+            cand --reason 'reason'
+            cand --risk-threshold 'risk-threshold'
+            cand --accept-risk 'accept-risk'
             cand -h 'Print help'
             cand --help 'Print help'
         }

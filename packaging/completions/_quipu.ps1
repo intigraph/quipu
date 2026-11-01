@@ -80,7 +80,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('gate', 'gate', [CompletionResultType]::ParameterValue, 'Judge a candidate policy set over recorded history without writing')
             [CompletionResult]::new('path', 'path', [CompletionResultType]::ParameterValue, 'Golden-path analysis: provenance cone, backtest and draft')
             [CompletionResult]::new('align', 'align', [CompletionResultType]::ParameterValue, 'Propose, decide and apply cross-graph alignments')
-            [CompletionResult]::new('propose', 'propose', [CompletionResultType]::ParameterValue, 'List, submit, accept or reject schema change proposals')
+            [CompletionResult]::new('propose', 'propose', [CompletionResultType]::ParameterValue, 'List, submit, plan, accept or reject schema change proposals')
             [CompletionResult]::new('memory', 'memory', [CompletionResultType]::ParameterValue, 'Read, export, receipt or commit versioned file memory')
             [CompletionResult]::new('attest', 'attest', [CompletionResultType]::ParameterValue, 'Register and manage attested session bindings')
             [CompletionResult]::new('signer', 'signer', [CompletionResultType]::ParameterValue, 'Enroll and manage hardware signers for attested writes')
@@ -1039,7 +1039,8 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List schema change proposals, optionally by status')
             [CompletionResult]::new('submit', 'submit', [CompletionResultType]::ParameterValue, 'Submit a schema change proposal')
-            [CompletionResult]::new('accept', 'accept', [CompletionResultType]::ParameterValue, 'Accept a pending proposal')
+            [CompletionResult]::new('plan', 'plan', [CompletionResultType]::ParameterValue, 'Report a pending proposal''s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined')
+            [CompletionResult]::new('accept', 'accept', [CompletionResultType]::ParameterValue, 'Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason')
             [CompletionResult]::new('reject', 'reject', [CompletionResultType]::ParameterValue, 'Reject a pending proposal')
             break
         }
@@ -1059,10 +1060,21 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;propose;plan' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--risk-threshold', '--risk-threshold', [CompletionResultType]::ParameterName, 'risk-threshold')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;propose;accept' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'decided-by')
             [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'note')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--risk-threshold', '--risk-threshold', [CompletionResultType]::ParameterName, 'risk-threshold')
+            [CompletionResult]::new('--accept-risk', '--accept-risk', [CompletionResultType]::ParameterName, 'accept-risk')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

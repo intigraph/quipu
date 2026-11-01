@@ -968,7 +968,7 @@ Value options: `--graph-a <VALUE>`, `--graph-b <VALUE>`, `--expected-version <VA
 
 ## `qp propose`
 
-List, submit, accept or reject schema change proposals.
+List, submit, plan, accept or reject schema change proposals.
 
 ```text
 qp propose
@@ -996,15 +996,27 @@ qp propose submit <kind> <target> <diff-file>
 
 Value options: `--proposer <VALUE>`, `--rationale <VALUE>`, `--trigger <VALUE>`.
 
+### `qp propose plan`
+
+Report a pending proposal's blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined.
+
+```text
+qp propose plan <id>
+```
+
+Value options: `--format <VALUE>`, `--risk-threshold <VALUE>`.
+
 ### `qp propose accept`
 
-Accept a pending proposal.
+Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason.
 
 ```text
 qp propose accept <id>
 ```
 
-Value options: `--decided-by <VALUE>`, `--note <VALUE>`.
+Value options: `--decided-by <VALUE>`, `--note <VALUE>`, `--reason <VALUE>`, `--risk-threshold <VALUE>`.
+
+Switches: `--accept-risk`.
 
 ### `qp propose reject`
 
