@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "db7bd1113a6b9d4c66ad9379e5699bda4974256d65c02e33dfc62f8798f59c68",
+      "source_sha256": "edbb85a57cca28fcc4abb5511e0347aeacf030a7ebde1b7d3604064340c3aff6",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "de6fc623d24926d757c92230455d5d62abde3f6c1dff9528116a5b522cc8cb77",
+      "source_sha256": "19ccb14fe42003427c42b310bd9fd99f0d27528d5c4a58ba04d62c0520992502",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
