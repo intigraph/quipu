@@ -14,9 +14,13 @@ All notable changes to this project will be documented in this file.
 
 - *(signing)* Consume the published shared signing crate (#942)([cf03e65](https://github.com/scbrown/quipu/commit/cf03e657b39ca284633285c070c3d83969ff336a))
 
+
+
 ### Fixed
 
 - *(store)* Refuse enrolled startup before migrations and retain writer revocation (#947)([8eaf183](https://github.com/scbrown/quipu/commit/8eaf1831cad75ec0ba3f9e13c7223feac8f9886e))
+
+
 
 ### Perf
 
