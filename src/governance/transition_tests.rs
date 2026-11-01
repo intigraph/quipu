@@ -613,3 +613,103 @@ fn udr9_self_registration_and_transition_in_one_write_are_rolled_back_together()
         ));
     }
 }
+
+#[test]
+fn udr9_a_finite_unsigned_root_tier_cannot_authorize_a_persisted_transition() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    crate::governance::trust_root::test_support::ensure_root(&mut store);
+    let kp = keypair();
+    register(&mut store, &public_key_hex(&kp), 0);
+    let reg = store.intern("urn:shuttle:registration:alice").unwrap();
+    let mut tier = assert_datum(
+        &mut store,
+        reg,
+        crate::governance::verifier_registry::TRUST_TIER,
+        Value::Str("agent".into()),
+    );
+    tier.valid_to = Some("2099-01-01T00:00:00Z".into());
+    let enrollment = store.transact(&[tier], TS, None, None);
+    let datums = transition_datums(&mut store, "reviewed", Some(&sign(&kp, "open", "reviewed")));
+    let transition = store.transact(&datums, TS, None, None);
+    eprintln!("finite unsigned ROOT tier: enrollment={enrollment:?}; transition={transition:?}");
+    assert!(
+        matches!(transition, Err(Error::PolicyDenied(_))),
+        "an unsigned finite tier must not authorize a persisted transition: {transition:?}"
+    );
+    assert!(!matches!(
+        crate::sparql::query(&store, "ASK { <urn:shuttle:event:triage-7:0> ?p ?o }").unwrap(),
+        crate::sparql::QueryResult::Ask(true)
+    ));
+}
+
+#[test]
+fn udr9_a_bounded_key_cannot_shadow_a_human_endorsed_registration() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    let genuine = keypair();
+    register(&mut store, &public_key_hex(&genuine), 0);
+    govern(&mut store);
+    let attacker = keypair();
+    let reg = store.intern("urn:shuttle:registration:alice").unwrap();
+    let mut key = assert_datum(
+        &mut store,
+        reg,
+        &format!("{DEFAULT_BASE_NS}publicKey"),
+        Value::Str(public_key_hex(&attacker)),
+    );
+    key.valid_to = Some("2099-01-01T00:00:00Z".into());
+    // The bounded row remains ordinary data; it must never become authority.
+    store.transact(&[key], TS, None, None).unwrap();
+    let forged = transition_datums(
+        &mut store,
+        "reviewed",
+        Some(&sign(&attacker, "open", "reviewed")),
+    );
+    assert!(matches!(
+        store.transact(&forged, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    let valid = transition_datums(
+        &mut store,
+        "reviewed",
+        Some(&sign(&genuine, "open", "reviewed")),
+    );
+    store.transact(&valid, TS, None, None).unwrap();
+}
+
+#[test]
+fn udr9_bounded_human_tier_is_raw_data_not_current_human_authority() {
+    use crate::governance::verifier_registry::{Scope, Witness, governed_tier, registered_keys};
+    let mut store = Store::open_in_memory().unwrap();
+    crate::governance::trust_root::test_support::ensure_root(&mut store);
+    let kp = keypair();
+    let key = public_key_hex(&kp);
+    register(&mut store, &key, 0);
+    let reg = store.intern("urn:shuttle:registration:alice").unwrap();
+    let mut tier = assert_datum(
+        &mut store,
+        reg,
+        crate::governance::verifier_registry::TRUST_TIER,
+        Value::Str("human".into()),
+    );
+    tier.valid_to = Some("2099-01-01T00:00:00Z".into());
+    store.transact(&[tier], TS, None, None).unwrap();
+    let now = Witness::now();
+    assert_eq!(
+        registered_keys(&store, "alice", None, &now, Scope::Root).unwrap(),
+        vec![key]
+    );
+    for scope in [Scope::HumanTier, Scope::Governed] {
+        assert!(
+            registered_keys(&store, "alice", None, &now, scope)
+                .unwrap()
+                .is_empty()
+        );
+    }
+    assert!(
+        governed_tier(&store, "urn:shuttle:registration:alice", &now)
+            .unwrap()
+            .is_none()
+    );
+}

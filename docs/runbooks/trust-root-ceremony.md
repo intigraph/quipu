@@ -135,3 +135,18 @@ its own controller disposition and preserved evidence.
 Root on the quipu host. Someone who can edit the database file, replace
 the binary, or run `import`/`unpack`/`restore` is past this gate. The gate
 stops graph writers (anything holding the write bearer), not hosts.
+
+### Current registration validity
+
+Current human/governed authority checks accept only open-ended ROOT facts:
+registration type, verifier, key, policy scope and tier. The trust-root snapshot
+seals that same open-ended set. A native assertion with a finite `valid_to` is
+still ordinary graph data, even when its expiry is in the future; it cannot
+supply current transition or human authority. Do not copy finite tier or key
+rows into a migration as evidence of endorsement. Re-enrol the reviewed facts
+through the existing human-signed ceremony. Revoke with a signed amendment;
+there is no automatic expiry-to-authority conversion.
+
+Historical transaction-bound lookups retain the existing revocation semantics.
+This repair prevents new transition authorization by bounded unsigned facts; it
+does not retrospectively certify stored events or arbitrary historical tiers.

@@ -40,3 +40,33 @@ normalizes terminal line endings. No inline player is promised. The
 [migration runbook](../../runbooks/trust-root-ceremony.md#shuttle-transition-registrations-aegis-udr9)
 explains why existing named-graph keys need explicit ROOT migration and human
 endorsement before enforced transitions. Flags remain unchanged.
+
+## Finite assertion review regression
+
+The independent review found that a native writer could add a finite unsigned
+ROOT tier ending in 2099: the writer snapshot excluded it but current authority
+accepted it. On published head `ea541825a2c958a5e5552702b236a68502e6c64a`,
+the preserved real-Store control enrolled transaction 3 and persisted transition
+4 without a human amendment. Its failed safety assertion remains recorded.
+
+The [finite recording](finite-output.log.gz), [timing](finite-timing.log) and
+[transcript](finite-transcript.txt) show that retained original failure followed
+by an actual candidate execution of the same safety assertion. The candidate
+refuses the transition. The baseline portion is retained output, not a new
+execution of the old binary. Additional native controls refuse a bounded key
+shadow and a bounded human tier, retain raw ROOT visibility, and admit the real
+endorsed key. Current authority requires the open-ended fact set sealed by the
+writer; historical transaction-bound lookups are not retrospectively certified.
+
+Build the candidate's no-default library test executable, then run:
+
+```sh
+TRANSITION_FINITE_TEST_BINARY=/path/to/owned/quipu-test-artifact \
+  bash docs/demos/transition-trust-root/finite-probe.sh
+```
+
+Replay the new output exactly as above, substituting `finite-output.log.gz`,
+`finite-output.log` and `finite-timing.log`. All new operations are in memory.
+
+Candidate registry source SHA256: `4596102cab436b6812bce5ecf15d7e51a563f80a14208f5d1c02f86e82fa3393`.
+Native regression source SHA256: `993684fc195978e7828e6137b94e2065a7ac023d009b470fafc8751dc92ca702`.

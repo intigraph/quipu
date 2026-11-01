@@ -1,0 +1,3 @@
+Retained native failure on published ea541825 (real human root, ordinary Store transactions):
+finite unsigned ROOT tier: enrollment=Ok(3); transition=Ok(4)
+Safety assertion FAILED: unsigned finite tier authorized a persisted transition.
