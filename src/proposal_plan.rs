@@ -16,7 +16,8 @@
 //!
 //! The verdict is `pass` (score at or under the threshold), `fail` (over it)
 //! or `undetermined` (the plan could not be computed honestly: SHACL compiled
-//! out, a SPARQL-based `sh:target`, or a focus set over [`MAX_FOCUS`]). An
+//! out, a SPARQL-based `sh:target`, a diff that is not Turtle, or a focus set
+//! over [`MAX_FOCUS`]). An
 //! undetermined plan never passes. Accept surfaces call [`gate`], which
 //! refuses anything but `pass` unless the caller accepts the risk with a reason.
 
@@ -170,12 +171,23 @@ pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
             "proposal {id} is not pending; a plan only previews an acceptance"
         )));
     }
-    let proposed = terms(&p.diff)?;
+    // A diff that is not Turtle (the schema allows a JSON patch) cannot be
+    // planned: that is `undetermined`, never an error that blocks every accept.
+    let (proposed, unparsed) = match terms(&p.diff) {
+        Ok(t) => (t, None),
+        Err(e) => (
+            Terms::default(),
+            Some(format!(
+                "the diff does not parse as Turtle ({e}); nothing in it can be planned"
+            )),
+        ),
+    };
     let mut undetermined = proposed.undetermined.clone();
+    undetermined.extend(unparsed.clone());
     let mut removed_terms = BTreeSet::new();
     let mut newly_failing = NewlyFailing::default();
     let mut in_scope = 0;
-    if p.kind == ProposalKind::Shape {
+    if p.kind == ProposalKind::Shape && unparsed.is_none() {
         let current = store
             .list_shapes()?
             .into_iter()
@@ -350,12 +362,16 @@ fn newly_failing_under(
 }
 
 /// The plan an accept surface gates on, or `None` when proposal `id` is not
-/// pending (or does not exist), so the accept itself reports that as before.
+/// pending, does not exist, or is a shape proposal whose Turtle does not
+/// parse: the accept itself reports each of those as before.
 ///
 /// # Errors
 /// As [`plan`], for a pending proposal.
 pub fn plan_for_accept(store: &Store, id: i64, threshold: u8) -> Result<Option<ProposalPlan>> {
     match store.get_proposal(id)? {
+        // A shape proposal whose Turtle does not parse is refused by the
+        // accept itself, with its own message; the plan would only mask it.
+        Some(p) if p.kind == ProposalKind::Shape && terms(&p.diff).is_err() => Ok(None),
         Some(p) if p.status == ProposalStatus::Pending => plan(store, id, threshold).map(Some),
         _ => Ok(None),
     }

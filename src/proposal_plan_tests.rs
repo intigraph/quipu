@@ -345,3 +345,26 @@ fn a_frozen_graph_using_a_changed_term_is_reported_as_a_snapshot() {
     assert_eq!(plan.named_graphs, ["http://example.org/g/live"]);
     assert_eq!(plan.snapshots, ["http://example.org/g/2026-07"]);
 }
+
+#[test]
+fn a_diff_that_is_not_turtle_is_undetermined_not_an_error() {
+    let store = store_with(PEOPLE, 0);
+    let id = propose(
+        &store,
+        &ProposalKind::Ontology,
+        r#"{"op": "add", "path": "/x"}"#,
+    );
+    let p = plan(&store, id, 100).unwrap();
+    assert_eq!(p.risk.verdict, Verdict::Undetermined);
+    assert!(
+        p.undetermined[0].contains("does not parse as Turtle"),
+        "{:?}",
+        p.undetermined
+    );
+    // The gate refuses it unless the risk is accepted with a reason.
+    assert!(gate(&p, None, None).is_err());
+    assert!(gate(&p, Some("JSON patch reviewed by hand"), None).is_ok());
+    // A shape proposal with bad Turtle is left to the accept's own refusal.
+    let bad = propose(&store, &ProposalKind::Shape, "not turtle {{");
+    assert!(plan_for_accept(&store, bad, 40).unwrap().is_none());
+}

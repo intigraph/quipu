@@ -177,8 +177,10 @@ It reports:
 
 The verdict is `pass` when the score is at or under the threshold, `fail` when
 it is above it, and `undetermined` when the plan cannot be computed honestly:
-SHACL compiled out, a SPARQL-based `sh:target`, or more than 50,000 focus
-nodes. `quipu propose plan` exits 0, 1 and 2 for these. The threshold is 40
+SHACL compiled out, a SPARQL-based `sh:target`, a diff that is not Turtle
+(such as a JSON patch), or more than 50,000 focus nodes. A shape proposal
+whose Turtle does not parse is not planned at accept; the accept refuses it
+with its own message, as before. `quipu propose plan` exits 0, 1 and 2 for these. The threshold is 40
 unless `QUIPU_PROPOSAL_RISK_THRESHOLD` sets another default, and a call can pass
 `--risk-threshold` (CLI) or `risk_threshold` (MCP/REST).
 
