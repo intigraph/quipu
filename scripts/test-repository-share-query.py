@@ -167,7 +167,7 @@ class RepositoryQuery(unittest.TestCase):
             refused = {
                 "arbitrary": f"<{new}> {same} <https://example.org/other> .",
                 "mismatched path": f"<{new}> {same} <{A}doc/quipu/OTHER.md> .",
-                "other repository": f"<{new}> {same} <{A}doc/quipu/README.md> .",
+                "other repository": f"<{new}> {same} <{A}doc/bobbin/README.md> .",
                 "reverse": f"<{own}> {same} <{new}> .",
                 "public to public": f"<{new}> {same} <https://w3id.org/intigraph/quipu/id/doc/README.md> .",
                 "second link": f"<{new}> {same} <{own}> .\n<{new}> {same} <{own}> .",
