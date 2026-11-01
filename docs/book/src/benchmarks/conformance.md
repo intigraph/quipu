@@ -378,6 +378,7 @@ status, and diagnostic or unsupported reason.
 Quipu passes **98/98** manifest-reachable SHACL Core cases.
 SHACL-SPARQL remains a deliberate non-goal: **0/22** pass and 22 are unsupported.
 Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.
+A shapes graph that uses SHACL-SPARQL (`sh:sparql`, `sh:select`, `sh:ask`, SPARQL validators or SPARQL-based constraint components) is refused when it is loaded, whether stored or sent with a request, with an `unsupported SHACL-SPARQL` error naming the shape. Such a shape is never loaded and then ignored.
 This score uses the context-free native validator on whole graphs; the write path is measured below.
 
 Pinned W3C Data Shapes revision: `9c863967bceaef1a87c24e4dd761eda763823120`.

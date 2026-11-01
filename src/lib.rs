@@ -124,6 +124,8 @@ pub mod shacl_context;
 pub mod shacl_cycles;
 #[cfg(feature = "shacl")]
 mod shacl_debt;
+/// Refuse SHACL-SPARQL shapes, which are not evaluated (aegis-rk4).
+pub mod shacl_unsupported;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod verified_write;
