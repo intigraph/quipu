@@ -182,6 +182,18 @@ pub fn parse(text: &str) -> Result<DataBook> {
         )));
     }
     let blocks = blocks(&lines, body_start)?;
+    // Block ids are document-scoped and unique (SPEC §7.1); import keys blank
+    // nodes and fragment addresses on them.
+    let mut ids = std::collections::BTreeSet::new();
+    if let Some(dup) = blocks
+        .iter()
+        .filter_map(Block::id)
+        .find(|id| !ids.insert(*id))
+    {
+        return Err(invalid(format!(
+            "databook:id `{dup}` is used by more than one block"
+        )));
+    }
     if blocks.iter().all(|b| b.label_kind() == BlockKind::Display) {
         return Err(invalid(
             "no fenced data block; a DataBook needs at least one",

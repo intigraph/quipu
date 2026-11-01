@@ -352,3 +352,105 @@ fn a_shapes_only_databook_counts_its_shapes() {
         ["graph.triple_count says 5, the shacl blocks hold 2"]
     );
 }
+
+/// Two blocks with the same `_:x` payload, each with its own `databook:id`.
+fn twin_blocks(graph_a: &str, graph_b: &str) -> String {
+    format!(
+        "---\nid: urn:test:twins\ntitle: Twins\ntype: databook\nversion: 1.0.0\ncreated: 2026-11-01\nprocess:\n  transformer: t\n---\n\n\
+         <!-- databook:id: first -->\n<!-- databook:graph: {graph_a} -->\n```turtle\n_:x <urn:p> \"same\" .\n```\n\n\
+         <!-- databook:id: second -->\n<!-- databook:graph: {graph_b} -->\n```turtle\n_:x <urn:p> \"same\" .\n```\n"
+    )
+}
+
+/// The distinct subjects of `<urn:p>` facts in `graph`, as entity ids.
+fn subjects(store: &Store, graph: &str) -> BTreeSet<i64> {
+    let g = store.lookup(graph).unwrap().unwrap();
+    let p = store.lookup("urn:p").unwrap().unwrap();
+    store
+        .current_facts_in_graph(g)
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.attribute == p)
+        .map(|f| f.entity)
+        .collect()
+}
+
+#[test]
+fn identical_blocks_in_one_graph_keep_distinct_blank_nodes() {
+    let text = twin_blocks("urn:g:one", "urn:g:one");
+    let mut store = Store::open_in_memory().unwrap();
+    import(&mut store, &text, &import_opts()).unwrap();
+    let first = subjects(&store, "urn:g:one");
+    assert_eq!(first.len(), 2, "two blocks, two blank nodes");
+
+    // Re-importing the same document is deterministic: the same two nodes.
+    import(&mut store, &text, &import_opts()).unwrap();
+    assert_eq!(subjects(&store, "urn:g:one"), first);
+
+    // Without ids the blocks are keyed by position, and still stay apart.
+    let anonymous = text
+        .replace("<!-- databook:id: first -->\n", "")
+        .replace("<!-- databook:id: second -->\n", "");
+    let mut store = Store::open_in_memory().unwrap();
+    import(&mut store, &anonymous, &import_opts()).unwrap();
+    assert_eq!(subjects(&store, "urn:g:one").len(), 2);
+}
+
+#[test]
+fn identical_blocks_in_two_graphs_share_no_blank_node() {
+    let mut store = Store::open_in_memory().unwrap();
+    import(
+        &mut store,
+        &twin_blocks("urn:g:one", "urn:g:two"),
+        &import_opts(),
+    )
+    .unwrap();
+    let (one, two) = (subjects(&store, "urn:g:one"), subjects(&store, "urn:g:two"));
+    assert_eq!((one.len(), two.len()), (1, 1));
+    assert!(one.is_disjoint(&two), "{one:?} {two:?}");
+}
+
+#[test]
+fn one_trig_block_shares_its_blank_node_across_graphs() {
+    let text = "---\nid: urn:test:shared\ntitle: S\ntype: databook\nversion: 1.0.0\ncreated: 2026-11-01\nprocess:\n  transformer: t\n---\n\n```trig\n<urn:g:one> { _:x <urn:p> \"in one\" . }\n<urn:g:two> { _:x <urn:p> \"in two\" . _:y <urn:p> \"other\" . }\n```\n";
+    let mut store = Store::open_in_memory().unwrap();
+    import(&mut store, text, &import_opts()).unwrap();
+    let (one, two) = (subjects(&store, "urn:g:one"), subjects(&store, "urn:g:two"));
+    assert_eq!((one.len(), two.len()), (1, 2));
+    assert!(one.is_subset(&two), "_:x is one node across both graphs");
+    // And a different document with the same block content gets its own nodes.
+    let mut other_doc = Store::open_in_memory().unwrap();
+    import(
+        &mut other_doc,
+        &text.replace("urn:test:shared", "urn:test:other"),
+        &import_opts(),
+    )
+    .unwrap();
+    let mine: BTreeSet<_> = one.iter().map(|&e| store.resolve(e).unwrap()).collect();
+    let theirs: BTreeSet<_> = subjects(&other_doc, "urn:g:one")
+        .iter()
+        .map(|&e| other_doc.resolve(e).unwrap())
+        .collect();
+    assert!(mine.is_disjoint(&theirs), "{mine:?} {theirs:?}");
+}
+
+#[test]
+fn a_round_trip_keeps_blank_node_count() {
+    let source = seeded();
+    let text = export(&source, &export_opts(Some(G))).unwrap();
+    let mut target = Store::open_in_memory().unwrap();
+    import(&mut target, &text, &import_opts()).unwrap();
+    let blanks = |store: &Store| {
+        let g = store.lookup(G).unwrap().unwrap();
+        store
+            .current_facts_in_graph(g)
+            .unwrap()
+            .iter()
+            .filter(|f| store.resolve(f.entity).unwrap().starts_with("_:"))
+            .map(|f| f.entity)
+            .collect::<BTreeSet<_>>()
+            .len()
+    };
+    assert_eq!(blanks(&target), blanks(&source));
+    assert_eq!(blanks(&target), 1);
+}

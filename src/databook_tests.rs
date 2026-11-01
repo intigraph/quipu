@@ -223,3 +223,10 @@ fn fence_round_trips_and_refuses_what_would_break_it() {
     assert!(fence("turtle", &[("id", "a --> b")], "x").is_err());
     assert!(fence("turtle", &[("id", "a\nb")], "x").is_err());
 }
+
+#[test]
+fn a_repeated_block_id_is_refused() {
+    let body = "<!-- databook:id: a -->\n```turtle\n<urn:a> <urn:b> <urn:c> .\n```\n\n```turtle\n<!-- databook:id: a -->\n<urn:a> <urn:b> <urn:d> .\n```\n";
+    let err = parse(&book(IDENTITY, body)).unwrap_err().to_string();
+    assert!(err.contains("`a` is used by more than one block"), "{err}");
+}

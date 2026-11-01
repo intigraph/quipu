@@ -9,15 +9,16 @@
 //! blocks, honouring TriG/N-Quads graph names, in ONE all-or-nothing write
 //! across graphs ([`Store::transact_graph_batches_tx`]). It never executes a
 //! block: `sparql` and `sparql-update` are reported as skipped, and `shacl`
-//! blocks load only when asked, after the data commits.
+//! blocks load only when asked, after the data commits. Blank nodes are
+//! scoped to their block (`BlockNodes`).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use oxrdf::{GraphName, Quad, Triple};
+use oxrdf::{BlankNode, GraphName, NamedOrBlankNode, Quad, Term, Triple};
 use oxrdfio::{RdfFormat, RdfParser, RdfSerializer};
 use sha2::{Digest, Sha256};
 
-use crate::databook::{self, Block, BlockKind, Frontmatter};
+use crate::databook::{self, Block, BlockKind, DataBook, Frontmatter};
 use crate::error::{Error, Result};
 use crate::schema::ROOT_GRAPH_IRI;
 use crate::store::{AsOf, Datum, Store};
@@ -240,6 +241,61 @@ fn block_quads(block: &Block, format: RdfFormat) -> Result<Vec<Quad>> {
         .collect()
 }
 
+/// Blank-node names for one block. They derive from the document's id and
+/// version, the block's key (its `databook:id`, else its position) and its
+/// payload, plus each node's order of first appearance in the block. So
+/// importing the same document again gives the same nodes; no two blocks share
+/// a node, even with identical payloads; and one `trig` block keeps a node shared
+/// across the graphs it names.
+struct BlockNodes {
+    prefix: String,
+    nodes: HashMap<BlankNode, BlankNode>,
+}
+
+impl BlockNodes {
+    fn new(book: &DataBook, key: &str, payload: &str) -> Self {
+        let mut hash = Sha256::new();
+        for part in [
+            "quipu-databook-bnodes-v1",
+            &book.header.id,
+            &book.header.version,
+            key,
+            payload,
+        ] {
+            hash.update((part.len() as u64).to_be_bytes());
+            hash.update(part.as_bytes());
+        }
+        Self {
+            prefix: format!("d{}", &hex::encode(hash.finalize())[..32]),
+            nodes: HashMap::new(),
+        }
+    }
+
+    fn node(&mut self, node: BlankNode) -> BlankNode {
+        let next = self.nodes.len();
+        self.nodes
+            .entry(node)
+            .or_insert_with(|| BlankNode::new_unchecked(format!("{}_{next}", self.prefix)))
+            .clone()
+    }
+
+    fn triple(&mut self, triple: Triple) -> Triple {
+        let subject = match triple.subject {
+            NamedOrBlankNode::BlankNode(node) => self.node(node).into(),
+            other @ NamedOrBlankNode::NamedNode(_) => other,
+        };
+        let object = match triple.object {
+            Term::BlankNode(node) => self.node(node).into(),
+            other => other,
+        };
+        Triple {
+            subject,
+            predicate: triple.predicate,
+            object,
+        }
+    }
+}
+
 fn describe(block: &Block) -> String {
     match block.id() {
         Some(id) => format!("{} block `{id}` (line {})", block.label, block.line),
@@ -266,11 +322,11 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
         warnings: book.warnings.clone(),
         ..ImportReport::default()
     };
-    // Graph IRI -> (block, blank-node scope, triples): blank nodes join only within a block.
-    let mut per_graph: BTreeMap<String, Vec<(String, String, Vec<Triple>)>> = BTreeMap::new();
+    // Graph IRI -> one (block, triples) group per contributing block.
+    let mut per_graph: BTreeMap<String, Vec<(usize, String, Vec<Triple>)>> = BTreeMap::new();
     let mut shapes = Vec::new();
     let mut triple_count = 0u64;
-    for block in &book.blocks {
+    for (index, block) in book.blocks.iter().enumerate() {
         let skip = match block.kind() {
             BlockKind::Rdf(format) => {
                 let default = opts
@@ -278,7 +334,10 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
                     .or(block.meta.get("graph").map(String::as_str))
                     .or(book.header.named_graph.as_deref())
                     .unwrap_or(ROOT_GRAPH_IRI);
-                let scope = format!("databook:sha256:{}", sha256(&block.payload));
+                let key = block
+                    .id()
+                    .map_or_else(|| format!("#{index}"), str::to_string);
+                let mut nodes = BlockNodes::new(&book, &key, &block.payload);
                 for quad in block_quads(block, format)? {
                     let target = match (&quad.graph_name, opts.graph) {
                         (GraphName::NamedNode(g), None) => g.as_str().to_string(),
@@ -291,12 +350,11 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
                         _ => default.to_string(),
                     };
                     triple_count += 1;
+                    let triple = nodes.triple(Triple::from(quad));
                     let entry = per_graph.entry(target).or_default();
-                    match entry.iter_mut().find(|(_, s, _)| *s == scope) {
-                        Some((_, _, triples)) => triples.push(Triple::from(quad)),
-                        None => {
-                            entry.push((describe(block), scope.clone(), vec![Triple::from(quad)]));
-                        }
+                    match entry.last_mut() {
+                        Some((i, _, triples)) if *i == index => triples.push(triple),
+                        _ => entry.push((index, describe(block), vec![triple])),
                     }
                 }
                 None
@@ -361,7 +419,7 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
         };
         names.insert(graph, iri.clone());
         let mut datums: Vec<Datum> = Vec::new();
-        for (block, scope, triples) in groups {
+        for (_, block, triples) in groups {
             let mut nt = RdfSerializer::from_format(RdfFormat::NTriples).for_writer(Vec::new());
             for triple in triples {
                 nt.serialize_triple(triple)
@@ -371,14 +429,13 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
                 .finish()
                 .map_err(|e| invalid(format!("re-serializing graph data: {e}")))?;
             datums.extend(
-                crate::rdf::parse_rdf_scoped(
+                // Blank nodes are already named per block (`BlockNodes`).
+                crate::rdf::parse_rdf(
                     store,
                     nt.as_slice(),
                     RdfFormat::NTriples,
                     None,
                     opts.timestamp,
-                    graph,
-                    Some(scope),
                 )
                 .map_err(|e| invalid(format!("{block} cannot be stored in graph {iri}: {e}")))?,
             );

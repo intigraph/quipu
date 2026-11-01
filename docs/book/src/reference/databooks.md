@@ -93,8 +93,13 @@ error.
 - Stored queries are not exported. Their `{param}` templates are not
   executable SPARQL, and mapping them to DataBook `VALUES` parameters is
   separate work.
-- Blank nodes are scoped per block. Exporting and re-importing gives the same
-  blank-node identities, but two blocks never share a blank node.
+- Blank nodes are scoped per block. Their names derive from the document's
+  `id` and `version`, the block's `databook:id` (or its position), its payload,
+  and each node's order of appearance. Re-importing the same DataBook gives
+  the same nodes. Two blocks never share a node, even with identical
+  payloads, and one TriG or N-Quads block keeps a node shared across the
+  graphs it names. Block ids must be unique (SPEC §7.1): a repeated
+  `databook:id` refuses the document.
 - The 1.5.0 reference parser recognises only three-backtick fences. Export
   therefore refuses a payload line that starts with three backticks; canonical
   Turtle escapes newlines, so graph data never contains one. Import also
