@@ -282,13 +282,13 @@ fn transition_datums(store: &mut Store, to: &str, signature: Option<&str>) -> Ve
 
 /// Register `pk` for alice — the fact shape `shuttle register` prints for a
 /// human to load.
-fn register(store: &mut Store, pk: &str, graph: i64) {
+fn registration_datums(store: &mut Store, pk: &str) -> Vec<Datum> {
     let reg = store.intern("urn:shuttle:registration:alice").unwrap();
     let class = store
         .intern(&format!("{DEFAULT_BASE_NS}VerifierRegistration"))
         .unwrap();
     let rdf_type = store.intern(RDF_TYPE).unwrap();
-    let datums = vec![
+    vec![
         Datum {
             entity: reg,
             attribute: rdf_type,
@@ -309,10 +309,23 @@ fn register(store: &mut Store, pk: &str, graph: i64) {
             &format!("{DEFAULT_BASE_NS}publicKey"),
             Value::Str(pk.into()),
         ),
-    ];
+    ]
+}
+
+fn register(store: &mut Store, pk: &str, graph: i64) {
+    let datums = registration_datums(store, pk);
     store
         .transact_to_graph(&datums, TS, None, None, graph)
         .expect("the registration must land");
+}
+
+fn govern(store: &mut Store) {
+    crate::governance::trust_root::test_support::govern(
+        store,
+        "urn:shuttle:registration:alice",
+        crate::governance::verifier_registry::AGENT_TIER,
+        TS,
+    );
 }
 
 #[test]
@@ -342,6 +355,7 @@ fn a_signed_registered_transition_lands_with_the_flag_on() {
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     register(&mut store, &public_key_hex(&kp), 0);
+    govern(&mut store);
     let sig = sign(&kp, "open", "reviewed");
     let datums = transition_datums(&mut store, "reviewed", Some(&sig));
     store
@@ -350,10 +364,7 @@ fn a_signed_registered_transition_lands_with_the_flag_on() {
 }
 
 #[test]
-fn the_registration_is_found_in_a_named_identity_graph() {
-    // Shuttle's convention: registrations live in a dataKind=identity NAMED
-    // graph, not ROOT. The registry read must span graphs or the gate refuses
-    // every genuine transition in that deployment shape.
+fn udr9_named_identity_registration_requires_root_migration_and_endorsement() {
     let mut store = Store::open_in_memory().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let identity = store.graph_create("urn:app:identity").unwrap();
@@ -361,9 +372,21 @@ fn the_registration_is_found_in_a_named_identity_graph() {
     register(&mut store, &public_key_hex(&kp), identity);
     let sig = sign(&kp, "open", "reviewed");
     let datums = transition_datums(&mut store, "reviewed", Some(&sig));
+    assert!(matches!(
+        store.transact(&datums, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    // Copying ordinary facts is not sufficient: endorsement is a separate
+    // root-signed amendment, through the production trust-root gate.
+    register(&mut store, &public_key_hex(&kp), 0);
+    assert!(matches!(
+        store.transact(&datums, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    govern(&mut store);
     store
         .transact(&datums, TS, None, None)
-        .expect("a registration in the identity graph must authenticate the write");
+        .expect("ROOT migration plus a real human-root amendment admits the key");
 }
 
 #[test]
@@ -389,6 +412,7 @@ fn a_wrong_key_signature_is_refused_at_the_write_path() {
     store.governance_config_mut().verify_transitions = true;
     let registered = keypair();
     register(&mut store, &public_key_hex(&registered), 0);
+    govern(&mut store);
     let forger = keypair();
     let sig = sign(&forger, "open", "reviewed");
     let datums = transition_datums(&mut store, "reviewed", Some(&sig));
@@ -407,6 +431,7 @@ fn a_tampered_payload_is_refused_at_the_write_path() {
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     register(&mut store, &public_key_hex(&kp), 0);
+    govern(&mut store);
     let sig = sign(&kp, "open", "reviewed");
     let datums = transition_datums(&mut store, "approved", Some(&sig));
     let err = store.transact(&datums, TS, None, None);
@@ -447,4 +472,144 @@ fn a_non_transition_write_is_not_touched() {
     store
         .transact(&datums, TS, None, None)
         .expect("an ordinary write must pass untouched");
+}
+
+#[test]
+fn udr9_unsigned_root_or_named_registration_cannot_authorize_a_transition() {
+    for named in [false, true] {
+        let mut store = Store::open_in_memory().unwrap();
+        store.governance_config_mut().verify_transitions = true;
+        let graph = if named {
+            store.graph_create("urn:app:identity").unwrap()
+        } else {
+            0
+        };
+        let kp = keypair();
+        register(&mut store, &public_key_hex(&kp), graph);
+        let sig = sign(&kp, "open", "reviewed");
+        let datums = transition_datums(&mut store, "reviewed", Some(&sig));
+        let result = store.transact(&datums, TS, None, None);
+        assert!(
+            matches!(result, Err(Error::PolicyDenied(_))),
+            "an ordinary graph writer must not enroll its own transition key: {result:?}"
+        );
+        assert!(!matches!(
+            crate::sparql::query(&store, "ASK { <urn:shuttle:event:triage-7:0> ?p ?o }").unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        ));
+    }
+}
+
+#[test]
+fn udr9_a_named_tier_marker_never_endorses_a_registration() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    let graph = store.graph_create("urn:app:identity").unwrap();
+    let kp = keypair();
+    register(&mut store, &public_key_hex(&kp), graph);
+    let reg = store.intern("urn:shuttle:registration:alice").unwrap();
+    let tier = assert_datum(
+        &mut store,
+        reg,
+        crate::governance::verifier_registry::TRUST_TIER,
+        Value::Str("agent".into()),
+    );
+    store
+        .transact_to_graph(&[tier], TS, None, None, graph)
+        .unwrap();
+    let datums = transition_datums(&mut store, "reviewed", Some(&sign(&kp, "open", "reviewed")));
+    assert!(matches!(
+        store.transact(&datums, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+}
+
+#[test]
+fn udr9_named_graph_key_shadowing_cannot_replace_an_endorsed_root_key() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    let root_key = keypair();
+    register(&mut store, &public_key_hex(&root_key), 0);
+    govern(&mut store);
+    let graph = store.graph_create("urn:app:identity").unwrap();
+    let attacker = keypair();
+    register(&mut store, &public_key_hex(&attacker), graph);
+    let forged = transition_datums(
+        &mut store,
+        "reviewed",
+        Some(&sign(&attacker, "open", "reviewed")),
+    );
+    assert!(matches!(
+        store.transact(&forged, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    let genuine = transition_datums(
+        &mut store,
+        "reviewed",
+        Some(&sign(&root_key, "open", "reviewed")),
+    );
+    store.transact(&genuine, TS, None, None).unwrap();
+}
+
+#[test]
+fn udr9_revocation_refuses_a_new_backdated_transition_but_preserves_the_old_event() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    let kp = keypair();
+    let key = public_key_hex(&kp);
+    register(&mut store, &key, 0);
+    govern(&mut store);
+    let datums = transition_datums(&mut store, "reviewed", Some(&sign(&kp, "open", "reviewed")));
+    store.transact(&datums, TS, None, None).unwrap();
+    crate::governance::trust_root::test_support::amend_retract(
+        &mut store,
+        "urn:shuttle:registration:alice",
+        &format!("{DEFAULT_BASE_NS}publicKey"),
+        Value::Str(key),
+        TS,
+        TS,
+    );
+    let next = store.intern("urn:shuttle:event:revoked-key").unwrap();
+    let mut backdated = datums;
+    for datum in &mut backdated {
+        datum.entity = next;
+    }
+    assert!(matches!(
+        store.transact(&backdated, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    assert!(matches!(
+        crate::sparql::query(&store, "ASK { <urn:shuttle:event:triage-7:0> ?p ?o }").unwrap(),
+        crate::sparql::QueryResult::Ask(true)
+    ));
+    assert!(!matches!(
+        crate::sparql::query(&store, "ASK { <urn:shuttle:event:revoked-key> ?p ?o }").unwrap(),
+        crate::sparql::QueryResult::Ask(true)
+    ));
+}
+
+#[test]
+fn udr9_self_registration_and_transition_in_one_write_are_rolled_back_together() {
+    let mut store = Store::open_in_memory().unwrap();
+    store.governance_config_mut().verify_transitions = true;
+    let kp = keypair();
+    let mut datums = registration_datums(&mut store, &public_key_hex(&kp));
+    datums.extend(transition_datums(
+        &mut store,
+        "reviewed",
+        Some(&sign(&kp, "open", "reviewed")),
+    ));
+    assert!(matches!(
+        store.transact(&datums, TS, None, None),
+        Err(Error::PolicyDenied(_))
+    ));
+    for iri in [
+        "urn:shuttle:event:triage-7:0",
+        "urn:shuttle:registration:alice",
+    ] {
+        assert!(!matches!(
+            crate::sparql::query(&store, &format!("ASK {{ <{iri}> ?p ?o }}")).unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        ));
+    }
 }

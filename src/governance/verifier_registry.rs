@@ -100,8 +100,8 @@ impl Witness {
 pub enum Scope {
     /// Only ROOT, the default graph the SPARQL-based verifiers always read.
     Root,
-    /// Every graph. The transition gate reads this way, because the identity
-    /// graph is a named graph of the operator's choosing.
+    /// Raw registration visibility across every graph. This is not trust-root
+    /// authorization; transition and verdict gates use [`Scope::Governed`].
     AllGraphs,
     /// Only HUMAN trust-root registrations: ROOT, and carrying an ASSERTED
     /// `aegis:trustTier "human"` in ROOT (aegis-kzt0ql.9.4). Human decisions
