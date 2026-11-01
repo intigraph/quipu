@@ -504,6 +504,81 @@ fn decide_dates_only_the_rows_it_rules_on() {
     assert_eq!(dates[format!("{A}yupana").as_str()], None);
 }
 
+/// Days that look valid digit by digit but do not exist (Kelly, PR968 F1).
+const IMPOSSIBLE_DAYS: [&str; 5] = [
+    "2026-02-31",
+    "2026-04-31",
+    "2026-02-29",
+    "1900-02-29",
+    "2026-06-31",
+];
+
+#[test]
+fn only_real_calendar_days_are_xsd_dates() {
+    use super::sssom::is_xsd_date;
+    for real in [
+        "2024-02-29",
+        "2000-02-29",
+        "2026-02-28",
+        "2026-01-31",
+        "2026-04-30",
+        "2026-12-31",
+        "2026-11-01",
+    ] {
+        assert!(is_xsd_date(real), "{real} is a real day");
+    }
+    for impossible in IMPOSSIBLE_DAYS {
+        assert!(!is_xsd_date(impossible), "{impossible} does not exist");
+    }
+}
+
+#[test]
+fn an_impossible_day_is_refused_on_every_date_path() {
+    let mut proposed = MappingSet::new("urn:quipu:align:aaa:bbb");
+    proposed
+        .mappings
+        .push(candidate("yupana", "yupana", "yupana", 0.86));
+    let rows = [DecisionRow {
+        subject_id: format!("{A}yupana"),
+        object_id: format!("{B}yupana"),
+        decision: Decision::Accept,
+    }];
+    // Control: the same paths accept a real leap day.
+    let leap = decide_dated(&proposed, &rows, "malcolm", Some("2024-02-29"))
+        .expect("2024-02-29 is real")
+        .set;
+    let leap_tsv = leap.to_tsv().expect("to_tsv");
+    MappingSet::from_tsv(&leap_tsv).expect("from_tsv");
+    export_tsv(&leap, &options()).expect("export tsv");
+    export_turtle(&leap, &options()).expect("export ttl");
+
+    for impossible in IMPOSSIBLE_DAYS {
+        // decide refuses to stamp it.
+        assert!(
+            decide_dated(&proposed, &rows, "malcolm", Some(impossible)).is_err(),
+            "decide stamped {impossible}"
+        );
+        // A set carrying it cannot be written, exported or read back.
+        let mut set = leap.clone();
+        set.mappings[0].mapping_date = Some(impossible.into());
+        assert!(set.to_tsv().is_err(), "to_tsv wrote {impossible}");
+        assert!(
+            export_tsv(&set, &options()).is_err(),
+            "tsv export wrote {impossible}"
+        );
+        assert!(
+            export_turtle(&set, &options()).is_err(),
+            "ttl export wrote {impossible}"
+        );
+        let sabotaged = leap_tsv.replacen("2024-02-29", impossible, 1);
+        assert_ne!(sabotaged, leap_tsv, "control: the date cell was replaced");
+        assert!(
+            MappingSet::from_tsv(&sabotaged).is_err(),
+            "from_tsv read {impossible}"
+        );
+    }
+}
+
 #[test]
 fn a_malformed_date_is_refused_everywhere() {
     let mut proposed = MappingSet::new("urn:quipu:align:aaa:bbb");

@@ -241,10 +241,13 @@ pub struct Mapping {
     pub mapping_date: Option<String>,
 }
 
-/// Is `value` an `xsd:date` in the only form quipu writes, `YYYY-MM-DD`?
+/// Is `value` a real calendar day as an `xsd:date` in the only form quipu
+/// writes, `YYYY-MM-DD`?
 ///
 /// Checked field by field rather than by a date library: the form is fixed,
-/// and a plausible-looking `2026-13-40` must be refused, not normalised.
+/// and a plausible-looking day that does not exist — `2026-02-31`, `2026-04-31`,
+/// `2026-02-29`, `1900-02-29` — must be refused, not normalised. Month lengths
+/// and leap years are proleptic Gregorian, as `xsd:date` specifies.
 #[must_use]
 pub fn is_xsd_date(value: &str) -> bool {
     let b = value.as_bytes();
@@ -255,9 +258,18 @@ pub fn is_xsd_date(value: &str) -> bool {
     if !(digits(0..4) && digits(5..7) && digits(8..10)) {
         return false;
     }
+    let year: u32 = value[0..4].parse().unwrap_or(0);
     let month: u32 = value[5..7].parse().unwrap_or(0);
     let day: u32 = value[8..10].parse().unwrap_or(0);
-    (1..=12).contains(&month) && (1..=31).contains(&day)
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
 }
 
 impl Mapping {
