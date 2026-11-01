@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prove the shipped pack can share outward without injecting receiver policy."""
 
+import importlib.util
 import json
 from pathlib import Path
 import sqlite3
@@ -124,6 +125,16 @@ def internal_names(export):
             raise RuntimeError(f"internal entity name published as an object: {rest[:120]}")
     if not renamed or not linked:
         raise RuntimeError("no w3id entity names or former-name links in the share")
+    # Each link must be the subject's exact former name (aegis-ro425e.18):
+    # the same check the stack release builder applies before import.
+    spec = importlib.util.spec_from_file_location(
+        "share_builder", Path(__file__).with_name("build-repository-share.py"))
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    try:
+        builder.verify_former_names(export)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
 
 
 def verify(binary, share, db, work):

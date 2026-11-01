@@ -62,6 +62,8 @@ class InternalNameTest(unittest.TestCase):
             [f"<{self.A}repo_quipu> {self.TYPE} <{self.A}GitRepo> ."],
             [f"<{self.W}chunk/x> <{self.A}inDocument> <{self.A}doc/quipu/README.md> ."],
             [f"<{self.W}doc/x> <{self.A}touchesRepo> <{self.A}repo_quipu> ."],
+            [f"<{self.W}doc/y> {self.SAME} <{self.A}doc/quipu/z> ."],
+            [f"<{self.W}doc/y> {self.SAME} <https://example.org/other> ."],
         ):
             with self.subTest(bad=bad), self.assertRaises(RuntimeError):
                 self.check(*self.positive(), *bad)
