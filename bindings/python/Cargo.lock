@@ -1731,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "quipu-ai"
-version = "0.16.5"
+version = "0.16.6"
 dependencies = [
  "base64 0.22.1",
  "bigdecimal",
@@ -1751,6 +1751,7 @@ dependencies = [
  "oxttl",
  "parking_lot",
  "petgraph 0.7.1",
+ "quipu-signing",
  "regex",
  "ring",
  "rudof_iri",
@@ -1773,11 +1774,22 @@ dependencies = [
 
 [[package]]
 name = "quipu-kg"
-version = "0.16.5"
+version = "0.16.6"
 dependencies = [
  "pyo3",
  "quipu-ai",
  "serde_json",
+]
+
+[[package]]
+name = "quipu-signing"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9590d3ae3ad7383f3b3325fd7649e873f26026460fc9767251028aa2a00c6575"
+dependencies = [
+ "hex",
+ "ring",
+ "sha2",
 ]
 
 [[package]]

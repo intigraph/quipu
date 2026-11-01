@@ -1,0 +1,32 @@
+[
+  {
+    "name": "before",
+    "readyMs": 37373,
+    "rows": 1,
+    "status": "198,938 triples · pack verified",
+    "build": {
+      "compiled_features": {
+        "owl": true,
+        "reactive_reasoner": true,
+        "shacl": true
+      },
+      "git_sha": "ad8de357521acdbd9f7a0175a37b7c20d3a21f5c",
+      "version": "0.16.6"
+    }
+  },
+  {
+    "name": "after",
+    "readyMs": 1259.5,
+    "rows": 1,
+    "status": "198,938 triples · pack verified",
+    "build": {
+      "compiled_features": {
+        "owl": true,
+        "reactive_reasoner": true,
+        "shacl": true
+      },
+      "git_sha": "unknown",
+      "version": "0.16.6"
+    }
+  }
+]

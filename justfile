@@ -184,6 +184,7 @@ demo name="explorer":
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
+        ownership-startup-boundary) cargo run --quiet --locked --offline --no-default-features --example ownership_startup_boundary ;;
         cast-filter) cargo run --quiet --locked --no-default-features --example cast_filter_profile -- examples/cast-filter-profile.rq 6000 ;;
         explorer)
             rm -f /tmp/quipu-demo.db
@@ -294,6 +295,11 @@ docs-demo-test:
 explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
     node scripts/test-explore-cords.cjs {{args}}
+
+# Staged loader and retry acceptance against the real browser engine.
+explorer-loading *args:
+    bash scripts/check-explorer-published.test.sh
+    node scripts/test-explore-loading.cjs {{args}}
 
 # Presentation acceptance against the same staged browser engine.
 explorer-presentation *args:
@@ -412,4 +418,17 @@ prime action="test":
         check) cargo check --locked --no-default-features --features shacl --all-targets ;;
         test) cargo test --locked --no-default-features --features shacl --bin quipu cli_prime:: && cargo test --locked --no-default-features --features shacl --test prime_cli --test prime_sync ;;
         *) echo 'Use: just prime check|test' >&2; exit 2 ;;
+    esac
+
+# Qualify the published shared signing dependency and its nested consumer locks.
+signing command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{command}}" in
+        locks)
+            for manifest in Cargo.toml bindings/python/Cargo.toml wasm/explorer/Cargo.toml wasm/harness/Cargo.toml; do
+                cargo update --workspace --manifest-path "$manifest"
+            done ;;
+        package-controls) python3 scripts/ci/test_signing_package.py ;;
+        *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
     esac

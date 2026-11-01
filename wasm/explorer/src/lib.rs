@@ -1,26 +1,27 @@
 //! The wasm bundle the book's "Explore this repository's graph" page runs
 //! (aegis-tpqccc).
 //!
-//! It is a thin shell on purpose. Loading a pack goes through the SAME
+//! It is a thin shell on purpose. Loading an arbitrary pack goes through the SAME
 //! `share_transport` -> `share_import` -> `promote_import` path the `quipu
 //! import` CLI takes, and current-state queries use `quipu::tool_query`, the
 //! same entry point the REST API and the MCP server use. A reader watching the
 //! page is therefore watching the real import and the real query engine, not a
 //! browser-shaped reimplementation of them — which is the whole point of
-//! putting it in front of them.
+//! putting it in front of them. The published default may restore an exact,
+//! build-pinned snapshot produced by that full receiving path; see snapshot.rs.
 //!
 //! Current facts derive from SPARQL. The read-only factHistory API additionally
 //! exposes receiver-local transaction history, never invented producer history.
 
 use quipu::share::{ShareOptions, ShareScope};
-use quipu::share_import::{PromoteImportRequest, promote_import};
-use quipu::share_transport::read_archive_bytes;
 use wasm_bindgen::prelude::*;
 
 mod engine;
 mod features;
 mod history;
+mod loading;
 mod pointers;
+mod snapshot;
 mod store_ops;
 
 #[wasm_bindgen]
@@ -85,68 +86,21 @@ impl Explorer {
     /// payload, or the import is refused.
     #[wasm_bindgen(js_name = loadPendant)]
     pub fn load_pendant(bytes: &[u8], source: &str, timestamp: &str) -> Result<Explorer, JsValue> {
-        let mut request = read_archive_bytes(bytes, source, true).map_err(err_js)?;
-        request.actor = None;
-        let mut store = quipu::Store::open_in_memory().map_err(err_js)?;
-        #[cfg(feature = "shacl")]
-        {
-            // This explorer writes, so a linked validator must also enforce
-            // adopted shapes on writes rather than merely preview imports.
-            store.shacl_config_mut().validate_on_write = true;
-        }
+        loading::load(bytes, source, timestamp, None)
+    }
 
-        // Step 2. Adopting the pack's shapes is a DECISION the receiver makes,
-        // and skipping it is not a silent no-op: `import_share` would find the
-        // pack's classes ungoverned and quarantine every triple. The page shows
-        // this as its own line for that reason.
-        store
-            .load_shapes("repository-share", &request.shapes_turtle, timestamp)
-            .map_err(err_js)?;
-        features::register_reasoners(&mut store)?;
-
-        let import = quipu::share_import::import_share(&mut store, &request, timestamp, None)
-            .map_err(err_js)?;
-
-        let promotion = if import.promotion.eligible {
-            Some(
-                promote_import(
-                    &mut store,
-                    &PromoteImportRequest {
-                        share_id: import.share_id.clone(),
-                        actor: None,
-                        target_graph: None,
-                        retire_from: None,
-                        dry_run: false,
-                    },
-                    timestamp,
-                    None,
-                )
-                .map_err(err_js)?,
-            )
-        } else {
-            None
-        };
-
-        let load_report = serde_json::to_string(&serde_json::json!({
-            "manifest": request.manifest,
-            "import": import,
-            "promotion": promotion,
-            "shapes_bytes": request.shapes_turtle.len(),
-            "export_bytes": request.export_ntriples.len(),
-            // Named rather than inferred: callers can distinguish a validator
-            // result from the fallback used by builds without SHACL.
-            "shacl_compiled": cfg!(feature = "shacl"),
-        }))
-        .map_err(err_js)?;
-
-        Ok(Explorer {
-            store,
-            load_report,
-            parent_share: request.manifest.share_id.clone(),
-            parent_graph_hash: request.manifest.graph_hash.clone(),
-            parent_export_ntriples: request.export_ntriples.clone(),
-            edits: Vec::new(),
-        })
+    /// Load with observational phase updates. Verification and promotion are unchanged.
+    ///
+    /// # Errors
+    /// Exactly those of [`Explorer::load_pendant`]. A failed UI callback is ignored.
+    #[wasm_bindgen(js_name = loadPendantWithProgress)]
+    pub fn load_pendant_with_progress(
+        bytes: &[u8],
+        source: &str,
+        timestamp: &str,
+        progress: js_sys::Function,
+    ) -> Result<Explorer, JsValue> {
+        loading::load(bytes, source, timestamp, Some(progress))
     }
 
     /// Deprecated alias for [`Explorer::load_pendant`], kept for one release
@@ -369,7 +323,11 @@ impl Explorer {
             &self.parent_export_ntriples,
             &ShareOptions {
                 scope: ShareScope::Root,
-                alignments_turtle: quipu::share_alignments::imported_member(&self.store, &self.parent_share).map_err(err_js)?,
+                alignments_turtle: quipu::share_alignments::imported_member(
+                    &self.store,
+                    &self.parent_share,
+                )
+                .map_err(err_js)?,
                 ..ShareOptions::default()
             },
             MAX_EXPORT_BYTES,
@@ -434,7 +392,11 @@ impl Explorer {
             &self.store,
             &ShareOptions {
                 scope: ShareScope::Root,
-                alignments_turtle: quipu::share_alignments::imported_member(&self.store, &self.parent_share).map_err(err_js)?,
+                alignments_turtle: quipu::share_alignments::imported_member(
+                    &self.store,
+                    &self.parent_share,
+                )
+                .map_err(err_js)?,
                 parent_share: Some(self.parent_share.clone()),
                 ..ShareOptions::default()
             },

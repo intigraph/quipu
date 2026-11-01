@@ -8,6 +8,7 @@ export function createEngineApi(ask) {
     version: () => ask({ cmd: "version" }),
     capabilities: () => ask({ cmd: "capabilities" }),
     search: (query, limit = 10) => ask({ cmd: "search", query, limit }),
+    validatePack: () => ask({ cmd: "validatePack" }),
     validate: (shapes, data) => ask({ cmd: "validate", shapes, data }),
     ontology: (input) => ask({ cmd: "ontology", input: json(input) }),
     remote: (options, sparql, graph) => ask({ cmd: "remote", options, sparql, graph }),
