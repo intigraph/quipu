@@ -322,43 +322,149 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         (dir, request)
     }
 
-    /// The marker travels: an internal share does not import silently into a
-    /// store that would later publish it (aegis-auw0o7).
+    /// An untyped store holding only the leaking literal, so a receiver needs
+    /// no vocabulary to stage it (and could promote it).
+    fn leak_only_store() -> Store {
+        let mut store = Store::open_in_memory().unwrap();
+        crate::rdf::ingest_rdf(
+            &mut store,
+            &b"<urn:leak> <urn:p> \"private.example\" .\n"[..],
+            RdfFormat::NTriples,
+            None,
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+        store
+    }
+
+    /// A store carrying the block-tier rule and nothing that violates it.
+    fn catalogue_only_store() -> Store {
+        let mut store = Store::open_in_memory().unwrap();
+        crate::rdf::ingest_rdf(
+            &mut store,
+            &br#"@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+aegis:private-host-rule a aegis:InternalIdentifierPattern ;
+    rdfs:label "private host" ;
+    aegis:regex "private[.]example" ;
+    aegis:enforcementTier "block" .
+"#[..],
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+        store
+    }
+
+    /// aegis-zev: the receiver reads the stamp. An internal share carrying an
+    /// identifier the outward scrub would block imports with NO operator flag,
+    /// and the import records that it was internal, on the result and on the
+    /// staged review record.
     #[test]
-    fn importing_an_internal_share_is_refused_unless_the_operator_declares_internal() {
-        let (_dir, request) = internal_request(&leaky_store());
-        let mut store = leaky_store();
+    fn an_internal_share_imports_without_a_flag_and_records_its_stamp() {
+        let (_dir, request) = internal_request(&leak_only_store());
+        let mut store = catalogue_only_store();
+
+        let result = import_share(&mut store, &request, TS, None).unwrap();
+        assert_eq!(result.share_id, request.manifest.share_id);
+        assert_eq!(result.outcome, "staged");
+        assert_eq!(
+            result.destination,
+            Some(crate::share::ShareDestination::Internal),
+            "the import must say it took an internal share"
+        );
+        let staged = store
+            .events_after(0, 100, Some(&["import.staged".to_string()]), None)
+            .unwrap();
+        assert_eq!(staged.len(), 1);
+        let payload: serde_json::Value = serde_json::from_str(&staged[0].payload).unwrap();
+        assert_eq!(payload["destination"], "internal", "{payload}");
+    }
+
+    /// The marking still protects the way back out: once that internal data is
+    /// promoted, an OUTWARD share of the receiving store runs the scrub and
+    /// refuses. This is the guarantee the old import-side refusal stood in for.
+    #[test]
+    fn an_outward_share_of_imported_internal_data_is_still_scrubbed() {
+        let (_dir, request) = internal_request(&leak_only_store());
+        let mut store = catalogue_only_store();
+        let out = tempfile::tempdir().unwrap();
+        // CONTROL: before the import, this receiver shares outward cleanly, so
+        // the refusal below is caused by the imported data.
+        crate::share::share(
+            &store,
+            out.path().join("before").to_str().unwrap(),
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let staged = import_share(&mut store, &request, TS, None).unwrap();
+        let promoted = promote_import(
+            &mut store,
+            &PromoteImportRequest {
+                share_id: staged.share_id,
+                actor: Some("reviewer".into()),
+                target_graph: None,
+                retire_from: None,
+                dry_run: false,
+            },
+            TS,
+            None,
+        )
+        .unwrap();
+        assert_eq!(promoted.outcome, "promoted");
+
+        let error = crate::share::share(
+            &store,
+            out.path().join("onward").to_str().unwrap(),
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("private host"), "{error}");
+
+        // CONTROL: the same store shared internally is written, so the refusal
+        // above is the scrub and not some other failure.
+        crate::share::share(
+            &store,
+            out.path().join("internal").to_str().unwrap(),
+            &crate::share::ShareOptions {
+                no_shapes: true,
+                destination: crate::share::ShareDestination::Internal,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
+    /// `[quipu.import] refuse_internal = true` refuses a stamped share before
+    /// anything is staged, and names the setting.
+    #[test]
+    fn refuse_internal_config_refuses_a_stamped_share_before_staging() {
+        let (_dir, request) = internal_request(&leak_only_store());
+        let mut store = catalogue_only_store();
+        store.import_policy_config_mut().refuse_internal = true;
 
         let error = import_share(&mut store, &request, TS, None).unwrap_err();
-        assert!(error.to_string().contains("private host"), "{error}");
-        assert!(
-            error.to_string().contains("destination=internal"),
-            "the refusal must say WHY this share was checked: {error}"
-        );
-        assert!(
-            error.to_string().contains("--destination internal"),
-            "the refusal must name the flag: {error}"
-        );
-        // A refusal before staging leaves nothing behind.
+        assert!(error.to_string().contains("refuse_internal"), "{error}");
+        assert!(error.to_string().contains("destination=internal"), "{error}");
         assert!(
             store.lookup(&request.manifest.share_id).unwrap().is_none(),
             "a refused import staged a graph"
         );
-
-        // The paired arm: the same bytes, with the operator declaring internal.
-        let mut declared = request.clone();
-        declared.destination = crate::share::ShareDestination::Internal;
-        let result = import_share(&mut store, &declared, TS, None).unwrap();
-        assert_eq!(result.share_id, request.manifest.share_id);
     }
 
-    /// The gate checks the BYTES, not the marker.
-    ///
-    /// A share stamped internal out of caution, carrying nothing an outward
-    /// share could not carry, imports normally. Refusing it would make the flag
-    /// a quarantine rather than a scrub exemption, and would push producers
-    /// toward not stamping at all — which is the one outcome that loses the
-    /// marker entirely.
+    /// A clean internal share imports and is still recorded as internal: the
+    /// stamp is the producer's statement, kept whatever the payload holds.
     #[test]
     fn an_internal_share_whose_payload_is_clean_imports_without_the_flag() {
         let mut clean = Store::open_in_memory().unwrap();
@@ -377,15 +483,13 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         let mut store = leaky_store();
         let result = import_share(&mut store, &request, TS, None).unwrap();
         assert_eq!(result.share_id, request.manifest.share_id);
+        assert_eq!(result.destination, Some(crate::share::ShareDestination::Internal));
     }
 
-    /// CONTROL for the pair above: an UNSTAMPED share of the same leaky store
-    /// imports without the flag.
-    ///
-    /// Without this, both tests above would pass if the gate refused every
-    /// import that happened to contain the pattern — which is a different and
-    /// much broader rule than the one that was ratified. The gate fires on the
-    /// MARKER; the scrub is what it does once it has fired.
+    /// An UNSTAMPED share imports and records no stamp, even when it carries
+    /// the pattern: import never scrubs. Stripping the stamp gains a producer
+    /// nothing, because the outward scrub runs on the way back out regardless
+    /// (see `an_outward_share_of_imported_internal_data_is_still_scrubbed`).
     #[test]
     fn an_unstamped_share_is_not_checked_even_when_it_carries_the_pattern() {
         let source = leaky_store();
@@ -423,7 +527,8 @@ aegis:private-host-rule a aegis:InternalIdentifierPattern ;
         let request = crate::share_transport::read_local(share_dir.to_str().unwrap()).unwrap();
         assert_eq!(request.manifest.destination, None);
         let mut store = leaky_store();
-        import_share(&mut store, &request, TS, None).unwrap();
+        let result = import_share(&mut store, &request, TS, None).unwrap();
+        assert_eq!(result.destination, None);
     }
 
     /// aegis-1mv0to: a Warning-severity result must NOT quarantine a share.
