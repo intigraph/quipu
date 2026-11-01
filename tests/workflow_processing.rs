@@ -7,6 +7,8 @@ use quipu::{
     types::{Op, Value},
 };
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
+#[path = "common/governed_verifier.rs"]
+mod governed_verifier;
 const TS: &str = "2026-10-11T00:00:00Z";
 const RUN: &str = "urn:shuttle:run:guard";
 const STEP: &str = "urn:shuttle:workflow:guard/step/review";
@@ -32,31 +34,6 @@ fn kind(s: &mut Store, e: &str, t: &str) -> Datum {
     let id = s.intern(&format!("{NS}{t}")).unwrap();
     datum(s, e, RDF_TYPE, Value::Ref(id), Op::Assert)
 }
-/// Private fixture: use the same human-root ceremony and signed endorsement
-/// as production. Ordinary graph registration alone no longer grants trust.
-fn endorse(s: &mut Store) {
-    use quipu::governance::trust_root::{bootstrap, bootstrap_message, endorse, endorse_challenge};
-    let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
-    let root = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
-    let key = public_key_hex(&root);
-    let proof = sign_hex(
-        &root,
-        &bootstrap_message(&s.store_id().unwrap(), "fixture-human", &key),
-    );
-    bootstrap(s, "fixture-human", &key, &[], &proof, TS).unwrap();
-    let challenge = endorse_challenge(s, "urn:reg", "agent").unwrap();
-    endorse(
-        s,
-        "urn:reg",
-        "agent",
-        "fixture-human",
-        &challenge.nonce,
-        &sign_hex(&root, &challenge.message),
-        "1970-01-01T00:00:00Z",
-    )
-    .unwrap();
-}
-
 fn setup(graph: i64) -> (Store, Ed25519KeyPair) {
     setup_with_loop(graph, false)
 }
@@ -76,7 +53,7 @@ fn setup_with_loop(graph: i64, loop_plan: bool) -> (Store, Ed25519KeyPair) {
         text(&mut s, "urn:reg", "publicKey", &public_key_hex(&kp)),
     ];
     s.transact(&reg, TS, None, None).unwrap();
-    endorse(&mut s);
+    governed_verifier::endorse(&mut s, "urn:reg", TS);
     let mut def = vec![
         kind(&mut s, "urn:w", "Workflow"),
         kind(&mut s, "urn:w", "WorkflowDefinition"),
@@ -330,7 +307,7 @@ fn a_signed_undefined_run_is_refused_only_when_processing_is_enrolled() {
             text(&mut s, "urn:reg", "publicKey", &public_key_hex(&kp)),
         ];
         s.transact(&reg, TS, None, None).unwrap();
-        endorse(&mut s);
+        governed_verifier::endorse(&mut s, "urn:reg", TS);
         let ds = event(
             &mut s,
             &kp,

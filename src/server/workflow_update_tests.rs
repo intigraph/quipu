@@ -9,6 +9,8 @@ use quipu::{
 };
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
 use std::sync::{Arc, Barrier};
+#[path = "../../tests/common/governed_verifier.rs"]
+mod governed_verifier;
 const RUN: &str = "urn:shuttle:run:direct";
 const TS: &str = "2026-10-11T00:00:00Z";
 fn setup(full: bool) -> (SharedStore, Ed25519KeyPair) {
@@ -26,6 +28,7 @@ fn setup(full: bool) -> (SharedStore, Ed25519KeyPair) {
         public_key_hex(&kp)
     );
     apply_update_as(&shared, &seed, full).unwrap();
+    governed_verifier::endorse(&mut shared.lock(), "urn:reg", TS);
     (shared, kp)
 }
 fn advance(kp: &Ed25519KeyPair, event: &str, step: &str, revision: u64) -> String {
@@ -139,4 +142,29 @@ async fn capabilities_reports_actual_opt_in() {
         .0;
     assert_eq!(value["enabled"], true);
     assert_eq!(value["signature_version"], 2);
+}
+
+#[test]
+fn an_unendorsed_key_cannot_advance_through_either_update_path() {
+    for full in [false, true] {
+        let (s, _) = setup(full);
+        let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
+        let attacker = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+        let registration = format!(
+            r#"PREFIX a:<{NS}> INSERT DATA {{ <urn:unendorsed> a a:VerifierRegistration ;
+            a:verifier "alice" ; a:publicKey "{}" . }}"#,
+            public_key_hex(&attacker)
+        );
+        apply_update_as(&s, &registration, full).unwrap();
+        let request = advance(&attacker, "urn:event:unendorsed", "review", 0);
+        assert!(apply_update_as(&s, &request, full).is_err());
+        assert!(result(&s, "ASK { <urn:event:unendorsed> ?p ?v }").contains("false"));
+        assert!(
+            result(
+                &s,
+                &format!("SELECT ?v WHERE {{ <{RUN}> <{NS}currentState> ?v }}")
+            )
+            .contains("open")
+        );
+    }
 }
