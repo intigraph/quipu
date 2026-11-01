@@ -19,6 +19,10 @@ pub mod config;
 mod config_load;
 pub mod context;
 pub mod crew_credentials;
+/// DataBook documents: parse and render (kurtcagle/databook 1.5.0).
+pub mod databook;
+/// Export a graph as a DataBook; import a DataBook's graph data.
+pub mod databook_store;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;

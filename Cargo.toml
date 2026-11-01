@@ -152,6 +152,8 @@ rudof_iri = { version = "=0.3.25", default-features = false, optional = true }
 shacl_engine = { package = "shacl", version = "=0.3.25", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# DataBook frontmatter (src/databook.rs). Pure Rust, MIT/Apache-2.0.
+yaml-rust2 = "0.10"
 # The sandbox validates the parser's AST; pin its explicitly unstable API.
 minijinja = { version = "=2.24.0", default-features = false, features = ["builtins", "serde", "fuel", "unstable_machinery"] }
 # `ws`: GET /feed/ws (docs/design/event-push.md §3) brings tokio-tungstenite.

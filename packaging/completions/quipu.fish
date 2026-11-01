@@ -52,6 +52,7 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "ontology" -d 'Load, lis
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "validate" -d 'Validate a data file against a shapes file without writing'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "repl" -d 'Open an interactive SPARQL prompt'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "export" -d 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "databook" -d 'Export a graph as a DataBook, or import a DataBook\'s graph data'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "render" -d 'Render graph data into files in an owned directory'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "stats" -d 'Show store statistics'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "prime" -d 'Print the agent primer and a bounded, read-only summary of the store'
@@ -257,6 +258,28 @@ complete -c quipu -n "__fish_quipu_using_subcommand export" -l group-id -r
 complete -c quipu -n "__fish_quipu_using_subcommand export" -l construct -r
 complete -c quipu -n "__fish_quipu_using_subcommand export" -l format -r
 complete -c quipu -n "__fish_quipu_using_subcommand export" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and not __fish_seen_subcommand_from export import" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and not __fish_seen_subcommand_from export import" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and not __fish_seen_subcommand_from export import" -f -a "export" -d 'Write one graph, current or as of a past point, as a DataBook'
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and not __fish_seen_subcommand_from export import" -f -a "import" -d 'Load a DataBook\'s graph blocks in one write; never runs its queries'
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l graph -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l tx -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l valid-at -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l id -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l title -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l version -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l timestamp -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l out -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -l with-shapes
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l graph -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l timestamp -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l actor -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l source -r
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -l with-shapes
+complete -c quipu -n "__fish_quipu_using_subcommand databook; and __fish_seen_subcommand_from import" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand render" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand render" -l dest -r
 complete -c quipu -n "__fish_quipu_using_subcommand render" -l graph -r

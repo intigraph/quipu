@@ -360,6 +360,36 @@ qp export
 
 Value options: `--graph <VALUE>`, `--group-id <VALUE>`, `--construct <VALUE>`, `--format <VALUE>`.
 
+## `qp databook`
+
+Export a graph as a DataBook, or import a DataBook's graph data.
+
+Subcommands: `databook export`, `databook import`.
+
+### `qp databook export`
+
+Write one graph, current or as of a past point, as a DataBook.
+
+```text
+qp databook export
+```
+
+Value options: `--graph <VALUE>`, `--tx <VALUE>`, `--valid-at <VALUE>`, `--id <VALUE>`, `--title <VALUE>`, `--version <VALUE>`, `--timestamp <VALUE>`, `--out <VALUE>`.
+
+Switches: `--with-shapes`.
+
+### `qp databook import`
+
+Load a DataBook's graph blocks in one write; never runs its queries.
+
+```text
+qp databook import <file.databook.md>
+```
+
+Value options: `--graph <VALUE>`, `--timestamp <VALUE>`, `--actor <VALUE>`, `--source <VALUE>`.
+
+Switches: `--with-shapes`.
+
 ## `qp render`
 
 Render graph data into files in an owned directory.
