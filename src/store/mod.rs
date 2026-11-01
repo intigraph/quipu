@@ -140,6 +140,7 @@ pub struct Store {
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
     pub(crate) labels_config: crate::config::LabelsConfig,
+    pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,

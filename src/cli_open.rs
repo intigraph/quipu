@@ -80,6 +80,11 @@ pub fn open_store(db_path: &str) -> Store {
     // the server and ignored by `quipu knot`, which refused every write the
     // operator had opted out of validating.
     store.shacl_config_mut().clone_from(&config().shacl);
+    // `[quipu.import]` (aegis-zev): `quipu import` must honour refuse_internal
+    // exactly as the server does.
+    store
+        .import_policy_config_mut()
+        .clone_from(&config().import_policy);
     // Pure reads and backups do not need to construct an inference session.
     // Import/share and ordinary writes must use the configured provider.
     let command = std::env::args().nth(1).unwrap_or_default();
@@ -99,6 +104,18 @@ pub fn open_store(db_path: &str) -> Store {
         configure_embeddings(&mut store);
     }
     store
+}
+
+/// Apply the operator's import-time policy to a transient (in-memory) import
+/// store: the embedding provider AND `[quipu.import]` (aegis-zev). A transient
+/// archive, URL or delta import must refuse exactly what a `--db` or directory
+/// import of the same share refuses; review of #954 found the archive arm
+/// staging a share the directory arm refused under `refuse_internal = true`.
+pub fn configure_transient_import(store: &mut Store) {
+    store
+        .import_policy_config_mut()
+        .clone_from(&config().import_policy);
+    configure_embeddings(store);
 }
 
 /// Apply the same provider policy to explicitly transient import stores.

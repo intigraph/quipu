@@ -407,6 +407,19 @@ pub struct EventsConfig {
     pub retention_days: Option<u32>,
 }
 
+/// Share-import policy, `[quipu.import]` (aegis-zev).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ImportPolicyConfig {
+    /// Refuse every share whose verified manifest is stamped
+    /// `destination: internal`. Default `false`: such a share is accepted, the
+    /// receiver reads the stamp itself, and the marking is recorded on the
+    /// import. A later outward `quipu share` of that data still runs the
+    /// outward scrub. Set this on a store that must never hold unscrubbed
+    /// internal identifiers at all.
+    pub refuse_internal: bool,
+}
+
 /// Vector storage backend selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -536,6 +549,12 @@ pub struct QuipuConfig {
     /// Event-log retention (quipu-9z9). Default: keep forever.
     pub events: EventsConfig,
 
+    /// Share-import policy (aegis-zev), `[quipu.import]`. Named
+    /// `import_policy` so the wiring guard cannot mistake another `.import`
+    /// identifier for its consumer; serde keeps the TOML key `import`.
+    #[serde(rename = "import")]
+    pub import_policy: ImportPolicyConfig,
+
     /// Read-only databases to mount alongside the store (quipu-at2), declared
     /// as `[[quipu.attachments]]` with `alias` and `path`. Empty by default,
     /// which is the pre-existing behaviour exactly: no attachment, no change
@@ -602,6 +621,7 @@ impl Default for QuipuConfig {
             owl: OwlConfig::default(),
             governance: GovernanceConfig::default(),
             events: EventsConfig::default(),
+            import_policy: ImportPolicyConfig::default(),
             attachments: Vec::new(),
             current_projections: Vec::new(),
         }
