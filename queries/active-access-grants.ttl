@@ -1,0 +1,29 @@
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix quipu: <https://quipu.dev/ontology/> .
+
+<urn:quipu:query:active_access_grants> a quipu:StoredQuery ;
+  quipu:queryName "active_access_grants" ;
+  quipu:queryForm "SELECT" ;
+  dct:description "Access grants that are active now: committed, not revoked, expired or pending cleanup, and not past their expiry. Optionally for one principal or one work item. For the brief and patrols (aegis-bqc)." ;
+  quipu:targetsClass <http://aegis.gastown.local/ontology/AccessGrant> ;
+  quipu:parameter [ a quipu:QueryParameter ; quipu:parameterName "principal" ; quipu:parameterIndex 0 ; quipu:parameterKind "text" ; quipu:required false ; quipu:defaultValue "" ; dct:description "Principal IRI to list grants for; empty for every principal." ] ;
+  quipu:parameter [ a quipu:QueryParameter ; quipu:parameterName "item" ; quipu:parameterIndex 1 ; quipu:parameterKind "text" ; quipu:required false ; quipu:defaultValue "" ; dct:description "Work-item IRI to list grants for; empty for every item." ] ;
+  quipu:sparqlTemplate """PREFIX aegis: <http://aegis.gastown.local/ontology/>
+SELECT ?grant ?grantId ?principal ?item ?role ?kind ?expiresAt WHERE {
+  ?grant a aegis:AccessGrant ;
+    aegis:grantId ?grantId ;
+    aegis:grantPrincipal ?principal ;
+    aegis:aboutWorkItem ?item ;
+    aegis:grantRole ?role ;
+    aegis:grantKind ?kind ;
+    aegis:grantExpiresAt ?expiresAt .
+  FILTER ('{principal}' = '' || STR(?principal) = '{principal}')
+  FILTER ('{item}' = '' || STR(?item) = '{item}')
+  FILTER (?expiresAt > NOW())
+  FILTER EXISTS { ?committed aegis:ofGrant ?grant ; aegis:grantState 'committed' . }
+  FILTER NOT EXISTS {
+    ?ended aegis:ofGrant ?grant ; aegis:grantState ?state .
+    FILTER (?state IN ('revoked', 'expired', 'cleanup-pending'))
+  }
+}
+ORDER BY ?expiresAt ?grantId""" .
