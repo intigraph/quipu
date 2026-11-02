@@ -30,11 +30,16 @@ use crate::{Result, Store, Value};
 use rusqlite::OptionalExtension;
 use spargebra::algebra::{Expression, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 #[cfg(test)]
 thread_local! {
     /// How many stars took the single pass (tests prove the path ran).
     pub(super) static PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// How many covering scans ran (tests prove a shared star scans once).
+    pub(super) static SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 struct Optional<'a> {
@@ -250,7 +255,6 @@ pub(super) fn try_visit(
         PASSES.with(|n| n.set(n.get() + 1));
         return Ok(true);
     };
-    let class = Value::Ref(class_id).to_bytes();
     // Slot 0 is the required pattern's, when there is one.
     let predicates = star
         .required
@@ -259,80 +263,9 @@ pub(super) fn try_visit(
         .chain(star.optionals.iter().map(|o| o.predicate))
         .map(|p| store.lookup(p))
         .collect::<Result<Vec<_>>>()?;
-    let mut wanted: Vec<i64> = predicates.iter().flatten().copied().collect();
-    wanted.push(type_id);
-    wanted.sort_unstable();
-    wanted.dedup();
-    let placeholders = (0..wanted.len())
-        .map(|i| format!("?{}", i + 2))
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = format!(
-        "SELECT e, a, v FROM facts INDEXED BY idx_current_gea \
-         WHERE g = ?1 AND op = 1 AND valid_to IS NULL AND a IN ({placeholders})"
-    );
-    let mut params: Vec<i64> = vec![*graph];
-    params.extend(&wanted);
-
-    // Read every subject before emitting any, so a decline emits nothing.
-    let slot_of: Vec<(i64, usize)> = predicates
-        .iter()
-        .enumerate()
-        .filter_map(|(slot, predicate)| predicate.map(|p| (p, slot)))
-        .collect();
-    let mut buffered = Buffered {
-        width: predicates.len(),
-        subjects: Vec::new(),
-        starts: Vec::new(),
-        values: Vec::new(),
+    let Some(buffered) = scan_shared(store, ctx, *graph, type_id, class_id, predicates)? else {
+        return Ok(false);
     };
-    {
-        let mut statement = store.conn.prepare_cached(&sql)?;
-        let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
-        let mut current: Option<i64> = None;
-        let mut typed = false;
-        // Reused for every subject; `push` moves the values out.
-        let mut values: Vec<Vec<Value>> = vec![Vec::new(); predicates.len()];
-        let mut seen = 0usize;
-        loop {
-            let row = rows.next()?;
-            let e = match row {
-                Some(row) => Some(row.get::<_, i64>(0)?),
-                None => None,
-            };
-            if let Some(done) = current
-                && e != current
-            {
-                if typed {
-                    if !settle(&mut values) {
-                        return Ok(false);
-                    }
-                    buffered.push(done, &mut values);
-                } else {
-                    values.iter_mut().for_each(Vec::clear);
-                }
-                typed = false;
-                seen = 0;
-            }
-            let Some(row) = row else { break };
-            current = e;
-            seen += 1;
-            check_eval_budget(ctx, seen, 0)?;
-            let a: i64 = row.get(1)?;
-            // Borrowed, decoded once into its slot; never copied.
-            let rusqlite::types::ValueRef::Blob(v) = row.get_ref(2)? else {
-                return Ok(false);
-            };
-            if a == type_id && v == class.as_slice() {
-                typed = true;
-            }
-            for &(predicate, slot) in &slot_of {
-                if predicate == a {
-                    values[slot].push(Value::from_bytes(v)?);
-                }
-            }
-        }
-    }
 
     #[cfg(test)]
     PASSES.with(|n| n.set(n.get() + 1));
@@ -373,6 +306,151 @@ pub(super) fn try_visit(
         }
     }
     Ok(true)
+}
+
+/// One covering scan of `graph`: every subject of the class with its slots,
+/// or `None` (decline) when a slot holds two encodings of one term.
+fn scan(
+    store: &Store,
+    ctx: &TemporalContext,
+    graph: i64,
+    type_id: i64,
+    class: &[u8],
+    predicates: &[Option<i64>],
+) -> Result<Option<Buffered>> {
+    #[cfg(test)]
+    SCANS.with(|n| n.set(n.get() + 1));
+    let mut wanted: Vec<i64> = predicates.iter().flatten().copied().collect();
+    wanted.push(type_id);
+    wanted.sort_unstable();
+    wanted.dedup();
+    let placeholders = (0..wanted.len())
+        .map(|i| format!("?{}", i + 2))
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT e, a, v FROM facts INDEXED BY idx_current_gea \
+         WHERE g = ?1 AND op = 1 AND valid_to IS NULL AND a IN ({placeholders})"
+    );
+    let mut params: Vec<i64> = vec![graph];
+    params.extend(&wanted);
+
+    // Read every subject before emitting any, so a decline emits nothing.
+    let slot_of: Vec<(i64, usize)> = predicates
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, predicate)| predicate.map(|p| (p, slot)))
+        .collect();
+    let mut buffered = Buffered {
+        width: predicates.len(),
+        subjects: Vec::new(),
+        starts: Vec::new(),
+        values: Vec::new(),
+    };
+    {
+        let mut statement = store.conn.prepare_cached(&sql)?;
+        let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
+        let mut current: Option<i64> = None;
+        let mut typed = false;
+        // Reused for every subject; `push` moves the values out.
+        let mut values: Vec<Vec<Value>> = vec![Vec::new(); predicates.len()];
+        let mut seen = 0usize;
+        loop {
+            let row = rows.next()?;
+            let e = match row {
+                Some(row) => Some(row.get::<_, i64>(0)?),
+                None => None,
+            };
+            if let Some(done) = current
+                && e != current
+            {
+                if typed {
+                    if !settle(&mut values) {
+                        return Ok(None);
+                    }
+                    buffered.push(done, &mut values);
+                } else {
+                    values.iter_mut().for_each(Vec::clear);
+                }
+                typed = false;
+                seen = 0;
+            }
+            let Some(row) = row else { break };
+            current = e;
+            seen += 1;
+            check_eval_budget(ctx, seen, 0)?;
+            let a: i64 = row.get(1)?;
+            // Borrowed, decoded once into its slot; never copied.
+            let rusqlite::types::ValueRef::Blob(v) = row.get_ref(2)? else {
+                return Ok(None);
+            };
+            if a == type_id && v == class {
+                typed = true;
+            }
+            for &(predicate, slot) in &slot_of {
+                if predicate == a {
+                    values[slot].push(Value::from_bytes(v)?);
+                }
+            }
+        }
+    }
+
+    Ok(Some(buffered))
+}
+
+/// Identical stars scanned once per query: the 2fa closed query reads the
+/// same star in its `closed` and `total` subqueries. The query runs in one
+/// read transaction, so a buffered scan stays exact for all of it.
+type StarKey = (i64, i64, Vec<Option<i64>>);
+
+/// At most this many buffered stars are kept for one query.
+const CACHED_STARS: usize = 16;
+
+thread_local! {
+    static CACHE: RefCell<Option<HashMap<StarKey, Option<Rc<Buffered>>>>> =
+        const { RefCell::new(None) };
+}
+
+/// Share buffered stars until dropped; restores any enclosing query's cache.
+pub(in crate::sparql) struct Cache(Option<HashMap<StarKey, Option<Rc<Buffered>>>>);
+
+impl Cache {
+    pub(in crate::sparql) fn install() -> Self {
+        Self(CACHE.with(|cache| cache.replace(Some(HashMap::new()))))
+    }
+}
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        CACHE.with(|cache| *cache.borrow_mut() = self.0.take());
+    }
+}
+
+/// [`scan`], shared within the installed [`Cache`] (declines included).
+fn scan_shared(
+    store: &Store,
+    ctx: &TemporalContext,
+    graph: i64,
+    type_id: i64,
+    class_id: i64,
+    predicates: Vec<Option<i64>>,
+) -> Result<Option<Rc<Buffered>>> {
+    let key: StarKey = (graph, class_id, predicates);
+    if let Some(found) =
+        CACHE.with(|cache| cache.borrow().as_ref().and_then(|c| c.get(&key).cloned()))
+    {
+        return Ok(found);
+    }
+    let class = Value::Ref(class_id).to_bytes();
+    let scanned = scan(store, ctx, graph, type_id, &class, &key.2)?.map(Rc::new);
+    CACHE.with(|cache| {
+        if let Some(c) = cache.borrow_mut().as_mut()
+            && c.len() < CACHED_STARS
+        {
+            c.insert(key, scanned.clone());
+        }
+    });
+    Ok(scanned)
 }
 
 /// The rows of OPTIONALs `i..` over `row`, in nested left-join order.

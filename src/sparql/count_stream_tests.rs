@@ -729,3 +729,27 @@ fn star_pass_matches_and_declines_exactly() {
     compare(&store, q, &ctx, true);
     assert_eq!(passes(), before, "no covering index must decline");
 }
+
+/// aegis-xdvg.6: inside one query's cache an identical star is scanned once
+/// and both uses stay exact; without the cache each use scans.
+#[test]
+fn identical_stars_share_one_scan_per_query() {
+    let store = fixture();
+    let ctx = TemporalContext::default();
+    let scans = || super::super::count_star::SCANS.with(std::cell::Cell::get);
+    let q = "SELECT ?st (COUNT(DISTINCT ?s) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue . OPTIONAL { ?s ex:id ?id } OPTIONAL { ?s ex:status ?st } } } GROUP BY ?st";
+    let before = scans();
+    compare(&store, q, &ctx, true);
+    compare(&store, q, &ctx, true);
+    assert_eq!(scans() - before, 2, "no cache: each use scans");
+    let cache = super::super::count_star::Cache::install();
+    let before = scans();
+    compare(&store, q, &ctx, true);
+    compare(&store, q, &ctx, true);
+    assert_eq!(
+        scans() - before,
+        1,
+        "one query: the identical star scans once"
+    );
+    drop(cache);
+}
