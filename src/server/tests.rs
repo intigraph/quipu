@@ -666,6 +666,7 @@ async fn cancelled_write_waiter_never_starts_blocking_work() {
 /// which needs no triple-insert plumbing and is fully deterministic.
 #[tokio::test]
 async fn stats_uses_generation_cache_and_invalidates_on_write() {
+    let _serial = super::base::STATS_TEST_LOCK.lock().await;
     let store = Store::open_in_memory().unwrap();
     let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
 
