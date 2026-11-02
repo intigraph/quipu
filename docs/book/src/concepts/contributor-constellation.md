@@ -80,7 +80,7 @@ file implements a decision.
 ```sparql
 PREFIX q: <https://quipu.dev/knowledge/>
 SELECT ?decision ?module WHERE {
-  q:vision q:guides ?decision .
+  ?vision a q:Vision ; q:guides ?decision .
   ?decision q:governs ?module .
   ?module a ?type .
 }

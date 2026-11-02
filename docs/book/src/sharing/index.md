@@ -294,6 +294,28 @@ producer coverage is unknown, not evidence that a relationship does not exist.
 Embedding model metadata and vector rebuilding are separate load capabilities;
 composing two graphs does not itself prove either one.
 
+#### Public entity names
+
+A released repository pendant names its entities under
+`https://w3id.org/intigraph/<repository>/id/`, which redirects to the
+project site:
+
+| Entity | Public name |
+|---|---|
+| Source file or symbol | `…/<repository>/id/code/<path-or-symbol>` |
+| Document or section | `…/<repository>/id/doc/<path>[#section]` |
+| Chunk pointer | `…/<repository>/id/chunk/<path>#<chunk>` |
+| The repository itself | `…/<repository>/id/repo` |
+| Quipu contributor idea | `…/quipu/id/idea/<name>` |
+
+The producer's store keeps its internal names; the release query renames
+subjects and entity-valued objects as it exports, and every renamed subject
+carries one `owl:sameAs` link to its former name, so a store that already
+holds an older pendant still resolves the old IRIs. Every repository applies
+the same rule, so a reference from one pendant to another lands on the name
+the other pendant publishes. Classes, predicates, literals and the four
+review-pinned publication-policy rule IRIs are not renamed.
+
 #### Composition is not an identity decision
 
 - **The same exact IRI** names the same RDF subject in the composed data.
