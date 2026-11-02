@@ -180,26 +180,31 @@ class RepositoryQuery(unittest.TestCase):
 
     def test_names_the_query_cannot_rename_refuse_at_build(self):
         # The query and the verifier read the repository segment the same
-        # way: a name the query leaves alone is refused, never published.
+        # way: a name the query leaves alone is refused, never published
+        # under a w3id name the verifier would not derive back.
         spec = importlib.util.spec_from_file_location(
             "share_builder", Path(__file__).resolve().parents[1] / "scripts/build-repository-share.py")
         builder = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(builder)
+        own = URIRef(str(A) + "doc/quipu/README.md")
         for name in (str(A) + "doc/my_repo/README.md", str(A) + "doc/quipu/"):
             source = Graph()
-            source.add((URIRef(name), RDF.type, A.Document))
-            source.add((URIRef(name), A.filePath, Literal("README.md")))
+            source.add((own, RDF.type, A.Document))
+            source.add((own, A.filePath, Literal("README.md")))
+            source.add((own, RDFS.seeAlso, URIRef(name)))
             with self.subTest(name=name), tempfile.TemporaryDirectory() as work:
                 result = source.query(QUERY).graph
-                self.assertIn((URIRef(name), RDF.type, A.Document), result)
+                new = URIRef("https://w3id.org/intigraph/quipu/id/doc/README.md")
+                self.assertIn((new, RDFS.seeAlso, URIRef(name)), result)
                 export = Path(work) / "export.nt"
                 export.write_bytes(result.serialize(format="nt", encoding="utf-8"))
-                with self.assertRaises(ValueError):
+                with self.assertRaisesRegex(ValueError, "unrenamed"):
                     builder.verify_former_names(export)
-        bare = Graph()
-        bare.add((URIRef("https://quipu.dev/knowledge/"), RDFS.label, Literal("root")))
-        self.assertIn((URIRef("https://quipu.dev/knowledge/"), RDFS.label, Literal("root")),
-                      bare.query(QUERY).graph)
+        idea = Graph()
+        idea.add((own, RDF.type, A.Document))
+        idea.add((own, RDFS.seeAlso, URIRef("https://quipu.dev/knowledge/")))
+        self.assertIn((URIRef("https://w3id.org/intigraph/quipu/id/doc/README.md"), RDFS.seeAlso,
+                       URIRef("https://quipu.dev/knowledge/")), idea.query(QUERY).graph)
 
 
 if __name__ == "__main__":
