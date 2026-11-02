@@ -20,6 +20,8 @@ test -x "$BOBBIN_BIN"
 test -f "$QUERY"
 test ! -e "$OUTPUT" || { echo "output already exists: $OUTPUT" >&2; exit 2; }
 
+python3 "$SOURCE/scripts/check-repository-agent-references.py" "$SOURCE"
+
 # Run only on the trusted producer. The authority address and credential stay
 # in its private environment; neither belongs in hosted workflow configuration.
 PRIVATE=$(mktemp -d "$(dirname "$OUTPUT")/.quipu-producer.XXXXXX")
@@ -161,6 +163,9 @@ PY
   'PREFIX aegis: <http://aegis.gastown.local/ontology/> SELECT ?module WHERE { ?symbol aegis:definedIn ?module . ?symbol aegis:filePath "src/share_transport.rs" } LIMIT 1' \
   --db "$FRESH_DB" > "$QUERY_JSON"
 grep -q 'src%2Fshare_transport\.rs' "$QUERY_JSON"
+
+python3 "$SOURCE/scripts/check-repository-agent-references.py" "$SOURCE" \
+  --receiver "$QUIPU_BIN" "$FRESH_DB_ABS"
 
 node "$SOURCE/scripts/verify-contributor-knowledge.mjs" "$QUIPU_BIN" "$FRESH_DB"
 

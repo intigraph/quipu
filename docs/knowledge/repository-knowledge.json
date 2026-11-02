@@ -1,6 +1,6 @@
 {
-  "source_revision": "4f3f5493d347d97e9a0470faa8c5c1c087d68da6",
-  "reviewed_at": "2026-10-22T12:28:59.732949Z",
+  "source_revision": "d707ec62fe105f3296143321e681aec8daa46f28",
+  "reviewed_at": "2026-11-01T18:44:51.782380Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -93,7 +93,7 @@
       "source": "scripts/build-repository-share.sh",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/scripts%2Fbuild-repository-share.sh",
       "summary": "The legacy trusted-host repository builder invokes the Bobbin indexer and Quipu share and quarantine checks. Private publication policy remains outside the public artifact.",
-      "source_sha256": "89e6a19cd92208acc18a89813adec4f510bb8b1b04ea2b636093425679a3e387",
+      "source_sha256": "c47cc0f8a0e7191cdb65bed7dc6e5d1eab9baf1d55f91c044cd7cf95c63a62bb",
       "properties": {
         "interfaceKind": "file-format",
         "publicName": "Trusted repository pendant builder"
@@ -132,6 +132,48 @@
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/reference/cli-commands.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
+      "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
+      "source_sha256": "31ebb7b598d3e7d39f938a7d3bcbf3399bf5001df2cdd4d2ac9c289e78591006",
+      "properties": {
+        "interfaceKind": "CLI",
+        "publicName": "CLI Command Index"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/reference/mcp-tool-index.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
+      "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
+      "source_sha256": "2291d39e5b259abebabfaac1a556ef6d12b25de9c63325ae9951d5408e454424",
+      "properties": {
+        "interfaceKind": "MCP",
+        "publicName": "MCP Tool Index"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/getting-started/agent-primer.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-primer.md",
+      "summary": "Agent Primer book entrypoint includes the embedded primer source and documents the prime command.",
+      "source_sha256": "27e5346173128a72c0695de93d2e09dc3a6b1d06e9335b9e5dd998b4c4f903b2",
+      "properties": {
+        "startHereOrder": 4
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "src/primer.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
+      "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
+      "source_sha256": "3693f0c75a2df4fa43ecf8b973b98915926fa121333c289021724465db6e9719",
+      "properties": {
+        "startHereOrder": 5
       }
     }
   ]

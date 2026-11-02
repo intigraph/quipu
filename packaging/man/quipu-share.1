@@ -13,79 +13,79 @@ Write a portable share of a graph, scope or project
 Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
 .TP
 \fB\-\-output\fR \fI<VALUE>\fR
-
+Output directory for the share
 .TP
 \fB\-\-graph\fR \fI<VALUE>\fR
-
+Explicit graph IRI for this operation
 .TP
 \fB\-\-group\-id\fR \fI<VALUE>\fR
-
+Select facts belonging to this group
 .TP
 \fB\-\-construct\fR \fI<VALUE>\fR
-
+SPARQL CONSTRUCT query selecting the share
 .TP
 \fB\-\-shapes\fR \fI<VALUE>\fR
-
+Shapes used for validation or packaging
 .TP
 \fB\-\-queries\fR \fI<VALUE>\fR
-
+Stored queries to include
 .TP
 \fB\-\-alignments\fR \fI<VALUE>\fR
-
+Reviewed SSSOM/RDF alignment file to carry
 .TP
 \fB\-\-parent\-share\fR \fI<VALUE>\fR
-
+Parent share for a delta export
 .TP
 \fB\-\-since\fR \fI<VALUE>\fR
-
+Starting share or transaction for incremental output
 .TP
 \fB\-\-destination\fR \fI<VALUE>\fR
-
+Publication destination evaluated by policy
 .TP
 \fB\-\-pack\-dir\fR \fI<VALUE>\fR
-
+Existing pack directory to share
 .TP
 \fB\-\-actor\fR \fI<VALUE>\fR
-
+Actor recorded in operation provenance
 .TP
 \fB\-\-attest\-key\fR \fI<VALUE>\fR
-
+Ed25519 attestation signing key file
 .TP
 \fB\-\-attest\-issued\-at\fR \fI<VALUE>\fR
-
+Attestation issue time as Unix seconds
 .TP
 \fB\-\-attest\-ttl\fR \fI<VALUE>\fR
-
+Attestation lifetime in seconds
 .TP
 \fB\-\-attest\-agent\fR \fI<VALUE>\fR
-
+Attested agent identifier
 .TP
 \fB\-\-attest\-session\fR \fI<VALUE>\fR
-
+Attested session identifier
 .TP
 \fB\-\-attest\-introducer\fR \fI<VALUE>\fR
-
+Attestation introducer identifier
 .TP
 \fB\-\-attest\-nonce\fR \fI<VALUE>\fR
-
+Unique attestation nonce
 .TP
 \fB\-\-pointers\fR \fI<VALUE>\fR
-
+TOML file declaring external graph pointers
 .TP
 \fB\-\-no\-shapes\fR
-
+Omit shapes from the share
 .TP
 \fB\-\-no\-queries\fR
-
+Omit stored queries from the share
 .TP
 \fB\-\-turtle\fR
-
+Include a human\-readable Turtle export
 .TP
 \fB\-\-attest\fR
-
+Attach a signed agent attestation
 .TP
 \fB\-\-project\fR
-
+Export this repository\*(Aqs project graph to .quipu/graph
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help
