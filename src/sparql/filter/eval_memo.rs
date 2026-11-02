@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use crate::error::Result;
 use crate::store::Store;
+use crate::types::Value;
 
 const MEMO_ENTRIES: usize = 1 << 20;
 
@@ -23,6 +24,10 @@ const MEMO_ENTRIES: usize = 1 << 20;
 struct Memo {
     refs: HashMap<String, i64>,
     iris: HashMap<i64, String>,
+    /// Constant subexpressions by address: the algebra is borrowed, unmoved,
+    /// for the whole evaluation.
+    constants: HashMap<usize, Option<Value>>,
+    date_times: HashMap<String, Option<oxsdatatypes::DateTime>>,
 }
 
 thread_local! {
@@ -82,4 +87,57 @@ pub(super) fn resolve(store: &Store, id: i64) -> Result<String> {
         }
     });
     Ok(iri)
+}
+
+/// The value of a constant expression (no variables), computed once inside a
+/// [`Scope`]; `compute` runs every time outside one.
+pub(super) fn constant(
+    expr: &spargebra::algebra::Expression,
+    compute: impl FnOnce() -> Option<Value>,
+) -> Option<Value> {
+    let key = std::ptr::from_ref(expr) as usize;
+    let active = MEMO.with(|memo| memo.borrow().is_some());
+    if !active {
+        return compute();
+    }
+    if let Some(value) = MEMO.with(|memo| {
+        memo.borrow()
+            .as_ref()
+            .and_then(|m| m.constants.get(&key).cloned())
+    }) {
+        return value;
+    }
+    let value = compute();
+    MEMO.with(|memo| {
+        if let Some(m) = memo.borrow_mut().as_mut()
+            && m.constants.len() < MEMO_ENTRIES
+        {
+            m.constants.insert(key, value.clone());
+        }
+    });
+    value
+}
+
+/// An `xsd:dateTime` lexical form parsed once inside a [`Scope`].
+pub(in crate::sparql) fn date_time(lexical: &str) -> Option<oxsdatatypes::DateTime> {
+    let cached = MEMO.with(|memo| {
+        memo.borrow()
+            .as_ref()
+            .map(|m| m.date_times.get(lexical).copied())
+    });
+    match cached {
+        Some(Some(parsed)) => parsed,
+        Some(None) => {
+            let parsed = lexical.parse().ok();
+            MEMO.with(|memo| {
+                if let Some(m) = memo.borrow_mut().as_mut()
+                    && m.date_times.len() < MEMO_ENTRIES
+                {
+                    m.date_times.insert(lexical.to_owned(), parsed);
+                }
+            });
+            parsed
+        }
+        None => lexical.parse().ok(),
+    }
 }
