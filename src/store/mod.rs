@@ -45,6 +45,7 @@ pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
 pub mod events;
+mod events_retention;
 pub mod forks;
 mod forks_merge;
 pub mod freeze;

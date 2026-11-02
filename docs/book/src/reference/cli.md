@@ -1147,6 +1147,10 @@ the write gates record; the raw events are served by
 refusal event records (metadata only, never the refused bodies) and the
 speculate exclusion.
 
+The counts cover the retained event log only. Event retention (default 30
+days, `[quipu.events] retention_days`) prunes older events, so the output
+ends with the timestamp of the oldest retained event the counts start from.
+
 ```bash
 quipu events refusals --db my.db
 ```

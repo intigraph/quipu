@@ -33,13 +33,17 @@ bind = "127.0.0.1:3030"
 # previous_auth_token_expires_at_epoch_secs = 2000000000
 
 [quipu.events]
-# Event-log retention. Unset (the default) keeps every event forever.
-# When set, the server hourly deletes events older than this many days —
-# but never an event a registered consumer has not yet committed past, so
-# a lagging consumer's replay is never broken (its backlog just stays on
-# disk). A consumer registering AFTER a prune replays from the retained
-# prefix, not from genesis.
-# retention_days = 90
+# Event-log retention, in days. Default 30; 0 keeps every event forever.
+# The server deletes older events hourly, in small batches, but never an
+# event a registered consumer has not yet committed past, so a lagging
+# consumer's replay is never broken (its backlog stays on disk). Only a
+# consumer that commits a cursor (POST /events/commit, or
+# /events/graph/commit for a named graph) is registered; a reader that only
+# pulls /events?since= or streams SSE is not protected. A consumer that
+# registers after a prune replays from the oldest retained event, not from
+# genesis. Event ages compare as instants, and an event whose timestamp
+# cannot be parsed is kept.
+# retention_days = 30
 
 # Read-only databases mounted alongside the store. Each block is one layer:
 # a knowledge pack, a shared reference database, a frozen archive someone
@@ -69,7 +73,7 @@ stops being read.
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
 | `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
-| `events.retention_days` | unset (keep forever) | Prune events older than N days, never past any registered consumer's committed offset |
+| `events.retention_days` | `30` | Prune events older than N days, never past any registered consumer's committed offset; `0` keeps every event |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
 | `labels.min_trust_rank` / `labels.min_trust_chain` | unset | Trust floors on the query path |
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
