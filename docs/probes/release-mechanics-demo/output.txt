@@ -1,0 +1,44 @@
+Script started on 2026-10-30 13:37:04-04:00 [COMMAND="bash /tmp/release-mechanics-demo/run.sh" <not executed on terminal>]
+Same disposable Git fixtures and canonical locks, including unrelated dependencies.
+Base a7f41abd: just changelog-verify-test
+  PASS  binding release suffixed stays exempt (exit 0)
+  PASS  binding release unsuffixed stays exempt (exit 0)
+  PASS  binding release near-match remains required (exit 1)
+  PASS  binding release feature remains required (exit 1)
+  PASS  binding release wrong-version remains required (exit 1)
+  PASS  binding release binding-version remains required (exit 1)
+  PASS  binding release source remains required (exit 1)
+  PASS  binding release dependency remains required (exit 1)
+  FAIL  binding release lock-dependency remains required — wanted exit 1 containing '867e660', got exit 0:
+  FAIL  binding release root-lock-dependency remains required — wanted exit 1 containing '7155821', got exit 0:
+  FAIL  binding release registry-namesake remains required — wanted exit 1 containing 'a155952', got exit 0:
+  PASS  binding exemption does not mask extras (exit 1)
+  PASS  binding exemption does not mask duplicates (exit 1)
+  49 passed, 3 failed
+Observed base exit: 1
+Candidate verifier blob: eaefb4ce3084e4d8cb2fdb3a8f1a0a6a3414bdc5
+Candidate: just changelog-verify-test
+  PASS  binding release suffixed stays exempt (exit 0)
+  PASS  binding release unsuffixed stays exempt (exit 0)
+  PASS  binding release near-match remains required (exit 1)
+  PASS  binding release feature remains required (exit 1)
+  PASS  binding release wrong-version remains required (exit 1)
+  PASS  binding release binding-version remains required (exit 1)
+  PASS  binding release source remains required (exit 1)
+  PASS  binding release dependency remains required (exit 1)
+  PASS  binding release lock-dependency remains required (exit 1)
+  PASS  binding release root-lock-dependency remains required (exit 1)
+  PASS  binding release registry-namesake remains required (exit 1)
+  PASS  binding exemption does not mask extras (exit 1)
+  PASS  binding exemption does not mask duplicates (exit 1)
+  52 passed, 0 failed
+Observed candidate exit: 0; canonical locks accepted, unrelated entries required.
+Retained canonical 0.16.6 release: just changelog-verify --version 0.16.6
+[1m./scripts/verify-changelog.sh --version 0.16.6[0m
+release-window: quipu-ai-v0.16.5..quipu-ai-v0.16.6; 0 bare subjects explicitly documented
+changelog-verify: version 0.16.6, range quipu-ai-v0.16.5..quipu-ai-v0.16.6
+  git-cliff commits: 18 · documented in CHANGELOG: 17 · missing: 0 · extra: 0
+OK — no duplicated bullets or category headings in 71 section(s).
+OK — the 0.16.6 section matches git-cliff exactly (18 commit(s), none missing, none extra).
+
+Script done on 2026-10-30 13:37:27-04:00 [COMMAND_EXIT_CODE="0"]
