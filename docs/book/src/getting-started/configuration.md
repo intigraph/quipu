@@ -103,6 +103,7 @@ stops being read.
 | `embedding.auto_embed` | `true` | Auto-embed entities on write (needs model/tokenizer paths) |
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
+| `embedding.exclude_predicates` | `[]` | Predicate IRIs whose values are left out of embedding text, so a value that changes on every write (a probe marker) does not create a new vector each time; the facts are still stored and queryable |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |
