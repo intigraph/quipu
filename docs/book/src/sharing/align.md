@@ -105,6 +105,45 @@ computed by quipu and never handed back, so requiring you to pre-create it would
 name you are not told. Any other graph IRI you pass must already exist — otherwise a typo would
 mint a new empty graph and report a successful write that nobody can find.
 
+## export
+
+```text
+quipu align export <set.tsv> --license <iri> [--format tsv|ttl] \
+    [--prefix <name>=<iri>]... [--author-prefix <name>] [--out <file>]
+```
+
+Writes a proposed or decided set as **standard SSSOM** — SSSOM/TSV with its YAML metadata
+block, or SSSOM/RDF as Turtle — for tools that have never heard of quipu. It is read-only and
+leaves the working set untouched, so the `expected-version` you carry to `apply` does not move.
+
+The working TSV is quipu's own file: it holds full IRIs and no licence, because its exact bytes
+are the version `apply` checks. Export adds what the standard requires and the working file
+cannot carry, and **refuses rather than guesses** wherever that takes a judgement only you can
+make:
+
+| export needs | where it comes from | if it is missing |
+|---|---|---|
+| CURIEs for every identifier | the set's `curie_map` plus each `--prefix` | refused, naming the IRI no prefix covers |
+| a `license` IRI | `--license` | refused — quipu does not pick a licence |
+| an `author_id` entity | the reviewer, under `--author-prefix` | refused for a bare name like `malcolm` |
+| a `mapping_date` | stamped by `decide` on every row it rules on | omitted: older sets carry none |
+
+Nothing is upgraded on the way out. A declined row keeps no `author_id`, so no SSSOM reader
+mistakes it for curation; an undecided row keeps the matcher's justification and its
+confidence. Declined rows travel through the declared extension slots `quipu_review` and
+`quipu_reviewed_by`.
+
+```console
+$ quipu align export decided.tsv --license https://creativecommons.org/publicdomain/zero/1.0/ \
+    --prefix A=https://a.example/ --prefix B=https://b.example/ \
+    --prefix crew=https://crew.example/agent/ --author-prefix crew --out set.sssom.tsv
+```
+
+`--format ttl` writes the same set as a `sssom:MappingSet` whose mappings are `owl:Axiom`
+nodes (`owl:annotatedSource`, `owl:annotatedProperty`, `owl:annotatedTarget`), with negations
+as `sssom:predicate_modifier sssom:NegatedPredicate`, authors as `pav:authoredBy` and dates as
+`dcterms:created` (`xsd:date`). The Turtle is parsed back before it is written.
+
 ## What the record is
 
 An alignment is an ordinary, queryable fact:

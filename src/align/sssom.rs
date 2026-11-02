@@ -21,9 +21,8 @@
 //!
 //! `author_id` absent marks a row the operator has not decided. That is the
 //! whole state machine: `propose` writes rows with no author, `decide` fills in
-//! the author, the date, and the operator's own justification
-//! (`semapv:ManualMappingCuration` — *the recorded justification is the
-//! operator's, not the matcher's*), and `apply` derives knots only from
+//! the author (and, through `decide_dated`, the `mapping_date`) while leaving
+//! the matcher's justification as it was, and `apply` derives knots only from
 //! authored, non-negated rows. A skipped row stays unauthored and comes back
 //! next time, which is why skip and reject must never be collapsed.
 
@@ -235,6 +234,42 @@ pub struct Mapping {
     /// Who reviewed, for a row that carries [`Review`] rather than an author.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quipu_reviewed_by: Option<String>,
+    /// SSSOM `mapping_date`: the UTC day (`YYYY-MM-DD`, an `xsd:date`) the
+    /// operator ruled on this row. `decide` stamps it; `propose` never does,
+    /// because a candidate has not been asserted on any date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping_date: Option<String>,
+}
+
+/// Is `value` a real calendar day as an `xsd:date` in the only form quipu
+/// writes, `YYYY-MM-DD`?
+///
+/// Checked field by field rather than by a date library: the form is fixed,
+/// and a plausible-looking day that does not exist — `2026-02-31`, `2026-04-31`,
+/// `2026-02-29`, `1900-02-29` — must be refused, not normalised. Month lengths
+/// and leap years are proleptic Gregorian, as `xsd:date` specifies.
+#[must_use]
+pub fn is_xsd_date(value: &str) -> bool {
+    let b = value.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+    if !(digits(0..4) && digits(5..7) && digits(8..10)) {
+        return false;
+    }
+    let year: u32 = value[0..4].parse().unwrap_or(0);
+    let month: u32 = value[5..7].parse().unwrap_or(0);
+    let day: u32 = value[8..10].parse().unwrap_or(0);
+    let leap = (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400);
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
 }
 
 impl Mapping {
@@ -395,7 +430,15 @@ impl MappingSet {
             let _ = writeln!(out, "#  {prefix}: \"{expansion}\"");
         }
         let _ = writeln!(out, "#mapping_set_id: \"{}\"", self.mapping_set_id);
+        // `mapping_date` is emitted only when some row carries one. A set
+        // written before dates existed therefore serialises to the SAME bytes,
+        // so its `sha256` — the version `apply` guards on — does not move
+        // under an operator who decided it on an older build.
+        let dated = self.mappings.iter().any(|m| m.mapping_date.is_some());
         out.push_str(&COLUMNS.join("\t"));
+        if dated {
+            out.push_str("\tmapping_date");
+        }
         out.push('\n');
 
         for m in &self.mappings {
@@ -422,6 +465,16 @@ impl MappingSet {
                 }
             }
             out.push_str(&cells.join("\t"));
+            if dated {
+                let date = m.mapping_date.as_deref().unwrap_or("");
+                if !date.is_empty() && !is_xsd_date(date) {
+                    return Err(Error::InvalidValue(format!(
+                        "mapping_date {date:?} is not an xsd:date (YYYY-MM-DD)"
+                    )));
+                }
+                out.push('\t');
+                out.push_str(date);
+            }
             out.push('\n');
         }
         Ok(out)
@@ -537,6 +590,16 @@ impl MappingSet {
                     })?),
                 },
                 quipu_reviewed_by: some(get("quipu_reviewed_by")),
+                mapping_date: match get("mapping_date") {
+                    "" => None,
+                    raw if is_xsd_date(raw) => Some(raw.to_string()),
+                    raw => {
+                        return Err(Error::InvalidValue(format!(
+                            "SSSOM/TSV row {}: mapping_date {raw:?} is not an xsd:date (YYYY-MM-DD)",
+                            row + 1
+                        )));
+                    }
+                },
             });
         }
 

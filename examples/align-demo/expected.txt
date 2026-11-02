@@ -7,3 +7,6 @@
 7. QUERY ACROSS BOTH    sameAs=bobbin-release
 8. BOUNDARY             the alignment is a fact in its own graph, not an edit to either source
 9. DERIVED GRAPH        quipu computed and created it; nobody had to name it in advance
+10. EXPORT SSSOM/TSV    rows=1 curies_only=true license=true author=demo:demo-operator dated=true
+11. EXPORT SSSOM/RDF    mapping_set=true axioms=1
+12. NO LICENCE REFUSED  exit=1 refused=true

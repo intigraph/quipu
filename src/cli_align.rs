@@ -28,6 +28,7 @@ use quipu::align::{
     apply::{self, set_version},
     decide::{self, Decision, DecisionRow},
     enumerate::propose_from_graphs,
+    export::{self, ExportFormat, ExportOptions},
     propose::LinkSpec,
     sssom::MappingSet,
 };
@@ -39,13 +40,16 @@ pub fn cmd_align(args: &[String], db_path: &str) {
         Some("propose") => cmd_propose(args, db_path),
         Some("decide") => cmd_decide(args),
         Some("apply") => cmd_apply(args, db_path),
+        Some("export") => cmd_export(args),
         _ => {
             eprintln!(
                 "usage: quipu align propose <graph-a> <graph-b> [--out <set.tsv>] [--db <path>]\n\
                  \x20      quipu align decide <set.tsv> --decisions <rows.tsv> \
                  --reviewer <who> [--out <set.tsv>]\n\
                  \x20      quipu align apply <set.tsv> --graph-a <iri> --graph-b <iri> \
-                 --expected-version <sha> [--actor <who>] [--db <path>]\n\n\
+                 --expected-version <sha> [--actor <who>] [--db <path>]\n\
+                 \x20      quipu align export <set.tsv> --license <iri> [--format tsv|ttl] \
+                 [--prefix <name>=<iri>]... [--author-prefix <name>] [--out <file>]\n\n\
                  `apply` requires --expected-version, printed by `decide`. It is not\n\
                  defaulted: recomputing it here would hash the set being written, always\n\
                  match, and silently void the concurrency check."
@@ -140,7 +144,10 @@ fn cmd_decide(args: &[String]) {
     };
     let set = read_set(set_path);
     let decisions = read_decisions(rows_path);
-    let report = match decide::decide(&set, &decisions, reviewer) {
+    // The day the operator ruled, recorded as SSSOM `mapping_date`.
+    let now = chrono_now();
+    let today = now.get(..10).unwrap_or_default();
+    let report = match decide::decide_dated(&set, &decisions, reviewer, Some(today)) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("align decide: {e}");
@@ -216,6 +223,64 @@ fn cmd_apply(args: &[String], db_path: &str) {
         Ok(report) => println!("{report:?}"),
         Err(e) => {
             eprintln!("align apply: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Read-only: writes a set as standard SSSOM/TSV or SSSOM/RDF (Turtle).
+///
+/// Touches no store and changes nothing about the set: the working TSV keeps
+/// its bytes, so its `expected-version` is unaffected.
+fn cmd_export(args: &[String]) {
+    let Some(set_path) = args.get(3) else {
+        eprintln!(
+            "usage: quipu align export <set.tsv> --license <iri> [--format tsv|ttl] \
+             [--prefix <name>=<iri>]... [--author-prefix <name>] [--out <file>]"
+        );
+        std::process::exit(1);
+    };
+    let Some(license) = flag_value(args, "--license") else {
+        eprintln!(
+            "align export: --license <iri> is required; SSSOM needs a licence on every \
+             mapping set and quipu does not choose one"
+        );
+        std::process::exit(1);
+    };
+    let format = match ExportFormat::parse(flag_value(args, "--format").unwrap_or("tsv")) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("align export: {e}");
+            std::process::exit(1);
+        }
+    };
+    let mut options = ExportOptions {
+        license: license.to_string(),
+        author_prefix: flag_value(args, "--author-prefix").map(str::to_string),
+        ..ExportOptions::default()
+    };
+    // --prefix is repeatable: name=<namespace IRI>.
+    for value in args
+        .windows(2)
+        .filter(|w| w[0] == "--prefix")
+        .map(|w| &w[1])
+    {
+        let Some((name, iri)) = value.split_once('=') else {
+            eprintln!("align export: --prefix {value:?} must be <name>=<iri>");
+            std::process::exit(1);
+        };
+        if let Some(prior) = options.prefixes.insert(name.to_string(), iri.to_string())
+            && prior != iri
+        {
+            eprintln!("align export: --prefix {name} given as both {prior:?} and {iri:?}");
+            std::process::exit(1);
+        }
+    }
+    let set = read_set(set_path);
+    match export::export(&set, &options, format) {
+        Ok(text) => emit(args, &text),
+        Err(e) => {
+            eprintln!("align export: {e}");
             std::process::exit(1);
         }
     }

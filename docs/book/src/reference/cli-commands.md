@@ -1312,7 +1312,7 @@ qp path draft <trajectory-IRI>
 
 Propose, decide and apply cross-graph alignments.
 
-Subcommands: `align propose`, `align decide`, `align apply`.
+Subcommands: `align propose`, `align decide`, `align apply`, `align export`.
 
 ### `qp align propose`
 
@@ -1355,6 +1355,16 @@ qp align apply <set.tsv>
 - `--expected-version <VALUE>`: Expected version for the compare-and-swap operation.
 
 - `--actor <VALUE>`: Actor recorded in operation provenance.
+
+### `qp align export`
+
+Export a mapping set as standard SSSOM TSV or RDF Turtle.
+
+```text
+qp align export <set.tsv>
+```
+
+Value options: `--license <VALUE>`, `--format <VALUE>`, `--prefix <VALUE>`, `--author-prefix <VALUE>`, `--out <VALUE>`.
 
 ## `qp propose`
 

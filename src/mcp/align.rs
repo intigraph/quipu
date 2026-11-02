@@ -124,7 +124,10 @@ pub fn tool_align_decide(input: &JsonValue) -> Result<JsonValue> {
         });
     }
 
-    let report = decide::decide(&set, &decisions, reviewer)?;
+    // The day the operator ruled, recorded as SSSOM `mapping_date` — the same
+    // stamp the CLI writes, so the two surfaces produce the same set.
+    let now = crate::time::now_iso();
+    let report = decide::decide_dated(&set, &decisions, reviewer, now.get(..10))?;
     Ok(json!({
         "set_tsv": report.set.to_tsv()?,
         // Carried forward for `apply`, from the set the operator actually decided.

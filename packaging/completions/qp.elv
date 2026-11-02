@@ -901,6 +901,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand propose 'Propose scored alignments between two named graphs as an SSSOM set'
             cand decide 'Apply reviewer accept and negate decisions to a mapping set'
             cand apply 'Materialize decided alignments into a derived alignment graph'
+            cand export 'Export a mapping set as standard SSSOM TSV or RDF Turtle'
         }
         &'qp;align;propose'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -923,6 +924,16 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --graph-b 'Second graph in the alignment pair'
             cand --expected-version 'Expected version for the compare-and-swap operation'
             cand --actor 'Actor recorded in operation provenance'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;align;export'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --license 'license'
+            cand --format 'format'
+            cand --prefix 'prefix'
+            cand --author-prefix 'author-prefix'
+            cand --out 'out'
             cand -h 'Print help'
             cand --help 'Print help'
         }

@@ -1003,6 +1003,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('propose', 'propose', [CompletionResultType]::ParameterValue, 'Propose scored alignments between two named graphs as an SSSOM set')
             [CompletionResult]::new('decide', 'decide', [CompletionResultType]::ParameterValue, 'Apply reviewer accept and negate decisions to a mapping set')
             [CompletionResult]::new('apply', 'apply', [CompletionResultType]::ParameterValue, 'Materialize decided alignments into a derived alignment graph')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export a mapping set as standard SSSOM TSV or RDF Turtle')
             break
         }
         'qp;align;propose' {
@@ -1028,6 +1029,17 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--graph-b', '--graph-b', [CompletionResultType]::ParameterName, 'Second graph in the alignment pair')
             [CompletionResult]::new('--expected-version', '--expected-version', [CompletionResultType]::ParameterName, 'Expected version for the compare-and-swap operation')
             [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;align;export' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--license', '--license', [CompletionResultType]::ParameterName, 'license')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
+            [CompletionResult]::new('--author-prefix', '--author-prefix', [CompletionResultType]::ParameterName, 'author-prefix')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

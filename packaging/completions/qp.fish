@@ -582,11 +582,12 @@ complete -c qp -n "__fish_qp_using_subcommand path; and __fish_seen_subcommand_f
 complete -c qp -n "__fish_qp_using_subcommand path; and __fish_seen_subcommand_from draft" -l dead-end -d 'Dead-end trajectory to include in the policy draft' -r
 complete -c qp -n "__fish_qp_using_subcommand path; and __fish_seen_subcommand_from draft" -l json -d 'Print machine-readable JSON'
 complete -c qp -n "__fish_qp_using_subcommand path; and __fish_seen_subcommand_from draft" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "propose" -d 'Propose scored alignments between two named graphs as an SSSOM set'
-complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "decide" -d 'Apply reviewer accept and negate decisions to a mapping set'
-complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "apply" -d 'Materialize decided alignments into a derived alignment graph'
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "propose" -d 'Propose scored alignments between two named graphs as an SSSOM set'
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "decide" -d 'Apply reviewer accept and negate decisions to a mapping set'
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "apply" -d 'Materialize decided alignments into a derived alignment graph'
+complete -c qp -n "__fish_qp_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "export" -d 'Export a mapping set as standard SSSOM TSV or RDF Turtle'
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from propose" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from propose" -l set-id -d 'Identifier for the proposed alignment set' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from propose" -l out -d 'Output file' -r
@@ -602,6 +603,13 @@ complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from apply" -l expected-version -d 'Expected version for the compare-and-swap operation' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from apply" -l actor -d 'Actor recorded in operation provenance' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l license -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l format -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l prefix -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l author-prefix -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l out -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l status -d 'Status to record or filter' -r
 complete -c qp -n "__fish_qp_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -s h -l help -d 'Print help'

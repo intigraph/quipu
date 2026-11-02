@@ -144,6 +144,7 @@ pub fn propose(
                 author_id: None,
                 quipu_review: None,
                 quipu_reviewed_by: None,
+                mapping_date: None,
             };
             if reviewed.contains_key(&candidate.pair_key()) {
                 continue;
