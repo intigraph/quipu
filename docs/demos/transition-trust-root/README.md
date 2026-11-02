@@ -7,7 +7,9 @@ The [recording](output.log.gz), [timing](timing.log) and
 Before: an ordinary graph writer's registration is enough to admit its signed
 transition, in ROOT or a named identity graph. After: both self-enrollment cases
 are refused. A real human-root-signed endorsement still admits the transition;
-the disabled legacy flag control remains admitted. No live store, key ceremony,
+the disabled legacy flag control remains admitted for a transition outside an
+enrolled workflow. An enrolled workflow advance is checked whatever the flag
+says (see the trust-root ceremony runbook). No live store, key ceremony,
 registration, transition or configuration change participates.
 
 The probe is added by this change. For the base run, only the same example and
