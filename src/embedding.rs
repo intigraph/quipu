@@ -123,8 +123,22 @@ fn text_from_facts(store: &Store, facts: &[crate::types::Fact]) -> Result<String
     let rdfs_label = store.lookup(&format!("{}label", namespace::RDFS))?;
     let rdfs_comment = store.lookup(&format!("{}comment", namespace::RDFS))?;
     let rdf_type = store.lookup(namespace::RDF_TYPE)?;
+    // Configured exclusions apply HERE, in the one place every text builder
+    // shares (inline, deferred collect, deferred staleness re-check, graph
+    // backfill, linkage). If only the collect path excluded a predicate, the
+    // deferred apply would rebuild different text, judge every vector stale and
+    // leave the entity with no embedding at all (aegis-jio5.2).
+    let mut excluded = BTreeSet::new();
+    for iri in &store.embedding_config().exclude_predicates {
+        if let Some(id) = store.lookup(iri)? {
+            excluded.insert(id);
+        }
+    }
 
     for fact in facts {
+        if excluded.contains(&fact.attribute) {
+            continue;
+        }
         if Some(fact.attribute) == rdfs_label {
             if let Value::Str(s) = &fact.value
                 && label.as_ref().is_none_or(|(t, _)| fact.tx >= *t)
