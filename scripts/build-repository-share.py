@@ -447,10 +447,11 @@ def is_legacy_entity(name):
 def verify_former_names(export):
     """Admit owl:sameAs only from a public name to its exact former name.
 
-    Every public entity subject carries exactly one such link; a legacy entity
-    name appears nowhere except as that link's object (rdf:type objects are
-    classes, never entities); and a name under the public entity prefix that
-    the release query cannot produce refuses. Returns the number of links.
+    Every public entity subject carries exactly one such link; no internal
+    (legacy namespace) name appears anywhere except as that link's object or an
+    rdf:type object (classes, never entities); and a name under the public
+    entity prefix that the release query cannot produce refuses. Returns the
+    number of links.
     """
     linked, subjects = set(), set()
     for subject, predicate, value in ntriples(Path(export).read_text()):
@@ -470,6 +471,11 @@ def verify_former_names(export):
                 continue
             if is_legacy_entity(name):
                 raise ValueError(f"legacy entity name published unrenamed: <{name}>")
+            # Any other internal name is refused too, not only the kinds the
+            # query renames: a directive, rule or entity this release does not
+            # map must never ship as a subject or a non-class object.
+            if name.startswith(FORMER_NAME_LEGACY):
+                raise ValueError(f"internal name published unrenamed: <{name}>")
             if re.match(rf"{re.escape(PUBLIC_ENTITY)}[^/]+/id/", name) and former_name(name) is None:
                 raise ValueError(f"not a public entity name: <{name}>")
         if subject[0] == "iri" and former_name(subject[1]) is not None:

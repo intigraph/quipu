@@ -110,7 +110,8 @@ def internal_names(export):
     The stack release builder's own check, over a strict N-Triples reading of
     the share: each public entity subject carries exactly its former name as
     one owl:sameAs link, and a legacy entity name appears nowhere else. On
-    top of that, no subject at all may be an internal (AEGIS) name.
+    top of that, no subject and no object other than an rdf:type class or a
+    former-name link may be an internal (AEGIS) name.
     """
     spec = importlib.util.spec_from_file_location(
         "share_builder", Path(__file__).with_name("build-repository-share.py"))
@@ -121,9 +122,12 @@ def internal_names(export):
         linked = builder.verify_former_names(export)
     except ValueError as error:
         raise RuntimeError(str(error)) from error
-    for subject, _, _ in triples:
+    kept = {("iri", builder.RDF_TYPE), ("iri", builder.SAME_AS)}
+    for subject, predicate, value in triples:
         if subject[0] == "iri" and subject[1].startswith(AEGIS):
             raise RuntimeError(f"internal entity name published as a subject: <{subject[1]}>")
+        if predicate not in kept and value[0] == "iri" and value[1].startswith(AEGIS):
+            raise RuntimeError(f"internal entity name published as an object: <{value[1]}>")
     if not linked:
         raise RuntimeError("no w3id entity names or former-name links in the share")
 

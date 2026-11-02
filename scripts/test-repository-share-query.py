@@ -178,6 +178,35 @@ class RepositoryQuery(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         builder.verify_former_names(export)
 
+    def test_unmapped_internal_names_refuse_in_any_position(self):
+        # Gemini on #970: an internal name the query does not rename (a new
+        # directive, say) must not pass as an object or a subject.
+        spec = importlib.util.spec_from_file_location(
+            "share_builder", Path(__file__).resolve().parents[1] / "scripts/build-repository-share.py")
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        own = URIRef(str(A) + "doc/quipu/README.md")
+        source = Graph()
+        source.add((own, RDF.type, A.Document))
+        source.add((own, A.filePath, Literal("README.md")))
+        base = source.query(QUERY).graph.serialize(format="nt", encoding="utf-8").decode()
+        new = "https://w3id.org/intigraph/quipu/id/doc/README.md"
+        other = f"{A}other-directive-2026-11-01"
+        see = "<http://www.w3.org/2000/01/rdf-schema#seeAlso>"
+        label = "<http://www.w3.org/2000/01/rdf-schema#label>"
+        with tempfile.TemporaryDirectory() as work:
+            export = Path(work) / "export.nt"
+            export.write_text(base)
+            self.assertEqual(builder.verify_former_names(export), 1, "control: the clean export passes")
+            for name, line in {
+                "object": f"<{new}> {see} <{other}> .",
+                "subject": f'<{other}> {label} "x" .',
+            }.items():
+                with self.subTest(name=name):
+                    export.write_text(base + line + "\n")
+                    with self.assertRaisesRegex(ValueError, "unrenamed"):
+                        builder.verify_former_names(export)
+
     def test_names_the_query_cannot_rename_refuse_at_build(self):
         # The query and the verifier read the repository segment the same
         # way: a name the query leaves alone is refused, never published
