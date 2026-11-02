@@ -17,6 +17,9 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+// Protected per-lineage authority journal (aegis-s24.8 P1); native only.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_journal;
 mod ownership_startup;
 #[cfg(test)]
 mod ownership_startup_tests;
