@@ -386,6 +386,8 @@ fn evaluate(
         }
     }
     let _direct = DirectRefs::install();
+    // A read evaluation: term lookups cannot change underneath it.
+    let _memo = super::filter::EvalMemo::install();
     if let Some(output) = native_count(store, inner, variables, aggregates, ctx, seed)? {
         return Ok(Some(output));
     }
