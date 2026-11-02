@@ -66,10 +66,19 @@ pub fn tool_list_proposals(store: &Store, input: &JsonValue) -> Result<JsonValue
         .map(crate::proposal::ProposalStatus::from_json)
         .transpose()?;
 
+    let with_plan = input
+        .get("plan")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let threshold = risk_threshold(input)?;
     let proposals = store.list_proposals(status.as_ref())?;
     let items: Vec<JsonValue> = proposals
         .iter()
         .map(|p| {
+            // aegis-493: only a pending proposal has a blast radius to preview.
+            let plan = (with_plan && p.status == crate::proposal::ProposalStatus::Pending)
+                .then(|| crate::proposal_plan::plan(store, p.id, threshold))
+                .transpose()?;
             Ok(serde_json::json!({
                 "id": p.id,
                 "kind": p.kind,
@@ -84,6 +93,7 @@ pub fn tool_list_proposals(store: &Store, input: &JsonValue) -> Result<JsonValue
                 "decision_note": p.decision_note,
                 "created_at": p.created_at,
                 "migration": store.get_proposal_migration(p.id)?,
+                "plan": plan,
             }))
         })
         .collect::<Result<_>>()?;
@@ -126,9 +136,27 @@ pub fn tool_accept_proposal(store: &mut Store, input: &JsonValue) -> Result<Json
         .unwrap_or(&now);
     let note = input.get("note").and_then(|v| v.as_str());
 
+    // aegis-493: plan the blast radius first; refuse a failing or undetermined
+    // plan unless the caller accepts the risk with a reason.
+    let plan = crate::proposal_plan::plan_for_accept(store, id, risk_threshold(input)?)?;
+    let accept_risk = input
+        .get("accept_risk")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let reason = input.get("risk_reason").and_then(|v| v.as_str());
+    if accept_risk && reason.is_none_or(|r| r.trim().is_empty()) {
+        return Err(Error::InvalidValue(
+            "accept_risk needs a non-empty 'risk_reason'".into(),
+        ));
+    }
+    let note = match &plan {
+        Some(plan) => crate::proposal_plan::gate(plan, reason.filter(|_| accept_risk), note)?,
+        None => note.map(str::to_owned),
+    };
+
     let migrates = store.get_proposal_migration(id)?.is_some();
     let (proposal, migration_tx) =
-        store.accept_proposal_with_migration(id, decided_by, timestamp, note)?;
+        store.accept_proposal_with_migration(id, decided_by, timestamp, note.as_deref())?;
 
     Ok(serde_json::json!({
         "proposal_id": proposal.id,
@@ -137,7 +165,20 @@ pub fn tool_accept_proposal(store: &mut Store, input: &JsonValue) -> Result<Json
         "kind": proposal.kind,
         "migration_source": migrates.then(|| crate::proposal_migration::migration_source(id)),
         "migration_tx": migration_tx,
+        "plan": plan,
     }))
+}
+
+/// `risk_threshold` (0-100), else the deployment default (aegis-493).
+fn risk_threshold(input: &JsonValue) -> Result<u8> {
+    match input.get("risk_threshold").filter(|v| !v.is_null()) {
+        None => Ok(crate::proposal_plan::default_threshold()),
+        Some(v) => v
+            .as_u64()
+            .filter(|t| *t <= 100)
+            .and_then(|t| u8::try_from(t).ok())
+            .ok_or_else(|| Error::InvalidValue("'risk_threshold' must be an integer 0-100".into())),
+    }
 }
 
 /// MCP tool: `quipu_reject_proposal` -- Reject a pending schema proposal.
