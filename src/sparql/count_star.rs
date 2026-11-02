@@ -153,54 +153,63 @@ fn covering_index(store: &Store) -> Result<bool> {
     }))
 }
 
-/// One subject's objects per OPTIONAL, each in term-key order.
-struct Slots {
-    subject: i64,
-    values: Vec<Vec<Value>>,
+/// Every buffered subject's slots, flat: one value arena and, per subject,
+/// where each of its `width` slots starts. No allocation per subject.
+struct Buffered {
+    width: usize,
+    subjects: Vec<i64>,
+    starts: Vec<usize>,
+    values: Vec<Value>,
 }
 
-/// Read the subject's raw `(a, v)` rows into per-OPTIONAL slots. `None` when
-/// a slot holds two encodings of one term.
-fn fill(
-    rows: &mut Vec<(i64, Vec<u8>)>,
-    predicates: &[Option<i64>],
-    type_id: i64,
-    class: &[u8],
-) -> Result<Option<Option<Vec<Vec<Value>>>>> {
-    let typed = rows
-        .iter()
-        .any(|(a, v)| *a == type_id && v.as_slice() == class);
-    if !typed {
-        rows.clear();
-        return Ok(Some(None));
-    }
-    let mut slots = Vec::with_capacity(predicates.len());
-    for predicate in predicates {
-        let mut keyed: Vec<(Vec<u8>, &[u8])> = Vec::new();
-        if let Some(predicate) = predicate {
-            for (a, v) in rows.iter() {
-                if a == predicate {
-                    keyed.push((Value::from_bytes(v)?.term_key(), v.as_slice()));
-                }
-            }
+impl Buffered {
+    fn push(&mut self, subject: i64, slots: &mut [Vec<Value>]) {
+        self.subjects.push(subject);
+        for slot in slots {
+            self.starts.push(self.values.len());
+            self.values.append(slot);
         }
-        // Stable: equal keys keep index (byte) order, so identical bytes sit
-        // together and are kept once.
+    }
+
+    /// Subject `k`'s slot `j`.
+    fn slot(&self, k: usize, j: usize) -> &[Value] {
+        let i = k * self.width + j;
+        let end = self.starts.get(i + 1).copied().unwrap_or(self.values.len());
+        &self.values[self.starts[i]..end]
+    }
+}
+
+/// Put each slot in the per-property scans' order: term-key order, identical
+/// values once. `false` when a slot holds two encodings of one term, where
+/// SQL keeps a representative of its choosing.
+///
+/// Rows arrive in index (byte) order and the sort is stable. Two encodings
+/// that decode to one value write back identically, and any representative
+/// would decode to that same value, so comparing written-back bytes is enough.
+/// Single values, the common case, need no key at all.
+fn settle(values: &mut [Vec<Value>]) -> bool {
+    for slot in values.iter_mut() {
+        if slot.len() < 2 {
+            continue;
+        }
+        let mut keyed: Vec<(Vec<u8>, Value)> = slot.drain(..).map(|v| (v.term_key(), v)).collect();
         keyed.sort_by(|a, b| a.0.cmp(&b.0));
-        let mut values = Vec::with_capacity(keyed.len());
-        for (i, (key, bytes)) in keyed.iter().enumerate() {
-            if i > 0 && keyed[i - 1].0 == *key {
-                if keyed[i - 1].1 == *bytes {
+        let mut previous: Option<(Vec<u8>, Vec<u8>)> = None;
+        for (key, value) in keyed {
+            let bytes = value.to_bytes();
+            if let Some((last_key, last_bytes)) = &previous
+                && *last_key == key
+            {
+                if *last_bytes == bytes {
                     continue;
                 }
-                return Ok(None);
+                return false;
             }
-            values.push(Value::from_bytes(bytes)?);
+            previous = Some((key, bytes));
+            slot.push(value);
         }
-        slots.push(values);
     }
-    rows.clear();
-    Ok(Some(Some(slots)))
+    true
 }
 
 /// Stream the star's rows if its shape and store admit the single pass;
@@ -266,33 +275,61 @@ pub(super) fn try_visit(
     params.extend(&wanted);
 
     // Read every subject before emitting any, so a decline emits nothing.
-    let mut subjects: Vec<Slots> = Vec::new();
+    let slot_of: Vec<(i64, usize)> = predicates
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, predicate)| predicate.map(|p| (p, slot)))
+        .collect();
+    let mut buffered = Buffered {
+        width: predicates.len(),
+        subjects: Vec::new(),
+        starts: Vec::new(),
+        values: Vec::new(),
+    };
     {
         let mut statement = store.conn.prepare_cached(&sql)?;
         let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
         let mut current: Option<i64> = None;
-        let mut pending: Vec<(i64, Vec<u8>)> = Vec::new();
-        while let Some(row) = rows.next()? {
-            let e: i64 = row.get(0)?;
-            if current.is_some_and(|c| c != e) {
-                match fill(&mut pending, &predicates, type_id, &class)? {
-                    None => return Ok(false),
-                    Some(Some(values)) => subjects.push(Slots {
-                        subject: current.expect("checked"),
-                        values,
-                    }),
-                    Some(None) => {}
+        let mut typed = false;
+        // Reused for every subject; `push` moves the values out.
+        let mut values: Vec<Vec<Value>> = vec![Vec::new(); predicates.len()];
+        let mut seen = 0usize;
+        loop {
+            let row = rows.next()?;
+            let e = match row {
+                Some(row) => Some(row.get::<_, i64>(0)?),
+                None => None,
+            };
+            if let Some(done) = current
+                && e != current
+            {
+                if typed {
+                    if !settle(&mut values) {
+                        return Ok(false);
+                    }
+                    buffered.push(done, &mut values);
+                } else {
+                    values.iter_mut().for_each(Vec::clear);
                 }
+                typed = false;
+                seen = 0;
             }
-            current = Some(e);
-            pending.push((row.get(1)?, row.get(2)?));
-            check_eval_budget(ctx, pending.len(), 0)?;
-        }
-        if let Some(e) = current {
-            match fill(&mut pending, &predicates, type_id, &class)? {
-                None => return Ok(false),
-                Some(Some(values)) => subjects.push(Slots { subject: e, values }),
-                Some(None) => {}
+            let Some(row) = row else { break };
+            current = e;
+            seen += 1;
+            check_eval_budget(ctx, seen, 0)?;
+            let a: i64 = row.get(1)?;
+            // Borrowed, decoded once into its slot; never copied.
+            let rusqlite::types::ValueRef::Blob(v) = row.get_ref(2)? else {
+                return Ok(false);
+            };
+            if a == type_id && v == class.as_slice() {
+                typed = true;
+            }
+            for &(predicate, slot) in &slot_of {
+                if predicate == a {
+                    values[slot].push(Value::from_bytes(v)?);
+                }
             }
         }
     }
@@ -300,13 +337,16 @@ pub(super) fn try_visit(
     #[cfg(test)]
     PASSES.with(|n| n.set(n.get() + 1));
     let mut emitted = 0usize;
-    for slots in subjects {
+    let mut slots: Vec<&[Value]> = Vec::with_capacity(buffered.width);
+    for (k, subject) in buffered.subjects.iter().enumerate() {
+        slots.clear();
+        slots.extend((0..buffered.width).map(|j| buffered.slot(k, j)));
         let mut row = seed.clone();
-        row.insert(star.subject.to_owned(), Value::Ref(slots.subject));
+        row.insert(star.subject.to_owned(), Value::Ref(*subject));
         match star.required {
             Some((_, object)) => {
-                let (values, optional_values) = slots.values.split_first().expect("required slot");
-                for value in values {
+                let (values, optional_values) = slots.split_first().expect("required slot");
+                for value in *values {
                     row.insert(object.to_owned(), value.clone());
                     expand(
                         store,
@@ -324,7 +364,7 @@ pub(super) fn try_visit(
                 store,
                 ctx,
                 &star.optionals,
-                &slots.values,
+                &slots,
                 0,
                 &mut row,
                 &mut emitted,
@@ -341,7 +381,7 @@ fn expand(
     store: &Store,
     ctx: &TemporalContext,
     optionals: &[Optional<'_>],
-    values: &[Vec<Value>],
+    values: &[&[Value]],
     i: usize,
     row: &mut Bindings,
     emitted: &mut usize,
@@ -353,7 +393,7 @@ fn expand(
         return emit(row);
     };
     let mut matched = false;
-    for value in &values[i] {
+    for value in values[i] {
         row.insert(optional.object.to_owned(), value.clone());
         let keep = match optional.expression {
             Some(e) => eval_filter(store, e, row, ctx)?,
