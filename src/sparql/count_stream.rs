@@ -170,34 +170,11 @@ pub(super) fn visit(
                         table = Some(super::values::values_table(store, bindings)?);
                     }
                     let table = table.as_ref().expect("filled above");
-                    let mut added: Vec<&str> = Vec::with_capacity(variables.len());
-                    'row: for values in table {
-                        added.clear();
-                        for (variable, value) in variables.iter().zip(values) {
-                            let Some(value) = value else { continue };
-                            match row.get(variable.as_str()) {
-                                Some(existing) if existing != value => {
-                                    for name in &added {
-                                        row.remove(*name);
-                                    }
-                                    continue 'row;
-                                }
-                                Some(_) => {}
-                                None => {
-                                    row.insert(variable.as_str().to_owned(), value.clone());
-                                    added.push(variable.as_str());
-                                }
-                            }
-                        }
+                    super::values::join_row(variables, table, row, &mut |row| {
                         super::pattern_util::check_eval_budget(ctx, joined, joined)?;
                         joined += 1;
-                        let result = emit(row);
-                        for name in &added {
-                            row.remove(*name);
-                        }
-                        result?;
-                    }
-                    Ok(())
+                        emit(row)
+                    })
                 });
             }
             visit(store, left, ctx, seed, &mut |row| {

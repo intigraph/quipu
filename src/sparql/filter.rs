@@ -15,6 +15,7 @@ use crate::types::Value;
 
 use super::Bindings;
 
+mod cast_eval;
 pub(super) mod eval_memo;
 mod regex_cache;
 pub(super) use eval_memo::Scope as EvalMemo;
@@ -517,22 +518,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::FunctionCall(Function::Custom(function), args)
             if super::casts::is_cast(function.as_str()) =>
         {
-            let cast = || {
-                super::casts::cast(
-                    store,
-                    function.as_str(),
-                    eval_expr(store, args.first()?, row)?,
-                    canonical_double,
-                    format_decimal,
-                )
-            };
-            // A cast of a literal is a constant: compute it once per
-            // evaluation (aegis-xdvg.6).
-            if matches!(args.as_slice(), [Expression::Literal(_)]) {
-                eval_memo::constant(expr, cast)
-            } else {
-                cast()
-            }
+            cast_eval::cast(store, expr, function.as_str(), args, row)
         }
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;
