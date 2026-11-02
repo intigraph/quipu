@@ -29,9 +29,14 @@ Cargo installation of `quipu-ai` 0.15.0 with `full`, alias creation, all three
 version checks, uninstall and owned-alias removal passed on Linux x86_64 in
 a clean HOME with a copied Rust 1.98 toolchain. Unrelated data was preserved.
 
-The Homebrew, apt, source-checkout, Rust-library, Tambo apply/removal and
-container procedures below are **not yet independently exercised for this
-reference revision**. Their commands are derived from the current source and
+The source-checkout install and removal also passed on Linux x86_64 at
+revision `4d82727f` (0.16.5), with matching CLI, alias and server identities.
+A separate Cargo project added and checked the documented `0.15` library
+dependency, then removed it and checked again. Both used a disposable HOME
+and copied toolchain; unrelated data was preserved.
+
+The Homebrew removal, apt, Tambo apply/removal and container procedures below
+are **not yet independently exercised for this reference revision**. Their commands are derived from the current source and
 package definitions; they are not a claim of a successful installation on your
 platform. Use the listed version and removal checks to verify that boundary.
 
@@ -285,10 +290,14 @@ retain and review the generated plan before applying it:
 
 ```sh
 tambo --version
-tambo plan --profile kg
+tambo init --guided
 tambo apply
 tambo verify
 ```
+
+Select the knowledge-graph (`kg`) profile in the guided interview. For an
+unattended plan, first provide a completed `caboodle-intent.toml`, then run
+`tambo plan --profile kg`; `plan` refuses a fresh directory without that intent.
 
 Read `caboodle-plan.toml` before `apply`. Preserve it and `.caboodle/` to resume
 the same installation. The plan determines the package manager and installed
