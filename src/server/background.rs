@@ -104,12 +104,21 @@ fn spawn_vector_retention(store: &SharedStore, cfg: &quipu::EmbeddingConfig) {
         loop {
             tick.tick().await;
             let mut pass = 0usize;
+            let mut failed = false;
             while pass < max_per_pass {
                 let store = prune_store.clone();
                 let batch = VECTOR_PRUNE_BATCH.min(max_per_pass - pass);
                 let res = tokio::task::spawn_blocking(move || {
                     let now = quipu::time::now_iso();
-                    store.lock().prune_superseded_vectors(days, &now, batch)
+                    let guard = store.lock();
+                    let held = std::time::Instant::now();
+                    let res = guard.prune_superseded_vectors(days, &now, batch);
+                    drop(guard);
+                    if let Ok(n) = &res {
+                        quipu::metrics::metrics()
+                            .observe_vector_prune_batch(*n as u64, held.elapsed().as_secs_f64());
+                    }
+                    res
                 })
                 .await;
                 match res {
@@ -121,14 +130,28 @@ fn spawn_vector_retention(store: &SharedStore, cfg: &quipu::EmbeddingConfig) {
                     }
                     Ok(Err(e)) => {
                         eprintln!("vectors: retention prune failed: {e}");
+                        failed = true;
                         break;
                     }
                     Err(e) => {
                         eprintln!("vectors: retention prune task failed: {e}");
+                        failed = true;
                         break;
                     }
                 }
                 tokio::task::yield_now().await;
+            }
+            // A failed pass records nothing: reporting it as uncapped would
+            // read as "drain complete". Its staleness shows in the end time.
+            if !failed {
+                let end = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0.0, |d| d.as_secs_f64());
+                quipu::metrics::metrics().observe_vector_prune_pass(
+                    pass as u64,
+                    pass >= max_per_pass,
+                    end,
+                );
             }
             if pass > 0 {
                 eprintln!(
