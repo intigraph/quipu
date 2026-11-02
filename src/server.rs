@@ -94,6 +94,9 @@ mod service_description;
 #[path = "server/snapshot_upload.rs"]
 mod snapshot_upload;
 #[cfg(test)]
+#[path = "server/stats_tests.rs"]
+mod stats_tests;
+#[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
 #[path = "server/tools.rs"]
