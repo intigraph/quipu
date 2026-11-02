@@ -78,8 +78,8 @@ _arguments "${_arguments_options[@]}" : \
 (install-alias)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--bin-dir=[]:VALUE:_default' \
-'--check[]' \
+'*--bin-dir=[Directory containing the CLI alias]:VALUE:_default' \
+'--check[Check the alias without installing it]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -87,10 +87,10 @@ _arguments "${_arguments_options[@]}" : \
 (knot)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--shapes=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--blank-node-scope=[]:VALUE:_default' \
+'*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
+'*--blank-node-scope=[Blank-node identity scope for this import]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file-ttl:_default' \
@@ -99,12 +99,12 @@ _arguments "${_arguments_options[@]}" : \
 (load)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--shapes=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--blank-node-scope=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
+'*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
+'*--blank-node-scope=[Blank-node identity scope for this import]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file-ttl:_default' \
@@ -113,16 +113,16 @@ _arguments "${_arguments_options[@]}" : \
 (ingest)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--declare-count=[]:VALUE:_default' \
-'*--declare-sha256=[]:VALUE:_default' \
-'*--format=[]:VALUE:_default' \
-'*--chunk=[]:VALUE:_default' \
-'*--base-iri=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--source=[]:VALUE:_default' \
-'*--blank-node-scope=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
+'*--declare-count=[Expected ingest triple count]:VALUE:_default' \
+'*--declare-sha256=[Expected input SHA-256 digest]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
+'*--chunk=[Maximum triples per ingest chunk]:VALUE:_default' \
+'*--base-iri=[Base IRI for relative RDF references]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--source=[Source identifier recorded in provenance]:VALUE:_default' \
+'*--blank-node-scope=[Blank-node identity scope for this import]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file:_default' \
@@ -131,11 +131,11 @@ _arguments "${_arguments_options[@]}" : \
 (read)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--valid-at=[]:VALUE:_default' \
-'*--tx=[]:VALUE:_default' \
-'*--fork=[]:VALUE:_default' \
-'*--entailment=[]:VALUE:_default' \
-'--federation[]' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
+'*--tx=[Historical transaction to read]:VALUE:_default' \
+'*--fork=[Named store fork to query]:VALUE:_default' \
+'*--entailment=[Query entailment regime]:VALUE:_default' \
+'--federation[Enable configured remote query federation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-sparql:_default' \
@@ -144,11 +144,11 @@ _arguments "${_arguments_options[@]}" : \
 (query)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--valid-at=[]:VALUE:_default' \
-'*--tx=[]:VALUE:_default' \
-'*--fork=[]:VALUE:_default' \
-'*--entailment=[]:VALUE:_default' \
-'--federation[]' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
+'*--tx=[Historical transaction to read]:VALUE:_default' \
+'*--fork=[Named store fork to query]:VALUE:_default' \
+'*--entailment=[Query entailment regime]:VALUE:_default' \
+'--federation[Enable configured remote query federation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-sparql:_default' \
@@ -165,8 +165,8 @@ _arguments "${_arguments_options[@]}" : \
 (cord)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--type=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
+'*--type=[Entity type IRI to select]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -174,8 +174,8 @@ _arguments "${_arguments_options[@]}" : \
 (unravel)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--tx=[]:VALUE:_default' \
-'*--valid-at=[]:VALUE:_default' \
+'*--tx=[Historical transaction to read]:VALUE:_default' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -183,9 +183,9 @@ _arguments "${_arguments_options[@]}" : \
 (impact)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--hops=[]:VALUE:_default' \
-'*--predicate=[]:VALUE:_default' \
-'--remove[]' \
+'*--hops=[Maximum traversal hops]:VALUE:_default' \
+'*--predicate=[Predicate IRI used to filter facts or edges]:VALUE:_default' \
+'--remove[Calculate the impact of removing the entity]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-entity-IRI:_default' \
@@ -194,7 +194,7 @@ _arguments "${_arguments_options[@]}" : \
 (explain)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--depth=[]:VALUE:_default' \
+'*--depth=[Maximum explanation depth]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-subject:_default' \
@@ -205,17 +205,17 @@ _arguments "${_arguments_options[@]}" : \
 (project)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--algorithm=[]:VALUE:_default' \
-'*--type=[]:VALUE:_default' \
-'*--predicate=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
-'*--damping=[]:VALUE:_default' \
-'*--max-iters=[]:VALUE:_default' \
-'*--tolerance=[]:VALUE:_default' \
-'*--from=[]:VALUE:_default' \
-'*--to=[]:VALUE:_default' \
-'*--seed=[]:VALUE:_default' \
+'*--algorithm=[Graph projection algorithm]:VALUE:_default' \
+'*--type=[Entity type IRI to select]:VALUE:_default' \
+'*--predicate=[Predicate IRI used to filter facts or edges]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
+'*--damping=[PageRank damping factor]:VALUE:_default' \
+'*--max-iters=[Maximum algorithm iterations]:VALUE:_default' \
+'*--tolerance=[Convergence tolerance for the algorithm]:VALUE:_default' \
+'*--from=[Start entity IRI for shortest-path projection]:VALUE:_default' \
+'*--to=[Destination entity IRI for shortest-path projection]:VALUE:_default' \
+'*--seed=[Seed entity for graph projection]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -223,11 +223,11 @@ _arguments "${_arguments_options[@]}" : \
 (report)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--type=[]:VALUE:_default' \
-'*--predicate=[]:VALUE:_default' \
-'*--hubs=[]:VALUE:_default' \
-'*--surprises=[]:VALUE:_default' \
-'*--questions=[]:VALUE:_default' \
+'*--type=[Entity type IRI to select]:VALUE:_default' \
+'*--predicate=[Predicate IRI used to filter facts or edges]:VALUE:_default' \
+'*--hubs=[Number of hubs in the report]:VALUE:_default' \
+'*--surprises=[Number of surprising relationships in the report]:VALUE:_default' \
+'*--questions=[Number of suggested questions in the report]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -235,8 +235,8 @@ _arguments "${_arguments_options[@]}" : \
 (reason)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--rules=[]:VALUE:_default' \
-'--reactive[]' \
+'*--rules=[Rule set to load or evaluate]:VALUE:_default' \
+'--reactive[Use the reactive reasoner]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -244,7 +244,7 @@ _arguments "${_arguments_options[@]}" : \
 (demotions)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -252,8 +252,8 @@ _arguments "${_arguments_options[@]}" : \
 (episode)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--base-ns=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
+'*--base-ns=[Base namespace for episode entities]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file-json:_default' \
@@ -262,8 +262,8 @@ _arguments "${_arguments_options[@]}" : \
 (retract)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--predicate=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
+'*--predicate=[Predicate IRI used to filter facts or edges]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-entity-IRI:_default' \
@@ -434,9 +434,9 @@ esac
 (validate)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--shapes=[]:VALUE:_default' \
-'*--data=[]:VALUE:_default' \
-'*--format=[]:VALUE:_default' \
+'*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
+'*--data=[RDF data file to validate]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -451,10 +451,10 @@ _arguments "${_arguments_options[@]}" : \
 (export)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--group-id=[]:VALUE:_default' \
-'*--construct=[]:VALUE:_default' \
-'*--format=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--group-id=[Select facts belonging to this group]:VALUE:_default' \
+'*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -462,15 +462,15 @@ _arguments "${_arguments_options[@]}" : \
 (render)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--dest=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--valid-at=[]:VALUE:_default' \
-'*--server=[]:VALUE:_default' \
-'*--query=[]:VALUE:_default' \
-'*--template=[]:VALUE:_default' \
-'*--layout=[]:VALUE:_default' \
-'*--path=[]:VALUE:_default' \
-'--dry-run[]' \
+'*--dest=[Render output destination]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
+'*--server=[Render service URL]:VALUE:_default' \
+'*--query=[Query used for rendering]:VALUE:_default' \
+'*--template=[Render template]:VALUE:_default' \
+'*--layout=[Render layout]:VALUE:_default' \
+'*--path=[Relative output path template]:VALUE:_default' \
+'--dry-run[Preview the operation without applying it]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::arg-spec-IRI:_default' \
@@ -486,10 +486,10 @@ _arguments "${_arguments_options[@]}" : \
 (prime)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--section=[]:VALUE:_default' \
-'--brief[]' \
-'--static[]' \
-'--json[]' \
+'*--section=[Agent primer section to print]:VALUE:_default' \
+'--brief[Print the short agent primer]' \
+'--static[Print the embedded primer without live context]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -497,26 +497,26 @@ _arguments "${_arguments_options[@]}" : \
 (search)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--mode=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
-'*--alpha=[]:VALUE:_default' \
-'*--rrf-k=[]:VALUE:_default' \
-'*--decay=[]:VALUE:_default' \
-'*--anchor=[]:VALUE:_default' \
-'*--anchor-mode=[]:VALUE:_default' \
-'*--direction=[]:VALUE:_default' \
-'*--max-hops=[]:VALUE:_default' \
-'*--via=[]:VALUE:_default' \
-'*--fusion=[]:VALUE:_default' \
-'*--valid-at=[]:VALUE:_default' \
-'*--type=[]:VALUE:_default' \
-'*--group=[]:VALUE:_default' \
-'*--structured-query=[]:VALUE:_default' \
-'*--filters=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--graphs=[]:VALUE:_default' \
-'--explain[]' \
-'--all-graphs[]' \
+'*--mode=[Operation mode]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
+'*--alpha=[Hybrid search semantic/keyword weighting]:VALUE:_default' \
+'*--rrf-k=[Reciprocal-rank fusion constant]:VALUE:_default' \
+'*--decay=[Search recency decay factor]:VALUE:_default' \
+'*--anchor=[Entity IRI anchoring graph-aware search]:VALUE:_default' \
+'*--anchor-mode=[How the anchor affects candidate selection]:VALUE:_default' \
+'*--direction=[Traversal direction for graph-aware search]:VALUE:_default' \
+'*--max-hops=[Maximum graph-search traversal hops]:VALUE:_default' \
+'*--via=[Predicate or path used for traversal]:VALUE:_default' \
+'*--fusion=[Search result fusion strategy]:VALUE:_default' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
+'*--type=[Entity type IRI to select]:VALUE:_default' \
+'*--group=[Group identifier for the operation]:VALUE:_default' \
+'*--structured-query=[Structured search query as JSON]:VALUE:_default' \
+'*--filters=[Structured search filters as JSON]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--graphs=[Explicit graph selection for search]:VALUE:_default' \
+'--explain[Include search ranking explanations]' \
+'--all-graphs[Search all permitted graphs explicitly]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-query:_default' \
@@ -525,8 +525,8 @@ _arguments "${_arguments_options[@]}" : \
 (search-index)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--kind=[]:VALUE:_default' \
-'*--batch-size=[]:VALUE:_default' \
+'*--kind=[Index or graph kind to select]:VALUE:_default' \
+'*--batch-size=[Number of entries per indexing batch]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_qp__subcmd__search-index_commands" \
@@ -542,7 +542,7 @@ _arguments "${_arguments_options[@]}" : \
             (status)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--kind=[]:VALUE:_default' \
+'*--kind=[Index or graph kind to select]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -550,8 +550,8 @@ _arguments "${_arguments_options[@]}" : \
 (backfill)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--kind=[]:VALUE:_default' \
-'*--batch-size=[]:VALUE:_default' \
+'*--kind=[Index or graph kind to select]:VALUE:_default' \
+'*--batch-size=[Number of entries per indexing batch]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -559,7 +559,7 @@ _arguments "${_arguments_options[@]}" : \
 (drop)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--kind=[]:VALUE:_default' \
+'*--kind=[Index or graph kind to select]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -597,22 +597,22 @@ esac
 (pack)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--verify=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
-'*--space=[]:VALUE:_default' \
-'*--name=[]:VALUE:_default' \
-'*--version=[]:VALUE:_default' \
-'*--shapes=[]:VALUE:_default' \
-'*--queries=[]:VALUE:_default' \
-'*--repo=[]:VALUE:_default' \
-'*--repo-sha=[]:VALUE:_default' \
-'*--model-id=[]:VALUE:_default' \
-'*--model-version=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--format=[]:VALUE:_default' \
-'--with-vectors[]' \
-'--full[]' \
-'--allow-missing-embedding-recipe[]' \
+'*--verify=[Pack file to verify without creating a new pack]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
+'*--space=[Namespace space recorded in pack metadata]:VALUE:_default' \
+'*--name=[Name of the generated object]:VALUE:_default' \
+'*--version=[Version recorded in pack metadata]:VALUE:_default' \
+'*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
+'*--queries=[Stored queries to include]:VALUE:_default' \
+'*--repo=[Repository identity or source root for this operation]:VALUE:_default' \
+'*--repo-sha=[Repository commit recorded in pack provenance]:VALUE:_default' \
+'*--model-id=[Embedding model identifier]:VALUE:_default' \
+'*--model-version=[Embedding model version]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
+'--with-vectors[Include embedding vectors in the pack]' \
+'--full[Include the full store or full primer, as applicable]' \
+'--allow-missing-embedding-recipe[Allow a pack without the embedding provider recipe]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::arg-graph-iri:_default' \
@@ -621,9 +621,9 @@ _arguments "${_arguments_options[@]}" : \
 (unpack)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--into=[]:VALUE:_default' \
-'*--expect-repo=[]:VALUE:_default' \
-'*--head-sha=[]:VALUE:_default' \
+'*--into=[Target store for unpacking]:VALUE:_default' \
+'*--expect-repo=[Expected repository identity in the pack]:VALUE:_default' \
+'*--head-sha=[Expected repository head commit]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file-pendant-db:_default' \
@@ -632,7 +632,7 @@ _arguments "${_arguments_options[@]}" : \
 (restore)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--force[]' \
+'--force[Permit replacement when restoring a store]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-full-pack:_default' \
@@ -641,31 +641,31 @@ _arguments "${_arguments_options[@]}" : \
 (share)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--output=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--group-id=[]:VALUE:_default' \
-'*--construct=[]:VALUE:_default' \
-'*--shapes=[]:VALUE:_default' \
-'*--queries=[]:VALUE:_default' \
-'*--alignments=[]:VALUE:_default' \
-'*--parent-share=[]:VALUE:_default' \
-'*--since=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--pack-dir=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--attest-key=[]:VALUE:_default' \
-'*--attest-issued-at=[]:VALUE:_default' \
-'*--attest-ttl=[]:VALUE:_default' \
-'*--attest-agent=[]:VALUE:_default' \
-'*--attest-session=[]:VALUE:_default' \
-'*--attest-introducer=[]:VALUE:_default' \
-'*--attest-nonce=[]:VALUE:_default' \
-'*--pointers=[]:VALUE:_default' \
-'--no-shapes[]' \
-'--no-queries[]' \
-'--turtle[]' \
-'--attest[]' \
-'--project[]' \
+'*--output=[Output directory for the share]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--group-id=[Select facts belonging to this group]:VALUE:_default' \
+'*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
+'*--shapes=[Shapes used for validation or packaging]:VALUE:_default' \
+'*--queries=[Stored queries to include]:VALUE:_default' \
+'*--alignments=[Reviewed SSSOM/RDF alignment file to carry]:VALUE:_default' \
+'*--parent-share=[Parent share for a delta export]:VALUE:_default' \
+'*--since=[Starting share or transaction for incremental output]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--pack-dir=[Existing pack directory to share]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--attest-key=[Ed25519 attestation signing key file]:VALUE:_default' \
+'*--attest-issued-at=[Attestation issue time as Unix seconds]:VALUE:_default' \
+'*--attest-ttl=[Attestation lifetime in seconds]:VALUE:_default' \
+'*--attest-agent=[Attested agent identifier]:VALUE:_default' \
+'*--attest-session=[Attested session identifier]:VALUE:_default' \
+'*--attest-introducer=[Attestation introducer identifier]:VALUE:_default' \
+'*--attest-nonce=[Unique attestation nonce]:VALUE:_default' \
+'*--pointers=[TOML file declaring external graph pointers]:VALUE:_default' \
+'--no-shapes[Omit shapes from the share]' \
+'--no-queries[Omit stored queries from the share]' \
+'--turtle[Include a human-readable Turtle export]' \
+'--attest[Attach a signed agent attestation]' \
+'--project[Export this repository'\''s project graph to .quipu/graph]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_qp__subcmd__share_commands" \
@@ -681,12 +681,12 @@ _arguments "${_arguments_options[@]}" : \
             (diff)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--format=[]:VALUE:_default' \
-'*--old-shapes=[]:VALUE:_default' \
-'*--new-shapes=[]:VALUE:_default' \
-'*--decisions=[]:VALUE:_default' \
-'--report[]' \
-'--fail-on-introduced[]' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
+'*--old-shapes=[Shapes used to validate the old share]:VALUE:_default' \
+'*--new-shapes=[Shapes used to validate the new share]:VALUE:_default' \
+'*--decisions=[Conflict decisions file]:VALUE:_default' \
+'--report[Print the validation diff report]' \
+'--fail-on-introduced[Exit nonzero when the diff introduces violations]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-old:_default' \
@@ -708,13 +708,13 @@ _arguments "${_arguments_options[@]}" : \
 (merge)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--emit-decisions=[]:VALUE:_default' \
-'*--decisions=[]:VALUE:_default' \
-'*--reviewer=[]:VALUE:_default' \
-'--slot-scoped[]' \
-'--propose[]' \
-'--dry-run[]' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--emit-decisions=[Write merge decisions to this file]:VALUE:_default' \
+'*--decisions=[Conflict decisions file]:VALUE:_default' \
+'*--reviewer=[Identity reviewing the merge]:VALUE:_default' \
+'--slot-scoped[Restrict the merge to selected slots]' \
+'--propose[Produce a merge proposal without applying it]' \
+'--dry-run[Preview the operation without applying it]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-dir:_default' \
@@ -731,7 +731,7 @@ _arguments "${_arguments_options[@]}" : \
             (show)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--format=[]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-decisions-json:_default' \
@@ -740,9 +740,9 @@ _arguments "${_arguments_options[@]}" : \
 (resolve)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--choose=[]:VALUE:_default' \
-'*--value=[]:VALUE:_default' \
-'*--by=[]:VALUE:_default' \
+'*--choose=[Conflict side to choose]:VALUE:_default' \
+'*--value=[Explicit value for a conflict resolution]:VALUE:_default' \
+'*--by=[Identity recording a resolution]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-decisions-json:_default' \
@@ -756,11 +756,11 @@ esac
 (import)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--source=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--query-namespace=[]:VALUE:_default' \
-'--replace-queries[]' \
+'*--source=[Source identifier recorded in provenance]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--query-namespace=[Namespace for imported stored queries]:VALUE:_default' \
+'--replace-queries[Replace imported query definitions on name conflicts]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-dir:_default' \
@@ -777,9 +777,9 @@ _arguments "${_arguments_options[@]}" : \
             (delta)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--query-namespace=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--query-namespace=[Namespace for imported stored queries]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-parent-share:_default' \
@@ -789,7 +789,7 @@ _arguments "${_arguments_options[@]}" : \
 (promote)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-id:_default' \
@@ -813,8 +813,8 @@ _arguments "${_arguments_options[@]}" : \
             (pending)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--after=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
+'*--after=[Resume after this cursor]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -822,10 +822,10 @@ _arguments "${_arguments_options[@]}" : \
 (notify)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--after=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
-'*--age-seconds=[]:VALUE:_default' \
-'*--route=[]:VALUE:_default' \
+'*--after=[Resume after this cursor]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
+'*--age-seconds=[Minimum notification age in seconds]:VALUE:_default' \
+'*--route=[Notification route for pending imports]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -833,8 +833,8 @@ _arguments "${_arguments_options[@]}" : \
 (rejected)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--reason=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--reason=[Reason recorded for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-id:_default' \
@@ -843,8 +843,8 @@ _arguments "${_arguments_options[@]}" : \
 (expired)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--reason=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--reason=[Reason recorded for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-id:_default' \
@@ -853,8 +853,8 @@ _arguments "${_arguments_options[@]}" : \
 (reopen)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--reason=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--reason=[Reason recorded for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-share-id:_default' \
@@ -871,19 +871,19 @@ esac
 (compose)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--repo=[]:VALUE:_default' \
-'*--shapes-from=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--destination=[]:VALUE:_default' \
-'*--revoke-tombstone=[]:VALUE:_default' \
-'*--pack-key=[]:VALUE:_default' \
-'*--reason=[]:VALUE:_default' \
-'*--use-pointer=[]:VALUE:_default' \
-'*--declaration=[]:VALUE:_default' \
-'*--authority=[]:VALUE:_default' \
-'*--repo-remote=[]:VALUE:_default' \
-'*--pointer-cache=[]:VALUE:_default' \
-'--rollback[]' \
+'*--repo=[Repository identity or source root for this operation]:VALUE:_default' \
+'*--shapes-from=[Pack supplying the composition shapes]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--destination=[Publication destination evaluated by policy]:VALUE:_default' \
+'*--revoke-tombstone=[Tombstone triple to revoke in the composition]:VALUE:_default' \
+'*--pack-key=[Composition pack key]:VALUE:_default' \
+'*--reason=[Reason recorded for the operation]:VALUE:_default' \
+'*--use-pointer=[Pointer to use in the composition]:VALUE:_default' \
+'*--declaration=[Composition declaration file]:VALUE:_default' \
+'*--authority=[Authority identifier for the operation]:VALUE:_default' \
+'*--repo-remote=[Repository remote used to resolve a pointer]:VALUE:_default' \
+'*--pointer-cache=[Local directory for resolved pack pointers]:VALUE:_default' \
+'--rollback[Restore the previous CURRENT composition snapshot]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '*::arg-pack:_default' \
@@ -892,10 +892,10 @@ _arguments "${_arguments_options[@]}" : \
 (changes)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--from=[]:VALUE:_default' \
-'*--capture=[]:VALUE:_default' \
-'*--limit=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
+'*--from=[First transaction to include]:VALUE:_default' \
+'*--capture=[Change-feed row capture mode]:VALUE:_default' \
+'*--limit=[Maximum number of results]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -903,10 +903,10 @@ _arguments "${_arguments_options[@]}" : \
 (follow)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--primary=[]:VALUE:_default' \
-'*--page-txs=[]:VALUE:_default' \
-'*--page-gap-ms=[]:VALUE:_default' \
-'--bootstrap-only[]' \
+'*--primary=[Primary server URL to follow]:VALUE:_default' \
+'*--page-txs=[Transactions per follower page]:VALUE:_default' \
+'*--page-gap-ms=[Delay between follower pages in milliseconds]:VALUE:_default' \
+'--bootstrap-only[Bootstrap a follower and exit without polling]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -929,11 +929,11 @@ _arguments "${_arguments_options[@]}" : \
             (scope)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--source-store-id=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--tx=[]:VALUE:_default' \
-'*--max-vm-steps=[]:VALUE:_default' \
-'*--deadline-ms=[]:VALUE:_default' \
+'*--source-store-id=[Identity of the source store being acquired]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--tx=[Historical transaction to read]:VALUE:_default' \
+'*--max-vm-steps=[Maximum SPARQL virtual-machine steps]:VALUE:_default' \
+'*--deadline-ms=[Acquisition query deadline in milliseconds]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -945,9 +945,9 @@ esac
 (migrate-vectors)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--from=[]:VALUE:_default' \
-'*--to=[]:VALUE:_default' \
-'--dry-run[]' \
+'*--from=[Source vector backend]:VALUE:_default' \
+'*--to=[Destination vector backend]:VALUE:_default' \
+'--dry-run[Preview the operation without applying it]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -971,7 +971,7 @@ _arguments "${_arguments_options[@]}" : \
             (show)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--format=[]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-qpack-dir:_default' \
@@ -980,8 +980,8 @@ _arguments "${_arguments_options[@]}" : \
 (resolve)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--choose=[]:VALUE:_default' \
-'*--by=[]:VALUE:_default' \
+'*--choose=[Conflict side to choose]:VALUE:_default' \
+'*--by=[Identity recording a resolution]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-qpack-dir:_default' \
@@ -1019,7 +1019,7 @@ _arguments "${_arguments_options[@]}" : \
 (pendant-check)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--history[]' \
+'--history[Check the pendant merge history]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-base-ref:_default' \
@@ -1039,11 +1039,11 @@ _arguments "${_arguments_options[@]}" : \
 (mcp)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--mcp-token-file=[]:VALUE:_default' \
-'*--bind=[]:VALUE:_default' \
-'*--primary-url=[]:VALUE:_default' \
-'--read-only[]' \
-'--embed-backfill[]' \
+'*--mcp-token-file=[File containing the MCP authentication token]:VALUE:_default' \
+'*--bind=[MCP HTTP listen address]:VALUE:_default' \
+'*--primary-url=[Primary server URL used by a read-only MCP follower]:VALUE:_default' \
+'--read-only[Serve MCP in read-only mode]' \
+'--embed-backfill[Enable embedding backfill in the MCP server]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1099,9 +1099,9 @@ _arguments "${_arguments_options[@]}" : \
 (install)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--harness=[]:VALUE:_default' \
-'--project[]' \
-'--no-st[]' \
+'*--harness=[Agent harness\: claude or codex]:VALUE:_default' \
+'--project[Use this repository'\''s project graph or project-local hooks]' \
+'--no-st[Do not integrate hooks with the crew orchestrator]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1109,9 +1109,9 @@ _arguments "${_arguments_options[@]}" : \
 (uninstall)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--harness=[]:VALUE:_default' \
-'--project[]' \
-'--no-st[]' \
+'*--harness=[Agent harness\: claude or codex]:VALUE:_default' \
+'--project[Use this repository'\''s project graph or project-local hooks]' \
+'--no-st[Do not integrate hooks with the crew orchestrator]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1119,9 +1119,9 @@ _arguments "${_arguments_options[@]}" : \
 (status)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--harness=[]:VALUE:_default' \
-'--project[]' \
-'--no-st[]' \
+'*--harness=[Agent harness\: claude or codex]:VALUE:_default' \
+'--project[Use this repository'\''s project graph or project-local hooks]' \
+'--no-st[Do not integrate hooks with the crew orchestrator]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1148,16 +1148,16 @@ _arguments "${_arguments_options[@]}" : \
             (draft)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--exemplar=[]:VALUE:_default' \
-'*--name=[]:VALUE:_default' \
-'*--label=[]:VALUE:_default' \
-'*--targets=[]:VALUE:_default' \
-'*--claim=[]:VALUE:_default' \
-'*--class=[]:VALUE:_default' \
-'*--point=[]:VALUE:_default' \
-'*--layer=[]:VALUE:_default' \
-'*--authority=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
+'*--exemplar=[Source exemplar for a policy draft]:VALUE:_default' \
+'*--name=[Name of the generated object]:VALUE:_default' \
+'*--label=[Human-readable label for the draft]:VALUE:_default' \
+'*--targets=[Target class IRI for the policy]:VALUE:_default' \
+'*--claim=[ASK query expressing the proposed policy claim]:VALUE:_default' \
+'*--class=[Policy classification\: soft or hard]:VALUE:_default' \
+'*--point=[Policy verification point]:VALUE:_default' \
+'*--layer=[Policy enforcement layer]:VALUE:_default' \
+'*--authority=[Authority identifier for the operation]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1165,9 +1165,9 @@ _arguments "${_arguments_options[@]}" : \
 (backtest)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--last-txs=[]:VALUE:_default' \
-'*--from-tx=[]:VALUE:_default' \
-'*--to-tx=[]:VALUE:_default' \
+'*--last-txs=[Number of recent transactions to evaluate]:VALUE:_default' \
+'*--from-tx=[First transaction in the selected interval]:VALUE:_default' \
+'*--to-tx=[Last transaction in the selected interval]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-candidate-ttl:_default' \
@@ -1195,14 +1195,14 @@ _arguments "${_arguments_options[@]}" : \
             (shadow)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--rules=[]:VALUE:_default' \
-'*--since=[]:VALUE:_default' \
-'*--from-tx=[]:VALUE:_default' \
-'*--to-tx=[]:VALUE:_default' \
-'*--last-txs=[]:VALUE:_default' \
-'*--mode=[]:VALUE:_default' \
-'*--max-txs=[]:VALUE:_default' \
-'--json[]' \
+'*--rules=[Rule set to load or evaluate]:VALUE:_default' \
+'*--since=[Starting share or transaction for incremental output]:VALUE:_default' \
+'*--from-tx=[First transaction in the selected interval]:VALUE:_default' \
+'*--to-tx=[Last transaction in the selected interval]:VALUE:_default' \
+'*--last-txs=[Number of recent transactions to evaluate]:VALUE:_default' \
+'*--mode=[Operation mode]:VALUE:_default' \
+'*--max-txs=[Maximum transactions to evaluate]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1229,9 +1229,9 @@ _arguments "${_arguments_options[@]}" : \
             (cone)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--via=[]:VALUE:_default' \
-'*--hops=[]:VALUE:_default' \
-'--json[]' \
+'*--via=[Predicate or path used for traversal]:VALUE:_default' \
+'*--hops=[Maximum traversal hops]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trajectory-IRI:_default' \
@@ -1240,8 +1240,8 @@ _arguments "${_arguments_options[@]}" : \
 (backtest)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--omit=[]:VALUE:_default' \
-'--json[]' \
+'*--omit=[Trajectory step to omit in a counterfactual]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trajectory-IRI:_default' \
@@ -1250,13 +1250,13 @@ _arguments "${_arguments_options[@]}" : \
 (draft)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--name=[]:VALUE:_default' \
-'*--label=[]:VALUE:_default' \
-'*--via=[]:VALUE:_default' \
-'*--omit=[]:VALUE:_default' \
-'*--by=[]:VALUE:_default' \
-'*--dead-end=[]:VALUE:_default' \
-'--json[]' \
+'*--name=[Name of the generated object]:VALUE:_default' \
+'*--label=[Human-readable label for the draft]:VALUE:_default' \
+'*--via=[Predicate or path used for traversal]:VALUE:_default' \
+'*--omit=[Trajectory step to omit in a counterfactual]:VALUE:_default' \
+'*--by=[Identity recording a resolution]:VALUE:_default' \
+'*--dead-end=[Dead-end trajectory to include in the policy draft]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trajectory-IRI:_default' \
@@ -1284,8 +1284,8 @@ _arguments "${_arguments_options[@]}" : \
             (propose)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--set-id=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
+'*--set-id=[Identifier for the proposed alignment set]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-graph-a:_default' \
@@ -1295,9 +1295,9 @@ _arguments "${_arguments_options[@]}" : \
 (decide)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--decisions=[]:VALUE:_default' \
-'*--reviewer=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
+'*--decisions=[Conflict decisions file]:VALUE:_default' \
+'*--reviewer=[Identity reviewing the merge]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-set-tsv:_default' \
@@ -1306,10 +1306,10 @@ _arguments "${_arguments_options[@]}" : \
 (apply)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph-a=[]:VALUE:_default' \
-'*--graph-b=[]:VALUE:_default' \
-'*--expected-version=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
+'*--graph-a=[First graph in the alignment pair]:VALUE:_default' \
+'*--graph-b=[Second graph in the alignment pair]:VALUE:_default' \
+'*--expected-version=[Expected version for the compare-and-swap operation]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-set-tsv:_default' \
@@ -1322,7 +1322,7 @@ esac
 (propose)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--status=[]:VALUE:_default' \
+'*--status=[Status to record or filter]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_qp__subcmd__propose_commands" \
@@ -1338,7 +1338,7 @@ _arguments "${_arguments_options[@]}" : \
             (list)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--status=[]:VALUE:_default' \
+'*--status=[Status to record or filter]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1346,9 +1346,9 @@ _arguments "${_arguments_options[@]}" : \
 (submit)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--proposer=[]:VALUE:_default' \
-'*--rationale=[]:VALUE:_default' \
-'*--trigger=[]:VALUE:_default' \
+'*--proposer=[Identity proposing an alignment]:VALUE:_default' \
+'*--rationale=[Reason for the alignment decision]:VALUE:_default' \
+'*--trigger=[Trigger identifier]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-kind:_default' \
@@ -1356,24 +1356,11 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-diff-file:_default' \
 && ret=0
 ;;
-(plan)
-_arguments "${_arguments_options[@]}" : \
-'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--format=[]:VALUE:_default' \
-'*--risk-threshold=[]:VALUE:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':arg-id:_default' \
-&& ret=0
-;;
 (accept)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--decided-by=[]:VALUE:_default' \
-'*--note=[]:VALUE:_default' \
-'*--reason=[]:VALUE:_default' \
-'*--risk-threshold=[]:VALUE:_default' \
-'--accept-risk[]' \
+'*--decided-by=[Identity recording the alignment decision]:VALUE:_default' \
+'*--note=[Explanatory note recorded with the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-id:_default' \
@@ -1382,8 +1369,8 @@ _arguments "${_arguments_options[@]}" : \
 (reject)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--decided-by=[]:VALUE:_default' \
-'*--note=[]:VALUE:_default' \
+'*--decided-by=[Identity recording the alignment decision]:VALUE:_default' \
+'*--note=[Explanatory note recorded with the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-id:_default' \
@@ -1411,7 +1398,7 @@ _arguments "${_arguments_options[@]}" : \
             (read)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-owner-json:_default' \
@@ -1420,7 +1407,7 @@ _arguments "${_arguments_options[@]}" : \
 (export)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-owner-json:_default' \
@@ -1429,7 +1416,7 @@ _arguments "${_arguments_options[@]}" : \
 (receipt)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-request-json:_default' \
@@ -1438,8 +1425,8 @@ _arguments "${_arguments_options[@]}" : \
 (commit)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'--local-authority[]' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'--local-authority[Explicitly authorize a local memory commit]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-request-json:_default' \
@@ -1467,14 +1454,14 @@ _arguments "${_arguments_options[@]}" : \
             (register)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--agent=[]:VALUE:_default' \
-'*--session=[]:VALUE:_default' \
-'*--public-key=[]:VALUE:_default' \
-'*--introducer=[]:VALUE:_default' \
-'*--issued-at=[]:VALUE:_default' \
-'*--expires-at=[]:VALUE:_default' \
-'--allow-write[]' \
-'--require-v2[]' \
+'*--agent=[Agent identifier for the binding]:VALUE:_default' \
+'*--session=[Session identifier on the statement]:VALUE:_default' \
+'*--public-key=[Verifier public key]:VALUE:_default' \
+'*--introducer=[Identifier of the binding introducer]:VALUE:_default' \
+'*--issued-at=[Issue time as Unix seconds]:VALUE:_default' \
+'*--expires-at=[Expiration time as Unix seconds]:VALUE:_default' \
+'--allow-write[Grant write permission to the attested binding]' \
+'--require-v2[Require version 2 attestations]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1548,14 +1535,14 @@ _arguments "${_arguments_options[@]}" : \
             (enroll)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--credential-id=[]:VALUE:_default' \
-'*--cose-key=[]:VALUE:_default' \
-'*--scheme=[]:VALUE:_default' \
-'*--origin=[]:VALUE:_default' \
-'*--rp-id=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--expires-at=[]:VALUE:_default' \
+'*--credential-id=[Base64url-encoded WebAuthn credential ID]:VALUE:_default' \
+'*--cose-key=[Base64url-encoded COSE public key]:VALUE:_default' \
+'*--scheme=[Signature scheme]:VALUE:_default' \
+'*--origin=[WebAuthn origin URL]:VALUE:_default' \
+'*--rp-id=[WebAuthn relying-party ID]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--expires-at=[Expiration time as Unix seconds]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1619,10 +1606,10 @@ _arguments "${_arguments_options[@]}" : \
             (configure)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--origin=[]:VALUE:_default' \
-'*--rp-id=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--author=[]:VALUE:_default' \
+'*--origin=[WebAuthn origin URL]:VALUE:_default' \
+'*--rp-id=[WebAuthn relying-party ID]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--author=[Author identifier on the signed statement]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1630,10 +1617,10 @@ _arguments "${_arguments_options[@]}" : \
 (enroll)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--credential-id=[]:VALUE:_default' \
-'*--cose-key=[]:VALUE:_default' \
-'*--scheme=[]:VALUE:_default' \
-'*--expires-at=[]:VALUE:_default' \
+'*--credential-id=[Base64url-encoded WebAuthn credential ID]:VALUE:_default' \
+'*--cose-key=[Base64url-encoded COSE public key]:VALUE:_default' \
+'*--scheme=[Signature scheme]:VALUE:_default' \
+'*--expires-at=[Expiration time as Unix seconds]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1689,8 +1676,8 @@ _arguments "${_arguments_options[@]}" : \
             (challenge)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--verifier=[]:VALUE:_default' \
-'*--public-key=[]:VALUE:_default' \
+'*--verifier=[Verifier identifier for a signed statement]:VALUE:_default' \
+'*--public-key=[Verifier public key]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1698,10 +1685,10 @@ _arguments "${_arguments_options[@]}" : \
 (bootstrap)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--verifier=[]:VALUE:_default' \
-'*--public-key=[]:VALUE:_default' \
-'*--pop-signature=[]:VALUE:_default' \
-'*--attests=[]:VALUE:_default' \
+'*--verifier=[Verifier identifier for a signed statement]:VALUE:_default' \
+'*--public-key=[Verifier public key]:VALUE:_default' \
+'*--pop-signature=[Proof-of-possession signature]:VALUE:_default' \
+'*--attests=[IRI of the object being attested]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1735,8 +1722,8 @@ _arguments "${_arguments_options[@]}" : \
             (create)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-iri:_default' \
@@ -1745,9 +1732,9 @@ _arguments "${_arguments_options[@]}" : \
 (label)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--label=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
+'*--label=[Human-readable label for the draft]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-iri:_default' \
@@ -1756,10 +1743,10 @@ _arguments "${_arguments_options[@]}" : \
 (list)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--kind=[]:VALUE:_default' \
-'*--graph=[]:VALUE:_default' \
-'--frozen[]' \
-'--json[]' \
+'*--kind=[Index or graph kind to select]:VALUE:_default' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'--frozen[List only frozen graphs]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1767,7 +1754,7 @@ _arguments "${_arguments_options[@]}" : \
 (import)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--as=[]:VALUE:_default' \
+'*--as=[IRI under which to import the graph]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-db:_default' \
@@ -1776,8 +1763,8 @@ _arguments "${_arguments_options[@]}" : \
 (freeze)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--out=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-iri:_default' \
@@ -1786,7 +1773,7 @@ _arguments "${_arguments_options[@]}" : \
 (thaw)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--actor=[]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-iri:_default' \
@@ -1795,7 +1782,7 @@ _arguments "${_arguments_options[@]}" : \
 (overlay-create)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--input=[]:VALUE:_default' \
+'*--input=[Input file for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1803,7 +1790,7 @@ _arguments "${_arguments_options[@]}" : \
 (overlay-write)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--input=[]:VALUE:_default' \
+'*--input=[Input file for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1811,7 +1798,7 @@ _arguments "${_arguments_options[@]}" : \
 (overlay-compose)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--input=[]:VALUE:_default' \
+'*--input=[Input file for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1838,8 +1825,8 @@ _arguments "${_arguments_options[@]}" : \
             (respace)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--into=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
+'*--into=[New integer namespace space number]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1847,7 +1834,7 @@ _arguments "${_arguments_options[@]}" : \
 (attach)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--list[]' \
+'--list[List mounted read-only databases]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1892,8 +1879,8 @@ esac
 (fork)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--name=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
+'*--name=[Name of the generated object]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-tx:_default' \
@@ -1934,13 +1921,13 @@ _arguments "${_arguments_options[@]}" : \
 (promote)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--emit-decisions=[]:VALUE:_default' \
-'*--decisions=[]:VALUE:_default' \
-'*--reviewer=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'--propose[]' \
-'--dry-run[]' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
+'*--emit-decisions=[Write merge decisions to this file]:VALUE:_default' \
+'*--decisions=[Conflict decisions file]:VALUE:_default' \
+'*--reviewer=[Identity reviewing the merge]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'--propose[Produce a merge proposal without applying it]' \
+'--dry-run[Preview the operation without applying it]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-name:_default' \
@@ -1953,11 +1940,11 @@ esac
 (audit)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--repo=[]:VALUE:_default' \
-'*--from=[]:VALUE:_default' \
-'*--to=[]:VALUE:_default' \
-'*--yupana=[]:VALUE:_default' \
-'--json[]' \
+'*--repo=[Repository identity or source root for this operation]:VALUE:_default' \
+'*--from=[Base Git revision for the audit]:VALUE:_default' \
+'*--to=[Tip Git revision for the audit]:VALUE:_default' \
+'*--yupana=[Yupana executable used for the audit]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trace-jsonl:_default' \
@@ -1974,7 +1961,7 @@ _arguments "${_arguments_options[@]}" : \
             (inventory)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--json[]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1982,8 +1969,8 @@ _arguments "${_arguments_options[@]}" : \
 (namespace)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'--json[]' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1991,8 +1978,8 @@ _arguments "${_arguments_options[@]}" : \
 (replay)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--delta=[]:VALUE:_default' \
-'--json[]' \
+'*--delta=[Refused-delta file for verdict replay]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trace-jsonl:_default' \
@@ -2001,7 +1988,7 @@ _arguments "${_arguments_options[@]}" : \
 (tree)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--json[]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trace-jsonl:_default' \
@@ -2010,7 +1997,7 @@ _arguments "${_arguments_options[@]}" : \
 (inheritance)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'--json[]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-trace-jsonl:_default' \
@@ -2019,8 +2006,8 @@ _arguments "${_arguments_options[@]}" : \
 (quarantine)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--verdict=[]:VALUE:_default' \
-'--json[]' \
+'*--verdict=[Verdict identifier to inspect]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ":: :_qp__subcmd__audit__subcmd__quarantine_commands" \
@@ -2036,8 +2023,8 @@ _arguments "${_arguments_options[@]}" : \
             (list)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--verdict=[]:VALUE:_default' \
-'--json[]' \
+'*--verdict=[Verdict identifier to inspect]:VALUE:_default' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -2045,11 +2032,11 @@ _arguments "${_arguments_options[@]}" : \
 (purge)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--before=[]:VALUE:_default' \
-'*--older-than=[]:VALUE:_default' \
-'--all[]' \
-'--json[]' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--before=[Purge entries older than this timestamp]:VALUE:_default' \
+'*--older-than=[Minimum age for quarantine purging]:VALUE:_default' \
+'--all[Select all retained quarantine entries]' \
+'--json[Print machine-readable JSON]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -2126,7 +2113,7 @@ _qp_commands() {
 'gate:Judge a candidate policy set over recorded history without writing' \
 'path:Golden-path analysis\: provenance cone, backtest and draft' \
 'align:Propose, decide and apply cross-graph alignments' \
-'propose:List, submit, plan, accept or reject schema change proposals' \
+'propose:List, submit, accept or reject schema change proposals' \
 'memory:Read, export, receipt or commit versioned file memory' \
 'attest:Register and manage attested session bindings' \
 'signer:Enroll and manage hardware signers for attested writes' \
@@ -2857,8 +2844,7 @@ _qp__subcmd__propose_commands() {
     local commands; commands=(
 'list:List schema change proposals, optionally by status' \
 'submit:Submit a schema change proposal' \
-'plan:Report a pending proposal'\''s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined' \
-'accept:Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason' \
+'accept:Accept a pending proposal' \
 'reject:Reject a pending proposal' \
     )
     _describe -t commands 'qp propose commands' commands "$@"
@@ -2872,11 +2858,6 @@ _qp__subcmd__propose__subcmd__accept_commands() {
 _qp__subcmd__propose__subcmd__list_commands() {
     local commands; commands=()
     _describe -t commands 'qp propose list commands' commands "$@"
-}
-(( $+functions[_qp__subcmd__propose__subcmd__plan_commands] )) ||
-_qp__subcmd__propose__subcmd__plan_commands() {
-    local commands; commands=()
-    _describe -t commands 'qp propose plan commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__propose__subcmd__reject_commands] )) ||
 _qp__subcmd__propose__subcmd__reject_commands() {
