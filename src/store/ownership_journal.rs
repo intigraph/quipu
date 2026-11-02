@@ -113,7 +113,7 @@ fn sibling(path: &Path, suffix: &str) -> Result<PathBuf> {
     Ok(path.with_file_name(name))
 }
 
-fn io(e: std::io::Error) -> Error {
+fn io(e: &std::io::Error) -> Error {
     refused(format!("write failed: {e}"))
 }
 
@@ -142,19 +142,19 @@ fn stage(path: &Path, journal: &Journal) -> Result<PathBuf> {
     let staged = sibling(path, ".staged")?;
     let mut file = owner_only(OpenOptions::new().write(true).create(true).truncate(true))
         .open(&staged)
-        .map_err(io)?;
-    file.write_all(&bytes).map_err(io)?;
-    file.sync_all().map_err(io)?;
+        .map_err(|e| io(&e))?;
+    file.write_all(&bytes).map_err(|e| io(&e))?;
+    file.sync_all().map_err(|e| io(&e))?;
     Ok(staged)
 }
 
 /// Atomically replace the journal with `journal`.
 pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
     let staged = stage(path, journal)?;
-    std::fs::rename(&staged, path).map_err(io)?;
+    std::fs::rename(&staged, path).map_err(|e| io(&e))?;
     File::open(directory(path))
         .and_then(|d| d.sync_all())
-        .map_err(io)
+        .map_err(|e| io(&e))
 }
 
 /// The sibling lock that serializes every journal change on this host.
@@ -254,14 +254,14 @@ pub(super) fn create(path: &Path, initial: &Journal) -> Result<()> {
         if e.kind() == std::io::ErrorKind::AlreadyExists {
             refused("a journal already exists")
         } else {
-            io(e)
+            io(&e)
         }
     });
     let _ = std::fs::remove_file(&staged);
     published?;
     let synced = File::open(directory(path))
         .and_then(|d| d.sync_all())
-        .map_err(io);
+        .map_err(|e| io(&e));
     drop(lock);
     synced
 }
