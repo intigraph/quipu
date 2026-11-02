@@ -271,27 +271,45 @@ pub(super) fn try_visit(
     PASSES.with(|n| n.set(n.get() + 1));
     let mut emitted = 0usize;
     let mut slots: Vec<&[Value]> = Vec::with_capacity(buffered.width);
+    // One row for every subject, and each variable's key String allocated
+    // once and handed back after each use: the expansion allocates per value
+    // only for the value itself (aegis-xdvg.6).
+    let mut row = seed.clone();
+    let mut keys: Vec<Option<String>> = vec![None; star.optionals.len()];
+    let mut subject_key: Option<String> = None;
+    let mut required_key: Option<String> = None;
     for (k, subject) in buffered.subjects.iter().enumerate() {
         slots.clear();
         slots.extend((0..buffered.width).map(|j| buffered.slot(k, j)));
-        let mut row = seed.clone();
-        row.insert(star.subject.to_owned(), Value::Ref(*subject));
-        match star.required {
+        bind(
+            &mut row,
+            &mut subject_key,
+            star.subject,
+            Value::Ref(*subject),
+        );
+        let result = match star.required {
             Some((_, object)) => {
                 let (values, optional_values) = slots.split_first().expect("required slot");
+                let mut result = Ok(());
                 for value in *values {
-                    row.insert(object.to_owned(), value.clone());
-                    expand(
+                    bind(&mut row, &mut required_key, object, value.clone());
+                    result = expand(
                         store,
                         ctx,
                         &star.optionals,
                         optional_values,
                         0,
                         &mut row,
+                        &mut keys,
                         &mut emitted,
                         emit,
-                    )?;
+                    );
+                    unbind(&mut row, &mut required_key, object);
+                    if result.is_err() {
+                        break;
+                    }
                 }
+                result
             }
             None => expand(
                 store,
@@ -300,10 +318,13 @@ pub(super) fn try_visit(
                 &slots,
                 0,
                 &mut row,
+                &mut keys,
                 &mut emitted,
                 emit,
-            )?,
-        }
+            ),
+        };
+        unbind(&mut row, &mut subject_key, star.subject);
+        result?;
     }
     Ok(true)
 }
@@ -453,6 +474,18 @@ fn scan_shared(
     Ok(scanned)
 }
 
+/// Bind `name` (not yet bound) to `value`, reusing the key String in `key`.
+fn bind(row: &mut Bindings, key: &mut Option<String>, name: &str, value: Value) {
+    row.insert(key.take().unwrap_or_else(|| name.to_owned()), value);
+}
+
+/// Unbind `name`, keeping its key String in `key` for the next bind.
+fn unbind(row: &mut Bindings, key: &mut Option<String>, name: &str) {
+    if let Some((owned, _)) = row.remove_entry(name) {
+        *key = Some(owned);
+    }
+}
+
 /// The rows of OPTIONALs `i..` over `row`, in nested left-join order.
 #[allow(clippy::too_many_arguments)]
 fn expand(
@@ -462,6 +495,7 @@ fn expand(
     values: &[&[Value]],
     i: usize,
     row: &mut Bindings,
+    keys: &mut [Option<String>],
     emitted: &mut usize,
     emit: super::count_stream::Emit<'_>,
 ) -> Result<()> {
@@ -472,19 +506,44 @@ fn expand(
     };
     let mut matched = false;
     for value in values[i] {
-        row.insert(optional.object.to_owned(), value.clone());
-        let keep = match optional.expression {
-            Some(e) => eval_filter(store, e, row, ctx)?,
-            None => true,
-        };
-        if keep {
-            matched = true;
-            expand(store, ctx, optionals, values, i + 1, row, emitted, emit)?;
+        bind(row, &mut keys[i], optional.object, value.clone());
+        let result = match optional.expression {
+            Some(e) => eval_filter(store, e, row, ctx),
+            None => Ok(true),
         }
-        row.remove(optional.object);
+        .and_then(|keep| {
+            if keep {
+                matched = true;
+                expand(
+                    store,
+                    ctx,
+                    optionals,
+                    values,
+                    i + 1,
+                    row,
+                    keys,
+                    emitted,
+                    emit,
+                )
+            } else {
+                Ok(())
+            }
+        });
+        unbind(row, &mut keys[i], optional.object);
+        result?;
     }
     if !matched {
-        expand(store, ctx, optionals, values, i + 1, row, emitted, emit)?;
+        expand(
+            store,
+            ctx,
+            optionals,
+            values,
+            i + 1,
+            row,
+            keys,
+            emitted,
+            emit,
+        )?;
     }
     Ok(())
 }
