@@ -375,7 +375,9 @@ fn scan(
         let mut typed = false;
         // Reused for every subject; `push` moves the values out.
         let mut values: Vec<Vec<Value>> = vec![Vec::new(); predicates.len()];
-        let mut seen = 0usize;
+        // Rows read over the whole scan: never reset per subject, so the
+        // deadline is polled every stride however small the subjects are.
+        let mut scanned = 0usize;
         loop {
             let row = rows.next()?;
             let e = match row {
@@ -394,12 +396,11 @@ fn scan(
                     values.iter_mut().for_each(Vec::clear);
                 }
                 typed = false;
-                seen = 0;
             }
             let Some(row) = row else { break };
             current = e;
-            seen += 1;
-            check_eval_budget(ctx, seen, 0)?;
+            scanned += 1;
+            check_eval_budget(ctx, scanned, 0)?;
             let a: i64 = row.get(1)?;
             // Borrowed, decoded once into its slot; never copied.
             let rusqlite::types::ValueRef::Blob(v) = row.get_ref(2)? else {

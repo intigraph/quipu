@@ -753,3 +753,57 @@ fn identical_stars_share_one_scan_per_query() {
     );
     drop(cache);
 }
+
+/// aegis-xdvg.6 (#980 review): the star scan polls the query deadline over
+/// the whole scan, not per subject. Many small subjects (two rows each) never
+/// reach one poll stride alone; a passed deadline still stops the scan before
+/// it buffers the graph.
+#[test]
+fn star_scan_polls_the_deadline_across_small_subjects() {
+    let mut store = Store::open_in_memory().unwrap();
+    let board = store.graph_create("http://example.org/board").unwrap();
+    let subjects: String = (0..1500)
+        .map(|i| format!("ex:s{i} a ex:Issue ; ex:id \"{i}\" .\n"))
+        .collect();
+    seed(&mut store, board, &subjects);
+    let q = "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue . OPTIONAL { ?s ex:id ?id } } }";
+    let live = TemporalContext::default();
+    let passes = || super::super::count_star::PASSES.with(std::cell::Cell::get);
+    let before = passes();
+    compare(&store, q, &live, true);
+    assert!(passes() > before, "the star path is the one under test");
+
+    let Query::Select { pattern, .. } = super::super::sparql_parser()
+        .parse_query(&format!("{PREFIX}{q}"))
+        .unwrap()
+    else {
+        panic!()
+    };
+    let (inner, _, _) = group(&pattern);
+    let GraphPattern::Graph { inner: star, .. } = inner else {
+        panic!("expected GRAPH: {inner:?}")
+    };
+    // Scoped the way the evaluator scopes `GRAPH ex:board`, so nothing else
+    // polls the deadline before the star scan does.
+    let expired = TemporalContext {
+        graph: super::super::GraphScope::Named(vec![board]),
+        deadline: Some(crate::time::Deadline::after_millis(0)),
+        ..TemporalContext::default()
+    };
+    let scans = || super::super::count_star::SCANS.with(std::cell::Cell::get);
+    let (scans_before, passes_before) = (scans(), passes());
+    let result =
+        super::super::count_star::try_visit(&store, star, &expired, &Bindings::new(), &mut |_| {
+            Ok(())
+        });
+    assert!(
+        matches!(result, Err(crate::Error::QueryTimeout { .. })),
+        "{result:?}"
+    );
+    assert!(scans() > scans_before, "the star scan was entered");
+    assert_eq!(
+        passes(),
+        passes_before,
+        "the deadline stops the scan itself, not only the emission after it"
+    );
+}
