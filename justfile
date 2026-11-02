@@ -184,6 +184,7 @@ demo name="explorer":
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
+        transition-trust-root) cargo run --quiet --locked --offline --no-default-features --example transition_trust_root ;;
         ownership-startup-boundary) cargo run --quiet --locked --offline --no-default-features --example ownership_startup_boundary ;;
         cast-filter) cargo run --quiet --locked --no-default-features --example cast_filter_profile -- examples/cast-filter-profile.rq 6000 ;;
         explorer)

@@ -28,7 +28,10 @@
 //!
 //! Rotation is close-then-insert (retract the old `aegis:publicKey` and assert
 //! the new one), revocation is a close, and expiry is a `valid_to` in the
-//! future. No new schema is needed.
+//! future. No new schema is needed. Raw ROOT/all-graph and historical reads
+//! retain that temporal visibility. A CURRENT human/governed authority check
+//! is stricter: only open-ended facts belong to the writer's sealed registry
+//! snapshot, so a bounded assertion cannot authorize a new operation.
 //!
 //! # One registration, not two
 //!
@@ -100,24 +103,27 @@ impl Witness {
 pub enum Scope {
     /// Only ROOT, the default graph the SPARQL-based verifiers always read.
     Root,
-    /// Every graph. The transition gate reads this way, because the identity
-    /// graph is a named graph of the operator's choosing.
+    /// Raw registration visibility across every graph. This is not trust-root
+    /// authorization; transition and verdict gates use [`Scope::Governed`].
     AllGraphs,
     /// Only HUMAN trust-root registrations: ROOT, and carrying an ASSERTED
     /// `aegis:trustTier "human"` in ROOT (aegis-kzt0ql.9.4). Human decisions
     /// verify only against these. Agent registrations stay writable by agents
     /// and can never verify a human decision. The marker is matched as an
     /// asserted ROOT fact in SQL, so neither inference nor a named graph can
-    /// supply it, and adding or changing it passes the trust-root gate
-    /// (`crate::governance::trust_root`).
+    /// supply it. Current authority additionally requires open-ended facts,
+    /// matching the set protected by `crate::governance::trust_root`.
     HumanTier,
     /// Registrations that chain to the trust root (aegis-c97o): ROOT, and
     /// carrying an ASSERTED `aegis:trustTier` of `"human"` or `"agent"` in
-    /// ROOT. Both markers sit behind the trust-root gate, so every
-    /// registration in this scope was written by an amendment a human
-    /// trust-root key signed. Verdict verification trusts only this scope;
-    /// an unmarked registration is still readable and reported, never
-    /// trusted.
+    /// ROOT. Verdict verification uses this scope; an unmarked registration
+    /// remains readable as raw data, never current authority.
+    /// For a current authority check (`witness.tx == None`), every
+    /// registration fact must be open-ended: the trust-root snapshot seals
+    /// only those facts. Bounded assertions remain raw data, never current
+    /// authority, even before their stated expiry. Historical witnesses keep
+    /// their transaction-bound revocation semantics; this is not a
+    /// retrospective endorsement certificate for arbitrary historical rows.
     Governed,
 }
 
@@ -181,7 +187,8 @@ pub fn governed_tier(
     let mut stmt = store.prepare(
         "SELECT v FROM facts WHERE e = ?3 AND a = ?4 AND g = 0 AND op = 1 \
          AND valid_from <= ?1 AND (valid_to IS NULL OR valid_to > ?1) \
-         AND (?2 IS NULL OR (tx <= ?2 AND (valid_to IS NULL OR retracted_tx > ?2)))",
+         AND (?2 IS NULL OR (tx <= ?2 AND (valid_to IS NULL OR retracted_tx > ?2))) \
+         AND (?2 IS NOT NULL OR valid_to IS NULL)",
     )?;
     let rows = stmt
         .query_map(rusqlite::params![witness.at, witness.tx, e, tier], |row| {
@@ -333,11 +340,20 @@ fn select_rows(
             Scope::Root | Scope::HumanTier | Scope::Governed => format!(" AND {alias}.g = 0"),
             Scope::AllGraphs => String::new(),
         };
+        // The current trust-root writer hashes open-ended ROOT facts only.
+        // Accepting a bounded tier OR key/verifier/type/scope here would let
+        // an ordinary native writer append authority outside that snapshot.
+        // Historical witnesses still see later signed closes at their tx.
+        let sealed = if matches!(scope, Scope::HumanTier | Scope::Governed) {
+            format!(" AND (?2 IS NOT NULL OR {alias}.valid_to IS NULL)")
+        } else {
+            String::new()
+        };
         format!(
             "{alias}.op = 1 AND {alias}.valid_from <= ?1 \
              AND ({alias}.valid_to IS NULL OR {alias}.valid_to > ?1) \
              AND (?2 IS NULL OR ({alias}.tx <= ?2 \
-                  AND ({alias}.valid_to IS NULL OR {alias}.retracted_tx > ?2))){graph}"
+                  AND ({alias}.valid_to IS NULL OR {alias}.retracted_tx > ?2))){graph}{sealed}"
         )
     };
     let mut sql = format!(

@@ -1,0 +1,11 @@
+Retained native failure on published ea541825 (real human root, ordinary Store transactions):
+finite unsigned ROOT tier: enrollment=Ok(3); transition=Ok(4)
+Safety assertion FAILED: unsigned finite tier authorized a persisted transition.
+
+Candidate native control (no live store or key operation):
+
+running 1 test
+finite unsigned ROOT tier: enrollment=Ok(3); transition=Err(PolicyDenied("transition 'urn:shuttle:event:triage-7:0' was performed by 'alice', who has no trust-root-governed ROOT aegis:VerifierRegistration in this store. A valid signature does not authorize self-enrollment. Have a human trust-root holder register and endorse agent 'alice''s public key in ROOT using `quipu trust-root endorse-challenge` / `endorse`, then retry. A named identity graph or an unsigned registration is not a trust root."))
+test governance::transition::tests::udr9_a_finite_unsigned_root_tier_cannot_authorize_a_persisted_transition ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3023 filtered out; finished in 0.03s

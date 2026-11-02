@@ -30,15 +30,15 @@
 //!
 //! ## Where the keys come from
 //!
-//! `aegis:VerifierRegistration` facts — human-authored, `aegis:verifier`
-//! naming the agent, `aegis:publicKey` its hex ed25519 key. Shuttle's
-//! convention puts them in a `dataKind=identity` named graph that is never
-//! frozen; quipu cannot know which graph the operator chose, so the registry
-//! read spans EVERY graph in the store. That is a visibility decision, not a
-//! trust one: protecting the registry from unauthorized writes is the
-//! authority gate's job (`enforce_authority`), exactly as it is for the
-//! decision registry. Any registered key for the agent may verify — an agent
-//! mid key rotation legitimately has two registrations.
+//! Only trust-root-governed `aegis:VerifierRegistration` facts in ROOT may
+//! authenticate a transition. The registration must carry an asserted ROOT
+//! `aegis:trustTier "agent"` or `"human"`, admitted through the human trust-root
+//! bootstrap/amendment gate, just as for verdict verification (aegis-c97o).
+//! A signature proves possession of a key, not authority to enroll that key.
+//! Ordinary writable identity-graph registrations are visible metadata, never
+//! trust sources. Existing named-graph registrations need explicit ROOT
+//! migration and human endorsement; there is no unsigned compatibility path.
+//! Any governed key for the agent may verify during an admitted key rotation.
 //!
 //! ## Definition-time, opt-in
 //!
@@ -197,11 +197,12 @@ impl Transition {
         if registered.is_empty() {
             return Ok(Some(format!(
                 "transition '{iri}' was performed by '{agent}', who has no \
-                 aegis:VerifierRegistration in this store. A signature only \
-                 attests once its key is registered by a human — have one \
-                 register agent '{agent}''s public key (shuttle prints the \
-                 registration: `shuttle register {agent} <workflow>`), then \
-                 retry."
+                 trust-root-governed ROOT aegis:VerifierRegistration in this \
+                 store. A valid signature does not authorize self-enrollment. \
+                 Have a human trust-root holder register and endorse agent \
+                 '{agent}''s public key in ROOT using `quipu trust-root \
+                 endorse-challenge` / `endorse`, then retry. A named identity \
+                 graph or an unsigned registration is not a trust root."
             )));
         }
         let message = if self.version.is_empty() {
@@ -356,15 +357,12 @@ fn read_transition(store: &Store, iri: &str, graph: i64) -> Result<Transition> {
     Ok(out)
 }
 
-/// Every public key registered for `agent` NOW: `aegis:VerifierRegistration`
-/// facts with `aegis:verifier` naming the agent, across EVERY graph (the
-/// identity graph is a named graph of the operator's choosing; see the module
-/// doc for why this is visibility, not trust). The gate verifies a transition
-/// in the write that records it, so "now" IS the signing instant (S1): a
-/// closed key and a not-yet-valid one are both absent.
+/// Trust-root-governed ROOT keys for `agent` NOW. The gate checks the current
+/// write, never the signer's claimed timestamp; expired/revoked keys refuse.
+/// Identity-graph metadata cannot supply a key, tier marker or scope here.
 fn registered_keys(store: &Store, agent: &str) -> Result<Vec<String>> {
     use super::verifier_registry::{Scope, Witness};
-    super::verifier_registry::registered_keys(store, agent, None, &Witness::now(), Scope::AllGraphs)
+    super::verifier_registry::registered_keys(store, agent, None, &Witness::now(), Scope::Governed)
 }
 
 /// The lexical form of a stored value: strings as-is, typed literals by their

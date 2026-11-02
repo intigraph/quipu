@@ -1,0 +1,15 @@
+$ base: same private in-memory probe, source d707ec62
+fixture=in-memory keys=ephemeral live_operations=NONE
+unendorsed_root=ADMITTED
+unendorsed_named_identity=ADMITTED
+human_root_endorsed=ADMITTED
+legacy_flag_off=ADMITTED
+
+$ candidate: same private in-memory probe, governed ROOT keys
+fixture=in-memory keys=ephemeral live_operations=NONE
+unendorsed_root=REFUSED
+unendorsed_named_identity=REFUSED
+human_root_endorsed=ADMITTED
+legacy_flag_off=ADMITTED
+
+PASS: self-enrollment refused; human endorsement and opt-in control preserved
