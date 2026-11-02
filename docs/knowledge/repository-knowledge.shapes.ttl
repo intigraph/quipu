@@ -59,4 +59,15 @@ a:QuipuMappingRecordProfile a sh:NodeShape ;
 a:QuipuNoHandAuthoredIdentity a sh:NodeShape ;
     sh:targetSubjectsOf owl:sameAs ;
     sh:property [ sh:path rdfs:label ; sh:minCount 1 ; ] ;
-    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ; ] .
+    # aegis-ro425e.18: the release query links each renamed entity to its
+    # former name. Only a name the query produces may carry one such link, to
+    # a name of the kind it was renamed from. SHACL Core cannot say "the
+    # subject's own former name"; the stack builder and the receiver check
+    # (verify_former_names) refuse any other link, and this shape refuses
+    # every identity knot outside these name forms.
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https://w3id[.]org/intigraph/([A-Za-z0-9-]+/id/((code|doc|chunk)/.+|repo)|quipu/id/idea/.+|stack/id/repo-embedded-knowledge-databases-directive-2026-09-03)$" ;
+    sh:not [ sh:pattern "^https://w3id[.]org/intigraph/quipu/id/idea/publication-policy/" ] ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 1 ; sh:nodeKind sh:IRI ;
+        sh:pattern "^(http://aegis[.]gastown[.]local/ontology/((code|doc|chunk)/[A-Za-z0-9-]+/.+|repo_[A-Za-z0-9-]+|repo-embedded-knowledge-databases-directive-2026-09-03)|https://quipu[.]dev/knowledge/.+)$" ;
+        sh:not [ sh:pattern "^https://quipu[.]dev/knowledge/publication-policy/" ] ; ] .
