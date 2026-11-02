@@ -7,7 +7,7 @@
 use clap::{Arg, ArgAction, Command};
 
 use crate::about::about;
-use crate::catalogue::{SPECS, Spec, is_group};
+use crate::catalogue::{SPECS, Spec, is_group, option_help};
 
 /// Root-level text shared by the man page and the completions.
 const ROOT_ABOUT: &str = "AI-native knowledge graph with strict ontology enforcement";
@@ -98,6 +98,7 @@ fn apply(mut cmd: Command, spec: &Spec) -> Command {
             Arg::new(name.to_string())
                 .long(name.to_string())
                 .value_name("VALUE")
+                .help(option_help(spec.path, name).expect("catalogue option description"))
                 .action(ArgAction::Append),
         );
     }
@@ -109,6 +110,7 @@ fn apply(mut cmd: Command, spec: &Spec) -> Command {
         cmd = cmd.arg(
             Arg::new(name.to_string())
                 .long(name.to_string())
+                .help(option_help(spec.path, name).expect("catalogue switch description"))
                 .action(ArgAction::SetTrue),
         );
     }
@@ -136,9 +138,16 @@ mod tests {
                     .find_subcommand(word)
                     .unwrap_or_else(|| panic!("missing {}", spec.path));
             }
-            for value in spec.values.split_whitespace().filter(|v| *v != "db") {
+            for value in spec
+                .values
+                .split_whitespace()
+                .chain(spec.switches.split_whitespace())
+                .filter(|v| *v != "db")
+            {
                 assert!(
-                    node.get_arguments().any(|a| a.get_long() == Some(value)),
+                    node.get_arguments().any(|a| a.get_long() == Some(value)
+                        && a.get_help()
+                            .is_some_and(|h| !h.to_string().trim().is_empty())),
                     "{}: --{value}",
                     spec.path
                 );
