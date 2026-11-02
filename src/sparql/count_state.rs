@@ -1,6 +1,6 @@
 //! Bounded COUNT and paired metadata AVG accumulators; no input rows retained.
 use crate::types::Value;
-use spargebra::algebra::{AggregateExpression, AggregateFunction};
+use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, Function};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -66,5 +66,39 @@ impl Counter {
         } else {
             Some(Value::Int(self.count))
         }
+    }
+}
+
+// Only the pure arithmetic/date projection used alongside COUNT in metadata.
+// Volatile functions and other expressions retain the ordinary evaluator.
+pub(super) fn stable(expr: &Expression) -> bool {
+    match expr {
+        Expression::Variable(_) | Expression::Literal(_) | Expression::NamedNode(_) => true,
+        Expression::Add(a, b)
+        | Expression::Subtract(a, b)
+        | Expression::Multiply(a, b)
+        | Expression::Divide(a, b)
+        | Expression::Equal(a, b)
+        | Expression::Less(a, b)
+        | Expression::LessOrEqual(a, b)
+        | Expression::Greater(a, b)
+        | Expression::GreaterOrEqual(a, b)
+        | Expression::And(a, b)
+        | Expression::Or(a, b) => stable(a) && stable(b),
+        Expression::UnaryPlus(a) | Expression::UnaryMinus(a) | Expression::Not(a) => stable(a),
+        Expression::If(a, b, c) => stable(a) && stable(b) && stable(c),
+        Expression::FunctionCall(
+            Function::Str
+            | Function::StrDt
+            | Function::Year
+            | Function::Month
+            | Function::Day
+            | Function::Hours
+            | Function::Minutes
+            | Function::Seconds
+            | Function::Floor,
+            args,
+        ) => args.iter().all(stable),
+        _ => false,
     }
 }
