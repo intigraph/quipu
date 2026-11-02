@@ -9,6 +9,7 @@ pub fn cmd_propose(args: &[String], db_path: &str) {
 
     match action {
         "submit" => cmd_propose_submit(args, &store),
+        "plan" => crate::cli_propose_plan::cmd_plan(args, &store),
         "accept" => cmd_propose_accept(args, &mut store),
         "reject" => cmd_propose_reject(args, &store),
         _ => cmd_propose_list(args, &store),
@@ -141,7 +142,8 @@ fn cmd_propose_accept(args: &[String], store: &mut quipu::Store) {
         Some(s) if !s.starts_with("--") => s.as_str(),
         _ => {
             eprintln!(
-                "usage: quipu propose accept <id> [--note <text>] [--decided-by <id>] [--db <path>]"
+                "usage: quipu propose accept <id> [--note <text>] [--decided-by <id>] \
+                 [--risk-threshold <0-100>] [--accept-risk --reason <why>] [--db <path>]"
             );
             std::process::exit(1);
         }
@@ -155,8 +157,10 @@ fn cmd_propose_accept(args: &[String], store: &mut quipu::Store) {
         .find(|w| w[0] == "--note")
         .map(|w| w[1].as_str());
     let decided_by = decided_by_or_exit(args);
+    // aegis-493: the blast-radius gate runs before anything is written.
+    let note = crate::cli_propose_plan::gate_or_exit(args, store, id, note);
     let now = chrono_now();
-    match store.accept_proposal(id, &decided_by, &now, note) {
+    match store.accept_proposal(id, &decided_by, &now, note.as_deref()) {
         Ok(p) => println!(
             "proposal {} accepted (target: {}, kind: {:?})",
             p.id, p.target, p.kind

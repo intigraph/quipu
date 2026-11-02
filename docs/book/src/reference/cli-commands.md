@@ -1358,7 +1358,7 @@ qp align apply <set.tsv>
 
 ## `qp propose`
 
-List, submit, accept or reject schema change proposals.
+List, submit, plan, accept or reject schema change proposals.
 
 ```text
 qp propose
@@ -1390,9 +1390,21 @@ qp propose submit <kind> <target> <diff-file>
 
 - `--trigger <VALUE>`: Trigger identifier.
 
+### `qp propose plan`
+
+Report a pending proposal's blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined.
+
+```text
+qp propose plan <id>
+```
+
+- `--format <VALUE>`: Plan output format: text or json.
+
+- `--risk-threshold <VALUE>`: Fail the plan above this 0-100 risk score (default: the deployment threshold).
+
 ### `qp propose accept`
 
-Accept a pending proposal.
+Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason.
 
 ```text
 qp propose accept <id>
@@ -1401,6 +1413,12 @@ qp propose accept <id>
 - `--decided-by <VALUE>`: Identity recording the alignment decision.
 
 - `--note <VALUE>`: Explanatory note recorded with the operation.
+
+- `--reason <VALUE>`: Why an over-threshold plan is accepted; recorded with the decision.
+
+- `--risk-threshold <VALUE>`: Refuse acceptance above this 0-100 risk score (default: the deployment threshold).
+
+- `--accept-risk`: Accept despite a plan over the risk threshold; requires --reason.
 
 ### `qp propose reject`
 
