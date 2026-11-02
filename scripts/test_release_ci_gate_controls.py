@@ -117,6 +117,16 @@ freshness_cases = [
     ("job-level shared freshness group", fresh_wf.replace(
         "    name: Check release PR freshness\n",
         "    name: Check release PR freshness\n    concurrency:\n      group: release-pr-freshness\n", 1), False),
+    # A job-level skip is what the merge gate cannot prove on an ordinary PR.
+    ("job-level freshness skip", fresh_wf.replace(
+        "    name: Check release PR freshness\n",
+        "    name: Check release PR freshness\n    if: github.event_name == 'push'\n", 1), False),
+    ("unscoped freshness check step", fresh_wf.replace(
+        "      - name: Check the open release PR against current main\n        if: steps.scope.outputs.in_scope == 'true'\n",
+        "      - name: Check the open release PR against current main\n", 1), False),
+    ("scope without the release branch test", fresh_wf.replace(
+        "             startsWith(github.event.pull_request.head.ref, 'release-plz')) }}",
+        "             true) }}", 1), False),
 ]
 for name, fresh_fixture, expected in freshness_cases:
     with tempfile.TemporaryDirectory(prefix="freshness-contract-") as directory:
@@ -131,4 +141,4 @@ for name, fresh_fixture, expected in freshness_cases:
                                 cwd=directory, capture_output=True, text=True)
         assert (result.returncode == 0) == expected, (name, result.stderr[-400:])
         print("PASS:", name)
-print(f"{len(freshness_cases)} freshness concurrency controls passed")
+print(f"{len(freshness_cases)} freshness concurrency and scope controls passed")

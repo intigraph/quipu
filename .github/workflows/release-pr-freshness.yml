@@ -37,12 +37,12 @@ jobs:
     # Not named "Release PR freshness": on a pull_request run the job's own check
     # would sit on the PR head beside the status of that name and could disagree.
     name: Check release PR freshness
-    # Only same-repository release-plz branches. A fork PR named release-plz-* gets
-    # no run, no token with write scope and no say in the verdict.
-    if: >-
-      github.event_name == 'push' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       startsWith(github.event.pull_request.head.ref, 'release-plz'))
+    # No job-level `if:`. A job skipped on every ordinary PR leaves a skipped check
+    # the merge gate cannot prove (#910 review). The scope test is the first step,
+    # and every later step runs only in scope: an ordinary or fork PR's run ends
+    # green having checked out, read and written nothing. Only same-repository
+    # release-plz branches are in scope; a fork PR named release-plz-* gets no say
+    # in the verdict (and GitHub gives fork PRs a read-only token regardless).
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -51,19 +51,38 @@ jobs:
       pull-requests: read
       statuses: write
     steps:
+      - name: Scope
+        id: scope
+        env:
+          IN_SCOPE: >-
+            ${{ github.event_name == 'push' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+             startsWith(github.event.pull_request.head.ref, 'release-plz')) }}
+        run: |
+          set -euo pipefail
+          case "$IN_SCOPE" in
+            true) echo "in_scope=true" >> "$GITHUB_OUTPUT" ;;
+            false) echo "in_scope=false" >> "$GITHUB_OUTPUT"
+                   echo "Not a push to main or a same-repository release PR; nothing to check." ;;
+            *) echo "::error::Unexpected scope value '$IN_SCOPE'."; exit 1 ;;
+          esac
       # Always main's code and main's tree: the PR head is fetched as data below and
       # none of its scripts run.
       - uses: actions/checkout@v4
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           ref: ${{ github.event_name == 'push' && github.sha || 'main' }}
           fetch-depth: 0
       - uses: actions/setup-python@v5
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           python-version: "3.12"
       - uses: taiki-e/install-action@v2
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           tool: git-cliff
       - name: Check the open release PR against current main
+        if: steps.scope.outputs.in_scope == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}

@@ -156,8 +156,31 @@ assert "github.event.pull_request.head.ref || github.ref" in fresh_group, \
 assert fresh_doc["concurrency"].get("cancel-in-progress") is False
 fresh = fresh_doc["jobs"]["release-pr-freshness"]
 assert "concurrency" not in fresh, "a job-level group would re-share one queue"
-assert "github.event.pull_request.head.repo.full_name == github.repository" in fresh["if"]
-assert "startsWith(github.event.pull_request.head.ref, 'release-plz')" in fresh["if"]
+# No job-level `if:`: a job skipped on every ordinary PR leaves a skipped check the
+# merge gate cannot prove (#910 review). The scope test is the first step and gates
+# every later step, so out of scope the job is green having done nothing.
+assert "if" not in fresh, "freshness must not skip as a job; scope it in its first step"
+scope = fresh["steps"][0]
+assert scope.get("id") == "scope" and "if" not in scope
+scope_expr = " ".join(scope["env"]["IN_SCOPE"].split())
+for clause in ("github.event_name == 'push'",
+               "github.event.pull_request.head.repo.full_name == github.repository",
+               "startsWith(github.event.pull_request.head.ref, 'release-plz')"):
+    assert clause in scope_expr, f"scope must test {clause}"
+for step in fresh["steps"][1:]:
+    assert step.get("if") == "steps.scope.outputs.in_scope == 'true'", \
+        f"every step after the scope test must be scoped: {step.get('name') or step.get('uses')}"
+with tempfile.TemporaryDirectory() as directory:
+    for value, code, out in (("true", 0, "in_scope=true"), ("false", 0, "in_scope=false"),
+                             ("", 1, None), ("maybe", 1, None)):
+        output = Path(directory) / f"out-{value or 'empty'}"
+        output.write_text("")
+        run = subprocess.run(["bash", "-c", scope["run"]], capture_output=True, text=True,
+                             env={"PATH": os.environ["PATH"], "IN_SCOPE": value,
+                                  "GITHUB_OUTPUT": str(output)})
+        assert run.returncode == code, (value, run.returncode, run.stdout, run.stderr)
+        if out:
+            assert output.read_text().strip() == out, (value, output.read_text())
 assert fresh["name"] != "Release PR freshness", "the job check must not shadow the status"
 assert "needs" not in fresh, "freshness must not wait on CI"
 checkout = next(s for s in fresh["steps"] if s.get("uses", "").startswith("actions/checkout"))
