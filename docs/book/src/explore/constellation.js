@@ -6,6 +6,8 @@ import { showRelation, showHistory } from "./relation.js";
 // interaction moves a camera, never a running force simulation.
 export function createConstellation({ query, prefixes, short, inspect, factHistory }) {
   const K = "https://quipu.dev/knowledge/";
+  // Packs since aegis-ro425e.18 name the vision by its w3id IRI; older ones by K.
+  const vision = () => nodes.get("https://w3id.org/intigraph/quipu/id/idea/vision") ?? nodes.get(K + "vision");
   const $ = (id) => document.getElementById(id);
   const svg = $("graph"), layer = $("graph-targets");
   const NS = "http://www.w3.org/2000/svg";
@@ -201,7 +203,7 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
   $("graph-zoom-in").onclick = () => zoom(1.3);
   $("graph-zoom-out").onclick = () => zoom(1 / 1.3);
   $("graph-home").onclick = () => {
-    const first = nodes.get(K + "vision") ?? nodes.values().next().value;
+    const first = vision() ?? nodes.values().next().value;
     if (first) { camera.z = .8; open(first.id); }
   };
   $("graph-fit").onclick = () => { overview = true; draw(); };
@@ -292,9 +294,9 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
         ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a knot or relation to inspect its facts.";
       ready = !preview || verified;
       const requested = new URL(location.href).searchParams.get("entity");
-      const first = nodes.get(K + "vision") ?? nodes.values().next().value;
+      const first = vision() ?? nodes.values().next().value;
       if (preview && !verified) {
-        const initial = nodes.get(requested) ?? nodes.get(K + "vision") ?? nodes.values().next().value;
+        const initial = nodes.get(requested) ?? vision() ?? nodes.values().next().value;
         if (initial) await open(initial.id, "none");
         draw();
         return;
@@ -304,6 +306,6 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
       draw();
     },
     focus(item) { if (ready) open(item.iri); },
-    hasVision() { return nodes.has(K + "vision"); },
+    hasVision() { return Boolean(vision()); },
   };
 }

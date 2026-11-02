@@ -242,7 +242,7 @@ fn focus_nodes(
 }
 
 /// One SELECT of `?n` per SHACL target declared in `shapes_turtle`.
-fn target_queries(shapes_turtle: &str) -> Result<Vec<String>> {
+pub(crate) fn target_queries(shapes_turtle: &str) -> Result<Vec<String>> {
     const SH: &str = "http://www.w3.org/ns/shacl#";
     let parser = oxrdfio::RdfParser::from_format(oxrdfio::RdfFormat::Turtle);
     let mut queries = Vec::new();
@@ -314,18 +314,21 @@ fn focus_triples(
 }
 
 #[cfg(feature = "shacl")]
-type Issue = crate::shacl::ValidationIssue;
+pub(crate) type Issue = crate::shacl::ValidationIssue;
 
 /// A violation-free stand-in when SHACL is compiled out.
 #[cfg(not(feature = "shacl"))]
 #[derive(Debug, Clone, serde::Serialize)]
-struct Issue {
-    focus_node: String,
-    path: Option<String>,
-    component: String,
+pub struct Issue {
+    /// The focus node.
+    pub focus_node: String,
+    /// The property path, if any.
+    pub path: Option<String>,
+    /// The SHACL component.
+    pub component: String,
 }
 
-fn issue_key(issue: &Issue) -> (String, Option<String>, String) {
+pub(crate) fn issue_key(issue: &Issue) -> (String, Option<String>, String) {
     (
         issue.focus_node.clone(),
         issue.path.clone(),
@@ -339,7 +342,7 @@ fn issue_key(issue: &Issue) -> (String, Option<String>, String) {
 /// reference, and WITHOUT write-time debt admission: this answers "what does
 /// the new schema refuse", not "would this write be admitted".
 #[cfg(feature = "shacl")]
-fn refusals(
+pub(crate) fn refusals(
     store: &Store,
     shapes: Option<&str>,
     focus: &BTreeSet<String>,
@@ -375,7 +378,7 @@ fn refusals(
 }
 
 #[cfg(not(feature = "shacl"))]
-fn refusals(
+pub(crate) fn refusals(
     _store: &Store,
     _shapes: Option<&str>,
     _focus: &BTreeSet<String>,
