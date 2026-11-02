@@ -128,68 +128,68 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;install-alias' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--bin-dir', '--bin-dir', [CompletionResultType]::ParameterName, 'bin-dir')
-            [CompletionResult]::new('--check', '--check', [CompletionResultType]::ParameterName, 'check')
+            [CompletionResult]::new('--bin-dir', '--bin-dir', [CompletionResultType]::ParameterName, 'Directory containing the CLI alias')
+            [CompletionResult]::new('--check', '--check', [CompletionResultType]::ParameterName, 'Check the alias without installing it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;knot' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'shapes')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
-            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'blank-node-scope')
+            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
+            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'Blank-node identity scope for this import')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;load' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'shapes')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
-            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'blank-node-scope')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
+            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'Blank-node identity scope for this import')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;ingest' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
-            [CompletionResult]::new('--declare-count', '--declare-count', [CompletionResultType]::ParameterName, 'declare-count')
-            [CompletionResult]::new('--declare-sha256', '--declare-sha256', [CompletionResultType]::ParameterName, 'declare-sha256')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
-            [CompletionResult]::new('--chunk', '--chunk', [CompletionResultType]::ParameterName, 'chunk')
-            [CompletionResult]::new('--base-iri', '--base-iri', [CompletionResultType]::ParameterName, 'base-iri')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'source')
-            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'blank-node-scope')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
+            [CompletionResult]::new('--declare-count', '--declare-count', [CompletionResultType]::ParameterName, 'Expected ingest triple count')
+            [CompletionResult]::new('--declare-sha256', '--declare-sha256', [CompletionResultType]::ParameterName, 'Expected input SHA-256 digest')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--chunk', '--chunk', [CompletionResultType]::ParameterName, 'Maximum triples per ingest chunk')
+            [CompletionResult]::new('--base-iri', '--base-iri', [CompletionResultType]::ParameterName, 'Base IRI for relative RDF references')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'Source identifier recorded in provenance')
+            [CompletionResult]::new('--blank-node-scope', '--blank-node-scope', [CompletionResultType]::ParameterName, 'Blank-node identity scope for this import')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;read' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
-            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'tx')
-            [CompletionResult]::new('--fork', '--fork', [CompletionResultType]::ParameterName, 'fork')
-            [CompletionResult]::new('--entailment', '--entailment', [CompletionResultType]::ParameterName, 'entailment')
-            [CompletionResult]::new('--federation', '--federation', [CompletionResultType]::ParameterName, 'federation')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'Historical transaction to read')
+            [CompletionResult]::new('--fork', '--fork', [CompletionResultType]::ParameterName, 'Named store fork to query')
+            [CompletionResult]::new('--entailment', '--entailment', [CompletionResultType]::ParameterName, 'Query entailment regime')
+            [CompletionResult]::new('--federation', '--federation', [CompletionResultType]::ParameterName, 'Enable configured remote query federation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;query' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
-            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'tx')
-            [CompletionResult]::new('--fork', '--fork', [CompletionResultType]::ParameterName, 'fork')
-            [CompletionResult]::new('--entailment', '--entailment', [CompletionResultType]::ParameterName, 'entailment')
-            [CompletionResult]::new('--federation', '--federation', [CompletionResultType]::ParameterName, 'federation')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'Historical transaction to read')
+            [CompletionResult]::new('--fork', '--fork', [CompletionResultType]::ParameterName, 'Named store fork to query')
+            [CompletionResult]::new('--entailment', '--entailment', [CompletionResultType]::ParameterName, 'Query entailment regime')
+            [CompletionResult]::new('--federation', '--federation', [CompletionResultType]::ParameterName, 'Enable configured remote query federation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -202,91 +202,91 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;cord' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'Entity type IRI to select')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;unravel' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'tx')
-            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'Historical transaction to read')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;impact' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--hops', '--hops', [CompletionResultType]::ParameterName, 'hops')
-            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'predicate')
-            [CompletionResult]::new('--remove', '--remove', [CompletionResultType]::ParameterName, 'remove')
+            [CompletionResult]::new('--hops', '--hops', [CompletionResultType]::ParameterName, 'Maximum traversal hops')
+            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'Predicate IRI used to filter facts or edges')
+            [CompletionResult]::new('--remove', '--remove', [CompletionResultType]::ParameterName, 'Calculate the impact of removing the entity')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;explain' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--depth', '--depth', [CompletionResultType]::ParameterName, 'depth')
+            [CompletionResult]::new('--depth', '--depth', [CompletionResultType]::ParameterName, 'Maximum explanation depth')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;project' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--algorithm', '--algorithm', [CompletionResultType]::ParameterName, 'algorithm')
-            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
-            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'predicate')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
-            [CompletionResult]::new('--damping', '--damping', [CompletionResultType]::ParameterName, 'damping')
-            [CompletionResult]::new('--max-iters', '--max-iters', [CompletionResultType]::ParameterName, 'max-iters')
-            [CompletionResult]::new('--tolerance', '--tolerance', [CompletionResultType]::ParameterName, 'tolerance')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'from')
-            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'to')
-            [CompletionResult]::new('--seed', '--seed', [CompletionResultType]::ParameterName, 'seed')
+            [CompletionResult]::new('--algorithm', '--algorithm', [CompletionResultType]::ParameterName, 'Graph projection algorithm')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'Entity type IRI to select')
+            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'Predicate IRI used to filter facts or edges')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
+            [CompletionResult]::new('--damping', '--damping', [CompletionResultType]::ParameterName, 'PageRank damping factor')
+            [CompletionResult]::new('--max-iters', '--max-iters', [CompletionResultType]::ParameterName, 'Maximum algorithm iterations')
+            [CompletionResult]::new('--tolerance', '--tolerance', [CompletionResultType]::ParameterName, 'Convergence tolerance for the algorithm')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Start entity IRI for shortest-path projection')
+            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Destination entity IRI for shortest-path projection')
+            [CompletionResult]::new('--seed', '--seed', [CompletionResultType]::ParameterName, 'Seed entity for graph projection')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;report' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
-            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'predicate')
-            [CompletionResult]::new('--hubs', '--hubs', [CompletionResultType]::ParameterName, 'hubs')
-            [CompletionResult]::new('--surprises', '--surprises', [CompletionResultType]::ParameterName, 'surprises')
-            [CompletionResult]::new('--questions', '--questions', [CompletionResultType]::ParameterName, 'questions')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'Entity type IRI to select')
+            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'Predicate IRI used to filter facts or edges')
+            [CompletionResult]::new('--hubs', '--hubs', [CompletionResultType]::ParameterName, 'Number of hubs in the report')
+            [CompletionResult]::new('--surprises', '--surprises', [CompletionResultType]::ParameterName, 'Number of surprising relationships in the report')
+            [CompletionResult]::new('--questions', '--questions', [CompletionResultType]::ParameterName, 'Number of suggested questions in the report')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;reason' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--rules', '--rules', [CompletionResultType]::ParameterName, 'rules')
-            [CompletionResult]::new('--reactive', '--reactive', [CompletionResultType]::ParameterName, 'reactive')
+            [CompletionResult]::new('--rules', '--rules', [CompletionResultType]::ParameterName, 'Rule set to load or evaluate')
+            [CompletionResult]::new('--reactive', '--reactive', [CompletionResultType]::ParameterName, 'Use the reactive reasoner')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;demotions' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;episode' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--base-ns', '--base-ns', [CompletionResultType]::ParameterName, 'base-ns')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--base-ns', '--base-ns', [CompletionResultType]::ParameterName, 'Base namespace for episode entities')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;retract' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'predicate')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--predicate', '--predicate', [CompletionResultType]::ParameterName, 'Predicate IRI used to filter facts or edges')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -394,9 +394,9 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;validate' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'shapes')
-            [CompletionResult]::new('--data', '--data', [CompletionResultType]::ParameterName, 'data')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
+            [CompletionResult]::new('--data', '--data', [CompletionResultType]::ParameterName, 'RDF data file to validate')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -409,25 +409,25 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;export' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'group-id')
-            [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'construct')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
+            [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;render' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--dest', '--dest', [CompletionResultType]::ParameterName, 'dest')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
-            [CompletionResult]::new('--server', '--server', [CompletionResultType]::ParameterName, 'server')
-            [CompletionResult]::new('--query', '--query', [CompletionResultType]::ParameterName, 'query')
-            [CompletionResult]::new('--template', '--template', [CompletionResultType]::ParameterName, 'template')
-            [CompletionResult]::new('--layout', '--layout', [CompletionResultType]::ParameterName, 'layout')
-            [CompletionResult]::new('--path', '--path', [CompletionResultType]::ParameterName, 'path')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
+            [CompletionResult]::new('--dest', '--dest', [CompletionResultType]::ParameterName, 'Render output destination')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
+            [CompletionResult]::new('--server', '--server', [CompletionResultType]::ParameterName, 'Render service URL')
+            [CompletionResult]::new('--query', '--query', [CompletionResultType]::ParameterName, 'Query used for rendering')
+            [CompletionResult]::new('--template', '--template', [CompletionResultType]::ParameterName, 'Render template')
+            [CompletionResult]::new('--layout', '--layout', [CompletionResultType]::ParameterName, 'Render layout')
+            [CompletionResult]::new('--path', '--path', [CompletionResultType]::ParameterName, 'Relative output path template')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -440,44 +440,44 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;prime' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--section', '--section', [CompletionResultType]::ParameterName, 'section')
-            [CompletionResult]::new('--brief', '--brief', [CompletionResultType]::ParameterName, 'brief')
-            [CompletionResult]::new('--static', '--static', [CompletionResultType]::ParameterName, 'static')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--section', '--section', [CompletionResultType]::ParameterName, 'Agent primer section to print')
+            [CompletionResult]::new('--brief', '--brief', [CompletionResultType]::ParameterName, 'Print the short agent primer')
+            [CompletionResult]::new('--static', '--static', [CompletionResultType]::ParameterName, 'Print the embedded primer without live context')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;search' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
-            [CompletionResult]::new('--alpha', '--alpha', [CompletionResultType]::ParameterName, 'alpha')
-            [CompletionResult]::new('--rrf-k', '--rrf-k', [CompletionResultType]::ParameterName, 'rrf-k')
-            [CompletionResult]::new('--decay', '--decay', [CompletionResultType]::ParameterName, 'decay')
-            [CompletionResult]::new('--anchor', '--anchor', [CompletionResultType]::ParameterName, 'anchor')
-            [CompletionResult]::new('--anchor-mode', '--anchor-mode', [CompletionResultType]::ParameterName, 'anchor-mode')
-            [CompletionResult]::new('--direction', '--direction', [CompletionResultType]::ParameterName, 'direction')
-            [CompletionResult]::new('--max-hops', '--max-hops', [CompletionResultType]::ParameterName, 'max-hops')
-            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'via')
-            [CompletionResult]::new('--fusion', '--fusion', [CompletionResultType]::ParameterName, 'fusion')
-            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
-            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'type')
-            [CompletionResult]::new('--group', '--group', [CompletionResultType]::ParameterName, 'group')
-            [CompletionResult]::new('--structured-query', '--structured-query', [CompletionResultType]::ParameterName, 'structured-query')
-            [CompletionResult]::new('--filters', '--filters', [CompletionResultType]::ParameterName, 'filters')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--graphs', '--graphs', [CompletionResultType]::ParameterName, 'graphs')
-            [CompletionResult]::new('--explain', '--explain', [CompletionResultType]::ParameterName, 'explain')
-            [CompletionResult]::new('--all-graphs', '--all-graphs', [CompletionResultType]::ParameterName, 'all-graphs')
+            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Operation mode')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
+            [CompletionResult]::new('--alpha', '--alpha', [CompletionResultType]::ParameterName, 'Hybrid search semantic/keyword weighting')
+            [CompletionResult]::new('--rrf-k', '--rrf-k', [CompletionResultType]::ParameterName, 'Reciprocal-rank fusion constant')
+            [CompletionResult]::new('--decay', '--decay', [CompletionResultType]::ParameterName, 'Search recency decay factor')
+            [CompletionResult]::new('--anchor', '--anchor', [CompletionResultType]::ParameterName, 'Entity IRI anchoring graph-aware search')
+            [CompletionResult]::new('--anchor-mode', '--anchor-mode', [CompletionResultType]::ParameterName, 'How the anchor affects candidate selection')
+            [CompletionResult]::new('--direction', '--direction', [CompletionResultType]::ParameterName, 'Traversal direction for graph-aware search')
+            [CompletionResult]::new('--max-hops', '--max-hops', [CompletionResultType]::ParameterName, 'Maximum graph-search traversal hops')
+            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'Predicate or path used for traversal')
+            [CompletionResult]::new('--fusion', '--fusion', [CompletionResultType]::ParameterName, 'Search result fusion strategy')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
+            [CompletionResult]::new('--type', '--type', [CompletionResultType]::ParameterName, 'Entity type IRI to select')
+            [CompletionResult]::new('--group', '--group', [CompletionResultType]::ParameterName, 'Group identifier for the operation')
+            [CompletionResult]::new('--structured-query', '--structured-query', [CompletionResultType]::ParameterName, 'Structured search query as JSON')
+            [CompletionResult]::new('--filters', '--filters', [CompletionResultType]::ParameterName, 'Structured search filters as JSON')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--graphs', '--graphs', [CompletionResultType]::ParameterName, 'Explicit graph selection for search')
+            [CompletionResult]::new('--explain', '--explain', [CompletionResultType]::ParameterName, 'Include search ranking explanations')
+            [CompletionResult]::new('--all-graphs', '--all-graphs', [CompletionResultType]::ParameterName, 'Search all permitted graphs explicitly')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;search-index' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
-            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'batch-size')
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
+            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'Number of entries per indexing batch')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('status', 'status', [CompletionResultType]::ParameterValue, 'Report the state of a search index')
@@ -487,22 +487,22 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;search-index;status' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;search-index;backfill' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
-            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'batch-size')
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
+            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'Number of entries per indexing batch')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;search-index;drop' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -522,69 +522,69 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;pack' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--verify', '--verify', [CompletionResultType]::ParameterName, 'verify')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
-            [CompletionResult]::new('--space', '--space', [CompletionResultType]::ParameterName, 'space')
-            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
-            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
-            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'shapes')
-            [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'queries')
-            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'repo')
-            [CompletionResult]::new('--repo-sha', '--repo-sha', [CompletionResultType]::ParameterName, 'repo-sha')
-            [CompletionResult]::new('--model-id', '--model-id', [CompletionResultType]::ParameterName, 'model-id')
-            [CompletionResult]::new('--model-version', '--model-version', [CompletionResultType]::ParameterName, 'model-version')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
-            [CompletionResult]::new('--with-vectors', '--with-vectors', [CompletionResultType]::ParameterName, 'with-vectors')
-            [CompletionResult]::new('--full', '--full', [CompletionResultType]::ParameterName, 'full')
-            [CompletionResult]::new('--allow-missing-embedding-recipe', '--allow-missing-embedding-recipe', [CompletionResultType]::ParameterName, 'allow-missing-embedding-recipe')
+            [CompletionResult]::new('--verify', '--verify', [CompletionResultType]::ParameterName, 'Pack file to verify without creating a new pack')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
+            [CompletionResult]::new('--space', '--space', [CompletionResultType]::ParameterName, 'Namespace space recorded in pack metadata')
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'Name of the generated object')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'Version recorded in pack metadata')
+            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
+            [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'Stored queries to include')
+            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'Repository identity or source root for this operation')
+            [CompletionResult]::new('--repo-sha', '--repo-sha', [CompletionResultType]::ParameterName, 'Repository commit recorded in pack provenance')
+            [CompletionResult]::new('--model-id', '--model-id', [CompletionResultType]::ParameterName, 'Embedding model identifier')
+            [CompletionResult]::new('--model-version', '--model-version', [CompletionResultType]::ParameterName, 'Embedding model version')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--with-vectors', '--with-vectors', [CompletionResultType]::ParameterName, 'Include embedding vectors in the pack')
+            [CompletionResult]::new('--full', '--full', [CompletionResultType]::ParameterName, 'Include the full store or full primer, as applicable')
+            [CompletionResult]::new('--allow-missing-embedding-recipe', '--allow-missing-embedding-recipe', [CompletionResultType]::ParameterName, 'Allow a pack without the embedding provider recipe')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;unpack' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--into', '--into', [CompletionResultType]::ParameterName, 'into')
-            [CompletionResult]::new('--expect-repo', '--expect-repo', [CompletionResultType]::ParameterName, 'expect-repo')
-            [CompletionResult]::new('--head-sha', '--head-sha', [CompletionResultType]::ParameterName, 'head-sha')
+            [CompletionResult]::new('--into', '--into', [CompletionResultType]::ParameterName, 'Target store for unpacking')
+            [CompletionResult]::new('--expect-repo', '--expect-repo', [CompletionResultType]::ParameterName, 'Expected repository identity in the pack')
+            [CompletionResult]::new('--head-sha', '--head-sha', [CompletionResultType]::ParameterName, 'Expected repository head commit')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;restore' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--force', '--force', [CompletionResultType]::ParameterName, 'force')
+            [CompletionResult]::new('--force', '--force', [CompletionResultType]::ParameterName, 'Permit replacement when restoring a store')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;share' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--output', '--output', [CompletionResultType]::ParameterName, 'output')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'group-id')
-            [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'construct')
-            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'shapes')
-            [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'queries')
-            [CompletionResult]::new('--alignments', '--alignments', [CompletionResultType]::ParameterName, 'alignments')
-            [CompletionResult]::new('--parent-share', '--parent-share', [CompletionResultType]::ParameterName, 'parent-share')
-            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'since')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--pack-dir', '--pack-dir', [CompletionResultType]::ParameterName, 'pack-dir')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--attest-key', '--attest-key', [CompletionResultType]::ParameterName, 'attest-key')
-            [CompletionResult]::new('--attest-issued-at', '--attest-issued-at', [CompletionResultType]::ParameterName, 'attest-issued-at')
-            [CompletionResult]::new('--attest-ttl', '--attest-ttl', [CompletionResultType]::ParameterName, 'attest-ttl')
-            [CompletionResult]::new('--attest-agent', '--attest-agent', [CompletionResultType]::ParameterName, 'attest-agent')
-            [CompletionResult]::new('--attest-session', '--attest-session', [CompletionResultType]::ParameterName, 'attest-session')
-            [CompletionResult]::new('--attest-introducer', '--attest-introducer', [CompletionResultType]::ParameterName, 'attest-introducer')
-            [CompletionResult]::new('--attest-nonce', '--attest-nonce', [CompletionResultType]::ParameterName, 'attest-nonce')
-            [CompletionResult]::new('--pointers', '--pointers', [CompletionResultType]::ParameterName, 'pointers')
-            [CompletionResult]::new('--no-shapes', '--no-shapes', [CompletionResultType]::ParameterName, 'no-shapes')
-            [CompletionResult]::new('--no-queries', '--no-queries', [CompletionResultType]::ParameterName, 'no-queries')
-            [CompletionResult]::new('--turtle', '--turtle', [CompletionResultType]::ParameterName, 'turtle')
-            [CompletionResult]::new('--attest', '--attest', [CompletionResultType]::ParameterName, 'attest')
-            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'project')
+            [CompletionResult]::new('--output', '--output', [CompletionResultType]::ParameterName, 'Output directory for the share')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
+            [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
+            [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
+            [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'Stored queries to include')
+            [CompletionResult]::new('--alignments', '--alignments', [CompletionResultType]::ParameterName, 'Reviewed SSSOM/RDF alignment file to carry')
+            [CompletionResult]::new('--parent-share', '--parent-share', [CompletionResultType]::ParameterName, 'Parent share for a delta export')
+            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'Starting share or transaction for incremental output')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--pack-dir', '--pack-dir', [CompletionResultType]::ParameterName, 'Existing pack directory to share')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--attest-key', '--attest-key', [CompletionResultType]::ParameterName, 'Ed25519 attestation signing key file')
+            [CompletionResult]::new('--attest-issued-at', '--attest-issued-at', [CompletionResultType]::ParameterName, 'Attestation issue time as Unix seconds')
+            [CompletionResult]::new('--attest-ttl', '--attest-ttl', [CompletionResultType]::ParameterName, 'Attestation lifetime in seconds')
+            [CompletionResult]::new('--attest-agent', '--attest-agent', [CompletionResultType]::ParameterName, 'Attested agent identifier')
+            [CompletionResult]::new('--attest-session', '--attest-session', [CompletionResultType]::ParameterName, 'Attested session identifier')
+            [CompletionResult]::new('--attest-introducer', '--attest-introducer', [CompletionResultType]::ParameterName, 'Attestation introducer identifier')
+            [CompletionResult]::new('--attest-nonce', '--attest-nonce', [CompletionResultType]::ParameterName, 'Unique attestation nonce')
+            [CompletionResult]::new('--pointers', '--pointers', [CompletionResultType]::ParameterName, 'TOML file declaring external graph pointers')
+            [CompletionResult]::new('--no-shapes', '--no-shapes', [CompletionResultType]::ParameterName, 'Omit shapes from the share')
+            [CompletionResult]::new('--no-queries', '--no-queries', [CompletionResultType]::ParameterName, 'Omit stored queries from the share')
+            [CompletionResult]::new('--turtle', '--turtle', [CompletionResultType]::ParameterName, 'Include a human-readable Turtle export')
+            [CompletionResult]::new('--attest', '--attest', [CompletionResultType]::ParameterName, 'Attach a signed agent attestation')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Export this repository''s project graph to .quipu/graph')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('diff', 'diff', [CompletionResultType]::ParameterValue, 'Diff two packs by entity, or write a PR-review report')
@@ -592,12 +592,12 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;share;diff' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
-            [CompletionResult]::new('--old-shapes', '--old-shapes', [CompletionResultType]::ParameterName, 'old-shapes')
-            [CompletionResult]::new('--new-shapes', '--new-shapes', [CompletionResultType]::ParameterName, 'new-shapes')
-            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'decisions')
-            [CompletionResult]::new('--report', '--report', [CompletionResultType]::ParameterName, 'report')
-            [CompletionResult]::new('--fail-on-introduced', '--fail-on-introduced', [CompletionResultType]::ParameterName, 'fail-on-introduced')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--old-shapes', '--old-shapes', [CompletionResultType]::ParameterName, 'Shapes used to validate the old share')
+            [CompletionResult]::new('--new-shapes', '--new-shapes', [CompletionResultType]::ParameterName, 'Shapes used to validate the new share')
+            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'Conflict decisions file')
+            [CompletionResult]::new('--report', '--report', [CompletionResultType]::ParameterName, 'Print the validation diff report')
+            [CompletionResult]::new('--fail-on-introduced', '--fail-on-introduced', [CompletionResultType]::ParameterName, 'Exit nonzero when the diff introduces violations')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -610,13 +610,13 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;merge' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--emit-decisions', '--emit-decisions', [CompletionResultType]::ParameterName, 'emit-decisions')
-            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'decisions')
-            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'reviewer')
-            [CompletionResult]::new('--slot-scoped', '--slot-scoped', [CompletionResultType]::ParameterName, 'slot-scoped')
-            [CompletionResult]::new('--propose', '--propose', [CompletionResultType]::ParameterName, 'propose')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--emit-decisions', '--emit-decisions', [CompletionResultType]::ParameterName, 'Write merge decisions to this file')
+            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'Conflict decisions file')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Identity reviewing the merge')
+            [CompletionResult]::new('--slot-scoped', '--slot-scoped', [CompletionResultType]::ParameterName, 'Restrict the merge to selected slots')
+            [CompletionResult]::new('--propose', '--propose', [CompletionResultType]::ParameterName, 'Produce a merge proposal without applying it')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show a merge''s conflicts in the standard layout')
@@ -625,27 +625,27 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;merge;show' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;merge;resolve' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'choose')
-            [CompletionResult]::new('--value', '--value', [CompletionResultType]::ParameterName, 'value')
-            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
+            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'Conflict side to choose')
+            [CompletionResult]::new('--value', '--value', [CompletionResultType]::ParameterName, 'Explicit value for a conflict resolution')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'source')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--query-namespace', '--query-namespace', [CompletionResultType]::ParameterName, 'query-namespace')
-            [CompletionResult]::new('--replace-queries', '--replace-queries', [CompletionResultType]::ParameterName, 'replace-queries')
+            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'Source identifier recorded in provenance')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--query-namespace', '--query-namespace', [CompletionResultType]::ParameterName, 'Namespace for imported stored queries')
+            [CompletionResult]::new('--replace-queries', '--replace-queries', [CompletionResultType]::ParameterName, 'Replace imported query definitions on name conflicts')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('delta', 'delta', [CompletionResultType]::ParameterValue, 'Verify a delta share against its parent share')
@@ -655,16 +655,16 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;import;delta' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--query-namespace', '--query-namespace', [CompletionResultType]::ParameterName, 'query-namespace')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--query-namespace', '--query-namespace', [CompletionResultType]::ParameterName, 'Namespace for imported stored queries')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import;promote' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -682,81 +682,81 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;import;review;pending' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'after')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
+            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'Resume after this cursor')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import;review;notify' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'after')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
-            [CompletionResult]::new('--age-seconds', '--age-seconds', [CompletionResultType]::ParameterName, 'age-seconds')
-            [CompletionResult]::new('--route', '--route', [CompletionResultType]::ParameterName, 'route')
+            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'Resume after this cursor')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
+            [CompletionResult]::new('--age-seconds', '--age-seconds', [CompletionResultType]::ParameterName, 'Minimum notification age in seconds')
+            [CompletionResult]::new('--route', '--route', [CompletionResultType]::ParameterName, 'Notification route for pending imports')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import;review;rejected' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'Reason recorded for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import;review;expired' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'Reason recorded for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;import;review;reopen' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'Reason recorded for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;compose' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'repo')
-            [CompletionResult]::new('--shapes-from', '--shapes-from', [CompletionResultType]::ParameterName, 'shapes-from')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'destination')
-            [CompletionResult]::new('--revoke-tombstone', '--revoke-tombstone', [CompletionResultType]::ParameterName, 'revoke-tombstone')
-            [CompletionResult]::new('--pack-key', '--pack-key', [CompletionResultType]::ParameterName, 'pack-key')
-            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'reason')
-            [CompletionResult]::new('--use-pointer', '--use-pointer', [CompletionResultType]::ParameterName, 'use-pointer')
-            [CompletionResult]::new('--declaration', '--declaration', [CompletionResultType]::ParameterName, 'declaration')
-            [CompletionResult]::new('--authority', '--authority', [CompletionResultType]::ParameterName, 'authority')
-            [CompletionResult]::new('--repo-remote', '--repo-remote', [CompletionResultType]::ParameterName, 'repo-remote')
-            [CompletionResult]::new('--pointer-cache', '--pointer-cache', [CompletionResultType]::ParameterName, 'pointer-cache')
-            [CompletionResult]::new('--rollback', '--rollback', [CompletionResultType]::ParameterName, 'rollback')
+            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'Repository identity or source root for this operation')
+            [CompletionResult]::new('--shapes-from', '--shapes-from', [CompletionResultType]::ParameterName, 'Pack supplying the composition shapes')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--destination', '--destination', [CompletionResultType]::ParameterName, 'Publication destination evaluated by policy')
+            [CompletionResult]::new('--revoke-tombstone', '--revoke-tombstone', [CompletionResultType]::ParameterName, 'Tombstone triple to revoke in the composition')
+            [CompletionResult]::new('--pack-key', '--pack-key', [CompletionResultType]::ParameterName, 'Composition pack key')
+            [CompletionResult]::new('--reason', '--reason', [CompletionResultType]::ParameterName, 'Reason recorded for the operation')
+            [CompletionResult]::new('--use-pointer', '--use-pointer', [CompletionResultType]::ParameterName, 'Pointer to use in the composition')
+            [CompletionResult]::new('--declaration', '--declaration', [CompletionResultType]::ParameterName, 'Composition declaration file')
+            [CompletionResult]::new('--authority', '--authority', [CompletionResultType]::ParameterName, 'Authority identifier for the operation')
+            [CompletionResult]::new('--repo-remote', '--repo-remote', [CompletionResultType]::ParameterName, 'Repository remote used to resolve a pointer')
+            [CompletionResult]::new('--pointer-cache', '--pointer-cache', [CompletionResultType]::ParameterName, 'Local directory for resolved pack pointers')
+            [CompletionResult]::new('--rollback', '--rollback', [CompletionResultType]::ParameterName, 'Restore the previous CURRENT composition snapshot')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;changes' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'from')
-            [CompletionResult]::new('--capture', '--capture', [CompletionResultType]::ParameterName, 'capture')
-            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'limit')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'First transaction to include')
+            [CompletionResult]::new('--capture', '--capture', [CompletionResultType]::ParameterName, 'Change-feed row capture mode')
+            [CompletionResult]::new('--limit', '--limit', [CompletionResultType]::ParameterName, 'Maximum number of results')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;follow' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--primary', '--primary', [CompletionResultType]::ParameterName, 'primary')
-            [CompletionResult]::new('--page-txs', '--page-txs', [CompletionResultType]::ParameterName, 'page-txs')
-            [CompletionResult]::new('--page-gap-ms', '--page-gap-ms', [CompletionResultType]::ParameterName, 'page-gap-ms')
-            [CompletionResult]::new('--bootstrap-only', '--bootstrap-only', [CompletionResultType]::ParameterName, 'bootstrap-only')
+            [CompletionResult]::new('--primary', '--primary', [CompletionResultType]::ParameterName, 'Primary server URL to follow')
+            [CompletionResult]::new('--page-txs', '--page-txs', [CompletionResultType]::ParameterName, 'Transactions per follower page')
+            [CompletionResult]::new('--page-gap-ms', '--page-gap-ms', [CompletionResultType]::ParameterName, 'Delay between follower pages in milliseconds')
+            [CompletionResult]::new('--bootstrap-only', '--bootstrap-only', [CompletionResultType]::ParameterName, 'Bootstrap a follower and exit without polling')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -770,20 +770,20 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;acquire;scope' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--source-store-id', '--source-store-id', [CompletionResultType]::ParameterName, 'source-store-id')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'tx')
-            [CompletionResult]::new('--max-vm-steps', '--max-vm-steps', [CompletionResultType]::ParameterName, 'max-vm-steps')
-            [CompletionResult]::new('--deadline-ms', '--deadline-ms', [CompletionResultType]::ParameterName, 'deadline-ms')
+            [CompletionResult]::new('--source-store-id', '--source-store-id', [CompletionResultType]::ParameterName, 'Identity of the source store being acquired')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'Historical transaction to read')
+            [CompletionResult]::new('--max-vm-steps', '--max-vm-steps', [CompletionResultType]::ParameterName, 'Maximum SPARQL virtual-machine steps')
+            [CompletionResult]::new('--deadline-ms', '--deadline-ms', [CompletionResultType]::ParameterName, 'Acquisition query deadline in milliseconds')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;migrate-vectors' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'from')
-            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'to')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Source vector backend')
+            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Destination vector backend')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -798,15 +798,15 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;git-merge;show' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;git-merge;resolve' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'choose')
-            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
+            [CompletionResult]::new('--choose', '--choose', [CompletionResultType]::ParameterName, 'Conflict side to choose')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -825,7 +825,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;pendant-check' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--history', '--history', [CompletionResultType]::ParameterName, 'history')
+            [CompletionResult]::new('--history', '--history', [CompletionResultType]::ParameterName, 'Check the pendant merge history')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -838,11 +838,11 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;mcp' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--mcp-token-file', '--mcp-token-file', [CompletionResultType]::ParameterName, 'mcp-token-file')
-            [CompletionResult]::new('--bind', '--bind', [CompletionResultType]::ParameterName, 'bind')
-            [CompletionResult]::new('--primary-url', '--primary-url', [CompletionResultType]::ParameterName, 'primary-url')
-            [CompletionResult]::new('--read-only', '--read-only', [CompletionResultType]::ParameterName, 'read-only')
-            [CompletionResult]::new('--embed-backfill', '--embed-backfill', [CompletionResultType]::ParameterName, 'embed-backfill')
+            [CompletionResult]::new('--mcp-token-file', '--mcp-token-file', [CompletionResultType]::ParameterName, 'File containing the MCP authentication token')
+            [CompletionResult]::new('--bind', '--bind', [CompletionResultType]::ParameterName, 'MCP HTTP listen address')
+            [CompletionResult]::new('--primary-url', '--primary-url', [CompletionResultType]::ParameterName, 'Primary server URL used by a read-only MCP follower')
+            [CompletionResult]::new('--read-only', '--read-only', [CompletionResultType]::ParameterName, 'Serve MCP in read-only mode')
+            [CompletionResult]::new('--embed-backfill', '--embed-backfill', [CompletionResultType]::ParameterName, 'Enable embedding backfill in the MCP server')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -878,27 +878,27 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;hooks;install' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'harness')
-            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'project')
-            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'no-st')
+            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'Agent harness: claude or codex')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Use this repository''s project graph or project-local hooks')
+            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'Do not integrate hooks with the crew orchestrator')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;hooks;uninstall' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'harness')
-            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'project')
-            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'no-st')
+            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'Agent harness: claude or codex')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Use this repository''s project graph or project-local hooks')
+            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'Do not integrate hooks with the crew orchestrator')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;hooks;status' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'harness')
-            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'project')
-            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'no-st')
+            [CompletionResult]::new('--harness', '--harness', [CompletionResultType]::ParameterName, 'Agent harness: claude or codex')
+            [CompletionResult]::new('--project', '--project', [CompletionResultType]::ParameterName, 'Use this repository''s project graph or project-local hooks')
+            [CompletionResult]::new('--no-st', '--no-st', [CompletionResultType]::ParameterName, 'Do not integrate hooks with the crew orchestrator')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -913,25 +913,25 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;policy;draft' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--exemplar', '--exemplar', [CompletionResultType]::ParameterName, 'exemplar')
-            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
-            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'label')
-            [CompletionResult]::new('--targets', '--targets', [CompletionResultType]::ParameterName, 'targets')
-            [CompletionResult]::new('--claim', '--claim', [CompletionResultType]::ParameterName, 'claim')
-            [CompletionResult]::new('--class', '--class', [CompletionResultType]::ParameterName, 'class')
-            [CompletionResult]::new('--point', '--point', [CompletionResultType]::ParameterName, 'point')
-            [CompletionResult]::new('--layer', '--layer', [CompletionResultType]::ParameterName, 'layer')
-            [CompletionResult]::new('--authority', '--authority', [CompletionResultType]::ParameterName, 'authority')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--exemplar', '--exemplar', [CompletionResultType]::ParameterName, 'Source exemplar for a policy draft')
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'Name of the generated object')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Human-readable label for the draft')
+            [CompletionResult]::new('--targets', '--targets', [CompletionResultType]::ParameterName, 'Target class IRI for the policy')
+            [CompletionResult]::new('--claim', '--claim', [CompletionResultType]::ParameterName, 'ASK query expressing the proposed policy claim')
+            [CompletionResult]::new('--class', '--class', [CompletionResultType]::ParameterName, 'Policy classification: soft or hard')
+            [CompletionResult]::new('--point', '--point', [CompletionResultType]::ParameterName, 'Policy verification point')
+            [CompletionResult]::new('--layer', '--layer', [CompletionResultType]::ParameterName, 'Policy enforcement layer')
+            [CompletionResult]::new('--authority', '--authority', [CompletionResultType]::ParameterName, 'Authority identifier for the operation')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;policy;backtest' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--last-txs', '--last-txs', [CompletionResultType]::ParameterName, 'last-txs')
-            [CompletionResult]::new('--from-tx', '--from-tx', [CompletionResultType]::ParameterName, 'from-tx')
-            [CompletionResult]::new('--to-tx', '--to-tx', [CompletionResultType]::ParameterName, 'to-tx')
+            [CompletionResult]::new('--last-txs', '--last-txs', [CompletionResultType]::ParameterName, 'Number of recent transactions to evaluate')
+            [CompletionResult]::new('--from-tx', '--from-tx', [CompletionResultType]::ParameterName, 'First transaction in the selected interval')
+            [CompletionResult]::new('--to-tx', '--to-tx', [CompletionResultType]::ParameterName, 'Last transaction in the selected interval')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -945,14 +945,14 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;gate;shadow' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--rules', '--rules', [CompletionResultType]::ParameterName, 'rules')
-            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'since')
-            [CompletionResult]::new('--from-tx', '--from-tx', [CompletionResultType]::ParameterName, 'from-tx')
-            [CompletionResult]::new('--to-tx', '--to-tx', [CompletionResultType]::ParameterName, 'to-tx')
-            [CompletionResult]::new('--last-txs', '--last-txs', [CompletionResultType]::ParameterName, 'last-txs')
-            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'mode')
-            [CompletionResult]::new('--max-txs', '--max-txs', [CompletionResultType]::ParameterName, 'max-txs')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--rules', '--rules', [CompletionResultType]::ParameterName, 'Rule set to load or evaluate')
+            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'Starting share or transaction for incremental output')
+            [CompletionResult]::new('--from-tx', '--from-tx', [CompletionResultType]::ParameterName, 'First transaction in the selected interval')
+            [CompletionResult]::new('--to-tx', '--to-tx', [CompletionResultType]::ParameterName, 'Last transaction in the selected interval')
+            [CompletionResult]::new('--last-txs', '--last-txs', [CompletionResultType]::ParameterName, 'Number of recent transactions to evaluate')
+            [CompletionResult]::new('--mode', '--mode', [CompletionResultType]::ParameterName, 'Operation mode')
+            [CompletionResult]::new('--max-txs', '--max-txs', [CompletionResultType]::ParameterName, 'Maximum transactions to evaluate')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -968,30 +968,30 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;path;cone' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'via')
-            [CompletionResult]::new('--hops', '--hops', [CompletionResultType]::ParameterName, 'hops')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'Predicate or path used for traversal')
+            [CompletionResult]::new('--hops', '--hops', [CompletionResultType]::ParameterName, 'Maximum traversal hops')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;path;backtest' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--omit', '--omit', [CompletionResultType]::ParameterName, 'omit')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--omit', '--omit', [CompletionResultType]::ParameterName, 'Trajectory step to omit in a counterfactual')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;path;draft' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
-            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'label')
-            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'via')
-            [CompletionResult]::new('--omit', '--omit', [CompletionResultType]::ParameterName, 'omit')
-            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'by')
-            [CompletionResult]::new('--dead-end', '--dead-end', [CompletionResultType]::ParameterName, 'dead-end')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'Name of the generated object')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Human-readable label for the draft')
+            [CompletionResult]::new('--via', '--via', [CompletionResultType]::ParameterName, 'Predicate or path used for traversal')
+            [CompletionResult]::new('--omit', '--omit', [CompletionResultType]::ParameterName, 'Trajectory step to omit in a counterfactual')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
+            [CompletionResult]::new('--dead-end', '--dead-end', [CompletionResultType]::ParameterName, 'Dead-end trajectory to include in the policy draft')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1007,34 +1007,34 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;align;propose' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--set-id', '--set-id', [CompletionResultType]::ParameterName, 'set-id')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--set-id', '--set-id', [CompletionResultType]::ParameterName, 'Identifier for the proposed alignment set')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;align;decide' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'decisions')
-            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'reviewer')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'Conflict decisions file')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Identity reviewing the merge')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;align;apply' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph-a', '--graph-a', [CompletionResultType]::ParameterName, 'graph-a')
-            [CompletionResult]::new('--graph-b', '--graph-b', [CompletionResultType]::ParameterName, 'graph-b')
-            [CompletionResult]::new('--expected-version', '--expected-version', [CompletionResultType]::ParameterName, 'expected-version')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--graph-a', '--graph-a', [CompletionResultType]::ParameterName, 'First graph in the alignment pair')
+            [CompletionResult]::new('--graph-b', '--graph-b', [CompletionResultType]::ParameterName, 'Second graph in the alignment pair')
+            [CompletionResult]::new('--expected-version', '--expected-version', [CompletionResultType]::ParameterName, 'Expected version for the compare-and-swap operation')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;propose' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'status')
+            [CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'Status to record or filter')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List schema change proposals, optionally by status')
@@ -1045,32 +1045,32 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;propose;list' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'status')
+            [CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'Status to record or filter')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;propose;submit' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--proposer', '--proposer', [CompletionResultType]::ParameterName, 'proposer')
-            [CompletionResult]::new('--rationale', '--rationale', [CompletionResultType]::ParameterName, 'rationale')
-            [CompletionResult]::new('--trigger', '--trigger', [CompletionResultType]::ParameterName, 'trigger')
+            [CompletionResult]::new('--proposer', '--proposer', [CompletionResultType]::ParameterName, 'Identity proposing an alignment')
+            [CompletionResult]::new('--rationale', '--rationale', [CompletionResultType]::ParameterName, 'Reason for the alignment decision')
+            [CompletionResult]::new('--trigger', '--trigger', [CompletionResultType]::ParameterName, 'Trigger identifier')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;propose;accept' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'decided-by')
-            [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'note')
+            [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'Identity recording the alignment decision')
+            [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'Explanatory note recorded with the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;propose;reject' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'decided-by')
-            [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'note')
+            [CompletionResult]::new('--decided-by', '--decided-by', [CompletionResultType]::ParameterName, 'Identity recording the alignment decision')
+            [CompletionResult]::new('--note', '--note', [CompletionResultType]::ParameterName, 'Explanatory note recorded with the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1087,29 +1087,29 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;memory;read' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;memory;export' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;memory;receipt' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;memory;commit' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--local-authority', '--local-authority', [CompletionResultType]::ParameterName, 'local-authority')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--local-authority', '--local-authority', [CompletionResultType]::ParameterName, 'Explicitly authorize a local memory commit')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1129,14 +1129,14 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;attest;register' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'agent')
-            [CompletionResult]::new('--session', '--session', [CompletionResultType]::ParameterName, 'session')
-            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'public-key')
-            [CompletionResult]::new('--introducer', '--introducer', [CompletionResultType]::ParameterName, 'introducer')
-            [CompletionResult]::new('--issued-at', '--issued-at', [CompletionResultType]::ParameterName, 'issued-at')
-            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'expires-at')
-            [CompletionResult]::new('--allow-write', '--allow-write', [CompletionResultType]::ParameterName, 'allow-write')
-            [CompletionResult]::new('--require-v2', '--require-v2', [CompletionResultType]::ParameterName, 'require-v2')
+            [CompletionResult]::new('--agent', '--agent', [CompletionResultType]::ParameterName, 'Agent identifier for the binding')
+            [CompletionResult]::new('--session', '--session', [CompletionResultType]::ParameterName, 'Session identifier on the statement')
+            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'Verifier public key')
+            [CompletionResult]::new('--introducer', '--introducer', [CompletionResultType]::ParameterName, 'Identifier of the binding introducer')
+            [CompletionResult]::new('--issued-at', '--issued-at', [CompletionResultType]::ParameterName, 'Issue time as Unix seconds')
+            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'Expiration time as Unix seconds')
+            [CompletionResult]::new('--allow-write', '--allow-write', [CompletionResultType]::ParameterName, 'Grant write permission to the attested binding')
+            [CompletionResult]::new('--require-v2', '--require-v2', [CompletionResultType]::ParameterName, 'Require version 2 attestations')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1191,14 +1191,14 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;signer;enroll' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--credential-id', '--credential-id', [CompletionResultType]::ParameterName, 'credential-id')
-            [CompletionResult]::new('--cose-key', '--cose-key', [CompletionResultType]::ParameterName, 'cose-key')
-            [CompletionResult]::new('--scheme', '--scheme', [CompletionResultType]::ParameterName, 'scheme')
-            [CompletionResult]::new('--origin', '--origin', [CompletionResultType]::ParameterName, 'origin')
-            [CompletionResult]::new('--rp-id', '--rp-id', [CompletionResultType]::ParameterName, 'rp-id')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'expires-at')
+            [CompletionResult]::new('--credential-id', '--credential-id', [CompletionResultType]::ParameterName, 'Base64url-encoded WebAuthn credential ID')
+            [CompletionResult]::new('--cose-key', '--cose-key', [CompletionResultType]::ParameterName, 'Base64url-encoded COSE public key')
+            [CompletionResult]::new('--scheme', '--scheme', [CompletionResultType]::ParameterName, 'Signature scheme')
+            [CompletionResult]::new('--origin', '--origin', [CompletionResultType]::ParameterName, 'WebAuthn origin URL')
+            [CompletionResult]::new('--rp-id', '--rp-id', [CompletionResultType]::ParameterName, 'WebAuthn relying-party ID')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'Expiration time as Unix seconds')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1247,20 +1247,20 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;deck;configure' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--origin', '--origin', [CompletionResultType]::ParameterName, 'origin')
-            [CompletionResult]::new('--rp-id', '--rp-id', [CompletionResultType]::ParameterName, 'rp-id')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--author', '--author', [CompletionResultType]::ParameterName, 'author')
+            [CompletionResult]::new('--origin', '--origin', [CompletionResultType]::ParameterName, 'WebAuthn origin URL')
+            [CompletionResult]::new('--rp-id', '--rp-id', [CompletionResultType]::ParameterName, 'WebAuthn relying-party ID')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--author', '--author', [CompletionResultType]::ParameterName, 'Author identifier on the signed statement')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;deck;enroll' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--credential-id', '--credential-id', [CompletionResultType]::ParameterName, 'credential-id')
-            [CompletionResult]::new('--cose-key', '--cose-key', [CompletionResultType]::ParameterName, 'cose-key')
-            [CompletionResult]::new('--scheme', '--scheme', [CompletionResultType]::ParameterName, 'scheme')
-            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'expires-at')
+            [CompletionResult]::new('--credential-id', '--credential-id', [CompletionResultType]::ParameterName, 'Base64url-encoded WebAuthn credential ID')
+            [CompletionResult]::new('--cose-key', '--cose-key', [CompletionResultType]::ParameterName, 'Base64url-encoded COSE public key')
+            [CompletionResult]::new('--scheme', '--scheme', [CompletionResultType]::ParameterName, 'Signature scheme')
+            [CompletionResult]::new('--expires-at', '--expires-at', [CompletionResultType]::ParameterName, 'Expiration time as Unix seconds')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1300,18 +1300,18 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;trust-root;challenge' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--verifier', '--verifier', [CompletionResultType]::ParameterName, 'verifier')
-            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'public-key')
+            [CompletionResult]::new('--verifier', '--verifier', [CompletionResultType]::ParameterName, 'Verifier identifier for a signed statement')
+            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'Verifier public key')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;trust-root;bootstrap' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--verifier', '--verifier', [CompletionResultType]::ParameterName, 'verifier')
-            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'public-key')
-            [CompletionResult]::new('--pop-signature', '--pop-signature', [CompletionResultType]::ParameterName, 'pop-signature')
-            [CompletionResult]::new('--attests', '--attests', [CompletionResultType]::ParameterName, 'attests')
+            [CompletionResult]::new('--verifier', '--verifier', [CompletionResultType]::ParameterName, 'Verifier identifier for a signed statement')
+            [CompletionResult]::new('--public-key', '--public-key', [CompletionResultType]::ParameterName, 'Verifier public key')
+            [CompletionResult]::new('--pop-signature', '--pop-signature', [CompletionResultType]::ParameterName, 'Proof-of-possession signature')
+            [CompletionResult]::new('--attests', '--attests', [CompletionResultType]::ParameterName, 'IRI of the object being attested')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1339,70 +1339,70 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;graph;create' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;label' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'label')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--label', '--label', [CompletionResultType]::ParameterName, 'Human-readable label for the draft')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;list' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'kind')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--frozen', '--frozen', [CompletionResultType]::ParameterName, 'frozen')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--frozen', '--frozen', [CompletionResultType]::ParameterName, 'List only frozen graphs')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;import' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--as', '--as', [CompletionResultType]::ParameterName, 'as')
+            [CompletionResult]::new('--as', '--as', [CompletionResultType]::ParameterName, 'IRI under which to import the graph')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;freeze' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;thaw' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;overlay-create' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'input')
+            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'Input file for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;overlay-write' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'input')
+            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'Input file for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;graph;overlay-compose' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'input')
+            [CompletionResult]::new('--input', '--input', [CompletionResultType]::ParameterName, 'Input file for this operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1418,15 +1418,15 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;db;respace' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--into', '--into', [CompletionResultType]::ParameterName, 'into')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--into', '--into', [CompletionResultType]::ParameterName, 'New integer namespace space number')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;db;attach' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--list', '--list', [CompletionResultType]::ParameterName, 'list')
+            [CompletionResult]::new('--list', '--list', [CompletionResultType]::ParameterName, 'List mounted read-only databases')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -1452,8 +1452,8 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;fork' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'name')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'Name of the generated object')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List named forks')
@@ -1482,24 +1482,24 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;fork;promote' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
-            [CompletionResult]::new('--emit-decisions', '--emit-decisions', [CompletionResultType]::ParameterName, 'emit-decisions')
-            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'decisions')
-            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'reviewer')
-            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
-            [CompletionResult]::new('--propose', '--propose', [CompletionResultType]::ParameterName, 'propose')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'dry-run')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
+            [CompletionResult]::new('--emit-decisions', '--emit-decisions', [CompletionResultType]::ParameterName, 'Write merge decisions to this file')
+            [CompletionResult]::new('--decisions', '--decisions', [CompletionResultType]::ParameterName, 'Conflict decisions file')
+            [CompletionResult]::new('--reviewer', '--reviewer', [CompletionResultType]::ParameterName, 'Identity reviewing the merge')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--propose', '--propose', [CompletionResultType]::ParameterName, 'Produce a merge proposal without applying it')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'repo')
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'from')
-            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'to')
-            [CompletionResult]::new('--yupana', '--yupana', [CompletionResultType]::ParameterName, 'yupana')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--repo', '--repo', [CompletionResultType]::ParameterName, 'Repository identity or source root for this operation')
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Base Git revision for the audit')
+            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Tip Git revision for the audit')
+            [CompletionResult]::new('--yupana', '--yupana', [CompletionResultType]::ParameterName, 'Yupana executable used for the audit')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('inventory', 'inventory', [CompletionResultType]::ParameterValue, 'List the policies the audit checks against')
@@ -1512,45 +1512,45 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;audit;inventory' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;namespace' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;replay' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--delta', '--delta', [CompletionResultType]::ParameterName, 'delta')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--delta', '--delta', [CompletionResultType]::ParameterName, 'Refused-delta file for verdict replay')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;tree' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;inheritance' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;quarantine' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--verdict', '--verdict', [CompletionResultType]::ParameterName, 'verdict')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--verdict', '--verdict', [CompletionResultType]::ParameterName, 'Verdict identifier to inspect')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('list', 'list', [CompletionResultType]::ParameterValue, 'List refused-attempt evidence, optionally for one verdict')
@@ -1559,19 +1559,19 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
         }
         'qp;audit;quarantine;list' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--verdict', '--verdict', [CompletionResultType]::ParameterName, 'verdict')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--verdict', '--verdict', [CompletionResultType]::ParameterName, 'Verdict identifier to inspect')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;audit;quarantine;purge' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
-            [CompletionResult]::new('--before', '--before', [CompletionResultType]::ParameterName, 'before')
-            [CompletionResult]::new('--older-than', '--older-than', [CompletionResultType]::ParameterName, 'older-than')
-            [CompletionResult]::new('--all', '--all', [CompletionResultType]::ParameterName, 'all')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'json')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--before', '--before', [CompletionResultType]::ParameterName, 'Purge entries older than this timestamp')
+            [CompletionResult]::new('--older-than', '--older-than', [CompletionResultType]::ParameterName, 'Minimum age for quarantine purging')
+            [CompletionResult]::new('--all', '--all', [CompletionResultType]::ParameterName, 'Select all retained quarantine entries')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Print machine-readable JSON')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
