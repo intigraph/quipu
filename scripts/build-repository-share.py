@@ -224,14 +224,16 @@ def indexed_labels(binary, database, subjects, *, file_paths=False):
     return labels
 
 
+# The receiver holds the released pendant, whose documents carry their public
+# w3id names (aegis-ro425e.18), not the producer's internal names.
+PUBLIC_DOCUMENT_BASE = "https://w3id.org/intigraph/quipu/id/doc/"
+
+
 def verify_agent_references(binary, database, paths):
     """Require real imported document pointers, never mint substitutes."""
     from urllib.parse import quote
 
-    subjects = [
-        "http://aegis.gastown.local/ontology/doc/quipu/" + quote(p, safe="")
-        for p in paths
-    ]
+    subjects = [PUBLIC_DOCUMENT_BASE + quote(p, safe="") for p in paths]
     expected = dict(zip(subjects, paths))
     if (
         set(indexed_labels(binary, database, subjects)) != set(subjects)

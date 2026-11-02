@@ -117,7 +117,7 @@ class AgentReferences(unittest.TestCase):
             private = Path(folder)
             source = private / "references.ttl"
             triples = [
-                '<http://aegis.gastown.local/ontology/doc/quipu/'
+                '<' + builder.PUBLIC_DOCUMENT_BASE
                 + quote(path, safe="")
                 + '> <http://www.w3.org/2000/01/rdf-schema#label> '
                 + json.dumps(path) + ' ; <http://aegis.gastown.local/ontology/filePath> '
@@ -126,7 +126,7 @@ class AgentReferences(unittest.TestCase):
                 for path in required
             ]
             triples.append(
-                '<http://aegis.gastown.local/ontology/doc/quipu/README.md> '
+                '<' + builder.PUBLIC_DOCUMENT_BASE + 'README.md> '
                 '<http://www.w3.org/2000/01/rdf-schema#label> "README" ; '
                 '<http://aegis.gastown.local/ontology/filePath> "README.md" ; '
                 '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
