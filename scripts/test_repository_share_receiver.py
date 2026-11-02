@@ -49,6 +49,7 @@ class InternalNameTest(unittest.TestCase):
         return [
             f"<{self.W}doc/README.md> {self.TYPE} <{self.A}Document> .",
             f"<{self.W}doc/README.md> {self.SAME} <{self.A}doc/quipu/README.md> .",
+            f"<{self.W}chunk/README.md#C1> {self.SAME} <{self.A}chunk/quipu/README.md#C1> .",
             f"<{self.W}chunk/README.md#C1> <{self.A}inDocument> <{self.W}doc/README.md> .",
             f'<{self.W}chunk/README.md#C1> <{self.A}mentions> "{self.A}doc/quipu/x" .',
         ]
@@ -64,6 +65,26 @@ class InternalNameTest(unittest.TestCase):
             [f"<{self.W}doc/x> <{self.A}touchesRepo> <{self.A}repo_quipu> ."],
             [f"<{self.W}doc/y> {self.SAME} <{self.A}doc/quipu/z> ."],
             [f"<{self.W}doc/y> {self.SAME} <https://example.org/other> ."],
+            # A public subject that does not carry its own former-name link.
+            [f"<{self.W}doc/unlinked.md> <{self.A}filePath> \"unlinked.md\" ."],
+            # Unrenamed idea and directive names.
+            ["<https://quipu.dev/knowledge/vision> <https://quipu.dev/knowledge/guides> "
+             f"<{self.W}doc/README.md> ."],
+            [f"<{self.W}doc/README.md> <http://www.w3.org/2000/01/rdf-schema#seeAlso> "
+             f"<{self.A}repo-embedded-knowledge-databases-directive-2026-09-03> ."],
+            # Former-name links the release query never writes.
+            [f"<{self.W}idea/publication-policy/k> {self.SAME} "
+             "<https://quipu.dev/knowledge/publication-policy/k> ."],
+            [f"<https://w3id.org/intigraph/other-repo/id/doc/spoof.md> {self.SAME} "
+             f"<{self.A}doc/quipu/README.md> ."],
+            # The same forbidden triples in other valid N-Triples spellings.
+            [f"<{self.W}doc/y>  {self.SAME} <https://example.org/other> ."],
+            [f"<{self.W}doc/y>\t{self.SAME}\t<https://example.org/other>\t."],
+            [f"<{self.W}doc/y>{self.SAME}<https://example.org/other>."],
+            [f"<http://\\u0061egis.gastown.local/ontology/doc/quipu/x> {self.TYPE} <{self.A}Document> ."],
+            [f"<{self.W}chunk/x> <{self.A}inDocument> <http://\\u0061egis.gastown.local/ontology/doc/quipu/x> ."],
+            # Not N-Triples at all: refuse rather than skip.
+            [f"<{self.W}doc/y> {self.SAME} https://example.org/other ."],
         ):
             with self.subTest(bad=bad), self.assertRaises(RuntimeError):
                 self.check(*self.positive(), *bad)

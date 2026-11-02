@@ -335,43 +335,147 @@ def verify_carried_alignments(stage, alignments):
 
 
 FORMER_NAME_LEGACY = "http://aegis.gastown.local/ontology/"
+FORMER_IDEA = "https://quipu.dev/knowledge/"
+PUBLIC_ENTITY = "https://w3id.org/intigraph/"
+STACK_DIRECTIVE = "repo-embedded-knowledge-databases-directive-2026-09-03"
+SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
+RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+# The repository segment, exactly as the release query matches it.
+OWNER = r"[A-Za-z0-9-]+"
+
+# W3C RDF 1.1 N-Triples terms. Blank node labels are held to ASCII PN_CHARS:
+# a label outside that refuses rather than being guessed at.
+_UCHAR = r"\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8}"
+_IRIREF = re.compile(rf'<((?:[^\x00-\x20<>"{{}}|^`\\]|{_UCHAR})*)>')
+_BNODE = re.compile(r"_:([A-Za-z0-9_](?:[A-Za-z0-9_.\-]*[A-Za-z0-9_\-])?)")
+_LITERAL = re.compile(
+    rf'"((?:[^"\\\n\r]|\\[tbnrf"\'\\]|{_UCHAR})*)"'
+    rf'(?:@[a-zA-Z]+(?:-[a-zA-Z0-9]+)*|\^\^<(?:[^\x00-\x20<>"{{}}|^`\\]|{_UCHAR})*>)?'
+)
+
+
+def _unescape_iri(raw):
+    return re.sub(_UCHAR, lambda m: chr(int(m.group(0)[2:], 16)), raw)
+
+
+def ntriples(text):
+    """Triples of strict N-Triples ``text`` as ``(kind, value)`` terms.
+
+    Any whitespace the grammar allows (spaces, tabs, none between terms) and
+    any UCHAR escape in an IRI are read the way an RDF importer reads them, so
+    a check over these terms sees exactly what a receiver loads. Anything else
+    refuses.
+    """
+    for number, line in enumerate(re.split(r"\r\n|\n|\r", text), 1):
+        position, terms = 0, []
+        while True:
+            while position < len(line) and line[position] in " \t":
+                position += 1
+            if position == len(line) or line[position] == "#":
+                break
+            if len(terms) == 3:
+                if line[position] != ".":
+                    raise ValueError(f"export.nt line {number}: expected '.'")
+                terms.append(".")
+                position += 1
+                continue
+            if len(terms) == 4:
+                raise ValueError(f"export.nt line {number}: text after '.'")
+            for kind, pattern in (("iri", _IRIREF), ("bnode", _BNODE), ("literal", _LITERAL)):
+                match = pattern.match(line, position)
+                if match:
+                    value = _unescape_iri(match.group(1)) if kind == "iri" else match.group(0)
+                    terms.append((kind, value))
+                    position = match.end()
+                    break
+            else:
+                raise ValueError(f"export.nt line {number}: not an N-Triples term")
+        if not terms:
+            continue
+        if len(terms) != 4:
+            raise ValueError(f"export.nt line {number}: not a triple")
+        subject, predicate, value, _ = terms
+        if subject[0] == "literal" or predicate[0] != "iri":
+            raise ValueError(f"export.nt line {number}: not a triple")
+        yield subject, predicate, value
+
+
+def public_name(name):
+    """The public name the release query gives legacy ``name``, or None."""
+    match = re.fullmatch(rf"{re.escape(FORMER_NAME_LEGACY)}(code|doc|chunk)/({OWNER})/(.+)", name)
+    if match:
+        kind, owner, tail = match.groups()
+        return f"{PUBLIC_ENTITY}{owner}/id/{kind}/{tail}"
+    match = re.fullmatch(rf"{re.escape(FORMER_NAME_LEGACY)}repo_({OWNER})", name)
+    if match:
+        return f"{PUBLIC_ENTITY}{match.group(1)}/id/repo"
+    if name == FORMER_NAME_LEGACY + STACK_DIRECTIVE:
+        return f"{PUBLIC_ENTITY}stack/id/{STACK_DIRECTIVE}"
+    tail = name[len(FORMER_IDEA):] if name.startswith(FORMER_IDEA) else ""
+    if tail and not tail.startswith("publication-policy/"):
+        return f"{PUBLIC_ENTITY}quipu/id/idea/{tail}"
+    return None
 
 
 def former_name(public):
     """The exact name the release query renamed ``public`` from, or None."""
-    match = re.fullmatch(r"https://w3id\.org/intigraph/([A-Za-z0-9-]+)/id/(.+)", public)
+    match = re.fullmatch(rf"{re.escape(PUBLIC_ENTITY)}({OWNER})/id/(.+)", public)
     if not match:
         return None
     owner, rest = match.groups()
     kind, _, tail = rest.partition("/")
     if kind in ("code", "doc", "chunk") and tail:
-        return f"{FORMER_NAME_LEGACY}{kind}/{owner}/{tail}"
-    if rest == "repo":
-        return f"{FORMER_NAME_LEGACY}repo_{owner}"
-    if owner == "quipu" and kind == "idea" and tail:
-        return "https://quipu.dev/knowledge/" + tail
-    if owner == "stack" and rest == "repo-embedded-knowledge-databases-directive-2026-09-03":
-        return FORMER_NAME_LEGACY + rest
-    return None
+        former = f"{FORMER_NAME_LEGACY}{kind}/{owner}/{tail}"
+    elif rest == "repo":
+        former = f"{FORMER_NAME_LEGACY}repo_{owner}"
+    elif owner == "quipu" and kind == "idea" and tail:
+        former = FORMER_IDEA + tail
+    elif owner == "stack" and rest == STACK_DIRECTIVE:
+        former = FORMER_NAME_LEGACY + rest
+    else:
+        return None
+    # Only a name the query would actually produce has a former name.
+    return former if public_name(former) == public else None
+
+
+def is_legacy_entity(name):
+    """A legacy entity name the release query renames (or should have)."""
+    return public_name(name) is not None or bool(
+        re.match(rf"{re.escape(FORMER_NAME_LEGACY)}((code|doc|chunk)/|repo_)", name))
 
 
 def verify_former_names(export):
-    """Admit owl:sameAs only from a public name to its exact former name."""
-    same_as = "<http://www.w3.org/2002/07/owl#sameAs>"
-    linked = set()
-    for line in Path(export).read_text().splitlines():
-        parts = line.split(" ", 2)
-        if len(parts) < 3 or parts[1] != same_as:
-            continue
-        subject, value = parts[0], parts[2].rstrip(" .")
-        if not (subject.startswith("<") and value.startswith("<")):
-            raise ValueError("owl:sameAs between non-IRIs")
-        expected = former_name(subject[1:-1])
-        if expected is None or value[1:-1] != expected:
-            raise ValueError(f"owl:sameAs is not a former-name link: {subject} {value}")
-        if subject in linked:
-            raise ValueError(f"more than one former name: {subject}")
-        linked.add(subject)
+    """Admit owl:sameAs only from a public name to its exact former name.
+
+    Every public entity subject carries exactly one such link; a legacy entity
+    name appears nowhere except as that link's object (rdf:type objects are
+    classes, never entities); and a name under the public entity prefix that
+    the release query cannot produce refuses. Returns the number of links.
+    """
+    linked, subjects = set(), set()
+    for subject, predicate, value in ntriples(Path(export).read_text()):
+        same = predicate == ("iri", SAME_AS)
+        if same:
+            if subject[0] != "iri" or value[0] != "iri":
+                raise ValueError("owl:sameAs between non-IRIs")
+            expected = former_name(subject[1])
+            if expected is None or value[1] != expected:
+                raise ValueError(f"owl:sameAs is not a former-name link: <{subject[1]}> <{value[1]}>")
+            if subject[1] in linked:
+                raise ValueError(f"more than one former name: <{subject[1]}>")
+            linked.add(subject[1])
+        positions = [subject] + ([] if same or predicate == ("iri", RDF_TYPE) else [value])
+        for kind, name in positions:
+            if kind != "iri":
+                continue
+            if is_legacy_entity(name):
+                raise ValueError(f"legacy entity name published unrenamed: <{name}>")
+            if re.match(rf"{re.escape(PUBLIC_ENTITY)}[^/]+/id/", name) and former_name(name) is None:
+                raise ValueError(f"not a public entity name: <{name}>")
+        if subject[0] == "iri" and former_name(subject[1]) is not None:
+            subjects.add(subject[1])
+    if subjects - linked:
+        raise ValueError(f"public entity without its former-name link: <{min(subjects - linked)}>")
     return len(linked)
 
 

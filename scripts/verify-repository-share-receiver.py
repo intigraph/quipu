@@ -105,36 +105,27 @@ def catalogue_controls(binary, work):
 
 
 def internal_names(export):
-    # Entities publish under their w3id names (aegis-ro425e.18). The internal
-    # name may appear only as the object of the owl:sameAs link back to it.
-    same_as = "<http://www.w3.org/2002/07/owl#sameAs>"
-    renamed = linked = 0
-    for line in export.read_text().splitlines():
-        parts = line.split(" ", 2)
-        if len(parts) < 3:
-            continue
-        subject, predicate, rest = parts
-        if subject.startswith(f"<{AEGIS}"):
-            raise RuntimeError(f"internal entity name published as a subject: {subject}")
-        if subject.startswith("<https://w3id.org/intigraph/"):
-            renamed += 1
-        if predicate == same_as and rest.startswith(f"<{AEGIS}"):
-            linked += 1
-        elif predicate != "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>" and re.match(
-                rf"<{re.escape(AEGIS)}(code|doc|chunk)/|<{re.escape(AEGIS)}repo_", rest):
-            raise RuntimeError(f"internal entity name published as an object: {rest[:120]}")
-    if not renamed or not linked:
-        raise RuntimeError("no w3id entity names or former-name links in the share")
-    # Each link must be the subject's exact former name (aegis-ro425e.18):
-    # the same check the stack release builder applies before import.
+    """Entities publish under their w3id names (aegis-ro425e.18).
+
+    The stack release builder's own check, over a strict N-Triples reading of
+    the share: each public entity subject carries exactly its former name as
+    one owl:sameAs link, and a legacy entity name appears nowhere else. On
+    top of that, no subject at all may be an internal (AEGIS) name.
+    """
     spec = importlib.util.spec_from_file_location(
         "share_builder", Path(__file__).with_name("build-repository-share.py"))
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     try:
-        builder.verify_former_names(export)
+        triples = list(builder.ntriples(export.read_text()))
+        linked = builder.verify_former_names(export)
     except ValueError as error:
         raise RuntimeError(str(error)) from error
+    for subject, _, _ in triples:
+        if subject[0] == "iri" and subject[1].startswith(AEGIS):
+            raise RuntimeError(f"internal entity name published as a subject: <{subject[1]}>")
+    if not linked:
+        raise RuntimeError("no w3id entity names or former-name links in the share")
 
 
 def verify(binary, share, db, work):

@@ -87,25 +87,25 @@ WHERE {
 } }
   BIND(STR(?s) AS ?subjectText)
   BIND(COALESCE(
-    IF(REGEX(?subjectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/[^/]+/"),
-       IRI(REPLACE(?subjectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/([^/]+)/", "https://w3id.org/intigraph/$2/id/$1/")), ?unmapped),
+    IF(REGEX(?subjectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/[A-Za-z0-9-]+/."),
+       IRI(REPLACE(?subjectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/([A-Za-z0-9-]+)/", "https://w3id.org/intigraph/$2/id/$1/")), ?unmapped),
     IF(REGEX(?subjectText, "^http://aegis[.]gastown[.]local/ontology/repo_[A-Za-z0-9-]+$"),
        IRI(CONCAT(REPLACE(?subjectText, "^http://aegis[.]gastown[.]local/ontology/repo_", "https://w3id.org/intigraph/"), "/id/repo")), ?unmapped),
     IF(?subjectText = "http://aegis.gastown.local/ontology/repo-embedded-knowledge-databases-directive-2026-09-03",
        <https://w3id.org/intigraph/stack/id/repo-embedded-knowledge-databases-directive-2026-09-03>, ?unmapped),
-    IF(STRSTARTS(?subjectText, "https://quipu.dev/knowledge/") && !STRSTARTS(?subjectText, "https://quipu.dev/knowledge/publication-policy/"),
+    IF(STRSTARTS(?subjectText, "https://quipu.dev/knowledge/") && STRLEN(?subjectText) > 28 && !STRSTARTS(?subjectText, "https://quipu.dev/knowledge/publication-policy/"),
        IRI(CONCAT("https://w3id.org/intigraph/quipu/id/idea/", STRAFTER(?subjectText, "https://quipu.dev/knowledge/"))), ?unmapped),
     ?s) AS ?publicSubject)
   # rdf:type objects are classes, and literals are never identities.
   BIND(IF(isIRI(?o) && ?p != rdf:type, STR(?o), ?unmapped) AS ?objectText)
   BIND(COALESCE(
-    IF(REGEX(?objectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/[^/]+/"),
-       IRI(REPLACE(?objectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/([^/]+)/", "https://w3id.org/intigraph/$2/id/$1/")), ?unmapped),
+    IF(REGEX(?objectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/[A-Za-z0-9-]+/."),
+       IRI(REPLACE(?objectText, "^http://aegis[.]gastown[.]local/ontology/(code|doc|chunk)/([A-Za-z0-9-]+)/", "https://w3id.org/intigraph/$2/id/$1/")), ?unmapped),
     IF(REGEX(?objectText, "^http://aegis[.]gastown[.]local/ontology/repo_[A-Za-z0-9-]+$"),
        IRI(CONCAT(REPLACE(?objectText, "^http://aegis[.]gastown[.]local/ontology/repo_", "https://w3id.org/intigraph/"), "/id/repo")), ?unmapped),
     IF(?objectText = "http://aegis.gastown.local/ontology/repo-embedded-knowledge-databases-directive-2026-09-03",
        <https://w3id.org/intigraph/stack/id/repo-embedded-knowledge-databases-directive-2026-09-03>, ?unmapped),
-    IF(STRSTARTS(?objectText, "https://quipu.dev/knowledge/") && !STRSTARTS(?objectText, "https://quipu.dev/knowledge/publication-policy/"),
+    IF(STRSTARTS(?objectText, "https://quipu.dev/knowledge/") && STRLEN(?objectText) > 28 && !STRSTARTS(?objectText, "https://quipu.dev/knowledge/publication-policy/"),
        IRI(CONCAT("https://w3id.org/intigraph/quipu/id/idea/", STRAFTER(?objectText, "https://quipu.dev/knowledge/"))), ?unmapped),
     ?o) AS ?publicObject)
   BIND(IF(?publicSubject != ?s, ?s, ?unmapped) AS ?formerSubject)
