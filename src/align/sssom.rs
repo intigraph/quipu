@@ -466,14 +466,18 @@ impl MappingSet {
             }
             out.push_str(&cells.join("\t"));
             if dated {
-                let date = m.mapping_date.as_deref().unwrap_or("");
-                if !date.is_empty() && !is_xsd_date(date) {
+                // `None` writes an empty cell; `Some("")` would too, and then
+                // read back as `None`, so an empty date is refused like any
+                // other non-date rather than silently changing on round trip.
+                if let Some(date) = m.mapping_date.as_deref()
+                    && !is_xsd_date(date)
+                {
                     return Err(Error::InvalidValue(format!(
                         "mapping_date {date:?} is not an xsd:date (YYYY-MM-DD)"
                     )));
                 }
                 out.push('\t');
-                out.push_str(date);
+                out.push_str(m.mapping_date.as_deref().unwrap_or(""));
             }
             out.push('\n');
         }

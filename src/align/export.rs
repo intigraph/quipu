@@ -142,6 +142,25 @@ impl Prefixes {
                     "CURIE prefix {name:?} expands to {iri:?}, which is not an absolute IRI"
                 )));
             }
+            // The expansion is written verbatim into `@prefix name: <...>` and
+            // the YAML `curie_map`, so it must be a lexically valid IRI: a `>`,
+            // space or line break would otherwise inject Turtle or corrupt the
+            // TSV metadata block.
+            check_iri(&format!("CURIE prefix {name:?} expansion"), iri)?;
+            // A prefix named after an IRI scheme makes `scheme:rest` ambiguous:
+            // a full IRI such as `urn:a:b` would read as a CURIE and be
+            // rewritten. Refuse the name instead of guessing which was meant.
+            let own_scheme = iri.split_once(':').map(|(s, _)| s);
+            if RESERVED_SCHEMES
+                .iter()
+                .any(|s| s.eq_ignore_ascii_case(name))
+                || own_scheme.is_some_and(|s| s.eq_ignore_ascii_case(name))
+            {
+                return Err(Error::InvalidValue(format!(
+                    "CURIE prefix {name:?} is also an IRI scheme, so full IRIs of that \
+                     scheme would be misread as CURIEs; choose another prefix name"
+                )));
+            }
             match all.get(name) {
                 Some(existing) if existing != iri => Err(Error::InvalidValue(format!(
                     "CURIE prefix {name:?} is declared as both {existing:?} and {iri:?}; \
@@ -298,7 +317,7 @@ fn prepare<'a>(set: &'a MappingSet, options: &ExportOptions) -> Result<Prepared<
                 && text.contains(['\t', '\n', '\r'])
             {
                 return Err(Error::InvalidValue(format!(
-                    "{slot} {text:?} contains a tab or line break, which SSSOM/TSV cannot carry"
+                    "{slot} {text:?} contains a tab or line break; labels must be single-line"
                 )));
             }
         }
@@ -428,12 +447,23 @@ pub fn export_tsv(set: &MappingSet, options: &ExportOptions) -> Result<String> {
     for row in &p.rows {
         let cells: Vec<String> = present
             .iter()
-            .map(|(_, _, cell)| cell(row).unwrap_or_default())
+            .map(|(_, _, cell)| tsv_cell(&cell(row).unwrap_or_default()))
             .collect();
         out.push_str(&cells.join("\t"));
         out.push('\n');
     }
     Ok(out)
+}
+
+/// One SSSOM/TSV mappings-block value, quoted per the spec's RFC 4180 rules:
+/// a value holding a double quote, tab or line break is enclosed in double
+/// quotes with its own double quotes doubled; any other value is written as is.
+fn tsv_cell(value: &str) -> String {
+    if value.contains(['"', '\t', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 /// A YAML double-quoted scalar.
@@ -482,7 +512,10 @@ fn check_iri(slot: &str, iri: &str) -> Result<()> {
 /// A CURIE's local part: non-empty, and nothing TSV or a `|`-separated
 /// multi-value list would split on.
 fn check_local(slot: &str, value: &str, local: &str) -> Result<()> {
+    // A local part starting with `//` would read back as `prefix://...`, which
+    // every CURIE reader (this one included) takes for an IRI.
     if local.is_empty()
+        || local.starts_with("//")
         || local
             .chars()
             .any(|c| c.is_whitespace() || c.is_control() || c == '|')
@@ -493,6 +526,11 @@ fn check_local(slot: &str, value: &str, local: &str) -> Result<()> {
     }
     Ok(())
 }
+
+/// IRI schemes a CURIE prefix may not be named after (see `Prefixes::new`).
+const RESERVED_SCHEMES: &[&str] = &[
+    "http", "https", "urn", "file", "ftp", "mailto", "tag", "data", "did", "info",
+];
 
 /// An XML `NCName`-shaped prefix name: a letter or `_`, then letters, digits,
 /// `_`, `-` or `.`.

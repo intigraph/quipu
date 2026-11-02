@@ -105,24 +105,61 @@ fn read_back(tsv: &str) -> ReadBack {
             }
             continue;
         }
-        header = line.split('\t').map(str::to_string).collect();
+        header = split_fields(line);
         break;
     }
     let rows: Vec<BTreeMap<String, String>> = lines
         .filter(|l| !l.is_empty())
-        .map(|l| {
-            header
-                .iter()
-                .cloned()
-                .zip(l.split('\t').map(str::to_string))
-                .collect()
-        })
+        .map(|l| header.iter().cloned().zip(split_fields(l)).collect())
         .collect();
     ReadBack {
         metadata,
         curie_map,
         header,
         rows,
+    }
+}
+
+/// One mappings-block line split as an SSSOM/TSV consumer must (the spec's
+/// RFC 4180 quoting): a field that starts with `"` runs to the next lone `"`,
+/// a doubled `""` inside it is one quote, and the enclosing quotes are
+/// stripped. Written independently of the exporter's own quoting.
+fn split_fields(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut chars = line.chars().peekable();
+    loop {
+        let mut field = String::new();
+        if chars.peek() == Some(&'"') {
+            chars.next();
+            loop {
+                match chars.next() {
+                    Some('"') if chars.peek() == Some(&'"') => {
+                        chars.next();
+                        field.push('"');
+                    }
+                    Some('"') => break,
+                    Some(c) => field.push(c),
+                    None => panic!("unterminated quoted field in {line:?}"),
+                }
+            }
+            assert!(
+                matches!(chars.peek(), None | Some('\t')),
+                "text after a closing quote in {line:?}"
+            );
+        } else {
+            while let Some(&c) = chars.peek() {
+                if c == '\t' {
+                    break;
+                }
+                assert_ne!(c, '"', "unquoted field holds a double quote in {line:?}");
+                field.push(c);
+                chars.next();
+            }
+        }
+        fields.push(field);
+        if chars.next().is_none() {
+            return fields;
+        }
     }
 }
 
@@ -611,5 +648,109 @@ fn a_malformed_date_is_refused_everywhere() {
     assert!(
         MappingSet::from_tsv(&sabotaged).is_err(),
         "from_tsv read a bad date"
+    );
+}
+
+// -- review findings on PR #968 (wu P2; advisory review) ---------------------
+
+#[test]
+fn labels_with_double_quotes_survive_a_standard_tsv_reader() {
+    for label in ["\"quoted\"", "say \"hi\" now", "ends with \"", "\"starts"] {
+        let mut set = decided();
+        set.mappings[0].subject_label = Some(label.into());
+        let tsv = export_tsv(&set, &options()).expect("export");
+        let back = read_back(&tsv);
+        let row = back
+            .rows
+            .iter()
+            .find(|r| r["subject_id"] == "A:bobbin-release")
+            .expect("row");
+        assert_eq!(row["subject_label"], label, "label {label:?} in\n{tsv}");
+    }
+    // Control: a label without quotes is written exactly as it is.
+    let tsv = export_tsv(&decided(), &options()).expect("export");
+    assert!(tsv.contains("\tbobbin-release\t"), "{tsv}");
+}
+
+#[test]
+fn a_prefix_expansion_that_is_not_a_clean_iri_is_refused() {
+    let injected = "https://example.org/> .\n<https://evil.example/s> \
+                    <https://evil.example/p> <https://evil.example/o";
+    for (how, iri) in [
+        ("turtle injection", injected),
+        ("space", "https://example.org/a b"),
+        ("newline", "https://example.org/\n#  x: y"),
+        ("angle bracket", "https://example.org/>"),
+    ] {
+        let mut opts = options();
+        opts.prefixes.insert("unused".into(), iri.into());
+        for format in [ExportFormat::Tsv, ExportFormat::Turtle] {
+            assert!(
+                export(&decided(), &opts, format).is_err(),
+                "{how} via --prefix, {format:?}"
+            );
+        }
+        let mut set = decided();
+        set.curie_map.insert("unused".into(), iri.into());
+        assert!(
+            export(&set, &options(), ExportFormat::Turtle).is_err(),
+            "{how} via the set's curie_map"
+        );
+    }
+}
+
+#[test]
+fn a_prefix_named_after_an_iri_scheme_is_refused() {
+    // The advisory scenario: full URN identifiers and a `urn` prefix. Without
+    // the refusal the uncovered object would be silently rewritten.
+    let mut set = decided();
+    set.mappings[0].subject_id = "urn:graph-a:node1".into();
+    set.mappings[0].object_id = "urn:graph-b:node2".into();
+    let mut opts = options();
+    opts.prefixes.insert("urn".into(), "urn:graph-a:".into());
+    for format in [ExportFormat::Tsv, ExportFormat::Turtle] {
+        let err = export(&set, &opts, format).expect_err("urn prefix");
+        assert!(err.to_string().contains("IRI scheme"), "{err}");
+    }
+    // A reserved scheme name is refused even with another namespace.
+    let mut opts = options();
+    opts.prefixes
+        .insert("https".into(), "https://a.example/".into());
+    assert!(export_tsv(&decided(), &opts).is_err(), "https prefix");
+    // Control: the same URNs under a non-scheme prefix name export, and the
+    // uncovered one is still refused as uncovered.
+    let mut opts = options();
+    opts.prefixes.insert("ga".into(), "urn:graph-a:".into());
+    let err = export_tsv(&set, &opts).expect_err("graph-b uncovered");
+    assert!(err.to_string().contains("not covered"), "{err}");
+    opts.prefixes.insert("gb".into(), "urn:graph-b:".into());
+    let tsv = export_tsv(&set, &opts).expect("both covered");
+    assert!(
+        tsv.contains("ga:node1") && tsv.contains("gb:node2"),
+        "{tsv}"
+    );
+}
+
+#[test]
+fn compaction_never_writes_a_double_slash_local_part() {
+    let mut set = decided();
+    set.mappings[0].subject_id = "https://a.example//item".into();
+    let mut opts = options();
+    opts.prefixes.insert("A".into(), "https://a.example".into());
+    // `A://item` would read back as an IRI with scheme `A`, so the only
+    // covering prefix is unusable and the identifier is uncovered.
+    let err = export_tsv(&set, &opts).expect_err("double slash");
+    assert!(err.to_string().contains("not covered"), "{err}");
+}
+
+#[test]
+fn an_empty_mapping_date_is_refused_not_dropped() {
+    let mut set = decided();
+    set.mappings[0].mapping_date = Some(String::new());
+    assert!(set.to_tsv().is_err(), "working-set TSV");
+    assert!(export_tsv(&set, &options()).is_err(), "SSSOM/TSV");
+    assert!(
+        export(&set, &options(), ExportFormat::Turtle).is_err(),
+        "Turtle"
     );
 }

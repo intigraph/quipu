@@ -128,6 +128,11 @@ make:
 | an `author_id` entity | the reviewer, under `--author-prefix` | refused for a bare name like `malcolm` |
 | a `mapping_date` | stamped by `decide` on every row it rules on | omitted: older sets carry none |
 
+A prefix must expand to a clean IRI (no spaces, angle brackets, quotes or line breaks), and
+its name must not be an IRI scheme such as `urn` or `https`: `urn:a:b` could then be read as a
+CURIE or as a full IRI, so export refuses the name rather than guess. Labels holding a double
+quote are written quoted, as the SSSOM/TSV quoting rules require.
+
 Nothing is upgraded on the way out. A declined row keeps no `author_id`, so no SSSOM reader
 mistakes it for curation; an undecided row keeps the matcher's justification and its
 confidence. Declined rows travel through the declared extension slots `quipu_review` and
