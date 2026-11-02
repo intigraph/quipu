@@ -476,3 +476,149 @@ fn an_explicit_id_spelled_like_a_position_keeps_its_own_nodes() {
         "and stay stable on re-import"
     );
 }
+
+/// #964 review (wu, Gemini): a title or instant that carries line breaks and
+/// fences must stay text. The import must reproduce exactly the exported graph.
+#[test]
+fn structural_text_in_the_title_never_becomes_data() {
+    let source = seeded();
+    let hostile = "Notes\n```turtle\n<urn:injected> <urn:p> <urn:o> .\n```\n# more";
+    let opts = ExportOptions {
+        title: Some(hostile),
+        ..export_opts(Some(G))
+    };
+    let text = export(&source, &opts).unwrap();
+    let book = crate::databook::parse(&text).unwrap();
+    assert_eq!(
+        book.blocks
+            .iter()
+            .filter(|b| matches!(b.kind(), BlockKind::Rdf(_)))
+            .count(),
+        1,
+        "only the graph-data block is loadable"
+    );
+    assert_eq!(
+        book.header.title, hostile,
+        "frontmatter keeps it exactly"
+    );
+    let mut target = Store::open_in_memory().unwrap();
+    let report = import(&mut target, &text, &import_opts()).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(
+        content(&target, G),
+        content(&source, G),
+        "exact graph equality"
+    );
+    assert_eq!(target.lookup("urn:injected").unwrap(), None);
+}
+
+/// An exported empty graph imports, registering the graph and writing nothing.
+#[test]
+fn an_empty_graph_round_trips() {
+    let source = Store::open_in_memory().unwrap();
+    source.graph_create("urn:g:empty").unwrap();
+    let text = export(&source, &export_opts(Some("urn:g:empty"))).unwrap();
+    let mut target = Store::open_in_memory().unwrap();
+    let head = target.latest_tx_id().unwrap();
+    let report = import(&mut target, &text, &import_opts()).unwrap();
+    assert!(
+        report.graphs.is_empty(),
+        "nothing to write: {:?}",
+        report.graphs
+    );
+    assert!(target.committed_graph_id("urn:g:empty").unwrap().is_some());
+    assert_eq!(target.latest_tx_id().unwrap(), head, "no transaction");
+}
+
+/// wu: graph registration is inside the import's rollback boundary. A write
+/// refused by the store (here, into a frozen graph) leaves no facts AND no newly
+/// registered graph.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_refused_graph_write_registers_no_new_graph() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("frozen.db").to_str().unwrap()).unwrap();
+    let frozen = "urn:g:b";
+    import(
+        &mut store,
+        &TWO_GRAPHS.replace("<urn:g:a> { <urn:s> <urn:p> \"a\" . }\n", ""),
+        &import_opts(),
+    )
+    .unwrap();
+    store
+        .freeze_graph(frozen, dir.path().to_str().unwrap(), T1, None)
+        .unwrap();
+    let text = TWO_GRAPHS.replace("urn:g:a", "urn:g:new");
+    let head = store.latest_tx_id().unwrap();
+    assert!(
+        import(&mut store, &text, &import_opts()).is_err(),
+        "frozen graph refuses"
+    );
+    assert_eq!(store.latest_tx_id().unwrap(), head, "no facts");
+    assert!(
+        store.committed_graph_id("urn:g:new").unwrap().is_none(),
+        "no new graph registered"
+    );
+}
+
+/// Shape-set names that slug alike still export as a valid DataBook.
+#[cfg(feature = "shacl")]
+#[test]
+fn colliding_shape_slugs_get_distinct_ids() {
+    let store = seeded();
+    let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
+    store.load_shapes("core_v1", shape, T0).unwrap();
+    store.load_shapes("core-v1", shape, T0).unwrap();
+    let opts = ExportOptions {
+        with_shapes: true,
+        ..export_opts(Some(G))
+    };
+    let text = export(&store, &opts).unwrap();
+    let book = crate::databook::parse(&text).unwrap();
+    let ids: Vec<_> = book.blocks.iter().filter_map(|b| b.id()).collect();
+    assert!(
+        ids.contains(&"shapes-core-v1") && ids.contains(&"shapes-core-v1-2"),
+        "{ids:?}"
+    );
+}
+
+/// CRLF shape text hashes as the reader will see it.
+#[cfg(feature = "shacl")]
+#[test]
+fn crlf_shapes_survive_their_checksum() {
+    let store = seeded();
+    let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\r\n<urn:S> a sh:NodeShape .\r\n";
+    store.load_shapes("people", shape, T0).unwrap();
+    let opts = ExportOptions {
+        with_shapes: true,
+        ..export_opts(Some(G))
+    };
+    let text = export(&store, &opts).unwrap();
+    let mut target = Store::open_in_memory().unwrap();
+    let with_shapes = ImportOptions {
+        with_shapes: true,
+        ..import_opts()
+    };
+    import(&mut target, &text, &with_shapes).unwrap();
+    assert_eq!(target.list_shapes().unwrap().len(), 1);
+}
+
+/// A malformed shape set after valid graph data rolls the graph data back too.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_refused_shape_set_rolls_back_the_graph_data() {
+    let text = TWO_GRAPHS.replace("```\n", "```\n\n```shacl\n<urn:s> <urn:p> .\n```\n");
+    let mut store = Store::open_in_memory().unwrap();
+    let head = store.latest_tx_id().unwrap();
+    let opts = ImportOptions {
+        with_shapes: true,
+        ..import_opts()
+    };
+    assert!(import(&mut store, &text, &opts).is_err());
+    assert_eq!(
+        store.latest_tx_id().unwrap(),
+        head,
+        "no graph data committed"
+    );
+    assert!(store.committed_graph_id("urn:g:a").unwrap().is_none());
+}

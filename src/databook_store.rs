@@ -102,6 +102,16 @@ fn graph_triples(store: &Store, graph: i64, as_of: Option<&AsOf>) -> Result<Vec<
         .collect()
 }
 
+/// `text` as one inert line of Markdown body: control characters (line breaks
+/// included) become spaces, so an exported title or instant can never start a
+/// fence and turn into a loadable block (#964 review). The frontmatter keeps
+/// the exact value; this is only the human-readable heading and summary.
+fn inline(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
+}
+
 /// Kebab-case block id for a shape-set name.
 fn block_id(prefix: &str, name: &str) -> String {
     let mut id = String::from(prefix);
@@ -154,15 +164,26 @@ pub fn export(store: &Store, opts: &ExportOptions<'_>) -> Result<String> {
             Some(as_of) => store.list_shapes_as_of(as_of)?,
             None => store.list_shapes()?,
         };
+        let mut used = std::collections::BTreeSet::from(["graph-data".to_string()]);
         for (name, text, _) in &shapes {
-            let id = block_id("shapes-", name);
+            // Distinct names can share a slug (`core_v1`, `core-v1`); ids must not.
+            let base = block_id("shapes-", name);
+            let mut id = base.clone();
+            for n in 2.. {
+                if used.insert(id.clone()) {
+                    break;
+                }
+                id = format!("{base}-{n}");
+            }
+            // The reader normalises line endings before hashing; so must we.
+            let text = text.replace("\r\n", "\n").replace('\r', "\n");
             let annotations = [
                 ("id", id.as_str()),
                 ("quipu:shapes-name", name.as_str()),
-                ("quipu:sha256", &sha256(text)),
+                ("quipu:sha256", &sha256(&text)),
             ];
             blocks.push(
-                databook::fence("shacl", &annotations, text)
+                databook::fence("shacl", &annotations, &text)
                     .map_err(|e| invalid(format!("shape set `{name}`: {e}")))?,
             );
         }
@@ -214,8 +235,9 @@ pub fn export(store: &Store, opts: &ExportOptions<'_>) -> Result<String> {
         (Some(_), None) => format!("its facts as of transaction {tx}"),
     };
     let mut out = front.finish();
+    let (title, graph_shown, when) = (inline(&title), inline(graph_iri), inline(&when));
     out.push_str(&format!(
-        "\n# {title}\n\nThe graph `{graph_iri}`: {when}, {} triples about {} subjects, \
+        "\n# {title}\n\nThe graph `{graph_shown}`: {when}, {} triples about {} subjects, \
          in canonical Turtle.\n\n## Graph data\n\n",
         triples.len(),
         subjects.len()
@@ -343,7 +365,13 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
                     .or(book.header.named_graph.as_deref())
                     .unwrap_or(ROOT_GRAPH_IRI);
                 let mut nodes = BlockNodes::new(&book, block, index);
-                for quad in block_quads(block, format)? {
+                let quads = block_quads(block, format)?;
+                if quads.is_empty() {
+                    // An empty graph is still that graph (an exported empty
+                    // graph must import): register it, with nothing to write.
+                    per_graph.entry(default.to_string()).or_default();
+                }
+                for quad in quads {
                     let target = match (&quad.graph_name, opts.graph) {
                         (GraphName::NamedNode(g), None) => g.as_str().to_string(),
                         (GraphName::BlankNode(_), None) => {
@@ -451,36 +479,53 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
         || format!("databook:{}@{}", book.header.id, book.header.version),
         str::to_string,
     );
-    for iri in per_graph.keys().filter(|iri| *iri != ROOT_GRAPH_IRI) {
-        store.graph_create(iri)?;
-    }
-    if !batches.is_empty() {
-        let txs =
-            store.transact_graph_batches_tx(&batches, opts.timestamp, opts.actor, Some(&source))?;
-        for ((graph, tx), (_, datums)) in txs.into_iter().zip(&batches) {
-            report
-                .graphs
-                .push((names[&graph].clone(), tx, datums.len()));
+    // Registration, graph data and shapes commit together or not at all: a
+    // refused graph or shape set must not leave new graph rows behind (#964).
+    store.ensure_ownership_writable()?;
+    const SCOPE: &str = "quipu_databook_import";
+    store.conn.execute_batch(&format!("SAVEPOINT {SCOPE}"))?;
+    let written = (|| -> Result<()> {
+        for iri in per_graph.keys().filter(|iri| *iri != ROOT_GRAPH_IRI) {
+            store.graph_create(iri)?;
         }
-    }
-    for block in shapes {
-        let name = block
-            .meta
-            .get("quipu:shapes-name")
-            .or_else(|| block.meta.get("id"))
-            .cloned()
-            .unwrap_or_else(|| format!("databook-line-{}", block.line));
-        // A fence holds whole lines; the text they came from ended with one.
-        let text = format!("{}\n", block.payload);
-        store
-            .load_shapes(&name, &text, opts.timestamp)
-            .map_err(|e| {
-                invalid(format!(
-                    "{} (graph data already committed): {e}",
-                    describe(block)
-                ))
-            })?;
-        report.shapes.push(name);
+        let batches: Vec<_> = batches.into_iter().filter(|(_, d)| !d.is_empty()).collect();
+        if !batches.is_empty() {
+            let txs = store.transact_graph_batches_tx(
+                &batches,
+                opts.timestamp,
+                opts.actor,
+                Some(&source),
+            )?;
+            for ((graph, tx), (_, datums)) in txs.into_iter().zip(&batches) {
+                report
+                    .graphs
+                    .push((names[&graph].clone(), tx, datums.len()));
+            }
+        }
+        for block in &shapes {
+            let name = block
+                .meta
+                .get("quipu:shapes-name")
+                .or_else(|| block.meta.get("id"))
+                .cloned()
+                .unwrap_or_else(|| format!("databook-line-{}", block.line));
+            // A fence holds whole lines; the text they came from ended with one.
+            let text = format!("{}\n", block.payload);
+            store
+                .load_shapes(&name, &text, opts.timestamp)
+                .map_err(|e| invalid(format!("{}: {e}", describe(block))))?;
+            report.shapes.push(name);
+        }
+        Ok(())
+    })();
+    match written {
+        Ok(()) => crate::store::release::release(&store.conn, SCOPE)?,
+        Err(error) => {
+            crate::store::release::rollback_release(&store.conn, SCOPE)?;
+            store.read_model.borrow_mut().clear();
+            store.term_cache.borrow_mut().clear_persistent();
+            return Err(error);
+        }
     }
     Ok(report)
 }
