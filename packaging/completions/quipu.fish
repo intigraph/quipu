@@ -82,7 +82,7 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "policy" -d 'Draft an ad
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "gate" -d 'Judge a candidate policy set over recorded history without writing'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "path" -d 'Golden-path analysis: provenance cone, backtest and draft'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "align" -d 'Propose, decide and apply cross-graph alignments'
-complete -c quipu -n "__fish_quipu_needs_command" -f -a "propose" -d 'List, submit, accept or reject schema change proposals'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "propose" -d 'List, submit, plan, accept or reject schema change proposals'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "memory" -d 'Read, export, receipt or commit versioned file memory'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "attest" -d 'Register and manage attested session bindings'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "signer" -d 'Enroll and manage hardware signers for attested writes'
@@ -582,11 +582,12 @@ complete -c quipu -n "__fish_quipu_using_subcommand path; and __fish_seen_subcom
 complete -c quipu -n "__fish_quipu_using_subcommand path; and __fish_seen_subcommand_from draft" -l dead-end -d 'Dead-end trajectory to include in the policy draft' -r
 complete -c quipu -n "__fish_quipu_using_subcommand path; and __fish_seen_subcommand_from draft" -l json -d 'Print machine-readable JSON'
 complete -c quipu -n "__fish_quipu_using_subcommand path; and __fish_seen_subcommand_from draft" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "propose" -d 'Propose scored alignments between two named graphs as an SSSOM set'
-complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "decide" -d 'Apply reviewer accept and negate decisions to a mapping set'
-complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply" -f -a "apply" -d 'Materialize decided alignments into a derived alignment graph'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "propose" -d 'Propose scored alignments between two named graphs as an SSSOM set'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "decide" -d 'Apply reviewer accept and negate decisions to a mapping set'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "apply" -d 'Materialize decided alignments into a derived alignment graph'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and not __fish_seen_subcommand_from propose decide apply export" -f -a "export" -d 'Export a mapping set as standard SSSOM TSV or RDF Turtle'
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from propose" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from propose" -l set-id -d 'Identifier for the proposed alignment set' -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from propose" -l out -d 'Output file' -r
@@ -602,13 +603,21 @@ complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subco
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -l expected-version -d 'Expected version for the compare-and-swap operation' -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -l actor -d 'Actor recorded in operation provenance' -r
 complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l status -d 'Status to record or filter' -r
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -s h -l help -d 'Print help'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "list" -d 'List schema change proposals, optionally by status'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "submit" -d 'Submit a schema change proposal'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "accept" -d 'Accept a pending proposal'
-complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -f -a "reject" -d 'Reject a pending proposal'
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l license -d 'License IRI for the mapping set; required' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l format -d 'Output or input format for this operation' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l prefix -d 'Extra CURIE prefix as name=<namespace>; repeatable' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l author-prefix -d 'Declared prefix that turns a bare reviewer into an author_id' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -l out -d 'Output file' -r
+complete -c quipu -n "__fish_quipu_using_subcommand align; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -l status -d 'Status to record or filter' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "list" -d 'List schema change proposals, optionally by status'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "submit" -d 'Submit a schema change proposal'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "plan" -d 'Report a pending proposal\'s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "accept" -d 'Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and not __fish_seen_subcommand_from list submit plan accept reject" -f -a "reject" -d 'Reject a pending proposal'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -l status -d 'Status to record or filter' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from list" -s h -l help -d 'Print help'
@@ -617,9 +626,16 @@ complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_sub
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -l rationale -d 'Reason for the alignment decision' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -l trigger -d 'Trigger identifier' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from submit" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l format -d 'Plan output format: text or json' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -l risk-threshold -d 'Fail the plan above this 0-100 risk score (default: the deployment threshold)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from plan" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l decided-by -d 'Identity recording the alignment decision' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l note -d 'Explanatory note recorded with the operation' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l reason -d 'Why an over-threshold plan is accepted; recorded with the decision' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l risk-threshold -d 'Refuse acceptance above this 0-100 risk score (default: the deployment threshold)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -l accept-risk -d 'Accept despite a plan over the risk threshold; requires --reason'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from accept" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand propose; and __fish_seen_subcommand_from reject" -l decided-by -d 'Identity recording the alignment decision' -r

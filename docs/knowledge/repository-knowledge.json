@@ -16,7 +16,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
-      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
+      "source_sha256": "fcfed3d4831a0981a9f65cb1a1453746517ac5204f90971912505e28b879076d",
       "type": "Concept"
     },
     {
@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "db7bd1113a6b9d4c66ad9379e5699bda4974256d65c02e33dfc62f8798f59c68",
+      "source_sha256": "7a5e11f3068d3408aa4996241f8cd4074c1796facf1dae76472f7e2209b8255b",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "de6fc623d24926d757c92230455d5d62abde3f6c1dff9528116a5b522cc8cb77",
+      "source_sha256": "57668c3ebf1cc3966b866adabfc07af8826fdc4434390a686924c7ebae6c080f",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -57,7 +57,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
-      "source_sha256": "71807e570e9d95c72ca547594bc549ee1d8644ca88683b35d7cb2df0be7dbd70",
+      "source_sha256": "fcfed3d4831a0981a9f65cb1a1453746517ac5204f90971912505e28b879076d",
       "type": "DecisionRecord",
       "properties": {
         "status": "active",
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ba70b50ed387df53982cf471d2b3d3ed5e0c1152bea3996e5b76a9c84531e314",
+      "source_sha256": "e59d76c675d5ab5ce4d8198f43c3f558025cab6b3cb49184a8ccfd1a3bf5c4d8",
       "properties": {
         "startHereOrder": 2
       }
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "a1134d791d4d05072af3dfb32f9c349526014a9031691da90a37e2b75c708993",
+      "source_sha256": "ac0323df70fcd1eac8781546bd77aaade266a8f530e45f55e98625a57d1a1674",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "31ebb7b598d3e7d39f938a7d3bcbf3399bf5001df2cdd4d2ac9c289e78591006",
+      "source_sha256": "d5e946dd60b572b0a92b2f61b934f7941660767d5d6bf0b03fdfcb8503ab62f7",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "2291d39e5b259abebabfaac1a556ef6d12b25de9c63325ae9951d5408e454424",
+      "source_sha256": "c26a52a4d1f3053525b8178995e377b5bbb9247097d49b190b3cd0525814564d",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"

@@ -848,6 +848,7 @@ def render_markdown(data: dict) -> str:
         f"Quipu passes **{core_counts['passed']}/{core_counts['cases']}** manifest-reachable SHACL Core cases.",
         f"SHACL-SPARQL remains a deliberate non-goal: **{sparql_counts['passed']}/{sparql_counts['cases']}** pass and {sparql_counts['unsupported']} are unsupported.",
         "Quipu does not advertise SHACL-SPARQL support; the upstream SPARQL validator is incomplete, and support requires the full 22-case manifest gate rather than a partial claim.",
+        "A shapes graph that uses SHACL-SPARQL (`sh:sparql`, `sh:select`, `sh:ask`, SPARQL validators or SPARQL-based constraint components) is refused when it is loaded, whether stored or sent with a request, with an `unsupported SHACL-SPARQL` error naming the shape. Such a shape is never loaded and then ignored.",
         "This score uses the context-free native validator on whole graphs; the write path is measured below.", "",
         f"Pinned W3C Data Shapes revision: `{data['shacl']['suite_revision']}`.",
         "The pinned manifest exposes 120 approved cases (98 Core + 22 SHACL-SPARQL).",

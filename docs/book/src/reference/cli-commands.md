@@ -1312,7 +1312,7 @@ qp path draft <trajectory-IRI>
 
 Propose, decide and apply cross-graph alignments.
 
-Subcommands: `align propose`, `align decide`, `align apply`.
+Subcommands: `align propose`, `align decide`, `align apply`, `align export`.
 
 ### `qp align propose`
 
@@ -1356,9 +1356,27 @@ qp align apply <set.tsv>
 
 - `--actor <VALUE>`: Actor recorded in operation provenance.
 
+### `qp align export`
+
+Export a mapping set as standard SSSOM TSV or RDF Turtle.
+
+```text
+qp align export <set.tsv>
+```
+
+- `--license <VALUE>`: License IRI for the mapping set; required.
+
+- `--format <VALUE>`: Output or input format for this operation.
+
+- `--prefix <VALUE>`: Extra CURIE prefix as name=<namespace>; repeatable.
+
+- `--author-prefix <VALUE>`: Declared prefix that turns a bare reviewer into an author_id.
+
+- `--out <VALUE>`: Output file.
+
 ## `qp propose`
 
-List, submit, accept or reject schema change proposals.
+List, submit, plan, accept or reject schema change proposals.
 
 ```text
 qp propose
@@ -1390,9 +1408,21 @@ qp propose submit <kind> <target> <diff-file>
 
 - `--trigger <VALUE>`: Trigger identifier.
 
+### `qp propose plan`
+
+Report a pending proposal's blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined.
+
+```text
+qp propose plan <id>
+```
+
+- `--format <VALUE>`: Plan output format: text or json.
+
+- `--risk-threshold <VALUE>`: Fail the plan above this 0-100 risk score (default: the deployment threshold).
+
 ### `qp propose accept`
 
-Accept a pending proposal.
+Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason.
 
 ```text
 qp propose accept <id>
@@ -1401,6 +1431,12 @@ qp propose accept <id>
 - `--decided-by <VALUE>`: Identity recording the alignment decision.
 
 - `--note <VALUE>`: Explanatory note recorded with the operation.
+
+- `--reason <VALUE>`: Why an over-threshold plan is accepted; recorded with the decision.
+
+- `--risk-threshold <VALUE>`: Refuse acceptance above this 0-100 risk score (default: the deployment threshold).
+
+- `--accept-risk`: Accept despite a plan over the risk threshold; requires --reason.
 
 ### `qp propose reject`
 
