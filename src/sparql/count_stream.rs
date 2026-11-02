@@ -419,7 +419,7 @@ fn evaluate(
             match agg {
                 AggregateExpression::CountSolutions { .. } => counter.count += 1,
                 AggregateExpression::FunctionCall { expr, distinct, .. } => {
-                    if let Some(value) = eval_expr(store, expr, &row) {
+                    if let Some(value) = eval_expr(store, expr, row) {
                         if matches!(
                             agg,
                             AggregateExpression::FunctionCall {
