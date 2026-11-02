@@ -123,6 +123,9 @@ impl Validator {
         // is where a recursive shape graph is refused before it can recurse
         // (aegis-ahu0: a stack overflow aborts the process).
         crate::shacl_cycles::refuse_cyclic_shapes(shapes)?;
+        // A constraint this validator would not evaluate is refused, never
+        // loaded and ignored (aegis-rk4; per-request shapes too, aegis-d19).
+        crate::shacl_unsupported::refuse_unsupported_shapes(shapes)?;
         let mut reader = std::io::BufReader::new(shapes.as_bytes());
         let schema = ShaclDataManager::load(
             &mut reader,

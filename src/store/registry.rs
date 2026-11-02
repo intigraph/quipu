@@ -41,6 +41,9 @@ impl Store {
             .collect();
         let candidate = format!("{}\n{turtle}", others.join("\n"));
         crate::shacl_cycles::refuse_cyclic_shapes(&candidate)?;
+        // Only the incoming set: a set already stored is refused when the
+        // combined validator is built, so writes fail closed (aegis-rk4).
+        crate::shacl_unsupported::refuse_unsupported_shapes(turtle)?;
         crate::entity_key_guard::check_shapes(self, &candidate)?;
         self.load_versioned("shapes", name, turtle, timestamp)?;
         self.emit_registry_event("shapes.loaded", name, timestamp)
