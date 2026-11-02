@@ -320,7 +320,10 @@ docs cmd="build":
         fmt)      npx prettier --write "docs/book/src/**/*.md" --prose-wrap preserve ;;
         vale)     vale docs/book/src/ ;;
         check)    just docs lint && just docs build ;;
-        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
+        generate) cargo run --locked --features docgen --bin quipu-docgen ;;
+        generated-check) cargo run --locked --features docgen --bin quipu-docgen -- --check ;;
+        references-test) python3 scripts/test-repository-knowledge.py ;;
+        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check generate generated-check references-test" ;;
     esac
 
 # === Public benchmarks ===

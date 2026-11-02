@@ -18,6 +18,43 @@ import tarfile
 from pathlib import Path
 
 
+# Used by the producer and its native five-document integration probe.
+INDEX_CONFIG = """quipu_push_chunks = true
+
+[index]
+include = [
+  "**/*.rs", "**/*.md", "**/*.rst", "**/*.toml", "**/*.yml", "**/*.yaml", "**/*.py",
+  "**/*.sh", "**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.ttl", "**/*.go",
+]
+exclude = [
+  "**/target/**", "**/.git/**", "**/.bobbin/**", "**/.agents/**", "**/.claude/**", "**/.codex/**",
+  "**/.mcp.json", "**/CLAUDE.local.md", "**/node_modules/**", "**/book/book/**", "**/vendor/**",
+]
+use_gitignore = true
+entities = false
+
+[embedding]
+model = "all-MiniLM-L6-v2"
+batch_size = 64
+"""
+
+
+def agent_references(source, paths):
+    """Require tracked, nonempty agent references before any publication work."""
+    references = (
+        "docs/book/src/reference/cli-commands.md",
+        "docs/book/src/reference/mcp-tool-index.md",
+        "docs/book/src/getting-started/agent-primer.md",
+        "src/primer.md",
+    )
+    if any(
+        p not in paths or not (source / p).is_file() or not (source / p).stat().st_size
+        for p in references
+    ):
+        raise ValueError("required agent reference missing from release")
+    return references
+
+
 def isolated_environment(private):
     """Native workers must not inherit a host endpoint or credential catalogue."""
     private = Path(private)
@@ -150,15 +187,24 @@ def register_queries(binary, database, definitions):
         raise ValueError("native registry did not return the exact loaded query names")
 
 
-def indexed_labels(binary, database, subjects):
+def indexed_labels(binary, database, subjects, *, file_paths=False):
     if any(
         not re.fullmatch(r'https?://[^\s<>"{}|\\^`]+', subject) for subject in subjects
     ):
         raise ValueError("invalid indexed subject IRI")
+    predicate = (
+        "http://aegis.gastown.local/ontology/filePath" if file_paths
+        else "http://www.w3.org/2000/01/rdf-schema#label"
+    )
+    # The receiver's typed Document reader must find these pointers too.
+    document = (
+        " ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> "
+        "<http://aegis.gastown.local/ontology/Document> ." if file_paths else ""
+    )
     query = (
         "SELECT ?s ?label WHERE { VALUES ?s { "
         + " ".join("<" + s + ">" for s in subjects)
-        + "} ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label }"
+        + "} ?s <" + predicate + "> ?label ." + document + " }"
     )
     (result,) = local_mcp(
         binary, database, [("quipu_query", {"query": query, "verbose": True})]
@@ -198,6 +244,22 @@ def is_tracked_alias(link, target, files):
         else:
             parts.append(part)
     return bool(parts) and Path(*parts) in files
+
+
+def verify_agent_references(binary, database, paths):
+    """Require real imported document pointers, never mint substitutes."""
+    from urllib.parse import quote
+
+    subjects = [
+        "http://aegis.gastown.local/ontology/doc/quipu/" + quote(p, safe="")
+        for p in paths
+    ]
+    expected = dict(zip(subjects, paths))
+    if (
+        set(indexed_labels(binary, database, subjects)) != set(subjects)
+        or indexed_labels(binary, database, subjects, file_paths=True) != expected
+    ):
+        raise ValueError("repository agent references missing after import")
 
 
 def materialize_release(source, revision, destination):
@@ -316,6 +378,7 @@ def build(revision, source, tooling, binary, bobbin, output):
     control = next((p for p in ("README.md", "README.rst") if p in paths), None)
     if control is None:
         raise ValueError("release lacks a supported public corpus positive control")
+    references = agent_references(source, paths)
     private = output.parent / "build-private"
     private.mkdir(mode=0o700)
 
@@ -337,24 +400,7 @@ def build(revision, source, tooling, binary, bobbin, output):
     )
     index = private / "index"
     (index / ".bobbin").mkdir(parents=True)
-    (index / ".bobbin/config.toml").write_text("""quipu_push_chunks = true
-
-[index]
-include = [
-  "**/*.rs", "**/*.md", "**/*.rst", "**/*.toml", "**/*.yml", "**/*.yaml", "**/*.py",
-  "**/*.sh", "**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.ttl", "**/*.go",
-]
-exclude = [
-  "**/target/**", "**/.git/**", "**/.bobbin/**", "**/.agents/**", "**/.claude/**", "**/.codex/**",
-  "**/.mcp.json", "**/CLAUDE.local.md", "**/node_modules/**", "**/book/book/**", "**/vendor/**",
-]
-use_gitignore = true
-entities = false
-
-[embedding]
-model = "all-MiniLM-L6-v2"
-batch_size = 64
-""")
+    (index / ".bobbin/config.toml").write_text(INDEX_CONFIG)
     env = isolated_environment(private)
     run(
         [
@@ -509,19 +555,7 @@ batch_size = 64
     ):
         raise ValueError("repository receiver did not admit a non-stub corpus")
     run([binary, "import", "promote", imported["share_id"], "--db", receiver])
-    positive = run(
-        [
-            binary,
-            "query",
-            "SELECT ?s WHERE { ?s <http://aegis.gastown.local/ontology/filePath> "
-            + json.dumps(control)
-            + " } LIMIT 1",
-            "--db",
-            receiver,
-        ]
-    )
-    if re.search(r"\n1 results\s*$", positive) is None:
-        raise ValueError("repository corpus positive control missing after import")
+    verify_agent_references(binary, receiver, (control, *references))
     run(
         [
             "python3",
@@ -535,7 +569,11 @@ batch_size = 64
     if run(["git", "-C", source, "status", "--porcelain"]).strip():
         raise ValueError("indexing changed the exact repository source")
     shutil.move(stage, output)
-    return {"triples": imported["triples"]["accepted"], "positive_file": control}
+    return {
+        "triples": imported["triples"]["accepted"],
+        "positive_file": control,
+        "agent_references": list(references),
+    }
 
 
 if __name__ == "__main__":
