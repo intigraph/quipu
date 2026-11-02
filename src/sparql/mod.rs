@@ -58,6 +58,7 @@ mod construct;
 mod count_cover;
 pub(crate) mod count_mmap;
 mod count_optional;
+mod count_star;
 mod count_state;
 mod count_stream;
 mod count_values_pushdown;

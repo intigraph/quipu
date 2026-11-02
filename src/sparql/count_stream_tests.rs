@@ -662,3 +662,70 @@ fn values_pushdown_moves_only_item_conjuncts() {
         .is_none()
     );
 }
+
+/// aegis-xdvg.6: the single-pass star matches the per-pattern scans exactly,
+/// and declines (still exact) on two encodings of one term or without the
+/// covering index.
+#[test]
+fn star_pass_matches_and_declines_exactly() {
+    let mut store = fixture();
+    let board = store.lookup("http://example.org/board").unwrap().unwrap();
+    seed(
+        &mut store,
+        board,
+        r#"ex:multi a ex:Issue ; ex:id "multi" ; ex:status "open", "blocked" ;
+             ex:created "2026-10-03T00:00:00Z"^^xsd:dateTime, "2026-10-02T00:00:00Z"^^xsd:dateTime .
+           ex:b ex:created "2026-09-30T00:00:00Z"^^xsd:dateTime .
+           ex:foreign ex:created "2026-10-05T00:00:00Z"^^xsd:dateTime ."#,
+    );
+    let ctx = TemporalContext::default();
+    let passes = || super::super::count_star::PASSES.with(std::cell::Cell::get);
+    for body in [
+        "GRAPH ex:board { ?s a ex:Issue . OPTIONAL { ?s ex:id ?id } OPTIONAL { ?s ex:status ?st FILTER(?st != \"tombstone\") } }",
+        "GRAPH ex:board { ?s ex:created ?c . ?s a ex:Issue . OPTIONAL { ?s ex:status ?st } }",
+        "GRAPH ex:board { ?s a ex:Issue . ?s ex:id ?id . OPTIONAL { ?s ex:status ?st } OPTIONAL { ?s ex:created ?c } }",
+    ] {
+        for q in [
+            format!("SELECT (COUNT(*) AS ?n) WHERE {{ {body} }}"),
+            format!(
+                "SELECT ?st (COUNT(DISTINCT ?s) AS ?n) (COUNT(?st) AS ?m) WHERE {{ {body} }} GROUP BY ?st"
+            ),
+        ] {
+            let before = passes();
+            compare(&store, &q, &ctx, true);
+            assert!(passes() > before, "single pass not taken: {q}");
+        }
+    }
+    // Two encodings of one term on one subject: SQL keeps a representative of
+    // its choosing, so the pass declines and the scans answer.
+    seed(&mut store, board, r#"ex:dup a ex:Issue ; ex:p 5 ."#);
+    let dup = store.lookup("http://example.org/dup").unwrap().unwrap();
+    let p = store.lookup("http://example.org/p").unwrap().unwrap();
+    // A legacy store's spelling of the same integer: the write path now
+    // canonicalizes it, so only an older store holds both encodings.
+    let legacy = Value::Typed {
+        lexical: "5".into(),
+        datatype: crate::namespace::XSD_INTEGER.into(),
+    };
+    store
+        .conn
+        .execute(
+            "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+             SELECT e, a, ?1, g, tx, valid_from, NULL, 1 FROM facts WHERE e = ?2 AND a = ?3",
+            rusqlite::params![legacy.to_bytes(), dup, p],
+        )
+        .unwrap();
+    let q = "SELECT ?v (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue . OPTIONAL { ?s ex:p ?v } } } GROUP BY ?v";
+    let before = passes();
+    compare(&store, q, &ctx, true);
+    assert_eq!(passes(), before, "two encodings of one term must decline");
+    // Without the covering index the existing scans run.
+    store
+        .conn
+        .execute_batch("DROP INDEX idx_current_gea")
+        .unwrap();
+    let q = "SELECT (COUNT(*) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue . OPTIONAL { ?s ex:id ?id } } }";
+    let before = passes();
+    compare(&store, q, &ctx, true);
+    assert_eq!(passes(), before, "no covering index must decline");
+}

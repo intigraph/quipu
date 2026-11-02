@@ -162,6 +162,9 @@ pub(super) fn visit(
             right,
             expression,
         } => {
+            if super::count_star::try_visit(store, pattern, ctx, seed, emit)? {
+                return Ok(());
+            }
             let mut emitted = 0;
             let mut probe = super::count_optional::Probe::default();
             visit(store, left, ctx, seed, &mut |row| {
