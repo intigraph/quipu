@@ -246,10 +246,21 @@ consumers can re-check it (`shuttle verify`). Under
 `aegis:VerifierRegistration`, or whose signature does not verify over the
 staged fields under any of the agent's registered keys is refused before it
 commits — forged and tampered transitions become unwritable rather than
-merely detectable. The registry read spans every graph (shuttle's convention
-keeps registrations in a never-frozen `dataKind=identity` named graph);
-protecting the registry itself from unauthorized writes is `enforce_authority`'s
-job, exactly as for signed decisions.
+merely detectable. Keys must come from trust-root-governed registrations in
+ROOT, carrying an asserted `aegis:trustTier "agent"` or `"human"` admitted by
+a human trust-root bootstrap or signed registry amendment. A registration in a
+writable shuttle identity graph, or an unendorsed ROOT registration, cannot
+authorize a transition even when its signature is mathematically valid.
+
+Existing identity-graph registrations need explicit migration of their exact
+registration facts to ROOT and endorsement by a human trust-root holder through
+`quipu trust-root endorse-challenge` / `endorse` (see the signing-plane runbook).
+Copying facts to ROOT alone grants no trust. No unsigned grace period or fallback
+is provided. Revocation applies to new writes at the current store witness;
+backdating the transition's claimed time cannot restore a revoked key. Existing
+stored events are not retroactively revalidated. This rule also applies when
+workflow enforcement invokes transition verification with the legacy flag off.
+Do not enable flags or enroll/migrate live keys merely by installing source.
 
 ## Authority over graphs
 
