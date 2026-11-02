@@ -253,3 +253,99 @@ fn an_unknown_current_role_refuses_every_advance() {
     assert!(err.contains("UNKNOWN"), "{err}");
     assert_eq!(std::fs::read(&dir.path).unwrap(), b"corrupt");
 }
+
+#[test]
+fn concurrent_creators_cannot_both_win() {
+    let dir = journal_path();
+    let results: Vec<(String, bool)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..8)
+            .map(|n| {
+                let path = dir.path.clone();
+                scope.spawn(move || {
+                    let epoch = format!("epoch-{n}");
+                    let initial = Journal::Active {
+                        authority: Authority {
+                            epoch: epoch.clone(),
+                            ..authority()
+                        },
+                    };
+                    (epoch, create(&path, &initial).is_ok())
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let winners: Vec<_> = results.iter().filter(|(_, ok)| *ok).collect();
+    assert_eq!(winners.len(), 1, "exactly one creator wins: {results:?}");
+    match read(&dir.path) {
+        JournalState::Known(journal) => match *journal {
+            Journal::Active { authority } => assert_eq!(authority.epoch, winners[0].0),
+            other => panic!("created journal is {other:?}"),
+        },
+        JournalState::Unknown(why) => panic!("created journal is UNKNOWN: {why}"),
+    }
+    assert!(!sibling(&dir.path, ".staged").unwrap().exists());
+}
+
+#[test]
+fn create_never_replaces_a_later_role() {
+    let dir = journal_path();
+    create(&dir.path, &active()).unwrap();
+    advance(&dir.path, &active(), &retiring()).unwrap();
+    advance(&dir.path, &retiring(), &retired()).unwrap();
+    let before = std::fs::read(&dir.path).unwrap();
+    assert!(create(&dir.path, &active()).is_err());
+    assert_eq!(std::fs::read(&dir.path).unwrap(), before);
+}
+
+#[test]
+fn create_refuses_when_absence_cannot_be_established() {
+    let tmp = tempfile::tempdir().unwrap();
+    let file = tmp.path().join("not-a-dir");
+    std::fs::write(&file, b"x").unwrap();
+    // A path under a regular file: stat fails with something other than NotFound.
+    assert!(create(&file.join("lineage.journal"), &active()).is_err());
+}
+
+#[test]
+fn the_size_limit_admits_the_final_newline() {
+    let dir = journal_path();
+    // A maximum-length body with a correct trailer must reach the decoder:
+    // refused as an invalid record, never as oversized.
+    let body = " ".repeat(MAX_RECORD_BYTES);
+    let file = format!(
+        "{body}{TRAILER}{}\n",
+        hex::encode(Sha256::digest(body.as_bytes()))
+    );
+    std::fs::write(&dir.path, file).unwrap();
+    match read(&dir.path) {
+        JournalState::Unknown(why) => assert!(why.starts_with("invalid record"), "{why}"),
+        JournalState::Known(known) => panic!("read {known:?}"),
+    }
+}
+
+#[test]
+fn the_trailer_ends_in_exactly_one_newline() {
+    let dir = journal_path();
+    write_atomic(&dir.path, &active()).unwrap();
+    let good = std::fs::read(&dir.path).unwrap();
+    std::fs::write(&dir.path, &good[..good.len() - 1]).unwrap();
+    assert!(is_unknown(&read(&dir.path)), "missing final newline");
+    let mut doubled = good.clone();
+    doubled.push(b'\n');
+    std::fs::write(&dir.path, &doubled).unwrap();
+    assert!(is_unknown(&read(&dir.path)), "extra final newline");
+}
+
+#[cfg(unix)]
+#[test]
+fn journal_files_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = journal_path();
+    create(&dir.path, &active()).unwrap();
+    advance(&dir.path, &active(), &retiring()).unwrap();
+    for path in [dir.path.clone(), sibling(&dir.path, ".lock").unwrap()] {
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "{}", path.display());
+    }
+}
