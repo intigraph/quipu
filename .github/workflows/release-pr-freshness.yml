@@ -20,10 +20,16 @@ on:
 
 permissions: {}
 
-# One check at a time, newest wins. Not cancel-in-progress: a cancelled run would
-# leave nothing on the PR head, while a queued newer run supersedes the older one.
+# One check at a time PER SOURCE, newest wins. Not cancel-in-progress: a cancelled
+# run would leave nothing on the PR head, while a queued newer run supersedes the
+# older one. GitHub keeps one pending run per group and cancels the one it replaces,
+# so the group is keyed by event and head ref. With a single shared group, ANY pull
+# request into main (its job skipped) or a release-PR regeneration could replace a
+# pending main-push run, leaving the release PR's old success standing after main
+# moved: a stale success (#910 review). Successive pushes to main still supersede
+# each other, and successive heads of the same release PR do too.
 concurrency:
-  group: release-pr-freshness
+  group: release-pr-freshness-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: false
 
 jobs:

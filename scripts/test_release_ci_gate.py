@@ -146,7 +146,16 @@ fresh_on = fresh_doc.get("on", fresh_doc.get(True))
 assert fresh_on["push"]["branches"] == ["main"]
 assert set(fresh_on["pull_request"]["types"]) >= {"opened", "synchronize", "reopened"}
 assert fresh_doc["permissions"] == {}
+# A pending main-push verdict must never be replaced by a pull_request run, or the
+# release PR keeps a stale success (#910 review). Keyed by event and head ref, no
+# cancel-in-progress, and no job-level group that would re-share one queue.
+fresh_group = fresh_doc["concurrency"]["group"]
+assert "${{ github.event_name }}" in fresh_group, "freshness group must be keyed by event"
+assert "github.event.pull_request.head.ref || github.ref" in fresh_group, \
+    "freshness group must be keyed by head ref"
+assert fresh_doc["concurrency"].get("cancel-in-progress") is False
 fresh = fresh_doc["jobs"]["release-pr-freshness"]
+assert "concurrency" not in fresh, "a job-level group would re-share one queue"
 assert "github.event.pull_request.head.repo.full_name == github.repository" in fresh["if"]
 assert "startsWith(github.event.pull_request.head.ref, 'release-plz')" in fresh["if"]
 assert fresh["name"] != "Release PR freshness", "the job check must not shadow the status"

@@ -102,3 +102,33 @@ for name, release_fixture, rearm_fixture in readiness_cases:
         assert result.returncode != 0, name
         print("PASS:", name)
 print(f"{len(readiness_cases)} readiness mutation controls passed")
+
+# #910 review: a pull_request run must not replace a pending main-push freshness run.
+fresh_wf = (root / ".github/workflows/release-pr-freshness.yml").read_text()
+keyed = "  group: release-pr-freshness-${{ github.event_name }}-${{ github.event.pull_request.head.ref || github.ref }}\n"
+assert fresh_wf.count(keyed) == 1, "freshness concurrency fixture moved"
+freshness_cases = [
+    ("current freshness group", fresh_wf, True),
+    ("shared freshness group", fresh_wf.replace(keyed, "  group: release-pr-freshness\n", 1), False),
+    ("event-only freshness group", fresh_wf.replace(
+        keyed, "  group: release-pr-freshness-${{ github.event_name }}\n", 1), False),
+    ("cancel-in-progress freshness", fresh_wf.replace(
+        "  cancel-in-progress: false\n", "  cancel-in-progress: true\n", 1), False),
+    ("job-level shared freshness group", fresh_wf.replace(
+        "    name: Check release PR freshness\n",
+        "    name: Check release PR freshness\n    concurrency:\n      group: release-pr-freshness\n", 1), False),
+]
+for name, fresh_fixture, expected in freshness_cases:
+    with tempfile.TemporaryDirectory(prefix="freshness-contract-") as directory:
+        path = Path(directory) / ".github/workflows"
+        path.mkdir(parents=True)
+        (path / "ci.yml").write_text(ci)
+        (path / "release.yml").write_text(release)
+        (path / "release-ci-ready.yml").write_text(
+            (root / ".github/workflows/release-ci-ready.yml").read_text())
+        (path / "release-pr-freshness.yml").write_text(fresh_fixture)
+        result = subprocess.run([sys.executable, str(root / "scripts/test_release_ci_gate.py")],
+                                cwd=directory, capture_output=True, text=True)
+        assert (result.returncode == 0) == expected, (name, result.stderr[-400:])
+        print("PASS:", name)
+print(f"{len(freshness_cases)} freshness concurrency controls passed")
