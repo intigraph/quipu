@@ -143,6 +143,18 @@ missing="$(printf '%s\n' "$missing" | while read -r h; do
   mech="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$MECHANICS_RE" || true)"
   # Every file it touched is release mechanics, and it touched at least one.
   if [[ "$files" -gt 0 && "$files" -eq "$mech" ]]; then continue; fi
+  # The Python crate pins the core version too. Admit its synchronization only
+  # for the exact canonical release subject (including GitHub's squash suffix),
+  # matching this section, and only canonical package version changes in Cargo data.
+  subject="$(git log -1 --format=%s "$h")"
+  release_subject="chore: release v${newest_ver}"
+  suffix="${subject#"$release_subject"}"
+  binding_mech="$(git show --name-only --format= "$h" | grep -cE '^(CHANGELOG\.md|Cargo\.(toml|lock)|bindings/python/Cargo\.(toml|lock))$' || true)"
+  if [[ "$subject" == "$release_subject" || ( "$subject" == "$release_subject"* && "$suffix" =~ ^\ \(#[0-9]+\)$ ) ]]; then
+    if [[ "$files" -gt 0 && "$files" -eq "$binding_mech" ]]; then
+      if python3 scripts/check-release-mechanics.py "$h" "$newest_ver"; then continue; fi
+    fi
+  fi
   echo "$h"
 done)"
 
