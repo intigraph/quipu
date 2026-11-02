@@ -224,26 +224,33 @@ def indexed_labels(binary, database, subjects, *, file_paths=False):
     return labels
 
 
-def is_tracked_alias(link, target, files):
+def is_tracked_alias(link, target, files, directories):
     """True when symlink ``link`` -> ``target`` names a tracked regular file.
 
     Agent files such as CLAUDE.md -> AGENTS.md are aliases of a file the
     release already carries. Absolute, escaping, dangling and chained links,
-    and links to directories, are not.
+    and links to directories, are not. The target is walked the way the
+    kernel resolves it: every component before the last, including the one
+    a ``..`` leaves, must be a tracked directory. A missing component, a file
+    or another link there fails (ENOENT/ENOTDIR), so ``missing/../AGENTS.md``,
+    ``CLAUDE.md/../AGENTS.md`` and ``AGENTS.md/`` are not aliases.
     """
-    if not target or target.startswith("/"):
+    if not target or target.startswith("/") or target.endswith("/"):
         return False
-    parts = []
-    for part in (Path(link).parent / target).parts:
+    root = Path(".")
+    here = Path(link).parent
+    for part in target.split("/"):
         if part in ("", "."):
             continue
+        if here != root and here not in directories:
+            return False
         if part == "..":
-            if not parts:
+            if here == root:
                 return False
-            parts.pop()
+            here = here.parent
         else:
-            parts.append(part)
-    return bool(parts) and Path(*parts) in files
+            here = here / part
+    return here != root and here in files
 
 
 def verify_agent_references(binary, database, paths):
@@ -278,11 +285,13 @@ def materialize_release(source, revision, destination):
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
         members = bundle.getmembers()
         files = {Path(member.name) for member in members if member.isfile()}
+        directories = {Path(member.name) for member in members if member.isdir()}
+        directories.update(parent for path in files for parent in path.parents)
         for member in members:
             relative = Path(member.name)
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValueError("unsupported tracked release member")
-            if member.issym() and is_tracked_alias(relative, member.linkname, files):
+            if member.issym() and is_tracked_alias(relative, member.linkname, files, directories):
                 continue
             if not (member.isfile() or member.isdir()):
                 raise ValueError("unsupported tracked release member")

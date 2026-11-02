@@ -450,6 +450,8 @@ class ReleaseAliases(unittest.TestCase):
         (source / "AGENTS.md").write_text("agent guide\n")
         (source / "docs").mkdir()
         (source / "docs/guide.md").write_text("guide\n")
+        (source / "docs/deep").mkdir()
+        (source / "docs/deep/note.md").write_text("note\n")
         for name, target in links.items():
             (source / name).symlink_to(target)
         subprocess.run(["git", "-C", str(source), "add", "-A"], check=True)
@@ -464,12 +466,20 @@ class ReleaseAliases(unittest.TestCase):
 
     def test_alias_of_tracked_file_is_skipped_and_target_copied_once(self):
         with tempfile.TemporaryDirectory() as folder:
-            copied = self.release(folder, {"CLAUDE.md": "AGENTS.md", "GEMINI.md": "AGENTS.md",
-                                           "docs/also.md": "guide.md"})
+            aliases = {"CLAUDE.md": "AGENTS.md", "GEMINI.md": "AGENTS.md",
+                       "docs/also.md": "guide.md", "docs/CLAUDE.md": "../AGENTS.md",
+                       "docs/deep/up.md": "../../AGENTS.md", "dot.md": "./docs/../AGENTS.md",
+                       "docs/deep/side.md": "../deep/note.md"}
+            copied = self.release(folder, aliases)
             self.assertEqual((copied / "AGENTS.md").read_text(), "agent guide\n")
             self.assertEqual((copied / "docs/guide.md").read_text(), "guide\n")
-            for alias in ("CLAUDE.md", "GEMINI.md", "docs/also.md"):
+            for alias in aliases:
                 self.assertFalse((copied / alias).exists() or (copied / alias).is_symlink())
+
+    def test_subdirectory_escape_refuses(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "unsupported tracked release member"):
+                self.release(folder, {"docs/LINK.md": "../../outside.md"})
 
     def test_other_links_refuse(self):
         for name, target in {
@@ -478,6 +488,12 @@ class ReleaseAliases(unittest.TestCase):
             "dangling": "missing.md",
             "directory": "docs",
             "chained": "CLAUDE.md",
+            # Lexically AGENTS.md, but the kernel fails ENOENT/ENOTDIR first.
+            "through a missing directory": "missing/../AGENTS.md",
+            "through a link": "CLAUDE.md/../AGENTS.md",
+            "through a file": "AGENTS.md/../AGENTS.md",
+            "trailing slash": "AGENTS.md/",
+            "escaping from a subdirectory": "docs/../../outside.md",
         }.items():
             links = {"CLAUDE.md": "AGENTS.md", "LINK.md": target}
             with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
