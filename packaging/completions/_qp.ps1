@@ -50,6 +50,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('validate', 'validate', [CompletionResultType]::ParameterValue, 'Validate a data file against a shapes file without writing')
             [CompletionResult]::new('repl', 'repl', [CompletionResultType]::ParameterValue, 'Open an interactive SPARQL prompt')
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query')
+            [CompletionResult]::new('databook', 'databook', [CompletionResultType]::ParameterValue, 'Export a graph as a DataBook, or import a DataBook''s graph data')
             [CompletionResult]::new('render', 'render', [CompletionResultType]::ParameterValue, 'Render graph data into files in an owned directory')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show store statistics')
             [CompletionResult]::new('prime', 'prime', [CompletionResultType]::ParameterValue, 'Print the agent primer and a bounded, read-only summary of the store')
@@ -413,6 +414,40 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;databook' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Write one graph, current or as of a past point, as a DataBook')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Load a DataBook''s graph blocks in one write; never runs its queries')
+            break
+        }
+        'qp;databook;export' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'tx')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'valid-at')
+            [CompletionResult]::new('--id', '--id', [CompletionResultType]::ParameterName, 'id')
+            [CompletionResult]::new('--title', '--title', [CompletionResultType]::ParameterName, 'title')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'version')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--with-shapes', '--with-shapes', [CompletionResultType]::ParameterName, 'with-shapes')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;databook;import' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'graph')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'timestamp')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'actor')
+            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'source')
+            [CompletionResult]::new('--with-shapes', '--with-shapes', [CompletionResultType]::ParameterName, 'with-shapes')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

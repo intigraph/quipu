@@ -459,6 +459,54 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(databook)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__databook_commands" \
+"*::: :->databook" \
+&& ret=0
+
+    case $state in
+    (databook)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-databook-command-$line[1]:"
+        case $line[1] in
+            (export)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--tx=[]:VALUE:_default' \
+'*--valid-at=[]:VALUE:_default' \
+'*--id=[]:VALUE:_default' \
+'*--title=[]:VALUE:_default' \
+'*--version=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--out=[]:VALUE:_default' \
+'--with-shapes[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--graph=[]:VALUE:_default' \
+'*--timestamp=[]:VALUE:_default' \
+'*--actor=[]:VALUE:_default' \
+'*--source=[]:VALUE:_default' \
+'--with-shapes[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-file-databook-md:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (render)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -2083,6 +2131,7 @@ _qp_commands() {
 'validate:Validate a data file against a shapes file without writing' \
 'repl:Open an interactive SPARQL prompt' \
 'export:Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query' \
+'databook:Export a graph as a DataBook, or import a DataBook'\''s graph data' \
 'render:Render graph data into files in an owned directory' \
 'stats:Show store statistics' \
 'prime:Print the agent primer and a bounded, read-only summary of the store' \
@@ -2280,6 +2329,24 @@ _qp__subcmd__compose_commands() {
 _qp__subcmd__cord_commands() {
     local commands; commands=()
     _describe -t commands 'qp cord commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__databook_commands] )) ||
+_qp__subcmd__databook_commands() {
+    local commands; commands=(
+'export:Write one graph, current or as of a past point, as a DataBook' \
+'import:Load a DataBook'\''s graph blocks in one write; never runs its queries' \
+    )
+    _describe -t commands 'qp databook commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__databook__subcmd__export_commands] )) ||
+_qp__subcmd__databook__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp databook export commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__databook__subcmd__import_commands] )) ||
+_qp__subcmd__databook__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp databook import commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__db_commands] )) ||
 _qp__subcmd__db_commands() {

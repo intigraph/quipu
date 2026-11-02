@@ -47,6 +47,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand validate 'Validate a data file against a shapes file without writing'
             cand repl 'Open an interactive SPARQL prompt'
             cand export 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query'
+            cand databook 'Export a graph as a DataBook, or import a DataBook''s graph data'
             cand render 'Render graph data into files in an owned directory'
             cand stats 'Show store statistics'
             cand prime 'Print the agent primer and a bounded, read-only summary of the store'
@@ -370,6 +371,37 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;databook'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand export 'Write one graph, current or as of a past point, as a DataBook'
+            cand import 'Load a DataBook''s graph blocks in one write; never runs its queries'
+        }
+        &'qp;databook;export'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'graph'
+            cand --tx 'tx'
+            cand --valid-at 'valid-at'
+            cand --id 'id'
+            cand --title 'title'
+            cand --version 'version'
+            cand --timestamp 'timestamp'
+            cand --out 'out'
+            cand --with-shapes 'with-shapes'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;databook;import'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'graph'
+            cand --timestamp 'timestamp'
+            cand --actor 'actor'
+            cand --source 'source'
+            cand --with-shapes 'with-shapes'
             cand -h 'Print help'
             cand --help 'Print help'
         }
