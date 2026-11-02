@@ -75,7 +75,7 @@ pub struct StringNarrow {
     test: Test,
     fold: Fold,
     needle: String,
-    regex: Option<regex::Regex>,
+    regex: Option<std::sync::Arc<regex::Regex>>,
     plain_literal: bool,
 }
 
