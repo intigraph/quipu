@@ -38,7 +38,8 @@ const TRAILER: &str = "\nsha256:";
 /// What a read established. `Unknown` is never treated as legacy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum JournalState {
-    Known(Journal),
+    // Boxed: a Journal record is far larger than the Unknown reason.
+    Known(Box<Journal>),
     Unknown(String),
 }
 
@@ -78,7 +79,7 @@ pub(super) fn read(path: &Path) -> JournalState {
         Ok(Record {
             payload: Payload::Journal { journal },
             ..
-        }) => JournalState::Known(journal),
+        }) => JournalState::Known(Box::new(journal)),
         Ok(_) => unknown("not a journal record"),
         Err(e) => unknown(format!("invalid record: {e}")),
     }
@@ -175,7 +176,7 @@ pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result
     lock.lock()
         .map_err(|e| refused(format!("lock unavailable: {e}")))?;
     let result = match read(path) {
-        JournalState::Known(current) if current == *expected => legal(&current, next)
+        JournalState::Known(current) if *current == *expected => legal(&current, next)
             .map_err(refused)
             .and_then(|()| write_atomic(path, next)),
         JournalState::Known(_) => Err(refused("stored role is not the expected one")),

@@ -93,7 +93,7 @@ fn is_unknown(state: &JournalState) -> bool {
 fn a_created_journal_reads_back_and_cannot_be_recreated() {
     let dir = journal_path();
     create(&dir.path, &active()).unwrap();
-    assert_eq!(read(&dir.path), JournalState::Known(active()));
+    assert_eq!(read(&dir.path), JournalState::Known(Box::new(active())));
     assert!(create(&dir.path, &active()).is_err(), "no second creation");
     let other = journal_path();
     assert!(
@@ -128,7 +128,7 @@ fn anything_unreadable_is_unknown_never_legacy() {
     std::fs::write(&dir.path, &edited).unwrap();
     match read(&dir.path) {
         JournalState::Unknown(why) => assert!(why.contains("checksum"), "{why}"),
-        known => panic!("an edited journal read as {known:?}"),
+        JournalState::Known(known) => panic!("an edited journal read as {known:?}"),
     }
 
     let (body, _) = text.rsplit_once(TRAILER).unwrap();
@@ -159,7 +159,7 @@ fn anything_unreadable_is_unknown_never_legacy() {
     std::fs::write(&dir.path, with_checksum(&operation)).unwrap();
     match read(&dir.path) {
         JournalState::Unknown(why) => assert!(why.contains("not a journal"), "{why}"),
-        known => panic!("an operation record read as {known:?}"),
+        JournalState::Known(known) => panic!("an operation record read as {known:?}"),
     }
 }
 
@@ -168,9 +168,9 @@ fn the_local_retirement_sequence_advances() {
     let dir = journal_path();
     create(&dir.path, &active()).unwrap();
     advance(&dir.path, &active(), &retiring()).unwrap();
-    assert_eq!(read(&dir.path), JournalState::Known(retiring()));
+    assert_eq!(read(&dir.path), JournalState::Known(Box::new(retiring())));
     advance(&dir.path, &retiring(), &retired()).unwrap();
-    assert_eq!(read(&dir.path), JournalState::Known(retired()));
+    assert_eq!(read(&dir.path), JournalState::Known(Box::new(retired())));
 }
 
 #[test]
@@ -193,9 +193,9 @@ fn a_pending_destination_activates_only_its_successor() {
     .unwrap();
     assert_eq!(
         read(&dir.path),
-        JournalState::Known(Journal::Active {
+        JournalState::Known(Box::new(Journal::Active {
             authority: successor
-        })
+        }))
     );
 }
 
