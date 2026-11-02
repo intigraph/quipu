@@ -89,6 +89,10 @@ impl CommitFence {
         let Some((path, authority)) = self.journal.get() else {
             return Ok(());
         };
+        // Never wait here: the commit hook runs under SQLite's writer lock.
+        // Contention means retirement holds the latch; refuse this commit but
+        // do not revoke, since retirement may still abort. The journal decides.
+        let _latch = super::ownership_latch::try_shared(&super::ownership_latch::path_for(path))?;
         super::ownership_journal::admits(path, authority).inspect_err(|e| {
             let _ = self.reason.set(e.to_string());
             self.revoke();
