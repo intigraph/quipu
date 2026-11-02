@@ -16,8 +16,21 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      - 'scripts/prepare-explorer-default.mjs'
+      - 'scripts/test-explore-default.cjs'
+      - '.github/actions/wasm-explorer-build/**'
+      - 'wasm/explorer/**'
+      - 'src/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'shapes/**'
+      - 'hooks/**'
+      - '.cargo/**'
       # The Agent Primer page includes the primer source (aegis-t7h).
       - 'src/primer.md'
   push:
@@ -30,8 +43,21 @@ on:
       - 'ui/**'
       - 'scripts/stage-datalinks.sh'
       - 'scripts/smoke-datalinks.cjs'
+      - 'scripts/test-explore-loading.cjs'
       - 'scripts/select-explorer-release.py'
       - 'scripts/test-select-explorer-release.py'
+      - 'scripts/prepare-explorer-default.mjs'
+      - 'scripts/test-explore-default.cjs'
+      - '.github/actions/wasm-explorer-build/**'
+      - 'wasm/explorer/**'
+      - 'src/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'shapes/**'
+      - 'hooks/**'
+      - '.cargo/**'
       - 'src/primer.md'
   workflow_dispatch:
 
@@ -55,7 +81,7 @@ jobs:
         with:
           tool: mdbook,mdbook-mermaid
 
-      # Package the committed text share and copy the renderer. No Rust.
+      # Package the committed text share and copy the renderer.
       - name: Test explorer release selection
         run: python3 scripts/test-select-explorer-release.py
 
@@ -63,9 +89,9 @@ jobs:
         run: scripts/stage-datalinks.sh
 
       # The "Explore this repository's graph" page (aegis-tpqccc) runs quipu
-      # compiled to wasm and imports the release's own knowledge pack. Both are
-      # RELEASE ASSETS, downloaded here rather than committed — so the repo stays
-      # source-only and this build still needs no Rust.
+      # compiled to wasm and imports a released knowledge pack. The engine is
+      # built from this checkout below, so a legacy release cannot silently
+      # disable the default-store fast path. All generated assets stay out of git.
       #
       # They are staged INTO the site rather than fetched by the page at runtime
       # because a browser cannot fetch them: GitHub serves release-asset
@@ -110,6 +136,20 @@ jobs:
             test -s "$DEST/$FILE" || { echo "missing staged explorer asset: $FILE"; exit 1; }
           done
 
+      - name: Build the matching explorer engine and runtime
+        uses: ./.github/actions/wasm-explorer-build
+
+      - name: Stage the checkout's engine over the released bundle
+        run: |
+          set -euo pipefail
+          DEST=docs/book/src/explore/pkg
+          cp -a wasm/explorer/pkg/. "$DEST/"
+          mkdir -p "$DEST/runtime"
+          cp -a wasm/explorer/runtime/dist/. "$DEST/runtime/"
+
+      - name: Require the validated default store and build-pinned proof
+        run: node scripts/prepare-explorer-default.mjs docs/book/src/explore
+
       - name: Build book
         run: mdbook build docs/book
 
@@ -141,6 +181,16 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.63.0
           npx playwright install --with-deps chromium
           node scripts/smoke-datalinks.cjs
+
+      - name: Verify explorer loading and retry in a browser
+        env:
+          SITE_DIR: docs/book/book/explore
+          OUT_DIR: ${{ runner.temp }}/explore-loading
+        run: |
+          bash scripts/check-explorer-published.test.sh
+          xvfb-run -a node scripts/test-explore-loading.cjs
+          test -s docs/book/book/explore/default-store.db.gz
+          node scripts/test-explore-default.cjs
 
       - name: Upload artifact
         if: github.ref == 'refs/heads/main'

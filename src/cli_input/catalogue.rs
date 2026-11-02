@@ -199,3 +199,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("audit quarantine list", "", 0, 0, "verdict", "json"),
     spec!("audit quarantine purge", "", 0, 0, "graph before older-than", "all json"),
 ];
+
+#[path = "option_help.rs"]
+mod descriptions;
+pub(super) use descriptions::option_help;

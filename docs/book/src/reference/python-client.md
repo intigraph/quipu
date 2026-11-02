@@ -7,6 +7,17 @@ wrapper, not a re-implementation: request shapes, auth, and error surfaces are
 kept honest against the REST reference, and anything not listed here is a call
 away with `curl`.
 
+## Local Python engine
+
+For an in-process store instead of HTTP, the separate `quipu-kg` package
+provides `import quipu`. It is included in the release source under
+[`bindings/python`](https://github.com/intigraph/quipu/tree/quipu-ai-v0.16.6/bindings/python);
+build its wheel with the linked README's instructions. It is not yet published
+on PyPI. Its initial operation set includes query, export, entity history,
+knot, episode, set, retract and shapes; it does not claim full native-tool
+parity. Use the REST client below for a database served by `quipu-server`,
+rather than opening that same file from the local library.
+
 ## Installation
 
 ```bash

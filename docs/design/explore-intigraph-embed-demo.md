@@ -43,3 +43,16 @@ failures, verification refusal, real Ask rows and the native bad-write control.
 The navigation acceptance compares relations with independent SPARQL queries,
 including history, deep links, late replies, another pack and invalid IRIs.
 Future release artifacts may change the data and timing.
+
+Embedded loading state is also available to a cross-origin host. With `embed=1`,
+the loader posts `{type: "quipu:state", state, pendant, stage}` to its parent
+at the same transitions as `html[data-load-state]` and `#graph-loader[data-state]`.
+`state` is `loading`, `ready`, or `error`; `stage` is `engine`, `pendant`,
+`indexing`, `ready`, or `error`. `pendant` is the label `repository` for the
+bundled release pack, otherwise `selected`. Selected file names, URL credentials
+and graph content are excluded. Standalone pages do not broadcast these events.
+
+A host must check both the message origin and `event.source` against its iframe.
+Only `ready` certifies completed graph loading; resize, iframe load and map-preview
+events do not. A host may keep its section hidden and remove it after a deadline
+or `error`. A short deadline can hide a healthy cold import that takes longer.
