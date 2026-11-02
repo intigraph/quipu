@@ -234,6 +234,7 @@ impl Store {
     ) -> Result<Self> {
         // Every initializing constructor checks sticky ownership before DDL,
         // including deserialized stores; unsupported providers cannot downgrade.
+        super::ownership_startup::require_unenrolled(&conn)?;
         let inspected = Self::with_connection(conn);
         inspected.ownership_state()?;
         let conn = inspected.conn;
@@ -345,8 +346,9 @@ impl Store {
         store.attached_graphs = attach::attached_graph_ids(&store.conn, attachments)?;
         // Installed after the migrations: from here on every outer commit on
         // this handle re-checks ownership (see `ownership_fence`).
-        if let Some(fence) = super::ownership_fence::commit_fence(&store.conn) {
-            store.conn.commit_hook(Some(fence))?;
+        store.ownership_fence = super::ownership_fence::CommitFence::new(&store.conn);
+        if let Some(fence) = store.ownership_fence.clone() {
+            store.conn.commit_hook(Some(move || fence.refuses()))?;
         }
         Ok(store)
     }
@@ -542,6 +544,7 @@ impl Store {
         let _ = crate::sparql::status_pushdown::register(&conn);
         Self {
             conn,
+            ownership_fence: None,
             signing: None,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
@@ -549,6 +552,7 @@ impl Store {
             resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
+            import_policy_config: crate::config::ImportPolicyConfig::default(),
             shacl_config: ShaclConfig::default(),
             projection_defs: Vec::new(),
             write_shapes: None,

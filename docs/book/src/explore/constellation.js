@@ -1,3 +1,4 @@
+import { constellationQueries } from "./constellation-queries.js";
 import { entityIri, readEntity, renderEntity } from "./entity.js";
 import { showRelation, showHistory } from "./relation.js";
 
@@ -253,23 +254,15 @@ export function createConstellation({ query, prefixes, short, inspect, factHisto
   }
   addText($("graph-legend"), "span", "Knot size: degree (distinct links in this loaded view). Cords: topic/type groups.");
   return {
-    async load(preview = null, onSnapshot = null) {
+    async load(preview = null, onSnapshot = null, { verified = false } = {}) {
       const ticket = ++generation; ready = false; ++selection;
-      const sparql = `${prefixes}
-SELECT ?subject ?predicate ?object WHERE {
-  ?s ?p ?o . FILTER(STRSTARTS(STR(?s), "${K}"))
-  BIND(STR(?s) AS ?subject) BIND(STR(?p) AS ?predicate) BIND(STR(?o) AS ?object)
-} LIMIT 2000`;
+      const queries = constellationQueries(prefixes), sparql = queries.knowledge;
       $("graph-showq").onclick = (e) => { e.preventDefault(); $("sparql").value = sparql; $("sparql").scrollIntoView(); };
       const result = preview ? preview.knowledge : await query(sparql);
       if (ticket !== generation) return;
       // Join to the real indexed code/doc nodes, including their own type and
       // label. Missing targets never become fabricated code nodes in this view.
-      const files = preview ? preview.files : await query(`${prefixes} SELECT ?subject ?kind ?path WHERE {
-        ?s rdf:type ?type ; aegis:filePath ?path .
-        FILTER(?type = aegis:CodeModule || ?type = aegis:Document)
-        BIND(STR(?s) AS ?subject) BIND(STR(?type) AS ?kind)
-      } ORDER BY ?path LIMIT 2000`);
+      const files = preview ? preview.files : await query(queries.files);
       if (ticket !== generation) return;
       if (onSnapshot) await onSnapshot({ knowledge: result, files });
       if (ticket !== generation) return;
@@ -297,10 +290,10 @@ SELECT ?subject ?predicate ?object WHERE {
       $("graph-search").value = ""; $("graph-results").replaceChildren();
       $("node-card").textContent = fallback
         ? "This pack has no contributor stories. Browse its files, or load a newer repository pack." : "Select a knot or relation to inspect its facts.";
-      ready = !preview;
+      ready = !preview || verified;
       const requested = new URL(location.href).searchParams.get("entity");
       const first = nodes.get(K + "vision") ?? nodes.values().next().value;
-      if (preview) {
+      if (preview && !verified) {
         const initial = nodes.get(requested) ?? nodes.get(K + "vision") ?? nodes.values().next().value;
         if (initial) await open(initial.id, "none");
         draw();

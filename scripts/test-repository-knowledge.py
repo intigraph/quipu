@@ -69,6 +69,103 @@ class ReleaseSnapshot(unittest.TestCase):
             self.assertFalse((source / ".bobbin").exists())
 
 
+class AgentReferences(unittest.TestCase):
+    def test_current_tracked_sources_and_each_missing_or_empty_member(self):
+        paths = subprocess.check_output(
+            ["git", "-C", str(ROOT), "ls-files", "-z"], text=True
+        ).split("\0")
+        required = builder.agent_references(ROOT, paths)
+        self.assertEqual(len(required), 4)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for path in required:
+                target = root / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((ROOT / path).read_bytes())
+            for path in required:
+                with self.subTest(path=path):
+                    with self.assertRaisesRegex(ValueError, "agent reference missing"):
+                        builder.agent_references(root, [p for p in paths if p != path])
+                    target = root / path
+                    original = target.read_bytes()
+                    target.write_bytes(b"")
+                    with self.assertRaisesRegex(ValueError, "agent reference missing"):
+                        builder.agent_references(root, paths)
+                    target.unlink()
+                    with self.assertRaisesRegex(ValueError, "agent reference missing"):
+                        builder.agent_references(root, paths)
+                    target.write_bytes(original)
+
+    def test_legacy_shared_entrypoint_checks_actual_tracked_sources(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/check-repository-agent-references.py"), str(ROOT)],
+            capture_output=True, text=True, check=True,
+        )
+        self.assertEqual(len(json.loads(result.stdout)["agent_references"]), 4)
+        self.assertFalse(json.loads(result.stdout)["receiver_checked"])
+
+    @unittest.skipUnless(os.environ.get("QUIPU_TEST_BIN"), "requires native test artifact")
+    def test_native_pointer_lookup_refuses_each_missing_reference(self):
+        from urllib.parse import quote
+
+        binary = Path(os.environ["QUIPU_TEST_BIN"])
+        paths = subprocess.check_output(
+            ["git", "-C", str(ROOT), "ls-files", "-z"], text=True
+        ).split("\0")
+        required = builder.agent_references(ROOT, paths)
+        with tempfile.TemporaryDirectory() as folder:
+            private = Path(folder)
+            source = private / "references.ttl"
+            triples = [
+                '<http://aegis.gastown.local/ontology/doc/quipu/'
+                + quote(path, safe="")
+                + '> <http://www.w3.org/2000/01/rdf-schema#label> '
+                + json.dumps(path) + ' ; <http://aegis.gastown.local/ontology/filePath> '
+                + json.dumps(path) + ' ; <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
+                + '<http://aegis.gastown.local/ontology/Document> .\n'
+                for path in required
+            ]
+            triples.append(
+                '<http://aegis.gastown.local/ontology/doc/quipu/README.md> '
+                '<http://www.w3.org/2000/01/rdf-schema#label> "README" ; '
+                '<http://aegis.gastown.local/ontology/filePath> "README.md" ; '
+                '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
+                '<http://aegis.gastown.local/ontology/Document> .\n'
+            )
+            for missing in [None, *range(len(required))]:
+                candidate = private / (str(missing) + ".db")
+                source.write_text("".join(t for i, t in enumerate(triples) if i != missing))
+                builder.command([binary, "knot", source, "--db", candidate], cwd=private)
+                if missing is None:
+                    builder.verify_agent_references(binary, candidate, required)
+                    result = builder.command(
+                        [sys.executable, ROOT / "scripts/check-repository-agent-references.py",
+                         ROOT, "--receiver", binary, candidate], cwd=private,
+                    )
+                    self.assertTrue(json.loads(result)["receiver_checked"])
+                else:
+                    with self.assertRaisesRegex(ValueError, "missing after import"):
+                        builder.verify_agent_references(binary, candidate, required)
+            # A label alone must not hide a lost or misdirected filePath.
+            wrong = "".join(triples).replace(
+                '<http://aegis.gastown.local/ontology/filePath> ' + json.dumps(required[0]),
+                '<http://aegis.gastown.local/ontology/filePath> "wrong.md"',
+            )
+            source.write_text(wrong)
+            candidate = private / "wrong-path.db"
+            builder.command([binary, "knot", source, "--db", candidate], cwd=private)
+            with self.assertRaisesRegex(ValueError, "missing after import"):
+                builder.verify_agent_references(binary, candidate, required)
+            source.write_text("".join(triples).replace(
+                ' ; <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
+                '<http://aegis.gastown.local/ontology/Document>', '', 1,
+            ))
+            candidate = private / "missing-document-type.db"
+            builder.command([binary, "knot", source, "--db", candidate], cwd=private)
+            with self.assertRaisesRegex(ValueError, "missing after import"):
+                builder.verify_agent_references(binary, candidate, required)
+
+
 class AlignmentCarrier(unittest.TestCase):
     def test_explicit_empty_positive_missing_corrupt_and_nonempty_negative(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -231,6 +328,16 @@ class Knowledge(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, "absent or ambiguous"),
             ):
                 self.render(lambda _: value)
+
+    def test_each_agent_reference_requires_its_real_index_pointer(self):
+        required = builder.agent_references(ROOT, [r["source"] for r in self.registry["records"]])
+        for record in self.registry["records"]:
+            if record["source"] not in required:
+                continue
+            subject = record["subject"]
+            with self.subTest(source=record["source"]):
+                with self.assertRaisesRegex(ValueError, "absent or ambiguous"):
+                    self.render(lambda s: None if s == subject else "indexed-label")
 
     def test_changed_source_refuses(self):
         path = self.root / self.registry["records"][0]["source"]

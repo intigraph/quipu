@@ -17,6 +17,9 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+mod ownership_startup;
+#[cfg(test)]
+mod ownership_startup_tests;
 pub(crate) mod release;
 pub use ownership::OwnershipState;
 #[cfg(test)]
@@ -113,6 +116,12 @@ use crate::vector_delegate::DelegatingVectorStore;
 
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
+    /// One admission pin and nonblocking check latch for this writer. Replacing
+    /// SQLite's single commit callback must never create a fresh admission.
+    /// Drop this reference before `conn`: its callback then owns the last
+    /// reader reference and releases it before the writer closes, preserving
+    /// SQLite's last-writer WAL/SHM cleanup.
+    ownership_fence: Option<Arc<ownership_fence::CommitFence>>,
     pub(crate) conn: Connection,
     /// v1 verdict-signing identity (ed25519, host-file key). When set, the
     /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
@@ -131,6 +140,7 @@ pub struct Store {
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
     pub(crate) labels_config: crate::config::LabelsConfig,
+    pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,

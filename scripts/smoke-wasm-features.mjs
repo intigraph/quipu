@@ -22,7 +22,10 @@ const worker = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8
 const html = `<!doctype html><title>Private WASM feature acceptance</title><script type="module">
 import { createEngineApi } from "/engine-api.js";
 const worker=new Worker('/worker.mjs',{type:'module'}); const pending=new Map(); let seq=0;
-worker.onmessage=({data:m})=>{const p=pending.get(m.id);pending.delete(m.id);p.resolve({...m,value:m.result})};
+worker.onmessage=({data:m})=>{
+ if(m.type==="quipu:load-progress") return;
+ const p=pending.get(m.id);pending.delete(m.id);p.resolve({...m,value:m.result});
+};
 worker.onerror=e=>{for(const p of pending.values())p.reject(new Error(e.message))};
 window.ask=msg=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});worker.postMessage({...msg,id})});
 window.quipu=createEngineApi(async msg=>{
@@ -48,7 +51,10 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (pathname === "/") { res.setHeader("Content-Type", "text/html"); res.end(html); return; }
-  if (pathname === "/engine-api.js") { res.setHeader("Content-Type", "text/javascript"); res.end(readFileSync(join(repo,"docs/book/src/explore/engine-api.js"))); return; }
+  if (["/engine-api.js", "/default-store.js", "/default-pack-proof.js", "/constellation-queries.js"].includes(pathname)) {
+    res.setHeader("Content-Type", "text/javascript");
+    res.end(readFileSync(join(repo, "docs/book/src/explore", pathname.slice(1)))); return;
+  }
   if (pathname === "/worker.mjs") { res.setHeader("Content-Type", "text/javascript"); res.end(worker); return; }
   if (pathname.endsWith("/query")) {
     let bytes = ""; for await (const chunk of req) bytes += chunk;

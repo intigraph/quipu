@@ -2,9 +2,9 @@
 # repository's graph" page (aegis-tpqccc).
 #
 # Deliberately separate from `wasm/harness`, which is an acceptance/bench
-# harness whose profile optimizes for speed so the wasm-vs-native ratio stays
-# honest. This one is a download, so it optimizes for SIZE, and its exported
-# surface is the page's API rather than a set of test scenarios.
+# harness. Its exported surface is the page's API rather than test scenarios.
+# Startup and interactive queries also need speed: shrinking the binary at the
+# expense of tens of seconds of worker CPU made the page impractical.
 #
 # Not a member of any workspace: it only ever builds for wasm32
 # (`.cargo/config.toml` pins the target), while the parent crate's tests,
@@ -39,10 +39,9 @@ owl = ["quipu/owl"]
 reactive-reasoner = ["quipu/reactive-reasoner"]
 
 [profile.release]
-# Size, not speed: every byte here is a byte the book page downloads before it
-# can show anything. The harness crate makes the opposite trade for the
-# opposite reason.
-opt-level = "z"
+# Optimize the actual receiver and query engine for latency. LTO and stripping
+# still limit download size; acceptance measures both bytes and cold startup.
+opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"

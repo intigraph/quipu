@@ -48,6 +48,10 @@ const server = http.createServer((req, res) => {
         && card.querySelector(".entity-types");
     }, id, { timeout: 30000 });
   };
+  // A reload imports the real pack again; use the initial startup budget,
+  // then keep the shorter entity-navigation checks below unchanged.
+  const initialAnswer = () => page.waitForFunction(() => document.querySelector("#sparql-out tbody tr"),
+    null, { timeout: 120000 });
   const current = () => page.locator("#node-card").getAttribute("data-entity");
   const verify = async (id) => {
     await settle(id);
@@ -80,7 +84,7 @@ const server = http.createServer((req, res) => {
   };
   try {
     await page.goto(target);
-    await page.waitForFunction(() => document.querySelector("#sparql-out tbody tr"), null, { timeout: 120000 });
+    await initialAnswer();
     check("first answer positive control", await page.locator("#sparql-out tbody tr").count() > 0);
     await page.click("#tab-map");
     await page.locator("#graph-targets .node-target").first().click();
@@ -97,16 +101,18 @@ const server = http.createServer((req, res) => {
     }
     for (const id of trail.slice(0, -1).reverse()) { await page.goBack(); await verify(id); }
     for (const id of trail.slice(1)) { await page.goForward(); await verify(id); }
-    const saved = page.url(); await page.reload(); await verify(trail.at(-1));
+    const saved = page.url(); await page.reload(); await initialAnswer(); await verify(trail.at(-1));
     check("reload restores Map tab", await page.locator("#tab-map").getAttribute("aria-selected") === "true");
     check("deep link survives reload", saved === page.url());
     // A valid IRI not in the overview can still be opened through an incoming link.
     const type = await page.evaluate(async () => {
-      const r = await window.quipu.query("SELECT ?iri WHERE { ?s a ?type . BIND(STR(?type) AS ?iri) } LIMIT 1");
+      // Use a low-degree real type so the independent full-link oracle below
+      // remains complete as the public repository pendant grows.
+      const r = await window.quipu.query("SELECT ?iri (COUNT(?s) AS ?members) WHERE { ?s a ?type . BIND(STR(?type) AS ?iri) } GROUP BY ?iri ORDER BY ?members LIMIT 1");
       return r.rows[0].iri;
     });
     const external = new URL(page.url()); external.searchParams.set("entity", type);
-    await page.goto(external.href); await verify(type);
+    await page.goto(external.href); await initialAnswer(); await verify(type);
     check("outside-overview entity has incoming links", await page.locator('#node-card button[data-direction="incoming"]').count() > 0);
     // Delay a real worker query, then navigate back while it is in flight.
     const delayed = await page.locator("#node-card .node-links button").first().getAttribute("data-entity");
@@ -151,7 +157,7 @@ const server = http.createServer((req, res) => {
     await verify(type);
     check("pack without vision preserves deep-linked entity", await current() === type);
     const invalid = new URL(page.url()); invalid.searchParams.set("entity", 'urn:bad> ?s ?p ?o');
-    await page.goto(invalid.href);
+    await page.goto(invalid.href); await initialAnswer();
     await page.waitForFunction(() => document.querySelector("#node-card").textContent.includes("Invalid entity IRI"));
     check("invalid deep link reports failure without stale facts", await page.locator("#node-card .node-links").count() === 0);
     const control = await page.evaluate(() => window.quipu.query("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1"));

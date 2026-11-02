@@ -7,6 +7,25 @@ summary to its defining tracked file. The native index must resolve every
 curated pointer before the build can proceed. Stored queries and validating
 shapes travel with the share.
 
+The generated CLI command index and MCP tool index, the Agent Primer page and
+its embedded source (`src/primer.md`) are required tracked, nonempty sources.
+In the current Python producer their source-bound summaries enter the curated
+registry, so the native index
+must resolve their real document pointers. After importing the finished pendant,
+the builder requires those same labelled pointers and exact paths in the
+receiver as well as README, through the typed `Document` reader.
+Missing sources, absent indexed pointers or a dropped receiver pointer stop
+publication. Both the current Python producer and the legacy shell builder use
+these checks. The pendant carries pointers and reviewed summaries, not full
+reference text; follow their revision-bound source links for the complete text.
+Generate and commit the references with `just docs generate` before cutting the
+release; `just docs generated-check` verifies the committed copies.
+It also generates man pages and completions using the catalogue's per-flag help;
+the CLI help and generated command index use those same descriptions.
+When a reference or primer changes, review its registry summary and update that
+record's `source_sha256` in `repository-knowledge.json`. A stale source witness
+refuses the build rather than silently binding a summary to different bytes.
+
 `alignments.ttl` is currently a valid empty SSSOM/RDF carrier. Its accompanying
 status file explicitly records zero approved mappings and seals those bytes.
 This is not evidence of global absence. Missing, changed or malformed input
