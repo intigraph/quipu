@@ -19,6 +19,19 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         ("align export", "author-prefix") => {
             Some("Declared prefix that turns a bare reviewer into an author_id")
         }
+        ("propose plan", "format") => Some("Plan output format: text or json"),
+        ("propose plan", "risk-threshold") => {
+            Some("Fail the plan above this 0-100 risk score (default: the deployment threshold)")
+        }
+        ("propose accept", "risk-threshold") => Some(
+            "Refuse acceptance above this 0-100 risk score (default: the deployment threshold)",
+        ),
+        ("propose accept", "accept-risk") => {
+            Some("Accept despite a plan over the risk threshold; requires --reason")
+        }
+        ("propose accept", "reason") => {
+            Some("Why an over-threshold plan is accepted; recorded with the decision")
+        }
         _ => common(name),
     }
 }
