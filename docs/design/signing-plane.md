@@ -383,13 +383,35 @@ instead of a synchronized multi-repo deploy.
 >   trusted. Retroactive ratification was rejected: the marker would then
 >   vouch for whatever key the registration held at the old instant,
 >   including one an agent swapped in and out before the root looked.
-> - **Not changed.** The transition gate (shuttle's identity graph, read at
->   `Scope::AllGraphs`) still trusts its registrations as written; it is the
->   same class of gap and is tracked separately.
+> - **S3b boundary.** This increment did not change the transition gate's
+>   `Scope::AllGraphs` read. The follow-up S3c below closes that separate gap.
 >
 > Tests: `src/mcp/verdict_trust_root_tests.rs` (self-enrollment, root-signed
 > registration, revocation, the historical rule) and the `aegis-c97o` block in
 > `src/governance/trust_root_tests.rs` (gate, amenders, chain, migration).
+
+### S3c — transition keys require human-root endorsement (aegis-udr9)
+
+The transition write gate now uses the same `Scope::Governed` ROOT registry as
+verdict verification. Registration type, verifier, key and asserted `trustTier`
+(`agent` or `human`) must all be in ROOT at the current store witness. Neither
+an ordinary ROOT registration nor an identity-graph registration can authenticate
+a transition by enrolling its own key. Named-graph tier markers and key shadows
+cannot contribute to a governed ROOT registration.
+
+The existing human bootstrap/amendment gate protects endorsements, rotations and
+revocations. New transitions use the current witness, never the transition's
+claimed timestamp: backdating cannot revive a revoked key. Previously stored
+events are not retroactively revalidated. The same trust check applies when
+direct workflow enforcement calls signature verification with the legacy flag
+off; default flags are unchanged.
+
+Operators must explicitly migrate reviewed named-graph registrations to ROOT and
+have the human root endorse them before submitting enforced transitions. There
+is no grace or unsigned fallback, automatic migration, new root or key ceremony
+in this source change. See the [migration runbook](../runbooks/trust-root-ceremony.md#shuttle-transition-registrations-aegis-udr9).
+The in-memory probe is `just demo transition-trust-root`; it uses ephemeral
+fixture keys and performs no live operations.
 
 "Who signs the registry" (deferred in v1) gets the same answer policies
 got: registration writes go through the write gate under a

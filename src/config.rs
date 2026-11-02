@@ -828,6 +828,14 @@ pub struct EmbeddingConfig {
     /// (default: 256). Caps the tensor size so an oversized `episode_body`
     /// can't blow up the sequence length or degrade embeddings (hq-7v0).
     pub max_sequence_length: usize,
+
+    /// Predicate IRIs whose values never enter an entity's embedding text
+    /// (default: none). For values that change on every write but carry no
+    /// meaning to search, such as a write-probe marker: each new value would
+    /// otherwise make new text and so a new vector, while the identical-text
+    /// skip keeps the vector when only an excluded predicate changed. The
+    /// facts are still stored and queryable; only the embedding ignores them.
+    pub exclude_predicates: Vec<String>,
 }
 
 impl Default for EmbeddingConfig {
@@ -839,6 +847,7 @@ impl Default for EmbeddingConfig {
             tokenizer_path: None,
             dimension: 384,
             max_sequence_length: 256,
+            exclude_predicates: Vec::new(),
         }
     }
 }
