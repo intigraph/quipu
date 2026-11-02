@@ -6,7 +6,9 @@ use std::collections::HashMap;
 #[derive(Default)]
 pub(super) struct Counter {
     pub(super) count: i64,
-    seen: HashMap<String, Vec<Value>>,
+    /// DISTINCT values by [`super::count_key::distinct_hash`].
+    seen: HashMap<u64, Vec<Value>>,
+    hasher: foldhash::fast::RandomState,
     sum: f64,
     invalid: bool,
     double: bool,
@@ -14,13 +16,12 @@ pub(super) struct Counter {
 impl Counter {
     fn accept(&mut self, value: Value, distinct: bool) -> bool {
         if distinct {
-            let key = if matches!(&value, Value::Float(n) if *n == 0.0) {
-                "Float(0.0)".into()
-            } else {
-                format!("{value:?}")
-            };
+            let key = super::count_key::distinct_hash(&value, &self.hasher);
             let bucket = self.seen.entry(key).or_default();
-            if bucket.contains(&value) {
+            if bucket
+                .iter()
+                .any(|seen| super::count_key::distinct_same(seen, &value) && *seen == value)
+            {
                 return false;
             }
             bucket.push(value);
