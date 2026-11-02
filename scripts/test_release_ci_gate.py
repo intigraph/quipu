@@ -203,9 +203,10 @@ case "$1 $2" in
     [ "$CASE" != busy-error ] || exit 1
     [ "$CASE" != busy-empty ] || exit 0
     [ "$CASE" != busy-text ] || { echo many; exit 0; }
-    if [ "$CASE" = stale-idle ]; then echo 0; else echo 1; fi ;;
+    case "$CASE" in stale-idle|dispatch-error) echo 0 ;; *) echo 1 ;; esac ;;
   'workflow run')
-    [ "$CASE" = stale-idle ] || { echo 'unexpected dispatch' >&2; exit 99; }
+    case "$CASE" in stale-idle|dispatch-error) ;; *) echo 'unexpected dispatch' >&2; exit 99 ;; esac
+    [ "$CASE" != dispatch-error ] || { echo 'synthetic dispatch failure' >&2; exit 1; }
     echo dispatched >> "$STATUS_LOG.dispatch" ;;
   *) echo "unexpected gh call: $*" >&2; exit 99 ;;
 esac
@@ -227,7 +228,7 @@ esac
                  "main-error", "head-error", "main-empty", "head-empty",
                  "main-moved", "head-moved", "success", "check-error", "status-error",
                  "stale-busy", "busy-error", "busy-empty", "busy-text", "stale-idle",
-                 "multiple", "pr-success", "pr-stale-busy"):
+                 "dispatch-error", "multiple", "pr-success", "pr-stale-busy"):
         status = fixture / "status.log"
         status.unlink(missing_ok=True)
         env = {**os.environ, "PATH": str(fixture) + os.pathsep + os.environ["PATH"],
@@ -241,7 +242,7 @@ esac
                "CHECK_EXIT": (
                    "2" if case == "check-error" else "1" if case in (
                        "stale-busy", "busy-error", "busy-empty", "busy-text", "stale-idle",
-                       "pr-stale-busy") else "0")}
+                       "dispatch-error", "pr-stale-busy") else "0")}
         Path(str(status) + ".dispatch").unlink(missing_ok=True)
         result = subprocess.run(["bash", "-c", fresh_script], cwd=fixture,
                                 env=env, capture_output=True, text=True)
@@ -252,7 +253,8 @@ esac
         assert ("No open release PR" in result.stdout) == (case == "empty"), (case, result)
         assert status.exists() == (case in (
             "success", "check-error", "status-error", "stale-busy", "busy-error",
-            "busy-empty", "busy-text", "stale-idle", "pr-success", "pr-stale-busy")), (case, result)
+            "busy-empty", "busy-text", "stale-idle", "dispatch-error", "pr-success",
+            "pr-stale-busy")), (case, result)
         assert Path(str(status) + ".dispatch").exists() == (case == "stale-idle"), (case, result)
         assert "unexpected dispatch" not in result.stderr, (case, result)
         if status.exists():
@@ -260,7 +262,8 @@ esac
             assert "statuses/" + "a" * 40 in record
             expected_state = ("error" if case == "check-error" else
                               "failure" if case in ("stale-busy", "busy-error", "busy-empty",
-                                                    "busy-text", "stale-idle", "pr-stale-busy")
+                                                    "busy-text", "stale-idle", "dispatch-error",
+                                                    "pr-stale-busy")
                               else "success")
             assert "state=" + expected_state in record
         print(f"release PR discovery control: {case}: ok")

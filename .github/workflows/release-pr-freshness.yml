@@ -140,7 +140,13 @@ jobs:
               exit 1
             fi
             if [ "$busy" -eq 0 ]; then
-              gh workflow run release-pr-daily.yml --ref main && echo "Requested one regeneration (release-pr-daily.yml)."
+              # Not `cmd && echo`: errexit ignores a failure there, and a stale PR
+              # whose regeneration was never requested must not end green.
+              if ! gh workflow run release-pr-daily.yml --ref main; then
+                echo "::error::Could not request a regeneration (release-pr-daily.yml); nothing will refresh the stale release PR."
+                exit 1
+              fi
+              echo "Requested one regeneration (release-pr-daily.yml)."
             else
               echo "A release-pr-daily run is already queued or running; not requesting another."
             fi
