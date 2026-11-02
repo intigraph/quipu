@@ -1,0 +1,247 @@
+//! Protected per-lineage authority journal: the P1 durable-role file
+//! (docs/design/ownership-handoff.md, "Durable authority and rollback limits";
+//! plan P1; aegis-s24.8).
+//!
+//! The journal lives OUTSIDE the database, its sidecar and any transferable
+//! backup, so restoring an old database cannot erase a retirement. It holds one
+//! `ownership_handoff_model` `Journal` record (Active, Retiring, Retired or
+//! Pending), strictly encoded by the model's codec, followed by a sha256 trailer.
+//!
+//! Reading never guesses. A missing, unreadable, oversized, malformed,
+//! wrong-kind, invalid or checksum-failing file is `Unknown`, never legacy or
+//! inactive. Writing is an atomic replace: a sibling temporary file, fsync,
+//! rename and a directory fsync. Advancing takes an exclusive lock on a sibling
+//! lock file, re-reads the current record, requires it to equal what the caller
+//! expected, and admits only the local transitions the design allows:
+//! Active -> Retiring (same source), Retiring -> Retired (same request) and
+//! Pending -> Active (the expected successor). Nothing leaves Retired, and
+//! nothing un-retires.
+//!
+//! Durability, not rollback protection: a whole-host rollback that restores
+//! this file too cannot be seen from its bytes; the startup witness covers that
+//! and is a later slice. There is deliberately no public enrollment path; the
+//! startup adapter that consumes this journal is the next slice, so this module
+//! is not yet called outside its tests.
+#![cfg_attr(not(test), allow(dead_code))]
+
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest as _, Sha256};
+
+use crate::error::{Error, Result};
+use crate::ownership_handoff_model::{Journal, MAX_RECORD_BYTES, Payload, RECORD_VERSION, Record};
+
+const TRAILER: &str = "\nsha256:";
+
+/// What a read established. `Unknown` is never treated as legacy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum JournalState {
+    // Boxed: a Journal record is far larger than the Unknown reason.
+    Known(Box<Journal>),
+    Unknown(String),
+}
+
+fn unknown(why: impl Into<String>) -> JournalState {
+    JournalState::Unknown(why.into())
+}
+
+fn refused(why: impl Into<String>) -> Error {
+    Error::PolicyDenied(format!("ownership journal: {}", why.into()))
+}
+
+/// Read the journal at `path`.
+pub(super) fn read(path: &Path) -> JournalState {
+    let mut bytes = Vec::new();
+    // Body, trailer marker, 64 hex digits and the final newline `encode` writes.
+    let limit = (MAX_RECORD_BYTES + TRAILER.len() + 64 + 1) as u64;
+    match File::open(path) {
+        Ok(file) => {
+            if let Err(e) = file.take(limit + 1).read_to_end(&mut bytes) {
+                return unknown(format!("unreadable: {e}"));
+            }
+        }
+        Err(e) => return unknown(format!("missing or unreadable: {e}")),
+    }
+    if bytes.len() as u64 > limit {
+        return unknown("oversized");
+    }
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return unknown("not UTF-8");
+    };
+    let Some((body, trailer)) = text.rsplit_once(TRAILER) else {
+        return unknown("no checksum trailer");
+    };
+    // Exactly one terminating newline, as `encode` writes.
+    if trailer.strip_suffix('\n') != Some(hex::encode(Sha256::digest(body.as_bytes())).as_str()) {
+        return unknown("checksum mismatch");
+    }
+    match Record::decode(body.as_bytes()) {
+        Ok(Record {
+            payload: Payload::Journal { journal },
+            ..
+        }) => JournalState::Known(Box::new(journal)),
+        Ok(_) => unknown("not a journal record"),
+        Err(e) => unknown(format!("invalid record: {e}")),
+    }
+}
+
+fn encode(journal: &Journal) -> Result<Vec<u8>> {
+    let record = Record {
+        version: RECORD_VERSION,
+        payload: Payload::Journal {
+            journal: journal.clone(),
+        },
+    };
+    let body = record.encode().map_err(refused)?;
+    let mut out = body.clone();
+    out.extend_from_slice(TRAILER.as_bytes());
+    out.extend_from_slice(hex::encode(Sha256::digest(&body)).as_bytes());
+    out.push(b'\n');
+    Ok(out)
+}
+
+fn sibling(path: &Path, suffix: &str) -> Result<PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| refused("journal path has no file name"))?;
+    let mut name = name.to_os_string();
+    name.push(suffix);
+    Ok(path.with_file_name(name))
+}
+
+fn io(e: std::io::Error) -> Error {
+    refused(format!("write failed: {e}"))
+}
+
+/// Owner-only on Unix: the journal and its siblings hold authority state.
+fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+}
+
+/// The directory to fsync; a bare file name lives in the current one.
+fn directory(path: &Path) -> &Path {
+    match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    }
+}
+
+/// Write `journal` to the staged sibling and fsync it. Callers hold the lock,
+/// which also serializes use of the one staged name.
+fn stage(path: &Path, journal: &Journal) -> Result<PathBuf> {
+    let bytes = encode(journal)?;
+    let staged = sibling(path, ".staged")?;
+    let mut file = owner_only(OpenOptions::new().write(true).create(true).truncate(true))
+        .open(&staged)
+        .map_err(io)?;
+    file.write_all(&bytes).map_err(io)?;
+    file.sync_all().map_err(io)?;
+    Ok(staged)
+}
+
+/// Atomically replace the journal with `journal`.
+pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
+    let staged = stage(path, journal)?;
+    std::fs::rename(&staged, path).map_err(io)?;
+    File::open(directory(path))
+        .and_then(|d| d.sync_all())
+        .map_err(io)
+}
+
+/// The sibling lock that serializes every journal change on this host.
+fn lock(path: &Path) -> Result<File> {
+    let lock = owner_only(OpenOptions::new().write(true).create(true).truncate(false))
+        .open(sibling(path, ".lock")?)
+        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
+    lock.lock()
+        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
+    Ok(lock)
+}
+
+/// Whether `next` may follow `current` in this owner's local journal.
+fn legal(current: &Journal, next: &Journal) -> std::result::Result<(), &'static str> {
+    match (current, next) {
+        (Journal::Active { authority }, Journal::Retiring { request }) => {
+            if request.source == *authority {
+                Ok(())
+            } else {
+                Err("retirement must name the active authority as its source")
+            }
+        }
+        (Journal::Retiring { request }, Journal::Retired { certificate }) => {
+            if certificate.request == *request {
+                Ok(())
+            } else {
+                Err("retirement certificate must complete the reserved request")
+            }
+        }
+        (Journal::Pending { successor, .. }, Journal::Active { authority }) => {
+            if authority == successor {
+                Ok(())
+            } else {
+                Err("activation must install the pending successor")
+            }
+        }
+        (Journal::Retired { .. }, _) => Err("a retired owner cannot change role"),
+        (Journal::Retiring { .. }, Journal::Active { .. }) => Err("retirement cannot be undone"),
+        _ => Err("transition is not a local journal step"),
+    }
+}
+
+/// Advance the journal from `expected` to `next` under an exclusive lock,
+/// refusing if the stored role is anything other than `expected`.
+pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result<()> {
+    let lock = lock(path)?;
+    let result = match read(path) {
+        JournalState::Known(current) if *current == *expected => legal(&current, next)
+            .map_err(refused)
+            .and_then(|()| write_atomic(path, next)),
+        JournalState::Known(_) => Err(refused("stored role is not the expected one")),
+        JournalState::Unknown(why) => Err(refused(format!("current role is UNKNOWN: {why}"))),
+    };
+    drop(lock);
+    result
+}
+
+/// Create a journal for a new lineage. Crate-private on purpose: there is no
+/// public enrollment path, and the startup adapter that would call this is not
+/// built yet. Refuses if any journal file already exists, or if that cannot
+/// be established. Under the sibling lock, and publishing with a hard link
+/// that never replaces an existing name, so two creators cannot both win.
+pub(super) fn create(path: &Path, initial: &Journal) -> Result<()> {
+    if !matches!(initial, Journal::Active { .. }) {
+        return Err(refused("a new journal starts Active"));
+    }
+    let lock = lock(path)?;
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => return Err(refused("a journal already exists")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(refused(format!("cannot establish absence: {e}"))),
+    }
+    let staged = stage(path, initial)?;
+    let published = std::fs::hard_link(&staged, path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            refused("a journal already exists")
+        } else {
+            io(e)
+        }
+    });
+    let _ = std::fs::remove_file(&staged);
+    published?;
+    let synced = File::open(directory(path))
+        .and_then(|d| d.sync_all())
+        .map_err(io);
+    drop(lock);
+    synced
+}
+
+#[cfg(test)]
+#[path = "ownership_journal_tests.rs"]
+mod tests;

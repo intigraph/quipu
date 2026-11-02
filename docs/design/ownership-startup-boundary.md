@@ -71,5 +71,12 @@ and startup adapter, not a filename inferred from the restored database. The
 per-handle revocation here is not durable rollback protection. Cross-process
 per-lineage latches, protected journal durability/recovery, generation pins,
 real startup authentication, transitions, every writer/consumer and original
-physical retained-writer acceptance remain open. Do not enroll stores or claim
+physical retained-writer acceptance remain open.
+
+The protected journal's file adapter now exists
+([`ownership_journal.rs`](../../src/store/ownership_journal.rs)): one model
+`Journal` record with a sha256 trailer, an atomic fsynced replace, and a locked
+advance that admits only Active to Retiring, Retiring to Retired and Pending to
+Active. Anything unreadable is UNKNOWN. Nothing reads it at startup yet; the
+startup adapter, generation pin and per-lineage latch are later P1 slices. Do not enroll stores or claim
 at-most-one physical writer from this increment.
