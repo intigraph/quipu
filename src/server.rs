@@ -584,7 +584,11 @@ async fn main() {
     } else if let Some(relay) = relay {
         relay::start(push_store_outer, relay);
     } else {
-        background::start(push_store_outer, config.events.retention_days);
+        background::start(
+            push_store_outer,
+            config.events.retention_days,
+            &config.embedding,
+        );
     }
 
     // Everything committed before this line is STARTUP in quipu_write_facts_total
