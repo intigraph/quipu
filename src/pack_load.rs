@@ -145,7 +145,7 @@ pub fn unpack_verified(
     drop(source);
     let imported =
         crate::store::import::import_graph(Path::new(destination), Path::new(pack_path), &graph)?;
-    let dest = Store::open(destination)?;
+    let mut dest = Store::open(destination)?;
     for (name, turtle, _) in &shapes {
         dest.load_shapes(name, turtle, timestamp)?;
     }

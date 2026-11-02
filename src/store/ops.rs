@@ -11,6 +11,8 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 
 #[path = "ops_post_commit.rs"]
 mod post_commit;
+#[path = "ops_speculate.rs"]
+mod speculate;
 
 /// Result of staging a transaction's rows into the open `quipu_transact`
 /// savepoint, threaded to [`Store::after_commit_hooks`] after RELEASE.
@@ -239,6 +241,31 @@ impl Store {
         graph: i64,
         retract_source: Option<&str>,
     ) -> Result<Staged> {
+        self.stage_and_guard_in_transaction(
+            datums,
+            timestamp,
+            actor,
+            source,
+            graph,
+            retract_source,
+            None,
+        )
+    }
+
+    /// The C1 writer has already allocated its one transaction under an
+    /// independent SQLite writer reservation. Reuse only that exact current
+    /// transaction; this is not a public historical-tx insertion primitive.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn stage_and_guard_in_transaction(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        graph: i64,
+        retract_source: Option<&str>,
+        existing_tx: Option<i64>,
+    ) -> Result<Staged> {
         // The human trust-root registry as it stands BEFORE this write
         // (aegis-kzt0ql.9.4). Compared with the post-state below.
         let workflow_before = if self.governance_config().enforce_workflows {
@@ -247,7 +274,12 @@ impl Store {
             None
         };
         let trust_before = crate::governance::trust_root::snapshot(self)?;
-        let tx_id = crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?;
+        let tx_id = if let Some(tx) = existing_tx {
+            self.validate_mapping_transaction(tx, timestamp, actor, source)?;
+            tx
+        } else {
+            crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?
+        };
 
         // Domain/range axioms are not merely a one-time migration at ontology
         // load. Apply them to every newly asserted edge so a range such as
@@ -262,6 +294,10 @@ impl Store {
         };
         #[cfg(not(feature = "owl"))]
         let staged_datums = datums.to_vec();
+        // Check inferred additions too: an OWL domain/range declaration must
+        // not provide an alternate way to manufacture a protected record.
+        crate::shape_mapping::write_scope::check(self, graph, &staged_datums)
+            .map_err(|error| self.stash_refusal("shape-mapping", error, staged_datums.len()))?;
         crate::memory_files::write_scope::check(self, graph, &staged_datums)
             .map_err(|e| self.stash_refusal("memory-files", e, staged_datums.len()))?;
         crate::entity_key_guard::check_write(self, graph, &staged_datums)
@@ -282,8 +318,16 @@ impl Store {
         #[cfg(not(feature = "owl"))]
         let superseded = 0usize;
 
-        let (asserts, retracts) =
-            self.stage_source_claims(&staged_datums, graph, tx_id, timestamp, retract_source)?;
+        let (asserts, retracts) = if existing_tx.is_some() {
+            if source != Some(super::mapping_atomic::SOURCE) || retract_source.is_some() {
+                return Err(crate::Error::InvalidValue(
+                    "existing transaction is reserved for mapping lifecycle settlement".into(),
+                ));
+            }
+            self.stage_mapping_valid_time(&staged_datums, graph, tx_id, timestamp)?
+        } else {
+            self.stage_source_claims(&staged_datums, graph, tx_id, timestamp, retract_source)?
+        };
         let written_asserts: Vec<_> = asserts.iter().collect();
         let written_retracts: Vec<_> = retracts.iter().collect();
 
@@ -387,40 +431,6 @@ impl Store {
             #[cfg(feature = "reactive-reasoner")]
             retracts,
         })
-    }
-
-    /// Execute `f` against a speculative fork of the store with `hypothetical`
-    /// datums applied. The fork is discarded after `f` returns — the underlying
-    /// store is never mutated. Useful for counterfactual impact analysis
-    /// ("what would break if I removed this?").
-    ///
-    /// Implementation: wraps the hypothetical write and query in a `SQLite`
-    /// `SAVEPOINT` that is always rolled back. Because [`transact`](Store::transact)
-    /// uses nested savepoints, observers (including the reactive reasoner) fire
-    /// normally inside the speculative fork, so derived facts are recomputed.
-    pub fn speculate<F, R>(&mut self, hypothetical: &[Datum], timestamp: &str, f: F) -> Result<R>
-    where
-        F: FnOnce(&Store) -> Result<R>,
-    {
-        self.conn.execute_batch("SAVEPOINT speculate")?;
-
-        let result = self
-            .transact(
-                hypothetical,
-                timestamp,
-                Some("speculate"),
-                Some("speculate"),
-            )
-            .and_then(|_| f(self));
-
-        // Always rollback: speculative state must not persist.
-        match crate::store::release::rollback_release(&self.conn, "speculate") {
-            Ok(()) => result,
-            Err(rollback_err) => match result {
-                Err(e) => Err(e),
-                Ok(_) => Err(rollback_err.into()),
-            },
-        }
     }
 
     /// Set `(entity, predicate)` to exactly `value`: retract every current

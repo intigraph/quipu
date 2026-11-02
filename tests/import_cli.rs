@@ -70,7 +70,7 @@ fn directory_and_archive_stage_in_the_selected_database_and_promote_after_reopen
     let (dir, archive) = fixture(root.path());
     for (index, reference) in [dir, archive].iter().enumerate() {
         let db = root.path().join(format!("receiver-{index}.db"));
-        let receiver = quipu::Store::open(db.to_str().unwrap()).unwrap();
+        let mut receiver = quipu::Store::open(db.to_str().unwrap()).unwrap();
         receiver
             .load_shapes("fixture", SHAPES, "2026-09-11")
             .unwrap();

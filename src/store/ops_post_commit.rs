@@ -4,6 +4,28 @@ use super::{Datum, Staged, Store};
 use crate::{embedding, error::Result};
 
 impl Store {
+    /// Mapping settlement emits per-graph fact counts only after its outer
+    /// commit. Request provenance is counted once by the logical-tx caller.
+    pub(in crate::store) fn observe_mapping_batch(
+        submitted: usize,
+        staged: &Staged,
+        actor: &str,
+        graph: i64,
+    ) {
+        let counts = staged.counts;
+        let kind =
+            crate::write_kind::classify(Some(actor), Some(crate::store::mapping_atomic::SOURCE));
+        crate::metrics::metrics().observe_write(&crate::metrics::writes::WriteCounts {
+            submitted: submitted as u64,
+            inferred: counts.inferred as u64,
+            asserted: counts.asserted as u64,
+            retracted: counts.retracted as u64,
+            superseded: counts.superseded as u64,
+            root: graph == crate::schema::ROOT_GRAPH,
+            kind,
+        });
+    }
+
     /// Post-commit side effects: auto-embedding and reactive observers. Runs
     /// after the savepoint is released (the write is durable relative to the
     /// parent), preserving the previous ordering.
