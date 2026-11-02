@@ -7,6 +7,8 @@ use quipu::{
     types::{Op, Value},
 };
 use ring::{rand::SystemRandom, signature::Ed25519KeyPair};
+#[path = "common/governed_verifier.rs"]
+mod governed_verifier;
 const TS: &str = "2026-10-11T00:00:00Z";
 const RUN: &str = "urn:shuttle:run:guard";
 const STEP: &str = "urn:shuttle:workflow:guard/step/review";
@@ -51,6 +53,7 @@ fn setup_with_loop(graph: i64, loop_plan: bool) -> (Store, Ed25519KeyPair) {
         text(&mut s, "urn:reg", "publicKey", &public_key_hex(&kp)),
     ];
     s.transact(&reg, TS, None, None).unwrap();
+    governed_verifier::endorse(&mut s, "urn:reg", TS);
     let mut def = vec![
         kind(&mut s, "urn:w", "Workflow"),
         kind(&mut s, "urn:w", "WorkflowDefinition"),
@@ -304,6 +307,7 @@ fn a_signed_undefined_run_is_refused_only_when_processing_is_enrolled() {
             text(&mut s, "urn:reg", "publicKey", &public_key_hex(&kp)),
         ];
         s.transact(&reg, TS, None, None).unwrap();
+        governed_verifier::endorse(&mut s, "urn:reg", TS);
         let ds = event(
             &mut s,
             &kp,
@@ -461,4 +465,30 @@ fn declared_process_requires_both_existing_types_on_one_entity() {
         ),
     ];
     assert!(s.transact(&run, TS, None, None).is_err());
+}
+
+#[test]
+fn an_unendorsed_key_cannot_advance_an_enrolled_workflow_with_legacy_flag_off() {
+    let (mut s, _) = setup(0);
+    assert!(!s.governance_config().verify_transitions);
+    let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
+    let attacker = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
+    let reg = vec![
+        kind(&mut s, "urn:unendorsed:reg", "VerifierRegistration"),
+        text(&mut s, "urn:unendorsed:reg", "verifier", "alice"),
+        text(
+            &mut s,
+            "urn:unendorsed:reg",
+            "publicKey",
+            &public_key_hex(&attacker),
+        ),
+    ];
+    s.transact(&reg, TS, None, None).unwrap();
+    let ds = advance(&mut s, &attacker, "urn:ev:unendorsed", "open", "reviewed");
+    assert!(s.transact(&ds, TS, None, None).is_err());
+    assert!(state(&s, 0).contains("open"));
+    assert!(!matches!(
+        quipu::sparql::query(&s, "ASK { <urn:ev:unendorsed> ?p ?o }").unwrap(),
+        quipu::sparql::QueryResult::Ask(true)
+    ));
 }

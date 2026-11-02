@@ -662,3 +662,155 @@ fn root_text_ignores_the_entitys_named_graph_facts() {
     let id = store.lookup("http://example.org/alice").unwrap().unwrap();
     assert_eq!(build_entity_text(&store, id).unwrap(), "Alice");
 }
+
+// ---- aegis-jio5.2: [embedding] exclude_predicates -------------------------
+//
+// The write-lane probe sets a fresh "probe-<ns>" literal every 30 s. Every
+// literal feeds the embedding text, so each write made new text and a new
+// vector: 176,624 superseded vectors for one marker entity in production.
+
+const PROBE_ENTITY: &str = "http://example.org/probe-marker";
+const PROBE_PREDICATE: &str = "http://example.org/v/writeProbeMarker";
+const OTHER_PREDICATE: &str = "http://example.org/v/note";
+
+/// Every vector row, current AND superseded. `vector_count` sees only
+/// current rows, and a superseded row is exactly what this leak adds.
+fn all_vector_rows(store: &Store) -> i64 {
+    store
+        .conn
+        .query_row("SELECT count(*) FROM vectors", [], |r| r.get(0))
+        .unwrap()
+}
+
+fn drain(store: &mut Store) {
+    if let Some(work) = store.take_deferred_embed() {
+        let embeddings: Vec<Vec<f32>> = work
+            .texts()
+            .iter()
+            .map(|t| DummyProvider.embed_text(t).unwrap())
+            .collect();
+        store.apply_deferred_embed(&work, &embeddings).unwrap();
+    }
+}
+
+/// A labelled marker entity, then `writes` probe writes through `set_triple`
+/// (the store call behind /set), each with a NEW value. Returns all rows.
+fn probe_rows(store: &mut Store, predicate: &str, writes: usize) -> i64 {
+    let ttl = format!(
+        "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+         <{PROBE_ENTITY}> rdfs:label \"write lane probe marker\" .\n"
+    );
+    ingest_rdf(
+        store,
+        ttl.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01",
+        None,
+        None,
+    )
+    .unwrap();
+    drain(store);
+    let entity = store.lookup(PROBE_ENTITY).unwrap().unwrap();
+    let pred = store.intern(predicate).unwrap();
+    for i in 0..writes {
+        let ts = format!("2026-01-02T00:00:{i:02}Z");
+        let (_, _, asserted) = store
+            .set_triple(
+                entity,
+                pred,
+                Value::Str(format!("probe-{i}")),
+                &ts,
+                None,
+                true,
+                None,
+            )
+            .unwrap();
+        assert_eq!(asserted, 1, "each probe write must really write");
+        drain(store);
+    }
+    all_vector_rows(store)
+}
+
+fn probe_store(deferred: bool, exclude: &[&str]) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    store.embedding_config_mut().auto_embed = true;
+    store.embedding_config_mut().exclude_predicates =
+        exclude.iter().map(|s| (*s).to_string()).collect();
+    store.set_defer_auto_embed(deferred);
+    store
+}
+
+#[test]
+fn control_changing_probe_literal_adds_a_vector_per_write() {
+    // The defect, reproduced: without the exclusion every probe write adds a
+    // row. This is the positive control for the two tests below.
+    let mut store = probe_store(false, &[]);
+    assert_eq!(probe_rows(&mut store, PROBE_PREDICATE, 5), 1 + 5);
+}
+
+#[test]
+fn excluded_probe_literal_adds_no_vector_inline() {
+    let mut store = probe_store(false, &[PROBE_PREDICATE]);
+    assert_eq!(
+        probe_rows(&mut store, PROBE_PREDICATE, 5),
+        1,
+        "only the label's vector"
+    );
+    assert_eq!(store.vector_count().unwrap(), 1, "and it is still current");
+}
+
+#[test]
+fn excluded_probe_literal_adds_no_vector_deferred() {
+    // The server path. The deferred apply REBUILDS the text and skips any vector
+    // whose text no longer matches; an exclusion applied on one side only would
+    // make every vector "stale" and leave the entity with NO embedding.
+    let mut store = probe_store(true, &[PROBE_PREDICATE]);
+    assert_eq!(
+        probe_rows(&mut store, PROBE_PREDICATE, 5),
+        1,
+        "only the label's vector"
+    );
+    assert_eq!(
+        store.vector_count().unwrap(),
+        1,
+        "the entity keeps a current vector"
+    );
+    let entity = store.lookup(PROBE_ENTITY).unwrap().unwrap();
+    assert_eq!(
+        build_entity_text(&store, entity).unwrap(),
+        "write lane probe marker"
+    );
+}
+
+#[test]
+fn a_non_excluded_literal_still_reembeds_once_per_change() {
+    let mut store = probe_store(false, &[PROBE_PREDICATE]);
+    assert_eq!(probe_rows(&mut store, OTHER_PREDICATE, 3), 1 + 3);
+}
+
+#[test]
+fn exclude_predicates_reaches_the_store_from_the_config_file() {
+    // Through the deployment path: config text -> ConfigFile -> the same
+    // configure_provider call the server and CLI make. A test that sets the
+    // store field directly could pass with the config key unreachable.
+    let toml_str = format!(
+        "[quipu]\nstore_path = \"/data/quipu.db\"\n\n[quipu.embedding]\nexclude_predicates = [\"{PROBE_PREDICATE}\"]\n"
+    );
+    let file: crate::config_load::ConfigFile = toml::from_str(&toml_str).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    crate::embedding_runtime::configure_provider(&mut store, &file.quipu.embedding).unwrap();
+    store.set_embedding_provider(Arc::new(DummyProvider));
+    assert_eq!(
+        store.embedding_config().exclude_predicates,
+        vec![PROBE_PREDICATE.to_string()]
+    );
+    assert_eq!(probe_rows(&mut store, PROBE_PREDICATE, 3), 1);
+    assert!(
+        crate::EmbeddingConfig::default()
+            .exclude_predicates
+            .is_empty(),
+        "default is unchanged behaviour"
+    );
+}
