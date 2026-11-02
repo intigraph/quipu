@@ -41,6 +41,79 @@ upload and a silently corrupted published release.
 
 An unresolvable tag also refuses, so the guard fails closed.
 
+## Three guards between a release PR and its tag
+
+These came from 0.16.5 (aegis-0zr). The release PR was prepared at about 05:40Z.
+PRs #901 and #903 merged after that, and the release PR then merged on top of them. The
+commit that was tagged shipped those two PRs, but the section did not list them.
+
+1. **Release PR freshness** (status on the release PR head). Every push to `main`
+   runs `scripts/release-pr-freshness.sh`. It builds the exact squash commit the
+   PR would merge as and verifies the section against it. When the result is
+   stale, the status goes red and one `release-pr-daily.yml` regeneration is
+   requested. **Do not merge a release PR whose freshness status is red.**
+2. **The cut is verified before it happens.** The `release-plz` job runs
+   `verify-changelog.sh --version <v>` on the commit it is about to tag, and
+   refuses to tag if anything is missing. To repair a refused version, correct
+   the unshipped section on `main` in an ordinary PR:
+
+   ```sh
+   scripts/fix-changelog.sh --version <v>   # rewrites only the <v> section
+   ```
+
+   The next push cuts the version once the section covers it.
+3. **CI and Release never cancel the release commit's own run.** Both workflows
+   give `chore: release v*` its own concurrency group.
+
+## When a release is cut but not fully published
+
+### The trusted repository share
+
+The `repository-share` job does not build the pendant. It waits for the
+configured trusted producer, which runs on its own host and reads live outward
+policy from its configured endpoint. Hosted runners never receive that policy.
+If the producer is unavailable, this job fails with "Trusted repository share
+missing". It is a separate job, so crates.io and the MCP Registry are no longer
+skipped because of it (they were for 0.16.4 and 0.16.5).
+
+The producer serves only the **latest** release. A release superseded before the
+producer recovers never gets a share from its schedule. 0.16.4 is in that state.
+
+Recover the producer using the private operations runbook, then wait for its
+normal scheduled run or use that runbook's scoped recovery command. Once its
+assets are uploaded, inspect them and rerun only the waiting job:
+
+```sh
+gh release view quipu-ai-v<v> --json assets --jq '.assets[].name' | grep repository.pendant
+gh run rerun <release-run-id> --job <repository-share job id>  # rebuilds nothing
+```
+
+Don't use **Re-run failed jobs** on a run from before this change. On those runs
+the share check was a step of `Binaries (x86_64-unknown-linux-gnu)`. Re-running
+that job rebuilds the binary and uploads it again with `--clobber`, and the
+producer's receipt binds the sha256 of the binary that was published first.
+
+### Publishing a cut release to crates.io
+
+A cut release whose `crates` job did not succeed now shows a red
+`crates.io NOT published` job. When the asset jobs are fixed, publish the tag
+through the manual lane. Dispatch it on the tag, and run a dry run first:
+
+```sh
+gh workflow run crates.yml --ref quipu-ai-v<v> -f version=<v> -f dry_run=true
+gh workflow run crates.yml --ref quipu-ai-v<v> -f version=<v> -f dry_run=false
+curl -s -H 'User-Agent: quipu-release' https://crates.io/api/v1/crates/quipu-ai | jq -r .crate.max_version
+gh workflow run mcp-registry.yml --ref main -f tag=quipu-ai-v<v> -f publish=true
+```
+
+crates.io Trusted Publishing is configured per workflow file. If only
+`release.yml` is registered for `quipu-ai`, the `crates.yml` lane is refused at
+"Authenticate with crates.io" and nothing is published. The crate owner then has
+to add `crates.yml` as a second trusted publisher on crates.io.
+
+A crates.io version is permanent, so whoever owns the release lane decides
+whether a skipped version, such as 0.16.4 after 0.16.5, is published at all.
+
 ## Rehearsing the release workflow without touching a real release
 
 A pull request cannot exercise `release.yml`'s asset path — this is not a hypothetical gap:

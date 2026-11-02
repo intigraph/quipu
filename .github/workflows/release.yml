@@ -99,6 +99,29 @@ jobs:
           python3 scripts/release_commit_guard.py --self-test
           python3 scripts/release_commit_guard.py "$GITHUB_SHA"
 
+      - uses: taiki-e/install-action@v2
+        if: steps.guard.outputs.state == 'release'
+        with:
+          tool: git-cliff
+
+      # THE CUT ITSELF IS VERIFIED, BEFORE IT HAPPENS (aegis-0zr). release-plz tags
+      # the commit this run checked out, so the version's section must cover every
+      # packaged commit up to THIS commit. The verify-changelog job below runs after
+      # the tag exists, when a failure can no longer be repaired: 0.16.5 was cut at
+      # 9f5bc69a with #901, #903 and #906 shipped but not listed, and only then
+      # reported. A refusal here leaves the version untagged and the section
+      # unshipped, so it can still be corrected on main (scripts/fix-changelog.sh
+      # --version <v>, merged as an ordinary PR); the next push then cuts it.
+      - name: Refuse to cut a version whose section misses packaged commits
+        if: steps.guard.outputs.state == 'release'
+        env:
+          VERSION: ${{ steps.guard.outputs.version }}
+        run: |
+          if ! ./scripts/verify-changelog.sh --version "$VERSION"; then
+            echo "::error title=Release not cut::the ${VERSION} section does not cover every packaged commit through ${GITHUB_SHA::8}, so ${VERSION} was NOT tagged. Correct the unshipped section on main with scripts/fix-changelog.sh --version ${VERSION} (see docs/RELEASING.md)."
+            exit 1
+          fi
+
       # release-plz refuses a repository where a tracked path is also ignored,
       # even when checkout itself is clean. Catch the repository invariant at
       # the boundary instead of waiting through release-plz setup to discover it.
@@ -194,6 +217,14 @@ jobs:
             echo "${VERSION} was already released (tag quipu-ai-v${VERSION}); its section was verified by the run that cut it." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # No state at all: release-plz did not run (CI correctness failed, or a
+          # step before the guard did), so this run cut nothing. A tagged version
+          # is still shipped history; only an untagged one is worth checking.
+          # Seen on 861ac848, which re-failed the shipped 0.16.4 section (aegis-0zr).
+          if [ -z "$STATE" ] && git rev-parse -q --verify "refs/tags/quipu-ai-v${VERSION}" >/dev/null; then
+            echo "${VERSION} was already released (tag quipu-ai-v${VERSION}) and this run cut nothing; not re-verifying shipped history." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           ./scripts/verify-changelog.sh --version "$VERSION"
 
       # The pending release PR is the artifact that actually gets merged, and it is
@@ -215,6 +246,103 @@ jobs:
             echo "::warning::could not fetch ${BR}"; exit 0; }
           VERSION="$(git show "refs/remotes/origin/${BR}:Cargo.toml" | python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["package"]["version"])')"
           ./scripts/verify-changelog.sh --at "refs/remotes/origin/${BR}" --version "$VERSION"
+
+  # A release PR is a snapshot of main. When a packaged commit lands after it was
+  # prepared, merging it ships that commit under a section that does not list it
+  # (aegis-0zr: #901 and #903 landed after #905 was refreshed). On every push,
+  # check the open release PR AS IT WOULD MERGE NOW, without waiting on CI, and
+  # put the verdict on the PR head as the "Release PR freshness" status, so a
+  # stale PR shows red before anyone merges it. A stale PR also asks for one
+  # regeneration through the daily proposal workflow; that workflow still waits
+  # for CI on main and refuses a moving main, so this cannot loop.
+  release-pr-freshness:
+    name: Release PR freshness
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One freshness check at a time, newest wins. Release-commit runs keep their own
+    # concurrency groups, so without this an older run that finishes late could
+    # overwrite the verdict a newer main already posted (aegis-0zr review, #910).
+    concurrency:
+      group: release-pr-freshness
+      cancel-in-progress: true
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Check the open release PR against current main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! listed="$(gh pr list --state open --json headRefName,headRefOid,number \
+            --jq '[.[] | select(.headRefName | startswith("release-plz"))][0] // {} | "\(.headRefName // "") \(.headRefOid // "") \(.number // "")"')"; then
+            echo "::error::Could not discover the open release PR; freshness is unknown."
+            exit 1
+          fi
+          read -r BR OID NUM <<< "$listed"
+          if [ -z "$BR$OID$NUM" ]; then
+            echo "No open release PR — nothing to check."
+            exit 0
+          fi
+          if [[ "$BR" != release-plz* || ! "$OID" =~ ^[0-9a-f]{40}$ || ! "$NUM" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid release PR discovery response; freshness is unknown."
+            exit 1
+          fi
+          # Check the exact commit that was listed, not the mutable branch name: a
+          # regeneration between the list and the fetch would otherwise check one
+          # proposal and publish the verdict on another.
+          git fetch --quiet origin "${OID}" || { echo "::error::could not fetch ${BR} @ ${OID::8}"; exit 1; }
+          if [ "$(git rev-parse FETCH_HEAD)" != "$OID" ]; then
+            echo "::error::fetched ${BR} does not match listed ${OID::8}; not checking"
+            exit 1
+          fi
+          rc=0; ./scripts/release-pr-freshness.sh "$OID" HEAD || rc=$?
+          case "$rc" in
+            0) state=success; desc="Covers every packaged commit on main at ${GITHUB_SHA::8}" ;;
+            1) state=failure; desc="Stale: main ${GITHUB_SHA::8} has packaged commits this release does not list" ;;
+            *) state=error;   desc="Could not check against main ${GITHUB_SHA::8} (exit ${rc})" ;;
+          esac
+          # Publish only if nothing moved while we checked. If main advanced, the newer
+          # push run owns the verdict; if the PR was regenerated, its new head is
+          # checked by the next push. Either way this run's answer is stale.
+          if ! now_main="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)" ||
+             ! now_head="$(gh pr view "$NUM" --json headRefOid --jq .headRefOid)"; then
+            echo "::error::Could not reread main and the release PR; not publishing a verdict."
+            exit 1
+          fi
+          if [[ ! "$now_main" =~ ^[0-9a-f]{40}$ || ! "$now_head" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid current revision response; not publishing a verdict."
+            exit 1
+          fi
+          if [ "$now_main" != "$GITHUB_SHA" ] || [ "$now_head" != "$OID" ]; then
+            echo "main or the release PR moved during the check (main ${now_main::8}, PR ${now_head::8}); not publishing this verdict."
+            exit 0
+          fi
+          # The status binds to the exact PR head that was checked.
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${OID}" -f state="$state" \
+            -f context="Release PR freshness" -f description="$desc" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+          echo "Release PR #${NUM} (${BR} @ ${OID::8}): ${state} — ${desc}" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$state" = failure ]; then
+            echo "::warning title=Release PR #${NUM} is stale::${desc}. Do not merge it until it is regenerated."
+            busy="$(gh run list --workflow release-pr-daily.yml --json status \
+              --jq '[.[] | select(.status != "completed")] | length')"
+            if [ "${busy:-0}" = 0 ]; then
+              gh workflow run release-pr-daily.yml --ref main && echo "Requested one regeneration (release-pr-daily.yml)."
+            else
+              echo "A release-pr-daily run is already queued or running; not requesting another."
+            fi
+          fi
+          [ "$state" != error ] || exit 1
 
   # The browser bundle the book's "Explore this repository's graph" page runs
   # (aegis-tpqccc). A release asset rather than a committed artifact for the same
@@ -715,62 +843,115 @@ jobs:
           gh release upload "$TAG" \
             "dist/${NAME}.tar.gz" "dist/${NAME}.tar.gz.sha256" --clobber
 
-      # The trusted producer observes the native assets, obtains live policy,
-      # and uploads only its verified share. Hosted runners never receive the
-      # private catalogue or authority configuration.
+      # The trusted repository share is checked by its own job below
+      # (repository-share), so a missing share cannot fail this job.
       - name: Record deferred repository share publication
-        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED != 'true'
+        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED != 'true' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           echo 'Repository pendant publication is disabled pending trusted producer activation. No new repository pendant was published by this job.' >> "$GITHUB_STEP_SUMMARY"
 
+  # THE TRUSTED REPOSITORY SHARE, AS ITS OWN JOB (aegis-0zr).
+  #
+  # The pendant triplet is NOT built here. The trusted producer uploads it: the
+  # configured trusted producer, scheduled every five minutes on its own host,
+  # which fetches live outward policy from its configured endpoint. Hosted runners never
+  # receive that policy. This job only waits for the upload and verifies it.
+  #
+  # It used to be the last step of the x86_64 Linux Binaries job, so a host that
+  # was unavailable failed "Binaries" and thereby skipped
+  # crates.io and the MCP Registry: 0.16.4 and 0.16.5 never reached crates.io
+  # while the release page looked shipped. crates.io does not consume the share,
+  # so it no longer waits on it. This job stays red until the share lands and
+  # verifies, which is the producer's delivery alarm (private operations runbook).
+  #
+  # It verifies against the RELEASED x86_64 archive, downloaded and checksummed,
+  # not a fresh build, because the provenance receipt binds the binary's sha256.
+  # A re-run of this job therefore needs no rebuild and cannot clobber an asset.
+  repository-share:
+    name: Trusted repository share
+    needs: [release-plz, artifacts]
+    if: >-
+      always() &&
+      vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true' &&
+      needs.artifacts.result == 'success' &&
+      (github.event_name == 'workflow_dispatch' ||
+       needs.release-plz.outputs.releases_created == 'true')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve package-qualified tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="quipu-ai-v$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Require the trusted repository share
-        if: vars.TRUSTED_REPOSITORY_SHARE_ENABLED == 'true' && matrix.target == 'x86_64-unknown-linux-gnu'
         timeout-minutes: 45
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
-          TARGET: ${{ matrix.target }}
+          TARGET: x86_64-unknown-linux-gnu
         run: |
           set -euo pipefail
           TMP="$(mktemp -d)"
           PACK="quipu-${TAG}-repository.pendant.tar.gz"
+          NATIVE="quipu-${TAG}-${TARGET}"
           complete=false
           for attempt in $(seq 1 80); do
-            if gh release download "$TAG" --repo scbrown/quipu --dir "$TMP" --clobber \
+            if gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$TMP" --clobber \
                 --pattern "$PACK" --pattern "$PACK.sha256" \
-                --pattern "$PACK.provenance.json" &&
+                --pattern "$PACK.provenance.json" 2>/dev/null &&
                 test -s "$TMP/$PACK" && test -s "$TMP/$PACK.sha256" &&
                 test -s "$TMP/$PACK.provenance.json"; then
               complete=true
               break
             fi
+            [ "$attempt" = 1 ] && echo "Waiting up to 40 min for ${PACK} from the configured trusted producer."
             sleep 30
           done
           if [[ "$complete" != true ]]; then
-            echo '::error::trusted repository share was not published before the deadline'
+            {
+              echo "### Trusted repository share missing for ${TAG}"
+              echo
+              echo "No \`${PACK}\` (+ \`.sha256\`, \`.provenance.json\`) appeared on the release within 40 minutes."
+              echo "It is uploaded by the configured trusted producer, not by this workflow."
+              echo "Check its host, schedule and policy endpoint using the private operations runbook."
+              echo "The producer may be unavailable, held or failing. It only serves the LATEST release."
+              echo
+              echo "Native binaries, wasm and crates.io do not wait on this job. Once the share is uploaded,"
+              echo "re-run THIS job only (it rebuilds nothing). See docs/RELEASING.md."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Trusted repository share missing::${PACK} was not uploaded within 40 min. The configured trusted producer did not run or failed; check its host and schedule using the private operations runbook, then re-run this job. crates.io was not gated on this."
             exit 1
           fi
-          BIN="target/${TARGET}/release/quipu"
+          # The released x86_64 archive, checksummed, is the binary the producer
+          # bound into the receipt.
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$TMP" --clobber \
+            --pattern "${NATIVE}.tar.gz" --pattern "${NATIVE}.tar.gz.sha256"
+          ( cd "$TMP" && sha256sum -c "${NATIVE}.tar.gz.sha256" )
+          tar -C "$TMP" -xzf "$TMP/${NATIVE}.tar.gz"
+          BIN="$TMP/${NATIVE}/quipu"
           # THE TAG COMMIT, NOT HEAD (aegis-3cxtcn). The producer refuses to run
           # unless its checkout HEAD *is* the tag commit, and stamps that sha as
           # `source_revision`; the verifier compares it by exact equality. On the
-          # push path this run's HEAD is the release-PR MERGE commit, which is a
-          # different sha, so passing HEAD here rejects every correctly-produced
-          # pack. Measured on v0.6.0 against the real published pack: tag
-          # 36665008, run HEAD 62e57bf0, verifier exit 1 on `source_revision`
-          # and exit 0 on the tag commit, with every other field already equal.
-          #
-          # This is also why the comment at the assert-tag-is-head call sites
-          # above no longer claims tag and HEAD agree on the push path: they do
-          # not, and that assumption is what made this gate unsatisfiable.
-          #
-          # The tree check is the real assurance and it stays STRICT. Identical
-          # trees are what make the tag commit a legitimate stand-in for the
-          # build; if they ever diverge the binary was not built from the tagged
-          # source, and that must stop the release loudly rather than be papered
-          # over by relaxing the equality check in verify().
+          # push path this run's HEAD is the release-PR MERGE commit, which can be
+          # a different sha with the same tree (v0.6.0: tag 36665008, HEAD
+          # 62e57bf0). The tree check is the real assurance and it stays STRICT.
           git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
-          test "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$TAG^{tree}")" || { echo '::error::release tag tree differs from the binary build tree' >&2; exit 1; }
+          test "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "$TAG^{tree}")" || { echo '::error::release tag tree differs from the checked-out tree' >&2; exit 1; }
           python3 scripts/verify-repository-share-provenance.py \
             "$TMP/$PACK" "$BIN" "$(git rev-parse "$TAG^{commit}")" "$TAG"
           "$BIN" import "$TMP/$PACK" --db "$TMP/receiver.db"
@@ -902,3 +1083,40 @@ jobs:
     with:
       tag: quipu-ai-v${{ needs.crates.outputs.version }}
       publish: ${{ vars.MCP_REGISTRY_PUBLISH == 'true' }}
+
+  # A SKIPPED crates job is grey, not red, and reads like "nothing to do". That
+  # is how 0.16.4 and 0.16.5 sat off crates.io (aegis-0zr). When a release was
+  # cut and crates.io did not get it, say so as an error naming the cause and the
+  # recovery, instead of leaving a silent skip.
+  crates-not-published:
+    name: crates.io NOT published
+    needs: [release-plz, wasm, artifacts, crates]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.release-plz.outputs.releases_created == 'true' &&
+      needs.crates.result != 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Report the unpublished crate
+        env:
+          WASM: ${{ needs.wasm.result }}
+          ARTIFACTS: ${{ needs.artifacts.result }}
+          CRATES: ${{ needs.crates.result }}
+        run: |
+          {
+            echo "### crates.io was NOT published"
+            echo
+            echo "| job | result |"
+            echo "|---|---|"
+            echo "| Wasm (release asset) | ${WASM} |"
+            echo "| Binaries (all targets) | ${ARTIFACTS} |"
+            echo "| Publish to crates.io | ${CRATES} |"
+            echo
+            echo "The crates job publishes only after the wasm and binary assets succeed."
+            echo "Fix the failed asset job, then publish the released tag through the manual lane"
+            echo "(docs/RELEASING.md, 'Publishing a cut release to crates.io')."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=crates.io NOT published::the release was cut but crates.io was not published (wasm=${WASM}, binaries=${ARTIFACTS}, crates=${CRATES}). See docs/RELEASING.md."
+          exit 1

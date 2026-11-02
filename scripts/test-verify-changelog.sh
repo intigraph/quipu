@@ -41,6 +41,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
     cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
     cp "$REPO_ROOT/scripts/changelog-duplicates.py" scripts/
+    cp "$REPO_ROOT/scripts/release-pr-freshness.sh" scripts/
     printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
     echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
     git tag v1.0.0
@@ -138,6 +139,24 @@ read -r d a b c <<<"$(make_repo)"
 { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
+
+# 7b. aegis-0zr: since #902 the release commit also syncs the Python binding's
+#     manifest and lock. Those are release mechanics too; without them in the
+#     exemption every release commit failed its own verify.
+read -r d a b c <<<"$(make_repo)"
+(
+  cd "$d"
+  mkdir -p bindings/python
+  printf '[package]\nname="probe-py"\nversion="1.0.0"\n' > bindings/python/Cargo.toml
+  echo lock > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: binding scaffold" && git tag quipu-ai-v1.0.0
+  printf '# Changelog\n\nnote\n' > CHANGELOG.md
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+  echo lock2 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "release commit syncing the Python binding stays exempt" 0 "none missing, none extra" "$d"
 
 # 8. The post-rename package-qualified tag is the preferred baseline. A newer
 # historical v-tag must not pull the range back across the rename boundary.
@@ -431,13 +450,20 @@ done
 
 # Execute the actual main workflow step. A populated Unreleased draft can lag
 # behind main; the package's released section must retain its tagged boundary.
-main_step="$(python3 - "$REPO_ROOT/.github/workflows/release.yml" <<'PYTEST'
+# workflow_step <exact step name, or "* on main"> — print that release.yml step's run body.
+workflow_step() {
+  python3 - "$REPO_ROOT/.github/workflows/release.yml" "$1" <<'PYTEST'
 from pathlib import Path
 import sys
 lines = Path(sys.argv[1]).read_text().splitlines()
-starts = [i for i, line in enumerate(lines)
-          if line.startswith("      - name:") and line.endswith(" on main")]
-assert len(starts) == 1, "expected one main changelog workflow step"
+want = sys.argv[2]
+def match(line):
+    if not line.startswith("      - name:"):
+        return False
+    name = line.split("name:", 1)[1].strip()
+    return name.endswith(" on main") if want == "* on main" else name == want
+starts = [i for i, line in enumerate(lines) if match(line)]
+assert len(starts) == 1, f"expected one workflow step named {want!r}"
 start = starts[0]
 end = next((i for i in range(start + 1, len(lines))
             if lines[i].startswith("      - ")), len(lines))
@@ -453,7 +479,9 @@ if value == "|":
 else:
     print(value)
 PYTEST
-)" || exit 1
+}
+main_step="$(workflow_step '* on main')" || exit 1
+cut_step="$(workflow_step 'Refuse to cut a version whose section misses packaged commits')" || exit 1
 read -r d a b c < <(make_repo)
 {
   echo '# Changelog'; echo; echo '## [Unreleased]'; echo; entry "$b"
@@ -483,7 +511,8 @@ for arm in stale-draft missing-released missing-pending complete-pending; do
       sed -i "/^## \[1.2.0\]/a $(entry "$fourth")" "$d/CHANGELOG.md"
       want=0; version=1.2.0 ;;
   esac
-  out="$(cd "$d" && bash -e -c "$main_step" 2>&1)"; rc=$?
+  # As the run that cuts the version: an empty state now skips a tagged version.
+  out="$(cd "$d" && STATE=release CREATED=true GITHUB_STEP_SUMMARY=/dev/null bash -e -c "$main_step" 2>&1)"; rc=$?
   if [[ "$rc" -eq "$want" ]] && grep -qF "version $version," <<<"$out"; then
     echo "  PASS  main workflow $arm (exit $rc)"
     pass=$((pass + 1))
@@ -497,7 +526,9 @@ done
 # release commit's own run skips it too.
 git -C "$d" show quipu-ai-v1.1.0:Cargo.toml > "$d/Cargo.toml"
 git -C "$d" show quipu-ai-v1.1.0:CHANGELOG.md | grep -vF "[$c]" > "$d/CHANGELOG.md"
-for arm in "released::0" "released:true:1" "defer::0" "release::1"; do
+# An EMPTY state (release-plz skipped: CI correctness failed) cut nothing, so a
+# tagged version is skipped too (aegis-0zr: 861ac848 re-failed shipped 0.16.4).
+for arm in "released::0" "released:true:1" "defer::0" "release::1" "::0"; do
   IFS=: read -r state created want <<<"$arm"
   out="$(cd "$d" && STATE="$state" CREATED="$created" GITHUB_STEP_SUMMARY=/dev/null \
     bash -e -c "$main_step" 2>&1)"; rc=$?
@@ -509,7 +540,80 @@ for arm in "released::0" "released:true:1" "defer::0" "release::1"; do
     fail=$((fail + 1))
   fi
 done
+
+# ...but an empty state on an UNTAGGED version still verifies it.
+sed -i 's/version="1.1.0"/version="1.2.0"/' "$d/Cargo.toml"
+sed -i '/^## \[1.1.0\]/i ## [1.2.0] - 2026-01-02\n' "$d/CHANGELOG.md"
+out="$(cd "$d" && STATE="" CREATED="" GITHUB_STEP_SUMMARY=/dev/null bash -e -c "$main_step" 2>&1)"; rc=$?
+if [[ "$rc" -eq 1 ]] && grep -qF "version 1.2.0," <<<"$out"; then
+  echo "  PASS  main workflow empty state on an untagged version still verifies (exit $rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  main workflow empty state untagged: wanted 1, got $rc: $out" >&2
+  fail=$((fail + 1))
+fi
+
+# aegis-0zr: the release-plz job verifies the commit it is ABOUT to tag. 1.2.0's
+# section misses the fourth commit here, so the cut is refused; with it listed,
+# the cut proceeds.
+out="$(cd "$d" && VERSION=1.2.0 bash -e -c "$cut_step" 2>&1)"; rc=$?
+if [[ "$rc" -eq 1 ]] && grep -qF "Release not cut" <<<"$out" && grep -qF "$fourth" <<<"$out"; then
+  echo "  PASS  pre-cut gate refuses a section missing a packaged commit (exit $rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  pre-cut gate on missing commit: wanted 1, got $rc: $out" >&2
+  fail=$((fail + 1))
+fi
+sed -i "/^## \[1.2.0\]/a $(entry "$fourth")" "$d/CHANGELOG.md"
+out="$(cd "$d" && VERSION=1.2.0 bash -e -c "$cut_step" 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 ]]; then
+  echo "  PASS  pre-cut gate allows a complete section (exit $rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  pre-cut gate on complete section: wanted 0, got $rc: $out" >&2
+  fail=$((fail + 1))
+fi
 rm -rf "$d"
+
+# aegis-0zr: release-pr-freshness.sh checks the release PR AS IT WOULD SQUASH-MERGE
+# onto main now. A packaged commit landing on main after the PR was prepared makes
+# it stale (the #901/#903 shape); an excluded-only commit does not; a PR prepared
+# from current main is fresh.
+fresh_repo() {
+  local d; read -r d a b c < <(make_repo)
+  (
+    cd "$d"
+    git checkout -qb rel
+    sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml
+    { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; entry "$b"; entry "$c"; } > CHANGELOG.md
+    git add -A && git commit -qm "chore: release v1.1.0"
+    git checkout -q -
+  ) >/dev/null 2>&1
+  echo "$d"
+}
+fresh_check() {
+  local name="$1" want="$2" d="$3" out rc
+  out="$(cd "$d" && ./scripts/release-pr-freshness.sh rel HEAD 2>&1)"; rc=$?
+  if [[ "$rc" -eq "$want" ]]; then
+    echo "  PASS  freshness: $name (exit $rc)"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL  freshness: $name: wanted $want, got $rc: $out" >&2
+    fail=$((fail + 1))
+  fi
+  rm -rf "$d"
+}
+d="$(fresh_repo)"
+fresh_check "PR prepared from current main is fresh" 0 "$d"
+d="$(fresh_repo)"
+(cd "$d" && echo late >> src/lib.rs && git commit -qam "fix: landed after the release PR") >/dev/null 2>&1
+fresh_check "packaged commit after the PR makes it stale" 1 "$d"
+d="$(fresh_repo)"
+(cd "$d" && echo note > docs/late.md && git add -A && git commit -qm "docs: excluded only") >/dev/null 2>&1
+fresh_check "excluded-only commit after the PR keeps it fresh" 0 "$d"
+d="$(fresh_repo)"
+(cd "$d" && printf '# Changelog\n\nhand edit\n' > CHANGELOG.md && git add -A && git commit -qm "chore: hand edit") >/dev/null 2>&1
+fresh_check "a conflicting main makes it stale" 1 "$d"
 
 # The detector's own arms, including its parse-error cases.
 if python3 "$REPO_ROOT/scripts/changelog-duplicates.py" --selftest >/dev/null 2>&1; then
