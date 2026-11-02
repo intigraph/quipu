@@ -436,7 +436,7 @@ fn evaluate(
     let rows = groups
         .into_iter()
         .map(|group| {
-            let mut row = Bindings::new();
+            let mut row = Bindings::default();
             for (var, value) in keys.iter().zip(group.key) {
                 if let Some(value) = value {
                     row.insert(var.clone(), value);

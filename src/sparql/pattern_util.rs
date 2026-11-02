@@ -10,7 +10,7 @@ use crate::types::Value;
 
 use super::TemporalContext;
 
-pub type Bindings = HashMap<String, Value>;
+pub type Bindings = HashMap<String, Value, foldhash::fast::RandomState>;
 
 /// Try to bind a variable. Returns false if incompatible with existing binding.
 pub fn bind_var(bindings: &mut Bindings, var: &str, value: Value, compatible: &mut bool) -> bool {

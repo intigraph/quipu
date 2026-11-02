@@ -105,7 +105,7 @@ pub(crate) fn sparql_parser() -> spargebra::SparqlParser {
 }
 
 /// A single row of variable bindings from a query result.
-pub type Bindings = HashMap<String, Value>;
+pub type Bindings = HashMap<String, Value, foldhash::fast::RandomState>;
 
 /// An RDF triple (used by CONSTRUCT and DESCRIBE results).
 #[derive(Debug, Clone, PartialEq)]
