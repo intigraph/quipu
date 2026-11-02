@@ -35,7 +35,7 @@ A separate Cargo project added and checked the documented `0.15` library
 dependency, then removed it and checked again. Both used a disposable HOME
 and copied toolchain; unrelated data was preserved.
 
-The Homebrew removal, apt, Tambo apply/removal and container procedures below
+The Homebrew, apt, Tambo apply/removal and container procedures below
 are **not yet independently exercised for this reference revision**. Their commands are derived from the current source and
 package definitions; they are not a claim of a successful installation on your
 platform. Use the listed version and removal checks to verify that boundary.
