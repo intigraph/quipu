@@ -1004,12 +1004,17 @@ List schema-evolution proposals, optionally filtered by status.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `status` | No | `pending`, `accepted`, or `rejected` (default: all) |
+| `plan` | No | `true` attaches a blast-radius plan to each pending proposal (writes nothing) |
+| `risk_threshold` | No | Plan: score above which the verdict is `fail` (0-100, default 40) |
 
 ### `quipu_accept_proposal`
 
 Accept a pending schema proposal. Shape proposals are validated before writing.
 A proposal carrying a migration runs it in the same transaction; a refused
-migration leaves the proposal pending and nothing written.
+migration leaves the proposal pending and nothing written. The blast-radius
+[plan](../concepts/schema-evolution.md#blast-radius-plan-and-risk-gate) is
+computed first and returned as `plan`; a `fail` or `undetermined` plan is
+refused unless `accept_risk` is `true` with a `risk_reason`.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -1018,6 +1023,9 @@ migration leaves the proposal pending and nothing written.
 | `note` | No | Optional acceptance note |
 | `dry_run` | No | `true` reports what acceptance would do and accepts nothing |
 | `limit` | No | Dry run: sample facts and violations per list (default 50) |
+| `risk_threshold` | No | Refuse when the plan's score is above this (0-100, default 40 or `QUIPU_PROPOSAL_RISK_THRESHOLD`) |
+| `accept_risk` | No | `true` accepts a failing or undetermined plan; needs `risk_reason` |
+| `risk_reason` | No | Why the risk is accepted; recorded in the decision note |
 | `timestamp` | No | ISO-8601 timestamp |
 
 ### `quipu_reject_proposal`

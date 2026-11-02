@@ -2,11 +2,11 @@
 .el .ds Aq '
 .TH QUIPU-PROPOSE 1 "" quipu "Quipu Manual"
 .SH NAME
-quipu\-propose \- List, submit, accept or reject schema change proposals
+quipu\-propose \- List, submit, plan, accept or reject schema change proposals
 .SH SYNOPSIS
 \fBquipu propose\fR [\fB\-\-db\fR] [\fB\-\-status\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
 .SH DESCRIPTION
-List, submit, accept or reject schema change proposals
+List, submit, plan, accept or reject schema change proposals
 .SH OPTIONS
 .TP
 \fB\-\-db\fR \fI<PATH>\fR
@@ -25,8 +25,11 @@ List schema change proposals, optionally by status
 quipu\-propose\-submit(1)
 Submit a schema change proposal
 .TP
+quipu\-propose\-plan(1)
+Report a pending proposal\*(Aqs blast radius and 0\-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined
+.TP
 quipu\-propose\-accept(1)
-Accept a pending proposal
+Accept a pending proposal; refused when its plan is over the risk threshold unless \-\-accept\-risk \-\-reason
 .TP
 quipu\-propose\-reject(1)
 Reject a pending proposal

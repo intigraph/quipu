@@ -117,7 +117,7 @@ class AgentReferences(unittest.TestCase):
             private = Path(folder)
             source = private / "references.ttl"
             triples = [
-                '<http://aegis.gastown.local/ontology/doc/quipu/'
+                '<' + builder.PUBLIC_DOCUMENT_BASE
                 + quote(path, safe="")
                 + '> <http://www.w3.org/2000/01/rdf-schema#label> '
                 + json.dumps(path) + ' ; <http://aegis.gastown.local/ontology/filePath> '
@@ -126,7 +126,7 @@ class AgentReferences(unittest.TestCase):
                 for path in required
             ]
             triples.append(
-                '<http://aegis.gastown.local/ontology/doc/quipu/README.md> '
+                '<' + builder.PUBLIC_DOCUMENT_BASE + 'README.md> '
                 '<http://www.w3.org/2000/01/rdf-schema#label> "README" ; '
                 '<http://aegis.gastown.local/ontology/filePath> "README.md" ; '
                 '<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> '
@@ -439,6 +439,68 @@ class Knowledge(unittest.TestCase):
         negative = subprocess.run(args, capture_output=True, text=True, cwd=self.root)
         self.assertNotEqual(negative.returncode, 0, negative.stdout)
 
+
+class ReleaseAliases(unittest.TestCase):
+    """aegis-asv: tracked agent-file aliases no longer block a release."""
+
+    def release(self, folder, links):
+        source = Path(folder) / "source"
+        source.mkdir()
+        subprocess.run(["git", "init", "-q", str(source)], check=True)
+        (source / "AGENTS.md").write_text("agent guide\n")
+        (source / "docs").mkdir()
+        (source / "docs/guide.md").write_text("guide\n")
+        (source / "docs/deep").mkdir()
+        (source / "docs/deep/note.md").write_text("note\n")
+        for name, target in links.items():
+            (source / name).symlink_to(target)
+        subprocess.run(["git", "-C", str(source), "add", "-A"], check=True)
+        subprocess.run(
+            ["git", "-C", str(source), "-c", "user.name=fixture",
+             "-c", "user.email=fixture@example.org", "commit", "-qm", "fixture"],
+            check=True,
+        )
+        revision = subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
+        return builder.materialize_release(source, revision, Path(folder) / "copied")
+
+    def test_alias_of_tracked_file_is_skipped_and_target_copied_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            aliases = {"CLAUDE.md": "AGENTS.md", "GEMINI.md": "AGENTS.md",
+                       "docs/also.md": "guide.md", "docs/CLAUDE.md": "../AGENTS.md",
+                       "docs/deep/up.md": "../../AGENTS.md", "dot.md": "./docs/../AGENTS.md",
+                       "docs/deep/side.md": "../deep/note.md"}
+            copied = self.release(folder, aliases)
+            self.assertEqual((copied / "AGENTS.md").read_text(), "agent guide\n")
+            self.assertEqual((copied / "docs/guide.md").read_text(), "guide\n")
+            for alias in aliases:
+                self.assertFalse((copied / alias).exists() or (copied / alias).is_symlink())
+
+    def test_subdirectory_escape_refuses(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(ValueError, "unsupported tracked release member"):
+                self.release(folder, {"docs/LINK.md": "../../outside.md"})
+
+    def test_other_links_refuse(self):
+        for name, target in {
+            "absolute": "/etc/hostname",
+            "escaping": "../outside.md",
+            "dangling": "missing.md",
+            "directory": "docs",
+            "chained": "CLAUDE.md",
+            # Lexically AGENTS.md, but the kernel fails ENOENT/ENOTDIR first.
+            "through a missing directory": "missing/../AGENTS.md",
+            "through a link": "CLAUDE.md/../AGENTS.md",
+            "through a file": "AGENTS.md/../AGENTS.md",
+            "trailing slash": "AGENTS.md/",
+            "through a file with a dot": "AGENTS.md/.",
+            "through a file with an empty segment": "AGENTS.md//AGENTS.md",
+            "escaping from a subdirectory": "docs/../../outside.md",
+        }.items():
+            links = {"CLAUDE.md": "AGENTS.md", "LINK.md": target}
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaisesRegex(ValueError, "unsupported tracked release member"):
+                    self.release(folder, links)
 
 if __name__ == "__main__":
     unittest.main()
