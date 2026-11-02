@@ -40,6 +40,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/fix-changelog.sh" scripts/
     cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
     cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
+    cp "$REPO_ROOT/scripts/check-release-mechanics.py" scripts/
     cp "$REPO_ROOT/scripts/changelog-duplicates.py" scripts/
     printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
     echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
@@ -138,6 +139,70 @@ read -r d a b c <<<"$(make_repo)"
 { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo;
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
+
+# Binding synchronization is release mechanics only for a canonical subject,
+# the selected version and version-only Cargo edits. Never hide real content.
+for arm in suffixed unsuffixed near-match feature wrong-version binding-version source dependency lock-dependency root-lock-dependency registry-namesake extra duplicate; do
+  read -r d a b c <<<"$(make_repo)"
+  (
+    cd "$d"
+    mkdir -p bindings/python
+    sed -i 's/name="probe"/name="quipu-ai"/; s/version="1.0.0"/version = "1.0.0"/' Cargo.toml
+    printf '[package]\nname="quipu-kg"\nversion = "1.0.0"\n' > bindings/python/Cargo.toml
+    printf 'version = 4\n\n[[package]]\nname = "quipu-ai"\nversion = "1.0.0"\n' > Cargo.lock
+    cp Cargo.lock bindings/python/Cargo.lock
+    if [[ "$arm" == root-lock-dependency ]]; then
+      printf '\n[[package]]\nname = "root-unrelated"\nversion = "1.0.0"\n' >> Cargo.lock
+    fi
+    printf '\n[[package]]\nname = "quipu-kg"\nversion = "1.0.0"\n\n[[package]]\nname = "unrelated-dependency"\nversion = "1.0.0"\n' >> bindings/python/Cargo.lock
+    if [[ "$arm" == registry-namesake ]]; then
+      printf '\n[[package]]\nname = "quipu-ai"\nversion = "1.0.0"\nsource = "registry+https://example.invalid/index"\n' >> bindings/python/Cargo.lock
+    fi
+    git add -A && git commit -qm 'chore: seed binding version fixture'
+  ) >/dev/null 2>&1
+  seed="$(git -C "$d" rev-parse --short=7 HEAD)"
+  subject='chore: release v1.1.0 (#914)'
+  case "$arm" in
+    unsuffixed) subject='chore: release v1.1.0' ;;
+    near-match) subject='chore: release v1.1.0 (#914) extra' ;;
+    feature) subject='feat: binding improvement' ;;
+    wrong-version) subject='chore: release v1.2.0 (#914)' ;;
+  esac
+  (
+    cd "$d"
+    sed -i 's/version = "1.0.0"/version = "1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+    sed -i 's/version = "1.0.0"/version = "1.1.0"/' Cargo.lock
+    python3 - "$arm" <<'PYLOCK'
+import pathlib, sys
+p = pathlib.Path('bindings/python/Cargo.lock')
+s = p.read_text()
+# Canonical local identities change; unrelated packages must remain identical.
+s = s.replace('name = "quipu-ai"\nversion = "1.0.0"\n\n', 'name = "quipu-ai"\nversion = "1.1.0"\n\n')
+s = s.replace('name = "quipu-kg"\nversion = "1.0.0"', 'name = "quipu-kg"\nversion = "1.1.0"')
+if sys.argv[1] == 'lock-dependency':
+    s = s.replace('name = "unrelated-dependency"\nversion = "1.0.0"', 'name = "unrelated-dependency"\nversion = "1.1.0"')
+if sys.argv[1] == 'registry-namesake':
+    s = s.replace('version = "1.0.0"\nsource =', 'version = "1.1.0"\nsource =')
+p.write_text(s)
+PYLOCK
+    if [[ "$arm" == binding-version ]]; then sed -i 's/version = "1.1.0"/version = "1.2.0"/' bindings/python/Cargo.toml; fi
+    if [[ "$arm" == source ]]; then echo substantive >> src/lib.rs; fi
+    if [[ "$arm" == dependency ]]; then echo 'description="substantive metadata"' >> bindings/python/Cargo.toml; fi
+    git add -A && git commit -qm "$subject"
+  ) >/dev/null 2>&1
+  mechanics="$(git -C "$d" rev-parse --short=7 HEAD)"
+  { echo '# Changelog'; echo; echo '## [1.1.0] - 2026-01-01'; echo;
+    entry "$b"; entry "$c"; entry "$seed"
+    if [[ "$arm" == extra ]]; then entry "$a"; fi
+    if [[ "$arm" == duplicate ]]; then entry "$b"; fi
+  } > "$d/CHANGELOG.md"
+  case "$arm" in
+    suffixed|unsuffixed) check "binding release $arm stays exempt" 0 'none missing, none extra' "$d" ;;
+    extra) check 'binding exemption does not mask extras' 1 'do not belong to this release' "$d" ;;
+    duplicate) check 'binding exemption does not mask duplicates' 1 'duplicated' "$d" ;;
+    *) check "binding release $arm remains required" 1 "$mechanics" "$d" ;;
+  esac
+done
 
 # 8. The post-rename package-qualified tag is the preferred baseline. A newer
 # historical v-tag must not pull the range back across the rename boundary.
