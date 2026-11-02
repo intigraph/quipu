@@ -66,14 +66,15 @@ pub struct ShareImportRequest {
     /// checked and the AUTHOR was not.
     #[serde(default)]
     pub attestation: Option<crate::session_attestation::AttestationEnvelope>,
-    /// The destination the OPERATOR declares for this import (aegis-auw0o7) —
-    /// not the one the incoming manifest claims.
+    /// The destination the RECEIVING operator declares (aegis-auw0o7), not
+    /// the one the incoming manifest claims. It is read only for
+    /// audience-bound transfers, where the receiver must name the exact
+    /// binding (`namespace_publication::receive`). An `internal` stamp needs
+    /// no declaration: the receiver reads it from the verified manifest
+    /// (aegis-zev).
     ///
-    /// `#[serde(skip)]`, so it is unreachable from the wire and every remote
-    /// caller is treated as outward-bound. The field exists to let the local
-    /// CLI say `--destination internal`; if a request could carry it, the gate
-    /// below would be one an untrusted caller could switch off, which is the
-    /// same hole the producer side refuses to open.
+    /// `#[serde(skip)]`, so it is unreachable from the wire and a remote
+    /// caller can never declare an audience on the receiver's behalf.
     #[serde(skip)]
     pub destination: crate::share_scrub::ShareDestination,
 }
@@ -156,6 +157,11 @@ pub struct ShareImportResult {
     /// Absent on wasm, where there is no verifier to answer with.
     #[cfg(not(target_arch = "wasm32"))]
     pub attestation: crate::share_attestation::AttestationStatus,
+    /// The destination stamp read from the VERIFIED manifest (aegis-zev).
+    /// `internal` means the producer skipped the outward scrub; absent means
+    /// the share carried no stamp.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination: Option<ShareDestination>,
 }
 
 /// Request for the separate ROOT-promotion operation.
@@ -394,50 +400,35 @@ pub(crate) fn import_inner(
     verify_share(request)?;
     crate::namespace_publication::receive(store, request)?;
     crate::import_embedding::verify_recipe(store, request.manifest.embedding.as_ref())?;
-    // THEN THE DESTINATION MARKER THE SHARE CARRIES, still before anything is
-    // staged (aegis-auw0o7). A share stamped `internal` was produced with the
-    // outward scrub skipped, so importing it here is the moment that exemption
-    // would be forgotten: the triples land in a store from which someone else
-    // will later produce a share, and nothing downstream remembers where they
-    // came from.
+    // THEN THE DESTINATION STAMP THE SHARE CARRIES, still before anything is
+    // staged (aegis-auw0o7, aegis-zev). The stamp is read here, after
+    // `verify_share`: it is inside the hash, so it means nothing until the
+    // bytes are known to hash to the id they claim, and from then on it cannot
+    // have been forged or stripped in transit.
     //
-    // The gate is NOT a blanket refusal, and the difference matters. It runs
-    // the scrub the producer skipped and refuses only if the payload actually
-    // fails it. A share marked internal out of caution, carrying nothing an
-    // outward share could not carry, imports normally — the marker is checked
-    // against the bytes rather than believed.
+    // The RECEIVER reads it; the operator no longer repeats it. Skipping the
+    // outward scrub is the producer's decision (`quipu share --destination
+    // internal`), and asking the importer to say it again added a refusal
+    // without adding a check. The protection that matters is on the way back
+    // out: every outward share runs the outward scrub over its whole payload
+    // (`share_scrub::enforce_destination`, default `Outward`), so internal
+    // identifiers that arrived here are refused there. The stamp is recorded
+    // on the result and on the staged review record, so the import stays
+    // visibly internal.
     //
-    // The manifest is checked AFTER `verify_share`, never before: the marker is
-    // inside the hash, so it means nothing until the bytes are known to hash to
-    // the id they claim.
-    if request
+    // A store that must never hold unscrubbed internal data says so once, in
+    // config: `[quipu.import] refuse_internal = true`.
+    let stamped_internal = request
         .manifest
         .destination
         .as_ref()
-        .is_some_and(ShareDestination::is_internal)
-        && !request.destination.is_internal()
-    {
-        let mut files = BTreeMap::from([
-            ("export.nt".to_string(), request.export_ntriples.clone()),
-            ("shapes.ttl".to_string(), request.shapes_turtle.clone()),
-        ]);
-        if let Some(text) = &request.alignments_turtle {
-            files.insert("alignments.ttl".into(), text.clone());
-        }
-        if let Some(queries) = &request.queries_turtle {
-            files.insert("queries.ttl".to_string(), queries.clone());
-        }
-        if !request.manifest.pointers.is_empty() {
-            files.insert(
-                crate::share::POINTERS_SCRUB_LABEL.to_string(),
-                crate::share::pointer_scrub_text(&request.manifest.pointers),
-            );
-        }
-        crate::share_scrub::scrub_outward_payload(
-            store,
-            &files,
-            "import of a share marked destination=internal",
-        )?;
+        .is_some_and(ShareDestination::is_internal);
+    if stamped_internal && store.import_policy_config().refuse_internal {
+        return Err(Error::PolicyDenied(format!(
+            "import refused share {}: its verified manifest is stamped destination=internal \
+             (unscrubbed identifiers) and this store sets [quipu.import] refuse_internal = true",
+            request.manifest.share_id
+        )));
     }
     // THEN who produced it, BEFORE anything is staged. A tampered, replayed, or
     // unbound envelope must fail here rather than after the graph exists — the
@@ -566,6 +557,7 @@ pub(crate) fn import_inner(
         queries,
         #[cfg(not(target_arch = "wasm32"))]
         attestation,
+        destination: request.manifest.destination.clone(),
     })
 }
 
