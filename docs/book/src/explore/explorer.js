@@ -160,7 +160,7 @@ const CANNED = [
   { name: "How does the vision guide code?", sparql: `${PREFIXES}
 PREFIX q: <https://quipu.dev/knowledge/>
 SELECT ?decision ?path WHERE {
-  q:vision q:guides ?decision .
+  ?vision a q:Vision ; q:guides ?decision .
   ?decision q:governs ?module .
   ?module aegis:filePath ?path .
 }` },
@@ -279,7 +279,7 @@ async function selectFile(item) {
   drawNeighbourhood(item);
   renderFacts(item);
   if (!$("#facts-drawer").open) $("#facts-drawer").showModal();
-  if (item.iri.startsWith("https://quipu.dev/knowledge/")) {
+  if (item.iri.startsWith("https://w3id.org/intigraph/quipu/id/idea/") || item.iri.startsWith("https://quipu.dev/knowledge/")) {
     body.replaceChildren(el("p", { text: "This is contributor knowledge. Its source and related nodes are in the constellation card; its editable facts are below." }));
     wireShowQuery("#detail-showq", factsQuery(item.iri));
     return;

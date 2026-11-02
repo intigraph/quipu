@@ -84,6 +84,7 @@ mod pack_turtle;
 pub mod path;
 pub mod proposal;
 pub mod proposal_migration;
+pub mod proposal_plan;
 pub mod provider;
 pub mod rdf;
 mod rdf_compact;

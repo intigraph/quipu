@@ -145,8 +145,11 @@ const server = http.createServer((req, res) => {
     // A second real pack without the vision must not let the file browser
     // overwrite the restored Map selection. All writes remain in this tab.
     const pack = await page.evaluate(async () => {
-      await window.quipu.retract("https://quipu.dev/knowledge/vision");
-      const zero = await window.quipu.query("SELECT ?p WHERE { <https://quipu.dev/knowledge/vision> ?p ?o }");
+      const vision = await window.quipu.query("SELECT (STR(?x) AS ?v) WHERE { ?x a <https://quipu.dev/knowledge/Vision> }");
+      if (vision.rows.length !== 1) throw Error("expected exactly one vision");
+      const iri = vision.rows[0].v;
+      await window.quipu.retract(iri);
+      const zero = await window.quipu.query("SELECT ?p WHERE { ?v a <https://quipu.dev/knowledge/Vision> ; ?p ?o }");
       if (zero.rows.length) throw Error("Vision removal failed");
       return Array.from(await window.quipu.share());
     });
