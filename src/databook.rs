@@ -458,7 +458,10 @@ pub fn fence(label: &str, annotations: &[(&str, &str)], payload: &str) -> Result
     }
     let mut out = String::new();
     for (key, value) in annotations {
-        if value.contains("-->") || value.contains('\n') {
+        // Any control character, not only `\n`: the reader normalises a bare
+        // `\r` to a line break, which would end the comment and turn the rest of
+        // the value into document text (#964 review).
+        if value.contains("-->") || value.contains(|c: char| c.is_control()) {
             return Err(invalid(format!("annotation `{key}` cannot hold `{value}`")));
         }
         let key = if key.contains(':') {

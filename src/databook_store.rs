@@ -61,7 +61,8 @@ pub struct ImportReport {
 pub struct ImportOptions<'a> {
     /// Load every graph block into this graph instead of the one it names.
     pub graph: Option<&'a str>,
-    /// Load `shacl` blocks as stored shapes (after the data commits).
+    /// Load `shacl` blocks as stored shapes, in the same all-or-nothing write
+    /// as the graph data.
     pub with_shapes: bool,
     pub timestamp: &'a str,
     pub actor: Option<&'a str>,

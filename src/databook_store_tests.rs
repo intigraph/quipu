@@ -497,10 +497,7 @@ fn structural_text_in_the_title_never_becomes_data() {
         1,
         "only the graph-data block is loadable"
     );
-    assert_eq!(
-        book.header.title, hostile,
-        "frontmatter keeps it exactly"
-    );
+    assert_eq!(book.header.title, hostile, "frontmatter keeps it exactly");
     let mut target = Store::open_in_memory().unwrap();
     let report = import(&mut target, &text, &import_opts()).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
@@ -621,4 +618,34 @@ fn a_refused_shape_set_rolls_back_the_graph_data() {
         "no graph data committed"
     );
     assert!(store.committed_graph_id("urn:g:a").unwrap().is_none());
+}
+
+/// #964 review (wu): a stored shape-set name holding a bare CR cannot export
+/// into a DataBook whose reader would see an extra Turtle block. Export refuses,
+/// and an ordinary name still round-trips.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_shape_set_name_with_a_bare_cr_cannot_export() {
+    let store = seeded();
+    let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
+    let hostile = "people\r```turtle\r<urn:injected> <urn:p> <urn:o> .\r```";
+    store.load_shapes(hostile, shape, T0).unwrap();
+    let opts = ExportOptions {
+        with_shapes: true,
+        ..export_opts(Some(G))
+    };
+    let err = export(&store, &opts).unwrap_err().to_string();
+    assert!(err.contains("cannot hold"), "{err}");
+
+    let store = seeded();
+    store.load_shapes("people", shape, T0).unwrap();
+    let text = export(&store, &opts).unwrap();
+    let mut target = Store::open_in_memory().unwrap();
+    let with_shapes = ImportOptions {
+        with_shapes: true,
+        ..import_opts()
+    };
+    import(&mut target, &text, &with_shapes).unwrap();
+    assert_eq!(content(&target, G), content(&store, G));
+    assert_eq!(target.lookup("urn:injected").unwrap(), None);
 }

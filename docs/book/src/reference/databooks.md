@@ -60,7 +60,9 @@ chosen in this order:
 4. Otherwise, the frontmatter's `graph.named_graph`.
 5. Otherwise, ROOT.
 
-All graphs commit in **one** all-or-nothing write. The transaction source is
+All graphs, and with `--with-shapes` the shape sets, commit in **one**
+all-or-nothing write: a refused graph or shape set leaves no facts, no shapes
+and no newly registered graph. The transaction source is
 `databook:<id>@<version>` unless you pass `--source`.
 
 Import checks every `quipu:sha256` before it writes anything, and refuses the
@@ -71,8 +73,8 @@ graph is registered.
 Import **never executes** a block:
 
 - `sparql` and `sparql-update` blocks are reported as skipped.
-- `shacl` blocks load as stored shapes only with `--with-shapes`, after the
-  data commits. Shape loading is a separate step.
+- `shacl` blocks load as stored shapes only with `--with-shapes`, inside the
+  same write as the graph data.
 - `json-ld` and encrypted blocks are skipped.
 - A block marked `mode=printed`, `hidden`, `reference` or
   `databook:display-only: true` is shown for reading and not loaded.

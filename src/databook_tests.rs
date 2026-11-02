@@ -230,3 +230,21 @@ fn a_repeated_block_id_is_refused() {
     let err = parse(&book(IDENTITY, body)).unwrap_err().to_string();
     assert!(err.contains("`a` is used by more than one block"), "{err}");
 }
+
+/// #964 review (wu): the reader turns a bare `\r` into a line break, so an
+/// annotation value holding one (or any control character) would end its
+/// comment and leak the rest into the document. The writer refuses it.
+#[test]
+fn annotation_values_refuse_every_control_character() {
+    for value in ["a\rb", "a\r\nb", "a\nb", "a\tb", "a\u{0}b", "a\u{85}b"] {
+        assert!(
+            fence(
+                "shacl",
+                &[("quipu:shapes-name", value)],
+                "<urn:a> <urn:b> <urn:c> .\n"
+            )
+            .is_err(),
+            "{value:?} was written"
+        );
+    }
+}
