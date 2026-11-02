@@ -51,8 +51,13 @@ fn supported(pattern: &GraphPattern) -> bool {
         // Seeding is equivalent to compatibility joining only for positive
         // BGP/GRAPH/JOIN operands, not for BIND, OPTIONAL or local filters.
         GraphPattern::Join { left, right } => {
-            supported(left) && super::bind_join::seed_safe(right) && supported(right)
+            supported(left)
+                && (matches!(**right, GraphPattern::Values { .. })
+                    || (super::bind_join::seed_safe(right) && supported(right)))
         }
+        // An inline table is a positive leaf: seeding it with a row is the
+        // same compatibility join the hash join performs (aegis-xdvg.6).
+        GraphPattern::Values { .. } => true,
         _ => false,
     }
 }
@@ -199,6 +204,15 @@ pub(super) fn visit(
                     Ok(())
                 },
             )
+        }
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => {
+            for row in super::values::eval_values(store, variables, bindings, seed)?.0 {
+                emit(row)?;
+            }
+            Ok(())
         }
         GraphPattern::Extend {
             inner,

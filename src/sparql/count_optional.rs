@@ -131,8 +131,8 @@ fn shape<'a>(
 ) -> Option<(&'a str, &'a str)> {
     // A join-condition FILTER sees compatible rows, just as the old left
     // join does. An embedded right FILTER is evaluated independently and can
-    // fail on unrelated rows; retain that error path by declining it.
-    let expression = expression?;
+    // fail on unrelated rows; retain that error path by declining it. A plain
+    // OPTIONAL has no condition at all (aegis-xdvg.6).
     let GraphPattern::Bgp { patterns } = right else {
         return None;
     };
@@ -152,7 +152,7 @@ fn shape<'a>(
         || predicate.as_str() == crate::namespace::RDF_TYPE
         || !binds(left, subject, true)
         || binds(left, object, false)
-        || !local(expression, subject, object)
+        || expression.is_some_and(|e| !local(e, subject, object))
     {
         return None;
     }

@@ -103,7 +103,51 @@ fn counts_preserve_terms_inference_duplicates_empty_and_groups() {
         "SELECT (COUNT(DISTINCT ?n) AS ?c) WHERE { ex:f ex:n ?n }",
         "SELECT ?status (COUNT(DISTINCT ?id) AS ?n) WHERE { GRAPH ex:board { ?s a ex:Issue ; ex:id ?id OPTIONAL { ?s ex:status ?status } } } GROUP BY ?status",
     ] {
-        compare(&store, q, &ctx, !q.contains("OPTIONAL"));
+        compare(&store, q, &ctx, true);
+    }
+}
+
+/// aegis-xdvg.6: plain single-pattern OPTIONALs and a constant VALUES join
+/// stream, bit-exact with the materializing evaluator, including order.
+#[test]
+fn plain_optionals_and_values_joins_match_exactly() {
+    let mut store = fixture();
+    let board = store.lookup("http://example.org/board").unwrap().unwrap();
+    // Multi-valued, absent and differently typed optional values.
+    seed(
+        &mut store,
+        board,
+        r#"ex:multi a ex:Issue ; ex:id "multi" ; ex:status "open", "blocked" ; ex:p 0, 1 ; ex:kw "Inbox", "x" .
+           ex:b ex:p 3 ; ex:created "2026-10-02T00:00:00Z"^^xsd:dateTime .
+           ex:a ex:created "2026-09-30T00:00:00Z"^^xsd:dateTime ; ex:kw "inbox" ."#,
+    );
+    let ctx = TemporalContext::default();
+    let body = r#"GRAPH ex:board { ?s a ex:Issue .
+        OPTIONAL { ?s ex:id ?id } OPTIONAL { ?s ex:status ?st } OPTIONAL { ?s ex:p ?p }
+        OPTIONAL { ?s ex:created ?cr } OPTIONAL { ?s ex:kw ?inbox FILTER(LCASE(STR(?inbox)) = "inbox") } }"#;
+    let union = format!(
+        "{{ {body} }} UNION {{ GRAPH ex:ephemeral {{ ?s a ex:Issue . OPTIONAL {{ ?s ex:id ?id }} OPTIONAL {{ ?s ex:status ?st }} }} }}"
+    );
+    for q in [
+        format!("SELECT (COUNT(*) AS ?n) WHERE {{ {body} }}"),
+        format!("SELECT ?st (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {body} }} GROUP BY ?st"),
+        format!("SELECT ?st ?p (COUNT(?id) AS ?n) WHERE {{ {union} }} GROUP BY ?st ?p"),
+        format!(
+            "SELECT ?m (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {union} VALUES ?m {{ 'a' 'b' 'c' }} }} GROUP BY ?m"
+        ),
+        format!(
+            "SELECT ?m ?bucket (COUNT(DISTINCT ?s) AS ?n) WHERE {{ {union} \
+             FILTER(!BOUND(?inbox)) BIND(COALESCE(STR(?st), '') AS ?src) \
+             BIND(IF(?p = 0, 'P0', IF(?p = 1, 'P1', 'other')) AS ?b) \
+             VALUES ?m {{ 'active' 'created' 'invalid' }} \
+             FILTER((?m = 'active' && ?src = 'open') || (?m = 'created' && BOUND(?cr)) || (?m = 'invalid' && !BOUND(?id))) \
+             BIND(IF(?m = 'active', ?b, '') AS ?bucket) }} GROUP BY ?m ?bucket"
+        ),
+        format!(
+            "SELECT ?m (COUNT(*) AS ?n) WHERE {{ {body} VALUES (?m ?st) {{ ('x' 'open') ('y' UNDEF) }} }} GROUP BY ?m"
+        ),
+    ] {
+        compare(&store, &q, &ctx, true);
     }
 }
 
