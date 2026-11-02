@@ -92,6 +92,16 @@ a refused COMMIT itself surfaces only as SQLite's generic constraint error.
 No production path sets a pin: there is no enrollment API, no provisioned
 journal location and no fresh external startup admission, so enrolled startup
 still refuses before any journal is consulted. The pin is exercised by test
-fixtures only. The per-lineage shared/exclusive latch spanning the outer COMMIT,
-the narrow transition token and the startup adapter remain later P1 slices. Do
+fixtures only.
+
+The per-lineage latch ([`ownership_latch.rs`](../../src/store/ownership_latch.rs))
+is a file lock beside the journal. Its lock order is: retirement takes it
+EXCLUSIVE, then SQLite's writer lock; writers take it SHARED, then SQLite's
+writer lock. The commit hook only *tries* it, and refuses on contention without
+revoking, so nothing holding SQLite's writer lock ever waits on the latch. A commit
+that passed the hook before retirement latched finishes before retirement's
+`BEGIN IMMEDIATE` can start, and so falls inside the sealed cut. Holding the latch
+until SQLite's WAL hook was rejected: that hook would replace
+`wal_autocheckpoint`. Still to come: threading the SHARED guard through every
+public write entrypoint, the narrow transition token and the startup adapter. Do
 not enroll stores or claim at-most-one physical writer from this increment.

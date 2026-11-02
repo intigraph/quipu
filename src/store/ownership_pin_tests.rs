@@ -217,3 +217,88 @@ fn an_unpinned_legacy_handle_is_unchanged() {
     write(&mut store, 1).unwrap();
     assert_eq!(count(&store, "transactions"), 1);
 }
+
+#[test]
+fn latch_contention_refuses_a_commit_without_revoking() {
+    let dir = tempfile::tempdir().unwrap();
+    let journal = dir.path().join("lineage.journal");
+    create(&journal, &active()).unwrap();
+    let store = open_pinned(dir.path(), &journal);
+    store
+        .conn
+        .execute_batch("CREATE TABLE direct_probe(x)")
+        .unwrap();
+
+    let retirement =
+        super::ownership_latch::exclusive(&super::ownership_latch::path_for(&journal)).unwrap();
+    assert!(
+        store
+            .conn
+            .execute("INSERT INTO direct_probe VALUES (1)", [])
+            .is_err(),
+        "a commit under retirement's latch must refuse"
+    );
+    assert_eq!(count(&store, "direct_probe"), 0);
+    // Retirement aborted without writing the journal: the handle is intact.
+    drop(retirement);
+    store
+        .conn
+        .execute("INSERT INTO direct_probe VALUES (2)", [])
+        .unwrap();
+    assert_eq!(count(&store, "direct_probe"), 1);
+}
+
+/// Lock order: retirement takes the latch, then waits for SQLite's writer
+/// lock. An open writer's COMMIT meets the latch without waiting, refuses,
+/// and releases SQLite's lock, so retirement proceeds and nothing deadlocks.
+#[test]
+fn retirement_and_an_open_writer_cannot_deadlock() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("pinned.db");
+    let journal = dir.path().join("lineage.journal");
+    create(&journal, &active()).unwrap();
+    let store = open_pinned(dir.path(), &journal);
+    store
+        .conn
+        .execute_batch("CREATE TABLE direct_probe(x); BEGIN; INSERT INTO direct_probe VALUES (1);")
+        .unwrap();
+
+    let (latched, latched_rx) = mpsc::channel();
+    let (done, done_rx) = mpsc::channel();
+    let retire_journal = journal.clone();
+    let retirement = std::thread::spawn(move || {
+        let _latch =
+            super::ownership_latch::exclusive(&super::ownership_latch::path_for(&retire_journal))
+                .unwrap();
+        latched.send(()).unwrap();
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.busy_timeout(Duration::from_secs(10)).unwrap();
+        // Waits for the open writer's SQLite lock.
+        conn.execute_batch("BEGIN IMMEDIATE").unwrap();
+        advance(&retire_journal, &active(), &retiring()).unwrap();
+        conn.execute_batch("COMMIT").unwrap();
+        done.send(()).unwrap();
+    });
+
+    latched_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(
+        done_rx.recv_timeout(Duration::from_millis(300)).is_err(),
+        "retirement must wait for the open writer"
+    );
+    let commit = store.conn.execute_batch("COMMIT");
+    assert!(
+        super::release::settle(&store.conn, commit).is_err(),
+        "the writer's COMMIT refuses under retirement's latch"
+    );
+    assert!(store.conn.is_autocommit());
+    done_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("retirement completes: no deadlock");
+    retirement.join().unwrap();
+
+    assert_eq!(count(&store, "direct_probe"), 0, "the refused row is gone");
+    assert!(write(&mut { store }, 1).is_err(), "RETIRING now refuses");
+}
