@@ -40,6 +40,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/fix-changelog.sh" scripts/
     cp "$REPO_ROOT/scripts/filter-packaged-commits.py" scripts/
     cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
+    cp "$REPO_ROOT/scripts/check-release-mechanics.py" scripts/
     cp "$REPO_ROOT/scripts/changelog-duplicates.py" scripts/
     cp "$REPO_ROOT/scripts/release-pr-freshness.sh" scripts/
     cp "$REPO_ROOT/scripts/python-binding-sync-only.py" scripts/
@@ -141,15 +142,81 @@ read -r d a b c <<<"$(make_repo)"
   entry "$b"; entry "$c"; } > "$d/CHANGELOG.md"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
 
+# Binding synchronization is release mechanics only for a canonical subject,
+# the selected version and version-only Cargo edits. Never hide real content.
+for arm in suffixed unsuffixed near-match feature wrong-version binding-version source dependency lock-dependency root-lock-dependency registry-namesake extra duplicate; do
+  read -r d a b c <<<"$(make_repo)"
+  (
+    cd "$d"
+    mkdir -p bindings/python
+    sed -i 's/name="probe"/name="quipu-ai"/; s/version="1.0.0"/version = "1.0.0"/' Cargo.toml
+    printf '[package]\nname="quipu-kg"\nversion = "1.0.0"\n' > bindings/python/Cargo.toml
+    printf 'version = 4\n\n[[package]]\nname = "quipu-ai"\nversion = "1.0.0"\n' > Cargo.lock
+    cp Cargo.lock bindings/python/Cargo.lock
+    if [[ "$arm" == root-lock-dependency ]]; then
+      printf '\n[[package]]\nname = "root-unrelated"\nversion = "1.0.0"\n' >> Cargo.lock
+    fi
+    printf '\n[[package]]\nname = "quipu-kg"\nversion = "1.0.0"\n\n[[package]]\nname = "unrelated-dependency"\nversion = "1.0.0"\n' >> bindings/python/Cargo.lock
+    if [[ "$arm" == registry-namesake ]]; then
+      printf '\n[[package]]\nname = "quipu-ai"\nversion = "1.0.0"\nsource = "registry+https://example.invalid/index"\n' >> bindings/python/Cargo.lock
+    fi
+    git add -A && git commit -qm 'chore: seed binding version fixture'
+  ) >/dev/null 2>&1
+  seed="$(git -C "$d" rev-parse --short=7 HEAD)"
+  subject='chore: release v1.1.0 (#914)'
+  case "$arm" in
+    unsuffixed) subject='chore: release v1.1.0' ;;
+    near-match) subject='chore: release v1.1.0 (#914) extra' ;;
+    feature) subject='feat: binding improvement' ;;
+    wrong-version) subject='chore: release v1.2.0 (#914)' ;;
+  esac
+  (
+    cd "$d"
+    sed -i 's/version = "1.0.0"/version = "1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+    sed -i 's/version = "1.0.0"/version = "1.1.0"/' Cargo.lock
+    python3 - "$arm" <<'PYLOCK'
+import pathlib, sys
+p = pathlib.Path('bindings/python/Cargo.lock')
+s = p.read_text()
+# Canonical local identities change; unrelated packages must remain identical.
+s = s.replace('name = "quipu-ai"\nversion = "1.0.0"\n\n', 'name = "quipu-ai"\nversion = "1.1.0"\n\n')
+s = s.replace('name = "quipu-kg"\nversion = "1.0.0"', 'name = "quipu-kg"\nversion = "1.1.0"')
+if sys.argv[1] == 'lock-dependency':
+    s = s.replace('name = "unrelated-dependency"\nversion = "1.0.0"', 'name = "unrelated-dependency"\nversion = "1.1.0"')
+if sys.argv[1] == 'registry-namesake':
+    s = s.replace('version = "1.0.0"\nsource =', 'version = "1.1.0"\nsource =')
+p.write_text(s)
+PYLOCK
+    if [[ "$arm" == binding-version ]]; then sed -i 's/version = "1.1.0"/version = "1.2.0"/' bindings/python/Cargo.toml; fi
+    if [[ "$arm" == source ]]; then echo substantive >> src/lib.rs; fi
+    if [[ "$arm" == dependency ]]; then echo 'description="substantive metadata"' >> bindings/python/Cargo.toml; fi
+    git add -A && git commit -qm "$subject"
+  ) >/dev/null 2>&1
+  mechanics="$(git -C "$d" rev-parse --short=7 HEAD)"
+  { echo '# Changelog'; echo; echo '## [1.1.0] - 2026-01-01'; echo;
+    entry "$b"; entry "$c"; entry "$seed"
+    if [[ "$arm" == extra ]]; then entry "$a"; fi
+    if [[ "$arm" == duplicate ]]; then entry "$b"; fi
+  } > "$d/CHANGELOG.md"
+  case "$arm" in
+    suffixed|unsuffixed) check "binding release $arm stays exempt" 0 'none missing, none extra' "$d" ;;
+    extra) check 'binding exemption does not mask extras' 1 'do not belong to this release' "$d" ;;
+    duplicate) check 'binding exemption does not mask duplicates' 1 'duplicated' "$d" ;;
+    *) check "binding release $arm remains required" 1 "$mechanics" "$d" ;;
+  esac
+done
+
 # 7b. aegis-0zr: since #902 the release commit also syncs the Python binding's
 #     manifest and lock. That canonical version sync is release mechanics; without
 #     it in the exemption every release commit failed its own verify.
 #
 # binding_lock <core-version> <binding-version> <serde-version>: a lock in Cargo's
-# real shape, with the core path entry, the binding, and one registry pin.
+# real shape, with the core path entry, the binding, and one registry pin. The
+# canonical identities, so each negative below fails on its own dimension and
+# not merely on the package names #946's gate requires.
 binding_lock() {
-  printf '[[package]]\nname = "probe"\nversion = "%s"\n\n' "$1"
-  printf '[[package]]\nname = "probe-py"\nversion = "%s"\ndependencies = [\n "probe",\n "serde",\n]\n\n' "$2"
+  printf '[[package]]\nname = "quipu-ai"\nversion = "%s"\n\n' "$1"
+  printf '[[package]]\nname = "quipu-kg"\nversion = "%s"\ndependencies = [\n "quipu-ai",\n "serde",\n]\n\n' "$2"
   printf '[[package]]\nname = "serde"\nversion = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$3"
 }
 # binding_repo: make_repo plus a tagged binding scaffold at 1.0.0.
@@ -159,7 +226,8 @@ binding_repo() {
   (
     cd "$d"
     mkdir -p bindings/python
-    printf '[package]\nname="probe-py"\nversion="1.0.0"\n\n[dependencies]\nserde="1.0.0"\n' \
+    sed -i 's/name="probe"/name="quipu-ai"/' Cargo.toml
+    printf '[package]\nname="quipu-kg"\nversion="1.0.0"\n\n[dependencies]\nserde="1.0.0"\n' \
       > bindings/python/Cargo.toml
     binding_lock 1.0.0 1.0.0 1.0.0 > bindings/python/Cargo.lock
     git add -A && git commit -qm "chore: binding scaffold" && git tag quipu-ai-v1.0.0
@@ -230,6 +298,24 @@ d="$(binding_repo)"
 e="$(git -C "$d" rev-parse --short=7 HEAD)"
 { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
 check "version sync carrying a manifest change is required" 1 "$e" "$d"
+
+# 7g. Merged with #946: a binding change is exempt only when BOTH checks agree.
+#     check-release-mechanics.py compares parsed TOML, so a reformatted line reads
+#     as unchanged there; python-binding-sync-only.py requires the bytes outside the
+#     synced versions to be identical, so the commit stays required.
+d="$(binding_repo)"
+(
+  cd "$d"
+  printf '# Changelog\n\nnote\n' > CHANGELOG.md
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+  sed -i 's/^serde="1.0.0"$/serde = "1.0.0"/' bindings/python/Cargo.toml
+  binding_lock 1.1.0 1.1.0 1.0.0 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "version sync carrying a reformatted binding manifest is required" 1 "$e" "$d"
+
 
 # 8. The post-rename package-qualified tag is the preferred baseline. A newer
 # historical v-tag must not pull the range back across the rename boundary.
