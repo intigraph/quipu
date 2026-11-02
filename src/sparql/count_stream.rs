@@ -163,6 +163,7 @@ pub(super) fn visit(
             expression,
         } => {
             let mut emitted = 0;
+            let mut probe = super::count_optional::Probe::default();
             visit(store, left, ctx, seed, &mut |row| {
                 super::count_optional::visit(
                     store,
@@ -170,6 +171,7 @@ pub(super) fn visit(
                     expression.as_ref(),
                     ctx,
                     &row,
+                    &mut probe,
                     &mut emitted,
                     emit,
                 )

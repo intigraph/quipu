@@ -2,7 +2,7 @@
 use super::filter::eval_filter;
 use super::pattern_util::{check_eval_budget, triple_pattern_vars};
 use super::{Bindings, GraphScope, TemporalContext};
-use crate::{Result, Store};
+use crate::{Result, Store, Value};
 use spargebra::algebra::{Expression, Function, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern};
 
@@ -213,18 +213,85 @@ pub(super) fn allowed(
         _ => Ok(true),
     }
 }
+/// Parents probed one by one before a property is read whole. Tests read it
+/// whole from the second parent, so every exact comparison covers both paths.
+#[cfg(not(test))]
+const PROBE_PARENTS: usize = 64;
+#[cfg(test)]
+const PROBE_PARENTS: usize = 1;
+/// The most property rows held for probing; larger properties keep per-parent
+/// probes.
+const PROBE_ROWS: usize = 1 << 20;
+
+/// One OPTIONAL's property read whole, once enough parents asked for it.
+///
+/// Every parent otherwise issues its own indexed read of `?s <p> ?o`: a board
+/// aggregate with seven OPTIONALs over ~70k items made ~500k of them, the
+/// largest remaining cost of its ~4.4s (aegis-xdvg.6). The admitted shape is
+/// a single current named graph without attachments, so subjects are their
+/// own canonical ids and a whole read keeps each subject's objects in the
+/// order its own read returns them. Anything else (a failed read, a subject
+/// that is not a reference, too many rows) keeps per-parent probes, which
+/// report any real failure themselves.
+#[derive(Default)]
+pub(super) struct Probe {
+    parents: usize,
+    table: Option<Option<std::collections::HashMap<i64, Vec<Value>>>>,
+}
+
+fn whole(
+    store: &Store,
+    right: &GraphPattern,
+    ctx: &TemporalContext,
+) -> Option<std::collections::HashMap<i64, Vec<Value>>> {
+    let GraphPattern::Bgp { patterns } = right else {
+        return None;
+    };
+    let [tp] = patterns.as_slice() else {
+        return None;
+    };
+    let (TermPattern::Variable(subject), TermPattern::Variable(object)) = (&tp.subject, &tp.object)
+    else {
+        return None;
+    };
+    let mut table: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
+    let mut rows = 0usize;
+    let mut admitted = true;
+    super::count_stream::visit(store, right, ctx, &Bindings::new(), &mut |mut row| {
+        rows += 1;
+        match (row.remove(subject.as_str()), row.remove(object.as_str())) {
+            (Some(Value::Ref(id)), Some(value)) if rows <= PROBE_ROWS => {
+                table.entry(id).or_default().push(value);
+                Ok(())
+            }
+            _ => {
+                admitted = false;
+                Err(crate::Error::InvalidValue("OPTIONAL probe declined".into()))
+            }
+        }
+    })
+    .ok()?;
+    admitted.then_some(table)
+}
+
 /// Match one parent's fresh property, retaining that parent once when unmatched.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn visit(
     store: &Store,
     right: &GraphPattern,
     expression: Option<&Expression>,
     ctx: &TemporalContext,
     parent: &Bindings,
+    probe: &mut Probe,
     emitted: &mut usize,
     emit: &mut dyn FnMut(Bindings) -> Result<()>,
 ) -> Result<()> {
+    probe.parents += 1;
+    if probe.table.is_none() && probe.parents > PROBE_PARENTS {
+        probe.table = Some(whole(store, right, ctx));
+    }
     let mut matched = false;
-    super::count_stream::visit(store, right, ctx, parent, &mut |row| {
+    let mut accept = |row: Bindings| -> Result<()> {
         if match expression {
             Some(e) => eval_filter(store, e, &row, ctx)?,
             None => true,
@@ -235,7 +302,32 @@ pub(super) fn visit(
             emit(row)?;
         }
         Ok(())
-    })?;
+    };
+    let probed = match (&probe.table, right) {
+        (Some(Some(table)), GraphPattern::Bgp { patterns }) => match patterns.as_slice() {
+            [tp] => match (&tp.subject, &tp.object) {
+                (TermPattern::Variable(subject), TermPattern::Variable(object)) => {
+                    match parent.get(subject.as_str()) {
+                        Some(Value::Ref(id)) => {
+                            for value in table.get(id).map(Vec::as_slice).unwrap_or_default() {
+                                let mut row = parent.clone();
+                                row.insert(object.as_str().to_owned(), value.clone());
+                                accept(row)?;
+                            }
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            },
+            _ => false,
+        },
+        _ => false,
+    };
+    if !probed {
+        super::count_stream::visit(store, right, ctx, parent, &mut accept)?;
+    }
     if !matched {
         check_eval_budget(ctx, *emitted, *emitted)?;
         *emitted += 1;
