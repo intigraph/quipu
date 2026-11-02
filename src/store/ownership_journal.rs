@@ -19,9 +19,9 @@
 //!
 //! Durability, not rollback protection: a whole-host rollback that restores
 //! this file too cannot be seen from its bytes; the startup witness covers that
-//! and is a later slice. There is deliberately no public enrollment path; the
-//! startup adapter that consumes this journal is the next slice, so this module
-//! is not yet called outside its tests.
+//! and is a later slice. There is deliberately no public enrollment path. The
+//! commit fence's generation pin calls `admits`; nothing in production sets
+//! a pin yet, and the startup adapter is a later slice.
 #![cfg_attr(not(test), allow(dead_code))]
 
 use std::fs::{File, OpenOptions};
@@ -31,7 +31,9 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest as _, Sha256};
 
 use crate::error::{Error, Result};
-use crate::ownership_handoff_model::{Journal, MAX_RECORD_BYTES, Payload, RECORD_VERSION, Record};
+use crate::ownership_handoff_model::{
+    Authority, Journal, MAX_RECORD_BYTES, Payload, RECORD_VERSION, Record,
+};
 
 const TRAILER: &str = "\nsha256:";
 
@@ -110,7 +112,7 @@ fn sibling(path: &Path, suffix: &str) -> Result<PathBuf> {
 }
 
 /// Atomically replace the journal with `journal`.
-fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
+pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
     let bytes = encode(journal)?;
     let dir = path
         .parent()
@@ -184,6 +186,28 @@ pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result
     };
     drop(lock);
     result
+}
+
+/// Whether the journal at `path` still admits a handle pinned to `pinned`:
+/// only `Active` at exactly that authority tuple does. Every other state
+/// refuses with its role named, never as legacy or inactive.
+pub(super) fn admits(path: &Path, pinned: &Authority) -> Result<()> {
+    let role = match read(path) {
+        JournalState::Unknown(why) => return Err(refused(format!("role is UNKNOWN: {why}"))),
+        JournalState::Known(journal) => match *journal {
+            Journal::Active { ref authority } if authority == pinned => return Ok(()),
+            Journal::Active { ref authority } => format!(
+                "ACTIVE at generation {} epoch {}, not this handle's generation {} epoch {}",
+                authority.generation, authority.epoch, pinned.generation, pinned.epoch
+            ),
+            Journal::Retiring { .. } => "RETIRING".into(),
+            Journal::Retired { .. } => "RETIRED".into(),
+            Journal::Pending { .. } => "PENDING".into(),
+        },
+    };
+    Err(refused(format!(
+        "role is {role}; this handle's admission is revoked"
+    )))
 }
 
 /// Create a journal for a new lineage. Crate-private on purpose: there is no

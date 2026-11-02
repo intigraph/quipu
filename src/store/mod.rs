@@ -27,6 +27,8 @@ pub(crate) mod release;
 pub use ownership::OwnershipState;
 #[cfg(test)]
 mod ownership_held_handle_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ownership_pin_tests;
 #[cfg(test)]
 mod ownership_stage_a_tests;
 #[cfg(test)]

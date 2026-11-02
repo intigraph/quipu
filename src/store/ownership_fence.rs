@@ -14,16 +14,31 @@
 //! Admitting enrolled writes requires the reviewed per-lineage shared/exclusive
 //! scope and protected-journal adapter; this increment admits none. SQLite's
 //! pre-commit callback cannot by itself prove that a latch spans COMMIT.
+//!
+//! Generation pin (P1, aegis-s24.8): a handle may carry the protected-journal
+//! path and the exact authority tuple it was admitted under. Every check then
+//! also re-reads that journal (a file read, never SQL on the committing
+//! connection) and refuses unless it is still ACTIVE at that tuple. A refusal
+//! revokes the pin for good, so restoring older journal bytes cannot revive
+//! the handle. No public path sets a pin yet: enrolled startup still refuses.
+use std::path::PathBuf;
 use std::sync::{
-    Arc, Mutex,
+    Arc, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
 };
+
+use crate::error::Result;
+use crate::ownership_handoff_model::Authority;
 
 use rusqlite::{Connection, OpenFlags};
 
 pub(super) struct CommitFence {
     reader: Mutex<Option<Connection>>,
     revoked: AtomicBool,
+    journal: OnceLock<(PathBuf, Authority)>,
+    // The first journal refusal, kept because a refused COMMIT surfaces only
+    // as SQLite's generic constraint error.
+    reason: OnceLock<String>,
 }
 
 impl CommitFence {
@@ -52,6 +67,8 @@ impl CommitFence {
         Some(Arc::new(Self {
             reader: Mutex::new(reader),
             revoked: AtomicBool::new(false),
+            journal: OnceLock::new(),
+            reason: OnceLock::new(),
         }))
     }
 
@@ -63,6 +80,39 @@ impl CommitFence {
     /// That observation must revoke the same pin the callbacks retain.
     pub(super) fn revoke(&self) {
         self.revoked.store(true, Ordering::Release);
+    }
+
+    /// The generation pin: refuse, and revoke for good, unless the pinned
+    /// journal still admits the pinned authority. Unpinned handles pass.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn check_journal(&self) -> Result<()> {
+        let Some((path, authority)) = self.journal.get() else {
+            return Ok(());
+        };
+        super::ownership_journal::admits(path, authority).inspect_err(|e| {
+            let _ = self.reason.set(e.to_string());
+            self.revoke();
+        })
+    }
+
+    /// Why the generation pin revoked this handle, if it did.
+    pub(super) fn reason(&self) -> Option<&str> {
+        self.reason.get().map(String::as_str)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(super) fn check_journal(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Test fixtures only: there is no enrollment or admission path that
+    /// could set a pin in production yet.
+    #[cfg(test)]
+    pub(super) fn pin_journal(&self, path: PathBuf, authority: Authority) {
+        assert!(
+            self.journal.set((path, authority)).is_ok(),
+            "a handle is pinned once"
+        );
     }
 
     pub(super) fn refuses(&self) -> bool {
