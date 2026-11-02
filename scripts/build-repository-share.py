@@ -240,10 +240,12 @@ def is_tracked_alias(link, target, files, directories):
     root = Path(".")
     here = Path(link).parent
     for part in target.split("/"):
-        if part in ("", "."):
-            continue
+        # Every component, even "." or an empty one, resolves through `here`,
+        # so `here` must be a directory (AGENTS.md/. is ENOTDIR).
         if here != root and here not in directories:
             return False
+        if part in ("", "."):
+            continue
         if part == "..":
             if here == root:
                 return False

@@ -493,6 +493,8 @@ class ReleaseAliases(unittest.TestCase):
             "through a link": "CLAUDE.md/../AGENTS.md",
             "through a file": "AGENTS.md/../AGENTS.md",
             "trailing slash": "AGENTS.md/",
+            "through a file with a dot": "AGENTS.md/.",
+            "through a file with an empty segment": "AGENTS.md//AGENTS.md",
             "escaping from a subdirectory": "docs/../../outside.md",
         }.items():
             links = {"CLAUDE.md": "AGENTS.md", "LINK.md": target}
