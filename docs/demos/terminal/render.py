@@ -79,7 +79,10 @@ def render_svg(tape: dict, frames: list[dict], duration: float) -> str:
                       f'values="{";".join(values)}" keyTimes="{";".join(f"{k:.6f}" for k in keys)}" '
                       f'dur="{duration:.3f}s" repeatCount="indefinite"/>')
         for row, line in enumerate(frame["lines"]):
-            color = "#6ee7b7" if line.startswith("$ ") else "#f1f5f9"
+            # Every wrapped row of a command keeps the prompt colour; colouring
+            # only the "$ " row painted a long command's tail as output.
+            command = row < frame.get("command_rows", 0) or line.startswith("$ ")
+            color = "#6ee7b7" if command else "#f1f5f9"
             pieces.append(f'<text x="28" y="{94 + row * tape["line_height"]}" '
                           f'fill="{color}" xml:space="preserve">{html.escape(line)}</text>')
         pieces.append('</g>')
@@ -154,10 +157,13 @@ def main() -> None:
         for line in (command + "\n" + body.rstrip()).splitlines():
             lines.extend(textwrap.wrap(line, width=65, replace_whitespace=False,
                                        drop_whitespace=False) or [""])
+        command_rows = len(textwrap.wrap(command, width=65, replace_whitespace=False,
+                                         drop_whitespace=False))
         pages = [lines[i:i + 14] for i in range(0, len(lines), 14)]
-        for page in pages:
+        for number, page in enumerate(pages):
             check_text("\n".join(page))
-            frames.append({"at": elapsed, "lines": page})
+            frames.append({"at": elapsed, "lines": page,
+                           "command_rows": max(0, min(len(page), command_rows - number * 14))})
             events.append([elapsed, "o", "\x1b[2J\x1b[H" + "\r\n".join(page) + "\r\n"])
             elapsed += step.get("hold", 5) / len(pages)
         runs.append({"tool": name, "args": step["args"], "exit": result.returncode,

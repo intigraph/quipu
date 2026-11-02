@@ -1,31 +1,33 @@
-# A note becomes a queryable graph
+# Insert a fact, watch the graph change
 
-The 20-second `terminal/demo.svg` captures a real local episode and query.
-`terminal/graph.svg` draws the row actually returned by that query in a
-strand-and-knot motif; it is not an explorer screenshot. The plain transcript
+The 24-second `terminal/demo.svg` records real local commands: it shows two
+plain Turtle facts, knots each into a fresh store, queries the result, then
+reads the store back at transaction 1. `terminal/graph-before.svg` and
+`terminal/graph-after.svg` draw the rows those native reads returned, in a
+strand-and-knot motif; they are not explorer screenshots. The plain transcript
 is `terminal/transcript.txt`. The fixture is public and uses only `urn:demo:`
-identifiers. No server, production store, token or embedding model is used.
-The native missing-model warning is included: loading a graph is not proof of
-semantic-index readiness.
+identifiers. No server, production store, token or embedding model is used, and
+no command writes to stderr: the recorder refuses any step that does.
 
 From the repository root, use a new private workspace and a native Quipu CLI:
 
 ```sh
 python3 docs/demos/terminal/prepare.py /tmp/quipu-demo
 python3 docs/demos/terminal/render.py docs/demos/terminal/demo.tape.json \
-  --workspace /tmp/quipu-demo --tool quipu="$(command -v quipu)" \
+  --workspace /tmp/quipu-demo --tool quipu="$(command -v quipu)" --tool cat=/bin/cat \
   --output docs/demos/terminal
 python3 docs/demos/terminal/graph.py
 python3 docs/demos/terminal/test_harness_origin.py
 ```
 
 `prepare.py` refuses an existing workspace. Do not reuse a prior database:
-episode upsert is intentionally idempotent and would not reproduce the fresh
-14-fact ingest. The recorder refuses unexpected exits, missing expected output
-or possible private data before replacing artifacts. Execution times are in the
-manifest; the 20-second timeline is deliberate reading time. The native binary
+the transaction numbers in the tape assume a fresh store. The recorder refuses
+unexpected exits, missing expected output, any stderr or possible private data
+before replacing artifacts. Execution times are in the
+manifest; the 24-second timeline is deliberate reading time. The native binary
 version and SHA, tape, renderer, fixture and generated-asset hashes are bound
-there. `graph.provenance.json` binds the graph to that manifest and exact row.
+there. `graph.provenance.json` binds both graphs to that manifest and its exact rows.
+`cat` is recorded with `version_args` of `/dev/null`, because BSD `cat` has no version flag.
 
 This vendors the byte-identical shared Tambo terminal recorder at
 `docs/demos/terminal-harness/render.py`; its origin commit and SHA are recorded
