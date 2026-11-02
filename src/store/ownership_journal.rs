@@ -54,7 +54,8 @@ fn refused(why: impl Into<String>) -> Error {
 /// Read the journal at `path`.
 pub(super) fn read(path: &Path) -> JournalState {
     let mut bytes = Vec::new();
-    let limit = (MAX_RECORD_BYTES + TRAILER.len() + 64) as u64;
+    // Body, trailer marker, 64 hex digits and the final newline `encode` writes.
+    let limit = (MAX_RECORD_BYTES + TRAILER.len() + 64 + 1) as u64;
     match File::open(path) {
         Ok(file) => {
             if let Err(e) = file.take(limit + 1).read_to_end(&mut bytes) {
@@ -72,7 +73,8 @@ pub(super) fn read(path: &Path) -> JournalState {
     let Some((body, trailer)) = text.rsplit_once(TRAILER) else {
         return unknown("no checksum trailer");
     };
-    if trailer.trim_end_matches('\n') != hex::encode(Sha256::digest(body.as_bytes())) {
+    // Exactly one terminating newline, as `encode` writes.
+    if trailer.strip_suffix('\n') != Some(hex::encode(Sha256::digest(body.as_bytes())).as_str()) {
         return unknown("checksum mismatch");
     }
     match Record::decode(body.as_bytes()) {
@@ -109,28 +111,58 @@ fn sibling(path: &Path, suffix: &str) -> Result<PathBuf> {
     Ok(path.with_file_name(name))
 }
 
-/// Atomically replace the journal with `journal`.
-fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
-    let bytes = encode(journal)?;
-    let dir = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .ok_or_else(|| refused("journal path has no directory"))?;
-    let staged = sibling(path, ".staged")?;
-    let io = |e: std::io::Error| refused(format!("write failed: {e}"));
+fn io(e: std::io::Error) -> Error {
+    refused(format!("write failed: {e}"))
+}
+
+/// Owner-only on Unix: the journal and its siblings hold authority state.
+fn owner_only(options: &mut OpenOptions) -> &mut OpenOptions {
+    #[cfg(unix)]
     {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&staged)
-            .map_err(io)?;
-        file.write_all(&bytes).map_err(io)?;
-        file.sync_all().map_err(io)?;
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
     }
+    options
+}
+
+/// The directory to fsync; a bare file name lives in the current one.
+fn directory(path: &Path) -> &Path {
+    match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    }
+}
+
+/// Write `journal` to the staged sibling and fsync it. Callers hold the lock,
+/// which also serializes use of the one staged name.
+fn stage(path: &Path, journal: &Journal) -> Result<PathBuf> {
+    let bytes = encode(journal)?;
+    let staged = sibling(path, ".staged")?;
+    let mut file = owner_only(OpenOptions::new().write(true).create(true).truncate(true))
+        .open(&staged)
+        .map_err(io)?;
+    file.write_all(&bytes).map_err(io)?;
+    file.sync_all().map_err(io)?;
+    Ok(staged)
+}
+
+/// Atomically replace the journal with `journal`.
+pub(super) fn write_atomic(path: &Path, journal: &Journal) -> Result<()> {
+    let staged = stage(path, journal)?;
     std::fs::rename(&staged, path).map_err(io)?;
-    File::open(dir).and_then(|d| d.sync_all()).map_err(io)?;
-    Ok(())
+    File::open(directory(path))
+        .and_then(|d| d.sync_all())
+        .map_err(io)
+}
+
+/// The sibling lock that serializes every journal change on this host.
+fn lock(path: &Path) -> Result<File> {
+    let lock = owner_only(OpenOptions::new().write(true).create(true).truncate(false))
+        .open(sibling(path, ".lock")?)
+        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
+    lock.lock()
+        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
+    Ok(lock)
 }
 
 /// Whether `next` may follow `current` in this owner's local journal.
@@ -166,15 +198,7 @@ fn legal(current: &Journal, next: &Journal) -> std::result::Result<(), &'static 
 /// Advance the journal from `expected` to `next` under an exclusive lock,
 /// refusing if the stored role is anything other than `expected`.
 pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result<()> {
-    let lock_path = sibling(path, ".lock")?;
-    let lock = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
-    lock.lock()
-        .map_err(|e| refused(format!("lock unavailable: {e}")))?;
+    let lock = lock(path)?;
     let result = match read(path) {
         JournalState::Known(current) if *current == *expected => legal(&current, next)
             .map_err(refused)
@@ -188,15 +212,34 @@ pub(super) fn advance(path: &Path, expected: &Journal, next: &Journal) -> Result
 
 /// Create a journal for a new lineage. Crate-private on purpose: there is no
 /// public enrollment path, and the startup adapter that would call this is not
-/// built yet. Refuses if any journal file already exists.
+/// built yet. Refuses if any journal file already exists, or if that cannot
+/// be established. Under the sibling lock, and publishing with a hard link
+/// that never replaces an existing name, so two creators cannot both win.
 pub(super) fn create(path: &Path, initial: &Journal) -> Result<()> {
     if !matches!(initial, Journal::Active { .. }) {
         return Err(refused("a new journal starts Active"));
     }
-    if std::fs::symlink_metadata(path).is_ok() {
-        return Err(refused("a journal already exists"));
+    let lock = lock(path)?;
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => return Err(refused("a journal already exists")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(refused(format!("cannot establish absence: {e}"))),
     }
-    write_atomic(path, initial)
+    let staged = stage(path, initial)?;
+    let published = std::fs::hard_link(&staged, path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            refused("a journal already exists")
+        } else {
+            io(e)
+        }
+    });
+    let _ = std::fs::remove_file(&staged);
+    published?;
+    let synced = File::open(directory(path))
+        .and_then(|d| d.sync_all())
+        .map_err(io);
+    drop(lock);
+    synced
 }
 
 #[cfg(test)]
