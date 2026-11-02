@@ -224,6 +224,37 @@ def indexed_labels(binary, database, subjects, *, file_paths=False):
     return labels
 
 
+def is_tracked_alias(link, target, files, directories):
+    """True when symlink ``link`` -> ``target`` names a tracked regular file.
+
+    Agent files such as CLAUDE.md -> AGENTS.md are aliases of a file the
+    release already carries. Absolute, escaping, dangling and chained links,
+    and links to directories, are not. The target is walked the way the
+    kernel resolves it: every component before the last, including the one
+    a ``..`` leaves, must be a tracked directory. A missing component, a file
+    or another link there fails (ENOENT/ENOTDIR), so ``missing/../AGENTS.md``,
+    ``CLAUDE.md/../AGENTS.md`` and ``AGENTS.md/`` are not aliases.
+    """
+    if not target or target.startswith("/") or target.endswith("/"):
+        return False
+    root = Path(".")
+    here = Path(link).parent
+    for part in target.split("/"):
+        # Every component, even "." or an empty one, resolves through `here`,
+        # so `here` must be a directory (AGENTS.md/. is ENOTDIR).
+        if here != root and here not in directories:
+            return False
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if here == root:
+                return False
+            here = here.parent
+        else:
+            here = here / part
+    return here != root and here in files
+
+
 # The receiver holds the released pendant, whose documents carry their public
 # w3id names (aegis-ro425e.18), not the producer's internal names.
 PUBLIC_DOCUMENT_BASE = "https://w3id.org/intigraph/quipu/id/doc/"
@@ -243,7 +274,11 @@ def verify_agent_references(binary, database, paths):
 
 
 def materialize_release(source, revision, destination):
-    """Index only exact tracked release bytes in a new private source tree."""
+    """Index only exact tracked release bytes in a new private source tree.
+
+    A tracked alias of a tracked regular file is skipped rather than copied, so
+    its target is indexed once; any other non-file member refuses.
+    """
     destination = Path(destination)
     destination.mkdir(mode=0o700)
     archive = subprocess.run(
@@ -252,13 +287,17 @@ def materialize_release(source, revision, destination):
         capture_output=True,
     ).stdout
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
-        for member in bundle.getmembers():
+        members = bundle.getmembers()
+        files = {Path(member.name) for member in members if member.isfile()}
+        directories = {Path(member.name) for member in members if member.isdir()}
+        directories.update(parent for path in files for parent in path.parents)
+        for member in members:
             relative = Path(member.name)
-            if (
-                relative.is_absolute()
-                or ".." in relative.parts
-                or not (member.isfile() or member.isdir())
-            ):
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("unsupported tracked release member")
+            if member.issym() and is_tracked_alias(relative, member.linkname, files, directories):
+                continue
+            if not (member.isfile() or member.isdir()):
                 raise ValueError("unsupported tracked release member")
             target = destination / relative
             if member.isdir():

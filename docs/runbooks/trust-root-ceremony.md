@@ -124,7 +124,11 @@ For a separately authorized operator migration:
    source publication or an ordinary valid signature is not migration acceptance.
 
 Until this is complete, an enforced transition whose key is unendorsed is
-refused atomically. An agent-tier registration cannot endorse another key.
+refused atomically. Enforced includes every advance of an enrolled workflow (a
+`Workflow` run of a `WorkflowDefinition`): those are checked against governed
+ROOT keys even with `[quipu.governance] verify_transitions = false`, so an
+upgrade before migration stops enrolled workflow advances signed by
+unendorsed keys. Only transitions outside an enrolled workflow follow the flag. An agent-tier registration cannot endorse another key.
 Revocation refuses later writes even when their claimed transition time is old.
 Stored events remain historical data and are not revalidated by this write gate.
 Do not disable verification as a rollback shortcut; a security rollback needs
