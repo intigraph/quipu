@@ -257,7 +257,7 @@ fn whole(
     let mut table: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
     let mut rows = 0usize;
     let mut admitted = true;
-    super::count_stream::visit(store, right, ctx, &Bindings::new(), &mut |mut row| {
+    super::count_stream::visit(store, right, ctx, &Bindings::new(), &mut |row| {
         rows += 1;
         match (row.remove(subject.as_str()), row.remove(object.as_str())) {
             (Some(Value::Ref(id)), Some(value)) if rows <= PROBE_ROWS => {
@@ -281,19 +281,19 @@ pub(super) fn visit(
     right: &GraphPattern,
     expression: Option<&Expression>,
     ctx: &TemporalContext,
-    parent: &Bindings,
+    parent: &mut Bindings,
     probe: &mut Probe,
     emitted: &mut usize,
-    emit: &mut dyn FnMut(Bindings) -> Result<()>,
+    emit: super::count_stream::Emit<'_>,
 ) -> Result<()> {
     probe.parents += 1;
     if probe.table.is_none() && probe.parents > PROBE_PARENTS {
         probe.table = Some(whole(store, right, ctx));
     }
     let mut matched = false;
-    let mut accept = |row: Bindings| -> Result<()> {
+    let mut accept = |row: &mut Bindings| -> Result<()> {
         if match expression {
-            Some(e) => eval_filter(store, e, &row, ctx)?,
+            Some(e) => eval_filter(store, e, row, ctx)?,
             None => true,
         } {
             check_eval_budget(ctx, *emitted, *emitted)?;
@@ -309,10 +309,13 @@ pub(super) fn visit(
                 (TermPattern::Variable(subject), TermPattern::Variable(object)) => {
                     match parent.get(subject.as_str()) {
                         Some(Value::Ref(id)) => {
+                            // `allowed` proved the object is not bound yet:
+                            // bind it in place for each value, then unbind.
                             for value in table.get(id).map(Vec::as_slice).unwrap_or_default() {
-                                let mut row = parent.clone();
-                                row.insert(object.as_str().to_owned(), value.clone());
-                                accept(row)?;
+                                parent.insert(object.as_str().to_owned(), value.clone());
+                                let result = accept(parent);
+                                parent.remove(object.as_str());
+                                result?;
                             }
                             true
                         }
@@ -331,7 +334,7 @@ pub(super) fn visit(
     if !matched {
         check_eval_budget(ctx, *emitted, *emitted)?;
         *emitted += 1;
-        emit(parent.clone())?;
+        emit(parent)?;
     }
     Ok(())
 }

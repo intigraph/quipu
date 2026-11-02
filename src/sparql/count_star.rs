@@ -210,7 +210,7 @@ pub(super) fn try_visit(
     pattern: &GraphPattern,
     ctx: &TemporalContext,
     seed: &Bindings,
-    emit: &mut dyn FnMut(Bindings) -> Result<()>,
+    emit: super::count_stream::Emit<'_>,
 ) -> Result<bool> {
     let Some(star) = shape(pattern) else {
         return Ok(false);
@@ -345,12 +345,12 @@ fn expand(
     i: usize,
     row: &mut Bindings,
     emitted: &mut usize,
-    emit: &mut dyn FnMut(Bindings) -> Result<()>,
+    emit: super::count_stream::Emit<'_>,
 ) -> Result<()> {
     let Some(optional) = optionals.get(i) else {
         check_eval_budget(ctx, *emitted, *emitted)?;
         *emitted += 1;
-        return emit(row.clone());
+        return emit(row);
     };
     let mut matched = false;
     for value in &values[i] {

@@ -31,7 +31,10 @@ use spargebra::term::{NamedNodePattern, TermPattern, Variable};
 use std::collections::HashMap;
 
 type Output = (Vec<Bindings>, Vec<String>);
-type Emit<'a> = &'a mut dyn FnMut(Bindings) -> Result<()>;
+/// Rows flow by mutable reference: a stage that binds a variable inserts it,
+/// emits, and restores the row, so no stage clones a row it only extends
+/// (aegis-xdvg.6). A consumer must not keep the reference.
+pub(super) type Emit<'a> = &'a mut dyn FnMut(&mut Bindings) -> Result<()>;
 
 fn supported(pattern: &GraphPattern) -> bool {
     match pattern {
@@ -93,8 +96,8 @@ fn bgp(
         && !patterns.iter().any(super::rdfs::is_rdf_type_pattern)
         && crate::store::read_model::read_model_applicable(store, ctx)
     {
-        for row in super::triple::eval_bgp(store, patterns, ctx, seed)?.0 {
-            emit(row)?;
+        for mut row in super::triple::eval_bgp(store, patterns, ctx, seed)?.0 {
+            emit(&mut row)?;
         }
         return Ok(());
     }
@@ -112,14 +115,19 @@ fn bgp_sql(
 ) -> Result<()> {
     if let Some((first, rest)) = patterns.split_first() {
         let (count, remaining) = counts.split_first_mut().expect("one counter per pattern");
-        super::triple::visit_triple_pattern(store, first, seed, ctx, &mut |row| {
+        super::triple::visit_triple_pattern(store, first, seed, ctx, &mut |mut row| {
             super::pattern_util::check_eval_budget(ctx, *count, *count)?;
             *count += 1;
-            bgp_sql(store, rest, ctx, &row, emit, remaining)
+            if rest.is_empty() {
+                // The last pattern's row is already owned: emit it as is.
+                emit(&mut row)
+            } else {
+                bgp_sql(store, rest, ctx, &row, emit, remaining)
+            }
         })?;
         Ok(())
     } else {
-        emit(seed.clone())
+        emit(&mut seed.clone())
     }
 }
 
@@ -149,8 +157,51 @@ pub(super) fn visit(
         }
         GraphPattern::Join { left, right } => {
             let mut joined = 0;
+            if let GraphPattern::Values {
+                variables,
+                bindings,
+            } = &**right
+            {
+                // Join each row with the inline table in place, converting
+                // its terms once (on the first row, as eval_values would).
+                let mut table: Option<Vec<Vec<Option<Value>>>> = None;
+                return visit(store, left, ctx, seed, &mut |row| {
+                    if table.is_none() {
+                        table = Some(super::values::values_table(store, bindings)?);
+                    }
+                    let table = table.as_ref().expect("filled above");
+                    let mut added: Vec<&str> = Vec::with_capacity(variables.len());
+                    'row: for values in table {
+                        added.clear();
+                        for (variable, value) in variables.iter().zip(values) {
+                            let Some(value) = value else { continue };
+                            match row.get(variable.as_str()) {
+                                Some(existing) if existing != value => {
+                                    for name in &added {
+                                        row.remove(*name);
+                                    }
+                                    continue 'row;
+                                }
+                                Some(_) => {}
+                                None => {
+                                    row.insert(variable.as_str().to_owned(), value.clone());
+                                    added.push(variable.as_str());
+                                }
+                            }
+                        }
+                        super::pattern_util::check_eval_budget(ctx, joined, joined)?;
+                        joined += 1;
+                        let result = emit(row);
+                        for name in &added {
+                            row.remove(*name);
+                        }
+                        result?;
+                    }
+                    Ok(())
+                });
+            }
             visit(store, left, ctx, seed, &mut |row| {
-                visit(store, right, ctx, &row, &mut |row| {
+                visit(store, right, ctx, row, &mut |row| {
                     super::pattern_util::check_eval_budget(ctx, joined, joined)?;
                     joined += 1;
                     emit(row)
@@ -173,7 +224,7 @@ pub(super) fn visit(
                     right,
                     expression.as_ref(),
                     ctx,
-                    &row,
+                    row,
                     &mut probe,
                     &mut emitted,
                     emit,
@@ -190,9 +241,9 @@ pub(super) fn visit(
             if let Some((rows, _)) =
                 super::filter_drive::try_eval(store, expr, inner, inner_ctx, seed)?
             {
-                for row in rows {
+                for mut row in rows {
                     if eval_filter(store, expr, &row, ctx)? {
-                        emit(row)?;
+                        emit(&mut row)?;
                     }
                 }
                 return Ok(());
@@ -203,7 +254,7 @@ pub(super) fn visit(
                 narrowed.as_ref().unwrap_or(ctx),
                 seed,
                 &mut |row| {
-                    if eval_filter(store, expr, &row, ctx)? {
+                    if eval_filter(store, expr, row, ctx)? {
                         emit(row)?;
                     }
                     Ok(())
@@ -214,8 +265,8 @@ pub(super) fn visit(
             variables,
             bindings,
         } => {
-            for row in super::values::eval_values(store, variables, bindings, seed)?.0 {
-                emit(row)?;
+            for mut row in super::values::eval_values(store, variables, bindings, seed)?.0 {
+                emit(&mut row)?;
             }
             Ok(())
         }
@@ -223,11 +274,17 @@ pub(super) fn visit(
             inner,
             variable,
             expression,
-        } => visit(store, inner, ctx, seed, &mut |mut row| {
-            if let Some(value) = eval_expr(store, expression, &row) {
-                row.insert(variable.as_str().into(), value);
-            }
-            emit(row)
+        } => visit(store, inner, ctx, seed, &mut |row| {
+            let Some(value) = eval_expr(store, expression, row) else {
+                return emit(row);
+            };
+            let previous = row.insert(variable.as_str().into(), value);
+            let result = emit(row);
+            match previous {
+                Some(previous) => row.insert(variable.as_str().into(), previous),
+                None => row.remove(variable.as_str()),
+            };
+            result
         }),
         _ => unreachable!("applicability checked before evaluation"),
     }

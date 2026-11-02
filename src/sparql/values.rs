@@ -57,6 +57,26 @@ pub fn eval_values(
     Ok((rows, vars))
 }
 
+/// The inline table's rows as values, converted once (aegis-xdvg.6). `None`
+/// is UNDEF.
+pub(super) fn values_table(
+    store: &Store,
+    bindings: &[Vec<Option<GroundTerm>>],
+) -> Result<Vec<Vec<Option<Value>>>> {
+    bindings
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|term| {
+                    term.as_ref()
+                        .map(|t| ground_term_to_value(store, t))
+                        .transpose()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// Convert a `VALUES` ground term into the store's `Value` representation.
 ///
 /// An IRI resolves to the interned `Ref` the fact log uses, so it joins with a
