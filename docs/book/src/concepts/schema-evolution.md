@@ -178,7 +178,9 @@ It reports:
 The verdict is `pass` when the score is at or under the threshold, `fail` when
 it is above it, and `undetermined` when the plan cannot be computed honestly:
 SHACL compiled out, a SPARQL-based `sh:target`, a diff that is not Turtle
-(such as a JSON patch), or more than 50,000 focus nodes. A shape proposal
+(such as a JSON patch), more than 50,000 focus nodes, or a store scan that
+fails (a query deadline or row cap on a large store, for example); the plan
+names the failed step and its count is unknown. A shape proposal
 whose Turtle does not parse is not planned at accept; the accept refuses it
 with its own message, as before. `quipu propose plan` exits 0, 1 and 2 for these. The threshold is 40
 unless `QUIPU_PROPOSAL_RISK_THRESHOLD` sets another default, and a call can pass
@@ -189,6 +191,9 @@ unless the caller accepts the risk with a reason: `--accept-risk --reason
 <why>` on the CLI, `"accept_risk": true, "risk_reason": "<why>"` over MCP and
 REST. The decision note then records `accepted at risk <score>/<threshold>
 (<verdict>): <why>`.
+
+The gate is advisory against a moving store: the plan and the accept are
+separate reads, not one transaction, so a write between them is not seen.
 
 The plan covers ROOT instance data for the SHACL count. Named-graph data is
 reported by graph, not validated, and a complex `sh:path` (inverse, sequence)

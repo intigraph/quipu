@@ -160,8 +160,8 @@ pub struct ProposalPlan {
 /// Plan proposal `id` against the current store. Writes nothing.
 ///
 /// # Errors
-/// The proposal does not exist or is not pending, its Turtle does not parse,
-/// or a store read fails.
+/// The proposal does not exist or is not pending, or a read of the proposal
+/// or the current shapes fails. A failed blast-radius scan is `undetermined`.
 pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
     let p = store
         .get_proposal(id)?
@@ -202,7 +202,11 @@ pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
                 .map(|s| (*s).to_owned())
                 .collect();
         }
-        let focus = focus(store, &p.diff, &proposed)?;
+        let focus = scanned(
+            "the focus-node scan",
+            focus(store, &p.diff, &proposed),
+            &mut undetermined,
+        );
         in_scope = focus.len();
         if !cfg!(feature = "shacl") {
             undetermined.push("SHACL is compiled out of this build".into());
@@ -211,7 +215,11 @@ pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
                 "{in_scope} focus nodes exceed the plan bound of {MAX_FOCUS}"
             ));
         } else if undetermined.is_empty() {
-            newly_failing = newly_failing_under(store, &p.target, &p.diff, &focus)?;
+            newly_failing = scanned(
+                "the SHACL before/after pass",
+                newly_failing_under(store, &p.target, &p.diff, &focus),
+                &mut undetermined,
+            );
         }
     }
     let changed: BTreeSet<String> = proposed
@@ -220,8 +228,19 @@ pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
         .map(str::to_owned)
         .chain(removed_terms.iter().cloned())
         .collect();
-    let stored_queries = stored_queries_naming(store, &changed)?;
-    let (named_graphs, snapshots) = graphs_using(store, &proposed, &removed_terms)?;
+    // These scans read the whole store. On a large one a query deadline or a
+    // row cap can stop them; that leaves the count unknown (`undetermined`),
+    // which an operator can accept at risk, never an error that blocks accept.
+    let stored_queries = scanned(
+        "the stored-query scan",
+        stored_queries_naming(store, &changed),
+        &mut undetermined,
+    );
+    let (named_graphs, snapshots) = scanned(
+        "the named-graph scan",
+        graphs_using(store, &proposed, &removed_terms),
+        &mut undetermined,
+    );
     let migration_ops = store.get_proposal_migration(id)?.map_or(0, |m| m.len());
     let risk = score(
         &[
@@ -250,6 +269,15 @@ pub fn plan(store: &Store, id: i64, threshold: u8) -> Result<ProposalPlan> {
         migration_ops,
         undetermined,
         risk,
+    })
+}
+
+/// The result of a store scan, or its default with the failure recorded as
+/// `undetermined`, so the count it would have contributed is unknown.
+fn scanned<T: Default>(step: &str, result: Result<T>, undetermined: &mut Vec<String>) -> T {
+    result.unwrap_or_else(|e| {
+        undetermined.push(format!("{step} failed ({e}); its count is unknown"));
+        T::default()
     })
 }
 

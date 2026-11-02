@@ -368,3 +368,56 @@ fn a_diff_that_is_not_turtle_is_undetermined_not_an_error() {
     let bad = propose(&store, &ProposalKind::Shape, "not turtle {{");
     assert!(plan_for_accept(&store, bad, 40).unwrap().is_none());
 }
+
+/// muldoon on #962: a blast-radius scan that fails (a query deadline, a row
+/// cap, an unreadable frozen-pack table) leaves its count unknown. That is
+/// `undetermined`, which an operator can accept at risk, never an error that
+/// blocks every accept. Errors on the proposal itself stay errors.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_failed_scan_is_undetermined_and_can_be_accepted_at_risk() {
+    use crate::mcp::proposal::tool_accept_proposal;
+    use serde_json::json;
+    let mut store = store_with(PEOPLE, 0);
+    store.load_shapes("people", &email_shape(0, 9), T0).unwrap();
+    let id = propose(&store, &ProposalKind::Shape, &email_shape(0, 8));
+    // Positive control: the same proposal plans as a pass before the fault.
+    assert_eq!(plan(&store, id, 40).unwrap().risk.verdict, Verdict::Pass);
+
+    // The named-graph scan reads frozen_packs; make that read fail.
+    store.conn.execute_batch("DROP TABLE frozen_packs").unwrap();
+    let p = plan(&store, id, 40).unwrap();
+    assert_eq!(p.risk.verdict, Verdict::Undetermined);
+    assert!(
+        p.undetermined
+            .iter()
+            .any(|u| u.starts_with("the named-graph scan failed")),
+        "{:?}",
+        p.undetermined
+    );
+    assert!(render_text(&p).contains("undetermined: the named-graph scan failed"));
+
+    let bare = json!({ "id": id, "decided_by": "r" });
+    let err = tool_accept_proposal(&mut store, &bare)
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Undetermined"), "{err}");
+    assert_eq!(
+        store.get_proposal(id).unwrap().unwrap().status,
+        ProposalStatus::Pending
+    );
+    let mut at_risk = bare;
+    at_risk["accept_risk"] = json!(true);
+    at_risk["risk_reason"] = json!("scan timed out; reviewed by hand");
+    let out = tool_accept_proposal(&mut store, &at_risk).unwrap();
+    assert_eq!(out["status"], "accepted");
+    let note = store.get_proposal(id).unwrap().unwrap().decision_note;
+    assert!(
+        note.as_deref()
+            .is_some_and(|n| n.contains("(Undetermined): scan timed out")),
+        "{note:?}"
+    );
+
+    // A proposal that does not exist is still an error, not undetermined.
+    assert!(plan(&store, 9_999, 40).is_err());
+}
