@@ -252,6 +252,10 @@ pub(super) fn try_evaluate(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<Option<Output>> {
+    // Judge item-only FILTER conjuncts before a constant VALUES join fans each
+    // item out into one row per table row (aegis-xdvg.6).
+    let pushed = super::count_values_pushdown::rewrite(inner);
+    let inner = pushed.as_ref().unwrap_or(inner);
     let mean = aggregates.iter().any(|(_, a)| {
         matches!(
             a,

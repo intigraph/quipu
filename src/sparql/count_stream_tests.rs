@@ -146,6 +146,16 @@ fn plain_optionals_and_values_joins_match_exactly() {
         format!(
             "SELECT ?m (COUNT(*) AS ?n) WHERE {{ {body} VALUES (?m ?st) {{ ('x' 'open') ('y' UNDEF) }} }} GROUP BY ?m"
         ),
+        // FILTER conjuncts split across a VALUES join: the item-only part may
+        // run first; one naming ?m, or a BIND over the join, must stay put.
+        format!(
+            "SELECT ?m (COUNT(*) AS ?n) WHERE {{ {body} BIND(STR(?st) AS ?src) VALUES ?m {{ 'a' 'open' }} \
+             FILTER(!BOUND(?inbox) && ?m != 'zz' && (?m = 'a' || ?src = ?m)) }} GROUP BY ?m"
+        ),
+        format!(
+            "SELECT ?m (COUNT(*) AS ?n) WHERE {{ {body} VALUES ?m {{ 1 2 }} BIND(?m * 2 AS ?d) \
+             FILTER(?d > 2 && BOUND(?id)) }} GROUP BY ?m"
+        ),
     ] {
         compare(&store, &q, &ctx, true);
     }
@@ -602,5 +612,53 @@ fn two_fresh_optional_plain_fields_preserve_preference_empty_and_multiplicity() 
         super::super::query(&store, &q).unwrap().rows()[0]["n"],
         Value::Int(2),
         "rdfs-only and ignored-language name use fallback; preferred/empty names do not"
+    );
+}
+
+/// aegis-xdvg.6: only deterministic conjuncts that see none of the VALUES
+/// table's or an intervening BIND's variables move below the join.
+#[test]
+fn values_pushdown_moves_only_item_conjuncts() {
+    fn filter_of(p: &GraphPattern) -> &GraphPattern {
+        match p {
+            GraphPattern::Project { inner, .. } | GraphPattern::Distinct { inner } => {
+                filter_of(inner)
+            }
+            other => other,
+        }
+    }
+    let parse = |q: &str| match spargebra::SparqlParser::new().parse_query(q).unwrap() {
+        spargebra::Query::Select { pattern, .. } => pattern,
+        _ => unreachable!(),
+    };
+    let pattern = parse(
+        "SELECT * WHERE { ?s <urn:p> ?o VALUES ?m { 1 2 } BIND(STR(?o) AS ?t) \
+         FILTER(BOUND(?o) && ?m = 1 && ?t = \"x\" && RAND() < 2) }",
+    );
+    let rewritten = super::super::count_values_pushdown::rewrite(filter_of(&pattern))
+        .expect("one conjunct moves");
+    let GraphPattern::Filter { expr, inner } = &rewritten else {
+        panic!("{rewritten:?}")
+    };
+    // The top filter keeps ?m, ?t (bound by a BIND above the join) and the
+    // volatile RAND().
+    let top = format!("{expr:?}");
+    assert!(
+        top.contains("\"m\"") && top.contains("\"t\"") && top.contains("Rand"),
+        "{top}"
+    );
+    assert!(!top.contains("Bound"), "BOUND(?o) should have moved: {top}");
+    // BOUND(?o) now filters the left side of the VALUES join, under the BIND.
+    let inner = format!("{inner:?}");
+    assert!(
+        inner.starts_with("Extend") && inner.contains("Join { left: Filter { expr: Bound"),
+        "{inner}"
+    );
+    // Nothing movable: no rewrite at all.
+    assert!(
+        super::super::count_values_pushdown::rewrite(filter_of(&parse(
+            "SELECT * WHERE { ?s <urn:p> ?o VALUES ?m { 1 } FILTER(?m = 1) }"
+        )))
+        .is_none()
     );
 }
