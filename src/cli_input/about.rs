@@ -116,6 +116,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("align propose", "Propose scored alignments between two named graphs as an SSSOM set"),
     ("align decide", "Apply reviewer accept and negate decisions to a mapping set"),
     ("align apply", "Materialize decided alignments into a derived alignment graph"),
+    ("align export", "Export a mapping set as standard SSSOM TSV or RDF Turtle"),
     ("propose list", "List schema change proposals, optionally by status"),
     ("propose submit", "Submit a schema change proposal"),
     ("propose plan", "Report a pending proposal's blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined"),
