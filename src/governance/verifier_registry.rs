@@ -28,10 +28,14 @@
 //!
 //! Rotation is close-then-insert (retract the old `aegis:publicKey` and assert
 //! the new one), revocation is a close, and expiry is a `valid_to` in the
-//! future. No new schema is needed. Raw ROOT/all-graph and historical reads
-//! retain that temporal visibility. A CURRENT human/governed authority check
-//! is stricter: only open-ended facts belong to the writer's sealed registry
-//! snapshot, so a bounded assertion cannot authorize a new operation.
+//! future. No new schema is needed. Raw ROOT/all-graph reads at the current
+//! instant retain that temporal visibility. A transaction-bound (historical)
+//! read does not: a bounded fact counts there only once it carries
+//! `retracted_tx`, and only closing an open-ended fact sets that, so an
+//! unexpired bounded fact is invisible to it and such a check refuses rather
+//! than admits. A CURRENT human/governed authority check is stricter still:
+//! only open-ended facts belong to the writer's sealed registry snapshot, so a
+//! bounded assertion cannot authorize a new operation.
 //!
 //! # One registration, not two
 //!
