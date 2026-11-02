@@ -136,14 +136,22 @@ missing="$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || t
 # with the guard still green. Observed live on #60: a fix(ci) commit that also
 # touched CHANGELOG.md was dropped from the required set, and the section
 # release-plz generated for it documents nothing but an unresolvable placeholder.
+MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock)$'
 # The Python binding's manifest and lock joined the release commit with #902
 # (aegis-sw4): release-pr-daily syncs their version to the crate's. Without them
-# here every release commit read as content and failed its own verify (aegis-0zr).
-MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock|bindings/python/Cargo\.toml|bindings/python/Cargo\.lock)$'
+# every release commit read as content and failed its own verify (aegis-0zr). They
+# count as mechanics ONLY when the change is that canonical version sync and
+# nothing else; a dependency or lock-entry change there is content (#910 review).
+BINDING_RE='^bindings/python/Cargo\.(toml|lock)$'
+SYNC_ONLY="$(dirname "${BASH_SOURCE[0]}")/python-binding-sync-only.py"
 missing="$(printf '%s\n' "$missing" | while read -r h; do
   [[ -z "$h" ]] && continue
   files="$(git show --name-only --format= "$h" 2>/dev/null | grep -c . || true)"
   mech="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$MECHANICS_RE" || true)"
+  binding="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$BINDING_RE" || true)"
+  if [[ "$binding" -gt 0 ]] && python3 "$SYNC_ONLY" "$h"; then
+    mech=$((mech + binding))
+  fi
   # Every file it touched is release mechanics, and it touched at least one.
   if [[ "$files" -gt 0 && "$files" -eq "$mech" ]]; then continue; fi
   echo "$h"

@@ -66,9 +66,8 @@ for name, fixture, expected in cases:
         path.mkdir(parents=True)
         (path / "ci.yml").write_text(fixture)
         (path / "release.yml").write_text(release)
-        (path / "release-ci-ready.yml").write_text(
-            (root / ".github/workflows/release-ci-ready.yml").read_text()
-        )
+        for companion in ("release-ci-ready.yml", "release-pr-freshness.yml"):
+            (path / companion).write_text((root / ".github/workflows" / companion).read_text())
         result = subprocess.run(
             [sys.executable, str(root / "scripts/test_release_ci_gate.py")],
             cwd=directory, capture_output=True, text=True,

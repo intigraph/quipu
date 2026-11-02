@@ -42,6 +42,7 @@ make_repo() {
     cp "$REPO_ROOT/scripts/check-release-window.py" scripts/
     cp "$REPO_ROOT/scripts/changelog-duplicates.py" scripts/
     cp "$REPO_ROOT/scripts/release-pr-freshness.sh" scripts/
+    cp "$REPO_ROOT/scripts/python-binding-sync-only.py" scripts/
     printf '[package]\nname="probe"\nversion="1.0.0"\nedition="2021"\nexclude=["docs/"]\n' > Cargo.toml
     echo a > src/lib.rs; git add -A; git commit -qm "feat: the released thing"
     git tag v1.0.0
@@ -141,22 +142,94 @@ read -r d a b c <<<"$(make_repo)"
 check "pure release-mechanics commit stays exempt" 0 "none missing, none extra" "$d"
 
 # 7b. aegis-0zr: since #902 the release commit also syncs the Python binding's
-#     manifest and lock. Those are release mechanics too; without them in the
-#     exemption every release commit failed its own verify.
-read -r d a b c <<<"$(make_repo)"
+#     manifest and lock. That canonical version sync is release mechanics; without
+#     it in the exemption every release commit failed its own verify.
+#
+# binding_lock <core-version> <binding-version> <serde-version>: a lock in Cargo's
+# real shape, with the core path entry, the binding, and one registry pin.
+binding_lock() {
+  printf '[[package]]\nname = "probe"\nversion = "%s"\n\n' "$1"
+  printf '[[package]]\nname = "probe-py"\nversion = "%s"\ndependencies = [\n "probe",\n "serde",\n]\n\n' "$2"
+  printf '[[package]]\nname = "serde"\nversion = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$3"
+}
+# binding_repo: make_repo plus a tagged binding scaffold at 1.0.0.
+binding_repo() {
+  local d a b c
+  read -r d a b c <<<"$(make_repo)"
+  (
+    cd "$d"
+    mkdir -p bindings/python
+    printf '[package]\nname="probe-py"\nversion="1.0.0"\n\n[dependencies]\nserde="1.0.0"\n' \
+      > bindings/python/Cargo.toml
+    binding_lock 1.0.0 1.0.0 1.0.0 > bindings/python/Cargo.lock
+    git add -A && git commit -qm "chore: binding scaffold" && git tag quipu-ai-v1.0.0
+  ) >/dev/null 2>&1
+  echo "$d"
+}
+d="$(binding_repo)"
 (
   cd "$d"
-  mkdir -p bindings/python
-  printf '[package]\nname="probe-py"\nversion="1.0.0"\n' > bindings/python/Cargo.toml
-  echo lock > bindings/python/Cargo.lock
-  git add -A && git commit -qm "chore: binding scaffold" && git tag quipu-ai-v1.0.0
   printf '# Changelog\n\nnote\n' > CHANGELOG.md
   sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml bindings/python/Cargo.toml
-  echo lock2 > bindings/python/Cargo.lock
+  binding_lock 1.1.0 1.1.0 1.0.0 > bindings/python/Cargo.lock
   git add -A && git commit -qm "chore: release v1.1.0"
 ) >/dev/null 2>&1
 { echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
 check "release commit syncing the Python binding stays exempt" 0 "none missing, none extra" "$d"
+
+# 7c. ...but an ordinary dependency upgrade that touches the root manifest and the
+#     binding's is CONTENT and stays required (#910 review: the old whole-file
+#     exemption dropped it).
+d="$(binding_repo)"
+(
+  cd "$d"
+  printf '\n[dependencies]\nserde="1.1.0"\n' >> Cargo.toml
+  sed -i 's/serde="1.0.0"/serde="1.1.0"/' bindings/python/Cargo.toml
+  binding_lock 1.0.0 1.0.0 1.1.0 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "build: upgrade serde"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "binding dependency upgrade is still required" 1 "$e" "$d"
+
+# 7d. A version sync that ALSO changes a lock entry is content too: the sync never
+#     touches a registry pin.
+d="$(binding_repo)"
+(
+  cd "$d"
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+  binding_lock 1.1.0 1.1.0 1.2.0 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "version sync carrying a lock-entry change is required" 1 "$e" "$d"
+
+# 7e. A binding version that does not equal the crate's is not the canonical sync.
+d="$(binding_repo)"
+(
+  cd "$d"
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml
+  sed -i 's/version="1.0.0"/version="9.9.9"/' bindings/python/Cargo.toml
+  binding_lock 1.1.0 9.9.9 1.0.0 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "binding synced to a different version is required" 1 "$e" "$d"
+
+# 7f. A correct sync whose manifest also gains a feature: only the manifest differs.
+d="$(binding_repo)"
+(
+  cd "$d"
+  sed -i 's/version="1.0.0"/version="1.1.0"/' Cargo.toml bindings/python/Cargo.toml
+  printf '\n[features]\nextra=[]\n' >> bindings/python/Cargo.toml
+  binding_lock 1.1.0 1.1.0 1.0.0 > bindings/python/Cargo.lock
+  git add -A && git commit -qm "chore: release v1.1.0"
+) >/dev/null 2>&1
+e="$(git -C "$d" rev-parse --short=7 HEAD)"
+{ echo "# Changelog"; echo; echo "## [1.1.0] - 2026-01-01"; echo; } > "$d/CHANGELOG.md"
+check "version sync carrying a manifest change is required" 1 "$e" "$d"
 
 # 8. The post-rename package-qualified tag is the preferred baseline. A newer
 # historical v-tag must not pull the range back across the rename boundary.
@@ -614,6 +687,22 @@ fresh_check "excluded-only commit after the PR keeps it fresh" 0 "$d"
 d="$(fresh_repo)"
 (cd "$d" && printf '# Changelog\n\nhand edit\n' > CHANGELOG.md && git add -A && git commit -qm "chore: hand edit") >/dev/null 2>&1
 fresh_check "a conflicting main makes it stale" 1 "$d"
+# A merge-tree failure that is not a conflict (an old Git without --write-tree
+# exits 129) is an environment error, never a stale verdict.
+d="$(fresh_repo)"
+mkdir -p "$d/.shim"
+printf '#!/bin/sh\n[ "$1" = merge-tree ] && { echo "error: unknown option write-tree" >&2; exit 129; }\nexec %s "$@"\n' \
+  "$(command -v git)" > "$d/.shim/git"
+chmod +x "$d/.shim/git"
+out="$(cd "$d" && PATH="$d/.shim:$PATH" ./scripts/release-pr-freshness.sh rel HEAD 2>&1)"; rc=$?
+if [[ "$rc" -eq 2 ]] && grep -qF "unknown option write-tree" <<<"$out" && ! grep -qF STALE <<<"$out"; then
+  echo "  PASS  freshness: a merge-tree environment failure is an error, not stale (exit $rc)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL  freshness: merge-tree environment failure: wanted 2, got $rc: $out" >&2
+  fail=$((fail + 1))
+fi
+rm -rf "$d"
 
 # The detector's own arms, including its parse-error cases.
 if python3 "$REPO_ROOT/scripts/changelog-duplicates.py" --selftest >/dev/null 2>&1; then

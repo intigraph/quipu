@@ -15,6 +15,10 @@ release dispatch, tag or registry write participates. The broader workflow
 controls also cover fetch/read failures, revision movement and exact status
 publication; this recording isolates the discovery correction.
 
+The step has since moved to `.github/workflows/release-pr-freshness.yml`, so it
+also runs for a regenerated release PR head; `probe.py` reads the candidate from
+there. The recording above is of the candidate revision it names.
+
 To reproduce, save the base workflow outside the checkout, then run:
 
 ```sh

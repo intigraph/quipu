@@ -34,10 +34,17 @@ VERSION="$(git show "${br_sha}:Cargo.toml" \
 
 # --write-tree exits 1 on a conflict and prints the conflicted paths. A release
 # PR that cannot merge cleanly is stale by definition: it must be regenerated.
-if ! tree="$(git merge-tree --write-tree --no-messages "$main_sha" "$br_sha" 2>&1)"; then
+# Any other status (an old Git without --write-tree, a shallow clone) is not a
+# verdict about the PR: report it as an environment error, with its message.
+mt=0; tree="$(git merge-tree --write-tree --no-messages "$main_sha" "$br_sha" 2>&1)" || mt=$?
+if [[ "$mt" -eq 1 ]]; then
   echo "STALE — release PR ${BR} no longer merges cleanly onto ${MAIN} (${main_sha:0:8}):" >&2
   printf '%s\n' "$tree" | sed -n '2,$p' | sed 's/^/  /' >&2
   exit 1
+elif [[ "$mt" -ne 0 ]]; then
+  echo "ERROR: git merge-tree failed (exit ${mt}); freshness unknown:" >&2
+  printf '%s\n' "$tree" | sed 's/^/  /' >&2
+  exit 2
 fi
 tree="$(printf '%s\n' "$tree" | head -1)"
 

@@ -24,11 +24,16 @@ if [ "$CASE" = api-error ]; then echo 'synthetic API failure' >&2; exit 1; fi
 printf '  \\n'
 ''')
     gh.chmod(0o700)
+    # The body reads the checked-out main first, as the workflow does after checkout.
+    subprocess.run(["git", "init", "-q", str(fixture)], check=True)
+    subprocess.run(["git", "-C", str(fixture), "-c", "user.name=probe", "-c",
+                    "user.email=probe@example.invalid", "commit", "-q", "--allow-empty",
+                    "-m", "main"], check=True)
     for label, path in (("BASE", os.environ["BASE_RELEASE_WORKFLOW"]),
-                        ("CANDIDATE", ".github/workflows/release.yml")):
+                        ("CANDIDATE", ".github/workflows/release-pr-freshness.yml")):
         for case in ("known-empty", "api-error"):
             result = subprocess.run(["bash", "-c", workflow_body(path)], cwd=fixture,
-                                    env={**os.environ, "CASE": case,
+                                    env={**os.environ, "CASE": case, "GITHUB_EVENT_NAME": "push",
                                          "PATH": str(fixture) + os.pathsep + os.environ["PATH"]},
                                     capture_output=True, text=True)
             claims_absence = "No open release PR" in result.stdout

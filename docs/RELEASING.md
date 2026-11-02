@@ -47,11 +47,15 @@ These came from 0.16.5 (aegis-0zr). The release PR was prepared at about 05:40Z.
 PRs #901 and #903 merged after that, and the release PR then merged on top of them. The
 commit that was tagged shipped those two PRs, but the section did not list them.
 
-1. **Release PR freshness** (status on the release PR head). Every push to `main`
-   runs `scripts/release-pr-freshness.sh`. It builds the exact squash commit the
-   PR would merge as and verifies the section against it. When the result is
-   stale, the status goes red and one `release-pr-daily.yml` regeneration is
-   requested. **Do not merge a release PR whose freshness status is red.**
+1. **Release PR freshness** (status on the release PR head). Every push to `main`,
+   and every new or regenerated release PR head, runs
+   `scripts/release-pr-freshness.sh` (`.github/workflows/release-pr-freshness.yml`).
+   It builds the exact squash commit the PR would merge as and verifies the section
+   against it. When the result is stale, the status goes red and one
+   `release-pr-daily.yml` regeneration is requested. Only a same-repository
+   `release-plz*` PR into `main` counts; a fork PR never does, and two open release
+   PRs are an error, not a choice. **Do not merge a release PR whose freshness status
+   is red.**
 2. **The cut is verified before it happens.** The `release-plz` job runs
    `verify-changelog.sh --version <v>` on the commit it is about to tag, and
    refuses to tag if anything is missing. To repair a refused version, correct
