@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "31ebb7b598d3e7d39f938a7d3bcbf3399bf5001df2cdd4d2ac9c289e78591006",
+      "source_sha256": "2b7640bce7861e7b36b9cf6b4c36cd4b2882df3024f56aab9daf5daac391bd3c",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "3693f0c75a2df4fa43ecf8b973b98915926fa121333c289021724465db6e9719",
+      "source_sha256": "7bdc29cfc3d8b9677fe37c86136cf642b4d119ea5b7c89247dd643c6b1df5cfb",
       "properties": {
         "startHereOrder": 5
       }

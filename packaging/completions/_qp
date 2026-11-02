@@ -477,15 +477,15 @@ _arguments "${_arguments_options[@]}" : \
             (export)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--tx=[]:VALUE:_default' \
-'*--valid-at=[]:VALUE:_default' \
-'*--id=[]:VALUE:_default' \
-'*--title=[]:VALUE:_default' \
-'*--version=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
-'--with-shapes[]' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--tx=[Historical transaction to read]:VALUE:_default' \
+'*--valid-at=[Valid-time instant to query]:VALUE:_default' \
+'*--id=[DataBook IRI written to its frontmatter]:VALUE:_default' \
+'*--title=[DataBook title written to its frontmatter]:VALUE:_default' \
+'*--version=[DataBook version, 1.0.0 when omitted]:VALUE:_default' \
+'*--timestamp=[Creation time recorded in the DataBook'\''s provenance]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
+'--with-shapes[Also export the loaded SHACL shapes]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -493,11 +493,11 @@ _arguments "${_arguments_options[@]}" : \
 (import)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--graph=[]:VALUE:_default' \
-'*--timestamp=[]:VALUE:_default' \
-'*--actor=[]:VALUE:_default' \
-'*--source=[]:VALUE:_default' \
-'--with-shapes[]' \
+'*--graph=[Explicit graph IRI for this operation]:VALUE:_default' \
+'*--timestamp=[Valid-time timestamp for the operation]:VALUE:_default' \
+'*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'*--source=[Source identifier recorded in provenance]:VALUE:_default' \
+'--with-shapes[Also load the DataBook'\''s SHACL shape blocks]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-file-databook-md:_default' \
