@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "0c2fa6e4c6e6ef53be0e9e0d202c1ce60af529dbabaa86773aa6771132a4dd3c",
+      "source_sha256": "3bfc9a72475341ece598d7cb4b372bdf4cae4df6029b93dcdda01e7a373bdb68",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "25577449ffaffd4b636bf139cd53e09825938de7745a26de49075023b496ce29",
+      "source_sha256": "010a92bb9368a773cb1e68040a5c904e9e059a04bd4790422a088836ecb830e9",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ba70b50ed387df53982cf471d2b3d3ed5e0c1152bea3996e5b76a9c84531e314",
+      "source_sha256": "e59d76c675d5ab5ce4d8198f43c3f558025cab6b3cb49184a8ccfd1a3bf5c4d8",
       "properties": {
         "startHereOrder": 2
       }
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "a1134d791d4d05072af3dfb32f9c349526014a9031691da90a37e2b75c708993",
+      "source_sha256": "ac0323df70fcd1eac8781546bd77aaade266a8f530e45f55e98625a57d1a1674",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "425ec2e1e8b6263bb112f6d2ca4bcb0243dda121771e8f7169c3ee9713f6a571",
+      "source_sha256": "fbce9ea70070d2a8a7abb0742d5052d4620522c0fa52095c68637bc88330bf38",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"

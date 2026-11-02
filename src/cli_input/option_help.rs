@@ -22,6 +22,11 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         }
         ("databook export", "with-shapes") => Some("Also export the loaded SHACL shapes"),
         ("databook import", "with-shapes") => Some("Also load the DataBook's SHACL shape blocks"),
+        ("align export", "license") => Some("License IRI for the mapping set; required"),
+        ("align export", "prefix") => Some("Extra CURIE prefix as name=<namespace>; repeatable"),
+        ("align export", "author-prefix") => {
+            Some("Declared prefix that turns a bare reviewer into an author_id")
+        }
         ("propose plan", "format") => Some("Plan output format: text or json"),
         ("propose plan", "risk-threshold") => {
             Some("Fail the plan above this 0-100 risk score (default: the deployment threshold)")
