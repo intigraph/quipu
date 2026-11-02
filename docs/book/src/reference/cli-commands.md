@@ -1364,7 +1364,15 @@ Export a mapping set as standard SSSOM TSV or RDF Turtle.
 qp align export <set.tsv>
 ```
 
-Value options: `--license <VALUE>`, `--format <VALUE>`, `--prefix <VALUE>`, `--author-prefix <VALUE>`, `--out <VALUE>`.
+- `--license <VALUE>`: License IRI for the mapping set; required.
+
+- `--format <VALUE>`: Output or input format for this operation.
+
+- `--prefix <VALUE>`: Extra CURIE prefix as name=<namespace>; repeatable.
+
+- `--author-prefix <VALUE>`: Declared prefix that turns a bare reviewer into an author_id.
+
+- `--out <VALUE>`: Output file.
 
 ## `qp propose`
 

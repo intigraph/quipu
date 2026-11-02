@@ -14,6 +14,11 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         ("project", "to") => Some("Destination entity IRI for shortest-path projection"),
         ("share", "project") => Some("Export this repository's project graph to .quipu/graph"),
         ("prime", "full") => Some("Print the full agent primer"),
+        ("align export", "license") => Some("License IRI for the mapping set; required"),
+        ("align export", "prefix") => Some("Extra CURIE prefix as name=<namespace>; repeatable"),
+        ("align export", "author-prefix") => {
+            Some("Declared prefix that turns a bare reviewer into an author_id")
+        }
         _ => common(name),
     }
 }

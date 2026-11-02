@@ -1035,11 +1035,11 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
         }
         'quipu;align;export' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
-            [CompletionResult]::new('--license', '--license', [CompletionResultType]::ParameterName, 'license')
-            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'format')
-            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'prefix')
-            [CompletionResult]::new('--author-prefix', '--author-prefix', [CompletionResultType]::ParameterName, 'author-prefix')
-            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'out')
+            [CompletionResult]::new('--license', '--license', [CompletionResultType]::ParameterName, 'License IRI for the mapping set; required')
+            [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--prefix', '--prefix', [CompletionResultType]::ParameterName, 'Extra CURIE prefix as name=<namespace>; repeatable')
+            [CompletionResult]::new('--author-prefix', '--author-prefix', [CompletionResultType]::ParameterName, 'Declared prefix that turns a bare reviewer into an author_id')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

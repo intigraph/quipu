@@ -604,11 +604,11 @@ complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from apply" -l actor -d 'Actor recorded in operation provenance' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from apply" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l license -r
-complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l format -r
-complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l prefix -r
-complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l author-prefix -r
-complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l out -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l license -d 'License IRI for the mapping set; required' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l format -d 'Output or input format for this operation' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l prefix -d 'Extra CURIE prefix as name=<namespace>; repeatable' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l author-prefix -d 'Declared prefix that turns a bare reviewer into an author_id' -r
+complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -l out -d 'Output file' -r
 complete -c qp -n "__fish_qp_using_subcommand align; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand propose; and not __fish_seen_subcommand_from list submit accept reject" -l status -d 'Status to record or filter' -r

@@ -1318,11 +1318,11 @@ _arguments "${_arguments_options[@]}" : \
 (export)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
-'*--license=[]:VALUE:_default' \
-'*--format=[]:VALUE:_default' \
-'*--prefix=[]:VALUE:_default' \
-'*--author-prefix=[]:VALUE:_default' \
-'*--out=[]:VALUE:_default' \
+'*--license=[License IRI for the mapping set; required]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
+'*--prefix=[Extra CURIE prefix as name=<namespace>; repeatable]:VALUE:_default' \
+'*--author-prefix=[Declared prefix that turns a bare reviewer into an author_id]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-set-tsv:_default' \

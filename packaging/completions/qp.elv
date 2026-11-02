@@ -929,11 +929,11 @@ set edit:completion:arg-completer[qp] = {|@words|
         }
         &'qp;align;export'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
-            cand --license 'license'
-            cand --format 'format'
-            cand --prefix 'prefix'
-            cand --author-prefix 'author-prefix'
-            cand --out 'out'
+            cand --license 'License IRI for the mapping set; required'
+            cand --format 'Output or input format for this operation'
+            cand --prefix 'Extra CURIE prefix as name=<namespace>; repeatable'
+            cand --author-prefix 'Declared prefix that turns a bare reviewer into an author_id'
+            cand --out 'Output file'
             cand -h 'Print help'
             cand --help 'Print help'
         }
