@@ -1,0 +1,95 @@
+# Just-in-time per-agent access records (aegis-bqc, part of aegis-ug3n).
+#
+# Design: Aegis docs/design/jit-agent-access.md, sections 6 (grant model) and
+# 9 (audit). The broker records every grant it issues, and each state change
+# as its own event, BEFORE it hands a capability token to an agent.
+#
+# Two rules the shapes enforce, because the design depends on them:
+#   - NO SECRET IS EVER RECORDED. Both shapes are sh:closed: a grant or event
+#     can carry only the properties listed here, so a token, secret value or
+#     client-secret ID cannot be attached to one. brokerKeyId names the
+#     broker's signing key; it is an identifier, never key material.
+#   - STATE IS DERIVED FROM EVENTS. A grant has no mutable state field; its
+#     state is its events (intent, committed, delivered, used, revoked, expired,
+#     cleanup-pending), one fact each, append-only. A stored state could
+#     disagree with them.
+#
+# Shipped EXCLUDED in shapes/MANIFEST: activating it is a separate Goldblum
+# classification and schema review. The stored query that lists active grants
+# is queries/active-access-grants.ttl.
+
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+
+aegis:AccessGrant a rdfs:Class ;
+    rdfs:label "access grant" ;
+    rdfs:comment "One time-boxed grant of a role to a principal for one held work item, issued by the access broker. Records identity, scope and lifetime; never a token or secret." .
+
+aegis:AccessGrantEvent a rdfs:Class ;
+    rdfs:label "access grant event" ;
+    rdfs:comment "One state change of an access grant, recorded as its own fact." .
+
+aegis:grantId a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "The broker's identifier for the grant, also carried in its capability token." .
+aegis:grantPrincipal a owl:ObjectProperty ;
+    rdfs:comment "The principal (agent) the grant is issued to." .
+aegis:grantRole a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "The access-policy role granted." .
+aegis:grantKind a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "proxied (a broker-signed capability checked by a proxy on every request) or direct (an upstream secret, allowed only for short-lived upstream credentials)." .
+aegis:policyDigest a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "sha256 digest of the endorsed access-policy revision the grant was evaluated against." .
+aegis:issuedAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime ;
+    rdfs:comment "When the broker issued the grant." .
+aegis:grantExpiresAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime ;
+    rdfs:comment "When the grant stops being valid: min(rule max TTL, requested, the item's deadline)." .
+aegis:brokerKeyId a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Identifier of the broker signing key that signed the capability token. Never key material." .
+aegis:attributionMode a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "attribution (the principal is claimed and evaluated) or attested (the principal is proven)." .
+aegis:ofGrant a owl:ObjectProperty ;
+    rdfs:comment "The access grant an event belongs to." .
+aegis:grantState a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "The state an event records." .
+aegis:eventAt a owl:DatatypeProperty ; rdfs:range xsd:dateTime ;
+    rdfs:comment "When the event happened." .
+aegis:eventReason a owl:DatatypeProperty ; rdfs:range xsd:string ;
+    rdfs:comment "Why, for revocations, refusals and cleanup; free text, never a secret." .
+
+aegis:AccessGrantShape a sh:NodeShape ;
+    sh:targetClass aegis:AccessGrant ;
+    sh:closed true ;
+    sh:ignoredProperties ( rdf:type rdfs:label prov:wasGeneratedBy ) ;
+    sh:property [ sh:path aegis:grantId ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 128 ] ;
+    sh:property [ sh:path aegis:grantPrincipal ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path aegis:aboutWorkItem ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path aegis:grantRole ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 128 ] ;
+    sh:property [ sh:path aegis:grantKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "proxied" "direct" ) ] ;
+    sh:property [ sh:path aegis:policyDigest ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path aegis:issuedAt ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:datatype xsd:dateTime ; sh:lessThan aegis:grantExpiresAt ] ;
+    sh:property [ sh:path aegis:grantExpiresAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path aegis:brokerKeyId ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 128 ] ;
+    sh:property [ sh:path aegis:attributionMode ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( "attribution" "attested" ) ] .
+
+aegis:AccessGrantEventShape a sh:NodeShape ;
+    sh:targetClass aegis:AccessGrantEvent ;
+    sh:closed true ;
+    sh:ignoredProperties ( rdf:type rdfs:label prov:wasGeneratedBy ) ;
+    sh:property [ sh:path aegis:ofGrant ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:nodeKind sh:IRI ; sh:class aegis:AccessGrant ] ;
+    sh:property [ sh:path aegis:grantState ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( "intent" "committed" "delivered" "used" "revoked" "expired" "cleanup-pending" ) ] ;
+    sh:property [ sh:path aegis:eventAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path aegis:eventReason ; sh:maxCount 1 ;
+                  sh:datatype xsd:string ; sh:maxLength 1024 ] .
