@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "5a7628484343ae75aa88dc3d9f87e7decb9b50c573c5fdaad1b8b87f10b2bc95",
+      "source_sha256": "87789b7f13a32cab43a6f2fc3bd0f32eb7870797cec94dbcf7c5330498208b96",
       "type": "Concept"
     },
     {
