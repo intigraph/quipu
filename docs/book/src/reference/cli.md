@@ -181,6 +181,8 @@ forms: 0 when the data conforms, 1 otherwise or on an error.
 ### `quipu export`
 
 Export deterministic RDF from ROOT or one explicit scope.
+To export one graph as a self-describing DataBook instead, with frontmatter,
+provenance and per-block digests, see [`quipu databook`](databooks.md).
 
 ```bash
 quipu export --db my.db                        # N-Triples (default)
