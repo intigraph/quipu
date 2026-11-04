@@ -67,9 +67,6 @@ impl Change {
 
 /// An operator decision for one slot (merge-reconcile.md §3.1, plus R2's
 /// `continue` for a convergent slot).
-// Fork promote passes decided values; the named choices arrive with share
-// merge (slice S3), which reads them from a decisions file.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Decision<V> {
     Ours,
@@ -77,6 +74,8 @@ pub(crate) enum Decision<V> {
     Base,
     Both,
     Values(BTreeSet<V>),
+    // Explicit convergent decisions arrive with the decisions schema slice.
+    #[cfg_attr(not(test), allow(dead_code))]
     Continue,
     Defer,
 }
@@ -409,8 +408,6 @@ pub(crate) fn plan_merge<S: Ord + Clone, V: Ord + Clone>(
 /// identity and the decisions file's SHA-256 (of `[]` for a clean merge).
 /// Two different merges never share it; the same input merged again does,
 /// which is what lets a re-apply report `already-applied` (R7).
-// Merge sources carry the id from slice S3 (share merge) on.
-#[cfg_attr(not(test), allow(dead_code))]
 #[must_use]
 pub(crate) fn merge_id(path: &str, incoming: &str, base: &str, decisions_sha256: &str) -> String {
     let record = serde_json::json!({

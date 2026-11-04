@@ -1,0 +1,21 @@
+Actual baseline regression output (02268bed5ea4f3a90eaef9551a65816698e87503 with the new regression test applied).
+Private build and HOME-guard boilerplate omitted; test output below is unchanged.
+
+running 1 test
+test share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time ... FAILED
+
+failures:
+
+---- share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time stdout ----
+
+thread 'share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time' (1168863) panicked at src/share_merge_decisions_tests.rs:1025:5:
+assertion `left == right` failed: incoming receipt and live winner: [(6, "2099-01-10T00:00:00Z", None)]
+  left: 1
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3122 filtered out; finished in 0.05s

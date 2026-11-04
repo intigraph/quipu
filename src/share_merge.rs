@@ -12,7 +12,8 @@ use serde::Serialize;
 use crate::error::{Error, Result};
 use crate::share::{ShareManifest, manifest_bytes, sha256};
 use crate::store::Store;
-use crate::types::Op;
+#[path = "share_merge_core.rs"]
+pub(crate) mod core;
 
 pub(crate) type Graph = HashSet<Triple>;
 type Slot = (String, String);
@@ -210,7 +211,10 @@ pub(crate) fn merge_graphs(
     Ok((merged, conflicts))
 }
 
-fn parts(store: &Store, incoming_dir: &Path) -> Result<(ShareStatus, Graph, Graph, String)> {
+fn parts(
+    store: &Store,
+    incoming_dir: &Path,
+) -> Result<(ShareStatus, Graph, Graph, String, String)> {
     let incoming = read_share(incoming_dir)?;
     let base = locate_base(&incoming)?;
     let (ours, ours_hash) = root_graph(store)?;
@@ -228,7 +232,13 @@ fn parts(store: &Store, incoming_dir: &Path) -> Result<(ShareStatus, Graph, Grap
         diverged: ours != base.graph && incoming.graph != base.graph,
         conflicts,
     };
-    Ok((status, base.graph, incoming.graph, incoming.shapes))
+    Ok((
+        status,
+        base.graph,
+        incoming.graph,
+        incoming.shapes,
+        incoming.manifest.created_at,
+    ))
 }
 
 pub fn status(store: &Store, incoming_dir: &Path) -> Result<ShareStatus> {
@@ -241,10 +251,32 @@ pub fn merge(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<MergeResult> {
-    let (status, base, theirs, shapes) = parts(store, incoming_dir)?;
+    core::atomic(store, |store| {
+        merge_inner(store, incoming_dir, timestamp, actor)
+    })
+}
+
+fn merge_inner(
+    store: &mut Store,
+    incoming_dir: &Path,
+    timestamp: &str,
+    actor: Option<&str>,
+) -> Result<MergeResult> {
+    let (status, base, theirs, shapes, authored_at) = parts(store, incoming_dir)?;
     let (ours, _) = root_graph(store)?;
     let (merged, conflicts) = merge_graphs(&base, &ours, &theirs, &shapes)?;
     let parents = [status.local_graph_hash, status.incoming_share];
+    let id = crate::merge_core::merge_id("share", &parents[1], &status.base_share, &sha256(b"[]"));
+    if let Some(tx) = store.find_transaction_by_source(&format!("merge_id={id}"))? {
+        return Ok(MergeResult {
+            outcome: "already-applied".into(),
+            tx_id: Some(tx),
+            asserted: 0,
+            retracted: 0,
+            provenance_parents: parents,
+            conflicts: Vec::new(),
+        });
+    }
     if !conflicts.is_empty() {
         return Ok(MergeResult {
             outcome: "conflicts".into(),
@@ -255,15 +287,34 @@ pub fn merge(
             conflicts,
         });
     }
-    let source = format!("share-merge:parents={},{}", parents[0], parents[1]);
-    commit(store, &ours, &merged, parents, &source, timestamp, actor)
+    let source = format!(
+        "share-merge:parents={},{};merge_id={id}",
+        parents[0], parents[1]
+    );
+    let plan = core::plan(
+        store,
+        &core::Inputs {
+            base: &base,
+            ours: &ours,
+            theirs: &theirs,
+            shapes: &shapes,
+            authored_at: &authored_at,
+        },
+        &BTreeMap::new(),
+        timestamp,
+    )?;
+    commit(
+        store, &ours, &merged, &plan, parents, &source, timestamp, actor,
+    )
 }
 
-/// Write `merged` over `ours` as ONE transaction and report it.
+/// Persist the common core’s ordered receive/decide plan and report final changes.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn commit(
     store: &mut Store,
     ours: &Graph,
     merged: &Graph,
+    plan: &core::Plan,
     parents: [String; 2],
     source: &str,
     timestamp: &str,
@@ -276,24 +327,6 @@ pub(crate) fn commit(
         lines.sort();
         lines.concat()
     };
-    let mut datums = crate::rdf::parse_rdf(
-        store,
-        render(&additions).as_bytes(),
-        RdfFormat::NTriples,
-        None,
-        timestamp,
-    )?;
-    let mut retracts = crate::rdf::parse_rdf(
-        store,
-        render(&removals).as_bytes(),
-        RdfFormat::NTriples,
-        None,
-        timestamp,
-    )?;
-    for d in &mut retracts {
-        d.op = Op::Retract;
-    }
-    datums.extend(retracts);
     // aegis-gxfm: write-time SHACL judges the additions inside `transact`; a
     // merge (or a decision) that only REMOVES values needs the deletion gate.
     store.enforce_retraction_shapes_nt(
@@ -303,7 +336,7 @@ pub(crate) fn commit(
         actor,
         Some(source),
     )?;
-    let tx_id = store.transact(&datums, timestamp, actor, Some(source))?;
+    let tx_id = core::persist(store, plan, timestamp, actor, source)?;
     Ok(MergeResult {
         outcome: "merged".into(),
         tx_id: Some(tx_id),
@@ -467,6 +500,27 @@ mod tests {
         let text = String::from_utf8(bytes).unwrap();
         assert!(text.contains("\"ours\""));
         assert!(text.contains("\"theirs\""));
+        let e = local.lookup("https://example.org/s").unwrap().unwrap();
+        let a = local.lookup(P_MANY).unwrap().unwrap();
+        let incoming = read_share(&incoming_dir).unwrap();
+        let received = local
+            .entity_facts(e)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.attribute == a && f.value == crate::types::Value::Str("theirs".into()))
+            .unwrap();
+        assert_eq!(received.valid_from, incoming.manifest.created_at);
+        let before = local.latest_tx_id().unwrap();
+        let repeated = merge(
+            &mut local,
+            &incoming_dir,
+            "2099-01-10T00:00:00Z",
+            Some("reviewer"),
+        )
+        .unwrap();
+        assert_eq!(repeated.outcome, "already-applied");
+        assert_eq!(repeated.tx_id, result.tx_id);
+        assert_eq!(local.latest_tx_id().unwrap(), before);
     }
 }
 
