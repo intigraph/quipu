@@ -3,15 +3,15 @@ use std::path::Path;
 
 use crate::cli::{chrono_now, flag_value};
 
-const USAGE: &str = "usage: quipu git-merge REF | git-merge show QPACK_DIR [--format text|md|json] | git-merge resolve QPACK_DIR KEY --choose CHOICE --by WHO | merge-driver BASE OURS THEIRS PATH | pendant-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | pendant-check [--history] BASE_REF OURS_REF THEIRS_REF RESULT_REF";
+const USAGE: &str = "usage: quipu git-merge REF | git-merge show PENDANT_DIR [--format text|md|json] | git-merge resolve PENDANT_DIR KEY --choose CHOICE --by WHO | merge-driver BASE OURS THEIRS PATH | pendant-resolve BASE_REF OURS_REF THEIRS_REF DIR KEY CHOICE | pendant-check [--history] BASE_REF OURS_REF THEIRS_REF RESULT_REF";
 
 fn fail(error: impl std::fmt::Display) -> ! {
-    eprintln!("qpack merge refused: {error}");
+    eprintln!("pendant merge refused: {error}");
     std::process::exit(1);
 }
 
-/// A qpack directory given as the directory or as its `decisions.json`.
-fn qpack_dir(arg: &str) -> &str {
+/// A pendant directory given as the directory or as its `decisions.json`.
+fn pendant_dir(arg: &str) -> &str {
     let arg = arg.trim_start_matches("./");
     arg.strip_suffix("/decisions.json")
         .or_else(|| arg.strip_suffix("decisions.json"))
@@ -20,7 +20,7 @@ fn qpack_dir(arg: &str) -> &str {
         .unwrap_or(arg)
 }
 
-/// Print one qpack's decisions in the standard layout (aegis-k7l).
+/// Print one pendant's decisions in the standard layout (aegis-k7l).
 fn show(dir: &str, format: &str) {
     let path = Path::new(dir).join("decisions.json");
     let file = quipu::merge_reconcile::ReconcileFile::load_path(&path).unwrap_or_else(|e| fail(e));
@@ -37,10 +37,10 @@ fn show(dir: &str, format: &str) {
 }
 
 /// Record one choice in the merge in progress, with refs from `MERGE_HEAD`,
-/// and print the qpack's decisions again. The shared resolve verb for Git
-/// (`quipu merge resolve <qpack>/decisions.json` lands here too).
+/// and print the pendant's decisions again. The shared resolve verb for Git
+/// (`quipu merge resolve <pendant>/decisions.json` lands here too).
 pub(crate) fn resolve_in_merge(dir: &str, key: &str, choice: &str, by: &str) {
-    let dir = qpack_dir(dir);
+    let dir = pendant_dir(dir);
     if choice == "value" {
         fail(
             "Git pendant merges take ours, theirs, base, both or defer (accept/reject for alias proposals), not typed values",
@@ -63,7 +63,7 @@ pub fn run(args: &[String]) {
                     fail(USAGE)
                 };
                 show(
-                    qpack_dir(dir),
+                    pendant_dir(dir),
                     flag_value(args, "--format").unwrap_or("text"),
                 );
                 return;
@@ -80,7 +80,7 @@ pub fn run(args: &[String]) {
                 else {
                     fail("git-merge resolve needs --choose <choice> and --by <who>")
                 };
-                resolve_in_merge(qpack_dir(dir), key, choice, by);
+                resolve_in_merge(pendant_dir(dir), key, choice, by);
                 return;
             }
             _ => {}
@@ -130,13 +130,13 @@ pub fn run(args: &[String]) {
         Ok(true) => {}
         Ok(false) => {
             if args[1] == "git-merge" {
-                // The full standard layout, once per qpack left undecided.
+                // The full standard layout, once per pendant left undecided.
                 for dir in &pending {
                     show(dir, "text");
                 }
             }
             eprintln!(
-                "qpack decisions pending; nothing is committed. Show them with: quipu merge show <qpack>/decisions.json{}",
+                "pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json{}",
                 pending
                     .first()
                     .map(|d| format!(" (here: {d}/decisions.json)"))
@@ -145,7 +145,7 @@ pub fn run(args: &[String]) {
             std::process::exit(2);
         }
         Err(e) => {
-            eprintln!("qpack merge refused: {e}");
+            eprintln!("pendant merge refused: {e}");
             std::process::exit(1);
         }
     }

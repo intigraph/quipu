@@ -2,7 +2,7 @@
 # (aegis-fxpbys.2).
 #
 # A share's `queries.ttl` describes each stored query (`quipu_ask`) as RDF so a
-# qpack can ship its competency questions beside its data and shapes. The
+# pendant can ship its competency questions beside its data and shapes. The
 # producer validates the member against these shapes before hashing it, and the
 # importer validates it again before anything reaches the receiver's registry.
 # The Rust side of the contract is `src/share_queries.rs`; this file is compiled

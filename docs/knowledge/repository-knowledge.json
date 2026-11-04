@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "57668c3ebf1cc3966b866adabfc07af8826fdc4434390a686924c7ebae6c080f",
+      "source_sha256": "33fc4a4145b88acdc0acef9ecbaa0d34c635525d6115c43985fc16b53debc3ce",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "7f72e7e491a80605800d3634b92499d737172df9b5d75424b3c39271de967408",
+      "source_sha256": "ff57e159392eceea271c89268819056aaebe72cac5c8769d888ac8babfba9690",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "d5e946dd60b572b0a92b2f61b934f7941660767d5d6bf0b03fdfcb8503ab62f7",
+      "source_sha256": "fa75f464685fcdc3544c25573efdeb524279b4cdcff2e270f3355bcb72e836b4",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "3693f0c75a2df4fa43ecf8b973b98915926fa121333c289021724465db6e9719",
+      "source_sha256": "f07d8d40d26c4d107e00a46ce57b403b45f5ceefeee13718f5f77e1339b1c73f",
       "properties": {
         "startHereOrder": 5
       }
