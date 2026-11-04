@@ -491,3 +491,83 @@ fn real_queued_writes_are_bounded_without_stalling_another_owner() {
     assert_eq!(a_values["count"], 1, "queued snapshots were appended");
     assert_ne!(a_values["rows"][0]["value"], "overflow");
 }
+
+#[test]
+fn blocked_embedding_releases_writer_and_preserves_independent_owner_progress() {
+    use crate::vector::KnowledgeVectorStore;
+    struct LatchedProvider {
+        entered: mpsc::Sender<()>,
+        release: std::sync::Mutex<mpsc::Receiver<()>>,
+    }
+    impl crate::EmbeddingProvider for LatchedProvider {
+        fn embed_text(&self, _text: &str) -> crate::Result<Vec<f32>> {
+            self.entered.send(()).map_err(refused)?;
+            self.release
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(10))
+                .map_err(refused)?;
+            Ok(vec![0.5; 8])
+        }
+        fn dimension(&self) -> usize {
+            8
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let (mut a_store, a_route) = fixture(temp.path(), "a");
+    let (b_store, b_route) = fixture(temp.path(), "b");
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    a_store.set_embedding_provider(Arc::new(LatchedProvider {
+        entered: entered_tx,
+        release: std::sync::Mutex::new(release_rx),
+    }));
+    a_store.embedding_config_mut().auto_embed = true;
+    // Named-graph embedding text is an explicit configured consumer choice.
+    // ROOT-only defaults intentionally produce no work for this graph.
+    a_store.search_config_mut().named_graphs = true;
+    let catalog = catalog(vec![a_route.clone(), b_route.clone()]);
+    let a = Arc::new(
+        Owner::prepare(
+            catalog.clone(),
+            temp.path(),
+            &a_route.graph,
+            a_store,
+            "policy-v1",
+        )
+        .unwrap(),
+    );
+    let b = Arc::new(
+        Owner::prepare(catalog, temp.path(), &b_route.graph, b_store, "policy-v1").unwrap(),
+    );
+    let writer = {
+        let a = a.clone();
+        std::thread::spawn(move || a.knot(&request(&a), &input(&a, "embedding")))
+    };
+    let entered = entered_rx.recv_timeout(Duration::from_secs(3));
+    let writer_free = a.writer.try_lock().is_some();
+    let reserved = a.admitted.load(Ordering::Acquire);
+    let (done_tx, done_rx) = mpsc::channel();
+    let independent = {
+        let b = b.clone();
+        std::thread::spawn(move || {
+            let written = b.knot(&request(&b), &input(&b, "independent"));
+            done_tx.send((written, values(&b))).unwrap();
+        })
+    };
+    let completed_before_release = done_rx.recv_timeout(Duration::from_secs(3));
+    // Release even on failed observations; no assertion may strand inference.
+    let _ = release_tx.send(());
+    let written = writer.join().unwrap();
+    independent.join().unwrap();
+    entered.expect("real knot never reached the configured provider");
+    assert!(writer_free, "inference held A's writer");
+    assert_eq!(reserved, 1, "inference released its admission reservation");
+    let (b_write, b_read) = completed_before_release.expect("B blocked behind A inference");
+    assert!(b_write.is_ok(), "{b_write:?}");
+    assert_eq!(b_read["count"], 1);
+    assert!(written.is_ok(), "{written:?}");
+    assert_eq!(a.read(KnowledgeVectorStore::vector_count).unwrap(), 1);
+    assert_eq!(b.read(KnowledgeVectorStore::vector_count).unwrap(), 0);
+    assert_eq!(a.admitted.load(Ordering::Acquire), 0);
+}
