@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "a67be5570de63d9a1d38721567c40c9df63a6e65f303d049dbec84ef2c3c2995",
+      "source_sha256": "5a7628484343ae75aa88dc3d9f87e7decb9b50c573c5fdaad1b8b87f10b2bc95",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "010a92bb9368a773cb1e68040a5c904e9e059a04bd4790422a088836ecb830e9",
+      "source_sha256": "46707f355fbaed4ea935fd7b707d49ba2490fac37f54623f5a67627feeeaf533",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "ac0323df70fcd1eac8781546bd77aaade266a8f530e45f55e98625a57d1a1674",
+      "source_sha256": "76e95d98ff98480949cdf9de0a7a993431e6a5818b0da1036eeab62442af8e80",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "4d6a6cd5b4a9220f4a78b8abee3f9a4033342a3908a5f13b631c9f07679d9678",
+      "source_sha256": "ff57e159392eceea271c89268819056aaebe72cac5c8769d888ac8babfba9690",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "fbce9ea70070d2a8a7abb0742d5052d4620522c0fa52095c68637bc88330bf38",
+      "source_sha256": "b6f28e87273068a932dfa631a06b3690727266563f693ff2e6f4e4193b477b80",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "7bdc29cfc3d8b9677fe37c86136cf642b4d119ea5b7c89247dd643c6b1df5cfb",
+      "source_sha256": "3aee7d7d2ce3c4273784b6b2b82bfd2c03e5fe5176933bb8b7069e50e03bc2f1",
       "properties": {
         "startHereOrder": 5
       }

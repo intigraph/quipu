@@ -93,6 +93,7 @@ pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
