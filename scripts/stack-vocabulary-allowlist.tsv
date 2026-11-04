@@ -4,7 +4,7 @@
 src/align/tests.rs	1
 src/align/verify.rs	1
 src/cli.rs	2
-src/cli_commands.rs	3
+src/cli_commands.rs	1
 src/cli_trust_root.rs	1
 src/code_entity_tests.rs	23
 src/config.rs	7

@@ -1,6 +1,7 @@
 //! Authority-intersection tests. Size-exempt (`*tests.rs`).
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 
 const TS: &str = "2026-01-01T00:00:00Z";
 
@@ -88,7 +89,7 @@ fn a_longer_chain_is_never_more_permissive() {
 fn an_undeclared_principal_holds_nothing_not_everything() {
     // Reading an absent grant as permission is how an access-control layer
     // becomes decorative.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let a = authority_of(&store, "nobody").unwrap();
     assert!(a.is_empty());
     assert!(!a.is_any());
@@ -96,7 +97,7 @@ fn an_undeclared_principal_holds_nothing_not_everything() {
 
 #[test]
 fn a_declared_principal_reads_back_its_graphs() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let iri = "http://ex/principal/weaver";
     let class = Value::Ref(
         store
@@ -210,7 +211,7 @@ fn a_fact(store: &Store, iri: &str) -> Vec<crate::store::Datum> {
 
 #[test]
 fn a_write_outside_the_chains_authority_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     declare(&mut store, "weaver", &["g:other"]);
     store.governance_config_mut().enforce_authority = true;
     store.set_principal_chain(vec!["weaver".into()]);
@@ -227,7 +228,7 @@ fn a_write_outside_the_chains_authority_is_refused_at_the_write_path() {
 fn the_control_the_same_write_lands_with_the_flag_off() {
     // Without this the test above proves only that SOMETHING rejected the
     // write. Same store, same chain, flag off => accepted.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     declare(&mut store, "weaver", &["g:other"]);
     assert!(!store.governance_config_mut().enforce_authority);
     store.set_principal_chain(vec!["weaver".into()]);
@@ -241,7 +242,7 @@ fn an_unattributed_write_is_untouched() {
     // Every existing caller sets no chain. Making attribution a hard requirement
     // beneath a running deployment would break all of them at once, so the check
     // is inert without one — the flag makes a SUPPLIED chain binding.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_authority = true;
     assert!(store.principal_chain().is_empty());
     store
@@ -252,7 +253,7 @@ fn an_unattributed_write_is_untouched() {
 #[test]
 fn a_chain_holding_root_may_write_to_root() {
     // The GREEN case. A check that refuses everything is not a check.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     declare(&mut store, "weaver", &[crate::schema::ROOT_GRAPH_IRI]);
     store.governance_config_mut().enforce_authority = true;
     store.set_principal_chain(vec!["weaver".into()]);
@@ -265,7 +266,7 @@ fn a_chain_holding_root_may_write_to_root() {
 fn a_delegate_narrows_the_chain_at_the_write_path() {
     // End-to-end §9.5: the orchestrator holds ROOT, the worker does not, and the
     // chain cannot write where the orchestrator alone could.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     declare(&mut store, "orchestrator", &[crate::schema::ROOT_GRAPH_IRI]);
     declare(&mut store, "worker", &["g:sandbox"]);
     store.governance_config_mut().enforce_authority = true;
@@ -287,7 +288,7 @@ fn a_delegate_narrows_the_chain_at_the_write_path() {
 fn a_wildcard_holder_still_narrows_to_its_delegate() {
     // The wildcard declines to narrow; it does not widen. An orchestrator
     // holding `*` delegating to a scoped worker gets the WORKER's scope.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     declare(&mut store, "root", &[ANY_GRAPH]);
     declare(&mut store, "scoped", &["g:sandbox"]);
     store.governance_config_mut().enforce_authority = true;
@@ -332,7 +333,7 @@ fn namespace_authority_combinations_preserve_write_and_delegate_boundaries() {
     for types in &choices {
         for identities in &choices {
             for grants in &choices {
-                let mut store = Store::open_in_memory().unwrap();
+                let mut store = Store::open_in_memory_test_ns().unwrap();
                 let mut ttl = String::new();
                 for ns in types {
                     ttl.push_str(&format!("<urn:principal> a <{ns}Principal> .\n"));
@@ -369,7 +370,7 @@ fn namespace_authority_combinations_preserve_write_and_delegate_boundaries() {
 
 #[test]
 fn namespace_authority_conflicting_identity_fails_closed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let public = "https://scbrown.github.io/quechua/ns#";
     load_authority(
         &mut store,
@@ -395,7 +396,7 @@ fn namespace_authority_conflicting_identity_fails_closed() {
 #[test]
 fn namespace_authority_foreign_terms_and_named_graphs_do_not_grant() {
     for ns in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         load_authority(
             &mut store,
             &format!(
