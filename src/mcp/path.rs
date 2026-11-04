@@ -15,7 +15,7 @@ fn vocab_for(store: &Store, input: &JsonValue) -> PathVocab {
         .get("base_ns")
         .and_then(|v| v.as_str())
         .unwrap_or_else(|| store.base_ns());
-    PathVocab::new(ns)
+    PathVocab::with_vocabulary(ns, store.vocabulary())
 }
 
 fn string_list(input: &JsonValue, key: &str) -> Vec<String> {
