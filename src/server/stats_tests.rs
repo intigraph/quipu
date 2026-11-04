@@ -168,3 +168,38 @@ async fn stats_does_not_start_a_second_scan_while_one_runs() {
         "the recompute slot is released after the scan"
     );
 }
+
+/// Refusals do not advance the graph transaction. Their counters cannot be
+/// cached under `counts_as_of_tx` or require acquiring the writer.
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn refusal_stats_are_fresh_at_an_unchanged_transaction_and_off_writer() {
+    let _serial = STATS_TEST_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let shared = pooled(&dir);
+    *STATS_CACHE.lock().unwrap() = None;
+    let before = stats(State(shared.clone())).await.unwrap().0;
+    let counted = before["write_refusals"]["total"].as_u64().unwrap();
+    {
+        let store = shared.lock();
+        store.record_gate_refusal(
+            "policy",
+            "fixture denial",
+            quipu::schema::ROOT_GRAPH,
+            None,
+            Some("fixture"),
+            "2026-01-01T00:00:00Z",
+        );
+    }
+    let writer = shared.lock();
+    let after = tokio::time::timeout(Duration::from_secs(20), stats(State(shared.clone())))
+        .await
+        .expect("refusal stats must not wait for the writer")
+        .unwrap()
+        .0;
+    drop(writer);
+    assert_eq!(after["counts_as_of_tx"], before["counts_as_of_tx"]);
+    assert!(after["write_refusals"]["total"].as_u64().unwrap() > counted);
+    assert_eq!(after["write_refusals"]["counter_scope"], "process");
+    assert_eq!(after["write_refusals"]["reset_on_restart"], true);
+}
