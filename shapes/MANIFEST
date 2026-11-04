@@ -107,6 +107,11 @@
       "file": "read-policy.ttl",
       "action": "exclude",
       "reason": "Owner-local policy carrier, not a served-graph profile. Protected owner-store semantic validation remains enforced; tenant imports never establish effective read authority."
+    },
+    {
+      "file": "access-grants.ttl",
+      "action": "exclude",
+      "reason": "Staged JIT access-grant records (aegis-bqc); activation needs the Goldblum classification and schema review."
     }
   ]
 }

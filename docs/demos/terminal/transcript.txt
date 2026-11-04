@@ -1,11 +1,36 @@
-$ quipu episode episode.json --base-ns urn:demo: --timestamp 2026-01-01T00:00:00Z --db demo.db
-ingested episode "demo" -- 14 facts (tx 1)
-automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness
+$ cat ada.ttl
+@prefix : <urn:demo:> .
+:Ada :studies :Engine .
 [exit 0]
-$ quipu read 'SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }' --db demo.db
-person	thing
+$ quipu knot ada.ttl --db demo.db
+knotted 1 facts from ada.ttl (tx 1)
+[exit 0]
+$ quipu read 'SELECT ?who ?what WHERE { ?who <urn:demo:studies> ?what }' --db demo.db
+who	what
 ----------------------------------------
 urn:demo:Ada	urn:demo:Engine
+
+1 results
+[exit 0]
+$ cat babbage.ttl
+@prefix : <urn:demo:> .
+:Babbage :designed :Engine .
+[exit 0]
+$ quipu knot babbage.ttl --db demo.db
+knotted 1 facts from babbage.ttl (tx 2)
+[exit 0]
+$ quipu read 'SELECT ?s ?p ?o WHERE { ?s ?p ?o }' --db demo.db
+s	p	o
+------------------------------------------------------------
+urn:demo:Ada	urn:demo:studies	urn:demo:Engine
+urn:demo:Babbage	urn:demo:designed	urn:demo:Engine
+
+2 results
+[exit 0]
+$ quipu read 'SELECT ?s ?p ?o WHERE { ?s ?p ?o }' --tx 1 --db demo.db
+s	p	o
+------------------------------------------------------------
+urn:demo:Ada	urn:demo:studies	urn:demo:Engine
 
 1 results
 [exit 0]

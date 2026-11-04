@@ -394,17 +394,40 @@ impl QuarantineConfig {
     }
 }
 
+/// Days of event log kept by default (aegis-jio5.5).
+pub const DEFAULT_EVENTS_RETENTION_DAYS: u32 = 30;
+
 /// Event-log retention policy (quipu-9z9).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct EventsConfig {
     /// Prune events older than this many days, provided every registered
     /// consumer has committed past them (`Store::prune_events` — a lagging
-    /// consumer's backlog is retained regardless of age). Unset = keep
-    /// forever, today's behaviour and the reactor-down-6wk guarantee.
-    /// Measured cost of forever at 10k episodes: the log is 30% of the
-    /// database (`docs/design/wasm-support.md` §5.1).
-    pub retention_days: Option<u32>,
+    /// consumer's backlog is retained regardless of age). Default 30; `0`
+    /// keeps every event forever. Measured cost of forever at 10k episodes:
+    /// the log is 30% of the database (`docs/design/wasm-support.md` §5.1).
+    pub retention_days: u32,
+}
+
+impl Default for EventsConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: DEFAULT_EVENTS_RETENTION_DAYS,
+        }
+    }
+}
+
+/// Share-import policy, `[quipu.import]` (aegis-zev).
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+pub struct ImportPolicyConfig {
+    /// Refuse every share whose verified manifest is stamped
+    /// `destination: internal`. Default `false`: such a share is accepted, the
+    /// receiver reads the stamp itself, and the marking is recorded on the
+    /// import. A later outward `quipu share` of that data still runs the
+    /// outward scrub. Set this on a store that must never hold unscrubbed
+    /// internal identifiers at all.
+    pub refuse_internal: bool,
 }
 
 /// Vector storage backend selection.
@@ -506,6 +529,11 @@ pub struct QuipuConfig {
     /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
     pub base_ns: String,
 
+    /// Which IRIs the golden-path vocabulary terms are written under
+    /// (`legacy` = under `base_ns`, the default; `intigraph` = published
+    /// Camayoc w3id terms). Individuals keep `base_ns` either way.
+    pub vocabulary: crate::term_vocabulary::Vocabulary,
+
     /// REST API server configuration.
     pub server: ServerConfig,
 
@@ -533,8 +561,14 @@ pub struct QuipuConfig {
     /// Governance enforcement policy (write-path gate).
     pub governance: GovernanceConfig,
 
-    /// Event-log retention (quipu-9z9). Default: keep forever.
+    /// Event-log retention (quipu-9z9). Default 30 days; `0` keeps every event.
     pub events: EventsConfig,
+
+    /// Share-import policy (aegis-zev), `[quipu.import]`. Named
+    /// `import_policy` so the wiring guard cannot mistake another `.import`
+    /// identifier for its consumer; serde keeps the TOML key `import`.
+    #[serde(rename = "import")]
+    pub import_policy: ImportPolicyConfig,
 
     /// Read-only databases to mount alongside the store (quipu-at2), declared
     /// as `[[quipu.attachments]]` with `alias` and `path`. Empty by default,
@@ -592,6 +626,7 @@ impl Default for QuipuConfig {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
+            vocabulary: crate::term_vocabulary::Vocabulary::default(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
@@ -602,6 +637,7 @@ impl Default for QuipuConfig {
             owl: OwlConfig::default(),
             governance: GovernanceConfig::default(),
             events: EventsConfig::default(),
+            import_policy: ImportPolicyConfig::default(),
             attachments: Vec::new(),
             current_projections: Vec::new(),
         }
@@ -808,6 +844,14 @@ pub struct EmbeddingConfig {
     /// (default: 256). Caps the tensor size so an oversized `episode_body`
     /// can't blow up the sequence length or degrade embeddings (hq-7v0).
     pub max_sequence_length: usize,
+
+    /// Predicate IRIs whose values never enter an entity's embedding text
+    /// (default: none). For values that change on every write but carry no
+    /// meaning to search, such as a write-probe marker: each new value would
+    /// otherwise make new text and so a new vector, while the identical-text
+    /// skip keeps the vector when only an excluded predicate changed. The
+    /// facts are still stored and queryable; only the embedding ignores them.
+    pub exclude_predicates: Vec<String>,
 }
 
 impl Default for EmbeddingConfig {
@@ -819,6 +863,7 @@ impl Default for EmbeddingConfig {
             tokenizer_path: None,
             dimension: 384,
             max_sequence_length: 256,
+            exclude_predicates: Vec::new(),
         }
     }
 }

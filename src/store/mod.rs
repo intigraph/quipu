@@ -17,6 +17,12 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+// Protected per-lineage authority journal (aegis-s24.8 P1); native only.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_journal;
+mod ownership_startup;
+#[cfg(test)]
+mod ownership_startup_tests;
 pub(crate) mod release;
 pub use ownership::OwnershipState;
 #[cfg(test)]
@@ -39,6 +45,7 @@ pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
 pub mod events;
+mod events_retention;
 pub mod forks;
 mod forks_merge;
 pub mod freeze;
@@ -113,6 +120,12 @@ use crate::vector_delegate::DelegatingVectorStore;
 
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
+    /// One admission pin and nonblocking check latch for this writer. Replacing
+    /// SQLite's single commit callback must never create a fresh admission.
+    /// Drop this reference before `conn`: its callback then owns the last
+    /// reader reference and releases it before the writer closes, preserving
+    /// SQLite's last-writer WAL/SHM cleanup.
+    ownership_fence: Option<Arc<ownership_fence::CommitFence>>,
     pub(crate) conn: Connection,
     /// v1 verdict-signing identity (ed25519, host-file key). When set, the
     /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
@@ -131,6 +144,7 @@ pub struct Store {
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
     pub(crate) labels_config: crate::config::LabelsConfig,
+    pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
@@ -215,6 +229,9 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
+    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
+    /// startup. Defaults to legacy (every term under `base_ns`).
+    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.

@@ -18,6 +18,43 @@ import tarfile
 from pathlib import Path
 
 
+# Used by the producer and its native five-document integration probe.
+INDEX_CONFIG = """quipu_push_chunks = true
+
+[index]
+include = [
+  "**/*.rs", "**/*.md", "**/*.rst", "**/*.toml", "**/*.yml", "**/*.yaml", "**/*.py",
+  "**/*.sh", "**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.ttl", "**/*.go",
+]
+exclude = [
+  "**/target/**", "**/.git/**", "**/.bobbin/**", "**/.agents/**", "**/.claude/**", "**/.codex/**",
+  "**/.mcp.json", "**/CLAUDE.local.md", "**/node_modules/**", "**/book/book/**", "**/vendor/**",
+]
+use_gitignore = true
+entities = false
+
+[embedding]
+model = "all-MiniLM-L6-v2"
+batch_size = 64
+"""
+
+
+def agent_references(source, paths):
+    """Require tracked, nonempty agent references before any publication work."""
+    references = (
+        "docs/book/src/reference/cli-commands.md",
+        "docs/book/src/reference/mcp-tool-index.md",
+        "docs/book/src/getting-started/agent-primer.md",
+        "src/primer.md",
+    )
+    if any(
+        p not in paths or not (source / p).is_file() or not (source / p).stat().st_size
+        for p in references
+    ):
+        raise ValueError("required agent reference missing from release")
+    return references
+
+
 def isolated_environment(private):
     """Native workers must not inherit a host endpoint or credential catalogue."""
     private = Path(private)
@@ -150,15 +187,24 @@ def register_queries(binary, database, definitions):
         raise ValueError("native registry did not return the exact loaded query names")
 
 
-def indexed_labels(binary, database, subjects):
+def indexed_labels(binary, database, subjects, *, file_paths=False):
     if any(
         not re.fullmatch(r'https?://[^\s<>"{}|\\^`]+', subject) for subject in subjects
     ):
         raise ValueError("invalid indexed subject IRI")
+    predicate = (
+        "http://aegis.gastown.local/ontology/filePath" if file_paths
+        else "http://www.w3.org/2000/01/rdf-schema#label"
+    )
+    # The receiver's typed Document reader must find these pointers too.
+    document = (
+        " ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> "
+        "<http://aegis.gastown.local/ontology/Document> ." if file_paths else ""
+    )
     query = (
         "SELECT ?s ?label WHERE { VALUES ?s { "
         + " ".join("<" + s + ">" for s in subjects)
-        + "} ?s <http://www.w3.org/2000/01/rdf-schema#label> ?label }"
+        + "} ?s <" + predicate + "> ?label ." + document + " }"
     )
     (result,) = local_mcp(
         binary, database, [("quipu_query", {"query": query, "verbose": True})]
@@ -178,8 +224,61 @@ def indexed_labels(binary, database, subjects):
     return labels
 
 
+def is_tracked_alias(link, target, files, directories):
+    """True when symlink ``link`` -> ``target`` names a tracked regular file.
+
+    Agent files such as CLAUDE.md -> AGENTS.md are aliases of a file the
+    release already carries. Absolute, escaping, dangling and chained links,
+    and links to directories, are not. The target is walked the way the
+    kernel resolves it: every component before the last, including the one
+    a ``..`` leaves, must be a tracked directory. A missing component, a file
+    or another link there fails (ENOENT/ENOTDIR), so ``missing/../AGENTS.md``,
+    ``CLAUDE.md/../AGENTS.md`` and ``AGENTS.md/`` are not aliases.
+    """
+    if not target or target.startswith("/") or target.endswith("/"):
+        return False
+    root = Path(".")
+    here = Path(link).parent
+    for part in target.split("/"):
+        # Every component, even "." or an empty one, resolves through `here`,
+        # so `here` must be a directory (AGENTS.md/. is ENOTDIR).
+        if here != root and here not in directories:
+            return False
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if here == root:
+                return False
+            here = here.parent
+        else:
+            here = here / part
+    return here != root and here in files
+
+
+# The receiver holds the released pendant, whose documents carry their public
+# w3id names (aegis-ro425e.18), not the producer's internal names.
+PUBLIC_DOCUMENT_BASE = "https://w3id.org/intigraph/quipu/id/doc/"
+
+
+def verify_agent_references(binary, database, paths):
+    """Require real imported document pointers, never mint substitutes."""
+    from urllib.parse import quote
+
+    subjects = [PUBLIC_DOCUMENT_BASE + quote(p, safe="") for p in paths]
+    expected = dict(zip(subjects, paths))
+    if (
+        set(indexed_labels(binary, database, subjects)) != set(subjects)
+        or indexed_labels(binary, database, subjects, file_paths=True) != expected
+    ):
+        raise ValueError("repository agent references missing after import")
+
+
 def materialize_release(source, revision, destination):
-    """Index only exact tracked release bytes in a new private source tree."""
+    """Index only exact tracked release bytes in a new private source tree.
+
+    A tracked alias of a tracked regular file is skipped rather than copied, so
+    its target is indexed once; any other non-file member refuses.
+    """
     destination = Path(destination)
     destination.mkdir(mode=0o700)
     archive = subprocess.run(
@@ -188,13 +287,17 @@ def materialize_release(source, revision, destination):
         capture_output=True,
     ).stdout
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
-        for member in bundle.getmembers():
+        members = bundle.getmembers()
+        files = {Path(member.name) for member in members if member.isfile()}
+        directories = {Path(member.name) for member in members if member.isdir()}
+        directories.update(parent for path in files for parent in path.parents)
+        for member in members:
             relative = Path(member.name)
-            if (
-                relative.is_absolute()
-                or ".." in relative.parts
-                or not (member.isfile() or member.isdir())
-            ):
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError("unsupported tracked release member")
+            if member.issym() and is_tracked_alias(relative, member.linkname, files, directories):
+                continue
+            if not (member.isfile() or member.isdir()):
                 raise ValueError("unsupported tracked release member")
             target = destination / relative
             if member.isdir():
@@ -270,6 +373,157 @@ def verify_carried_alignments(stage, alignments):
         raise ValueError("native share did not carry the reviewed alignments")
 
 
+FORMER_NAME_LEGACY = "http://aegis.gastown.local/ontology/"
+FORMER_IDEA = "https://quipu.dev/knowledge/"
+PUBLIC_ENTITY = "https://w3id.org/intigraph/"
+STACK_DIRECTIVE = "repo-embedded-knowledge-databases-directive-2026-09-03"
+SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
+RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+# The repository segment, exactly as the release query matches it.
+OWNER = r"[A-Za-z0-9-]+"
+
+# W3C RDF 1.1 N-Triples terms. Blank node labels are held to ASCII PN_CHARS:
+# a label outside that refuses rather than being guessed at.
+_UCHAR = r"\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8}"
+_IRIREF = re.compile(rf'<((?:[^\x00-\x20<>"{{}}|^`\\]|{_UCHAR})*)>')
+_BNODE = re.compile(r"_:([A-Za-z0-9_](?:[A-Za-z0-9_.\-]*[A-Za-z0-9_\-])?)")
+_LITERAL = re.compile(
+    rf'"((?:[^"\\\n\r]|\\[tbnrf"\'\\]|{_UCHAR})*)"'
+    rf'(?:@[a-zA-Z]+(?:-[a-zA-Z0-9]+)*|\^\^<(?:[^\x00-\x20<>"{{}}|^`\\]|{_UCHAR})*>)?'
+)
+
+
+def _unescape_iri(raw):
+    return re.sub(_UCHAR, lambda m: chr(int(m.group(0)[2:], 16)), raw)
+
+
+def ntriples(text):
+    """Triples of strict N-Triples ``text`` as ``(kind, value)`` terms.
+
+    Any whitespace the grammar allows (spaces, tabs, none between terms) and
+    any UCHAR escape in an IRI are read the way an RDF importer reads them, so
+    a check over these terms sees exactly what a receiver loads. Anything else
+    refuses.
+    """
+    for number, line in enumerate(re.split(r"\r\n|\n|\r", text), 1):
+        position, terms = 0, []
+        while True:
+            while position < len(line) and line[position] in " \t":
+                position += 1
+            if position == len(line) or line[position] == "#":
+                break
+            if len(terms) == 3:
+                if line[position] != ".":
+                    raise ValueError(f"export.nt line {number}: expected '.'")
+                terms.append(".")
+                position += 1
+                continue
+            if len(terms) == 4:
+                raise ValueError(f"export.nt line {number}: text after '.'")
+            for kind, pattern in (("iri", _IRIREF), ("bnode", _BNODE), ("literal", _LITERAL)):
+                match = pattern.match(line, position)
+                if match:
+                    value = _unescape_iri(match.group(1)) if kind == "iri" else match.group(0)
+                    terms.append((kind, value))
+                    position = match.end()
+                    break
+            else:
+                raise ValueError(f"export.nt line {number}: not an N-Triples term")
+        if not terms:
+            continue
+        if len(terms) != 4:
+            raise ValueError(f"export.nt line {number}: not a triple")
+        subject, predicate, value, _ = terms
+        if subject[0] == "literal" or predicate[0] != "iri":
+            raise ValueError(f"export.nt line {number}: not a triple")
+        yield subject, predicate, value
+
+
+def public_name(name):
+    """The public name the release query gives legacy ``name``, or None."""
+    match = re.fullmatch(rf"{re.escape(FORMER_NAME_LEGACY)}(code|doc|chunk)/({OWNER})/(.+)", name)
+    if match:
+        kind, owner, tail = match.groups()
+        return f"{PUBLIC_ENTITY}{owner}/id/{kind}/{tail}"
+    match = re.fullmatch(rf"{re.escape(FORMER_NAME_LEGACY)}repo_({OWNER})", name)
+    if match:
+        return f"{PUBLIC_ENTITY}{match.group(1)}/id/repo"
+    if name == FORMER_NAME_LEGACY + STACK_DIRECTIVE:
+        return f"{PUBLIC_ENTITY}stack/id/{STACK_DIRECTIVE}"
+    tail = name[len(FORMER_IDEA):] if name.startswith(FORMER_IDEA) else ""
+    if tail and not tail.startswith("publication-policy/"):
+        return f"{PUBLIC_ENTITY}quipu/id/idea/{tail}"
+    return None
+
+
+def former_name(public):
+    """The exact name the release query renamed ``public`` from, or None."""
+    match = re.fullmatch(rf"{re.escape(PUBLIC_ENTITY)}({OWNER})/id/(.+)", public)
+    if not match:
+        return None
+    owner, rest = match.groups()
+    kind, _, tail = rest.partition("/")
+    if kind in ("code", "doc", "chunk") and tail:
+        former = f"{FORMER_NAME_LEGACY}{kind}/{owner}/{tail}"
+    elif rest == "repo":
+        former = f"{FORMER_NAME_LEGACY}repo_{owner}"
+    elif owner == "quipu" and kind == "idea" and tail:
+        former = FORMER_IDEA + tail
+    elif owner == "stack" and rest == STACK_DIRECTIVE:
+        former = FORMER_NAME_LEGACY + rest
+    else:
+        return None
+    # Only a name the query would actually produce has a former name.
+    return former if public_name(former) == public else None
+
+
+def is_legacy_entity(name):
+    """A legacy entity name the release query renames (or should have)."""
+    return public_name(name) is not None or bool(
+        re.match(rf"{re.escape(FORMER_NAME_LEGACY)}((code|doc|chunk)/|repo_)", name))
+
+
+def verify_former_names(export):
+    """Admit owl:sameAs only from a public name to its exact former name.
+
+    Every public entity subject carries exactly one such link; no internal
+    (legacy namespace) name appears anywhere except as that link's object or an
+    rdf:type object (classes, never entities); and a name under the public
+    entity prefix that the release query cannot produce refuses. Returns the
+    number of links.
+    """
+    linked, subjects = set(), set()
+    for subject, predicate, value in ntriples(Path(export).read_text()):
+        same = predicate == ("iri", SAME_AS)
+        if same:
+            if subject[0] != "iri" or value[0] != "iri":
+                raise ValueError("owl:sameAs between non-IRIs")
+            expected = former_name(subject[1])
+            if expected is None or value[1] != expected:
+                raise ValueError(f"owl:sameAs is not a former-name link: <{subject[1]}> <{value[1]}>")
+            if subject[1] in linked:
+                raise ValueError(f"more than one former name: <{subject[1]}>")
+            linked.add(subject[1])
+        positions = [subject] + ([] if same or predicate == ("iri", RDF_TYPE) else [value])
+        for kind, name in positions:
+            if kind != "iri":
+                continue
+            if is_legacy_entity(name):
+                raise ValueError(f"legacy entity name published unrenamed: <{name}>")
+            # Any other internal name is refused too, not only the kinds the
+            # query renames: a directive, rule or entity this release does not
+            # map must never ship as a subject or a non-class object.
+            if name.startswith(FORMER_NAME_LEGACY):
+                raise ValueError(f"internal name published unrenamed: <{name}>")
+            if re.match(rf"{re.escape(PUBLIC_ENTITY)}[^/]+/id/", name) and former_name(name) is None:
+                raise ValueError(f"not a public entity name: <{name}>")
+        if subject[0] == "iri" and former_name(subject[1]) is not None:
+            subjects.add(subject[1])
+    if subjects - linked:
+        raise ValueError(f"public entity without its former-name link: <{min(subjects - linked)}>")
+    return len(linked)
+
+
 def build(revision, source, tooling, binary, bobbin, output):
     repository = "scbrown/quipu"
     source, tooling, output = map(Path, (source, tooling, output))
@@ -288,6 +542,7 @@ def build(revision, source, tooling, binary, bobbin, output):
     control = next((p for p in ("README.md", "README.rst") if p in paths), None)
     if control is None:
         raise ValueError("release lacks a supported public corpus positive control")
+    references = agent_references(source, paths)
     private = output.parent / "build-private"
     private.mkdir(mode=0o700)
 
@@ -309,24 +564,7 @@ def build(revision, source, tooling, binary, bobbin, output):
     )
     index = private / "index"
     (index / ".bobbin").mkdir(parents=True)
-    (index / ".bobbin/config.toml").write_text("""quipu_push_chunks = true
-
-[index]
-include = [
-  "**/*.rs", "**/*.md", "**/*.rst", "**/*.toml", "**/*.yml", "**/*.yaml", "**/*.py",
-  "**/*.sh", "**/*.js", "**/*.mjs", "**/*.ts", "**/*.tsx", "**/*.json", "**/*.ttl", "**/*.go",
-]
-exclude = [
-  "**/target/**", "**/.git/**", "**/.bobbin/**", "**/.agents/**", "**/.claude/**", "**/.codex/**",
-  "**/.mcp.json", "**/CLAUDE.local.md", "**/node_modules/**", "**/book/book/**", "**/vendor/**",
-]
-use_gitignore = true
-entities = false
-
-[embedding]
-model = "all-MiniLM-L6-v2"
-batch_size = 64
-""")
+    (index / ".bobbin/config.toml").write_text(INDEX_CONFIG)
     env = isolated_environment(private)
     run(
         [
@@ -460,6 +698,7 @@ batch_size = 64
         or (stage / "shapes.ttl").stat().st_size == 0
     ):
         raise ValueError("repository share omitted receiver shapes")
+    verify_former_names(stage / "export.nt")
     receiver = private / "receiver.db"
     run(
         [
@@ -481,19 +720,7 @@ batch_size = 64
     ):
         raise ValueError("repository receiver did not admit a non-stub corpus")
     run([binary, "import", "promote", imported["share_id"], "--db", receiver])
-    positive = run(
-        [
-            binary,
-            "query",
-            "SELECT ?s WHERE { ?s <http://aegis.gastown.local/ontology/filePath> "
-            + json.dumps(control)
-            + " } LIMIT 1",
-            "--db",
-            receiver,
-        ]
-    )
-    if re.search(r"\n1 results\s*$", positive) is None:
-        raise ValueError("repository corpus positive control missing after import")
+    verify_agent_references(binary, receiver, (control, *references))
     run(
         [
             "python3",
@@ -507,7 +734,11 @@ batch_size = 64
     if run(["git", "-C", source, "status", "--porcelain"]).strip():
         raise ValueError("indexing changed the exact repository source")
     shutil.move(stage, output)
-    return {"triples": imported["triples"]["accepted"], "positive_file": control}
+    return {
+        "triples": imported["triples"]["accepted"],
+        "positive_file": control,
+        "agent_references": list(references),
+    }
 
 
 if __name__ == "__main__":

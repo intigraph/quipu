@@ -1,0 +1,22 @@
+# Recorded UI source at 567630d03511e3f4f23d288682e4762407c51398
+595925b4131c7ba20804a8bdfa709a8cde32c4a9d3f97fed4a604a66511ed545  docs/book/src/explore/constellation-queries.js
+f9e88708810b6c104119972d284aa61960ff59f42d9877bd8fd5df003503d5bb  docs/book/src/explore/constellation.js
+4a17b9b50431ec9f3c6f847511d1166bcc420bbfaac2a69c27515d00acca429d  docs/book/src/explore/default-store.js
+50e05f96aea9ee81ecee61f6b3d049c866b9cc8c4f0ff627d84621452d42757c  docs/book/src/explore/engine-api.js
+98c991d966a4a692f1253c681df3fbb7cf9cb3909e2a41fd004863cbe9cc68d4  docs/book/src/explore/entity.js
+f9c074dcf2d8a9a9a5890ce9a178948559c27124aebce6196fe88ff4371c2f12  docs/book/src/explore/explorer.js
+6441450ac111ed9423261f5a5430fc7cf54d0874fe42966d57a173bf67d04c36  docs/book/src/explore/loading.js
+cf7acbe3f0588736de7f37e6faa611b4c6debd88737d537937913cdf1775c543  docs/book/src/explore/map-cache.js
+12f8729c0c0a784eadce3679da0f2a25382a2032abe8c7babf8d9f067fee1a56  docs/book/src/explore/pack-loader.js
+6bc710129e25a55680563f78cdffeae4491a53390d81d69bb7bb903143b74daa  docs/book/src/explore/presentation.js
+dcf6d5022f8c7e8d622c36a1d09dff2c2fd8b42f262e8c5c9e981d584bb80e9d  docs/book/src/explore/provenance.js
+acbfc59dd9acf3d4d37cb77143c954fa1c5894045fdd3128d6d81f75f31320b0  docs/book/src/explore/relation.js
+3d5e368d59808c652def0790eca6d30589769598b51a85176d4e6528cd908929  docs/book/src/explore/sw.js
+35d453c5ba98b690137a5fd37a642cb2382d64fd49289e78b8f037858ea1a887  docs/book/src/explore/workbench.js
+5b645f4bd22596c3b23d1a651397675378ad38f9808640f5678de4e768c040dc  docs/book/src/explore/worker-progress.js
+30223c35b6ccfff673fd5920c1fade64de49430988c1bb5e61392024040c2229  docs/book/src/explore/worker.js
+# Staged runtime and input used by the recording; generated binaries are not committed.
+53afba84bed64abc16db8c072cc505a6e70322bc11a3828932239793880e63f3  docs/book/src/explore/pkg/quipu_wasm_explorer_bg.wasm
+433c9cffab66ecff67c1249acc04fd21ed4d374f510c9927ba83680b2cf62abf  docs/book/src/explore/repository.pendant.tar.gz
+# Generated proof actually served during recording (replaces the source placeholder).
+550af503ced05ab325afda660576d01f174d602f2e983267b2077ab15e646853  docs/book/src/explore/default-pack-proof.js

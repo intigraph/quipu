@@ -31,7 +31,10 @@ use spargebra::term::{NamedNodePattern, TermPattern, Variable};
 use std::collections::HashMap;
 
 type Output = (Vec<Bindings>, Vec<String>);
-type Emit<'a> = &'a mut dyn FnMut(Bindings) -> Result<()>;
+/// Rows flow by mutable reference: a stage that binds a variable inserts it,
+/// emits, and restores the row, so no stage clones a row it only extends
+/// (aegis-xdvg.6). A consumer must not keep the reference.
+pub(super) type Emit<'a> = &'a mut dyn FnMut(&mut Bindings) -> Result<()>;
 
 fn supported(pattern: &GraphPattern) -> bool {
     match pattern {
@@ -51,8 +54,13 @@ fn supported(pattern: &GraphPattern) -> bool {
         // Seeding is equivalent to compatibility joining only for positive
         // BGP/GRAPH/JOIN operands, not for BIND, OPTIONAL or local filters.
         GraphPattern::Join { left, right } => {
-            supported(left) && super::bind_join::seed_safe(right) && supported(right)
+            supported(left)
+                && (matches!(**right, GraphPattern::Values { .. })
+                    || (super::bind_join::seed_safe(right) && supported(right)))
         }
+        // An inline table is a positive leaf: seeding it with a row is the
+        // same compatibility join the hash join performs (aegis-xdvg.6).
+        GraphPattern::Values { .. } => true,
         _ => false,
     }
 }
@@ -88,8 +96,8 @@ fn bgp(
         && !patterns.iter().any(super::rdfs::is_rdf_type_pattern)
         && crate::store::read_model::read_model_applicable(store, ctx)
     {
-        for row in super::triple::eval_bgp(store, patterns, ctx, seed)?.0 {
-            emit(row)?;
+        for mut row in super::triple::eval_bgp(store, patterns, ctx, seed)?.0 {
+            emit(&mut row)?;
         }
         return Ok(());
     }
@@ -107,14 +115,19 @@ fn bgp_sql(
 ) -> Result<()> {
     if let Some((first, rest)) = patterns.split_first() {
         let (count, remaining) = counts.split_first_mut().expect("one counter per pattern");
-        super::triple::visit_triple_pattern(store, first, seed, ctx, &mut |row| {
+        super::triple::visit_triple_pattern(store, first, seed, ctx, &mut |mut row| {
             super::pattern_util::check_eval_budget(ctx, *count, *count)?;
             *count += 1;
-            bgp_sql(store, rest, ctx, &row, emit, remaining)
+            if rest.is_empty() {
+                // The last pattern's row is already owned: emit it as is.
+                emit(&mut row)
+            } else {
+                bgp_sql(store, rest, ctx, &row, emit, remaining)
+            }
         })?;
         Ok(())
     } else {
-        emit(seed.clone())
+        emit(&mut seed.clone())
     }
 }
 
@@ -144,8 +157,28 @@ pub(super) fn visit(
         }
         GraphPattern::Join { left, right } => {
             let mut joined = 0;
+            if let GraphPattern::Values {
+                variables,
+                bindings,
+            } = &**right
+            {
+                // Join each row with the inline table in place, converting
+                // its terms once (on the first row, as eval_values would).
+                let mut table: Option<Vec<Vec<Option<Value>>>> = None;
+                return visit(store, left, ctx, seed, &mut |row| {
+                    if table.is_none() {
+                        table = Some(super::values::values_table(store, bindings)?);
+                    }
+                    let table = table.as_ref().expect("filled above");
+                    super::values::join_row(variables, table, row, &mut |row| {
+                        super::pattern_util::check_eval_budget(ctx, joined, joined)?;
+                        joined += 1;
+                        emit(row)
+                    })
+                });
+            }
             visit(store, left, ctx, seed, &mut |row| {
-                visit(store, right, ctx, &row, &mut |row| {
+                visit(store, right, ctx, row, &mut |row| {
                     super::pattern_util::check_eval_budget(ctx, joined, joined)?;
                     joined += 1;
                     emit(row)
@@ -157,14 +190,19 @@ pub(super) fn visit(
             right,
             expression,
         } => {
+            if super::count_star::try_visit(store, pattern, ctx, seed, emit)? {
+                return Ok(());
+            }
             let mut emitted = 0;
+            let mut probe = super::count_optional::Probe::default();
             visit(store, left, ctx, seed, &mut |row| {
                 super::count_optional::visit(
                     store,
                     right,
                     expression.as_ref(),
                     ctx,
-                    &row,
+                    row,
+                    &mut probe,
                     &mut emitted,
                     emit,
                 )
@@ -180,9 +218,9 @@ pub(super) fn visit(
             if let Some((rows, _)) =
                 super::filter_drive::try_eval(store, expr, inner, inner_ctx, seed)?
             {
-                for row in rows {
+                for mut row in rows {
                     if eval_filter(store, expr, &row, ctx)? {
-                        emit(row)?;
+                        emit(&mut row)?;
                     }
                 }
                 return Ok(());
@@ -193,22 +231,37 @@ pub(super) fn visit(
                 narrowed.as_ref().unwrap_or(ctx),
                 seed,
                 &mut |row| {
-                    if eval_filter(store, expr, &row, ctx)? {
+                    if eval_filter(store, expr, row, ctx)? {
                         emit(row)?;
                     }
                     Ok(())
                 },
             )
         }
+        GraphPattern::Values {
+            variables,
+            bindings,
+        } => {
+            for mut row in super::values::eval_values(store, variables, bindings, seed)?.0 {
+                emit(&mut row)?;
+            }
+            Ok(())
+        }
         GraphPattern::Extend {
             inner,
             variable,
             expression,
-        } => visit(store, inner, ctx, seed, &mut |mut row| {
-            if let Some(value) = eval_expr(store, expression, &row) {
-                row.insert(variable.as_str().into(), value);
-            }
-            emit(row)
+        } => visit(store, inner, ctx, seed, &mut |row| {
+            let Some(value) = eval_expr(store, expression, row) else {
+                return emit(row);
+            };
+            let previous = row.insert(variable.as_str().into(), value);
+            let result = emit(row);
+            match previous {
+                Some(previous) => row.insert(variable.as_str().into(), previous),
+                None => row.remove(variable.as_str()),
+            };
+            result
         }),
         _ => unreachable!("applicability checked before evaluation"),
     }
@@ -236,6 +289,10 @@ pub(super) fn try_evaluate(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<Option<Output>> {
+    // Judge item-only FILTER conjuncts before a constant VALUES join fans each
+    // item out into one row per table row (aegis-xdvg.6).
+    let pushed = super::count_values_pushdown::rewrite(inner);
+    let inner = pushed.as_ref().unwrap_or(inner);
     let mean = aggregates.iter().any(|(_, a)| {
         matches!(
             a,
@@ -306,6 +363,8 @@ fn evaluate(
         }
     }
     let _direct = DirectRefs::install();
+    // A read evaluation: term lookups cannot change underneath it.
+    let _memo = super::filter::EvalMemo::install();
     if let Some(output) = native_count(store, inner, variables, aggregates, ctx, seed)? {
         return Ok(Some(output));
     }
@@ -339,7 +398,7 @@ fn evaluate(
             match agg {
                 AggregateExpression::CountSolutions { .. } => counter.count += 1,
                 AggregateExpression::FunctionCall { expr, distinct, .. } => {
-                    if let Some(value) = eval_expr(store, expr, &row) {
+                    if let Some(value) = eval_expr(store, expr, row) {
                         if matches!(
                             agg,
                             AggregateExpression::FunctionCall {

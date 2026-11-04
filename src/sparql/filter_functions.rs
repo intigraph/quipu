@@ -472,8 +472,11 @@ fn temporal_order(a: &Value, b: &Value) -> Option<Option<std::cmp::Ordering>> {
     };
     let (x, y) = (x.trim(), y.trim());
     Some(match kind {
-        Temporal::DateTime => match (x.parse::<oxsdatatypes::DateTime>(), y.parse()) {
-            (Ok(x), Ok(y)) => x.partial_cmp(&y),
+        Temporal::DateTime => match (
+            super::filter::eval_memo::date_time(x),
+            super::filter::eval_memo::date_time(y),
+        ) {
+            (Some(x), Some(y)) => x.partial_cmp(&y),
             _ => None,
         },
         Temporal::Date => match (x.parse::<oxsdatatypes::Date>(), y.parse()) {

@@ -33,6 +33,10 @@ The [executable model and candidate record contract](ownership-handoff-model.md)
 describe that source-only P0 implementation and its remaining assumptions.
 They do not activate store enforcement or satisfy native/runtime acceptance.
 
+The first [Store startup boundary](ownership-startup-boundary.md) reserves
+enrolled startup refusal and shares the existing disk commit-fence pin across
+callback replacement. It admits no enrolled writer and does not complete P1.
+
 ## Phases and proof gates
 
 | Phase | Deliverable | Required proof before advancing |

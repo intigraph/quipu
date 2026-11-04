@@ -64,6 +64,10 @@ def run(server_binary, cli_binary):
         identity = conn.execute('SELECT store_id FROM store_identity').fetchone()[0]
         tx = conn.execute('SELECT MAX(id) FROM transactions').fetchone()[0]
         assert conn.execute('SELECT COUNT(*) FROM events').fetchone()[0] > 0, 'pending push trap has no events'
+        # Retention trap: these events are older than the configured window, so
+        # a replica that wrongly ran the writer's retention job would delete
+        # them and change the database bytes checked below.
+        conn.execute("UPDATE events SET ts = '2000-01-01T00:00:00Z'")
         observed = {'failed': False, 'posts': 0, 'gets': 0, 'poll_times': []}
 
         class Primary(BaseHTTPRequestHandler):
@@ -110,7 +114,7 @@ def run(server_binary, cli_binary):
         (root / '.bobbin').mkdir()
         (root / '.bobbin/config.toml').write_text(
             '[quipu.server.replica]\nprimary_url = ' + json.dumps(primary_url)
-            + '\n[quipu.events]\nretention_days = 0\n')
+            + '\n[quipu.events]\nretention_days = 1\n')
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
