@@ -415,3 +415,79 @@ fn read_identity_and_callback_share_one_snapshot_and_release_after_errors() {
         "read transaction leaked"
     );
 }
+
+#[test]
+fn real_queued_writes_are_bounded_without_stalling_another_owner() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a_store, a_route) = fixture(temp.path(), "a");
+    let (b_store, b_route) = fixture(temp.path(), "b");
+    let catalog = catalog(vec![a_route.clone(), b_route.clone()]);
+    let a = Arc::new(
+        Owner::prepare(
+            catalog.clone(),
+            temp.path(),
+            &a_route.graph,
+            a_store,
+            "policy-v1",
+        )
+        .unwrap(),
+    );
+    let b = Arc::new(
+        Owner::prepare(catalog, temp.path(), &b_route.graph, b_store, "policy-v1").unwrap(),
+    );
+    let held = a.writer.lock();
+    let mut queued = Vec::new();
+    for value in ["first", "second"] {
+        let a = a.clone();
+        queued.push(std::thread::spawn(move || {
+            a.knot(&request(&a), &input(&a, value))
+        }));
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while a.admitted.load(Ordering::Acquire) != 2 && std::time::Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+    let admitted_while_held = a.admitted.load(Ordering::Acquire);
+    let (overflow_tx, overflow_rx) = mpsc::channel();
+    let overflow = {
+        let a = a.clone();
+        std::thread::spawn(move || {
+            overflow_tx
+                .send(a.knot(&request(&a), &input(&a, "overflow")))
+                .unwrap();
+        })
+    };
+    let (progress_tx, progress_rx) = mpsc::channel();
+    let progress = {
+        let b = b.clone();
+        std::thread::spawn(move || {
+            let written = b.knot(&request(&b), &input(&b, "independent"));
+            progress_tx.send((written, values(&b))).unwrap();
+        })
+    };
+    // Observe both results before releasing A. Always release and join before
+    // asserting, so a broken bound/fallback cannot strand a fixture thread.
+    let overflow_while_held = overflow_rx.recv_timeout(Duration::from_secs(3));
+    let progress_while_held = progress_rx.recv_timeout(Duration::from_secs(3));
+    drop(held);
+    let completed: Vec<_> = queued
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect();
+    overflow.join().unwrap();
+    progress.join().unwrap();
+    assert_eq!(
+        admitted_while_held, 2,
+        "real calls did not fill A's admission bound"
+    );
+    let refused = overflow_while_held.expect("overflow waited on A's writer");
+    assert!(refused.unwrap_err().to_string().contains("mailbox full"));
+    let (written, read) = progress_while_held.expect("B waited behind A's queued writes");
+    assert!(written.is_ok(), "{written:?}");
+    assert_eq!(read["count"], 1);
+    assert!(completed.iter().all(Result::is_ok), "{completed:?}");
+    assert_eq!(a.admitted.load(Ordering::Acquire), 0);
+    let a_values = values(&a);
+    assert_eq!(a_values["count"], 1, "queued snapshots were appended");
+    assert_ne!(a_values["rows"][0]["value"], "overflow");
+}
