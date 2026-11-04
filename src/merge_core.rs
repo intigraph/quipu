@@ -409,6 +409,8 @@ pub(crate) fn plan_merge<S: Ord + Clone, V: Ord + Clone>(
 /// identity and the decisions file's SHA-256 (of `[]` for a clean merge).
 /// Two different merges never share it; the same input merged again does,
 /// which is what lets a re-apply report `already-applied` (R7).
+// Merge sources carry the id from slice S3 (share merge) on.
+#[cfg_attr(not(test), allow(dead_code))]
 #[must_use]
 // Merge sources carry the id from slice S3 (share merge) on.
 #[cfg_attr(not(test), allow(dead_code))]
