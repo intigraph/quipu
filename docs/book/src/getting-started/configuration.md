@@ -109,6 +109,8 @@ stops being read.
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `embedding.exclude_predicates` | `[]` | Predicate IRIs whose values are left out of embedding text, so a value that changes on every write (a probe marker) does not create a new vector each time; the facts are still stored and queryable |
+| `embedding.superseded_retention_days` | `30` | Days a superseded (closed) embedding is kept before the server deletes it; `0` keeps them forever. Narrows `search` with `valid_at` older than the window to entities whose embedding was current then and now (see [Vector Search](../architecture/vector-search.md#retention-of-superseded-embeddings)); fact reads are unaffected |
+| `embedding.superseded_prune_max_per_pass` | `50000` | Most superseded embeddings deleted in one hourly pass, so a large backlog drains over several passes |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |

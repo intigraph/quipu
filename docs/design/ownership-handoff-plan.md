@@ -37,6 +37,10 @@ The first [Store startup boundary](ownership-startup-boundary.md) reserves
 enrolled startup refusal and shares the existing disk commit-fence pin across
 callback replacement. It admits no enrolled writer and does not complete P1.
 
+The [enrollment inventory, chain-head witness and startup admission design](ownership-witness-enrollment.md)
+specifies the remaining P1 startup adapter and the P2/P3 witness prerequisites
+as source slices E1, W1, W2, S1 and T1. It selects no principal or storage.
+
 ## Phases and proof gates
 
 | Phase | Deliverable | Required proof before advancing |

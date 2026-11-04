@@ -2,7 +2,10 @@
 
 Open [Explore](../explore/.) to follow the ideas behind Quipu into the code.
 
-The loading panel follows engine startup, pendant download, and graph indexing.
+The loading panel names the repository pendant or selected file from first paint
+through download, indexing and retry. URL labels use the file name, excluding
+credentials, query parameters and fragments. It follows engine startup, pendant
+download, and graph indexing.
 Download percentages use the response size when available; otherwise the panel
 shows transferred bytes. Once the graph is ready, the workbench appears. If
 loading fails, **Try again** repeats the selected load without leaving the page.

@@ -195,7 +195,7 @@ pub(super) fn try_eval(
             previous = Some((subject, hash, rowid));
         }
         if emit {
-            output.push(Bindings::from([(
+            output.push(Bindings::from_iter([(
                 name.to_owned(),
                 Value::Ref(store.canonical_id(subject)?),
             )]));
