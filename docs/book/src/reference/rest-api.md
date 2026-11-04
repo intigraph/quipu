@@ -1951,7 +1951,7 @@ There is no `offset`. Passing `limit` alone therefore returns the *oldest* N —
 38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
 recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
 
-Each entry is `{id, timestamp, actor, source, authenticated}`. `authenticated`
+Each entry is `{id, timestamp, actor, source, authenticated, declared}`. `authenticated`
 is null when local credential evidence is absent; otherwise it contains
 `principal`, `credential_id` (null for a shared bearer), and `auth_class`
 (`named_bearer` or `legacy_shared_bearer`). It is separate from declared fields. `source` identifies the write path:
@@ -1959,6 +1959,16 @@ is null when local credential evidence is absent; otherwise it contains
 `/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
 both optional on `/knot`. Supply them for source provenance; authenticated
 credential evidence does not reconstruct a missing source or historical actor.
+
+`declared` is the committed request's caller-declared `agent`, `harness`, `host`,
+`session` and `model` headers, with at most 1024 UTF-8 bytes per value. Missing,
+blank or oversized values are omitted. It is null for a transaction without
+retained declarations, including older stores. An empty object means the
+request context existed but supplied no accepted values. These declarations
+commit or roll back with the fact transaction; they are never authenticated
+host or session evidence. Verified agent/session credit does not invent missing
+header values. A transaction ID remains local to its store: this endpoint does
+not establish a composed-history cursor or repair named-graph entity history.
 
 ### `POST /embed_backfill`
 

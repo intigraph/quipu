@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS transaction_auth (
     auth_class TEXT NOT NULL
 );
 
+-- Caller declarations, separate from authenticated credential evidence.
+CREATE TABLE IF NOT EXISTS transaction_declarations (
+    tx INTEGER PRIMARY KEY REFERENCES transactions(id),
+    declarations TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS store_identity (
     id       INTEGER PRIMARY KEY CHECK (id = 1),
     store_id TEXT NOT NULL UNIQUE
