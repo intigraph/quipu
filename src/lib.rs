@@ -47,6 +47,8 @@ pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
 pub mod merge3;
+/// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
+mod merge_core;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
 pub mod metrics;
