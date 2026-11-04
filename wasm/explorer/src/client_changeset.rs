@@ -6,6 +6,19 @@ use wasm_bindgen::prelude::*;
 
 use super::err_js;
 
+/// Preview canonical catch-up plus private edits. Conflicts are explicit;
+/// this never rebases, authorizes or validates a proposal for admission.
+#[wasm_bindgen(js_name = previewClientOverlay)]
+pub fn preview_client_overlay(
+    overlay_json: &str,
+    canonical_json: &str,
+    shapes: &str,
+) -> Result<String, JsValue> {
+    let overlay: ClientOverlay = serde_json::from_str(overlay_json).map_err(err_js)?;
+    let canonical: BaseJournal = serde_json::from_str(canonical_json).map_err(err_js)?;
+    serde_json::to_string(&overlay.preview(&canonical, shapes).map_err(err_js)?).map_err(err_js)
+}
+
 /// Open private proposals over an acquired source journal. The master still
 /// reconstructs the base and checks current authority at admission.
 #[wasm_bindgen(js_name = openClientOverlay)]

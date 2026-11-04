@@ -318,6 +318,8 @@ impl SignedChangeSet {
 
 mod overlay;
 pub use overlay::{ClientOverlay, PreparedChangeSet, ProposalIdentity};
+mod preview;
+pub use preview::OverlayPreview;
 
 #[cfg(test)]
 #[path = "client_changeset_tests.rs"]

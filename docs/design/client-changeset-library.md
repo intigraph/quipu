@@ -27,8 +27,12 @@ records; the caller retains the overlay and journal.
 This slice supports one explicit complete graph with open valid intervals and
 canonical skolemized terms. Bounded or proposed intervals, multi-graph/context
 scopes and conflict-resolution signatures are not supported: they must refuse,
-not silently fall back. Rebase, composed canonical-plus-overlay reads, derived
-local graphs and the full resolver workflow remain implementation work. This
+not silently fall back. `preview()` composes canonical catch-up with the private
+delta using the shared pure slot operator, returning either a complete graph or
+explicit conflicts. It retains both the frozen journal and proposals, refuses
+foreign lineage, stale cursors, changed shapes and bounded intervals, and makes
+no SHACL or authority decision. The compiled Wasm bridge exposes the same preview.
+Rebase, derived local graphs and the full resolver workflow remain implementation work. This
 library slice does not establish full P3 acceptance or production readiness.
 
 The portable Wasm bridge opens/replaces serialized overlays, prepares the exact

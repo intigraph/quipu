@@ -10,14 +10,27 @@ const bundle = process.argv[2];
 assert.ok(bundle, "usage: node scripts/smoke-wasm-client-changeset.mjs <node-bundle-dir>");
 const wasm = createRequire(import.meta.url)(join(resolve(bundle), "quipu_wasm_explorer.js"));
 const hash = value => `sha256:${createHash("sha256").update(value).digest("hex")}`;
+const shapes = '@prefix sh: <http://www.w3.org/ns/shacl#> . [] sh:path <urn:p>; sh:maxCount 1 .';
 const base = {
   store_id: "urn:store:synthetic-client", log_epoch: "urn:epoch:synthetic-client",
-  base_tx: 3, graph: "ROOT", shapes_hash: hash("synthetic shapes"),
+  base_tx: 3, graph: "ROOT", shapes_hash: hash(shapes),
   rows: [{ triple: '<urn:s> <urn:p> "base"', valid_from: "2026-01-01T00:00:00Z", valid_to: null }],
 };
 const opened = wasm.openClientOverlay(JSON.stringify(base), "urn:fork:synthetic-client");
 const overlay = wasm.replaceClientOverlay(opened, JSON.stringify(['<urn:s> <urn:p> "local"']));
 assert.deepEqual(JSON.parse(overlay).base, JSON.parse(opened).base, "a local edit must retain its frozen journal");
+const caughtUp = { ...base, base_tx: 4, rows: [...base.rows,
+  { ...base.rows[0], triple: '<urn:s> <urn:note> "upstream"' }] };
+const preview = JSON.parse(wasm.previewClientOverlay(overlay, JSON.stringify(caughtUp), shapes));
+assert.equal(preview.outcome, "composed");
+assert.deepEqual(preview.triples, ['<urn:s> <urn:note> "upstream"', '<urn:s> <urn:p> "local"']);
+const conflicting = { ...caughtUp, rows: [{ ...base.rows[0], triple: '<urn:s> <urn:p> "master"' }] };
+const conflict = JSON.parse(wasm.previewClientOverlay(overlay, JSON.stringify(conflicting), shapes));
+assert.equal(conflict.outcome, "conflicts");
+assert.equal(conflict.records.length, 1);
+assert.equal(Object.hasOwn(conflict, "triples"), false);
+assert.throws(() => wasm.previewClientOverlay(overlay, JSON.stringify({ ...caughtUp, log_epoch: "urn:other" }), shapes));
+assert.throws(() => wasm.previewClientOverlay(overlay, JSON.stringify(caughtUp), ""));
 const identity = {
   key_id: "urn:registration:synthetic", signer: "synthetic-client",
   operation_id: "00000000-0000-4000-8000-000000000001",
