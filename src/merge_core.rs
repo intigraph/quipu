@@ -212,23 +212,49 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
         // Clean: ROOT moves to the merged set. Incoming additions keep their
         // authored time; ROOT values the incoming side removed close at the
         // incoming close time, clamped.
+        let added: Vec<(V, String)> = merged
+            .difference(&ov)
+            .map(|v| {
+                let from = input.theirs.get(v).cloned();
+                (v.clone(), from.unwrap_or_else(|| td.to_string()))
+            })
+            .collect();
+        // R6 on a slot of at most one value: the replaced value ends where its
+        // replacement starts. With no incoming close time (a share carries
+        // none per fact), it closes at the replacement's authored start, and
+        // the replacement never starts before that close (lex, #1003).
+        let single = input.card.bound() == Some(1);
+        let replacement_start = added
+            .iter()
+            .map(|(_, from)| from)
+            .filter(|_| single)
+            .min_by(|a, b| {
+                if not_before(a, b) && not_before(b, a) {
+                    std::cmp::Ordering::Equal
+                } else if not_before(a, b) {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Less
+                }
+            });
+        let mut last_close: Option<String> = None;
         for v in ov.difference(&merged) {
-            let at = clamp_close(input.theirs_closed.get(v), &input.ours[v], td);
+            let incoming = input.theirs_closed.get(v).or(replacement_start);
+            let at = clamp_close(incoming, &input.ours[v], td);
+            if last_close.as_ref().is_none_or(|c| !not_before(c, &at)) {
+                last_close = Some(at.clone());
+            }
             plan.receive.push(FactOp::Close {
                 value: v.clone(),
                 at,
             });
         }
-        for v in merged.difference(&ov) {
-            let from = input
-                .theirs
-                .get(v)
-                .cloned()
-                .unwrap_or_else(|| td.to_string());
-            plan.receive.push(FactOp::Assert {
-                value: v.clone(),
-                from,
-            });
+        for (v, from) in added {
+            let from = match &last_close {
+                Some(close) if single && !not_before(&from, close) => close.clone(),
+                _ => from,
+            };
+            plan.receive.push(FactOp::Assert { value: v, from });
         }
         return Ok(plan);
     }
