@@ -9,12 +9,15 @@ use super::*;
 use crate::sparql::{QueryResult, TemporalContext, query_temporal};
 
 const T0: &str = "2026-01-01T00:00:00Z";
+#[cfg(any(feature = "shacl", feature = "owl"))]
 const TO: &str = "2026-01-02T00:00:00Z";
+#[cfg(feature = "shacl")]
 const TT: &str = "2026-01-03T00:00:00Z";
 const TF: &str = "2026-01-04T00:00:00Z";
 const TR: &str = "2026-01-05T00:00:00Z";
 const TD: &str = "2026-01-10T00:00:00Z";
 
+#[cfg(feature = "shacl")]
 const ONE: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
     <urn:t:S> a sh:NodeShape ; sh:targetSubjectsOf <urn:t:status> ;\n\
     sh:property [ sh:path <urn:t:status> ; sh:maxCount 1 ] .\n";
@@ -96,6 +99,7 @@ fn assert_interval_sanity(rows: &[(String, String, Option<String>)]) {
     }
 }
 
+#[cfg(feature = "shacl")]
 /// Spec C4: base "base"@T0; ROOT changes it to "ours"@To, the fork to
 /// "theirs"@Tt, under sh:maxCount 1.
 fn c4_store() -> (Store, i64, i64) {
@@ -137,6 +141,7 @@ fn c4_store() -> (Store, i64, i64) {
     (store, e, a)
 }
 
+#[cfg(feature = "shacl")]
 fn promote(store: &mut Store, e: i64, a: i64, chosen: &str) -> i64 {
     let (_, conflicts) = store.fork_conflicts("f").unwrap();
     assert_eq!(conflicts.len(), 1, "C4 is one maxCount-1 conflict");
