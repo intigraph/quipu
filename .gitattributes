@@ -35,3 +35,6 @@ docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space
 # quipu-docgen output (aegis-t7h): regenerate, do not edit.
 packaging/man/** linguist-generated=true
 packaging/completions/** linguist-generated=true
+
+# Preserve the replayable vector-scan PTY recording byte-for-byte.
+docs/demos/vector-scan/output.txt -text whitespace=cr-at-eol
