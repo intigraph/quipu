@@ -20,7 +20,7 @@ src/cli.rs	3
 src/cli_acquire.rs	1
 src/cli_align.rs	1
 src/cli_attest.rs	6
-src/cli_commands.rs	5
+src/cli_commands.rs	3
 src/cli_deck.rs	1
 src/cli_entailment.rs	1
 src/cli_follow.rs	2

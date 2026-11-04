@@ -35,6 +35,10 @@ pub mod tree;
 pub mod trust_root;
 pub mod verdict_facts;
 pub mod verifier_registry;
+
+#[cfg(test)]
+#[path = "governance_ns_tests.rs"]
+mod governance_ns_tests;
 pub(crate) mod workflow;
 
 pub use guard::{PolicyRegistry, is_governance_write};

@@ -34,7 +34,7 @@ fn an_authority_refusal_records_nothing_but_is_audited() {
 
 #[test]
 fn a_reserved_or_inferred_graph_cannot_be_protected() {
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     refused(s.attest_protect_graph("urn:quipu:anything"), "reserved");
     refused(
         s.attest_protect_graph("https://example.org/graph/answers#inferred"),

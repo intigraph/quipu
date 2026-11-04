@@ -31,7 +31,6 @@
 //! evaluate — which is also exactly the form the backtest can replay.
 
 use crate::error::{Error, Result};
-use crate::namespace::DEFAULT_BASE_NS;
 
 /// The one effect a drafted policy can be born with.
 ///
@@ -79,13 +78,16 @@ pub struct DraftIntent {
     /// `aegis:authority` on the parent Directive — the human whose intent this
     /// is, when presented. Declared provenance, never invented.
     pub authority: Option<String>,
+    /// The store's governance namespace (`[quipu].base_ns`), which names the
+    /// policy and every term the draft writes. Required: no default.
+    pub base_ns: String,
 }
 
 impl DraftIntent {
     /// The IRI the drafted policy will occupy.
     #[must_use]
     pub fn policy_iri(&self) -> String {
-        format!("{DEFAULT_BASE_NS}policy_{}", self.name)
+        format!("{}policy_{}", self.base_ns, self.name)
     }
 }
 
@@ -100,6 +102,7 @@ impl DraftIntent {
 /// # Errors
 /// [`Error::InvalidValue`] naming the defective field and its remedy.
 pub fn draft_turtle(intent: &DraftIntent) -> Result<String> {
+    crate::namespace::require_base_ns(&intent.base_ns)?;
     if intent.name.is_empty()
         || !intent
             .name
@@ -173,7 +176,7 @@ pub fn draft_turtle(intent: &DraftIntent) -> Result<String> {
     let layer = intent.layer.as_deref().unwrap_or("tool");
 
     let mut turtle = format!(
-        "@prefix aegis: <{DEFAULT_BASE_NS}> .\n\
+        "@prefix aegis: <{base_ns}> .\n\
          @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .\n\n\
          <{iri}> a aegis:Policy ;\n\
          \x20   rdfs:label {label} ;\n\
@@ -189,6 +192,7 @@ pub fn draft_turtle(intent: &DraftIntent) -> Result<String> {
          \x20   aegis:constraintClass \"{class}\" ;\n\
          \x20   aegis:verificationPoint \"{point}\" ;\n\
          \x20   aegis:hostedAtLayer \"{layer}\"",
+        base_ns = intent.base_ns,
         iri = intent.policy_iri(),
         label = turtle_literal(&intent.label),
         exemplar = turtle_literal(&intent.exemplar),

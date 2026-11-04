@@ -25,7 +25,7 @@ fn signer(auth: &Authenticator) -> Signer {
 }
 
 pub(super) fn ready(auth: &Authenticator) -> Store {
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     s.attest_protect_graph(OUT).unwrap();
     s.attest_enroll_signer(&signer(auth)).unwrap();
     s.attest_set_enabled(true).unwrap();
@@ -125,7 +125,7 @@ fn value(s: &Store, e: &str, p: &str) -> Option<Value> {
 #[test]
 fn default_off_refuses_and_enrollment_is_validated() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     s.attest_protect_graph(OUT).unwrap();
     s.attest_enroll_signer(&signer(&a)).unwrap();
     refused(s.attest_challenge(&proposal("x")), "disabled");

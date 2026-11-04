@@ -3,7 +3,7 @@
 use ring::rand::{SecureRandom as _, SystemRandom};
 
 use super::*;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 
 /// The receipt node for one admitted write.
 pub fn receipt_iri(nonce: &str) -> String {
@@ -13,14 +13,21 @@ pub fn receipt_iri(nonce: &str) -> String {
 /// Terms only the server may write: the receipt nodes and the provenance
 /// vocabulary. A proposal that uses them is refused, so no signed or ordinary
 /// triple can look like a server-authored attestation.
-fn reserved(term: &str) -> bool {
+///
+/// `ns` is the store's governance namespace. With none, the provenance terms
+/// are matched by local name in every namespace, so a store that cannot say
+/// which namespace is its own reserves more, never less.
+fn reserved(term: &str, ns: Option<&str>) -> bool {
+    let provenance = |local: &str| local.starts_with("attest") || local == "AttestedWrite";
     term.starts_with("urn:quipu:")
-        || term
-            .strip_prefix(DEFAULT_BASE_NS)
-            .is_some_and(|local| local.starts_with("attest") || local == "AttestedWrite")
+        || match ns {
+            Some(ns) => term.strip_prefix(ns).is_some_and(provenance),
+            None => provenance(term.rsplit(['/', '#']).next().unwrap_or(term)),
+        }
 }
 
-fn valid_proposal(proposal: &Proposal) -> bool {
+fn valid_proposal(proposal: &Proposal, ns: Option<&str>) -> bool {
+    let reserved = |term: &str| reserved(term, ns);
     !proposal.datums.is_empty()
         && !proposal.datums.iter().any(|d| {
             reserved(&d.s) || reserved(&d.p) || matches!(&d.o, TypedValue::Iri(i) if reserved(i))
@@ -52,7 +59,7 @@ impl Store {
     /// Preconditions are checked now too, so a stale proposal is refused
     /// before anyone is asked to sign.
     pub fn attest_challenge(&mut self, proposal: &Proposal) -> Result<Challenge> {
-        if !valid_proposal(proposal) {
+        if !valid_proposal(proposal, self.governance_ns().ok()) {
             return Err(refuse("invalid proposal"));
         }
         self.attest_atomic(|store, _| {
@@ -210,7 +217,8 @@ impl Store {
             valid_to: None,
             op: Op::Assert,
         };
-        let term = |name: &str| self.intern(&format!("{DEFAULT_BASE_NS}{name}"));
+        let ns = self.governance_ns()?;
+        let term = |name: &str| self.intern(&format!("{ns}{name}"));
         let node = self.intern(&receipt_iri(nonce))?;
         let mut datums = Vec::new();
         let mut subjects = std::collections::BTreeSet::new();

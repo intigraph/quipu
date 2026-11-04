@@ -50,6 +50,8 @@ fn audit(dir: &Path, args: &[&str]) -> Output {
 fn seed(dir: &Path) {
     fs::write(dir.join("trace.jsonl"), "").unwrap();
     let mut store = quipu::Store::open(dir.join("store.db").to_str().unwrap()).unwrap();
+    // The shipped policy pack is written under the legacy namespace.
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     quipu::ingest_rdf(
         &mut store,
         &include_bytes!("../shapes/policies/tripwire.ttl")[..],

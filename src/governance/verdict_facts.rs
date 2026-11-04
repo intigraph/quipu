@@ -25,7 +25,7 @@
 //! this module builds, and only for the duration of the write.
 
 use crate::error::Result;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -96,6 +96,7 @@ pub fn datums_for(
     timestamp: &str,
     actor: Option<&str>,
 ) -> Result<Vec<Datum>> {
+    let ns = store.governance_ns()?;
     let Some(identity) = store.signing_identity() else {
         return Ok(Vec::new());
     };
@@ -112,12 +113,12 @@ pub fn datums_for(
     // the same evidence is idempotent by content rather than accumulating a row
     // per evaluation.
     let id = &signature[..signature.len().min(32)];
-    let subject = store.intern(&format!("{DEFAULT_BASE_NS}verdict_{id}"))?;
+    let subject = store.intern(&format!("{ns}verdict_{id}"))?;
 
     let mut datums = vec![Datum {
         entity: subject,
         attribute: store.intern(RDF_TYPE)?,
-        value: Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}Verdict"))?),
+        value: Value::Ref(store.intern(&format!("{ns}Verdict"))?),
         valid_from: timestamp.to_string(),
         valid_to: None,
         op: Op::Assert,
@@ -142,7 +143,7 @@ pub fn datums_for(
     for (field, value) in fields {
         datums.push(Datum {
             entity: subject,
-            attribute: store.intern(&format!("{DEFAULT_BASE_NS}{field}"))?,
+            attribute: store.intern(&format!("{ns}{field}"))?,
             value: Value::Str(value),
             valid_from: timestamp.to_string(),
             valid_to: None,

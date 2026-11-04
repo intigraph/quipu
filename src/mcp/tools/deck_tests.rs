@@ -16,7 +16,7 @@ fn now() -> i64 {
 }
 
 fn store(auth: &Authenticator, enabled: bool) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store
         .deck_configure(&Config {
             origin: ORIGIN.into(),

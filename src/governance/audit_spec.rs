@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 
 use crate::error::Result;
-use crate::namespace::DEFAULT_BASE_NS;
 use crate::sparql::{self, QueryResult};
 use crate::store::Store;
 use crate::types::Value;
@@ -66,8 +65,9 @@ pub fn load(store: &Store) -> Result<Spec> {
 /// # Errors
 /// Store and SPARQL errors.
 pub fn load_as_of(store: &Store, as_of: Option<&crate::store::AsOf>) -> Result<Spec> {
+    let ns = store.governance_ns()?;
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT ?p ?label ?class ?point ?effect ?layer ?inherited WHERE {{ \
             ?p a a:Policy ; a:boundary \"action\" . \

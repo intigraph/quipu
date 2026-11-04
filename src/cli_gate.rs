@@ -37,13 +37,15 @@ fn cmd_shadow(args: &[String], live_db: &str) {
     };
     let turtle = std::fs::read_to_string(rules)
         .unwrap_or_else(|e| fail(&format!("error reading {rules}: {e}")));
-    let candidate =
-        Candidate::from_turtle(&turtle).unwrap_or_else(|e| fail(&format!("error: {e}")));
-    let store = open_quiescent_copy(
+    let candidate = Candidate::from_turtle(&turtle, &crate::cli_open::config().base_ns)
+        .unwrap_or_else(|e| fail(&format!("error: {e}")));
+    let mut store = open_quiescent_copy(
         std::path::Path::new(db),
         Some(std::path::Path::new(live_db)),
     )
     .unwrap_or_else(|e| fail(&format!("refused: {e}")));
+    // The copy's governance vocabulary is the configured store's.
+    store.set_base_ns(crate::cli_open::config().base_ns.clone());
 
     let int = |name: &str| {
         flag_value(args, name).map(|v| {

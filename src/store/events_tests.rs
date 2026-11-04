@@ -47,7 +47,7 @@ fn all_events(store: &Store) -> Vec<EventRow> {
 /// offsets strictly monotonic, `tx_id` matches the episode's tx.
 #[test]
 fn ingest_emits_episode_and_edges_in_commit_order() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let e = ep(
         "ev-test-1",
         vec![node("svc-a", "Service"), node("host-b", "Host")],
@@ -104,7 +104,7 @@ fn ingest_emits_episode_and_edges_in_commit_order() {
 /// `subject_preexisting=true`.
 #[test]
 fn schema_events_fire_once_and_preexisting_is_flagged() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let e1 = ep("ev-first", vec![node("svc-a", "Service")], vec![]);
     ingest_episode(&mut store, &e1, "2026-07-23T00:00:00Z", DEFAULT_BASE_NS).unwrap();
 
@@ -178,7 +178,7 @@ fn schema_events_fire_once_and_preexisting_is_flagged() {
 /// the log records commits, not attempts.
 #[test]
 fn idempotent_reingest_emits_no_events() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let e = ep("ev-idem", vec![node("svc-a", "Service")], vec![]);
     ingest_episode(&mut store, &e, "2026-07-23T00:00:00Z", DEFAULT_BASE_NS).unwrap();
     let before = store.latest_event_offset().unwrap();
@@ -196,7 +196,7 @@ fn idempotent_reingest_emits_no_events() {
 /// with a usable cursor.
 #[test]
 fn pull_filters_and_pagination() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut e1 = ep("ev-g1", vec![node("a", "T1")], vec![]);
     e1.group_id = Some("group-one".into());
     let mut e2 = ep("ev-g2", vec![node("b", "T2")], vec![]);
@@ -245,7 +245,7 @@ fn pull_filters_and_pagination() {
 /// consumer starts from 0 (full replay).
 #[test]
 fn consumer_commit_and_resume() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest_episode(
         &mut store,
         &ep("ev-c1", vec![node("a", "T1")], vec![]),
@@ -308,6 +308,7 @@ fn additive_schema_reopen() {
 
     {
         let mut store = Store::open(path_s).unwrap();
+        store.set_base_ns(crate::namespace::DEFAULT_BASE_NS);
         ingest_episode(
             &mut store,
             &ep("ev-persist", vec![node("a", "T1")], vec![]),
@@ -318,7 +319,8 @@ fn additive_schema_reopen() {
     }
     {
         // Reopen: facts intact, event log intact, both APIs answer.
-        let store = Store::open(path_s).unwrap();
+        let mut store = Store::open(path_s).unwrap();
+        store.set_base_ns(crate::namespace::DEFAULT_BASE_NS);
         assert!(!store.current_facts().unwrap().is_empty());
         let events = all_events(&store);
         assert!(!events.is_empty(), "events survive reopen (durable log)");
@@ -333,7 +335,7 @@ fn additive_schema_reopen() {
 /// mechanism, not by memory of the code.
 #[test]
 fn retraction_emits_edge_retracted() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let e = ep(
         "ev-retract",
         vec![node("svc-a", "Service"), node("host-b", "Host")],
@@ -393,7 +395,7 @@ sh:property [ sh:path aegis:size ; sh:minCount 1 ] .
 "#;
 
     fn store_with_shapes() -> Store {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         store
             .load_shapes("p3-test", SHAPES, "2026-07-23T00:00:00Z")
             .unwrap();
@@ -532,7 +534,7 @@ sh:property [ sh:path aegis:size ; sh:minCount 1 ] .
 /// offset is never invalidated.
 #[test]
 fn retention_prunes_by_age_but_never_past_a_consumer() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ing = |store: &mut Store, name: &str, entity: &str, ts: &str| {
         ingest_episode(
             store,
@@ -588,7 +590,7 @@ fn retention_prunes_by_age_but_never_past_a_consumer() {
 /// decides (the browser-pack / no-consumers deployment).
 #[test]
 fn retention_with_no_consumers_prunes_by_age_alone() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest_episode(
         &mut store,
         &ep("old", vec![node("a", "T")], vec![]),
@@ -706,7 +708,7 @@ fn refusal_events(store: &Store) -> Vec<EventRow> {
 /// `events_after` consumer surface, and is countable by gate.
 #[test]
 fn policy_refusal_records_refusal_event() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     define_require_label_policy(&mut store);
 
     let bad = unlabelled_doc(&store);
@@ -751,7 +753,7 @@ fn policy_refusal_records_refusal_event() {
 /// count-by-gate helper aggregates across gates.
 #[test]
 fn authority_refusal_records_and_counts_by_gate() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     define_require_label_policy(&mut store);
     // Two policy refusals...
     for _ in 0..2 {
@@ -786,7 +788,7 @@ fn authority_refusal_records_and_counts_by_gate() {
 /// speculation rolls back by design — so it leaves NO refusal event.
 #[test]
 fn speculate_refusal_leaves_no_refusal_event() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     define_require_label_policy(&mut store);
 
     let bad = unlabelled_doc(&store);
@@ -807,7 +809,7 @@ fn speculate_refusal_leaves_no_refusal_event() {
 /// recording path.
 #[test]
 fn recording_failure_does_not_mask_the_refusal() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     define_require_label_policy(&mut store);
     store.conn.execute_batch("DROP TABLE events").unwrap();
 
@@ -824,7 +826,7 @@ fn recording_failure_does_not_mask_the_refusal() {
 #[test]
 #[cfg(feature = "shacl")]
 fn shacl_refused_episode_records_refusal_event() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     let shapes = concat!(
         "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
@@ -880,7 +882,7 @@ mod directive_traceability_emit {
     const SHAPES: &str = include_str!("../../shapes/aegis-ontology.shapes.ttl");
 
     fn store_with_real_shapes() -> Store {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         store
             .load_shapes("aegis-ontology", SHAPES, "2026-10-01T00:00:00Z")
             .unwrap();
@@ -1019,7 +1021,7 @@ fn write_provenance_counts_committed_request_writes_only() {
     // A client label no other test uses: provenance is thread-scoped, so other
     // tests' writes cannot reach these series.
     const CLIENT: &str = "test-7zp4rc";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     define_require_label_policy(&mut store);
     let complete = Arc::new(RequestProvenance::classify(
         CLIENT,
@@ -1101,7 +1103,7 @@ fn graph_events(store: &Store, graph: &str) -> Vec<EventRow> {
 
 #[test]
 fn a_committed_named_graph_emits_entity_events_tagged_with_its_iri() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.graph_create_recorded(BOARD, TS, None).unwrap();
     let g = store.committed_graph_id(BOARD).unwrap().unwrap();
     let root_before = all_events(&store).len();
@@ -1138,7 +1140,7 @@ fn a_committed_named_graph_emits_entity_events_tagged_with_its_iri() {
 
 #[test]
 fn added_is_judged_within_the_graph_not_the_store() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store
         .transact(
             &[ref_datum(&store, "urn:item:1", "urn:p:x", "urn:o:1")],
@@ -1172,7 +1174,7 @@ fn added_is_judged_within_the_graph_not_the_store() {
 
 #[test]
 fn overlays_and_unregistered_graphs_stay_silent() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let overlay = store
         .overlay_create("https://example.org/overlay/o", 0)
         .unwrap();
@@ -1196,7 +1198,7 @@ fn overlays_and_unregistered_graphs_stay_silent() {
 
 #[test]
 fn one_graphs_reader_never_sees_another_graphs_events() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.graph_create_recorded(BOARD, TS, None).unwrap();
     store.graph_create_recorded(OTHER, TS, None).unwrap();
     for (iri, item) in [(BOARD, "urn:item:b"), (OTHER, "urn:item:o")] {
@@ -1219,7 +1221,7 @@ fn one_graphs_reader_never_sees_another_graphs_events() {
 
 #[test]
 fn only_named_graph_events_carry_the_graph_key_on_the_wire() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store
         .transact(
             &[ref_datum(&store, "urn:item:r", "urn:p:x", "urn:o:1")],
@@ -1248,7 +1250,7 @@ fn only_named_graph_events_carry_the_graph_key_on_the_wire() {
 
 #[test]
 fn lag_is_measured_within_the_readers_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store
         .transact(
             &[ref_datum(&store, "urn:item:r", "urn:p:x", "urn:o:1")],

@@ -36,7 +36,6 @@
 use super::guard::PolicyRegistry;
 use super::quarantine::{self, AttemptedDelta, Entry, ReplayCapture};
 use crate::error::{Error, Result};
-use crate::namespace::DEFAULT_BASE_NS;
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 use crate::types::Value;
@@ -428,10 +427,11 @@ pub(crate) fn rebuild_as_of(store: &Store, tx: i64) -> Result<Store> {
 
 /// Read a verdict's recorded fields back from its facts.
 fn verdict_info(store: &Store, verdict: &str) -> Result<VerdictInfo> {
+    let ns = store.governance_ns()?;
     let iri = if verdict.contains(':') {
         verdict.to_string()
     } else {
-        format!("{DEFAULT_BASE_NS}{verdict}")
+        format!("{ns}{verdict}")
     };
     let missing = || Error::InvalidValue(format!("no aegis:Verdict <{iri}> in this store"));
     let id = store.lookup(&iri)?.ok_or_else(missing)?;
@@ -440,7 +440,7 @@ fn verdict_info(store: &Store, verdict: &str) -> Result<VerdictInfo> {
         return Err(missing());
     }
     let field = |name: &str| -> Result<String> {
-        let attr = store.lookup(&format!("{DEFAULT_BASE_NS}{name}"))?;
+        let attr = store.lookup(&format!("{ns}{name}"))?;
         facts
             .iter()
             .find(|f| Some(f.attribute) == attr)
@@ -480,6 +480,7 @@ fn committed_write(store: &Store, info: &VerdictInfo) -> Result<Option<i64>> {
 /// `aegis:VerifierRegistration` key, and the store's own identity if it
 /// attests as that verifier.
 fn check_seal(store: &Store, entry: &Entry) -> Result<Seal> {
+    let ns = store.governance_ns()?;
     let mut keys = Vec::new();
     if let Some(identity) = store.signing_identity()
         && identity.verifier == entry.verifier
@@ -488,7 +489,7 @@ fn check_seal(store: &Store, entry: &Entry) -> Result<Seal> {
     }
     let verifier = entry.verifier.replace(['"', '\\', '\n'], "");
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?k WHERE {{ \
+        "PREFIX a: <{ns}> SELECT ?k WHERE {{ \
          ?r a a:VerifierRegistration ; a:verifier \"{verifier}\" ; a:publicKey ?k }}"
     );
     if let QueryResult::Select { rows, .. } =
