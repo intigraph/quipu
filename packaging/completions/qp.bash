@@ -1723,7 +1723,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__export)
-            opts="-h --db --graph --group-id --construct --format --help"
+            opts="-h --db --graph --group-id --construct --format --read-only --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

@@ -370,6 +370,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand --read-only 'Export a cold local snapshot without writes; refuses sidecars and attachments'
             cand -h 'Print help'
             cand --help 'Print help'
         }

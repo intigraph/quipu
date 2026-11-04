@@ -1,0 +1,14 @@
+Script started on 2026-11-04 15:53:24-05:00 [COMMAND="python3 docs/demos/readonly-export/run.py" <not executed on terminal>]
+Disposable cold fixture: one positive RDF triple
+$ base export --read-only --db snapshot.db
+exit=2
+unknown option for export: --read-only
+Use qp --help for usage.
+$ candidate export --read-only --db snapshot.db
+exit=0
+<urn:positive> <urn:predicate> <urn:object> .
+bytes, mtime and directory entries unchanged: PASS
+snapshot SHA256=5f10d2b3239e028c55e535381690617b7bc23848e878388d3f09b63f12f54ad6
+default export returns identical RDF: PASS
+
+Script done on 2026-11-04 15:53:24-05:00 [COMMAND_EXIT_CODE="0"]

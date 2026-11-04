@@ -413,6 +413,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--read-only', '--read-only', [CompletionResultType]::ParameterName, 'Export a cold local snapshot without writes; refuses sidecars and attachments')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

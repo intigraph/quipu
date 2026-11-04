@@ -69,7 +69,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("ontology remove", "<name>", 1, 1, "", ""),
     spec!("validate", "", 0, 0, "shapes data format", ""),
     spec!("repl", "", 0, 0, "", ""),
-    spec!("export", "", 0, 0, "graph group-id construct format", ""),
+    spec!("export", "", 0, 0, "graph group-id construct format", "read-only"),
     spec!("render", "[spec-IRI]", 0, 1, "dest graph valid-at server query template layout path", "dry-run"),
     spec!("stats", "", 0, 0, "", ""),
     spec!("prime", "", 0, 0, "section", "brief static json"),

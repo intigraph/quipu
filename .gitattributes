@@ -38,3 +38,6 @@ packaging/completions/** linguist-generated=true
 
 # Preserve the replayable vector-scan PTY recording byte-for-byte.
 docs/demos/vector-scan/output.txt -text whitespace=cr-at-eol
+
+# Retain the replayable read-only export demonstration byte-for-byte.
+docs/demos/readonly-export/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

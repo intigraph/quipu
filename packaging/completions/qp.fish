@@ -256,6 +256,7 @@ complete -c qp -n "__fish_qp_using_subcommand export" -l graph -d 'Explicit grap
 complete -c qp -n "__fish_qp_using_subcommand export" -l group-id -d 'Select facts belonging to this group' -r
 complete -c qp -n "__fish_qp_using_subcommand export" -l construct -d 'SPARQL CONSTRUCT query selecting the share' -r
 complete -c qp -n "__fish_qp_using_subcommand export" -l format -d 'Output or input format for this operation' -r
+complete -c qp -n "__fish_qp_using_subcommand export" -l read-only -d 'Export a cold local snapshot without writes; refuses sidecars and attachments'
 complete -c qp -n "__fish_qp_using_subcommand export" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand render" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand render" -l dest -d 'Render output destination' -r

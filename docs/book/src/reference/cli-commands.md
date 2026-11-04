@@ -454,6 +454,8 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+- `--read-only`: Export a cold local snapshot without writes; refuses sidecars and attachments.
+
 ## `qp render`
 
 Render graph data into files in an owned directory.

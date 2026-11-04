@@ -897,3 +897,17 @@ These are operator actions, never automatic server startup repairs. Source
 installation does not authorize production adoption. See the
 ownership and failure contract in `docs/design/store-ownership.md` for partial
 completion, supported host identity and rollout limits.
+
+
+## Export a cold snapshot without writes
+
+Use `qp export --read-only --db /path/to/snapshot.db --graph <iri>` for a
+custodian-held, cold local snapshot. The custodian must keep it cold for the
+entire export. The flag opens SQLite read-only and immutable, skips migrations
+and index initialization, and refuses existing WAL, shared-memory or journal
+sidecars and configured attachments. It does not create missing stores. Graph,
+group and CONSTRUCT selection retain their normal export semantics. A graph
+export is RDF triples; preserve its graph IRI separately when importing it.
+
+This flag does not fence an external writer and must not be used against a live
+database. Without the flag, the existing configured writable open is unchanged.
