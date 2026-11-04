@@ -351,7 +351,12 @@ static EMITTED: AtomicU64 = AtomicU64::new(0);
 pub fn emit(event: &Event) {
     EMITTED.fetch_add(1, Ordering::Relaxed);
     crate::metrics::metrics().observe_search(event);
-    super::journal::append(event);
+    if super::counters_only::selected() {
+        // Never fall back to detailed capture, including on aggregate failure.
+        super::counters_only::append(event);
+    } else {
+        super::journal::append(event);
+    }
     // A local CLI's stderr is the user's terminal, not a process log: the
     // record there interleaved with every `quipu read` (aegis-4pbw). Metrics
     // and the journal above still receive it.
