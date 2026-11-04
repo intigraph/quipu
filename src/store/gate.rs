@@ -122,7 +122,7 @@ impl Store {
         let mut proposed: std::collections::HashMap<(i64, i64), Vec<Vec<u8>>> =
             std::collections::HashMap::new();
         for d in datums {
-            if d.op != Op::Assert {
+            if d.op != Op::Assert || is_receipt(d) {
                 continue;
             }
             let Ok(attr_iri) = self.resolve(d.attribute) else {
@@ -311,7 +311,16 @@ impl Store {
         let Some(ontology) = self.owl_cache.take() else {
             return Ok(());
         };
-        let result = ontology.validate(self, datums);
+        // Receipts hold no valid time, so they cannot violate a constraint on
+        // what holds at once (aegis-karb.2).
+        let open: Vec<Datum>;
+        let checked = if datums.iter().any(is_receipt) {
+            open = datums.iter().filter(|d| !is_receipt(d)).cloned().collect();
+            open.as_slice()
+        } else {
+            datums
+        };
+        let result = ontology.validate(self, checked);
         self.owl_cache = Some(ontology);
         let violations = result?;
         if violations.is_empty() {
@@ -559,4 +568,13 @@ impl Store {
         }
         Ok(())
     }
+}
+
+/// A receipt: an assertion closed at its own start, `[t, t)`. It records that
+/// a value was received and is current at no valid time, so it neither
+/// supersedes a functional value nor counts toward an OWL constraint
+/// (aegis-karb.2, the merge spec's R3 under ruling B).
+#[cfg(feature = "owl")]
+fn is_receipt(d: &Datum) -> bool {
+    d.op == Op::Assert && d.valid_to.as_deref() == Some(d.valid_from.as_str())
 }

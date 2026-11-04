@@ -20,9 +20,6 @@
 //! pendant merge move onto it in later slices. The caller supplies the slot's
 //! cardinality, so tests can state it as a fixture does, without shapes.
 
-// Slice S1 has no caller yet; fork promote adopts it in S2, which removes this.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
@@ -70,6 +67,9 @@ impl Change {
 
 /// An operator decision for one slot (merge-reconcile.md §3.1, plus R2's
 /// `continue` for a convergent slot).
+// Fork promote passes decided values; the named choices arrive with share
+// merge (slice S3), which reads them from a decisions file.
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Decision<V> {
     Ours,
@@ -138,18 +138,26 @@ fn value_merge<V: Ord + Clone>(
     ))
 }
 
-fn epoch(t: &str) -> Result<i64> {
-    crate::time::epoch_of_rfc3339(t)
-        .ok_or_else(|| Error::InvalidValue(format!("merge core: not an RFC 3339 time: {t}")))
+/// `a >= b` in valid time. Two RFC 3339 instants compare as instants (an
+/// offset is honoured); anything else compares as the store compares valid
+/// time, as text, so a date-only stamp such as `2026-01-05` keeps working.
+fn not_before(a: &str, b: &str) -> bool {
+    match (
+        crate::time::epoch_of_rfc3339(a),
+        crate::time::epoch_of_rfc3339(b),
+    ) {
+        (Some(x), Some(y)) => x >= y,
+        _ => a >= b,
+    }
 }
 
 /// The time at which an incoming close ends a ROOT row (spec §3.1 clamp). An
 /// incoming close earlier than the row's own start would reverse it, so the
 /// row closes at `td` instead; a close later than `td` is applied as is.
-fn clamp_close(incoming: Option<&String>, row_from: &str, td: &str) -> Result<String> {
+fn clamp_close(incoming: Option<&String>, row_from: &str, td: &str) -> String {
     match incoming {
-        Some(at) if epoch(at)? >= epoch(row_from)? => Ok(at.clone()),
-        _ => Ok(td.to_string()),
+        Some(at) if not_before(at, row_from) => at.clone(),
+        _ => td.to_string(),
     }
 }
 
@@ -157,14 +165,13 @@ fn clamp_close(incoming: Option<&String>, row_from: &str, td: &str) -> Result<St
 ///
 /// # Errors
 /// [`Error::InvalidValue`] for a decision the slot cannot take (`continue` on
-/// a conflict, `both` above the bound, a conflict decision on a clean slot)
-/// or an unparsable time. Nothing is planned in that case.
+/// a conflict, `both` above the bound, a conflict decision on a clean slot).
+/// Nothing is planned in that case.
 pub(crate) fn plan_slot<V: Ord + Clone>(
     input: &SlotInput<V>,
     decision: Option<&Decision<V>>,
     td: &str,
 ) -> Result<SlotPlan<V>> {
-    epoch(td)?;
     let bv = &input.base;
     let ov: BTreeSet<V> = input.ours.keys().cloned().collect();
     let tv: BTreeSet<V> = input.theirs.keys().cloned().collect();
@@ -206,7 +213,7 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
         // authored time; ROOT values the incoming side removed close at the
         // incoming close time, clamped.
         for v in ov.difference(&merged) {
-            let at = clamp_close(input.theirs_closed.get(v), &input.ours[v], td)?;
+            let at = clamp_close(input.theirs_closed.get(v), &input.ours[v], td);
             plan.receive.push(FactOp::Close {
                 value: v.clone(),
                 at,
@@ -369,6 +376,8 @@ pub(crate) fn plan_merge<S: Ord + Clone, V: Ord + Clone>(
 /// identity and the decisions file's SHA-256 (of `[]` for a clean merge).
 /// Two different merges never share it; the same input merged again does,
 /// which is what lets a re-apply report `already-applied` (R7).
+// Merge sources carry the id from slice S3 (share merge) on.
+#[cfg_attr(not(test), allow(dead_code))]
 #[must_use]
 pub(crate) fn merge_id(path: &str, incoming: &str, base: &str, decisions_sha256: &str) -> String {
     let record = serde_json::json!({

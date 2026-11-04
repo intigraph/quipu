@@ -27,10 +27,11 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use rusqlite::params;
 
 use crate::error::{Error, Result};
+use crate::merge_core::{Card, Decision, FactOp, SlotInput, plan_merge};
 use crate::merge3::{DecisionRecord, FocusView, ShapeBounds, Slots, merge_slots, reaches};
-use crate::types::{Fact, Value};
+use crate::types::{Fact, Op, Value};
 
-use super::Store;
+use super::{Datum, Store};
 
 type Key = (i64, i64, Vec<u8>);
 
@@ -41,9 +42,15 @@ pub type ForkResolutions = HashMap<(i64, i64), Vec<Value>>;
 
 /// What promotion would do to ROOT, or why it cannot.
 pub(super) struct ForkMerge {
-    /// Fork facts to assert into ROOT.
+    /// The two ordered steps for ROOT (spec R3, ruling B): the clean part plus
+    /// a receipt `[Td, Td)` per incoming value of a decided slot, then the
+    /// decisions.
+    pub(super) receive: Vec<Datum>,
+    pub(super) decide: Vec<Datum>,
+    /// Open assertions across both steps, for the SHACL pre-check. Receipts
+    /// are not here: they are current at no valid time.
     pub(super) added: Vec<Fact>,
-    /// ROOT facts to retract.
+    /// ROOT facts closed across both steps, for the deletion gate.
     pub(super) removed: Vec<Fact>,
     /// Bounded slots both sides changed incompatibly. Non-empty means the
     /// caller must write nothing.
@@ -63,19 +70,23 @@ impl Store {
         Self::collect_visible_facts(&mut stmt, params![crate::schema::ROOT_GRAPH, tx])
     }
 
-    /// Three-way merge of `theirs` (the fork) into `ours` (ROOT) over `base`,
-    /// returned as the delta to apply to ROOT.
+    /// Three-way merge of `theirs` (the fork) into `ours` (ROOT) over `base`.
     ///
-    /// With `resolved`, each decided conflicting slot takes its decided values
-    /// instead of being held; a decided value no side holds is asserted with
-    /// `timestamp` as its valid time.
+    /// Conflict detection is `merge3`'s; with `timestamp` (the promotion
+    /// instant `Td`) the write is planned by [`crate::merge_core`]: incoming
+    /// one-side changes keep the fork's own valid times, closes take the
+    /// fork's close time clamped to the ROOT row (aegis-0s2a), and a decided
+    /// slot (from `resolved`) is written as a receipt then a live assertion
+    /// from `Td`, so a winner never overlaps the value it replaces. Without
+    /// `timestamp` only the conflicts are computed.
     pub(super) fn fork_merge(
         &self,
         base: Vec<Fact>,
         ours: Vec<Fact>,
         theirs: Vec<Fact>,
         resolved: Option<&ForkResolutions>,
-        timestamp: &str,
+        fork_g: i64,
+        timestamp: Option<&str>,
     ) -> Result<ForkMerge> {
         let bounds = match self.get_combined_shapes()? {
             Some(shapes) => ShapeBounds::parse(&shapes)?,
@@ -102,35 +113,30 @@ impl Store {
             (out, kept)
         };
         let (b, _) = slots(base, false);
-        let (o, mut ours_facts) = slots(ours, true);
-        let (t, mut theirs_facts) = slots(theirs, true);
+        let (o, ours_facts) = slots(ours, true);
+        let (t, theirs_facts) = slots(theirs, true);
 
         let mut paths: HashMap<i64, Option<String>> = HashMap::new();
+        let mut bound_of = |&(e, a): &(i64, i64)| -> Result<Option<usize>> {
+            if bounds.is_empty() {
+                return Ok(None);
+            }
+            let path = match paths.get(&a) {
+                Some(p) => p.clone(),
+                None => {
+                    let iri = self.resolve(a)?;
+                    let p = bounds.constrains(&iri).then_some(iri);
+                    paths.insert(a, p.clone());
+                    p
+                }
+            };
+            match path {
+                Some(p) => bounds.bound(&e, &p, &view),
+                None => Ok(None),
+            }
+        };
         let empty = BTreeSet::new();
-        let (mut merged, held) = merge_slots(
-            &b,
-            &o,
-            &t,
-            |&(e, a)| {
-                if bounds.is_empty() {
-                    return Ok(None);
-                }
-                let path = match paths.get(&a) {
-                    Some(p) => p.clone(),
-                    None => {
-                        let iri = self.resolve(a)?;
-                        let p = bounds.constrains(&iri).then_some(iri);
-                        paths.insert(a, p.clone());
-                        p
-                    }
-                };
-                match path {
-                    Some(p) => bounds.bound(&e, &p, &view),
-                    None => Ok(None),
-                }
-            },
-            &empty,
-        )?;
+        let (_, held) = merge_slots(&b, &o, &t, &mut bound_of, &empty)?;
 
         let render = |e: i64, a: i64, set: &BTreeSet<Vec<u8>>| -> Result<Vec<String>> {
             let mut out = set
@@ -144,23 +150,11 @@ impl Store {
             Ok(out)
         };
         let mut conflicts = Vec::with_capacity(held.len());
-        let mut decided: HashMap<Key, Value> = HashMap::new();
         let mut used = 0;
         for c in &held {
             let (e, a) = *c.slot;
-            if let Some(chosen) = resolved.and_then(|r| r.get(&(e, a))) {
+            if resolved.is_some_and(|r| r.contains_key(&(e, a))) {
                 used += 1;
-                let mut set = BTreeSet::new();
-                for v in chosen {
-                    let k = v.term_key();
-                    decided.insert((e, a, k.clone()), v.clone());
-                    set.insert(k);
-                }
-                if set.is_empty() {
-                    merged.remove(&(e, a));
-                } else {
-                    merged.insert((e, a), set);
-                }
                 continue;
             }
             conflicts.push(DecisionRecord {
@@ -178,61 +172,109 @@ impl Store {
                     .into(),
             ));
         }
-        if !conflicts.is_empty() {
-            return Ok(ForkMerge {
-                added: Vec::new(),
-                removed: Vec::new(),
-                conflicts,
-            });
-        }
-
-        // With no conflict, every merged value ROOT lacks came from the fork,
-        // and every ROOT value the merge dropped is a ROOT fact.
-        let mut added = Vec::new();
-        let mut removed = Vec::new();
-        let slot_keys: BTreeSet<&(i64, i64)> = o.keys().chain(merged.keys()).collect();
-        for &(e, a) in slot_keys {
-            let mv = merged.get(&(e, a)).unwrap_or(&empty);
-            let ov = o.get(&(e, a)).unwrap_or(&empty);
-            for k in mv.difference(ov) {
-                let key = (e, a, k.clone());
-                if let Some(f) = theirs_facts.remove(&key) {
-                    added.push(f);
-                    continue;
-                }
-                if let Some(value) = decided.get(&key) {
-                    // A decided value the fork does not hold (base, or a typed
-                    // value): a new assertion, valid from the promotion.
-                    added.push(Fact {
-                        entity: e,
-                        attribute: a,
-                        value: value.clone(),
-                        tx: 0,
-                        valid_from: timestamp.to_string(),
-                        valid_to: None,
-                        op: crate::types::Op::Assert,
-                    });
-                    continue;
-                }
-                added.push(theirs_facts.remove(&key).ok_or_else(|| {
-                    Error::Store(format!(
-                        "fork merge: added value on ({e}, {a}) is not a fork fact"
-                    ))
-                })?);
-            }
-            for k in ov.difference(mv) {
-                removed.push(ours_facts.remove(&(e, a, k.clone())).ok_or_else(|| {
-                    Error::Store(format!(
-                        "fork merge: removed value on ({e}, {a}) is not a ROOT fact"
-                    ))
-                })?);
-            }
-        }
-        Ok(ForkMerge {
-            added,
-            removed,
+        let mut out = ForkMerge {
+            receive: Vec::new(),
+            decide: Vec::new(),
+            added: Vec::new(),
+            removed: Vec::new(),
             conflicts,
-        })
+        };
+        let Some(td) = timestamp.filter(|_| out.conflicts.is_empty()) else {
+            return Ok(out);
+        };
+
+        // Plan only the slots the fork changed or a decision names: an
+        // unchanged or ROOT-only slot writes nothing.
+        let mut inputs = BTreeMap::new();
+        let mut decisions = BTreeMap::new();
+        let keys: BTreeSet<(i64, i64)> =
+            b.keys().chain(o.keys()).chain(t.keys()).copied().collect();
+        for (e, a) in keys {
+            let (bv, ov, tv) = (
+                b.get(&(e, a)).unwrap_or(&empty),
+                o.get(&(e, a)).unwrap_or(&empty),
+                t.get(&(e, a)).unwrap_or(&empty),
+            );
+            let decided = resolved.and_then(|r| r.get(&(e, a)));
+            if tv == bv && decided.is_none() {
+                continue;
+            }
+            let rows = |set: &BTreeSet<Vec<u8>>, facts: &HashMap<Key, Fact>| {
+                set.iter()
+                    .map(|k| (k.clone(), facts[&(e, a, k.clone())].valid_from.clone()))
+                    .collect::<BTreeMap<_, _>>()
+            };
+            let theirs_closed = if bv.difference(tv).next().is_some() {
+                self.fork_closes(fork_g, e, a)?
+            } else {
+                BTreeMap::new()
+            };
+            inputs.insert(
+                (e, a),
+                SlotInput {
+                    base: bv.clone(),
+                    ours: rows(ov, &ours_facts),
+                    theirs: rows(tv, &theirs_facts),
+                    theirs_closed,
+                    card: Card::Many(bound_of(&(e, a))?),
+                },
+            );
+            if let Some(chosen) = decided {
+                let set = chosen
+                    .iter()
+                    .map(|v| {
+                        let k = v.term_key();
+                        values.entry((e, a, k.clone())).or_insert_with(|| v.clone());
+                        k
+                    })
+                    .collect();
+                decisions.insert((e, a), Decision::Values(set));
+            }
+        }
+        let plan = plan_merge(&inputs, &decisions, td)?;
+        let fact = |e: i64, a: i64, k: &Vec<u8>, from: &str, to: Option<&String>, op| Fact {
+            entity: e,
+            attribute: a,
+            value: values[&(e, a, k.clone())].clone(),
+            tx: 0,
+            valid_from: from.to_string(),
+            valid_to: to.cloned(),
+            op,
+        };
+        for (step, ops) in [
+            (&mut out.receive, &plan.receive),
+            (&mut out.decide, &plan.decide),
+        ] {
+            for ((e, a), op) in ops {
+                let (e, a) = (*e, *a);
+                let f = match op {
+                    FactOp::Assert { value, from } => {
+                        let f = fact(e, a, value, from, None, Op::Assert);
+                        out.added.push(f.clone());
+                        f
+                    }
+                    FactOp::Receipt { value, at } => fact(e, a, value, at, Some(at), Op::Assert),
+                    FactOp::Close { value, at } => {
+                        let row = ours_facts.get(&(e, a, value.clone())).ok_or_else(|| {
+                            Error::Store(format!(
+                                "fork merge: closed value on ({e}, {a}) is not a ROOT fact"
+                            ))
+                        })?;
+                        out.removed.push(row.clone());
+                        fact(e, a, value, &row.valid_from, Some(at), Op::Retract)
+                    }
+                };
+                step.push(Datum {
+                    entity: f.entity,
+                    attribute: f.attribute,
+                    value: f.value,
+                    valid_from: f.valid_from,
+                    valid_to: f.valid_to,
+                    op: f.op,
+                });
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -312,65 +354,23 @@ impl FocusView for IdView<'_> {
 }
 
 impl Store {
-    /// Re-time the ROOT closes promotion transaction `tx` made (aegis-jxxd).
-    ///
-    /// The write path closes a retracted row at the transaction's timestamp,
-    /// which for a promotion is the promotion instant. A direct write of the
-    /// same correction closes it at the correction's own time. So each ROOT
-    /// row `tx` closed for a `removed` value takes the valid time at which the
-    /// fork closed that value (its latest closed row in the fork graph), and
-    /// transaction time stays the promotion's (`retracted_tx = tx`). A value
-    /// the fork holds no closed row for keeps the promotion instant.
-    pub(super) fn retime_promoted_closes(
-        &self,
-        tx: i64,
-        fork_g: i64,
-        removed: &[Fact],
-    ) -> Result<()> {
-        if tx == 0 || removed.is_empty() {
-            return Ok(());
-        }
-        let mut fork_rows = self.conn.prepare(
+    /// The fork's own close time for each value of slot `(e, a)` it closed:
+    /// its latest closed row in the fork graph (aegis-jxxd). The merge core
+    /// clamps it to the ROOT row it ends.
+    fn fork_closes(&self, fork_g: i64, e: i64, a: i64) -> Result<BTreeMap<Vec<u8>, String>> {
+        let mut rows = self.conn.prepare_cached(
             "SELECT v, valid_to FROM facts \
              WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1 AND valid_to IS NOT NULL \
              ORDER BY retracted_tx DESC, rowid DESC",
         )?;
-        let mut root_rows = self.conn.prepare(
-            "SELECT rowid, v FROM facts \
-             WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1 AND retracted_tx = ?4",
-        )?;
-        let mut set = self
-            .conn
-            .prepare("UPDATE facts SET valid_to = ?1 WHERE rowid = ?2")?;
-        for f in removed {
-            let key = f.value.term_key();
-            let closed: Vec<(Vec<u8>, String)> = fork_rows
-                .query_map(params![fork_g, f.entity, f.attribute], |r| {
-                    Ok((r.get(0)?, r.get(1)?))
-                })?
-                .collect::<rusqlite::Result<_>>()?;
-            let mut close = None;
-            for (v, valid_to) in closed {
-                if Value::from_bytes(&v)?.term_key() == key {
-                    close = Some(valid_to);
-                    break;
-                }
-            }
-            let Some(close) = close else {
-                continue;
-            };
-            let rows: Vec<(i64, Vec<u8>)> = root_rows
-                .query_map(
-                    params![crate::schema::ROOT_GRAPH, f.entity, f.attribute, tx],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )?
-                .collect::<rusqlite::Result<_>>()?;
-            for (rowid, v) in rows {
-                if Value::from_bytes(&v)?.term_key() == key {
-                    set.execute(params![close, rowid])?;
-                }
-            }
+        let closed: Vec<(Vec<u8>, String)> = rows
+            .query_map(params![fork_g, e, a], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut out = BTreeMap::new();
+        for (v, valid_to) in closed {
+            out.entry(Value::from_bytes(&v)?.term_key())
+                .or_insert(valid_to);
         }
-        Ok(())
+        Ok(out)
     }
 }
