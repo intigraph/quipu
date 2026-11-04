@@ -12,8 +12,8 @@ Quit Store's Context Merge, which it extends rather than replaces, and six
 other strategies.
 
 Across five synthetic seeds, the shape-aware operator raised $33$ conflicts,
-all true positives, with no triples lost or fabricated and no SHACL violations
-admitted. The context-overlap baseline detected the same $33$ conflicts but
+all true positives as judged by the same shapes that define them, with no
+triples lost or fabricated and no SHACL violations admitted. The context-overlap baseline detected the same $33$ conflicts but
 asked $845$ questions. A recorded production replay covers $105$ human alias
 repairs ($93$ after excluding $12$ chained pairs) and $939$ duplicate-value
 incidents. It reproduces a triple-level limit: different names for one entity
@@ -24,5 +24,7 @@ A further synthetic study tests evolving shape contracts. Merging shape
 declarations first handles the tested cardinality changes, while datatype
 evolution exposes a detector blind spot caught by post-merge validation.
 These results qualify schema-first orchestration rather than establish a
-universal conflict-resolution rule.
+universal conflict-resolution rule. The supported claim is fewer human decisions
+with nothing silently lost, for cardinality conflicts in one deployment; it is
+not shape-independent merge correctness.
 \end{abstract}

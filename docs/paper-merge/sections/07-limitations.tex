@@ -1,6 +1,20 @@
 \section{Limitations}
 \label{sec:limits}
 
+\paragraph{Scope: less human attention, not general merge correctness.} The
+claim this paper supports is narrow. For slot-level cardinality conflicts, the
+operator asks a person fewer questions than the alternatives we measured, and it
+loses nothing silently. It is evaluated in one deployment, over one ontology
+family, with SHACL cardinality bounds as the only constraint that defines a
+conflict. It does not cover alias divergence ($0$ of $93$ detected), datatype or
+other SHACL constraints, lists and blank-node structures, or ontologies that
+diverge beyond the Arm E fixtures. Every precision and true-positive figure in
+\S\ref{sec:synthetic} and \S\ref{sec:replay} is relative to the shapes that also
+define the conflicts, so none of them is evidence of shape-independent
+correctness. The follow-up is an oracle defined by use cases: expected graph
+outcomes stated per merge case, with each slot's intended cardinality declared
+by the fixture rather than read from the shapes.
+
 \paragraph{Alias divergence is invisible, and that is a property of the medium.}
 When two writers mint different names for one entity, the graphs disagree about
 the world while agreeing about every triple. No triple-level operator can see

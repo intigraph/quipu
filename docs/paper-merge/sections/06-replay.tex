@@ -3,11 +3,18 @@
 
 The synthetic arm can measure what the alternatives cost. It cannot be evidence
 that our operator is correct, because its oracle and its operator share a
-definition. This arm removes that circularity twice over: the corpus is
-\emph{recorded} production divergence rather than generated, and the operator
-under test is the shipped \texttt{share\_merge} driven through real bundles.
-Here a disagreement between operator and expectation is a finding rather than a
-harness bug.
+definition. This arm removes one half of that circularity and not the other. The
+corpus is \emph{recorded} production divergence rather than generated, and the
+operator under test is the shipped \texttt{share\_merge} driven through real
+bundles, so no harness could have manufactured the divergence, and a
+disagreement between operator and expectation is a finding rather than a harness
+bug. The judgement, however, is still derived from the shapes. A
+\texttt{comment-double} decision counts as correct only because the description
+predicate carries \texttt{sh:maxCount 1}, and \emph{SHACL violations} is scored
+against the same shapes in every arm. The one result in this arm that does not
+depend on the shapes is the alias column, and it is a negative: $0$ of $93$.
+Judging correctness with an oracle that does not read the shapes is follow-up
+work (\S\ref{sec:limits}).
 
 \paragraph{The corpus.} Extracted from a live multi-agent knowledge graph in
 which software agents and people had been writing concurrently for months, and
