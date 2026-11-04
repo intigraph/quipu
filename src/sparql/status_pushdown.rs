@@ -142,7 +142,7 @@ fn constraint_sql(
         return Ok(None); // Unknown or aliased ids retain the ordinary evaluator.
     };
     let Some(value) =
-        super::pattern_util::resolve_object_pattern(store, &tp.object, &Bindings::new())?
+        super::pattern_util::resolve_object_pattern(store, &tp.object, &Bindings::default())?
     else {
         return Ok(None);
     };
@@ -294,7 +294,7 @@ pub fn candidates(
     while let Some(row) = rows.next()? {
         super::pattern_util::check_eval_budget(ctx, bindings.len(), bindings.len())?;
         let subject: i64 = row.get(0)?;
-        let mut binding = Bindings::new();
+        let mut binding = Bindings::default();
         binding.insert(plan.subject.to_string(), Value::Ref(subject));
         bindings.push(binding);
     }

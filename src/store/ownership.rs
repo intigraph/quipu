@@ -126,6 +126,9 @@ pub(super) fn state_on(
     if pin.is_some_and(CommitFence::revoked) {
         return Err(super::ownership_startup::unavailable());
     }
+    if let Some(pin) = pin {
+        pin.check_journal()?;
+    }
     if super::ownership_startup::enrolled(conn)? {
         if let Some(pin) = pin {
             pin.revoke();
@@ -234,14 +237,14 @@ impl Store {
     /// Every committing write entrypoint calls this before it writes anything.
     /// INACTIVE legacy stores stay writable; this grants no ownership capability.
     pub fn ensure_ownership_writable(&self) -> Result<()> {
-        if self
-            .ownership_fence
-            .as_ref()
-            .is_some_and(|fence| fence.revoked())
-        {
-            return Err(Error::PolicyDenied(
-                "store handoff: this handle's admission was revoked; authenticated enrolled startup is unavailable".into(),
-            ));
+        if let Some(fence) = self.ownership_fence.as_ref().filter(|f| f.revoked()) {
+            let mut why = String::from(
+                "store handoff: this handle's admission was revoked; authenticated enrolled startup is unavailable",
+            );
+            if let Some(reason) = fence.reason() {
+                why.push_str(&format!(" ({reason})"));
+            }
+            return Err(Error::PolicyDenied(why));
         }
         self.ownership_state().map(|_| ())
     }

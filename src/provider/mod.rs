@@ -455,7 +455,7 @@ mod tests {
             self.name
         }
         fn query(&self, _sparql: &str) -> Result<QueryResult> {
-            let mut row = crate::sparql::Bindings::new();
+            let mut row = crate::sparql::Bindings::default();
             for v in &self.variables {
                 row.insert(v.clone(), crate::types::Value::Str(format!("{v}-val")));
             }
