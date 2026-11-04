@@ -412,8 +412,6 @@ pub(crate) fn plan_merge<S: Ord + Clone, V: Ord + Clone>(
 // Merge sources carry the id from slice S3 (share merge) on.
 #[cfg_attr(not(test), allow(dead_code))]
 #[must_use]
-// Merge sources carry the id from slice S3 (share merge) on.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn merge_id(path: &str, incoming: &str, base: &str, decisions_sha256: &str) -> String {
     let record = serde_json::json!({
         "schema": "quipu.merge-id/v1",
