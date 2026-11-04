@@ -77,16 +77,6 @@ fn a_store_is_governed_by_policies_in_its_own_namespace() {
 }
 
 #[test]
-fn a_policy_in_another_namespace_is_not_this_stores_governance() {
-    // Before S3b every store read the legacy namespace, whatever its base_ns.
-    let mut store = Store::open_in_memory().unwrap();
-    store.set_base_ns(OWN);
-    store.governance_config_mut().enforce_on_write = true;
-    define_policy(&mut store, DEFAULT_BASE_NS);
-    unlabeled_doc(&mut store, "http://ex/d1").expect("foreign-namespace policy does not bind");
-}
-
-#[test]
 fn the_legacy_namespace_keeps_identical_iris() {
     // A store pinned to the old constant reads and writes exactly the
     // IRIs it did before.
@@ -184,6 +174,34 @@ fn without_a_namespace_generic_words_on_plain_entities_still_pass() {
     assert!(unavailable(
         legacy.transact(&amend, TS, None, None).map(|_| ())
     ));
+}
+
+#[test]
+fn policies_stranded_under_another_namespace_refuse_instead_of_being_ignored() {
+    // An upgrade sets a new base_ns over policies written under the old one:
+    // the guard would load none of them and deny nothing (malcolm, #1011).
+    let mut store = Store::open_in_memory_test_ns().unwrap();
+    define_policy(&mut store, DEFAULT_BASE_NS);
+    store.set_base_ns(OWN);
+    store.governance_config_mut().enforce_on_write = true;
+    let r = unlabeled_doc(&mut store, "http://ex/d1");
+    assert!(
+        matches!(&r, Err(e) if e.to_string().contains("silently ignored")),
+        "{r:?}"
+    );
+    // A class merely named Policy elsewhere, without that namespace's claim,
+    // is not a stranded policy.
+    let mut other = Store::open_in_memory().unwrap();
+    other.set_base_ns(OWN);
+    other.governance_config_mut().enforce_on_write = true;
+    let w = vec![datum(
+        &other,
+        "http://ex/insurance",
+        RDF_TYPE,
+        iri(&other, "http://vocab.example/ins#Policy"),
+    )];
+    other.transact(&w, TS, None, None).expect("unrelated class");
+    unlabeled_doc(&mut other, "http://ex/d2").expect("no stranded policy");
 }
 
 #[test]

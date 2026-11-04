@@ -103,6 +103,9 @@ impl PolicyRegistry {
         // Refuses on a store with no usable base_ns: an empty namespace would
         // load zero policies, and a guard with no policies denies nothing.
         let ns = store.governance_ns()?;
+        // ... and on policies written under another namespace, which it would
+        // otherwise ignore just as silently.
+        super::stranded::refuse_stranded_policies(store, ns)?;
         let q = format!(
             "PREFIX a: <{ns}> \
              SELECT ?p ?t ?c ?e ?probe ?window ?exemplar WHERE {{ \
