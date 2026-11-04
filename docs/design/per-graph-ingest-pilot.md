@@ -92,6 +92,8 @@ head. Search, counts and feeds must obey the same visibility and graph grants.
    namespace write-path changes first, or refresh this source onto their accepted
    content. Serialize write-path integration rather than stacking incompatible
    server changes.
+   Router/write-path source lands after the namespace S3a–c changes (#1008,
+   #1011, #1014), or rebases onto them; allow one Quipu write-path PR at a time.
 2. In disposable files, hold owner A's writer behind a latch. Owner B must commit
    and answer a point read before A is released. Repeat for queue, embedding and
    checkpoint pressure. Assert no admission into A or a catalog writer.
