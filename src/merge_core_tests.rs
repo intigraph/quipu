@@ -40,6 +40,13 @@ fn assert_(value: V, from: &str) -> FactOp<V> {
     }
 }
 
+fn receipt(value: V, at: &str) -> FactOp<V> {
+    FactOp::Receipt {
+        value,
+        at: at.into(),
+    }
+}
+
 fn close(value: V, at: &str) -> FactOp<V> {
     FactOp::Close {
         value,
@@ -156,33 +163,25 @@ fn c4_each_decision_is_sequenced_receive_then_decide() {
     assert!(undecided.held && undecided.receive.is_empty());
     assert!(plan(&s, Some(Decision::Defer)).held);
 
-    // Every decided row receives c from Td, never from its authored Tt.
-    let received = vec![assert_("c", TD)];
+    // Every decided row receives c as a receipt [Td, Td) (ruling B): never
+    // open, never at its authored Tt.
+    let received = vec![receipt("c", TD)];
     let ours = plan(&s, Some(Decision::Ours));
-    assert_eq!(
-        (ours.receive, ours.decide),
-        (received.clone(), vec![close("c", TD)])
-    );
+    assert_eq!((ours.receive, ours.decide), (received.clone(), vec![]));
     let theirs = plan(&s, Some(Decision::Theirs));
     assert_eq!(
         (theirs.receive, theirs.decide),
-        (received.clone(), vec![close("b", TD)])
+        (received.clone(), vec![close("b", TD), assert_("c", TD)])
     );
     let base = plan(&s, Some(Decision::Base));
     assert_eq!(
         (base.receive, base.decide),
-        (
-            received.clone(),
-            vec![close("b", TD), close("c", TD), assert_("a", TD)]
-        )
+        (received.clone(), vec![close("b", TD), assert_("a", TD)])
     );
     let value = plan(&s, Some(Decision::Values(set(&["d"]))));
     assert_eq!(
         (value.receive, value.decide),
-        (
-            received,
-            vec![close("b", TD), close("c", TD), assert_("d", TD)]
-        )
+        (received, vec![close("b", TD), assert_("d", TD)])
     );
     assert!(plan_slot(&s, Some(&Decision::Both), TD).is_err());
     assert!(plan_slot(&s, Some(&Decision::Continue), TD).is_err());
@@ -193,16 +192,23 @@ fn c4_theirs_never_overlaps_ours_in_valid_time() {
     // The measured fork-promote defect: the winner must start where the loser
     // ends, not at its authored time.
     let p = plan(&c4(), Some(Decision::Theirs));
-    let starts: Vec<_> = p
+    let open_starts: Vec<_> = p
         .receive
         .iter()
+        .chain(&p.decide)
         .filter_map(|op| match op {
             FactOp::Assert { from, .. } => Some(from.as_str()),
-            FactOp::Close { .. } => None,
+            FactOp::Close { .. } | FactOp::Receipt { .. } => None,
         })
         .collect();
-    assert_eq!(starts, vec![TD]);
+    assert_eq!(open_starts, vec![TD]);
     assert!(p.decide.contains(&close("b", TD)));
+    // No open assertion in receive: the gate never sees b and c both open.
+    assert!(
+        p.receive
+            .iter()
+            .all(|op| matches!(op, FactOp::Receipt { .. }))
+    );
 }
 
 #[test]
@@ -211,12 +217,9 @@ fn c5_delete_vs_replace() {
     let s = slot(&["a"], &[], &[("c", TT)], Card::ONE);
     assert_eq!(plan(&s, None).change, Change::DeleteReplace);
     let p = plan(&s, Some(Decision::Ours));
-    assert_eq!(
-        (p.receive, p.decide),
-        (vec![assert_("c", TD)], vec![close("c", TD)])
-    );
+    assert_eq!((p.receive, p.decide), (vec![receipt("c", TD)], vec![]));
     let p = plan(&s, Some(Decision::Base));
-    assert_eq!(p.decide, vec![close("c", TD), assert_("a", TD)]);
+    assert_eq!(p.decide, vec![assert_("a", TD)]);
     // C5b: ours replaced, theirs deleted. Nothing incoming to receive; a
     // losing ours closes at Td, not at the incoming close time.
     let mut s = slot(&["a"], &[("c", TO)], &[], Card::ONE);
@@ -270,7 +273,7 @@ fn plan_merge_is_atomic_and_counts_applied_and_held() {
     assert_eq!(done.receive.len(), 4);
     assert_eq!(
         done.decide,
-        vec![("s1", close("b", TD)), ("s2", close("c", TD))]
+        vec![("s1", close("b", TD)), ("s1", assert_("c", TD))]
     );
 
     decisions.insert("nope", Decision::Ours);
