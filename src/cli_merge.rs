@@ -139,7 +139,7 @@ pub fn cmd_merge_reconcile(args: &[String]) -> bool {
             };
             let mut file = read_file(path);
             if let quipu::merge_reconcile::ReconcileFile::Git { dir, .. } = &file {
-                // A Git choice rewrites the qpack: same verb, the Git applier.
+                // A Git choice rewrites the pendant: same verb, the Git applier.
                 let Some(choice) = flag_value(args, "--choose") else {
                     fail("resolve needs --choose <choice>")
                 };
