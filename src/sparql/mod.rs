@@ -56,6 +56,7 @@ mod bind_join_tests;
 mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
+mod count_key;
 pub(crate) mod count_mmap;
 mod count_optional;
 mod count_star;
