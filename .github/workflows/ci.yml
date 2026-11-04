@@ -511,6 +511,11 @@ jobs:
           python-version: "3.12"
       - run: pip install pre-commit PyYAML==6.0.3
       - run: python3 scripts/check-private-keys.py
+      # Quipu core names no stack vocabulary (namespace, hostname or term list);
+      # vocabularies are data a store loads. Self-test the scanner first so a
+      # broken scanner cannot pass by finding nothing.
+      - run: python3 scripts/check-stack-vocabulary.py --self-test
+      - run: python3 scripts/check-stack-vocabulary.py
       - run: pre-commit run --all-files
         env:
           SKIP: mdbook-build

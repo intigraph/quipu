@@ -116,14 +116,14 @@ impl Store {
         self.base_ns = base_ns.into();
     }
 
-    /// The golden-path vocabulary new terms are written under.
-    pub fn vocabulary(&self) -> crate::term_vocabulary::Vocabulary {
-        self.vocabulary
+    /// The vocabulary term map new terms are written through.
+    pub fn vocabulary(&self) -> &crate::term_vocabulary::VocabularyMap {
+        &self.vocabulary
     }
 
-    /// Set the golden-path vocabulary. Called once at startup from config.
-    pub fn set_vocabulary(&mut self, vocabulary: crate::term_vocabulary::Vocabulary) {
-        self.vocabulary = vocabulary;
+    /// Set the vocabulary term map. Called once at startup from config.
+    pub fn set_vocabulary(&mut self, vocabulary: crate::term_vocabulary::VocabularyMap) {
+        self.vocabulary = std::sync::Arc::new(vocabulary);
     }
 
     /// Get a mutable reference to the search/limit config.

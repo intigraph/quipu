@@ -91,7 +91,20 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
-    store.set_vocabulary(config.vocabulary);
+    if let Some(path) = &config.vocabulary_map {
+        // A configured map that cannot be read must stop startup: writing the
+        // unmapped IRIs instead would be a silent change of vocabulary.
+        let map = quipu::term_vocabulary::VocabularyMap::load(path).unwrap_or_else(|e| {
+            eprintln!("error loading vocabulary map: {e}");
+            std::process::exit(1);
+        });
+        eprintln!(
+            "vocabulary map {} loaded: {} term(s) written under their mapped IRIs",
+            path.display(),
+            map.len()
+        );
+        store.set_vocabulary(map);
+    }
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }

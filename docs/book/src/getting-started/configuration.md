@@ -64,7 +64,7 @@ stops being read.
 |-------|---------|-------------|
 | `store_path` | `.bobbin/quipu/quipu.db` | SQLite database path |
 | `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
-| `vocabulary` | `legacy` | Which IRIs golden-path terms (`stepOf`, `sourceKind`, …) are written under: `legacy` = under `base_ns`; `intigraph` = the published Camayoc `https://w3id.org/intigraph/camayoc/core/ns#` terms. Individuals keep `base_ns` either way. Switch only once readers see both IRIs for new writes. |
+| `vocabulary_map` | unset | Path to a Turtle file of `owl:equivalentProperty` / `owl:equivalentClass` statements. For each term Quipu would mint under `base_ns` (the subject), the object IRI is written instead. Vocabulary packs ship their own map; Quipu names none. Individuals keep `base_ns`. Configure a map only once readers see the mapped IRIs. A map that cannot be read stops startup. |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
