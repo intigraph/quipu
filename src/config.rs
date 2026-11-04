@@ -890,7 +890,27 @@ pub struct EmbeddingConfig {
     /// skip keeps the vector when only an excluded predicate changed. The
     /// facts are still stored and queryable; only the embedding ignores them.
     pub exclude_predicates: Vec<String>,
+
+    /// Days a superseded vector (one whose `valid_to` is set) is kept before
+    /// the server deletes it (default: 30; `0` keeps every version forever).
+    /// Current vectors are never deleted. The cost is recall for
+    /// `search --valid-at`: a point in time older than this window finds
+    /// only the entities whose vector was still current then or is current
+    /// now, not the older text of entities that changed since. A row whose
+    /// `valid_to` is not a parseable timestamp is kept.
+    pub superseded_retention_days: u32,
+
+    /// Most superseded vectors deleted in one hourly retention pass
+    /// (default: 50 000). A store upgraded with a large backlog drains it
+    /// over several passes instead of in one long delete.
+    pub superseded_prune_max_per_pass: usize,
 }
+
+/// Default for [`EmbeddingConfig::superseded_retention_days`].
+pub const DEFAULT_SUPERSEDED_RETENTION_DAYS: u32 = 30;
+
+/// Default for [`EmbeddingConfig::superseded_prune_max_per_pass`].
+pub const DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS: usize = 50_000;
 
 impl Default for EmbeddingConfig {
     fn default() -> Self {
@@ -902,6 +922,8 @@ impl Default for EmbeddingConfig {
             dimension: 384,
             max_sequence_length: 256,
             exclude_predicates: Vec::new(),
+            superseded_retention_days: DEFAULT_SUPERSEDED_RETENTION_DAYS,
+            superseded_prune_max_per_pass: DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS,
         }
     }
 }
