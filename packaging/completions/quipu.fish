@@ -26,6 +26,7 @@ end
 
 complete -c quipu -n "__fish_quipu_needs_command" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_needs_command" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "competency" -d 'Inspect pendant competency contracts without opening a store'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "store" -d 'Inspect native ownership, or explicitly adopt or restore a disk store'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "version" -d 'Print the version and source commit'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "install-alias" -d 'Add the qp alias beside the quipu binary'
@@ -93,6 +94,11 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "db" -d 'Respace, attach
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "events" -d 'Read store event records such as refusals'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "fork" -d 'Create, list, diff, drop or promote named forks of ROOT'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "audit" -d 'Check traces, namespaces, replays and quarantine against policy'
+complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand competency; and not __fish_seen_subcommand_from lint" -f -a "lint" -d 'Validate competency.toml schema and query/command syntax offline; execute nothing'
+complete -c quipu -n "__fish_quipu_using_subcommand competency; and __fish_seen_subcommand_from lint" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand competency; and __fish_seen_subcommand_from lint" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand store; and not __fish_seen_subcommand_from status adopt restore" -f -a "status" -d 'Report inactive or enforced native store ownership without adopting'

@@ -21,6 +21,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+            cand competency 'Inspect pendant competency contracts without opening a store'
             cand store 'Inspect native ownership, or explicitly adopt or restore a disk store'
             cand version 'Print the version and source commit'
             cand install-alias 'Add the qp alias beside the quipu binary'
@@ -88,6 +89,17 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand events 'Read store event records such as refusals'
             cand fork 'Create, list, diff, drop or promote named forks of ROOT'
             cand audit 'Check traces, namespaces, replays and quarantine against policy'
+        }
+        &'qp;competency'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand lint 'Validate competency.toml schema and query/command syntax offline; execute nothing'
+        }
+        &'qp;competency;lint'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;store'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

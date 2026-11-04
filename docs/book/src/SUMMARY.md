@@ -45,6 +45,7 @@
 # Reference
 
 - [CLI Commands](reference/cli.md)
+  - [Competency contracts](reference/competency.md)
   - [CLI Command Index](reference/cli-commands.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
 - [Render graph data into files](reference/render.md)

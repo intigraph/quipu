@@ -24,6 +24,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('competency', 'competency', [CompletionResultType]::ParameterValue, 'Inspect pendant competency contracts without opening a store')
             [CompletionResult]::new('store', 'store', [CompletionResultType]::ParameterValue, 'Inspect native ownership, or explicitly adopt or restore a disk store')
             [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Print the version and source commit')
             [CompletionResult]::new('install-alias', 'install-alias', [CompletionResultType]::ParameterValue, 'Add the qp alias beside the quipu binary')
@@ -91,6 +92,19 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Read store event records such as refusals')
             [CompletionResult]::new('fork', 'fork', [CompletionResultType]::ParameterValue, 'Create, list, diff, drop or promote named forks of ROOT')
             [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Check traces, namespaces, replays and quarantine against policy')
+            break
+        }
+        'qp;competency' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('lint', 'lint', [CompletionResultType]::ParameterValue, 'Validate competency.toml schema and query/command syntax offline; execute nothing')
+            break
+        }
+        'qp;competency;lint' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'qp;store' {

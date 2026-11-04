@@ -15,6 +15,7 @@ pub mod changeset;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
 pub mod compact;
+pub mod competency;
 pub mod config;
 mod config_load;
 pub mod context;
