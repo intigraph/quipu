@@ -574,6 +574,12 @@ impl Store {
 /// a value was received and is current at no valid time, so it neither
 /// supersedes a functional value nor counts toward an OWL constraint
 /// (aegis-karb.2, the merge spec's R3 under ruling B).
+///
+/// The test compares `valid_to` and `valid_from` as TEXT, exactly as the store
+/// orders valid time. Two different spellings of one instant (an offset
+/// against `Z`, or a fractional second) are not equal, so such a datum is not
+/// a receipt and keeps every check: the exemption fails closed. The merge core
+/// writes both ends from one string, so its receipts always match.
 #[cfg(feature = "owl")]
 fn is_receipt(d: &Datum) -> bool {
     d.op == Op::Assert && d.valid_to.as_deref() == Some(d.valid_from.as_str())
