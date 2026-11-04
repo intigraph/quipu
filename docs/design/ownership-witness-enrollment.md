@@ -167,6 +167,7 @@ cannot refuse those writes, so the walker reports them as `UNKNOWN`
 
 With strong read-after-write consistency the walk is exact. Its result maps
 onto `WitnessHead`:
+
 - `ACTIVE(g)` with no unresolved attempt is `Active`.
 - A `RESERVED` attempt without an `OUTCOME` is `Reserved`.
 - A `RETIRED` outcome without `ACTIVE(g+1)` is `Retired`.
