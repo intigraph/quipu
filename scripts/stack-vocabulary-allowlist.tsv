@@ -155,7 +155,7 @@ src/metrics/agents.rs	1
 src/metrics/tests.rs	13
 src/metrics/write_provenance.rs	1
 src/metrics/writes.rs	1
-src/namespace.rs	21
+src/namespace.rs	7
 src/namespace_publication_tests.rs	1
 src/onnx_embedder.rs	2
 src/owl.rs	2
@@ -192,7 +192,6 @@ src/reasoner/parse.rs	1
 src/reasoner/parse_tests.rs	6
 src/reasoner/reactive.rs	6
 src/reasoner/reactive_tests.rs	3
-src/reconcile/mod.rs	1
 src/report.rs	1
 src/request_usage.rs	4
 src/resolution/index.rs	3

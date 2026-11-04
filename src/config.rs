@@ -528,6 +528,10 @@ pub struct QuipuConfig {
     /// mints a name; there is no default (see `namespace::require_base_ns`).
     pub base_ns: String,
 
+    /// Base for code-entity IRIs (`{code_base}{repo}/{path}`), which the import
+    /// reconciler reads. No default: a store names its own code entities.
+    pub code_base: String,
+
     /// Optional Turtle file mapping the vocabulary terms Quipu mints to the
     /// IRIs to write instead (see [`crate::term_vocabulary`]). Unset: every
     /// term stays under `base_ns`. Individuals keep `base_ns` either way.
@@ -625,6 +629,7 @@ impl Default for QuipuConfig {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: String::new(),
+            code_base: String::new(),
             vocabulary_map: None,
             server: ServerConfig::default(),
             federation: FederationConfig::default(),

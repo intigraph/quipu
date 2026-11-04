@@ -586,6 +586,7 @@ impl Store {
             recording_verdicts: false,
             trust_root_bootstrap: None,
             base_ns: String::new(),
+            code_base: String::new(),
             vocabulary: std::sync::Arc::default(),
             namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,

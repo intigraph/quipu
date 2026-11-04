@@ -220,6 +220,16 @@ impl Store {
         Ok(None)
     }
 
+    /// The code-entity IRI base (`[quipu].code_base`); empty when unset.
+    pub fn code_base(&self) -> &str {
+        &self.code_base
+    }
+
+    /// Set the code-entity IRI base. Called once at startup from config.
+    pub fn set_code_base(&mut self, code_base: impl Into<String>) {
+        self.code_base = code_base.into();
+    }
+
     /// The vocabulary term map new terms are written through.
     pub fn vocabulary(&self) -> &crate::term_vocabulary::VocabularyMap {
         &self.vocabulary

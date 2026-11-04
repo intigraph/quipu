@@ -84,6 +84,7 @@ pub fn open_store(db_path: &str) -> Store {
     // the names it mints, so every command needs it, as the server sets it.
     // Unset stays unset: governance then refuses (`Store::governance_ns`).
     store.set_base_ns(config().base_ns.clone());
+    store.set_code_base(config().code_base.clone());
     if config().search.keyword
         && let Err(e) = store.initialize_lexical_index()
     {
