@@ -22,6 +22,7 @@ mod targets;
 
 #[path = "shacl_write_paths.rs"]
 pub(crate) mod write_paths;
+pub use write_paths::refuse_unverifiable_write_paths;
 
 use serde::{Deserialize, Serialize};
 
