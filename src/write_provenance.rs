@@ -10,6 +10,10 @@
 //! - `absent`: none of the five headers;
 //! - `partial`: anything in between.
 //!
+//! A write whose attestation VERIFIED takes agent and session from the key
+//! binding instead ([`RequestProvenance::with_verified_identity`]): signed
+//! clients omit those headers on purpose, and a header never earns that credit.
+//!
 //! The request middleware classifies the headers once; this module carries the
 //! result to the commit, the same way `write_kind` carries the code path. A
 //! refused or rolled-back request commits nothing and so counts nothing.
@@ -88,6 +92,36 @@ impl RequestProvenance {
         Self {
             client: client.to_string(),
             endpoint: endpoint.to_string(),
+            completeness,
+            missing,
+        }
+    }
+
+    /// This classification once the request's attestation has VERIFIED: the
+    /// key binding supplies the agent and the session, so neither counts as
+    /// missing whatever the headers said (aegis-7zp4rc.2).
+    ///
+    /// Signed writers deliberately omit `X-Quipu-Agent`/`-Session`, because
+    /// a header must not assert identity on a signed request; the verified
+    /// binding is the stronger source. Only the attestation middleware calls
+    /// this, after verification, so a header alone can never earn the credit.
+    /// Harness, host and (for agent harnesses) model stay as declared.
+    #[must_use]
+    pub fn with_verified_identity(&self) -> Self {
+        let missing: Vec<&'static str> = self
+            .missing
+            .iter()
+            .copied()
+            .filter(|f| !matches!(*f, "agent" | "session"))
+            .collect();
+        let completeness = if missing.is_empty() {
+            Completeness::Complete
+        } else {
+            Completeness::Partial
+        };
+        Self {
+            client: self.client.clone(),
+            endpoint: self.endpoint.clone(),
             completeness,
             missing,
         }

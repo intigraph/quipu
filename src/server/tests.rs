@@ -666,6 +666,7 @@ async fn cancelled_write_waiter_never_starts_blocking_work() {
 /// which needs no triple-insert plumbing and is fully deterministic.
 #[tokio::test]
 async fn stats_uses_generation_cache_and_invalidates_on_write() {
+    let _serial = super::base::STATS_TEST_LOCK.lock().await;
     let store = Store::open_in_memory().unwrap();
     let shared: SharedStore = Arc::new(super::StoreHandle::writer_only(store));
 
@@ -687,6 +688,7 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
     *STATS_CACHE.lock().unwrap() = Some(StatsCache {
         generation: cur_gen,
         value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        computed_at: None,
     });
     let hit = stats(State(shared.clone()))
         .await
@@ -703,6 +705,7 @@ async fn stats_uses_generation_cache_and_invalidates_on_write() {
     *STATS_CACHE.lock().unwrap() = Some(StatsCache {
         generation: cur_gen - 1,
         value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        computed_at: None,
     });
     let fresh = stats(State(shared.clone()))
         .await

@@ -55,7 +55,14 @@ impl PathVocab {
     /// `[quipu] base_ns`).
     #[must_use]
     pub fn new(base_ns: &str) -> Self {
-        let t = |local: &str| format!("{base_ns}{local}");
+        Self::with_vocabulary(base_ns, crate::term_vocabulary::Vocabulary::Legacy)
+    }
+
+    /// Resolve the vocabulary for `vocabulary` (see [`crate::term_vocabulary`]):
+    /// legacy terms under `base_ns`, or the published Camayoc w3id terms.
+    #[must_use]
+    pub fn with_vocabulary(base_ns: &str, vocabulary: crate::term_vocabulary::Vocabulary) -> Self {
+        let t = |local: &str| crate::term_vocabulary::term(local, base_ns, vocabulary);
         Self {
             step_of: t("stepOf"),
             step_order: t("stepOrder"),

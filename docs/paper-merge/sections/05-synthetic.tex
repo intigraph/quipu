@@ -105,5 +105,7 @@ property of the design, not evidence about it. We do not repair this by making
 the oracle cleverer, which would only move the coincidence somewhere less
 visible. We handle it by reporting per-class results so a reader can see which
 rows are definitional, by confining this arm's contribution to the \emph{cost of
-the alternatives}, and by taking correctness evidence from \S\ref{sec:replay},
-where the operator under test is the shipped one and disagreement is a finding.
+the alternatives}. The replay arm (\S\ref{sec:replay}) replaces the generated
+corpus with recorded divergence and the harness with the shipped operator, but
+its positive results are scored against the same shapes. It therefore does not
+supply shape-independent correctness evidence either (\S\ref{sec:limits}).

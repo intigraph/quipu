@@ -974,7 +974,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
-':arg-qpack-dir:_default' \
+':arg-pendant-dir:_default' \
 && ret=0
 ;;
 (resolve)
@@ -984,7 +984,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--by=[Identity recording a resolution]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
-':arg-qpack-dir:_default' \
+':arg-pendant-dir:_default' \
 ':arg-key:_default' \
 && ret=0
 ;;
@@ -1310,6 +1310,19 @@ _arguments "${_arguments_options[@]}" : \
 '*--graph-b=[Second graph in the alignment pair]:VALUE:_default' \
 '*--expected-version=[Expected version for the compare-and-swap operation]:VALUE:_default' \
 '*--actor=[Actor recorded in operation provenance]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-set-tsv:_default' \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--license=[License IRI for the mapping set; required]:VALUE:_default' \
+'*--format=[Output or input format for this operation]:VALUE:_default' \
+'*--prefix=[Extra CURIE prefix as name=<namespace>; repeatable]:VALUE:_default' \
+'*--author-prefix=[Declared prefix that turns a bare reviewer into an author_id]:VALUE:_default' \
+'*--out=[Output file]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':arg-set-tsv:_default' \
@@ -2158,6 +2171,7 @@ _qp__subcmd__align_commands() {
 'propose:Propose scored alignments between two named graphs as an SSSOM set' \
 'decide:Apply reviewer accept and negate decisions to a mapping set' \
 'apply:Materialize decided alignments into a derived alignment graph' \
+'export:Export a mapping set as standard SSSOM TSV or RDF Turtle' \
     )
     _describe -t commands 'qp align commands' commands "$@"
 }
@@ -2170,6 +2184,11 @@ _qp__subcmd__align__subcmd__apply_commands() {
 _qp__subcmd__align__subcmd__decide_commands() {
     local commands; commands=()
     _describe -t commands 'qp align decide commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__align__subcmd__export_commands] )) ||
+_qp__subcmd__align__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp align export commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__align__subcmd__propose_commands] )) ||
 _qp__subcmd__align__subcmd__propose_commands() {
@@ -2483,8 +2502,8 @@ _qp__subcmd__gate__subcmd__shadow_commands() {
 (( $+functions[_qp__subcmd__git-merge_commands] )) ||
 _qp__subcmd__git-merge_commands() {
     local commands; commands=(
-'show:Show a qpack'\''s pending merge decisions in the standard layout' \
-'resolve:Record one choice in the Git merge in progress and rewrite the qpack' \
+'show:Show a pendant'\''s pending merge decisions in the standard layout' \
+'resolve:Record one choice in the Git merge in progress and rewrite the pendant' \
     )
     _describe -t commands 'qp git-merge commands' commands "$@"
 }

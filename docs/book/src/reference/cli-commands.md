@@ -1034,20 +1034,20 @@ qp git-merge <ref>
 
 ### `qp git-merge show`
 
-Show a qpack's pending merge decisions in the standard layout.
+Show a pendant's pending merge decisions in the standard layout.
 
 ```text
-qp git-merge show <qpack-dir>
+qp git-merge show <pendant-dir>
 ```
 
 - `--format <VALUE>`: Output or input format for this operation.
 
 ### `qp git-merge resolve`
 
-Record one choice in the Git merge in progress and rewrite the qpack.
+Record one choice in the Git merge in progress and rewrite the pendant.
 
 ```text
-qp git-merge resolve <qpack-dir> <key>
+qp git-merge resolve <pendant-dir> <key>
 ```
 
 - `--choose <VALUE>`: Conflict side to choose.
@@ -1312,7 +1312,7 @@ qp path draft <trajectory-IRI>
 
 Propose, decide and apply cross-graph alignments.
 
-Subcommands: `align propose`, `align decide`, `align apply`.
+Subcommands: `align propose`, `align decide`, `align apply`, `align export`.
 
 ### `qp align propose`
 
@@ -1355,6 +1355,24 @@ qp align apply <set.tsv>
 - `--expected-version <VALUE>`: Expected version for the compare-and-swap operation.
 
 - `--actor <VALUE>`: Actor recorded in operation provenance.
+
+### `qp align export`
+
+Export a mapping set as standard SSSOM TSV or RDF Turtle.
+
+```text
+qp align export <set.tsv>
+```
+
+- `--license <VALUE>`: License IRI for the mapping set; required.
+
+- `--format <VALUE>`: Output or input format for this operation.
+
+- `--prefix <VALUE>`: Extra CURIE prefix as name=<namespace>; repeatable.
+
+- `--author-prefix <VALUE>`: Declared prefix that turns a bare reviewer into an author_id.
+
+- `--out <VALUE>`: Output file.
 
 ## `qp propose`
 
