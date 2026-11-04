@@ -100,6 +100,8 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+/// Immutable admission plans for the per-graph writer pilot; not an activation API.
+pub mod graph_catalog;
 /// Experimental pure ownership-handoff model; no Store or runtime integration.
 pub mod ownership_handoff_model;
 mod rdf_graph_store;

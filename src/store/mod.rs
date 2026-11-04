@@ -16,6 +16,9 @@ pub mod datasets;
 pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
+/// Native owner qualification primitive; not a server route activation API.
+#[cfg(unix)]
+pub mod graph_owner;
 mod ownership_fence;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
