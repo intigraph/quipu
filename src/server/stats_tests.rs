@@ -168,3 +168,54 @@ async fn stats_does_not_start_a_second_scan_while_one_runs() {
         "the recompute slot is released after the scan"
     );
 }
+
+/// aegis-67p0lj: the streaming COUNT aggregate equals the previous algorithm
+/// (select every `?s ?p ?o` row, count rows and distinct Ref subjects and
+/// predicates) on a store with repeated subjects, a shared predicate, literal
+/// and IRI objects, and an rdf:type.
+#[tokio::test]
+async fn stats_count_aggregate_equals_the_materialising_count() {
+    let _serial = STATS_TEST_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let shared = pooled(&dir);
+    {
+        let mut writer = shared.lock();
+        quipu::tool_knot(
+            &mut writer,
+            &json!({ "turtle": "@prefix ex: <http://example.org/> .\n\
+                ex:a a ex:Thing ; ex:name \"A\" ; ex:link ex:b .\n\
+                ex:b a ex:Thing ; ex:name \"B\" .\n\
+                ex:c ex:link ex:a , ex:b .\n" }),
+        )
+        .expect("fixture knot");
+    }
+    // Oracle: the previous materialising algorithm, kept here verbatim.
+    let (facts, entities, predicates) = {
+        let reader = shared.read();
+        let rows = quipu::sparql_query(&reader, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+        let mut e = std::collections::HashSet::new();
+        let mut p = std::collections::HashSet::new();
+        for row in rows.rows() {
+            if let Some(quipu::Value::Ref(id)) = row.get("s") {
+                e.insert(*id);
+            }
+            if let Some(quipu::Value::Ref(id)) = row.get("p") {
+                p.insert(*id);
+            }
+        }
+        (rows.rows().len() as u64, e.len() as u64, p.len() as u64)
+    };
+    assert!(
+        facts >= 7,
+        "precondition: the fixture landed ({facts} rows)"
+    );
+    *STATS_CACHE.lock().unwrap() = None;
+    STATS_RECOMPUTING.store(false, Ordering::SeqCst);
+    let got = stats(State(shared.clone()))
+        .await
+        .expect("stats handler should succeed")
+        .0;
+    assert_eq!(got["facts"].as_u64(), Some(facts), "facts");
+    assert_eq!(got["entities"].as_u64(), Some(entities), "entities");
+    assert_eq!(got["predicates"].as_u64(), Some(predicates), "predicates");
+}

@@ -312,22 +312,35 @@ impl Drop for StatsRecompute {
     }
 }
 
+/// The aggregate is ONE counting query over the same pattern and default
+/// dataset as before, so the COUNT path streams it without retaining
+/// solutions. The previous form selected every `?s ?p ?o` row and counted in
+/// Rust, which materialised the whole store: about 3 GB transient per call on
+/// ~10.8M facts (aegis-67p0lj). Subjects and predicates are always term
+/// references, so `COUNT(DISTINCT ?s)` / `?p` equal the previous `Ref`-only sets.
+pub(crate) const STATS_AGGREGATE_QUERY: &str = "SELECT (COUNT(*) AS ?facts) \
+     (COUNT(DISTINCT ?s) AS ?entities) (COUNT(DISTINCT ?p) AS ?predicates) \
+     WHERE { ?s ?p ?o }";
+
 fn stats_aggregate(store: &quipu::Store) -> quipu::Result<JsonValue> {
-    let result = quipu::sparql_query(store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
-    let mut entities = std::collections::HashSet::new();
-    let mut predicates = std::collections::HashSet::new();
-    for row in result.rows() {
-        if let Some(quipu::Value::Ref(id)) = row.get("s") {
-            entities.insert(*id);
+    let result = quipu::sparql_query(store, STATS_AGGREGATE_QUERY)?;
+    let row = result
+        .rows()
+        .first()
+        .ok_or_else(|| quipu::Error::InvalidValue("stats aggregate returned no row".into()))?;
+    let count = |name: &str| -> quipu::Result<u64> {
+        match row.get(name) {
+            Some(quipu::Value::Int(n)) => u64::try_from(*n)
+                .map_err(|_| quipu::Error::InvalidValue(format!("negative {name} count"))),
+            other => Err(quipu::Error::InvalidValue(format!(
+                "stats aggregate {name} is not an integer: {other:?}"
+            ))),
         }
-        if let Some(quipu::Value::Ref(id)) = row.get("p") {
-            predicates.insert(*id);
-        }
-    }
+    };
     Ok(json!({
-        "facts": result.rows().len(),
-        "entities": entities.len(),
-        "predicates": predicates.len()
+        "facts": count("facts")?,
+        "entities": count("entities")?,
+        "predicates": count("predicates")?
     }))
 }
 
