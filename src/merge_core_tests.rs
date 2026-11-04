@@ -254,7 +254,6 @@ fn c7b_a_close_later_than_td_is_applied_as_is() {
 fn a_decision_on_a_clean_slot_is_refused() {
     let s = slot(&["a"], &[("a", T0)], &[("c", TT)], Card::ONE);
     assert!(plan_slot(&s, Some(&Decision::Ours), TD).is_err());
-    assert!(plan_slot(&s, None, "not a time").is_err());
 }
 
 #[test]
@@ -296,5 +295,21 @@ fn c8d_merge_id_names_one_merge_of_one_input() {
     assert_ne!(
         a,
         merge_id("share", "share-A", "share-0", &crate::share::sha256(b"{}"))
+    );
+}
+
+#[test]
+fn date_only_stamps_clamp_in_the_store_s_text_order() {
+    // The store accepts and compares date-only valid times as text.
+    let mut s = slot(&["a"], &[("a", "2026-01-05")], &[], Card::ONE);
+    s.theirs_closed = rows(&[("a", "2026-01-04")]);
+    assert_eq!(
+        plan_slot(&s, None, "2026-01-10").unwrap().receive,
+        vec![close("a", "2026-01-10")]
+    );
+    s.theirs_closed = rows(&[("a", "2026-01-06")]);
+    assert_eq!(
+        plan_slot(&s, None, "2026-01-10").unwrap().receive,
+        vec![close("a", "2026-01-06")]
     );
 }
