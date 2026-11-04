@@ -1,0 +1,5 @@
+# Reviewed gitleaks false positives, one exact fingerprint per line
+# (commit:file:rule:line); real credentials are never listed here.
+# PR1027: SHA256 source witness of src/transaction_auth.rs, not a credential.
+# Wu verified and authorized this exact fingerprint on aegis-w3k75d.15.
+7c575238c273869801d8d5eda7b75ae594b907ec:docs/demos/qualified-main-history/source.json:generic-api-key:12
