@@ -1,0 +1,27 @@
+Script started on 2026-11-04 10:11:47-05:00 [COMMAND="bash docs/demos/competency-lint/reproduce.sh" <not executed on terminal>]
+Before: installed CLI
+$ quipu --version
+quipu 0.16.6
+git_sha: 5d2fe613acd7cd2c172b23e3af8b2a5bddd612bf
+git_dirty: false
+$ quipu competency lint ./pendant
+unknown command: competency
+Use qp --help for usage.
+exit=2 (expected unsupported command)
+
+After: candidate CLI, same fixture
+$ quipu --version
+quipu 0.16.6
+git_sha: c4bc05dde5fffc2c438d962fd6e38c83bdb6ac5a
+git_dirty: false
+$ quipu competency lint ./pendant
+competency: 1 question(s), 1 command(s); schema and syntax pass (not executed)
+
+Sabotage: replace ASK with BROKEN
+$ quipu competency lint ./pendant
+competency: question present: competency: query does not parse: error at 1:10: expected CONSTRUCT
+exit=1 (expected invalid query, named present)
+
+No store opened; no query or command executed.
+
+Script done on 2026-11-04 10:11:47-05:00 [COMMAND_EXIT_CODE="0"]
