@@ -7,6 +7,10 @@ use axum::{http::StatusCode, response::IntoResponse};
 #[path = "replication_guard_tests.rs"]
 mod replication_guard_tests;
 
+#[cfg(test)]
+#[path = "memory_credential_tests.rs"]
+mod memory_credential_tests;
+
 pub(crate) struct Config {
     pub auth_policy: quipu::http_auth::BearerPolicy,
     pub session_keys: quipu::http_auth::SessionKeyPolicy,

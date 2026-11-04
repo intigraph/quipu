@@ -425,6 +425,7 @@ async fn main() {
         .route("/memory/commit", post(memory_files::commit))
         .route("/memory/receipt", post(memory_files::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
+        .layer(axum::middleware::from_fn(memory_files::scope_guard))
         .layer(axum::Extension(config.memory_files.clone()))
         .merge(assets::routes())
         // Core API

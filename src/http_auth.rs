@@ -5,6 +5,7 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
+mod memory_auth;
 mod render_auth;
 pub use render_auth::authorize_http_bearers;
 
@@ -411,7 +412,11 @@ impl BearerPolicy {
                 .authenticate(Some(&format!("Bearer {}", previous.token)))
                 .is_some()
         });
-        if registry.is_empty() || registry.overlaps(&self.named) || shared_collision {
+        if registry.is_empty()
+            || registry.contains_memory_credentials()
+            || registry.overlaps(&self.named)
+            || shared_collision
+        {
             return Err("replication credentials must be nonempty and distinct from writers");
         }
         self.replication_only = registry;
@@ -463,7 +468,9 @@ pub fn authorize_bearers(
 ) -> Authorization {
     // This lower-level API has no route to prove replication admission.
     // Only the HTTP adapter can grant the three exact replication operations.
-    if policy.replication_principal(auth_header).is_some() {
+    if policy.replication_principal(auth_header).is_some()
+        || policy.memory_credential(auth_header).is_some()
+    {
         return Authorization {
             decision: AccessDecision::Unauthorized,
             generation: None,

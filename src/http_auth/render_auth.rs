@@ -14,6 +14,25 @@ pub fn authorize_http_bearers(
     auth_header: Option<&str>,
     now_epoch_secs: u64,
 ) -> Authorization {
+    if let Some((_, _, expiry)) = policy.memory_credential(auth_header) {
+        let allowed = now_epoch_secs < expiry
+            && method == "POST"
+            && matches!(
+                path,
+                "/memory/commit" | "/memory/projection" | "/memory/receipt"
+            );
+        return Authorization {
+            decision: if read_only && path == "/memory/commit" {
+                AccessDecision::ReadOnly
+            } else if allowed {
+                AccessDecision::Allow
+            } else {
+                AccessDecision::Unauthorized
+            },
+            generation: (allowed && !(read_only && path == "/memory/commit"))
+                .then_some(AuthGeneration::Named),
+        };
+    }
     // A presented replication credential cannot fall through to an open-read,
     // shared-write or ordinary named-write policy on any other operation.
     if policy.replication_principal(auth_header).is_some() {
