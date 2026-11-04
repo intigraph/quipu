@@ -34,8 +34,15 @@ report.
 - **Change kinds per slot**: *unchanged*; *one-side* (exactly one side differs
   from base); *convergent* (both differ from base, identically); *divergent*
   (both differ from base, differently).
-- **Merge id**: the SHA-256 of the decisions file, or of the empty decision set
-  for a clean merge. It ties every transaction of one merge together.
+- **Merge id**: the SHA-256 of one canonical record of the merge's inputs: the
+  path, the incoming identity (share id, `fork name@fork_tx`, or the Git
+  `MERGE_HEAD` commit), the base identity (parent share id, the fork's
+  `fork_tx`, or the Git merge base), and the SHA-256 of the decisions file
+  (the empty decision set for a clean merge). It ties every transaction of
+  one merge together and names one merge of one input. Two different merges
+  never share an id, including two clean ones; the same input merged again
+  has the same id, which is what makes R7 work. ROOT's state is deliberately
+  not part of the id: staleness is checked separately (C8b).
 - **Fixture times** (UTC, fixed so assertions are exact):
 
   | Name | Value | Meaning |
@@ -109,16 +116,20 @@ incoming side carries:
 | Pendant merge | none (the output is a file without valid time) | none | Git commit ids |
 
 **Where the incoming time applies.** Use `Tt` when nothing ROOT holds is
-displaced over `[Tt, Td)`. That covers a one-side change and a set-union
-addition. In a decided conflict an incoming value is received from `Td`
+displaced over `[Tt, Td)`, other than a base-identical value that this
+incoming change supersedes. That covers a one-side change (ours equals base,
+so theirs authored the only change, at `Tt`) and a set-union addition. In a decided conflict an incoming value is received from `Td`
 instead. Ours held the slot until the decision, so an earlier start would
 overlap it (R6). `Tt` is still recorded, in the decision row and the `receive`
 source.
 
 **Clamp (case C7).** A close taken from the incoming side is applied only if
 it falls inside the ROOT row it closes. If it is earlier than that row's
-`valid_from`, the row closes at `Td`. A merge never produces
-`valid_to < valid_from` (R6), and never empties a ROOT row (R5).
+`valid_from`, the row closes at `Td`. A close **later** than `Td` (a
+future-dated close on the incoming side) is applied as is: it reverses no
+interval and empties no row, and it is what the incoming side authored (case
+C7b). A merge never produces `valid_to < valid_from` (R6), and never empties
+a ROOT row (R5).
 
 ### 3.2 Atomicity and the write gate
 
@@ -243,6 +254,13 @@ For `card: many(n)` exceeded (C3e), the same table applies. `both` is offered
 only when `|ours ∪ theirs|` fits `n`. When it fits, `CUR = ours ∪ theirs` and
 the incoming additions are received from `Td`.
 
+**C4-gate, the intermediate state is not refused.** Run C4 `theirs` with a
+gating `sh:maxCount 1` shape loaded. Expect the apply to succeed with the
+outcome above, and `AT(s, tx=receive, vt=Td) = {b, c}`: two values at the
+`receive` pin, which the write gate must not refuse, because it judges the
+state after `decide` (§3.2). Until that sequence-scoped gate exists, karb.2
+cannot pass C4 or C5, and this fixture is the one that shows why.
+
 ### C5. Delete vs replace
 
 | # | card | base | ours | theirs | Outcome | Today |
@@ -286,6 +304,13 @@ R1).
 *Alternative considered and rejected:* closing at `Tr`, which empties ROOT's
 row. That would erase ROOT's own later claim from valid time and break R5.
 
+**C7b, a future-dated incoming close.** Base `a@T0`, ours unchanged, and the
+fork closes `a` at `Tz = 2026-02-01T00:00:00Z`, later than `Td`. Expect:
+`VT(a) = [T0, Tz)`, `AT(s, vt=Td) = {a}`, `AT(s, vt=Tz) = {}`, and one
+`receive` transaction closing `a` at `Tz`. (Stated as valid-time reads, not
+`CUR`, because the fixture times are fixed dates and `CUR` reads the wall
+clock.)
+
 ### C8. Idempotence and staleness
 
 | # | Action | Expect |
@@ -293,6 +318,7 @@ row. That would erase ROOT's own later claim from valid time and break R5.
 | C8a | apply the same decisions twice | the second apply returns `already-applied` with the first apply's tx ids; transaction count unchanged |
 | C8b | ROOT changes a reviewed slot between emit and apply | refused as stale, nothing written (merge-reconcile.md §3.2) |
 | C8c | apply a clean merge twice (share) | the second apply writes nothing (the graph already equals the merged state) |
+| C8d | two different clean merges (two incoming shares, no decisions) | two different merge ids; filtering the log by either returns only its own transactions; the second is not reported `already-applied` |
 
 ## 6. Partial merge (Stiwi 2026-11-03, aegis-karb.1 comment 1)
 
@@ -406,7 +432,8 @@ the response row has `base [a]`, `ours [b]`, `theirs [c]`, and no transaction.
    `valid_from` (C4 `theirs`, measured overlap). Clamp closes (C7, aegis-0s2a).
 5. List slots: whole or sequence (C6).
 6. Partial modes and merge units (§6).
-7. A gate over the whole sequence (§3.2).
+7. A gate over the whole sequence (§3.2), proven by fixture C4-gate.
+8. A merge id per merge of one input (§2), proven by fixture C8d.
 
 ## 9. Not in scope
 
