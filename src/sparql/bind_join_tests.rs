@@ -32,7 +32,7 @@ fn seeded_literal_object_drives_small_metadata_relation() {
     let GraphPattern::Bgp { patterns } = pattern else {
         panic!("BGP required")
     };
-    let seed = Bindings::from([("role".into(), crate::types::Value::Str("admin".into()))]);
+    let seed = Bindings::from_iter([("role".into(), crate::types::Value::Str("admin".into()))]);
     let optimized = super::sparse_bgp::try_eval(&store, &patterns, &ctx, &seed)
         .unwrap()
         .expect("a bound literal must engage the finite selective plan");
@@ -45,7 +45,7 @@ fn seeded_literal_object_drives_small_metadata_relation() {
         ))
     );
     assert_eq!(optimized.1, vec!["s", "role"]);
-    let absent = Bindings::from([("role".into(), crate::types::Value::Str("absent".into()))]);
+    let absent = Bindings::from_iter([("role".into(), crate::types::Value::Str("absent".into()))]);
     assert!(
         super::sparse_bgp::try_eval(&store, &patterns, &ctx, &absent)
             .unwrap()
@@ -54,7 +54,7 @@ fn seeded_literal_object_drives_small_metadata_relation() {
             .is_empty()
     );
     assert!(
-        super::sparse_bgp::try_eval(&store, &patterns, &ctx, &Bindings::new())
+        super::sparse_bgp::try_eval(&store, &patterns, &ctx, &Bindings::default())
             .unwrap()
             .is_none()
     );
@@ -137,7 +137,7 @@ fn bag(rows: &[Bindings]) -> Vec<String> {
 fn both_ways(store: &Store, sparql: &str, ctx: &TemporalContext) -> (Vec<String>, Vec<String>) {
     let p = where_clause(sparql);
     let (left, right) = join_operands(&p);
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (bind_rows, _) = try_values_bind_join(store, left, right, ctx, &seed)
         .unwrap()
         .expect("the bind join must engage for this shape");
@@ -250,7 +250,7 @@ fn a_seed_that_conflicts_with_a_values_row_drops_it() {
            SELECT * WHERE { VALUES ?s { ex:alice ex:bob } ?s ex:name ?n }"#,
     );
     let (left, right) = join_operands(&p);
-    let mut seed = Bindings::new();
+    let mut seed = Bindings::default();
     let bob = store.lookup("http://example.org/bob").unwrap().unwrap();
     seed.insert("s".into(), crate::types::Value::Ref(bob));
     let (rows, _) = try_values_bind_join(&store, left, right, &TemporalContext::default(), &seed)
@@ -272,7 +272,7 @@ fn empty_values_yields_no_rows_and_the_same_header() {
         left,
         right,
         &TemporalContext::default(),
-        &Bindings::new(),
+        &Bindings::default(),
     )
     .unwrap()
     .unwrap();
@@ -300,7 +300,7 @@ fn declines_when_the_other_side_could_observe_substitution() {
             left,
             right,
             &TemporalContext::default(),
-            &Bindings::new()
+            &Bindings::default()
         )
         .unwrap()
         .is_none()
@@ -351,7 +351,7 @@ fn declines_above_the_row_ceiling() {
             left,
             right,
             &TemporalContext::default(),
-            &Bindings::new()
+            &Bindings::default()
         )
         .unwrap()
         .is_none()
@@ -445,7 +445,7 @@ fn subject_bind_join_preserves_projected_duplicate_bags_and_headers() {
     );
     let (left, right) = join_operands(&pattern);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (left_rows, left_vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
     let (right_rows, right_vars) = eval_pattern_seeded(&store, right, &ctx, &seed).unwrap();
     let (bound, header) =
@@ -471,7 +471,7 @@ fn subject_bind_join_declines_undef_and_preserves_its_bag() {
     let pattern = where_clause(sparql);
     let (left, right) = join_operands(&pattern);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
     assert!(
         super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &rows, &vars,)
@@ -493,7 +493,7 @@ fn subject_bind_join_never_correlates_a_right_filter() {
     let (left, right) = join_operands(&pattern);
     assert!(matches!(right, GraphPattern::Filter { .. }));
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
     assert!(
         super::bind_join::try_subject_bind_join(&store, right, &ctx, &seed, &rows, &vars,)
@@ -549,7 +549,7 @@ fn subject_bind_join_refuses_a_wide_or_non_subject_driver() {
     );
     let (left, right) = join_operands(&pattern);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
     let wide = vec![rows[0].clone(); super::bind_join::SUBJECT_BIND_MAX_ROWS + 1];
     assert!(
@@ -577,7 +577,7 @@ fn subject_bind_join_checks_deadline_before_lookup() {
       }"#,
     );
     let (left, right) = join_operands(&pattern);
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (rows, vars) =
         eval_pattern_seeded(&store, left, &TemporalContext::default(), &seed).unwrap();
     let ctx = TemporalContext {
@@ -593,7 +593,7 @@ fn subject_bind_join_checks_deadline_before_lookup() {
 #[test]
 fn subject_bind_constant_graph_union_matches_bottom_up_bags_and_headers() {
     let store = store();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let ctx = TemporalContext::default();
     let left = where_clause(
         "SELECT * WHERE { VALUES ?s { <http://example.org/alice> <http://example.org/alice> <http://example.org/bob> } }",
@@ -635,7 +635,7 @@ fn subject_bind_constant_graph_union_matches_bottom_up_bags_and_headers() {
 #[test]
 fn subject_bind_declines_an_actual_project_boundary() {
     let store = store();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let ctx = TemporalContext::default();
     let left = where_clause("SELECT * WHERE { VALUES ?s { <http://example.org/alice> } }");
     let (rows, vars) = eval_pattern_seeded(&store, &left, &ctx, &seed).unwrap();

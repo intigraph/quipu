@@ -121,6 +121,7 @@ function check(name, value) { assert(value, name); results.push(name); console.l
       await page.waitForSelector('#graph-loader[data-state="engine"]');
       check("engine has a prominent loading panel", (await page.locator("#graph-loader").boundingBox()).height >= 300);
       await screenshot(page, { path: path.join(out, "engine.png"), fullPage: true });
+      check("default pendant is named before the engine starts", (await page.locator("#loading-source").innerText()) === "repository.pendant.tar.gz");
       await page.waitForFunction(() => {
         const p = document.querySelector("#loading-progress");
         return document.querySelector("#graph-loader").dataset.state === "pendant" && p.value > 0 && p.value < 100;
@@ -182,13 +183,15 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     const starters = await page.locator("#starter-questions button").count();
     mode = { failPack: 1 };
     await page.locator("#load-menu").evaluate((e) => { e.open = true; });
-    await page.fill("#url-input", new URL("selected.pendant.tar.gz", target).href);
+    await page.fill("#url-input", new URL("selected.pendant.tar.gz?view=fixture-query#fixture-fragment", target).href);
     await page.click("#url-load");
     await page.waitForSelector('#graph-loader[data-state="error"]');
+    check("selected URL pendant is named in the error panel", (await page.locator("#loading-source").innerText()) === "selected.pendant.tar.gz");
     check("selected URL is retained for its retry", (await page.locator("#status").innerText()).includes("selected.pendant.tar.gz"));
     mode = {};
     await page.click("#loading-retry");
     await ready(page);
+    check("retry retains the selected pendant name", (await page.locator("#loading-source").innerText()) === "selected.pendant.tar.gz");
     check("retries do not duplicate controls", await page.locator("#starter-questions button").count() === starters);
     await page.fill("#url-input", `http://127.0.0.1:${corsServer.address().port}/compressed.pendant.tar.gz`);
     await page.click("#url-load");
@@ -197,6 +200,10 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     check("CORS-hidden encoding cannot invent a percentage", await page.locator("#loading-progress").getAttribute("value") === null
       && !(await page.locator("#loading-bytes").innerText()).includes("%"));
     await ready(page);
+    await page.setInputFiles("#file-input", { name: "team graph #1.pendant.tar.gz", mimeType: "application/gzip",
+      buffer: Buffer.from("damaged fixture") });
+    await page.waitForSelector('#graph-loader[data-state="error"]');
+    check("selected file name is exact, including spaces and hash", (await page.locator("#loading-source").innerText()) === "team graph #1.pendant.tar.gz");
     check("standalone explorer does not broadcast state", (await page.evaluate(() => window.protocolMessages)).length === 0);
     await context.close();
 
@@ -217,6 +224,14 @@ function check(name, value) { assert(value, name); results.push(name); console.l
     check("embed real import emits all loading stages then ready", ["engine", "pendant", "indexing"].every(stage =>
       messages.some(s => s.state === "loading" && s.stage === stage))
       && messages.at(-1).stage === "ready"
+      && messages.every(s => Object.keys(s).sort().join() === "pendant,stage,state,type"));
+    await embedded.setInputFiles("#file-input", { name: "private graph #1.pendant.tar.gz", mimeType: "application/gzip",
+      buffer: Buffer.from("damaged fixture") });
+    await embedded.waitForSelector('#graph-loader[data-state="error"]');
+    await page.waitForFunction(() => window.states.at(-1)?.state === "error" && window.states.at(-1)?.pendant === "selected");
+    check("embedded file is named only inside its own loader", (await embedded.locator("#loading-source").innerText()) === "private graph #1.pendant.tar.gz");
+    messages = await page.evaluate(() => window.states);
+    check("source names never enter parent state messages", !JSON.stringify(messages).includes("private graph")
       && messages.every(s => Object.keys(s).sort().join() === "pendant,stage,state,type"));
     await context.close();
   } finally {
