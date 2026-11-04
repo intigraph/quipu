@@ -1,0 +1,37 @@
+Script started on 2026-11-04 11:17:52-05:00 [COMMAND="bash /tmp/arnold-record-core-demo.sh" <not executed on terminal>]
+Same fixture: base={a}, ours={c}, incoming={c}, maxCount=1
+
+BEFORE: core 9da19a6e + identical demo test
+
+running 1 test
+Base override: Err(InvalidValue("merge core: a convergent slot takes continue or value"))
+Two explicit values under maxCount=1: Ok(SlotPlan { change: Convergent, receive: [], decide: [Close { value: "c", at: "2026-01-10T00:00:00Z" }, Assert { value: "d", from: "2026-01-10T00:00:00Z" }, Assert { value: "e", from: "2026-01-10T00:00:00Z" }], held: false })
+Continue control: SlotPlan { change: Convergent, receive: [], decide: [], held: false }
+
+thread 'merge_core::tests::decision_override_demo' (353564) panicked at src/merge_core_tests.rs:378:21:
+called `Result::unwrap()` on an `Err` value: InvalidValue("merge core: a convergent slot takes continue or value")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test merge_core::tests::decision_override_demo ... FAILED
+
+failures:
+
+failures:
+    merge_core::tests::decision_override_demo
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3114 filtered out; finished in 0.00s
+
+
+AFTER: core 9d3e27f4 + identical demo test
+
+running 1 test
+Base override: Ok(SlotPlan { change: Convergent, receive: [], decide: [Close { value: "c", at: "2026-01-10T00:00:00Z" }, Assert { value: "a", from: "2026-01-10T00:00:00Z" }], held: false })
+Two explicit values under maxCount=1: Err(InvalidValue("merge core: decision would hold 2 values, above sh:maxCount 1"))
+Continue control: SlotPlan { change: Convergent, receive: [], decide: [], held: false }
+test merge_core::tests::decision_override_demo ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3114 filtered out; finished in 0.00s
+
+
+Observed test exits: before=101 after=0
+
+Script done on 2026-11-04 11:17:52-05:00 [COMMAND_EXIT_CODE="0"]

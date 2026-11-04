@@ -365,3 +365,17 @@ fn date_only_stamps_clamp_in_the_store_s_text_order() {
         vec![close("a", "2026-01-06")]
     );
 }
+
+#[test]
+fn decision_override_demo() {
+    let s = slot(&["a"], &[("c", TO)], &[("c", TT)], Card::ONE);
+    let base = plan_slot(&s, Some(&Decision::Base), TD);
+    let oversized = plan_slot(&s, Some(&Decision::Values(set(&["d", "e"]))), TD);
+    let keep = plan_slot(&s, Some(&Decision::Continue), TD).unwrap();
+    println!("Base override: {base:?}");
+    println!("Two explicit values under maxCount=1: {oversized:?}");
+    println!("Continue control: {keep:?}");
+    assert_eq!(base.unwrap().decide, vec![close("c", TD), assert_("a", TD)]);
+    assert!(oversized.is_err());
+    assert!(keep.receive.is_empty() && keep.decide.is_empty());
+}
