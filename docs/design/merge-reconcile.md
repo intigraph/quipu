@@ -18,8 +18,8 @@ guessed.
 | Merge | Detect | Resolve today | Shipped in |
 |---|---|---|---|
 | Share reconnect, `quipu merge <share-dir>` | exit 2, conflicts in the JSON result | **emit / propose / decide / apply**: `--emit-decisions <file> [--propose]`, then `--decisions <file> --reviewer <who> [--dry-run]`; REST `/merge/decisions`, `/merge/apply`; MCP `quipu_merge_decisions`, `quipu_merge_apply`. Rows carry each side's provenance, a `kind`, a `rule` in words, labels, a mechanical `proposal`, and the operator's `decision`. v2 files bind each reviewed slot (`local_slot_hash`). | #435, #658 |
-| Git pendant merge, `quipu git-merge <ref>` / `merge-driver` | exit 2, `decisions.json` beside the qpack | `quipu pendant-resolve BASE OURS THEIRS DIR KEY CHOICE` (base/ours/theirs, accept/reject for alias proposals); CI `pendant-check` refuses an unrecorded or text-merged result | #346 |
-| PR review of a qpack change | `quipu share diff --report --format markdown` | read-only "Merge decisions" section in the check-run summary (labels, constraint, base/ours/theirs, resolution, alias caveat) | fxpbys.1 M1/M2 |
+| Git pendant merge, `quipu git-merge <ref>` / `merge-driver` | exit 2, `decisions.json` beside the pendant | `quipu pendant-resolve BASE OURS THEIRS DIR KEY CHOICE` (base/ours/theirs, accept/reject for alias proposals); CI `pendant-check` refuses an unrecorded or text-merged result | #346 |
+| PR review of a pendant change | `quipu share diff --report --format markdown` | read-only "Merge decisions" section in the check-run summary (labels, constraint, base/ours/theirs, resolution, alias caveat) | fxpbys.1 M1/M2 |
 | Fork promote, `quipu fork promote <name>` | `ForkPromotion::Conflicts`, nothing written, fork stays open, exit 1 | **none** | #888 |
 
 ## 2. The gaps
@@ -69,10 +69,10 @@ the CLI and inline for MCP.
 
 | Step | Share | Fork promote (new) | Git pendant |
 |---|---|---|---|
-| emit | `quipu merge <dir> --emit-decisions f.json [--propose]` | `quipu fork promote <name> --emit-decisions f.json [--propose]` | written by `quipu git-merge` as `<qpack>/decisions.json` |
-| show (new) | `quipu merge show f.json [--format text\|md\|json]` | same | `quipu merge show <qpack>/decisions.json` |
-| resolve (new) | `quipu merge resolve f.json <row> --choose <c> --by <who>` | same | same, or `quipu git-merge resolve <qpack> <key>`; it rewrites the qpack (refs from `MERGE_HEAD`); `pendant-resolve` stays for scripts |
-| apply | `quipu merge <dir> --decisions f.json --reviewer <who> [--dry-run]` | `quipu fork promote <name> --decisions f.json --reviewer <who> [--dry-run]` | `git add <qpack>` and commit; CI `pendant-check` |
+| emit | `quipu merge <dir> --emit-decisions f.json [--propose]` | `quipu fork promote <name> --emit-decisions f.json [--propose]` | written by `quipu git-merge` as `<pendant>/decisions.json` |
+| show (new) | `quipu merge show f.json [--format text\|md\|json]` | same | `quipu merge show <pendant>/decisions.json` |
+| resolve (new) | `quipu merge resolve f.json <row> --choose <c> --by <who>` | same | same, or `quipu git-merge resolve <pendant> <key>`; it rewrites the pendant (refs from `MERGE_HEAD`); `pendant-resolve` stays for scripts |
+| apply | `quipu merge <dir> --decisions f.json --reviewer <who> [--dry-run]` | `quipu fork promote <name> --decisions f.json --reviewer <who> [--dry-run]` | `git add <pendant>` and commit; CI `pendant-check` |
 
 MCP: `quipu_merge_decisions` and `quipu_merge_apply` take `fork: <name>` as
 an alternative to the inline shares, and `quipu_merge_decisions` returns the

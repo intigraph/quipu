@@ -1,6 +1,6 @@
 //! Stored queries carried by a share as `queries.ttl` (aegis-fxpbys.2).
 //!
-//! A qpack ships its competency questions beside its data and shapes: every
+//! A pendant ships its competency questions beside its data and shapes: every
 //! selected stored query (the registry `quipu_ask` reads) is described as RDF in
 //! a `queries.ttl` member whose SHA-256 the manifest seals, so the queries are
 //! part of the share's identity exactly as its shapes are.
