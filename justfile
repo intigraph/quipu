@@ -65,6 +65,15 @@ deploy-server:
 test *args="":
     cargo test {{args}}
 
+# Explicit offline comparison against the frozen pre-change SQLite scan.
+vector-scan command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        benchmark) cargo test --release --lib vector::scoring::benchmark::paired_sqlite_vector_scan -- --ignored --nocapture ;;
+        *) echo 'Use: just vector-scan benchmark' >&2; exit 2 ;;
+    esac
+
 # Offline replay controls: restart, deduplication, corruption and private files.
 test-search-outcome-replay:
     python3 -B scripts/test_search_outcome_replay.py
