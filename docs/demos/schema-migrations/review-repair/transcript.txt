@@ -1,0 +1,108 @@
+Script started on 2026-10-29 06:54:09-04:00 [COMMAND="bash ./run-nocapture.sh" <not executed on terminal>]
+Isolated schema-migration review controls; no installed service calls.
+Before: 78f832815c56c3744efc37832e4e848635013b56 + independent review tests.
+Candidate: current 6ba582d1 integration + repairs, source witness 0c709581e040e4678a769b75a7ca9918cba11af2a337a61dd003b48e79f261e1.
+
+$ before-tests lex_review
+
+running 6 tests
+test proposal_migration::tests::lex_review_cast_rejects_invalid_xsd_value_spaces ... FAILED
+test proposal_migration::tests::lex_review_decided_program_is_immutable ... FAILED
+test proposal_migration::tests::lex_review_dry_run_matches_validation_off_delete ... FAILED
+test proposal_migration::tests::lex_review_existing_release_helper_settles_same_veto ... ok
+test proposal_migration::tests::lex_review_refused_commit_leaves_connection_usable ... FAILED
+test proposal_migration::tests::lex_review_valid_xsd_cast_control ... ok
+
+failures:
+
+---- proposal_migration::tests::lex_review_cast_rejects_invalid_xsd_value_spaces stdout ----
+CAST "-1" -> xsd:unsignedInt: preview=Ok(Object {"gate": Object {"would_accept": Bool(true)}, "migration": Object {"assert_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"-1\"^^<http://www.w3.org/2001/XMLSchema#unsignedInt> .")], "asserted": Number(1), "ops": Array [Object {"asserted": Number(1), "index": Number(0), "op": String("cast_datatype"), "retracted": Number(1), "update": String("DELETE { ?s <http://example.org/age> ?o } INSERT { ?s <http://example.org/age> ?cast } WHERE { ?s <http://example.org/age> ?o FILTER(isLiteral(?o)) BIND(STRDT(STR(?o), <http://www.w3.org/2001/XMLSchema#unsignedInt>) AS ?cast) }")}], "retract_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"-1\" .")], "retracted": Number(1)}, "proposal_id": Number(1), "refused_after_migration": Object {"results": Array [], "violations": Number(0)}, "refused_before_migration": Object {"results": Array [], "violations": Number(0)}, "source": String("migration:1"), "status": String("pending")}); acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:closed false .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" }); stored=[Typed { lexical: "-1", datatype: "http://www.w3.org/2001/XMLSchema#unsignedInt" }]
+CAST "256" -> xsd:unsignedByte: preview=Ok(Object {"gate": Object {"would_accept": Bool(true)}, "migration": Object {"assert_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"256\"^^<http://www.w3.org/2001/XMLSchema#unsignedByte> .")], "asserted": Number(1), "ops": Array [Object {"asserted": Number(1), "index": Number(0), "op": String("cast_datatype"), "retracted": Number(1), "update": String("DELETE { ?s <http://example.org/age> ?o } INSERT { ?s <http://example.org/age> ?cast } WHERE { ?s <http://example.org/age> ?o FILTER(isLiteral(?o)) BIND(STRDT(STR(?o), <http://www.w3.org/2001/XMLSchema#unsignedByte>) AS ?cast) }")}], "retract_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"256\" .")], "retracted": Number(1)}, "proposal_id": Number(1), "refused_after_migration": Object {"results": Array [], "violations": Number(0)}, "refused_before_migration": Object {"results": Array [], "violations": Number(0)}, "source": String("migration:1"), "status": String("pending")}); acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:closed false .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" }); stored=[Typed { lexical: "256", datatype: "http://www.w3.org/2001/XMLSchema#unsignedByte" }]
+CAST "0" -> xsd:positiveInteger: preview=Ok(Object {"gate": Object {"would_accept": Bool(true)}, "migration": Object {"assert_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"0\"^^<http://www.w3.org/2001/XMLSchema#positiveInteger> .")], "asserted": Number(1), "ops": Array [Object {"asserted": Number(1), "index": Number(0), "op": String("cast_datatype"), "retracted": Number(1), "update": String("DELETE { ?s <http://example.org/age> ?o } INSERT { ?s <http://example.org/age> ?cast } WHERE { ?s <http://example.org/age> ?o FILTER(isLiteral(?o)) BIND(STRDT(STR(?o), <http://www.w3.org/2001/XMLSchema#positiveInteger>) AS ?cast) }")}], "retract_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"0\" .")], "retracted": Number(1)}, "proposal_id": Number(1), "refused_after_migration": Object {"results": Array [], "violations": Number(0)}, "refused_before_migration": Object {"results": Array [], "violations": Number(0)}, "source": String("migration:1"), "status": String("pending")}); acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:closed false .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" }); stored=[Typed { lexical: "0", datatype: "http://www.w3.org/2001/XMLSchema#positiveInteger" }]
+CAST "2026-02-31" -> xsd:date: preview=Ok(Object {"gate": Object {"would_accept": Bool(true)}, "migration": Object {"assert_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"2026-02-31\"^^<http://www.w3.org/2001/XMLSchema#date> .")], "asserted": Number(1), "ops": Array [Object {"asserted": Number(1), "index": Number(0), "op": String("cast_datatype"), "retracted": Number(1), "update": String("DELETE { ?s <http://example.org/age> ?o } INSERT { ?s <http://example.org/age> ?cast } WHERE { ?s <http://example.org/age> ?o FILTER(isLiteral(?o)) BIND(STRDT(STR(?o), <http://www.w3.org/2001/XMLSchema#date>) AS ?cast) }")}], "retract_sample": Array [String("<http://example.org/alice> <http://example.org/age> \"2026-02-31\" .")], "retracted": Number(1)}, "proposal_id": Number(1), "refused_after_migration": Object {"results": Array [], "violations": Number(0)}, "refused_before_migration": Object {"results": Array [], "violations": Number(0)}, "source": String("migration:1"), "status": String("pending")}); acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:closed false .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" }); stored=[Typed { lexical: "2026-02-31", datatype: "http://www.w3.org/2001/XMLSchema#date" }]
+
+thread 'proposal_migration::tests::lex_review_cast_rejects_invalid_xsd_value_spaces' (3920123) panicked at src/proposal_migration_tests.rs:627:5:
+invalid XSD values accepted and persisted: [("-1", "unsignedInt"), ("256", "unsignedByte"), ("0", "positiveInteger"), ("2026-02-31", "date")]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- proposal_migration::tests::lex_review_decided_program_is_immutable stdout ----
+post-accept replacement=Ok(()); now=Some([Sparql { update: "DELETE DATA { <http://example.org/x> <http://example.org/p> 1 }" }])
+
+thread 'proposal_migration::tests::lex_review_decided_program_is_immutable' (3920559) panicked at src/proposal_migration_tests.rs:676:5:
+accepted program must remain the one whose migration transaction was committed
+
+---- proposal_migration::tests::lex_review_dry_run_matches_validation_off_delete stdout ----
+validation_off preview={"gate":{"introduced":[{"component":"http://www.w3.org/ns/shacl#MinCountConstraintComponent","focus_node":"http://example.org/alice","message":"MinCount(1) not satisfied","path":"http://example.org/name","severity":"Violation","source_shape":"_:b6fca394b9fd8ad26da0959bb1f1da64","value":null}],"reason":"the migration would introduce 1 violation(s) under the new shapes","would_accept":false},"migration":{"assert_sample":[],"asserted":0,"ops":[{"asserted":0,"index":0,"op":"sparql","retracted":1,"update":"DELETE DATA { <http://example.org/alice> <http://example.org/name> \"Alice Smith\" }"}],"retract_sample":["<http://example.org/alice> <http://example.org/name> \"Alice Smith\" ."],"retracted":1},"proposal_id":1,"refused_after_migration":{"results":[{"component":"http://www.w3.org/ns/shacl#MinCountConstraintComponent","focus_node":"http://example.org/alice","message":"MinCount(1) not satisfied","path":"http://example.org/name","severity":"Violation","source_shape":"_:b6fca394b9fd8ad26da0959bb1f1da64","value":null}],"violations":1},"refused_before_migration":{"results":[],"violations":0},"source":"migration:1","status":"pending"}; acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:property [ sh:path ex:name; sh:minCount 1 ] .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" })
+
+thread 'proposal_migration::tests::lex_review_dry_run_matches_validation_off_delete' (3920596) panicked at src/proposal_migration_tests.rs:651:5:
+assertion `left == right` failed: dry-run must agree with actual acceptance under the same config
+  left: false
+ right: true
+
+---- proposal_migration::tests::lex_review_refused_commit_leaves_connection_usable stdout ----
+commit veto result=Err(Sqlite(SqliteFailure(Error { code: ConstraintViolation, extended_code: 531 }, Some("constraint failed")))); autocommit=false
+
+thread 'proposal_migration::tests::lex_review_refused_commit_leaves_connection_usable' (3920656) panicked at src/proposal_migration_tests.rs:664:5:
+refused outer RELEASE must settle the dead transaction
+
+
+failures:
+    proposal_migration::tests::lex_review_cast_rejects_invalid_xsd_value_spaces
+    proposal_migration::tests::lex_review_decided_program_is_immutable
+    proposal_migration::tests::lex_review_dry_run_matches_validation_off_delete
+    proposal_migration::tests::lex_review_refused_commit_leaves_connection_usable
+
+test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 3211 filtered out; finished in 0.41s
+
+Expected failing control exit: 101
+
+$ candidate-tests lex_review --nocapture
+
+running 6 tests
+test proposal_migration::tests::lex_review_cast_rejects_invalid_xsd_value_spaces ... CAST "-1" -> xsd:unsignedInt: preview=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"-1\"^^<http://www.w3.org/2001/XMLSchema#unsignedInt> for <http://example.org/alice> <http://example.org/age>; no facts were written")); acceptance=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"-1\"^^<http://www.w3.org/2001/XMLSchema#unsignedInt> for <http://example.org/alice> <http://example.org/age>; no facts were written")); stored=[Str("-1")]
+CAST "256" -> xsd:unsignedByte: preview=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"256\"^^<http://www.w3.org/2001/XMLSchema#unsignedByte> for <http://example.org/alice> <http://example.org/age>; no facts were written")); acceptance=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"256\"^^<http://www.w3.org/2001/XMLSchema#unsignedByte> for <http://example.org/alice> <http://example.org/age>; no facts were written")); stored=[Str("256")]
+CAST "0" -> xsd:positiveInteger: preview=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"0\"^^<http://www.w3.org/2001/XMLSchema#positiveInteger> for <http://example.org/alice> <http://example.org/age>; no facts were written")); acceptance=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"0\"^^<http://www.w3.org/2001/XMLSchema#positiveInteger> for <http://example.org/alice> <http://example.org/age>; no facts were written")); stored=[Str("0")]
+CAST "2026-02-31" -> xsd:date: preview=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"2026-02-31\"^^<http://www.w3.org/2001/XMLSchema#date> for <http://example.org/alice> <http://example.org/age>; no facts were written")); acceptance=Err(InvalidValue("migration op 0 (cast_datatype): would write the ill-typed literal \"2026-02-31\"^^<http://www.w3.org/2001/XMLSchema#date> for <http://example.org/alice> <http://example.org/age>; no facts were written")); stored=[Str("2026-02-31")]
+ok
+test proposal_migration::tests::lex_review_decided_program_is_immutable ... post-accept replacement=Err(InvalidValue("proposal 1 not found or no longer pending; migration program is immutable")); now=Some([RenamePredicate { from: "http://example.org/name", to: "http://example.org/fullName" }])
+ok
+test proposal_migration::tests::lex_review_dry_run_matches_validation_off_delete ... validation_off preview={"gate":{"would_accept":true},"migration":{"assert_sample":[],"asserted":0,"ops":[{"asserted":0,"index":0,"op":"sparql","retracted":1,"update":"DELETE DATA { <http://example.org/alice> <http://example.org/name> \"Alice Smith\" }"}],"retract_sample":["<http://example.org/alice> <http://example.org/name> \"Alice Smith\" ."],"retracted":1},"proposal_id":1,"refused_after_migration":{"results":[{"component":"http://www.w3.org/ns/shacl#MinCountConstraintComponent","focus_node":"http://example.org/alice","message":"MinCount(1) not satisfied","path":"http://example.org/name","severity":"Violation","source_shape":"_:aa7a3836dbf8c19b9f0fd0625f892c01","value":null}],"violations":1},"refused_before_migration":{"results":[],"violations":0},"source":"migration:1","status":"pending"}; acceptance=Ok(Proposal { id: 1, kind: Shape, target: "people", diff: "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\nex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ; sh:property [ sh:path ex:name; sh:minCount 1 ] .", rationale: None, proposer: "agent/test", trigger_ref: None, status: Accepted, decided_by: Some("lex-review-fixture"), decided_at: Some("2026-06-01T00:00:00Z"), decision_note: None, created_at: "2026-01-01T00:00:00Z" })
+ok
+test proposal_migration::tests::lex_review_existing_release_helper_settles_same_veto ... ok
+test proposal_migration::tests::lex_review_refused_commit_leaves_connection_usable ... commit veto result=Err(Sqlite(SqliteFailure(Error { code: ConstraintViolation, extended_code: 531 }, Some("constraint failed")))); autocommit=true
+ok
+test proposal_migration::tests::lex_review_valid_xsd_cast_control ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 3243 filtered out; finished in 0.39s
+
+
+$ before-tests ordinary_filtered_scan_keeps_existing_join_budget_semantics
+
+running 1 test
+test sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics ... FAILED
+
+failures:
+
+---- sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics stdout ----
+
+thread 'sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics' (3921300) panicked at src/sparql/triple/limited_tests.rs:329:124:
+called `Result::unwrap()` on an `Err` value: QueryComplexity { limit: 3 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3216 filtered out; finished in 0.02s
+
+Expected failing control exit: 101
+
+$ candidate-tests ordinary_filtered_scan_keeps_existing_join_budget_semantics --nocapture
+
+running 1 test
+test sparql::triple::limited_tests::ordinary_filtered_scan_keeps_existing_join_budget_semantics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3248 filtered out; finished in 0.02s
+
+
+Script done on 2026-10-29 06:54:10-04:00 [COMMAND_EXIT_CODE="0"]

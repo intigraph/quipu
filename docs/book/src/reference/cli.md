@@ -1,6 +1,8 @@
 # CLI Commands
 
 The `quipu` binary provides a command-line interface for all operations.
+The [CLI Command Index](cli-commands.md) lists every command path with its
+exact syntax, generated from the parser's catalogue.
 
 ## Global Flags
 
@@ -53,7 +55,7 @@ strings alone do not establish that two binaries contain the same code.
 
 ## Commands
 
-### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve`
+### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve|verify`
 
 List or explicitly apply the configured namespace registry, then mint stable
 entity identities or resolve reference descriptors. See [entity namespaces](namespaces.md)
@@ -787,6 +789,7 @@ rather than applying it directly.
 ```bash
 quipu propose list --status pending --db my.db
 quipu propose submit shape ex:PersonShape new-shape.ttl --proposer agent-1 --rationale "tighten cardinality"
+quipu propose plan 3 --db my.db
 quipu propose accept 3 --note "LGTM" --db my.db
 quipu propose reject 4 --note "breaks existing data" --db my.db
 ```
@@ -795,7 +798,8 @@ quipu propose reject 4 --note "breaks existing data" --db my.db
 |------------|-------------|
 | `list [--status pending]` | List proposals |
 | `submit <kind> <target> <file.ttl> --proposer <id> [--rationale <text>] [--trigger <ref>]` | Queue a change |
-| `accept <id> [--note <text>]` | Apply and record the decision |
+| `plan <id> [--format text\|json] [--risk-threshold <0-100>]` | Blast radius and 0-100 risk score, no write; exit 0 pass, 1 fail, 2 not determined ([details](../concepts/schema-evolution.md#blast-radius-plan-and-risk-gate)) |
+| `accept <id> [--note <text>] [--risk-threshold <0-100>] [--accept-risk --reason <why>]` | Apply and record the decision; refused when the plan fails unless the risk is accepted |
 | `reject <id> --note <reason>` | Reject with a reason |
 
 ### `quipu policy`
@@ -1095,8 +1099,17 @@ quipu fork drop experiment --db my.db          # terminal; the name is not reusa
 | `<tx> [--name <n>]` | Create: materialize ROOT-as-of-`<tx>` into a new fork (default name `fork-<tx>`) |
 | `list` | Name, fork-tx, status, created-at for every fork |
 | `diff <a> <b>` | Present-state triple diff between two forks (or `main`) |
-| `promote <name>` | Apply the fork's delta to ROOT through the write gates; SHACL refusal leaves ROOT untouched |
+| `promote <name>` | Three-way merge the fork into ROOT through the write gates; a conflict or SHACL refusal leaves ROOT untouched |
+| `promote <name> --emit-decisions <f> [--propose]` | Write the promotion's conflicts as a decisions file; nothing is promoted |
+| `promote <name> --decisions <f> --reviewer <who> [--dry-run]` | Promote with every conflict decided, in one transaction that records the reviewer and the file's hash |
 | `drop <name>` | Close the fork; its facts remain as history, the name is not reusable |
+
+A promotion that stops on conflicts is finished the same way as a share
+merge: emit the decisions, show them (`quipu merge show <f>`), record each
+choice (`quipu merge resolve <f> <row> --choose <choice> --by <who>`), then
+promote with `--decisions`. The file binds each conflicting slot on both
+sides, so a change to either after it was emitted refuses the apply. The
+same file applied twice reports `already-applied` and writes nothing.
 
 Reads: `--fork <name>` on `quipu read`, or the `fork` field on
 `POST /query` / `quipu_query`. Unknown and dropped forks are refused
@@ -1133,6 +1146,10 @@ the write gates record; the raw events are served by
 `GET /events?types=write.refused`. See the REST API reference for what a
 refusal event records (metadata only, never the refused bodies) and the
 speculate exclusion.
+
+The counts cover the retained event log only. Event retention (default 30
+days, `[quipu.events] retention_days`) prunes older events, so the output
+ends with the timestamp of the oldest retained event the counts start from.
 
 ```bash
 quipu events refusals --db my.db

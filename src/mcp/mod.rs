@@ -34,6 +34,7 @@ mod tests;
 mod scope_refusal_tests;
 pub mod tools;
 mod value;
+mod verdict_verify;
 mod verdict_witness;
 
 use serde_json::Value as JsonValue;
@@ -488,6 +489,16 @@ pub fn tool_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
 
 /// [`tool_query`] with configured remotes available to SPARQL `SERVICE`.
 pub fn tool_query_with_federation(
+    store: &Store,
+    input: &JsonValue,
+    federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
+) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(crate::search_outcome::Operation::Query, input, || {
+        query_with_federation(store, input, federation)
+    })
+}
+
+fn query_with_federation(
     store: &Store,
     input: &JsonValue,
     federation: Option<std::sync::Arc<crate::config::FederationConfig>>,

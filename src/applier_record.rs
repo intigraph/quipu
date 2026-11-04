@@ -29,6 +29,15 @@ pub fn record_to_datum(
         Ok(r) => r,
         Err(reason) => return Ok(Err(reason)),
     };
+    let close = match retracted_valid_at(record, retract) {
+        Ok(close) => close,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    if retract && close.is_none() {
+        return Ok(Err(
+            "legacy retraction lacks retracted_valid_at; upgrade the source instead of guessing its close".into(),
+        ));
+    }
     let value_field = if retract { "old_value" } else { "value" };
     let value = match value_of(store, &record[value_field])? {
         Ok(v) => v,
@@ -43,15 +52,36 @@ pub fn record_to_datum(
         attribute: store.intern(attribute)?,
         value,
         valid_from,
-        // A retract names the fact it closes; its own row's valid time
-        // describes the closing, not an interval to replay.
+        // The retraction's audit interval is not the assertion's close.
         valid_to: if retract {
-            None
+            close.map(String::from)
         } else {
             record["valid_to"].as_str().map(String::from)
         },
         op: if retract { Op::Retract } else { Op::Assert },
     }))
+}
+
+/// Shared by decoding and digesting: malformed new metadata never falls back
+/// to a guessed close. Absence denotes legacy digest encoding only; decoding
+/// a new retraction without a close is refused above.
+pub(super) fn retracted_valid_at(
+    record: &Json,
+    retract: bool,
+) -> std::result::Result<Option<&str>, String> {
+    let Some(value) = record.get("retracted_valid_at") else {
+        return Ok(None);
+    };
+    let Some(close) = value.as_str().filter(|_| retract) else {
+        return Err("retracted_valid_at requires a retraction and a timestamp string".into());
+    };
+    let valid = crate::time::normalize_rfc3339_utc(close).is_some()
+        || (close.len() == 10
+            && crate::time::normalize_rfc3339_utc(&format!("{close}T00:00:00Z")).is_some());
+    if !valid {
+        return Err("retracted_valid_at is not an ISO date or RFC 3339 timestamp".into());
+    }
+    Ok(Some(close))
 }
 
 fn value_of(store: &Store, json: &Json) -> Result<std::result::Result<Value, String>> {

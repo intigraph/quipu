@@ -1,6 +1,6 @@
 {
-  "source_revision": "4f3f5493d347d97e9a0470faa8c5c1c087d68da6",
-  "reviewed_at": "2026-10-22T12:28:59.732949Z",
+  "source_revision": "d707ec62fe105f3296143321e681aec8daa46f28",
+  "reviewed_at": "2026-11-01T18:44:51.782380Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "a67be5570de63d9a1d38721567c40c9df63a6e65f303d049dbec84ef2c3c2995",
+      "source_sha256": "5a7628484343ae75aa88dc3d9f87e7decb9b50c573c5fdaad1b8b87f10b2bc95",
       "type": "Concept"
     },
     {
@@ -16,7 +16,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Repository pendants transfer source-bound knowledge between stores through explicit quarantine and promotion, keeping transport separate from receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "fcfed3d4831a0981a9f65cb1a1453746517ac5204f90971912505e28b879076d",
       "type": "Concept"
     },
     {
@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "18e430331670a562cb7b8af3fb5617e822d7ad856c752bf779215f155d12eb01",
+      "source_sha256": "7a5e11f3068d3408aa4996241f8cd4074c1796facf1dae76472f7e2209b8255b",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "835167869859963bf977baaf26ceb62941c5febecafc2d35707b4b98a95e56ef",
+      "source_sha256": "33fc4a4145b88acdc0acef9ecbaa0d34c635525d6115c43985fc16b53debc3ce",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -46,7 +46,7 @@
       "source": "docs/book/src/getting-started/agent-setup.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-setup.md#local-stdio-mcp",
       "summary": "Local agent clients run quipu mcp over stdio with explicit executable and database paths; it launches the matching sibling server without an HTTP listener.",
-      "source_sha256": "0b9cba098e5a785d2f82029c09e5ef15b357bbdc3b06fd13e25a076cf13ef3eb",
+      "source_sha256": "911c9bf9dbea7c0a02306227c6c1fadbf892fb84d2eee31793330b63b222ee71",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "quipu mcp"
@@ -57,7 +57,7 @@
       "source": "docs/book/src/sharing/index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fsharing%2Findex.md",
       "summary": "Imported knowledge stays staged until explicit promotion. Bundled shapes and source evidence are not automatic receiver authority.",
-      "source_sha256": "21ef102025042cd7d6ef277945bf040e8b34b5229bee719fbe32d8621f4fe486",
+      "source_sha256": "fcfed3d4831a0981a9f65cb1a1453746517ac5204f90971912505e28b879076d",
       "type": "DecisionRecord",
       "properties": {
         "status": "active",
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ba70b50ed387df53982cf471d2b3d3ed5e0c1152bea3996e5b76a9c84531e314",
+      "source_sha256": "e59d76c675d5ab5ce4d8198f43c3f558025cab6b3cb49184a8ccfd1a3bf5c4d8",
       "properties": {
         "startHereOrder": 2
       }
@@ -93,7 +93,7 @@
       "source": "scripts/build-repository-share.sh",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/scripts%2Fbuild-repository-share.sh",
       "summary": "The legacy trusted-host repository builder invokes the Bobbin indexer and Quipu share and quarantine checks. Private publication policy remains outside the public artifact.",
-      "source_sha256": "89e6a19cd92208acc18a89813adec4f510bb8b1b04ea2b636093425679a3e387",
+      "source_sha256": "c47cc0f8a0e7191cdb65bed7dc6e5d1eab9baf1d55f91c044cd7cf95c63a62bb",
       "properties": {
         "interfaceKind": "file-format",
         "publicName": "Trusted repository pendant builder"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "a9fd838e1ea737a6b3b078692dc88f23194890ce5c7e70d113c28cdd7a281149",
+      "source_sha256": "76e95d98ff98480949cdf9de0a7a993431e6a5818b0da1036eeab62442af8e80",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,10 +128,52 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "73b84d2efdfc949f9f55340ac3bfd2f86c3cea92b464220a9bfa4739066b4381",
+      "source_sha256": "cb47f52dba12e0b97c7e75c39fd5187a6592ae82ca4734a767edbd6458d2cec2",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/reference/cli-commands.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
+      "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
+      "source_sha256": "fa75f464685fcdc3544c25573efdeb524279b4cdcff2e270f3355bcb72e836b4",
+      "properties": {
+        "interfaceKind": "CLI",
+        "publicName": "CLI Command Index"
+      }
+    },
+    {
+      "kind": "interface",
+      "source": "docs/book/src/reference/mcp-tool-index.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
+      "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
+      "source_sha256": "c26a52a4d1f3053525b8178995e377b5bbb9247097d49b190b3cd0525814564d",
+      "properties": {
+        "interfaceKind": "MCP",
+        "publicName": "MCP Tool Index"
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "docs/book/src/getting-started/agent-primer.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Fagent-primer.md",
+      "summary": "Agent Primer book entrypoint includes the embedded primer source and documents the prime command.",
+      "source_sha256": "27e5346173128a72c0695de93d2e09dc3a6b1d06e9335b9e5dd998b4c4f903b2",
+      "properties": {
+        "startHereOrder": 4
+      }
+    },
+    {
+      "kind": "start-here",
+      "source": "src/primer.md",
+      "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
+      "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
+      "source_sha256": "f07d8d40d26c4d107e00a46ce57b403b45f5ceefeee13718f5f77e1339b1c73f",
+      "properties": {
+        "startHereOrder": 5
       }
     }
   ]

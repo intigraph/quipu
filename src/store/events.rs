@@ -138,8 +138,14 @@ impl Store {
     /// consumers must cross the writer barrier, then reread the durable log.
     /// This does not run on reads or inner savepoint releases.
     #[cfg(feature = "server")]
+    /// SQLite keeps one commit hook per connection, so this one also carries
+    /// the ownership commit fence; a refused commit never wakes consumers.
     pub fn set_commit_wake(&self, mut wake: impl FnMut() + Send + 'static) -> Result<()> {
+        let fence = self.ownership_fence.clone();
         self.conn.commit_hook(Some(move || {
+            if fence.as_ref().is_some_and(|fence| fence.refuses()) {
+                return true;
+            }
             wake();
             false
         }))?;
@@ -477,53 +483,6 @@ impl Store {
             out.push(row?);
         }
         Ok(out)
-    }
-
-    // -- Retention --------------------------------------------------------
-
-    /// Prune the event log (quipu-9z9) without breaking the replay contract.
-    ///
-    /// Deletes events whose `ts` is strictly older than `older_than`
-    /// (ISO-8601) AND that every registered consumer has already committed
-    /// past: with any rows in `consumers`, only offsets at or below
-    /// `MIN(committed_offset)` are eligible — an event a consumer has not yet
-    /// consumed is retained no matter how old, so a committed cursor never
-    /// points at a hole and the reactor-down-6wk guarantee survives retention
-    /// (the lagging consumer's backlog just stays on disk). With NO
-    /// registered consumers there is no cursor to honour and age alone
-    /// decides — the browser-pack case the design calls pure overhead.
-    ///
-    /// Offsets are `AUTOINCREMENT`, so pruning never causes offset reuse.
-    /// What retention DOES give up is genesis replay: a consumer registering
-    /// after a prune replays from the retained prefix, not from the
-    /// beginning. A deployment that needs full-history replay for
-    /// yet-unknown consumers must not enable retention.
-    ///
-    /// Nothing calls this by default — retention is opt-in via
-    /// `[quipu.events] retention_days` (see [`crate::config::EventsConfig`])
-    /// or a deliberate caller. Returns the number of events deleted.
-    pub fn prune_events(&self, older_than: &str) -> Result<u64> {
-        let safe: i64 = self.conn.query_row(
-            "SELECT COALESCE(MIN(committed_offset), ?1) FROM consumers",
-            params![i64::MAX],
-            |r| r.get(0),
-        )?;
-        let deleted = self.conn.execute(
-            "DELETE FROM events WHERE ts < ?1 AND \"offset\" <= ?2",
-            params![older_than, safe],
-        )?;
-        // Each graph's log is held back only by that graph's consumers.
-        let graph_deleted = if self.has_graph_events()? {
-            self.conn.execute(
-                "DELETE FROM graph_events WHERE ts < ?1 AND \"offset\" <= COALESCE(\
-                     (SELECT MIN(c.committed_offset) FROM graph_consumers c \
-                      WHERE c.graph = graph_events.graph), ?2)",
-                params![older_than, i64::MAX],
-            )?
-        } else {
-            0
-        };
-        Ok((deleted + graph_deleted) as u64)
     }
 
     // -- Pull API ---------------------------------------------------------

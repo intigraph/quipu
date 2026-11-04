@@ -373,3 +373,6 @@ mod tests {
 
 #[cfg(test)]
 mod numeric_tests;
+
+#[cfg(test)]
+mod temporal_tests;

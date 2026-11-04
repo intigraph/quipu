@@ -1,0 +1,34 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-PROPOSE-ACCEPT 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-propose\-accept \- Accept a pending proposal; refused when its plan is over the risk threshold unless \-\-accept\-risk \-\-reason
+.SH SYNOPSIS
+\fBquipu propose accept\fR [\fB\-\-db\fR] [\fB\-\-decided\-by\fR] [\fB\-\-note\fR] [\fB\-\-reason\fR] [\fB\-\-risk\-threshold\fR] [\fB\-\-accept\-risk\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIid\fR> 
+.SH DESCRIPTION
+Accept a pending proposal; refused when its plan is over the risk threshold unless \-\-accept\-risk \-\-reason
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-decided\-by\fR \fI<VALUE>\fR
+Identity recording the alignment decision
+.TP
+\fB\-\-note\fR \fI<VALUE>\fR
+Explanatory note recorded with the operation
+.TP
+\fB\-\-reason\fR \fI<VALUE>\fR
+Why an over\-threshold plan is accepted; recorded with the decision
+.TP
+\fB\-\-risk\-threshold\fR \fI<VALUE>\fR
+Refuse acceptance above this 0\-100 risk score (default: the deployment threshold)
+.TP
+\fB\-\-accept\-risk\fR
+Accept despite a plan over the risk threshold; requires \-\-reason
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIid\fR>
+

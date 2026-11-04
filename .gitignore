@@ -51,6 +51,7 @@ python/dist/
 # Census benchmark run outputs (stores, manifests, metrics)
 benchmark/census/out/
 benchmark/mergebench/out/
+benchmark/agent-branches/out/
 
 # DEMM-Bench run outputs (cases, scorer results, summaries)
 benchmark/demm/out/
@@ -94,6 +95,7 @@ docs/book/src/datalinks/demo.pendant.tar.gz
 # Rust and the repo carries no binaries.
 docs/book/src/explore/pkg/
 docs/book/src/explore/repository.pendant.tar.gz
+docs/book/src/explore/default-store.db.gz
 
 # Beads / Dolt files (added by bd init)
 .dolt/
@@ -124,3 +126,7 @@ docs/paper-merge/*.fdb_latexmk
 # Reproducible merge-load runs and generated Node WASM glue.
 benchmark/merge-load/out/
 wasm/explorer/pkg-node/
+
+# The Python bindings build into CARGO_TARGET_DIR or their own target.
+/bindings/python/target/
+/bindings/python/dist/

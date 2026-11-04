@@ -5,9 +5,9 @@ edition = "2024"
 license = "Apache-2.0"
 description = "Shared Quipu v1 verdict signing primitives; trust and keys remain caller-owned"
 repository = "https://github.com/intigraph/quipu"
-# Source preparation only. A registry publication path must be independently
-# admitted before consumers acquire a registry dependency.
-publish = false
+# Publication enabled for the first crates.io release, 0.1.0 (approved by Stiwi
+# 2026-10-29, aegis-ulk option A); pending until published by hand from the merged
+# commit and read back. Not in the root workspace or the release-plz lane.
 
 [workspace]
 

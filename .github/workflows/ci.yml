@@ -17,14 +17,48 @@ on:
 # CD consumes only the newest main commit. Cancel superseded runs on every ref
 # so an old 22-job matrix cannot starve the six checks gating the current head.
 # Pushes run only those six; release-only surfaces run on PRs and nightly.
+#
+# EXCEPT the release commit ("chore: release vX", the release-PR merge), which
+# gets a group of its own, exactly as in release.yml (aegis-3xv). Release
+# publishes only on a green "Release correctness" for its exact SHA, so
+# cancelling the release commit's CI strands the release: #906 landed seconds
+# after 4fe4d08b (chore: release v0.16.5), cancelled its "Test (shacl)", its
+# Release run failed, and a later run cut 0.16.5 from 9f5bc69a instead
+# (aegis-0zr). Keep this suffix identical to release.yml's.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: "ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  query-builders:
+    name: Typed SPARQL client builders
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: python3 -m pip install pytest
+      - name: Install and exercise the built Python package outside the source tree
+        run: |
+          python3 -m pip install ./python
+          cd "$RUNNER_TEMP"
+          python3 -c 'from quipu_client import Select, Var; assert Select((Var("s"),)).to_request() == {"query": "SELECT ?s WHERE {  }"}'
+          python3 -c 'from importlib.resources import files; assert files("quipu_client").joinpath("py.typed").is_file()'
+      - run: python3 -m pytest python/tests -q
+      - run: node --test tests/query-builder.test.mjs
+      - run: npx --yes --ignore-scripts --package typescript@5.9.3 tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/query-builder-types.mts
+      - run: cargo test --locked --no-default-features --test query_builder
+      - run: cargo test --locked --no-default-features --lib bindings::tests
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -149,7 +183,7 @@ jobs:
         run: cargo test --features shacl,owl
 
       # Release correctness already requires this job. No path filter or driver config.
-      - name: Verify qpack Git merge semantics
+      - name: Verify pendant Git merge semantics
         if: matrix.name == 'shacl'
         run: |
           cargo build --locked --features shacl --bin quipu
@@ -178,6 +212,36 @@ jobs:
   # Unique but non-CD-gating cfg surfaces. Run them serially on PRs/nightly so
   # they remain release evidence without competing with a pushed head's six
   # required checks for account runners.
+  generated-docs:
+    # Agent surfaces stay current (aegis-t7h): man pages, shell completions and
+    # the book's CLI and MCP indexes must equal what quipu-docgen regenerates
+    # from the command catalogue and the tool definitions, and every CLI verb
+    # and MCP tool must be named in the primer or skill or excluded with a
+    # reason. The primer's skill copy is checked by tests/prime_sync.rs in the
+    # Test jobs. Required through Release correctness.
+    name: Generated docs drift
+    runs-on: ubuntu-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-docgen-sources-v1-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-docgen-sources-v1-
+      - run: cargo clippy --locked --features docgen --bin quipu-docgen -- -D warnings -A missing-docs
+      - run: cargo test --locked --features docgen --bin quipu-docgen
+      - name: Committed generated docs equal regeneration
+        run: cargo run --locked --features docgen --bin quipu-docgen -- --check
+
   extended-features:
     name: Extended feature surfaces
     if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
@@ -215,6 +279,16 @@ jobs:
           timeout 120 python3 scripts/test-named-graph-recipe.py target/debug/quipu-server
           timeout 60 python3 scripts/test-replica-server.py target/debug/quipu-server target/debug/quipu
           timeout 120 python3 scripts/test-read-process-pool.py target/debug/quipu-server target/debug/quipu
+          # TerminusDB import. Set the repo variable TERMINUSDB_LIVE_CI=true to also run
+          # it against a real, pinned TerminusDB container (test-fixtures/terminusdb/live/README.md).
+          if [ "${{ vars.TERMINUSDB_LIVE_CI }}" = "true" ]; then
+            docker run -d --name tdb -p 127.0.0.1:6363:6363 -e TERMINUSDB_ADMIN_PASS=ci-only \
+              terminusdb/terminusdb-server:v12.0.8@sha256:43061044d1857bb6f1a2f41d7a59ad06ba5f91c03cbc90128d7c0415f32a0916
+            for _ in $(seq 60); do curl -sf -u admin:ci-only http://127.0.0.1:6363/api/info >/dev/null && break; sleep 1; done
+            export TERMINUSDB_LIVE_URL=http://127.0.0.1:6363 TERMINUSDB_USER=admin TERMINUSDB_PASSWORD=ci-only
+          fi
+          QUIPU_BIN=target/debug/quipu QUIPU_SERVER_BIN=target/debug/quipu-server \
+            timeout 180 python3 scripts/test-terminusdb-import.py
       # The quipu-server binary's own unit tests (src/server/*). The bin needs
       # shacl+onnx+server, which no `test` matrix arm enables, so these were
       # clippy'd and built but never RUN anywhere in CI. They include the
@@ -247,6 +321,20 @@ jobs:
           trap 'docker volume rm -f quipu-ci >/dev/null' EXIT
           timeout 180 python3 scripts/ci/mcp-stdio-smoke.py -- \
             docker run -i --rm -v quipu-ci:/data quipu-mcp:ci
+          # Actual container restart retains legacy data without pretending the
+          # image has a physical-host placement provider. No injected identity.
+          docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store status --db /data/quipu.db \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["ownership"] == "INACTIVE"'
+          docker run --rm --entrypoint /bin/sh quipu-mcp:ci -c 'test ! -s /etc/machine-id'
+          if docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store adopt --db /data/quipu.db; then
+            echo "ownership adoption succeeded without a host provider" >&2
+            exit 1
+          fi
+          docker run --rm --entrypoint /usr/local/bin/quipu \
+            -v quipu-ci:/data quipu-mcp:ci store status --db /data/quipu.db \
+            | python3 -c 'import json,sys; assert json.load(sys.stdin)["ownership"] == "INACTIVE"'
       - run: cargo clippy --no-default-features --features remote --all-targets -- -D warnings -A missing-docs
       - run: cargo clippy --features shacl,lancedb --all-targets -- -D warnings -A missing-docs
       - run: cargo test --no-default-features --features remote
@@ -461,6 +549,15 @@ jobs:
           python3 scripts/test_rearm_release_correctness.py
           python3 scripts/test_semver_policy.py
           python3 scripts/check-semver-policy.py
+
+      # The changelog guard, the pre-cut gate and the release PR freshness check
+      # (aegis-0zr) were exercised only by release.yml after a merge, so a PR that
+      # broke them landed before anything ran them. Run the hermetic suite here.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Prove the changelog guard, pre-cut gate and freshness check
+        run: ./scripts/test-verify-changelog.sh
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
@@ -726,7 +823,7 @@ jobs:
   release-correctness:
     name: Release correctness
     if: always()
-    needs: [clippy, test, build, check, shacl-write-path]
+    needs: [clippy, test, build, check, shacl-write-path, generated-docs]
     runs-on: ubuntu-latest
     steps:
       - name: Require every correctness job to pass

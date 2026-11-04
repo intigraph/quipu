@@ -292,7 +292,7 @@ impl GraphDigest {
 }
 
 /// The shape sets in force at `tx`, in the share's encoding.
-pub(super) fn shapes_hash(store: &Store, tx: i64) -> Result<String> {
+pub(crate) fn shapes_hash(store: &Store, tx: i64) -> Result<String> {
     let sets = store.list_shapes_as_of(&crate::store::AsOf {
         tx: Some(tx),
         valid_at: None,

@@ -65,6 +65,19 @@ deploy-server:
 test *args="":
     cargo test {{args}}
 
+# Explicit offline comparison against the frozen pre-change SQLite scan.
+vector-scan command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        benchmark) cargo test --release --lib vector::scoring::benchmark::paired_sqlite_vector_scan -- --ignored --nocapture ;;
+        *) echo 'Use: just vector-scan benchmark' >&2; exit 2 ;;
+    esac
+
+# Offline replay controls: restart, deduplication, corruption and private files.
+test-search-outcome-replay:
+    python3 -B scripts/test_search_outcome_replay.py
+
 # Run linter
 lint:
     cargo clippy -- -D warnings -A missing-docs
@@ -141,7 +154,7 @@ paper-merge cmd="build":
         cd docs/paper-merge && rm -f main.aux main.bbl main.blg main.log main.out main.pdf main.fls main.fdb_latexmk; \
     else echo "unknown paper-merge command '{{ cmd }}' (available: build, clean)"; exit 1; fi
 
-# Run a paper benchmark: census, merge, memory, schema (and their report generators).
+# Run a paper benchmark: census, merge, agent-branches, memory, schema (and their report generators).
 # just bench agents [--models fake,claude:<m>,codex:<m>] [--tasks ...] [--trials N] [--seed S]
 #   The default model is the scripted `fake` writer: zero spend. A real model
 #   spends budget; see benchmark/census/agent/README.md before running one.
@@ -160,13 +173,15 @@ bench name *args:
         cargo run --quiet --release --example shape_e --features shacl -- {{ args }}; \
     elif [ "{{ name }}" = "schema-report" ]; then \
         python3 benchmark/shapes/render.py {{ args }}; \
+    elif [ "{{ name }}" = "agent-branches" ]; then \
+        python3 benchmark/agent-branches/run.py {{ args }}; \
     elif [ "{{ name }}" = "merge-note" ]; then \
         python3 benchmark/merge-note.py; \
     elif [ "{{ name }}" = "agents" ]; then \
         cargo build --quiet --release --example census && \
         python3 benchmark/census/agent/run_agents.py {{ args }}; \
     else \
-        echo "unknown benchmark '{{ name }}' (available: census, merge, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
+        echo "unknown benchmark '{{ name }}' (available: census, merge, agent-branches, agents, memory, memory-report, schema, schema-report, merge-note)"; exit 1; \
     fi
 
 # Load the fictional demo graph and serve the explorer on localhost:3030.
@@ -176,6 +191,11 @@ demo name="explorer":
     set -euo pipefail
     case {{quote(name)}} in
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
+        ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
+        transition-trust-root) cargo run --quiet --locked --offline --no-default-features --example transition_trust_root ;;
+        ownership-startup-boundary) cargo run --quiet --locked --offline --no-default-features --example ownership_startup_boundary ;;
+        cast-filter) cargo run --quiet --locked --no-default-features --example cast_filter_profile -- examples/cast-filter-profile.rq 6000 ;;
         explorer)
             rm -f /tmp/quipu-demo.db
             cargo run --bin quipu --features shacl -- knot examples/demo-graph/demo.ttl --db /tmp/quipu-demo.db
@@ -286,6 +306,11 @@ explorer-navigation *args:
     node scripts/test-explore-navigation.cjs {{args}}
     node scripts/test-explore-cords.cjs {{args}}
 
+# Staged loader and retry acceptance against the real browser engine.
+explorer-loading *args:
+    bash scripts/check-explorer-published.test.sh
+    node scripts/test-explore-loading.cjs {{args}}
+
 # Presentation acceptance against the same staged browser engine.
 explorer-presentation *args:
     node scripts/test-explore-presentation.cjs {{args}}
@@ -305,7 +330,10 @@ docs cmd="build":
         fmt)      npx prettier --write "docs/book/src/**/*.md" --prose-wrap preserve ;;
         vale)     vale docs/book/src/ ;;
         check)    just docs lint && just docs build ;;
-        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
+        generate) cargo run --locked --features docgen --bin quipu-docgen ;;
+        generated-check) cargo run --locked --features docgen --bin quipu-docgen -- --check ;;
+        references-test) python3 scripts/test-repository-knowledge.py ;;
+        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check generate generated-check references-test" ;;
     esac
 
 # === Public benchmarks ===
@@ -377,3 +405,43 @@ read-process-test server cli:
 installer-check:
     sh -n install.sh
     python3 scripts/test-install-release.py
+
+# Typed Python REST + JavaScript/WASM SPARQL builder controls.
+clients action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{action}}" in
+        package) uv build python ;;
+        types) npx --yes --ignore-scripts --package typescript@5.9.3 tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext tests/query-builder-types.mts ;;
+        fmt) ruff format python/quipu_client python/tests/builder_cases.py python/tests/test_sparql.py ;;
+        check) cargo check --locked --no-default-features --all-targets ;;
+        lint) cargo clippy --locked --no-default-features --all-targets -- -D warnings -A missing-docs ;;
+        test) python3 -m pytest python/tests -q
+              node --test tests/query-builder.test.mjs
+              cargo test --locked --no-default-features --test query_builder
+              cargo test --locked --no-default-features --lib bindings::tests ;;
+        *) echo 'Use: just clients package|types|fmt|check|lint|test' >&2; exit 2 ;;
+    esac
+
+# Focused stack prime contract checks (runtime tests use the crew HOME guard).
+prime action="test":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(action)}} in
+        check) cargo check --locked --no-default-features --features shacl --all-targets ;;
+        test) cargo test --locked --no-default-features --features shacl --bin quipu cli_prime:: && cargo test --locked --no-default-features --features shacl --test prime_cli --test prime_sync ;;
+        *) echo 'Use: just prime check|test' >&2; exit 2 ;;
+    esac
+
+# Qualify the published shared signing dependency and its nested consumer locks.
+signing command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{command}}" in
+        locks)
+            for manifest in Cargo.toml bindings/python/Cargo.toml wasm/explorer/Cargo.toml wasm/harness/Cargo.toml; do
+                cargo update --workspace --manifest-path "$manifest"
+            done ;;
+        package-controls) python3 scripts/ci/test_signing_package.py ;;
+        *) echo "usage: just signing locks|package-controls" >&2; exit 2 ;;
+    esac

@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-PROJECT 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-project \- Project the graph and run a graph algorithm such as PageRank
+.SH SYNOPSIS
+\fBquipu project\fR [\fB\-\-db\fR] [\fB\-\-algorithm\fR] [\fB\-\-type\fR] [\fB\-\-predicate\fR] [\fB\-\-graph\fR] [\fB\-\-limit\fR] [\fB\-\-damping\fR] [\fB\-\-max\-iters\fR] [\fB\-\-tolerance\fR] [\fB\-\-from\fR] [\fB\-\-to\fR] [\fB\-\-seed\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Project the graph and run a graph algorithm such as PageRank
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-algorithm\fR \fI<VALUE>\fR
+Graph projection algorithm
+.TP
+\fB\-\-type\fR \fI<VALUE>\fR
+Entity type IRI to select
+.TP
+\fB\-\-predicate\fR \fI<VALUE>\fR
+Predicate IRI used to filter facts or edges
+.TP
+\fB\-\-graph\fR \fI<VALUE>\fR
+Explicit graph IRI for this operation
+.TP
+\fB\-\-limit\fR \fI<VALUE>\fR
+Maximum number of results
+.TP
+\fB\-\-damping\fR \fI<VALUE>\fR
+PageRank damping factor
+.TP
+\fB\-\-max\-iters\fR \fI<VALUE>\fR
+Maximum algorithm iterations
+.TP
+\fB\-\-tolerance\fR \fI<VALUE>\fR
+Convergence tolerance for the algorithm
+.TP
+\fB\-\-from\fR \fI<VALUE>\fR
+Start entity IRI for shortest\-path projection
+.TP
+\fB\-\-to\fR \fI<VALUE>\fR
+Destination entity IRI for shortest\-path projection
+.TP
+\fB\-\-seed\fR \fI<VALUE>\fR
+Seed entity for graph projection
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

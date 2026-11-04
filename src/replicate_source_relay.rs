@@ -45,6 +45,8 @@ impl Session {
             .is_autocommit()
             .then(|| store.conn.unchecked_transaction())
             .transpose()?;
+        let local_epoch = store.log_epoch()?;
+        let ownership = store.ownership_state()?;
         let held: Vec<&String> = allowed.0.iter().chain(allowed.1).collect();
         if scope.iter().chain(&context).any(|g| !held.contains(&g)) {
             return Err(refused("a relay serves only graphs inside its own scope"));
@@ -78,6 +80,8 @@ impl Session {
             identity,
             store_id: source.store_id,
             log_epoch: source.log_epoch,
+            local_epoch,
+            ownership,
             scope: scope_digest(&scope, &context),
             graphs,
             since: request.since,

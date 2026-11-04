@@ -10,6 +10,10 @@ pub mod applier;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asof_share;
 pub mod bindings;
+pub mod changeset;
+/// Change-sets against a live store: `/diff` and the `/patch` state check.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod changeset_store;
 pub mod compact;
 pub mod config;
 mod config_load;
@@ -18,6 +22,8 @@ pub mod crew_credentials;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
+pub mod entity_key;
+mod entity_key_guard;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;
@@ -36,6 +42,9 @@ mod literal_identity;
 pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
+pub mod merge3;
+/// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
+pub mod merge_reconcile;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
@@ -44,11 +53,15 @@ mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+/// Portable bootstrap manifest and signature verification, including WASM.
+#[path = "asof_share/manifest.rs"]
+pub mod replica_manifest;
 pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
 pub mod replicate_wire;
 mod search_graph_scope;
+pub mod search_outcome;
 pub mod search_trace;
 pub mod substring;
 pub mod transaction_auth;
@@ -70,10 +83,13 @@ mod pack_load;
 mod pack_turtle;
 pub mod path;
 pub mod proposal;
+pub mod proposal_migration;
+pub mod proposal_plan;
 pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
@@ -82,6 +98,10 @@ pub mod follow;
 pub mod follow_http;
 /// Whether a follower may serve reads in place of its primary (aegis-tnh).
 pub mod follow_ready;
+/// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
+pub mod fork_merge_decisions;
+/// Experimental pure ownership-handoff model; no Store or runtime integration.
+pub mod ownership_handoff_model;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;
@@ -106,6 +126,8 @@ pub mod shacl_context;
 pub mod shacl_cycles;
 #[cfg(feature = "shacl")]
 mod shacl_debt;
+/// Refuse SHACL-SPARQL shapes, which are not evaluated (aegis-rk4).
+pub mod shacl_unsupported;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod verified_write;
@@ -173,6 +195,7 @@ pub mod vector_lance;
 pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
+pub mod write_gate;
 
 /// The crate version this build was compiled from.
 ///
@@ -226,7 +249,7 @@ pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
 #[cfg(not(target_arch = "wasm32"))]
-pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions};
+pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions, tool_merge_resolve};
 pub use mcp::named_query::tool_ask;
 #[cfg(feature = "owl")]
 pub use mcp::owl::tool_load_ontology;

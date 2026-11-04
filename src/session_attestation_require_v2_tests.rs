@@ -197,6 +197,7 @@ fn a_binding_that_predates_the_column_migrates_as_v1_allowed() {
         )
         .unwrap();
     }
+    Store::adopt(path.to_str().unwrap()).unwrap();
     let store = Store::open(path.to_str().unwrap()).unwrap();
     let read = store.attestation_binding("legacy-writer").unwrap().unwrap();
     assert!(read.allow_write, "control: the legacy row was read at all");

@@ -21,6 +21,14 @@ use crate::types::Value;
 /// Input: `{ "query": "...", "group_ids": ["..."], "max_results": N, "entity_type_filter": "..." }`
 /// Output: `{ "nodes": [{ "iri", "label", "types", "summary", "score" }], "count": N }`
 pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(
+        crate::search_outcome::Operation::SearchNodes,
+        input,
+        || search_nodes(store, input),
+    )
+}
+
+fn search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let query = input
         .get("query")
         .and_then(|v| v.as_str())
@@ -102,6 +110,14 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 /// Input: `{ "query": "...", "group_ids": ["..."], "max_results": N }`
 /// Output: `{ "facts": [{ "source", "predicate", "target", "provenance" }], "count": N }`
 pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(
+        crate::search_outcome::Operation::SearchFacts,
+        input,
+        || search_facts(store, input),
+    )
+}
+
+fn search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let query = input
         .get("query")
         .and_then(|v| v.as_str())

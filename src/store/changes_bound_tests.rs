@@ -83,6 +83,31 @@ fn the_bound_covers_bytes_as_base64() {
 }
 
 #[test]
+fn the_bound_counts_a_close_absent_from_the_retraction_audit_row() {
+    let mut store = Store::open_in_memory().unwrap();
+    let g = store.graph_create("urn:graph:close").unwrap();
+    let mut d = datum(&store, "urn:example:item", Value::Int(1), Op::Assert);
+    store
+        .transact_to_graph(&[d.clone()], T, None, None, g)
+        .unwrap();
+    d.op = Op::Retract;
+    let tx = store.transact_to_graph(&[d], T, None, None, g).unwrap();
+    // Like a promoted correction: only the assertion carries the retimed
+    // close. A long fractional timestamp makes an omitted bound observable.
+    let close = format!("2026-03-01T00:00:00.{}Z", "1".repeat(16_000));
+    store
+        .conn
+        .execute(
+            "UPDATE facts SET valid_to=?1 WHERE op=1 AND retracted_tx=?2",
+            params![close, tx],
+        )
+        .unwrap();
+    let (bound, actual) = bound_and_actual(&store, tx, g);
+    assert!(actual > 16_000);
+    assert!(bound >= actual, "bound {bound} < actual {actual}");
+}
+
+#[test]
 fn the_bound_counts_the_metadata_every_record_repeats() {
     let mut store = Store::open_in_memory().unwrap();
     let datums: Vec<Datum> = (0..20)

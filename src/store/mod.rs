@@ -15,6 +15,22 @@ pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod decision_deck;
 mod decision_nonces;
+mod ownership;
+mod ownership_fence;
+// Protected per-lineage authority journal (aegis-s24.8 P1); native only.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_journal;
+mod ownership_startup;
+#[cfg(test)]
+mod ownership_startup_tests;
+pub(crate) mod release;
+pub use ownership::OwnershipState;
+#[cfg(test)]
+mod ownership_held_handle_tests;
+#[cfg(test)]
+mod ownership_stage_a_tests;
+#[cfg(test)]
+mod ownership_tests;
 mod poststate_profile;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
@@ -29,7 +45,9 @@ pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
 pub mod events;
+mod events_retention;
 pub mod forks;
+mod forks_merge;
 pub mod freeze;
 mod freeze_io;
 mod gate;
@@ -63,6 +81,7 @@ pub mod respace;
 mod respace_map;
 mod retract_triples;
 mod retraction;
+mod retraction_gate;
 mod search_scope_policy;
 mod serialize;
 mod set;
@@ -101,6 +120,12 @@ use crate::vector_delegate::DelegatingVectorStore;
 
 /// The core fact log store backed by `SQLite`.
 pub struct Store {
+    /// One admission pin and nonblocking check latch for this writer. Replacing
+    /// SQLite's single commit callback must never create a fresh admission.
+    /// Drop this reference before `conn`: its callback then owns the last
+    /// reader reference and releases it before the writer closes, preserving
+    /// SQLite's last-writer WAL/SHM cleanup.
+    ownership_fence: Option<Arc<ownership_fence::CommitFence>>,
     pub(crate) conn: Connection,
     /// v1 verdict-signing identity (ed25519, host-file key). When set, the
     /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
@@ -119,6 +144,7 @@ pub struct Store {
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
     pub(crate) labels_config: crate::config::LabelsConfig,
+    pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
     /// ingest is validated against the persistently-loaded shapes (hq-c6s).
     pub(crate) shacl_config: ShaclConfig,
@@ -133,6 +159,10 @@ pub struct Store {
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.
     pub(crate) poststate_profile: PoststateProfile,
+    /// Whether `idx_current_g` has the exact current-membership definition,
+    /// memoized against `PRAGMA schema_version` (aegis-ek4): a correlated
+    /// named-graph leaf asks once per outer row.
+    pub(crate) current_g_index: std::cell::Cell<Option<(i64, bool)>>,
     /// OWL write-time constraint policy (aegis-bmqup).
     pub(crate) owl_config: OwlConfig,
     /// Ontology built from the stored ontologies, cached because the write gate
@@ -199,6 +229,9 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
+    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
+    /// startup. Defaults to legacy (every term under `base_ns`).
+    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
@@ -393,6 +426,58 @@ impl Store {
         ))
     }
 
+    /// The /stats triple counts: (facts, entities, predicates) over the triples
+    /// `SELECT ?s ?p ?o WHERE { ?s ?p ?o }` answers, computed WITHOUT
+    /// materialising them (aegis-67p0lj).
+    ///
+    /// Same population as that query: live ROOT rows (`g = 0 AND op = 1 AND
+    /// valid_to IS NULL`), one triple per `(e, a, term_key(v))`. Repeated
+    /// assertions and different encodings of one term (`"1"^^xsd:integer` and
+    /// `"01"^^xsd:integer`) count once, exactly as `collect_visible_facts`
+    /// dedups them. This differs from [`Store::graph_counts`], which counts
+    /// physical rows.
+    ///
+    /// Rows stream in `(e, a)` order and only the current `(e, a)` group's term
+    /// keys are held, so memory is bounded by the largest group, not the store.
+    /// The query it replaces built every row (one production store, 2026-11-04:
+    /// ~3.0M triples, a transient ~3 GB allocation per call).
+    pub fn current_triple_counts(&self) -> Result<(u64, u64, u64)> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v FROM facts \
+             WHERE g = 0 AND op = 1 AND valid_to IS NULL ORDER BY e, a",
+        )?;
+        let mut rows = stmt.query([])?;
+        let (mut facts, mut entities) = (0u64, 0u64);
+        let mut predicates = std::collections::HashSet::new();
+        let mut group: Option<(i64, i64)> = None;
+        let mut last_entity: Option<i64> = None;
+        let mut terms: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+        while let Some(row) = rows.next()? {
+            let (e, a): (i64, i64) = (row.get(0)?, row.get(1)?);
+            if group != Some((e, a)) {
+                terms.clear();
+                group = Some((e, a));
+            }
+            let bytes = row.get_ref(2)?.as_blob().map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Blob,
+                    Box::new(e),
+                )
+            })?;
+            let key = crate::Value::from_bytes(bytes)?.term_key();
+            if terms.insert(key) {
+                facts += 1;
+                predicates.insert(a);
+                if last_entity != Some(e) {
+                    entities += 1;
+                    last_entity = Some(e);
+                }
+            }
+        }
+        Ok((facts, entities, predicates.len() as u64))
+    }
+
     /// The latest committed transaction id (0 for an empty store).
     ///
     /// Cheap (indexed MAX on the rowid-keyed transactions table) and
@@ -410,6 +495,20 @@ impl Store {
             Some(row) => Ok(row.get(0)?),
             None => Ok(0),
         }
+    }
+
+    /// The newest transaction whose source contains `fragment`, if any.
+    /// Used to recognise a decisions file that was already applied.
+    pub fn find_transaction_by_source(&self, fragment: &str) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id FROM transactions WHERE instr(source, ?1) > 0 \
+                 ORDER BY id DESC LIMIT 1",
+                params![fragment],
+                |r| r.get(0),
+            )
+            .optional()?)
     }
 
     /// Retrieve a transaction by id.
@@ -434,6 +533,15 @@ impl Store {
     /// Prepare a SQL statement against the underlying connection.
     pub(crate) fn prepare(&self, sql: &str) -> Result<rusqlite::Statement<'_>> {
         Ok(self.conn.prepare(sql)?)
+    }
+
+    /// Prepare through the connection's statement cache. For SQL the
+    /// evaluator re-issues once per outer row (a nested-loop BGP step, a
+    /// correlated EXISTS): the text is identical per row and only the bound
+    /// parameters change, so parsing and planning it again for every row was
+    /// most of a board aggregate's time (aegis-ek4).
+    pub(crate) fn prepare_cached(&self, sql: &str) -> Result<rusqlite::CachedStatement<'_>> {
+        Ok(self.conn.prepare_cached(sql)?)
     }
 }
 

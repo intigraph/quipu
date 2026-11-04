@@ -1,0 +1,38 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-DECK 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-deck \- Configure and enroll the Decision Deck
+.SH SYNOPSIS
+\fBquipu deck\fR [\fB\-\-db\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIsubcommands\fR>
+.SH DESCRIPTION
+Configure and enroll the Decision Deck
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+quipu\-deck\-configure(1)
+Configure the Decision Deck scope (starts disabled)
+.TP
+quipu\-deck\-enroll(1)
+Enroll a Decision Deck credential
+.TP
+quipu\-deck\-enable(1)
+Enable the Decision Deck
+.TP
+quipu\-deck\-disable(1)
+Disable the Decision Deck
+.TP
+quipu\-deck\-revoke(1)
+Revoke a Decision Deck credential
+.TP
+quipu\-deck\-status(1)
+Show Decision Deck configuration and state
+.TP
+quipu\-deck\-help(1)
+Print this message or the help of the given subcommand(s)

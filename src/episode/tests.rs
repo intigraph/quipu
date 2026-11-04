@@ -1723,3 +1723,36 @@ fn reuse_by_the_existing_label_is_unchanged() {
         vec!["bead reference pattern"]
     );
 }
+
+/// aegis-p9q on the episode path: a snapshot owner that renames a node another
+/// episode references ends with exactly the new label, not both.
+#[test]
+fn snapshot_rename_of_externally_referenced_node_keeps_only_the_new_label() {
+    let mut store = Store::open_in_memory().unwrap();
+    ingest(
+        &mut store,
+        r#"{"name":"inventory","replace_snapshot":true,
+            "nodes":[{"name":"bead reference pattern","type":"Service"}]}"#,
+        "2026-01-01T00:00:00Z",
+    );
+    ingest(
+        &mut store,
+        r#"{"name":"consumer","nodes":[{"name":"observer","type":"Service"}],
+            "edges":[{"source":"observer","target":"bead reference pattern","relation":"observes"}]}"#,
+        "2026-01-01T01:00:00Z",
+    );
+    ingest(
+        &mut store,
+        r#"{"name":"inventory","replace_snapshot":true,
+            "nodes":[{"name":"bead_reference_pattern","type":"Service"}]}"#,
+        "2026-01-02T00:00:00Z",
+    );
+    assert_eq!(
+        active_values(
+            &store,
+            &format!("{TEST_BASE_NS}bead_reference_pattern"),
+            namespace::RDFS_LABEL
+        ),
+        vec!["bead_reference_pattern"]
+    );
+}

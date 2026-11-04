@@ -9,6 +9,9 @@ use crate::store::changes::Capture;
 
 const T: &str = "2026-10-24T00:00:00Z";
 
+#[path = "applier_valid_time_tests.rs"]
+mod valid_time_tests;
+
 fn d(store: &Store, e: &str, a: &str, v: Value, op: Op) -> Datum {
     Datum {
         entity: store.intern(e).unwrap(),

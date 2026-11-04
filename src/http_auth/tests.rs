@@ -346,6 +346,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/query_capture.rs",
             include_str!("../server/query_capture.rs"),
         ),
+        // Observation currently registers no routes; scan future additions too.
+        (
+            "server/search_observation.rs",
+            include_str!("../server/search_observation.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
@@ -358,6 +363,7 @@ fn routes_in_server_source() -> Vec<String> {
         "server/memory_files.rs", // handlers only; routes registered in server.rs
         "server/background.rs",   // primary worker startup, no route registration
         "server/replica.rs",      // handlers/middleware; route is registered in server.rs
+        "server/patch.rs",        // /diff and /patch handlers; routes registered in server.rs
         "server/relay.rs",        // upstream follower task, no route registration
         "server/admission.rs",
         "server/auth.rs",
@@ -367,6 +373,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/event_cursor.rs",
         "server/feed_stream_tests.rs",
         "server/feed_read_pool_tests.rs",
+        // /stats off-writer tests (aegis-fclp): test-only, no routes.
+        "server/stats_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",

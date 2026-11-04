@@ -97,7 +97,7 @@ impl WriteKind {
             "/knot" | "/knot/stage" => Self::Knot,
             "/knot/promote" | "/knot/cancel" | "/import/promote" => Self::Promote,
             "/import" | "/merge/apply" => Self::Import,
-            "/update" => Self::Update,
+            "/update" | "/patch" => Self::Update,
             "/set" | "/entity_ref" => Self::Set,
             "/retract" | "/retract/source" => Self::Retract,
             "/propose" | "/proposal/accept" | "/proposal/reject" => Self::Proposal,

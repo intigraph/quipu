@@ -1,0 +1,27 @@
+Script started on 2026-10-30 07:36:49-04:00 [COMMAND="bash docs/demos/ownership-handoff-model/probe.sh --fixture-copy" <not executed on terminal>]
+CANDIDATE source f9c7da76f5a72f903e4d47743e9c246665f0508c; synthetic in-memory model
+MODEL only; oracle assumptions are not credentials
+before_retirement old_A_can_commit=true
+premature_witness_retirement=REFUSED
+premature_receipt=REFUSED
+after_retirement old_A_can_commit=false
+after_B_admission old_A_can_commit=false B_can_commit=true admitted_owners=1
+
+COUNTERFACTUAL: same source, only retirement prerequisite removed
+MODEL only; oracle assumptions are not credentials
+before_retirement old_A_can_commit=true
+premature_witness_retirement=RECORDED
+premature_receipt=PUBLISHED
+source_barrier=NOT_EXECUTED
+after_B_admission old_A_can_commit=true B_can_commit=true admitted_owners=2
+Counterfactual failed the model assertion (actual exit 101).
+
+RESTORED CANDIDATE (same input)
+MODEL only; oracle assumptions are not credentials
+before_retirement old_A_can_commit=true
+premature_witness_retirement=REFUSED
+premature_receipt=REFUSED
+after_retirement old_A_can_commit=false
+after_B_admission old_A_can_commit=false B_can_commit=true admitted_owners=1
+
+Script done on 2026-10-30 07:37:16-04:00 [COMMAND_EXIT_CODE="0"]

@@ -14,6 +14,25 @@ pub fn authorize_http_bearers(
     auth_header: Option<&str>,
     now_epoch_secs: u64,
 ) -> Authorization {
+    // A presented replication credential cannot fall through to an open-read,
+    // shared-write or ordinary named-write policy on any other operation.
+    if policy.replication_principal(auth_header).is_some() {
+        let allowed = method == "POST"
+            && matches!(
+                path,
+                "/share/asof" | "/replicate/stream" | "/replicate/challenge"
+            );
+        return Authorization {
+            decision: if read_only {
+                AccessDecision::ReadOnly
+            } else if allowed {
+                AccessDecision::Allow
+            } else {
+                AccessDecision::Unauthorized
+            },
+            generation: (allowed && !read_only).then_some(AuthGeneration::Named),
+        };
+    }
     let write = is_write_request(path, method);
     let protected_read = path == "/render";
     let authorization = authorize_bearers(
@@ -107,3 +126,7 @@ mod tests {
         assert!(!is_write_request("/render", "POST"));
     }
 }
+
+#[cfg(test)]
+#[path = "replication_auth_tests.rs"]
+mod replication_tests;

@@ -5,7 +5,8 @@
 //! An operator asked to rule on an escalation rules better knowing "you
 //! rejected something similar, and here is where you said why". This module
 //! finds that precedent at mint time: prior `DecisionRequest`s that actually
-//! GOT a ruling — a signed `aegis:Decision` from a registered decider, the
+//! GOT a ruling — a signed `aegis:GateApproval` (or a pre-split
+//! `aegis:Decision`) from a registered decider, the
 //! same trust rule [`super::router::resolve`] applies, reused rather than
 //! restated — scored by similarity to the request being minted.
 //!
@@ -37,7 +38,7 @@ use crate::sparql::{self, QueryResult};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
-use super::router::{decision_verifies, evidence_hash};
+use super::router::{GATE_RULING_CLASSES, decision_verifies, evidence_hash};
 use super::similarity::{EmbeddingCosine, TextSimilarity};
 
 /// The most precedents one request carries. Three is enough to show a pattern
@@ -105,7 +106,8 @@ pub fn nearest_decided(
          SELECT ?r ?d ?rp ?rt ?h ?outcome ?by ?sig WHERE {{ \
             ?r a a:DecisionRequest ; a:forPolicy ?rp ; a:forTarget ?rt ; \
                a:evidenceHash ?h . \
-            ?d a a:Decision ; a:evidenceHash ?h ; a:outcome ?outcome ; \
+            {GATE_RULING_CLASSES} \
+            ?d a:evidenceHash ?h ; a:outcome ?outcome ; \
                a:by ?by ; a:signature ?sig . \
          }}"
     );

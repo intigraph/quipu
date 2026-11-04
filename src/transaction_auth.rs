@@ -311,10 +311,7 @@ mod tests {
                 .unwrap()
         });
         assert!(store.transaction_auth(id).unwrap().is_some());
-        store
-            .conn
-            .execute_batch("ROLLBACK TO outer_test; RELEASE outer_test")
-            .unwrap();
+        crate::store::release::rollback_release(&store.conn, "outer_test").unwrap();
         assert!(store.get_transaction(id).unwrap().is_none());
         assert!(store.transaction_auth(id).unwrap().is_none());
         let _ =

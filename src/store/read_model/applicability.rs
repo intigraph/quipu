@@ -101,6 +101,19 @@ impl Store {
         Ok(usize::try_from(n).unwrap_or(usize::MAX))
     }
 
+    /// How many facts [`Store::facts_as_of_in_graph`] would return for a tx
+    /// cut, counted rather than read: `GET /diff`'s affordability check
+    /// (aegis-4mk). Same predicate as that read.
+    pub fn fact_count_as_of(&self, graph: i64, tx: i64) -> Result<usize> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM facts WHERE op = 1 AND g = ?1 AND tx <= ?2 \
+             AND (retracted_tx IS NULL OR retracted_tx > ?2)",
+            rusqlite::params![graph, tx],
+            |r| r.get(0),
+        )?;
+        Ok(usize::try_from(n).unwrap_or(usize::MAX))
+    }
+
     /// Whether a read model for `graph` fits the configured budget.
     ///
     /// Checked with a `COUNT`, not by building one and measuring — on the

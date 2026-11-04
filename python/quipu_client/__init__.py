@@ -4,6 +4,22 @@ Stdlib only. See ``docs/book/src/reference/python-client.md`` in the main
 repository for the documented surface.
 """
 
+from .sparql import (
+    Aggregate,
+    Call,
+    Compare,
+    Filter,
+    Graph,
+    Group,
+    Iri,
+    Literal,
+    Optional,
+    Path,
+    Select,
+    Triple,
+    Union,
+    Var,
+)
 from .client import QuipuClient, QuipuError
 from .types import AskResult, EpisodeResult, KnotResult, RetractResult, SetResult
 
@@ -17,4 +33,21 @@ __all__ = [
     "KnotResult",
     "RetractResult",
     "SetResult",
+]
+
+__all__ += [
+    "Aggregate",
+    "Call",
+    "Compare",
+    "Filter",
+    "Graph",
+    "Group",
+    "Iri",
+    "Literal",
+    "Optional",
+    "Path",
+    "Select",
+    "Triple",
+    "Union",
+    "Var",
 ]

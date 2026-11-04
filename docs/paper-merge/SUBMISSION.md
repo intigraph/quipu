@@ -19,6 +19,10 @@ The plain-text abstract below matches the current paper source and rebuilt
 PDF. The schema-evolution study retains its datatype detector miss caught by
 post-merge validation. The accepted public-history ruling remains in force.
 
+Revised 2026-10-27: the introduction's contributions and the conclusion's paragraph order were revised; the abstract is unchanged.
+
+Revised 2026-11-04: the replay arm no longer claims to remove the oracle circularity, a scope paragraph opens the limitations, and the abstract and conclusion qualify every correctness figure as judged by the same shapes. The rebuilt PDF is 16 pages; its abstract extracts to 1,758 characters including spaces. The abstract below was updated to match.
+
 ---
 
 ## 1. Public-history decision — resolved 2026-09-24
@@ -82,7 +86,7 @@ one-way door on arXiv: the license cannot be loosened after announcement.
 **Abstract** (plain text for the web form — no LaTeX, transcribed from the built
 PDF):
 
-Merging RDF serializations creates ordering conflicts and misses semantic ones. We describe and evaluate a three-way merge in which the schema defines a conflict: set algebra combines canonical triples, and a slot is contended only where a SHACL shape permits at most one value. Multi-valued predicates union; divergent functional values go to a person. The same shapes graph validates the result. We do not claim the first three-way merge for RDF. Our contribution is an implementation in a production multi-agent store and an evaluation against Quit Store’s Context Merge, which it extends rather than replaces, and six other strategies. Across five synthetic seeds, the shape-aware operator raised 33 conflicts, all true positives, with no triples lost or fabricated and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts but asked 845 questions. A recorded production replay covers 105 human alias repairs (93 after excluding 12 chained pairs) and 939 duplicate-value incidents. It reproduces a triple-level limit: different names for one entity remain invisible (0 of 93 alias repairs detected, matching 0 of 21 synthetic cases), alongside the benefit on real duplicate values. A further synthetic study tests evolving shape contracts. Merging shape declarations first handles the tested cardinality changes, while datatype evolution exposes a detector blind spot caught by post-merge validation. These results qualify schema-first orchestration rather than establish a universal conflict-resolution rule.
+Merging RDF serializations creates ordering conflicts and misses semantic ones. We describe and evaluate a three-way merge in which the schema defines a conflict: set algebra combines canonical triples, and a slot is contended only where a SHACL shape permits at most one value. Multi-valued predicates union; divergent functional values go to a person. The same shapes graph validates the result. We do not claim the first three-way merge for RDF. Our contribution is an implementation in a production multi-agent store and an evaluation against Quit Store’s Context Merge, which it extends rather than replaces, and six other strategies. Across five synthetic seeds, the shape-aware operator raised 33 conflicts, all true positives as judged by the same shapes that define them, with no triples lost or fabricated and no SHACL violations admitted. The context-overlap baseline detected the same 33 conflicts but asked 845 questions. A recorded production replay covers 105 human alias repairs (93 after excluding 12 chained pairs) and 939 duplicate-value incidents. It reproduces a triple-level limit: different names for one entity remain invisible (0 of 93 alias repairs detected, matching 0 of 21 synthetic cases), alongside the benefit on real duplicate values. A further synthetic study tests evolving shape contracts. Merging shape declarations first handles the tested cardinality changes, while datatype evolution exposes a detector blind spot caught by post-merge validation. These results qualify schema-first orchestration rather than establish a universal conflict-resolution rule. The supported claim is fewer human decisions with nothing silently lost, for cardinality conflicts in one deployment; it is not shape-independent merge correctness.
 
 ---
 
@@ -111,7 +115,7 @@ the identifier and corpus-reversibility controls.
 | `arxiv-scrub-gate.sh` | **PASS**, exit 0 — whole declared artifact and every positive control |
 | bibliography | All entries cited; 0 unresolved citations |
 | BibTeX warnings | **0** |
-| build | tectonic, 15 pages; abstract checked against source/PDF |
+| build | tectonic, 16 pages; abstract checked against source/PDF |
 | Arm E | Real library/schema fixtures; counts and tables regenerate |
 | bead ids in the artifact | **0** — the one advisory (`examples/replay/main.rs`) is gone |
 | policy projection | the gate was run against the config that the pre-push guard's own selftest **passes**; see the note below |

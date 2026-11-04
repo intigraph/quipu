@@ -97,7 +97,22 @@ pub fn eval_bgp(
                 }
                 _ => None,
             };
-            let matches = eval_triple_pattern_limited(store, tp, existing, ctx, remaining)?;
+            // One seed may produce the entire relation. Bound that scan to
+            // one row beyond its remaining budget, then refuse before retaining
+            // an oversized relation; never silently truncate a query result.
+            let budget = ctx
+                .materialization_cap
+                .map(|cap| cap.saturating_sub(new_rows.len()).saturating_add(1));
+            let limit = match (remaining, budget) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, b) => a.or(b),
+            };
+            let matches = eval_triple_pattern_limited(store, tp, existing, ctx, limit)?;
+            if let Some(cap) = ctx.materialization_cap
+                && new_rows.len().saturating_add(matches.len()) > cap
+            {
+                return Err(crate::Error::QueryComplexity { limit: cap });
+            }
             new_rows.extend(matches);
         }
         result_rows = new_rows;
@@ -180,6 +195,9 @@ pub(super) fn count_triple_pattern(
         None,
     )
 }
+
+#[path = "triple_scan_cache.rs"]
+mod scan_cache;
 
 fn visit_triple_pattern_limited(
     store: &Store,
@@ -405,8 +423,12 @@ fn visit_triple_pattern_limited(
     let facts = if substring_candidates {
         "facts NOT INDEXED"
     } else if matches!(mode, ScanMode::Retained | ScanMode::Streamed) {
-        super::graph_membership::object_source(store, ctx, tp, bindings)?
-            .unwrap_or(store.facts_source())
+        if let Some(source) = super::graph_membership::object_source(store, ctx, tp, bindings)? {
+            source
+        } else {
+            super::graph_membership::predicate_source(store, ctx, tp, bindings)?
+                .unwrap_or(store.facts_source())
+        }
     } else {
         store.facts_source()
     };
@@ -448,7 +470,7 @@ fn visit_triple_pattern_limited(
     });
     if emit.is_none() {
         return super::count_mmap::scalar(store, || {
-            let mut stmt = store.prepare(&format!("SELECT COUNT(*) FROM ({sql})"))?;
+            let mut stmt = store.prepare_cached(&format!("SELECT COUNT(*) FROM ({sql})"))?;
             let count: i64 = stmt.query_row(param_refs.as_slice(), |row| row.get(0))?;
             usize::try_from(count).map_err(|_| {
                 crate::Error::InvalidValue("COUNT exceeds addressable row count".into())
@@ -465,7 +487,7 @@ fn visit_triple_pattern_limited(
         Some(aliases) => Ok(aliases.get(&id).copied().unwrap_or(id)),
         None => store.canonical_id(id),
     };
-    let mut stmt = store.prepare(&sql)?;
+    let (mut stmt, _nested) = scan_cache::prepare(store, &sql)?;
     let mut rows = stmt.query(param_refs.as_slice())?;
 
     let mut count = 0;

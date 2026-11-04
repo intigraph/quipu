@@ -31,6 +31,10 @@ pub(super) fn is_group(spec: &Spec) -> bool {
 
 #[rustfmt::skip]
 pub(super) static SPECS: &[Spec] = &[
+    spec!("store", "", GROUP, 0, "", ""),
+    spec!("store status", "", 0, 0, "", ""),
+    spec!("store adopt", "", 0, 0, "", ""),
+    spec!("store restore", "<source.db>", 1, 1, "", ""),
     spec!("version", "", 0, 0, "", ""),
     spec!("install-alias", "", 0, 0, "bin-dir", "check"),
     spec!("knot", "<file.ttl>", 1, 1, "shapes graph timestamp blank-node-scope", ""),
@@ -58,6 +62,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("namespaces apply", "", 0, 0, "", ""),
     spec!("entity-ref mint", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref resolve", "<request.json>", 1, 1, "", ""),
+    spec!("entity-ref verify", "<request.json>", 1, 1, "", ""),
     spec!("ontology", "", 0, 0, "", ""),
     spec!("ontology list", "", 0, 0, "", ""),
     spec!("ontology load", "<name> <file.ttl>", 2, 2, "", ""),
@@ -67,6 +72,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("export", "", 0, 0, "graph group-id construct format", ""),
     spec!("render", "[spec-IRI]", 0, 1, "dest graph valid-at server query template layout path", "dry-run"),
     spec!("stats", "", 0, 0, "", ""),
+    spec!("prime", "", 0, 0, "section", "brief static json"),
     spec!("search", "<query>", 1, 1, "mode limit alpha rrf-k decay anchor anchor-mode direction max-hops via fusion valid-at type group structured-query filters graph graphs", "explain all-graphs"),
     spec!("search-index", "", 0, 0, "kind batch-size", ""),
     spec!("search-index status", "", 0, 0, "kind", ""),
@@ -81,6 +87,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("share diff", "<old> <new>", 2, 2, "format old-shapes new-shapes decisions", "report fail-on-introduced"),
     spec!("status", "<share-dir>", 1, 1, "", ""),
     spec!("merge", "<share-dir>", 1, 1, "actor emit-decisions decisions reviewer", "slot-scoped propose dry-run"),
+    spec!("merge show", "<decisions.json>", 1, 1, "format", ""),
+    spec!("merge resolve", "<decisions.json> <row>", 2, 2, "choose value by", ""),
     spec!("import", "<share-dir|archive|URL>", 1, 1, "source actor destination query-namespace", "replace-queries"),
     spec!("import delta", "<parent-share> <delta-share>", 2, 2, "actor destination query-namespace", ""),
     spec!("import promote", "<share-id>", 1, 1, "actor", ""),
@@ -97,6 +105,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("acquire scope", "", 0, 0, "source-store-id graph tx max-vm-steps deadline-ms", ""),
     spec!("migrate-vectors", "", 0, 0, "from to", "dry-run"),
     spec!("git-merge", "<ref>", 1, 1, "", ""),
+    spec!("git-merge show", "<pendant-dir>", 1, 1, "format", ""),
+    spec!("git-merge resolve", "<pendant-dir> <key>", 2, 2, "choose by", ""),
     spec!("merge-driver", "<base> <ours> <theirs> <path>", 4, 4, "", ""),
     spec!("pendant-resolve", "<base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>", 6, 6, "", ""),
     spec!("pendant-check", "<base-ref> <ours-ref> <theirs-ref> <result-ref>", 4, 4, "", "history"),
@@ -122,10 +132,12 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("align propose", "<graph-a> <graph-b>", 2, 2, "set-id out", ""),
     spec!("align decide", "<set.tsv>", 1, 1, "decisions reviewer out", ""),
     spec!("align apply", "<set.tsv>", 1, 1, "graph-a graph-b expected-version actor", ""),
+    spec!("align export", "<set.tsv>", 1, 1, "license format prefix author-prefix out", ""),
     spec!("propose", "", 0, 0, "status", ""),
     spec!("propose list", "", 0, 0, "status", ""),
     spec!("propose submit", "<kind> <target> <diff-file>", 3, 3, "proposer rationale trigger", ""),
-    spec!("propose accept", "<id>", 1, 1, "decided-by note", ""),
+    spec!("propose plan", "<id>", 1, 1, "format risk-threshold", ""),
+    spec!("propose accept", "<id>", 1, 1, "decided-by note reason risk-threshold", "accept-risk"),
     spec!("propose reject", "<id>", 1, 1, "decided-by note", ""),
     spec!("memory", "", GROUP, 0, "", ""),
     spec!("memory read", "<owner.json>", 1, 1, "graph", ""),
@@ -178,7 +190,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("fork list", "", 0, 0, "", ""),
     spec!("fork diff", "<a> <b>", 2, 2, "", ""),
     spec!("fork drop", "<name>", 1, 1, "", ""),
-    spec!("fork promote", "<name>", 1, 1, "", ""),
+    spec!("fork promote", "<name>", 1, 1, "timestamp emit-decisions decisions reviewer actor", "propose dry-run"),
     spec!("audit", "<trace.jsonl>", 1, 1, "repo from to yupana", "json"),
     spec!("audit inventory", "", 0, 0, "", "json"),
     spec!("audit namespace", "", 0, 0, "graph", "json"),
@@ -189,3 +201,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("audit quarantine list", "", 0, 0, "verdict", "json"),
     spec!("audit quarantine purge", "", 0, 0, "graph before older-than", "all json"),
 ];
+
+#[path = "option_help.rs"]
+mod descriptions;
+pub(super) use descriptions::option_help;

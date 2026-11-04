@@ -65,3 +65,34 @@ fn scope_carries_and_restores() {
     });
     assert!(current().is_none());
 }
+
+/// aegis-7zp4rc.2: a verified attestation supplies agent and session, so a
+/// signed writer that (correctly) omits those headers is complete when the
+/// rest of its declaration is.
+#[test]
+fn a_verified_identity_supplies_agent_and_session_only() {
+    // The sd signed-write shape: harness, host and model, no agent/session.
+    let signed = class([None, Some("claude"), Some("host-a"), None, Some("m")]);
+    assert_eq!(signed.completeness, Completeness::Partial);
+    assert_eq!(signed.missing, vec!["agent", "session"]);
+    let credited = signed.with_verified_identity();
+    assert_eq!(credited.completeness, Completeness::Complete);
+    assert!(credited.missing.is_empty());
+    assert_eq!(
+        (credited.client.as_str(), credited.endpoint.as_str()),
+        (signed.client.as_str(), signed.endpoint.as_str())
+    );
+
+    // Negative control: the key never supplies host, harness or model.
+    let no_model = class([None, Some("codex"), Some("host-a"), None, None]);
+    let credited = no_model.with_verified_identity();
+    assert_eq!(credited.completeness, Completeness::Partial);
+    assert_eq!(credited.missing, vec!["model"]);
+    let bare = class([None, None, None, None, None]).with_verified_identity();
+    assert_eq!(bare.completeness, Completeness::Partial);
+    assert_eq!(bare.missing, vec!["harness", "host"]);
+
+    // Already complete stays complete.
+    let full = class([Some("a"), Some("cron"), Some("h"), None, None]);
+    assert_eq!(full.with_verified_identity(), full);
+}

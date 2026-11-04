@@ -2013,15 +2013,16 @@ fn test_tool_definitions() {
     // Share-merge conflict resolution (aegis-yavo9c): a read and its writer.
     assert!(names.contains(&"quipu_merge_decisions"));
     assert!(names.contains(&"quipu_merge_apply"));
+    assert!(names.contains(&"quipu_merge_resolve"));
     #[cfg(feature = "owl")]
     {
-        assert_eq!(defs.len(), 83);
+        assert_eq!(defs.len(), 84);
         assert!(names.contains(&"quipu_load_ontology"));
         assert!(names.contains(&"quipu_explain"));
     }
     #[cfg(not(feature = "owl"))]
     {
-        assert_eq!(defs.len(), 81);
+        assert_eq!(defs.len(), 82);
         assert!(!names.contains(&"quipu_load_ontology"));
         assert!(!names.contains(&"quipu_explain"));
     }
@@ -2193,7 +2194,7 @@ fn test_propose_and_list_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_proposal_roundtrip() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a valid shape proposal.
     let shape_turtle = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -2224,7 +2225,7 @@ ex:PersonShape a sh:NodeShape ;
         "note": "Approved — looks correct",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let accept_result = super::proposal::tool_accept_proposal(&store, &accept).unwrap();
+    let accept_result = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap();
     assert_eq!(accept_result["status"], "accepted");
     assert_eq!(accept_result["proposal_id"], id);
 
@@ -2268,7 +2269,7 @@ fn test_reject_proposal_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_invalid_turtle_stays_pending() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a shape proposal with invalid Turtle.
     let propose = serde_json::json!({
@@ -2287,7 +2288,7 @@ fn test_accept_invalid_turtle_stays_pending() {
         "decided_by": "agent/reviewer",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let err = super::proposal::tool_accept_proposal(&store, &accept).unwrap_err();
+    let err = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap_err();
     assert!(err.to_string().contains("invalid"));
 
     // Proposal should still be pending.
@@ -3486,6 +3487,22 @@ fn test_verifier_registry_authority() {
     )
     .unwrap();
 
+    // aegis-c97o: an unmarked registration is graph-writable by any writer,
+    // so it authorizes nothing until the trust root endorses it.
+    let pre = super::tool_verifier_authorized(
+        &store,
+        &serde_json::json!({"verifier":"quipu","predicate":"has-test"}),
+    )
+    .unwrap();
+    assert_eq!(pre["authorized"], false, "{pre:#?}");
+    assert_eq!(pre["reason"], "registration-not-chained-to-trust-root");
+    crate::governance::trust_root::test_support::govern(
+        &mut store,
+        "http://aegis.gastown.local/ontology/reg1",
+        "agent",
+        "2026-01-01T00:00:00Z",
+    );
+
     // quipu IS registered for has-test; NOT for something-else.
     let a = super::tool_verifier_authorized(
         &store,
@@ -3538,6 +3555,13 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
         None,
     )
     .unwrap();
+    // The trust root endorses the registration (aegis-c97o).
+    crate::governance::trust_root::test_support::govern(
+        &mut store,
+        "http://aegis.gastown.local/ontology/reg",
+        "agent",
+        "2026-01-01T00:00:00Z",
+    );
 
     // Evaluate -> SIGNED verdict.
     let claim = "PREFIX a: <http://aegis.gastown.local/ontology/> ASK { $target a:hasTest ?t }";
@@ -3559,6 +3583,13 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
         ok["trusted"], true,
         "signed by the registered key + authorized: {ok:#?}"
     );
+    assert_eq!(
+        ok["trust"]["registration"],
+        "http://aegis.gastown.local/ontology/reg"
+    );
+    assert_eq!(ok["trust"]["tier"], "agent");
+    assert_eq!(ok["trust"]["root"]["kind"], "amendment", "{ok:#?}");
+    assert_eq!(ok["trust"]["root"]["root_signer"], "test-root");
 
     // Tamper the outcome -> signature no longer valid, not trusted.
     let mut forged = v.clone();
@@ -4958,6 +4989,12 @@ fn test_verdict_verify_answers_as_of_the_recorded_signature() {
         None,
     )
     .unwrap();
+    crate::governance::trust_root::test_support::govern(
+        &mut store,
+        &format!("{ns}reg"),
+        "agent",
+        "2026-01-01T00:00:00Z",
+    );
     let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
     let v = super::tool_policy_check(
         &store,
@@ -4981,30 +5018,33 @@ fn test_verdict_verify_answers_as_of_the_recorded_signature() {
     store
         .transact(&[rec], "2026-02-01T00:00:00Z", None, None)
         .unwrap();
+    // The registration is governed, so rotation is a root-signed amendment.
     let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
-    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
-    store
-        .retract_triples(
-            reg,
-            pk,
-            Some(&Value::Str(old_key)),
-            "2026-03-01T00:00:00Z",
-            None,
-            false,
-            None,
-        )
-        .unwrap();
-    let next = Datum {
-        entity: reg,
-        attribute: pk.unwrap(),
-        value: Value::Str("00".repeat(32)),
-        valid_from: "2026-03-01T00:00:00Z".into(),
-        valid_to: None,
-        op: Op::Assert,
-    };
-    store
-        .transact(&[next], "2026-03-01T00:00:00Z", None, None)
-        .unwrap();
+    let pk = store.intern(&format!("{ns}publicKey")).unwrap();
+    let rotate = vec![
+        Datum {
+            entity: reg,
+            attribute: pk,
+            value: Value::Str(old_key),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: Op::Retract,
+        },
+        Datum {
+            entity: reg,
+            attribute: pk,
+            value: Value::Str("00".repeat(32)),
+            valid_from: "2026-03-01T00:00:00Z".into(),
+            valid_to: None,
+            op: Op::Assert,
+        },
+    ];
+    crate::governance::trust_root::test_support::amend(
+        &mut store,
+        &format!("{ns}reg"),
+        rotate,
+        "2026-03-01T00:00:00Z",
+    );
 
     let mut recorded = v.clone();
     recorded["verdict"] = serde_json::json!(verdict);
@@ -5044,7 +5084,7 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
          a:reg a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" ; a:publicKey \"{key}\" .\n\
          a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n"
     );
-    let pre_revocation_tx = crate::rdf::ingest_rdf(
+    crate::rdf::ingest_rdf(
         &mut store,
         ttl.as_bytes(),
         oxrdfio::RdfFormat::Turtle,
@@ -5053,8 +5093,14 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
         None,
         None,
     )
-    .unwrap()
-    .0;
+    .unwrap();
+    crate::governance::trust_root::test_support::govern(
+        &mut store,
+        &format!("{ns}reg"),
+        "agent",
+        "2026-01-01T00:00:00Z",
+    );
+    let pre_revocation_tx = store.latest_tx_id().unwrap();
     let claim = format!("PREFIX a: <{ns}> ASK {{ $target a:hasTest ?t }}");
     let v = super::tool_policy_check(
         &store,
@@ -5063,20 +5109,15 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
         }),
     )
     .unwrap();
-    // Revoke the key (compromise).
-    let reg = store.lookup(&format!("{ns}reg")).unwrap().unwrap();
-    let pk = store.lookup(&format!("{ns}publicKey")).unwrap();
-    store
-        .retract_triples(
-            reg,
-            pk,
-            Some(&Value::Str(key)),
-            "2026-03-01T00:00:00Z",
-            None,
-            false,
-            None,
-        )
-        .unwrap();
+    // Revoke the key (compromise), through the trust root.
+    crate::governance::trust_root::test_support::amend_retract(
+        &mut store,
+        &format!("{ns}reg"),
+        &format!("{ns}publicKey"),
+        Value::Str(key),
+        "2026-01-01T00:00:00Z",
+        "2026-03-01T00:00:00Z",
+    );
 
     // The forger names a transaction from before the revocation.
     let mut what_if = v.clone();

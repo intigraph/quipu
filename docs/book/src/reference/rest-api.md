@@ -263,6 +263,35 @@ requires the proxy to select the corresponding downstream Quipu credential.
 The shared bearer remains `legacy-shared-bearer`, including if a registry entry
 accidentally duplicates its verifier.
 
+### Replication-only identities
+
+`[quipu.server].replication_credentials_file` selects a **separate** version-1
+verifier registry for an operator-authorized full-store standby. Its entries use
+the same verifier format above, but never enter the graph-writer registry.
+A matching credential authorizes only `POST /share/asof`,
+`POST /replicate/stream` and `POST /replicate/challenge`. Other methods, paths,
+graph mutations and ordinary reads refuse that presented credential rather than
+falling back to anonymous access. This does not change existing public reads
+made without that credential. It is not the tenant scoped-read/lease profile.
+
+The source must retain write authentication. An absent, empty or invalid
+configured replication registry prevents startup, as does overlap with a current,
+previous or named writer credential. An unreadable writer registry cannot be
+ignored when separation must be verified. Replica, relay, read-only and scoped
+serving profiles and strict session-key-only mode refuse this bearer source-only
+setting. Omission changes no policy.
+The registry is captured at startup; atomic candidate validation and a normal
+restart are required for installation or revocation. A credential has bearer
+possession semantics: bind issuance and secret delivery to the admitted standby
+host; a caller-supplied hostname is not host authentication.
+
+This grants transport access, not proof of a complete replica. Bootstrap/cut
+identity, source signing-key pinning, exact graph scope, retained history,
+provider completeness, atomic shared-applier progress and challenge freshness
+remain separate admission gates. Do not use the unsigned legacy follow path,
+silently omit unsupported graphs, or enable read traffic from a successful
+authentication check. No credentials are issued by configuring this file.
+
 For a coherent, pinned source receipt, use `POST /acquire` for a single file,
 or `POST /acquire/composed` for qualified MAIN scope with fenced immutable
 providers. The latter uses a separate version-gated contract and refuses
@@ -395,13 +424,23 @@ plain curl without a signed envelope cannot produce the authenticated result.
 
 ### `GET /stats`
 
-Store statistics.
+Store statistics, and the store id that signed writes bind to (quipu-write-v2).
 
 ```bash
 curl localhost:3030/stats
 ```
 
-Response: `{"facts": 1234, "entities": 56, "predicates": 12}`
+Response:
+
+```json
+{"facts": 1234, "entities": 56, "predicates": 12,
+ "store_id": "urn:uuid:...", "counts_as_of_tx": 9876, "counts_stale": false}
+```
+
+`store_id` is always current. The counts are computed on a read connection, never
+the writer, and cached until the next write. `counts_as_of_tx` is the transaction
+they describe; `counts_stale` is `true` only when another request was already
+recomputing them and an earlier aggregate was returned instead of a second scan.
 
 ### `GET /query` and `POST /query`
 
@@ -504,6 +543,78 @@ undeclared remote fails a configured freshness/trust floor (quipu-fd1). The
 temporal/graph fields are refused on a federated query (they only shape the
 local evaluator's context). See
 [Federation](../architecture/federation.md).
+
+### `GET /diff` and `POST /patch`
+
+Change-sets in the store-wide `quipu-changeset` v1 format: parent-bound SPARQL
+Update (ground `DELETE DATA`, then ground `INSERT DATA`) under a `# key: value`
+comment header naming `base-tx`, `target-tx`, `store-id`, `valid-time`,
+`source`, `shapes-hash` and a `digest` over the statements. Share deltas
+(`delta.ru`) use the same format. The spec is
+[`docs/design/changeset-format.md`](https://github.com/intigraph/quipu/blob/main/docs/design/changeset-format.md).
+
+`GET /diff?from=<side>&to=<side>` returns the change-set that turns `from` into
+`to`. A side is `tx:N` (ROOT as of transaction N), `main` (ROOT now) or
+`fork:<name>` (a fork now, rendered as a change to ROOT). Add
+`graph=<iri>` to diff a registered named graph instead of ROOT (not with a
+fork side). Send `Accept: application/rdf-patch` for the
+[RDF Patch](https://afs.github.io/rdf-patch/) form; the default is
+`application/sparql-update`. Blank nodes are refused: skolemize first. A
+side holding more statements than `server.update_full_copy_max_facts` (default
+250000, the same ceiling `/update` uses for a whole-store copy) is refused with
+`422` and `{"error": "diff_too_large", "side", "statements", "limit"}`. The
+sides are counted before either is read; narrow the diff with `graph=` or a
+closer pair of transactions.
+
+```bash
+curl 'localhost:3030/diff?from=tx:4180&to=main' -H 'Authorization: Bearer <token>'
+```
+
+```sparql
+# quipu-changeset: v1
+# base-tx: 4180
+# target-tx: 4182
+# store-id: 0b6f…
+# source: diff:tx:4180..main
+# shapes-hash: 6f1c…
+# digest: sha256:9a0e…
+DELETE DATA {
+  <http://ex/s> <http://ex/status> "open" .
+};
+INSERT DATA {
+  <http://ex/s> <http://ex/status> "closed" .
+};
+```
+
+`POST /patch` applies a change-set sent as `application/sparql-update` or
+`application/rdf-patch`. It is a write: it needs write authentication and
+passes the same authority, placement, policy, OWL and reject-mode SHACL gates
+as `/update`. A refusal writes nothing. The touched statements are compared
+with the store first:
+
+| Store state | Response |
+|---|---|
+| Post-state already holds (deletes absent, inserts present) | `200`, `"already_applied": true`, `tx` null, nothing written |
+| Pre-state holds (deletes present, inserts absent) | `200`, `"applied": true` with the `/update` report (`tx`, `asserted`, `retracted`, `graphs`) |
+| Anything else | `409`, `already_deleted` and `already_inserted` list the statements already in their post-state; nothing written |
+
+Retrying a patch whose response was lost is therefore safe. The header's
+`valid-time` becomes the inserted statements' `valid_from` (default: now).
+It must be an RFC 3339 timestamp, otherwise the patch is refused with `400`
+before anything is written. Transaction time is always the server's. `source` is recorded as the
+transaction source unless a `source` query parameter overrides it; `actor`
+and `source` parameters work as on `/update`. A declared `digest` that does
+not match the statements is refused. `shapes_hash_matches` reports whether
+the sender's `shapes-hash` equals the server's current one. It is advisory:
+the server always validates against its own shapes.
+
+```bash
+curl 'localhost:3030/diff?from=tx:4180&to=main' > change.ru
+curl localhost:3030/patch -X POST -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/sparql-update' --data-binary @change.ru
+# {"applied":true,"already_applied":false,"digest":"sha256:9a0e…",
+#  "tx":5120,"asserted":1,"retracted":1,"graphs":[…],"shapes_hash_matches":true}
+```
 
 ### `POST /knot`
 
@@ -1789,7 +1900,9 @@ never reported as the same thing.
 ### `POST /propose`
 
 Submit a schema-evolution proposal. Body: `kind`, `target`, `diff`, `proposer`,
-optional `rationale`, `trigger_ref`, `timestamp`.
+optional `rationale`, `trigger_ref`, `migration`, `timestamp`. `migration`
+is a data-migration program run when the proposal is accepted; see
+[Schema Evolution](../concepts/schema-evolution.md#data-migrations).
 
 ### `POST /proposals`
 
@@ -1799,7 +1912,10 @@ List schema-evolution proposals. Body: optional `status`
 ### `POST /proposal/accept`
 
 Accept a pending proposal. Body: `id`, `decided_by` (required), optional
-`note`, `timestamp`.
+`note`, `timestamp`. A proposal carrying a migration runs it in the same
+transaction and the response adds `migration_source` and `migration_tx`.
+With `"dry_run": true` (and optional `limit`) nothing is accepted and the
+response is the dry-run report.
 
 ### `POST /proposal/reject`
 
@@ -1961,7 +2077,11 @@ migration) are not counted as that client's writes:
 - `quipu_write_provenance_missing_total{client,field}` — commits missing a
   required field (`agent`, `harness`, `host`, `session`, `model`).
 
-A header that is present but blank counts as missing. Coverage per client is
+A header that is present but blank counts as missing. A write signed with a
+verified `x-quipu-attestation` takes its agent and session from the key
+binding, so a signed client that omits those two headers can still be
+`complete`. Harness, host and model still come from the headers, and a
+refused signature counts nothing. Coverage per client is
 `rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
 the process restarts, so use rates rather than raw values.
 
@@ -2217,18 +2337,22 @@ curl -s localhost:3030/policy/check -X POST \
 
 ### `POST /verifier/authorized`
 
-`{"verifier", "predicate"}` → `{"authorized": bool}`: may this verifier
-attest this predicate, per the Phase-0 verifier registry?
+`{"verifier", "predicate"}` → `{"authorized": bool, "reason"}`: may this
+verifier attest this predicate? Only a registration that chains to the human
+trust root (a governed `aegis:trustTier`) authorizes.
 
 ### `POST /verdict/verify`
 
-Verify a signed Verdict against the Phase-0 root of trust:
+Verify a signed Verdict against the trust root:
 `{"predicate_id", "target_ref", "outcome", "evidence_hash", "tier"?,
 "verifier", "signature", "verdict"?, "signed_at"?, "tx"?}` →
 `{"signature_valid", "verifier_registered", "verifier_authorized", "trusted",
-"as_of"}` — `trusted` is the conjunction to gate on. The registry is read as of
-the signature: pass `verdict` (the stored verdict IRI) to use the instant the
-store recorded it.
+"trust", "untrusted_reason", "unchained_registration", "as_of"}` — `trusted`
+is the conjunction to gate on. Only a registration governed by the human trust
+root counts; `trust` names it and its chain, `untrusted_reason` says why not
+(see [`quipu_verdict_verify`](mcp-tools.md#quipu_verdict_verify)). The
+registry is read as of the signature: pass `verdict` (the stored verdict IRI)
+to use the instant the store recorded it.
 
 ## Overlays
 
@@ -2622,3 +2746,13 @@ unknown axis values, and empty labels are errors. Create first via
 `GET /graphs` returns each row's `creation` together with class/lifecycle/labels.
 The [MCP-only recipe](../recipes/named-graph-mcp.md) exercises the same handlers
 without a REST client.
+
+### Local ownership staging
+
+Stage A keeps legacy disk/browser/container startup and ordinary replication
+requests explicitly INACTIVE; they do not confer ownership authority. The local
+CLI `quipu store status --db <path>` reports this state without adoption.
+Explicit native adoption persists a sticky `ownership_enforcement` marker;
+its authority and filesystem binding are excluded from reconstruction shares.
+Malformed/partial enforced state refuses instead of falling back to INACTIVE.
+No ownership HTTP route, activation default or backend identity fallback is added.

@@ -120,6 +120,10 @@ pub fn evaluate_temporal_view(
         .map_err(|e| crate::Error::InvalidValue(e.to_string()))?
         .join(" ");
     let ctx = TemporalContext {
+        // This profile treats zero as an absent caller work cap. Normalize
+        // before the premise query too; the native evaluator treats Some(0)
+        // as a literal zero-row ceiling.
+        row_cap: context.row_cap.filter(|cap| *cap > 0),
         deadline: context
             .deadline
             .or_else(crate::time::request_deadline)

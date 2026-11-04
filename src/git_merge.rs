@@ -1,7 +1,9 @@
 //! Store-free pendant merging. Git supplies the base; the store merge supplies the operator.
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
-pub use crate::git_merge_repo::{check, check_history, driver, merge, resolve};
+pub use crate::git_merge_repo::{
+    check, check_history, driver, merge, merge_refs, merge_with_pending, resolve, resolve_by,
+};
 use crate::share::{ShareManifest, canonicalize_ntriples, manifest_bytes, sha256};
 use crate::share_merge::{DecisionRecord, Graph, merge_graphs, parse_graph};
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,34 @@ pub struct Decisions {
     pub aliases: Vec<AliasProposal>,
     #[serde(default)]
     pub resolutions: BTreeMap<String, String>,
+    /// Who recorded each resolution and when (`"<who> at <time>"`), as the
+    /// resolving tool claims it (aegis-k7l). Display only: the merge result is
+    /// fixed by `resolutions` alone.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub resolved_by: BTreeMap<String, String>,
+}
+
+/// The values a conflict resolves to under `choice`, or why it cannot.
+pub(crate) fn resolved_values(c: &DecisionRecord, choice: &str) -> Result<Vec<String>> {
+    Ok(match choice {
+        "base" => c.base.clone(),
+        "ours" => c.ours.clone(),
+        "theirs" => c.theirs.clone(),
+        "both" => {
+            let values = crate::share_merge_decisions::union(&c.ours, &c.theirs);
+            if values.len() > c.max_count {
+                return Err(invalid(format!(
+                    "`both` would hold {} values for {} <{}>, above sh:maxCount {}",
+                    values.len(),
+                    c.subject,
+                    c.predicate,
+                    c.max_count
+                )));
+            }
+            values
+        }
+        _ => return Err(invalid("conflict resolution must be base/ours/theirs/both")),
+    })
 }
 
 pub(crate) struct Merged {
@@ -170,6 +200,7 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
         conflicts,
         aliases: propose(&b, &o, &t),
         resolutions: BTreeMap::new(),
+        resolved_by: BTreeMap::new(),
     };
     let mut pack = Pack {
         graph: render(&graph),
@@ -190,6 +221,7 @@ impl Merged {
         if let Some(recorded) = recorded {
             let mut expected = self.decisions.clone();
             expected.resolutions = recorded.resolutions.clone();
+            expected.resolved_by = recorded.resolved_by.clone();
             if expected != *recorded {
                 return Err(invalid(
                     "stale or altered decisions: inputs/proposals differ",
@@ -203,20 +235,17 @@ impl Merged {
         for (i, c) in self.decisions.conflicts.iter().enumerate() {
             let key = format!("conflict:{i}");
             known.insert(key.clone());
-            let values = match self.decisions.resolutions.get(&key).map(String::as_str) {
-                Some("base") => &c.base,
-                Some("ours") => &c.ours,
-                Some("theirs") => &c.theirs,
+            let values = match self.decisions.resolutions.get(&key) {
+                Some(choice) => resolved_values(c, choice)?,
                 None => {
                     unresolved += 1;
                     continue;
                 }
-                _ => return Err(invalid("conflict resolution must be base/ours/theirs")),
             };
             graph.retain(|t| {
                 t.subject.to_string() != c.subject || t.predicate.as_str() != c.predicate
             });
-            for value in values {
+            for value in &values {
                 graph.extend(parse_graph(
                     &format!("{} <{}> {} .", c.subject, c.predicate, value),
                     "resolution",

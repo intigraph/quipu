@@ -54,7 +54,7 @@ carries, so load the same shape set there first:
 
 ```bash
 quipu shapes load items shapes.ttl --db target.db
-quipu import share1 --db target.db --actor you --destination internal
+quipu import share1 --db target.db --actor you
 ```
 
 The JSON result is the review:
@@ -71,8 +71,12 @@ The JSON result is the review:
 ```
 
 - ROOT is unchanged at this point.
-- A share stamped `internal` must be imported with `--destination internal` too, or
-  import refuses it.
+- A share stamped `internal` imports with no extra flag: the receiver reads the
+  stamp from the verified manifest, prints
+  `internal share: unscrubbed identifiers, kept internal`, and records
+  `"destination": "internal"` on the result. A later outward share of that data
+  still runs the outward scrub. To refuse such shares outright, set
+  `[quipu.import] refuse_internal = true`.
 - If the data breaks your shapes, the result says so, and nothing can be promoted:
 
 ```json

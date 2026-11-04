@@ -54,10 +54,73 @@ pub(super) fn witness_json(witness: &Witness, basis: &str) -> JsonValue {
     serde_json::json!({ "tx": witness.tx, "at": witness.at, "basis": basis })
 }
 
-/// Is `verifier` registered (Phase-0 root of trust) to attest `predicate_id`
-/// at `witness`? True iff an `aegis:VerifierRegistration` in effect then names
-/// both. A governed authority check, independent of (and prior to) signing.
+/// Is `verifier` registered to attest `predicate_id` at `witness` by a
+/// registration that chains to the human trust root (aegis-c97o)? True iff a
+/// GOVERNED `aegis:VerifierRegistration` (asserted ROOT trust tier, written
+/// only by a root-signed amendment) in effect then names both. An unmarked
+/// registration is graph-writable by any writer, so it never authorizes.
 pub(super) fn is_registered_verifier(
+    store: &Store,
+    verifier: &str,
+    predicate_id: &str,
+    witness: &Witness,
+) -> Result<bool> {
+    crate::governance::verifier_registry::is_authorized(
+        store,
+        verifier,
+        predicate_id,
+        witness,
+        Scope::Governed,
+    )
+}
+
+/// The `untrusted_reason` for a key or grant that exists only under a
+/// registration with no trust-root chain (aegis-c97o).
+pub(super) const UNCHAINED: &str = "registration-not-chained-to-trust-root";
+
+/// Log, never trust, a registration that would have verified before
+/// aegis-c97o. This is the migration signal: re-sign it by the trust root
+/// (docs/runbooks/trust-root-ceremony.md, "Endorsing agent registrations").
+pub(super) fn warn_unchained(verifier: &str, registration: &str) {
+    eprintln!(
+        "quipu: warning: verifier '{verifier}' matched registration {registration}, which has no \
+         trust-root chain (no root-signed aegis:trustTier); NOT trusted (aegis-c97o). Endorse it \
+         with a trust-root amendment to restore trust."
+    );
+}
+
+/// Why a governed registration is trusted: the registration, its tier at
+/// `witness`, and how it chains to the trust root.
+pub(super) fn trust_json(
+    store: &Store,
+    registration: &str,
+    witness: &Witness,
+) -> Result<JsonValue> {
+    use crate::governance::trust_root::{Chain, chain_of};
+    let tier = crate::governance::verifier_registry::governed_tier(store, registration, witness)?;
+    let chain = match chain_of(store, registration)? {
+        Chain::Bootstrap {
+            record,
+            fingerprint,
+        } => {
+            serde_json::json!({ "kind": "bootstrap", "record": record, "fingerprint": fingerprint })
+        }
+        Chain::Amendment { amendment, signer } => serde_json::json!({
+            "kind": "amendment", "amendment": amendment, "root_signer": signer
+        }),
+        Chain::GateOnly => serde_json::json!({ "kind": "gate" }),
+    };
+    Ok(serde_json::json!({
+        "registration": registration,
+        "tier": tier,
+        "root": chain,
+    }))
+}
+
+/// Is there a NON-governed registration of `verifier` for `predicate_id` at
+/// `witness`? Reported so a caller can see a pre-aegis-c97o grant that no
+/// longer counts.
+fn has_unchained_grant(
     store: &Store,
     verifier: &str,
     predicate_id: &str,
@@ -75,7 +138,9 @@ pub(super) fn is_registered_verifier(
 /// MCP tool: `quipu_verifier_authorized` -- check the verifier registry: may
 /// `verifier` attest `predicate`? Input: `{ "verifier": "...", "predicate":
 /// "...", "signed_at"?: "...", "tx"?: N }` (default: now). Output:
-/// `{ "authorized": bool, "as_of": {...} }`.
+/// `{ "authorized": bool, "reason": null | "...", "as_of": {...} }`.
+/// `authorized` needs a registration that chains to the trust root
+/// (aegis-c97o); `reason` says why not.
 pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let verifier = input
         .get("verifier")
@@ -86,8 +151,17 @@ pub fn tool_verifier_authorized(store: &Store, input: &JsonValue) -> Result<Json
         .and_then(JsonValue::as_str)
         .ok_or_else(|| Error::InvalidValue("missing 'predicate' parameter".into()))?;
     let (witness, basis) = explicit_witness(input);
+    let authorized = is_registered_verifier(store, verifier, predicate, &witness)?;
+    let reason = if authorized {
+        JsonValue::Null
+    } else if has_unchained_grant(store, verifier, predicate, &witness)? {
+        JsonValue::from(UNCHAINED)
+    } else {
+        JsonValue::from("no-registration-grants-this-predicate")
+    };
     Ok(serde_json::json!({
-        "authorized": is_registered_verifier(store, verifier, predicate, &witness)?,
+        "authorized": authorized,
+        "reason": reason,
         "as_of": witness_json(&witness, basis)
     }))
 }

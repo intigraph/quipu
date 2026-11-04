@@ -84,6 +84,9 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("proposals", "decided_at", TermIdKind::None),
     ("proposals", "decision_note", TermIdKind::None),
     ("proposals", "created_at", TermIdKind::None),
+    // The program names IRIs as strings, never as term ids (aegis-esd).
+    ("proposal_migrations", "proposal_id", TermIdKind::None),
+    ("proposal_migrations", "program", TermIdKind::None),
     ("ontologies", "name", TermIdKind::None),
     ("ontologies", "turtle", TermIdKind::None),
     ("ontologies", "loaded_at", TermIdKind::None),

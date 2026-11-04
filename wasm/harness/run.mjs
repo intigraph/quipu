@@ -58,7 +58,12 @@ const check = (label, cond, detail) => {
   if (!cond) failures++;
 };
 
+const inactiveChecks = (label, r) => {
+  check(`${label}: ownership explicitly INACTIVE`, r.ownership === "INACTIVE", r.ownership);
+  check(`${label}: no ownership capability`, r.ownership_authorized === false);
+};
 const readChecks = (label, r) => {
+  inactiveChecks(label, r);
   check(`${label}: point lookup ≥ ${EXPECT.pointMin}`, r.point >= EXPECT.pointMin, `got ${r.point}`);
   check(`${label}: type scan = ${EXPECT.scan}`, r.scan === EXPECT.scan, `got ${r.scan}`);
   check(`${label}: 2-hop join = ${EXPECT.join}`, r.join === EXPECT.join, `got ${r.join}`);
@@ -73,9 +78,11 @@ const readChecks = (label, r) => {
     (n) => window.ask({ cmd: "write", path: "mem-harness.db", n }),
     EPISODES,
   );
+  inactiveChecks("memory write", w);
   check("memory: ingest returns triples", w.triples > 0, `${w.triples} triples`);
   const r = await page.evaluate(() => window.ask({ cmd: "read", path: "mem-harness.db" }));
   readChecks("memory", r);
+  check("memory: enforced marker cannot downgrade", await page.evaluate(() => window.ask({ cmd: "ownership_refusal", path: "mem-enforced.db" })) === true);
   const jm = await page.evaluate(() => window.ask({ cmd: "journal_mode", path: "mem-jm.db" }));
   console.log(`INFO  memory: journal_mode=WAL request →`, JSON.stringify(jm));
   await ctx.close();
@@ -91,7 +98,9 @@ const readChecks = (label, r) => {
     (n) => window.ask({ cmd: "write", path: "opfs-harness.db", n }),
     EPISODES,
   );
+  inactiveChecks("opfs write", w);
   check("opfs: ingest returns triples", w.triples > 0, `${w.triples} triples`);
+  check("opfs: enforced marker cannot downgrade", await page.evaluate(() => window.ask({ cmd: "ownership_refusal", path: "opfs-enforced.db" })) === true);
   const jm2 = await page.evaluate(() => window.ask({ cmd: "journal_mode", path: "opfs-jm.db" }));
   console.log(`INFO  opfs: journal_mode=WAL request →`, JSON.stringify(jm2));
   readChecks("opfs same-page", await page.evaluate(() => window.ask({ cmd: "read", path: "opfs-harness.db" })));

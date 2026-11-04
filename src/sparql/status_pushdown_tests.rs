@@ -454,3 +454,66 @@ fn status_pushdown_constant_literal_owner_preserves_term_aliases() {
     assert_eq!(actual, accepted(&s, full, &expr, &ctx));
     assert_eq!(actual, ["absent", "lang"].map(|name| format!("{EX}{name}")));
 }
+
+#[test]
+fn absence_with_selective_owner_does_not_decode_unrelated_statuses() {
+    use rusqlite::functions::FunctionFlags;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let mut store = store();
+    let graph = store.lookup(&format!("{EX}g")).unwrap().unwrap();
+    let mut data = String::new();
+    for i in 0..6000 {
+        data.push_str(&format!("<{EX}bulk{i}> <{RDF_TYPE}> <{EX}T> .\n<{EX}bulk{i}> <{EX}owner> \"other\" .\n<{EX}bulk{i}> <{EX}status> \"closed\" .\n"));
+    }
+    data.push_str(&format!(
+        "<{EX}target> <{RDF_TYPE}> <{EX}T> .\n<{EX}target> <{EX}owner> \"target\" .\n"
+    ));
+    ingest_rdf_to_graph(
+        &mut store,
+        data.as_bytes(),
+        RdfFormat::NTriples,
+        None,
+        "2026-02-01T00:00:00Z",
+        None,
+        None,
+        graph,
+    )
+    .unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::clone(&calls);
+    store
+        .conn
+        .create_scalar_function(
+            "quipu_plain_literal",
+            1,
+            FunctionFlags::SQLITE_UTF8
+                | FunctionFlags::SQLITE_INNOCUOUS
+                | FunctionFlags::SQLITE_DETERMINISTIC,
+            move |ctx| {
+                seen.fetch_add(1, Ordering::Relaxed);
+                let bytes: Vec<u8> = ctx.get(0)?;
+                Ok(matches!(Value::from_bytes(&bytes), Ok(Value::Str(_))))
+            },
+        )
+        .unwrap();
+    let text = |owner: &str| {
+        format!(
+            "SELECT ?s WHERE {{ GRAPH <{EX}g> {{ ?s <{RDF_TYPE}> <{EX}T>; <{EX}owner> \"{owner}\" FILTER NOT EXISTS {{ ?s <{EX}status> ?v FILTER(isLiteral(?v) && sameTerm(?v,STR(?v))) }} }} }}"
+        )
+    };
+    let result = query(&store, &text("target")).unwrap();
+    assert_eq!(result.rows().len(), 1);
+    let Value::Ref(target) = result.rows()[0]["s"] else {
+        panic!("subject")
+    };
+    assert_eq!(store.resolve(target).unwrap(), format!("{EX}target"));
+    assert!(query(&store, &text("absent")).unwrap().rows().is_empty());
+    let work = calls.load(Ordering::Relaxed);
+    assert!(
+        work < 32,
+        "selective/absent owner decoded unrelated statuses: {work}"
+    );
+}

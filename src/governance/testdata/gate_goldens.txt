@@ -68,22 +68,22 @@ case type_in_write_graph
   result: denied: 'http://ex/e_g_write' blocked by policy 'http://ex/P_deny' (effect 'deny', target type 'http://ex/TDeny'): claim unsatisfied.
   verdict: http://ex/P_deny http://ex/e_g_write unsatisfied
 case require_approval_no_request
-  result: denied: 'http://ex/e_ra_none' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  result: denied: 'http://ex/e_ra_none' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest has been opened; have a registered decider record a signed aegis:GateApproval with outcome "approve" bound to its evidenceHash, then retry.
   verdict: http://ex/P_ra http://ex/e_ra_none unsatisfied
   request: http://ex/P_ra http://ex/e_ra_none window=3600 now>0=true
 case escalate_no_request
-  result: denied: 'http://ex/e_esc_none' needs a human decision under policy 'http://ex/P_esc'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  result: denied: 'http://ex/e_esc_none' needs a human decision under policy 'http://ex/P_esc'. A DecisionRequest has been opened; have a registered decider record a signed aegis:GateApproval with outcome "approve" bound to its evidenceHash, then retry.
   verdict: http://ex/P_esc http://ex/e_esc_none unsatisfied
   request: http://ex/P_esc http://ex/e_esc_none window=3600 now>0=true
 case escalate_no_window_declared
-  result: denied: 'http://ex/e_nowin' needs a human decision under policy 'http://ex/P_nowin'. A DecisionRequest has been opened; have a registered decider record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  result: denied: 'http://ex/e_nowin' needs a human decision under policy 'http://ex/P_nowin'. A DecisionRequest has been opened; have a registered decider record a signed aegis:GateApproval with outcome "approve" bound to its evidenceHash, then retry.
   verdict: http://ex/P_nowin http://ex/e_nowin unsatisfied
   request: http://ex/P_nowin http://ex/e_nowin window=0 now>0=true
 case require_approval_pending
-  result: denied: 'http://ex/e_ra_pend' blocked by policy 'http://ex/P_ra': 'http://ex/e_ra_pend' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest is open and expires at 11700000000 (unix seconds), after which it is DENIED. To proceed, have a registered decider record a signed aegis:Decision with outcome "approve" bound to this request's evidenceHash, then retry.
+  result: denied: 'http://ex/e_ra_pend' blocked by policy 'http://ex/P_ra': 'http://ex/e_ra_pend' needs a human decision under policy 'http://ex/P_ra'. A DecisionRequest is open and expires at 11700000000 (unix seconds), after which it is DENIED. To proceed, have a registered decider record a signed aegis:GateApproval with outcome "approve" bound to this request's evidenceHash, then retry.
   verdict: http://ex/P_ra http://ex/e_ra_pend unsatisfied
 case require_approval_expired
-  result: denied: 'http://ex/e_ra_exp' blocked by policy 'http://ex/P_ra': the previous DecisionRequest expired with no ruling and was denied (declared default-deny). This attempt has opened a fresh request; have an authorized operator record a signed aegis:Decision with outcome "approve" bound to its evidenceHash, then retry.
+  result: denied: 'http://ex/e_ra_exp' blocked by policy 'http://ex/P_ra': the previous DecisionRequest expired with no ruling and was denied (declared default-deny). This attempt has opened a fresh request; have an authorized operator record a signed aegis:GateApproval with outcome "approve" bound to its evidenceHash, then retry.
   verdict: http://ex/P_ra http://ex/e_ra_exp unsatisfied
   request: http://ex/P_ra http://ex/e_ra_exp window=3600 now>0=true
 case require_approval_approved

@@ -50,6 +50,7 @@ where
     let identity = auth::request_identity();
     let kind = request_middleware::request_write_kind();
     let provenance = request_middleware::request_write_provenance();
+    let search = crate::search_observation::current();
     // On a deep stack: request work parses and walks caller-supplied SPARQL,
     // whose recursion follows its structure, and the pool's default stack
     // aborted the process on a few kilobytes of nesting (aegis-xcvb5z). The
@@ -59,7 +60,12 @@ where
     match tokio::task::spawn_blocking(move || {
         quipu::sparql_structure::on_deep_stack(move || {
             quipu::transaction_auth::with_identity(identity, || {
-                quipu::write_provenance::scoped(provenance, || quipu::write_kind::scoped(kind, f))
+                quipu::write_provenance::scoped(provenance, || {
+                    quipu::write_kind::scoped(kind, || match search {
+                        Some(call) => call.scope(f),
+                        None => f(),
+                    })
+                })
             })
         })
     })

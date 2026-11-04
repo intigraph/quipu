@@ -60,28 +60,71 @@ impl EmbeddingRecipe {
     }
 }
 
+/// What [`configure_provider`] set up. `Display` is the operator-facing line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderStatus {
+    /// A model and tokenizer loaded.
+    Ready {
+        /// Embedding width the provider produces.
+        dimension: usize,
+        /// Whether writes are embedded automatically.
+        auto_embed: bool,
+    },
+    /// `auto_embed = false` and no model: the operator turned it off.
+    Disabled,
+    /// No model configured. The default for a fresh local store, so a CLI need
+    /// not announce it on every command: semantic calls still refuse with their
+    /// own "no embedding provider configured" error. A server logs it once.
+    Unconfigured,
+}
+
+impl std::fmt::Display for ProviderStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ready { dimension, auto_embed } => {
+                write!(f, "embedding provider ready (dim={dimension}, auto_embed={auto_embed})")
+            }
+            Self::Disabled => f.write_str("automatic embedding disabled by explicit configuration"),
+            Self::Unconfigured => f.write_str("automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness"),
+        }
+    }
+}
+
 /// Applies explicit opt-out as well as the default. No model is downloaded.
 /// A missing provider leaves graph operations usable, but never claims an index.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn configure_provider(
     store: &mut crate::Store,
     config: &crate::EmbeddingConfig,
-) -> Result<String> {
+) -> Result<ProviderStatus> {
     store.embedding_config_mut().clone_from(config);
     match (&config.model_path, &config.tokenizer_path) {
         (Some(model), Some(tokenizer)) => {
             #[cfg(feature = "onnx")]
             {
                 use std::sync::Arc;
-                let provider = crate::OnnxEmbeddingProvider::load(model, tokenizer, config.dimension, config.max_sequence_length)?;
+                let provider = crate::OnnxEmbeddingProvider::load(
+                    model,
+                    tokenizer,
+                    config.dimension,
+                    config.max_sequence_length,
+                )?;
                 store.set_embedding_provider(Arc::new(provider));
-                Ok(format!("embedding provider ready (dim={}, auto_embed={})", config.dimension, config.auto_embed))
+                Ok(ProviderStatus::Ready {
+                    dimension: config.dimension,
+                    auto_embed: config.auto_embed,
+                })
             }
             #[cfg(not(feature = "onnx"))]
-            { let _ = (model, tokenizer); Err(Error::InvalidValue("configured embedding model requires the onnx build feature; no index was created".into())) }
+            {
+                let _ = (model, tokenizer);
+                Err(Error::InvalidValue("configured embedding model requires the onnx build feature; no index was created".into()))
+            }
         }
-        (None, None) if !config.auto_embed => Ok("automatic embedding disabled by explicit configuration".into()),
-        (None, None) => Ok("automatic embedding unavailable: no model and tokenizer configured; graph loading is not semantic-index readiness".into()),
-        _ => Err(Error::InvalidValue("embedding requires BOTH model_path and tokenizer_path; no index was created".into())),
+        (None, None) if !config.auto_embed => Ok(ProviderStatus::Disabled),
+        (None, None) => Ok(ProviderStatus::Unconfigured),
+        _ => Err(Error::InvalidValue(
+            "embedding requires BOTH model_path and tokenizer_path; no index was created".into(),
+        )),
     }
 }

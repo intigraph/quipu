@@ -225,6 +225,7 @@ macro_rules! embed_handler {
             State(s): State<SharedStore>,
             axum::Json(i): axum::Json<JsonValue>,
         ) -> Result<axum::Json<JsonValue>, AppError> {
+            super::search_observation::input(&i);
             let queued = quipu::time::Stopwatch::start();
             let endpoint = match stringify!($name) {
                 "search" => quipu::search_trace::Endpoint::Search,

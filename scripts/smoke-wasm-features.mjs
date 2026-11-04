@@ -22,7 +22,10 @@ const worker = readFileSync(join(repo, "docs/book/src/explore/worker.js"), "utf8
 const html = `<!doctype html><title>Private WASM feature acceptance</title><script type="module">
 import { createEngineApi } from "/engine-api.js";
 const worker=new Worker('/worker.mjs',{type:'module'}); const pending=new Map(); let seq=0;
-worker.onmessage=({data:m})=>{const p=pending.get(m.id);pending.delete(m.id);p.resolve({...m,value:m.result})};
+worker.onmessage=({data:m})=>{
+ if(m.type==="quipu:load-progress") return;
+ const p=pending.get(m.id);pending.delete(m.id);p.resolve({...m,value:m.result});
+};
 worker.onerror=e=>{for(const p of pending.values())p.reject(new Error(e.message))};
 window.ask=msg=>new Promise((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});worker.postMessage({...msg,id})});
 window.quipu=createEngineApi(async msg=>{
@@ -48,7 +51,10 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (pathname === "/") { res.setHeader("Content-Type", "text/html"); res.end(html); return; }
-  if (pathname === "/engine-api.js") { res.setHeader("Content-Type", "text/javascript"); res.end(readFileSync(join(repo,"docs/book/src/explore/engine-api.js"))); return; }
+  if (["/engine-api.js", "/default-store.js", "/default-pack-proof.js", "/constellation-queries.js"].includes(pathname)) {
+    res.setHeader("Content-Type", "text/javascript");
+    res.end(readFileSync(join(repo, "docs/book/src/explore", pathname.slice(1)))); return;
+  }
   if (pathname === "/worker.mjs") { res.setHeader("Content-Type", "text/javascript"); res.end(worker); return; }
   if (pathname.endsWith("/query")) {
     let bytes = ""; for await (const chunk of req) bytes += chunk;
@@ -98,7 +104,14 @@ try {
       catch (error) { const detail = JSON.parse(String(error)); refused = detail.details?.kind === "validation_failed"; }
       const result = JSON.parse(invoke("quipu_query", {query: "SELECT ?s WHERE { ?s a <urn:Record> }"}));
       const raw = invoke("quipu_entity_history", {iri: "urn:good"});
-      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw};
+      const builder = await import("/pkg/runtime/query-builder.mjs");
+      const query = new builder.Select([new builder.Var("s")]).where(
+        new builder.Triple(new builder.Var("s"), new builder.Iri("urn:title"), new builder.Literal("Before")));
+      const built = JSON.parse(query.execute(db));
+      const saved = JSON.parse(query.save(db, "browser_builder_saved"));
+      const asked = JSON.parse(invoke("quipu_ask", {name:"browser_builder_saved"}));
+      return {caps, committed: write.tx_id > 0, refused, count: result.count, raw,
+        builderCount: built.count, builderSaved: saved.loaded, builderAsked: asked.count};
     } finally { db.free(); }
   });
   assert.equal(memoryDatabase.caps.storage, "memory");
@@ -106,6 +119,9 @@ try {
   assert.equal(memoryDatabase.committed, true);
   assert.equal(memoryDatabase.refused, true);
   assert.equal(memoryDatabase.count, 1);
+  assert.equal(memoryDatabase.builderCount, 1);
+  assert.equal(memoryDatabase.builderSaved, "browser_builder_saved");
+  assert.equal(memoryDatabase.builderAsked, 1);
   assert.match(memoryDatabase.raw, /9007199254740993/);
   assert.doesNotMatch(memoryDatabase.raw, /9007199254740992/);
   console.log("PASS fresh shared Database governed write/refusal/no-leak/lossless browser history");

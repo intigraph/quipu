@@ -98,6 +98,33 @@ Markdown may link directly to an IRI; frontmatter `entities:` may list IRIs;
 code comments may use `quipu: prefix:key` with their registry context. These
 references can feed explicit Bobbin/anchor links; no reactor is launched.
 
+## Verify a key reference
+
+Key-minting namespaces bind an IRI to its declared type and ordered key values.
+Existing key fields cannot be retracted or replaced through guarded raw writes;
+label changes remain allowed. Loaded shapes cannot change or remove an
+allocated type's effective key contract, even after the entity is retired.
+Use a new identity with supersession links for a changed key.
+
+After an explicit share import/promotion, verification is an optional local step:
+
+```json
+{"iri":"https://knowledge.example/id/example-key"}
+```
+
+```sh
+quipu entity-ref verify reference.json --db local.db
+```
+
+REST/MCP use `"action":"verify"`, with `iri` and optional `graph` only. The
+receiver's configured/retained key namespace and current local shape must agree
+with exactly one live selected type and exactly one correctly typed value per
+key field. The computed IRI must match exactly. Success returns `verified:true`;
+unknown, missing, ambiguous, wrong-kind or mismatched identities refuse without
+writing. No network request, automatic repair or namespace-policy import occurs.
+This does not change the share import's acceptance policy or verify historical
+views.
+
 ## Audience-matched pendants
 
 Public namespace IRIs can go everywhere. Restricted IRIs can go only to a

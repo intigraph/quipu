@@ -58,6 +58,7 @@ pub(super) fn cancellations() -> &'static Cancellations {
 }
 
 pub(super) struct Completion<'a> {
+    pub(super) search: Option<std::sync::Arc<super::super::search_observation::Call>>,
     pub(super) id: u64,
     pub(super) client: String,
     pub(super) task: String,
@@ -87,6 +88,9 @@ impl Completion<'_> {
         }
         // Disarm first so a later panic cannot manufacture a second terminal event.
         self.finished = true;
+        if let Some(call) = &self.search {
+            super::super::search_observation::finish(call, status, usage);
+        }
         let elapsed = self.started.elapsed();
         self.metrics
             .observe_request(&self.endpoint, status, elapsed.as_secs_f64());

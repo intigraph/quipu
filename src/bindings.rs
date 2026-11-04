@@ -28,6 +28,18 @@ const OPERATIONS: &[Operation] = &[
         handler: |s, v| crate::tool_query(s, v),
     },
     Operation {
+        name: "quipu_queries",
+        requires_shacl: false,
+        requires_schema: false,
+        handler: |s, v| crate::tool_queries(s, v),
+    },
+    Operation {
+        name: "quipu_ask",
+        requires_shacl: false,
+        requires_schema: false,
+        handler: |s, v| crate::tool_ask(s, v),
+    },
+    Operation {
         name: "quipu_export",
         requires_shacl: false,
         requires_schema: false,
@@ -142,6 +154,8 @@ impl BindingError {
 /// A local engine owns its store; adapters cannot mutate it around validation.
 pub struct Engine {
     store: Store,
+    /// `memory` or `file`, reported verbatim in the capability manifest.
+    storage: &'static str,
     /// Set once this store becomes a replica (the first `replica_*` call).
     /// From then on it is read-only to local callers: only the applier
     /// writes, and it writes what the source already accepted.
@@ -152,16 +166,35 @@ impl Engine {
     /// Create a fresh memory store. Shapes must be explicitly adopted through
     /// `quipu_shapes`; writes cannot silently disable a linked validator.
     pub fn open_in_memory() -> Result<Self> {
-        #[allow(unused_mut)]
-        let mut store = Store::open_in_memory()?;
+        Ok(Self::governed(Store::open_in_memory()?, "memory"))
+    }
+
+    /// Open (or create) a file-backed store. Shapes adopted in an earlier
+    /// session persist in the file and are enforced again from the first
+    /// write; a fresh file starts with no adopted schema, like memory.
+    ///
+    /// Do NOT open a database that a running `quipu-server` (or any other
+    /// writer) is serving. `SQLite` keeps the file consistent, but the server's
+    /// in-process state (term cache, read models, change feed) never sees this
+    /// engine's writes, and this engine runs with default configuration, not
+    /// the server's governance, label or SHACL settings. Nothing detects that
+    /// case yet (no shared writer lock exists): talk to a served store through
+    /// its REST API instead.
+    pub fn open(path: &str) -> Result<Self> {
+        Ok(Self::governed(Store::open(path)?, "file"))
+    }
+
+    #[cfg_attr(not(feature = "shacl"), allow(unused_mut))]
+    fn governed(mut store: Store, storage: &'static str) -> Self {
         #[cfg(feature = "shacl")]
         {
             store.shacl_config_mut().validate_on_write = true;
         }
-        Ok(Self {
+        Self {
             store,
+            storage,
             replica: None,
-        })
+        }
     }
 
     /// Report this build and actual dispatch availability, not global parity.
@@ -172,7 +205,7 @@ impl Engine {
             "version": crate::VERSION,
             "revision": crate::GIT_SHA,
             "git_dirty": env!("QUIPU_GIT_DIRTY") == "true",
-            "storage": "memory",
+            "storage": self.storage,
             "features": { "shacl": cfg!(feature = "shacl") },
             "reasoning": "none_registered",
             "shape_catalog": match crate::tool_shapes(&self.store, &json!({"action": "list"})) {
@@ -350,7 +383,7 @@ impl Engine {
 fn writes(operation: &str, input: &Value) -> bool {
     match operation {
         "quipu_knot" | "quipu_episode" | "quipu_set" | "quipu_retract" => true,
-        "quipu_shapes" => matches!(
+        "quipu_shapes" | "quipu_queries" => matches!(
             input.get("action").and_then(Value::as_str),
             Some("load" | "remove")
         ),

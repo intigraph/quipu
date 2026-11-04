@@ -327,15 +327,12 @@ fn apply_locked(
         phase = Instant::now();
     };
     let ox = OxStore::new().map_err(|e| quipu::Error::Store(e.to_string()))?;
-    let mut graph_ids = HashMap::new();
-    graph_ids.insert(GraphName::DefaultGraph, 0);
     let mut graphs = vec![(0, GraphName::DefaultGraph)];
     for graph_id in store.all_named_graph_ids()? {
         let iri = store.resolve(graph_id)?;
         let name = GraphName::NamedNode(
             NamedNode::new(iri).map_err(|e| quipu::Error::InvalidValue(e.to_string()))?,
         );
-        graph_ids.insert(name.clone(), graph_id);
         graphs.push((graph_id, name));
     }
     let path = match plan {
@@ -362,71 +359,14 @@ fn apply_locked(
         .collect::<Result<_, _>>()
         .map_err(|e| quipu::Error::Store(e.to_string()))?;
     lap(&mut times.eval);
-    // The write gates /knot enforces, on what this update asserts, before any
-    // term is interned or any transaction begins (aegis-1hfyk5).
-    update_gates::enforce(
+    let (batches, txs) = update_commit::commit(
         store,
-        after.difference(&before),
         before.difference(&after),
-        attribution.actor.as_deref(),
-        &attribution.source,
+        after.difference(&before),
+        attribution,
+        None,
+        times,
     )?;
-    lap(&mut times.gates);
-    let now = quipu::time::now_iso();
-    let mut changes: HashMap<i64, Vec<quipu::store::Datum>> = HashMap::new();
-    for quad in before.difference(&after) {
-        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
-        changes
-            .entry(graph_id)
-            .or_default()
-            .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
-                attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(store, &quad.object)?,
-                valid_from: now.clone(),
-                valid_to: Some(now.clone()),
-                op: quipu::Op::Retract,
-            });
-    }
-    for quad in after.difference(&before) {
-        let graph_id = graph_id(store, &mut graph_ids, &quad.graph_name)?;
-        changes
-            .entry(graph_id)
-            .or_default()
-            .push(quipu::store::Datum {
-                entity: quipu::rdf::intern_subject(store, &quad.subject)?,
-                attribute: store.intern(quad.predicate.as_str())?,
-                value: quipu::rdf::term_to_value(store, &quad.object)?,
-                valid_from: now.clone(),
-                valid_to: None,
-                op: quipu::Op::Assert,
-            });
-    }
-    let mut batches: Vec<_> = changes.into_iter().collect();
-    // Deterministic commit (and report) order across graphs; ROOT first.
-    batches.sort_unstable_by_key(|(graph, _)| *graph);
-    lap(&mut times.prep);
-    let shapes = store
-        .get_combined_shapes()?
-        .map(|s| quipu::shacl::split_shapes_by_policy(&s).reject);
-    lap(&mut times.shapes);
-    let txs = store.with_write_shapes(shapes.as_deref(), |store| {
-        store.transact_graph_batches_tx(
-            &batches,
-            &now,
-            attribution.actor.as_deref(),
-            Some(&attribution.source),
-        )
-    })?;
-    lap(&mut times.commit);
-    // Register every named graph this update asserted into, so the next
-    // update's dataset includes it (aegis-e9o5ci). After the commit, so a
-    // refused write leaves no empty registry row behind.
-    for (graph_id, datums) in &batches {
-        if datums.iter().any(|d| d.op == quipu::Op::Assert) {
-            store.graph_ensure_registered(*graph_id)?;
-        }
-    }
     Ok(Applied {
         path,
         changes: batches,
@@ -518,25 +458,9 @@ fn insert_fact(
     Ok(())
 }
 
-fn graph_id(
-    store: &quipu::Store,
-    ids: &mut HashMap<GraphName, i64>,
-    graph: &GraphName,
-) -> Result<i64, AppError> {
-    if let Some(id) = ids.get(graph) {
-        return Ok(*id);
-    }
-    let GraphName::NamedNode(name) = graph else {
-        return Err(
-            quipu::Error::InvalidValue("blank-node graph names are unsupported".into()).into(),
-        );
-    };
-    let id = store.intern(name.as_str())?;
-    ids.insert(graph.clone(), id);
-    Ok(id)
-}
-
 // Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
+#[path = "update_commit.rs"]
+pub(super) mod update_commit;
 #[path = "update_full.rs"]
 pub(crate) mod update_full;
 #[path = "update_gates.rs"]

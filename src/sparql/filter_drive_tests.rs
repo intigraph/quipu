@@ -283,7 +283,11 @@ fn declines_where_driving_could_cost_more_or_change_the_answer() {
     // A small original driver is already cheap.
     let (small, _dir) = fixture(2_000, true);
     assert_eq!(driven(&small, &plain(window)).1, 0);
-    let (store, _dir) = fixture(12_000, true);
+    let (mut store, _dir) = fixture(12_000, true);
+    // This compares semantic parity with a deliberately unoptimized plan,
+    // not its wall-clock speed on a shared test host. Budget refusal has its
+    // own controls; keep the normal row ceiling for both plans here.
+    store.search_config_mut().query_timeout_ms = 0;
     for text in [
         // The filter keeps most rows: the probes saved cannot pay for the scan.
         plain("?end >= \"2026-01-01T00:00:00Z\"^^xsd:dateTime"),
@@ -468,4 +472,49 @@ fn a_conjunct_after_one_the_driver_cannot_judge_is_not_applied_early() {
     let (actual, drove) = driven(&store, &text);
     assert_eq!(drove, 0, "a non-prefix conjunct must not drive");
     assert_eq!(bag(actual.rows()), bag(expected.rows()));
+}
+
+/// Constructor syntax is a built-in deterministic cast, even though spargebra
+/// represents it as Custom. It must select before hydrating the whole board.
+#[test]
+fn implemented_cast_bounds_drive_the_same_rows_as_typed_literals() {
+    let (store, _dir) = fixture(6000, false);
+    let cast = plain("?end >= xsd:dateTime('2026-10-27T12:00:00Z')");
+    let literal = plain("?end >= '2026-10-27T12:00:00Z'^^xsd:dateTime");
+    let old = reference(|| query(&store, &cast).unwrap());
+    let (new, drove) = driven(&store, &cast);
+    assert_eq!(drove, 1, "implemented dateTime cast must drive");
+    assert_eq!(bag(new.rows()), bag(old.rows()));
+    assert_eq!(
+        bag(new.rows()),
+        bag(query(&store, &literal).unwrap().rows())
+    );
+    assert!(
+        !new.rows().is_empty(),
+        "empty answers cannot prove narrowing"
+    );
+}
+
+/// Recognizing our casts does not admit unknown extensions or volatile inputs.
+/// Invalid casts remain type errors, with precisely the original answer.
+#[test]
+fn casts_keep_type_errors_and_unknown_or_volatile_functions_conservative() {
+    let (store, _dir) = fixture(6000, false);
+    for (filter, expected_drives) in [
+        ("?end >= xsd:dateTime('not-a-date')", None),
+        (
+            "?end >= <http://example.org/custom>('2026-10-27T12:00:00Z')",
+            Some(0),
+        ),
+        ("?end >= xsd:dateTime(STRUUID())", Some(0)),
+    ] {
+        let text = plain(filter);
+        let old = reference(|| query(&store, &text).unwrap());
+        let (new, drove) = driven(&store, &text);
+        if let Some(expected) = expected_drives {
+            assert_eq!(drove, expected, "{filter}");
+        }
+        assert_eq!(bag(new.rows()), bag(old.rows()), "{filter}");
+        assert!(new.rows().is_empty());
+    }
 }

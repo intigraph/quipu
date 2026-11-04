@@ -8,20 +8,17 @@ use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 fn atomic<T>(store: &mut Store, run: impl FnOnce(&mut Store) -> Result<T>) -> Result<T> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT share_review_transition")?;
     match run(store) {
         Ok(value) => {
-            store
-                .conn
-                .execute_batch("RELEASE share_review_transition")?;
+            crate::store::release::release(&store.conn, "share_review_transition")?;
             Ok(value)
         }
         Err(error) => {
-            store.conn.execute_batch(
-                "ROLLBACK TO share_review_transition; RELEASE share_review_transition",
-            )?;
+            crate::store::release::rollback_release(&store.conn, "share_review_transition")?;
             store.read_model.borrow_mut().clear();
             store.term_cache.borrow_mut().clear_persistent();
             Err(error)
@@ -139,7 +136,7 @@ pub fn import_share_prepared(
             } else {
                 "import.quarantined"
             };
-            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
+            let payload = json!({"share_id":result.share_id,"source":request.source,"actor":actor,"claimed_actor":request.actor,"unknown_types":result.validation.off_vocabulary,"blockers":result.promotion.blockers,"shapes_hash":request.manifest.shapes_hash,"destination":request.manifest.destination,"triples":result.triples,"size_bytes":request.export_ntriples.len()+request.shapes_turtle.len()+request.queries_turtle.as_ref().map_or(0,String::len)+request.alignments_turtle.as_ref().map_or(0,String::len),"waiting_seconds":0});
             transition(store, &result.share_id, next, kind, timestamp, &payload)?;
         }
         // The LAST check, inside the savepoint (aegis-oa5):

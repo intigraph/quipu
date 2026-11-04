@@ -1,0 +1,12 @@
+base man search --limit: <blank>
+candidate man search --limit: Maximum number of results
+candidate required tracked agent sources: 4
+candidate complete source fixture: ACCEPTED
+candidate missing docs/book/src/reference/cli-commands.md: REFUSED
+candidate missing docs/book/src/reference/mcp-tool-index.md: REFUSED
+candidate missing docs/book/src/getting-started/agent-primer.md: REFUSED
+candidate missing src/primer.md: REFUSED
+No release publication or runtime operation
+native index: README + all 4 actual reference pointers and exact paths PRESENT
+native private share/import: README + all 4 exact reference pointers PRESENT
+scope=five-real-documents destination=internal published=NONE live_store_operations=NONE

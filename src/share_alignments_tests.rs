@@ -245,7 +245,7 @@ fn http_directory_fetches_only_fixed_manifest_declared_alignment_member() {
         vec!["manifest.json", "export.nt", "shapes.ttl", ALIGNMENTS_FILE]
     );
 }
-
+#[cfg(all(target_os = "linux", not(target_arch = "wasm32")))] // rustix has no mkfifoat on macOS
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 #[test]
 fn native_producer_inputs_refuse_symlink_fifo_and_oversized_files() {
@@ -258,12 +258,15 @@ fn native_producer_inputs_refuse_symlink_fifo_and_oversized_files() {
     symlink(&regular, &link).unwrap();
     assert!(read_file(&link).is_err());
     let fifo = dir.path().join("fifo");
-    rustix::fs::mkfifoat(
-        rustix::fs::CWD,
-        &fifo,
-        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
-    )
-    .unwrap();
+    // `rustix::fs::mkfifoat` is not provided on Apple targets, which kept the
+    // lib tests from compiling on macOS; the POSIX utility works on every unix.
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success()
+    );
     assert!(read_file(&fifo).is_err());
     let huge = dir.path().join("huge");
     std::fs::File::create(&huge)
@@ -359,8 +362,12 @@ fn delta_member_presence_must_match_its_declaration() {
     );
 }
 
+/// The producer scrubs alignment bytes bound outward. On the receiving side an
+/// `internal` stamp is read from the manifest (aegis-zev): such a share is
+/// accepted and recorded as internal by default, and a store with
+/// `[quipu.import] refuse_internal = true` refuses it before retaining anything.
 #[test]
-fn alignment_bytes_cannot_bypass_outward_producer_or_receiver_scrub() {
+fn alignment_bytes_cannot_bypass_outward_producer_scrub_or_receiver_policy() {
     let text = "<urn:alignment:x> <urn:description> \"FIXTURE_PRIVATE_TOKEN\" .\n";
     let mut source = Store::open_in_memory().unwrap();
     crate::share_scrub::seed_test_catalogue(&mut source);
@@ -374,14 +381,22 @@ fn alignment_bytes_cannot_bypass_outward_producer_or_receiver_scrub() {
     let p = payload(Some(text));
     let mut r = request(&p);
     r.destination = ShareDestination::Outward;
-    let mut receiver = Store::open_in_memory().unwrap();
-    crate::share_scrub::seed_test_catalogue(&mut receiver);
-    let before = receiver.latest_tx_id().unwrap();
-    assert!(import_share(&mut receiver, &r, "2026-10-21T00:00:00Z", None).is_err());
-    assert_eq!(receiver.latest_tx_id().unwrap(), before);
+    // A refusing receiver retains nothing.
+    let mut refusing = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut refusing);
+    refusing.import_policy_config_mut().refuse_internal = true;
+    let before = refusing.latest_tx_id().unwrap();
+    let error = import_share(&mut refusing, &r, "2026-10-21T00:00:00Z", None).unwrap_err();
+    assert!(error.to_string().contains("refuse_internal"), "{error}");
+    assert_eq!(refusing.latest_tx_id().unwrap(), before);
     assert!(
-        imported_member(&receiver, &r.manifest.share_id)
+        imported_member(&refusing, &r.manifest.share_id)
             .unwrap()
             .is_none()
     );
+    // A default receiver accepts it and records the stamp.
+    let mut receiver = Store::open_in_memory().unwrap();
+    crate::share_scrub::seed_test_catalogue(&mut receiver);
+    let result = import_share(&mut receiver, &r, "2026-10-21T00:00:00Z", None).unwrap();
+    assert_eq!(result.destination, Some(ShareDestination::Internal));
 }

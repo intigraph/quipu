@@ -32,8 +32,7 @@ impl Store {
 
     /// Open (or create) a Quipu store at the given path.
     pub fn open(path: &str) -> Result<Self> {
-        let conn = Connection::open(path)?;
-        Self::init(conn)
+        Self::open_owned(path, &[])
     }
 
     /// Create an in-memory store (useful for tests).
@@ -186,8 +185,7 @@ impl Store {
     /// attachment quipu refuses to compose (no `g` column, or a term space
     /// that collides — see `attach::verify_attached_schema`).
     pub fn open_with_attachments(path: &str, attachments: &[attach::Attachment]) -> Result<Self> {
-        let conn = Connection::open(path)?;
-        Self::init_with_attachments(conn, attachments)
+        Self::open_owned(path, attachments)
     }
 
     /// Move what can be moved out of the WAL, without ever blocking a reader
@@ -230,8 +228,21 @@ impl Store {
         Self::init_with_attachments(conn, &[])
     }
 
-    fn init_with_attachments(conn: Connection, attachments: &[attach::Attachment]) -> Result<Self> {
+    pub(super) fn init_with_attachments(
+        conn: Connection,
+        attachments: &[attach::Attachment],
+    ) -> Result<Self> {
+        // Every initializing constructor checks sticky ownership before DDL,
+        // including deserialized stores; unsupported providers cannot downgrade.
+        super::ownership_startup::require_unenrolled(&conn)?;
+        let inspected = Self::with_connection(conn);
+        inspected.ownership_state()?;
+        let conn = inspected.conn;
         crate::lexical::register(&conn)?;
+        // Per-row SPARQL scans reuse cached statements, one per text and
+        // nesting depth (aegis-ek4); a multi-branch board query needs more
+        // than rusqlite's default 16 before the LRU starts re-preparing.
+        conn.set_prepared_statement_cache_capacity(256);
         // `wal_autocheckpoint` is stated EXPLICITLY rather than left to SQLite's
         // default (aegis-raq1ok). Read the honest caveat before changing it:
         // the deployed store reached a **1.06 GB** WAL against a 5.7 GB
@@ -333,10 +344,16 @@ impl Store {
         store.facts_source = facts_source;
         store.resolve_sql = resolve_sql;
         store.attached_graphs = attach::attached_graph_ids(&store.conn, attachments)?;
+        // Installed after the migrations: from here on every outer commit on
+        // this handle re-checks ownership (see `ownership_fence`).
+        store.ownership_fence = super::ownership_fence::CommitFence::new(&store.conn);
+        if let Some(fence) = store.ownership_fence.clone() {
+            store.conn.commit_hook(Some(move || fence.refuses()))?;
+        }
         Ok(store)
     }
 
-    fn ensure_store_identity(conn: &Connection) -> Result<()> {
+    pub(super) fn ensure_store_identity(conn: &Connection) -> Result<()> {
         let exists: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM store_identity WHERE id = 1)",
             [],
@@ -353,7 +370,7 @@ impl Store {
 
     /// A store opened for the first time, or first opened by a version that
     /// predates the epoch, gets one now; its earlier history had none.
-    fn ensure_log_epoch(conn: &Connection) -> Result<()> {
+    pub(super) fn ensure_log_epoch(conn: &Connection) -> Result<()> {
         conn.execute(
             "INSERT OR IGNORE INTO log_epoch (id, epoch, minted_at, reason) \
              VALUES (1, ?1, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 'created')",
@@ -516,7 +533,7 @@ impl Store {
     /// struct construction without sharing the schema setup — the two must not
     /// drift, or a pooled reader would be a different kind of Store than the
     /// writer.
-    fn with_connection(conn: Connection) -> Self {
+    pub(super) fn with_connection(conn: Connection) -> Self {
         // Persistent lexical triggers can be present even when query mode is
         // off. Register their decoder on every writer and pooled reader.
         let _ = crate::lexical::register(&conn);
@@ -527,6 +544,7 @@ impl Store {
         let _ = crate::sparql::status_pushdown::register(&conn);
         Self {
             conn,
+            ownership_fence: None,
             signing: None,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),
@@ -534,11 +552,13 @@ impl Store {
             resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
             labels_config: crate::config::LabelsConfig::default(),
+            import_policy_config: crate::config::ImportPolicyConfig::default(),
             shacl_config: ShaclConfig::default(),
             projection_defs: Vec::new(),
             write_shapes: None,
             write_reference_graphs: None,
             poststate_profile: PoststateProfile::default(),
+            current_g_index: std::cell::Cell::new(None),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]
             owl_cache: None,
@@ -555,6 +575,7 @@ impl Store {
             recording_verdicts: false,
             trust_root_bootstrap: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
+            vocabulary: crate::term_vocabulary::Vocabulary::default(),
             namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,
             local_vector_backend: None,

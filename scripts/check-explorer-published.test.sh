@@ -5,7 +5,7 @@ CHECK="$ROOT/scripts/check-explorer-published.sh"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/src/pkg" "$T/out/pkg"
-for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js constellation.js constellation.css entity.js relation.js; do echo source > "$T/out/$f"; done
+for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js default-store.js default-pack-proof.js worker-progress.js provenance.js loading.js loading.css constellation.js constellation-queries.js constellation.css entity.js relation.js; do echo source > "$T/out/$f"; done
 for f in quipu_wasm_explorer.js quipu_wasm_explorer_bg.wasm; do
   echo wasm > "$T/src/pkg/$f"; cp "$T/src/pkg/$f" "$T/out/pkg/$f"
 done
@@ -41,10 +41,24 @@ rm "$T/out/engine-api.js"
 expect_fail "$CHECK" "$T/src" "$T/out"
 grep -q 'missing from book output: explore/engine-api.js' "$T/error"
 echo source > "$T/out/engine-api.js"
-for f in presentation.js presentation.css map-cache.js pack-loader.js relation.js; do
+for f in presentation.js presentation.css map-cache.js pack-loader.js default-store.js default-pack-proof.js worker-progress.js provenance.js constellation-queries.js loading.js loading.css relation.js; do
   rm "$T/out/$f"
   expect_fail "$CHECK" "$T/src" "$T/out"
   grep -q "missing from book output: explore/$f" "$T/error"
   echo source > "$T/out/$f"
 done
-echo '13 explorer publication scenarios passed'
+echo snapshot > "$T/src/default-store.db.gz"
+expect_fail "$CHECK" "$T/src" "$T/out"
+grep -q 'validated default asset' "$T/error"
+cp "$T/src/default-store.db.gz" "$T/out/"
+"$CHECK" "$T/src" "$T/out"
+echo changed > "$T/out/default-store.db.gz"
+expect_fail "$CHECK" "$T/src" "$T/out"
+grep -q 'validated default asset' "$T/error"
+cp "$T/src/default-store.db.gz" "$T/out/"
+echo proof > "$T/src/default-pack-proof.js"
+expect_fail "$CHECK" "$T/src" "$T/out"
+grep -q 'validated default asset' "$T/error"
+cp "$T/src/default-pack-proof.js" "$T/out/"
+"$CHECK" "$T/src" "$T/out"
+echo 'explorer publication controls passed'

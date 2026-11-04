@@ -32,7 +32,7 @@ pub fn audit_query() -> super::queries::StoredQuery {
     super::queries::StoredQuery {
         name: "decision_deck_audit_v1".into(),
         description: "Admitted Decision Deck receipts; re-verify each exact nonce using the native receipt API".into(),
-        template: format!("PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?decision ?outcome ?actor ?digest ?credential ?time ?scheme ?admission ?receipt FROM <{GRAPH}> WHERE {{ ?decision a a:Decision ; a:outcome ?outcome ; a:by ?actor ; a:evidenceHash ?digest ; a:deckCredential ?credential ; a:deckRecordedAt ?time ; a:deckScheme ?scheme ; a:deckAdmission ?admission ; a:deckReceipt ?receipt . }} ORDER BY ?decision LIMIT 200"),
+        template: format!("PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?decision ?outcome ?actor ?digest ?credential ?time ?scheme ?admission ?receipt FROM <{GRAPH}> WHERE {{ {{ ?decision a a:GateApproval }} UNION {{ ?decision a a:Decision }} ?decision a:outcome ?outcome ; a:by ?actor ; a:evidenceHash ?digest ; a:deckCredential ?credential ; a:deckRecordedAt ?time ; a:deckScheme ?scheme ; a:deckAdmission ?admission ; a:deckReceipt ?receipt . }} ORDER BY ?decision LIMIT 200"),
         dataset: None,
         params: Vec::new(),
     }

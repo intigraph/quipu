@@ -5,14 +5,15 @@
 @prefix a: <http://aegis.gastown.local/ontology/> .
 @prefix rule: <http://quipu.local/rule#> .
 
-# A purpose-specific profile of the existing governed Decision class.
+# A purpose-specific profile of the governed gate ruling (aegis:GateApproval).
 # The JSON value is parsed strictly and its complete Decision content must
 # pass the existing admitted decision-seal verifier before use in an answer.
 # Decisions without judgmentClaim remain outside this profile.
 rule:judgmentClaim a rdf:Property ; rdfs:label "judgment claim digest" ; rdfs:range xsd:string .
 rule:RuleJudgmentProfile a sh:NodeShape ;
     sh:targetSubjectsOf rule:judgmentClaim ;
-    sh:class a:Decision ;
+    # A gate ruling: aegis:GateApproval, or a pre-split aegis:Decision (one release).
+    sh:or ( [ sh:class a:GateApproval ] [ sh:class a:Decision ] ) ;
     sh:property [ sh:path rule:judgmentClaim ; sh:minCount 1 ; sh:maxCount 1 ;
         sh:datatype xsd:string ; sh:pattern "^[a-f0-9]{64}$" ] ;
     sh:property [ sh:path rdf:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;

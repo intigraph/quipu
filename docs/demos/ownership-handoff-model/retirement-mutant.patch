@@ -1,0 +1,17 @@
+--- a/src/ownership_handoff_model/state.rs
++++ b/src/ownership_handoff_model/state.rs
+@@ -146,12 +146,5 @@
+     // Critical prerequisite for witness retirement and usable receipts. The mutant removes THIS
+     // check; the model explorer must then find two writable placements.
+-    pub(super) fn require_retired(&self, certificate: &Certificate) -> ModelResult<()> {
+-        require(
+-            self.journal.get(&certificate.request.source.owner)
+-                == Some(&Journal::Retired {
+-                    certificate: certificate.clone(),
+-                })
+-                && self.seals.get(&certificate.request.operation) == Some(certificate),
+-            "source retirement and sealed durable outbox do not agree",
+-        )
++    pub(super) fn require_retired(&self, _certificate: &Certificate) -> ModelResult<()> {
++        Ok(())
+     }

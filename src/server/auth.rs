@@ -106,7 +106,7 @@ pub(super) fn bearer_policy(
         );
     }
 
-    match config.crew_credentials_file.as_deref() {
+    let auth_policy = match config.crew_credentials_file.as_deref() {
         None => auth_policy,
         Some(path) => match load_registry(path) {
             Ok(registry) => {
@@ -120,14 +120,43 @@ pub(super) fn bearer_policy(
                 eprintln!("error: scoped credential authority unavailable; refusing startup");
                 std::process::exit(2);
             }
+            Err(_) if config.replication_credentials_file.is_some() => {
+                eprintln!("error: writer registry cannot be checked for replication separation");
+                std::process::exit(2);
+            }
             Err(reason) => {
-                // Optional additions cannot disable an existing shared bearer.
-                // Deployment must validate the candidate before provisioning clients.
                 eprintln!(
                     "warning: crew credential registry not activated: {reason}; shared bearer policy unchanged"
                 );
                 auth_policy
             }
+        },
+    };
+    replication_policy(config, auth_policy).unwrap_or_else(|reason| {
+        eprintln!("error: {reason}; refusing startup");
+        std::process::exit(2);
+    })
+}
+
+fn replication_policy(
+    config: &quipu::config::ServerConfig,
+    auth_policy: quipu::http_auth::BearerPolicy,
+) -> Result<quipu::http_auth::BearerPolicy, &'static str> {
+    match config.replication_credentials_file.as_deref() {
+        None => Ok(auth_policy),
+        Some(path) => match load_registry(path) {
+            Ok(registry)
+                if !registry.is_empty()
+                    && auth_policy.requires_auth()
+                    && config.scoped_reads.is_none()
+                    && config.replica.is_none()
+                    && config.relay.is_none()
+                    && !config.session_keys.required
+                    && !config.read_only =>
+            {
+                auth_policy.with_replication_only(registry)
+            }
+            _ => Err("replication credential authority unavailable"),
         },
     }
 }
@@ -151,7 +180,8 @@ pub(super) async fn run_authorized(
 ) -> axum::response::Response {
     if authorization.generation == Some(quipu::http_auth::AuthGeneration::Named) {
         let principal = policy
-            .named_principal(header)
+            .replication_principal(header)
+            .or_else(|| policy.named_principal(header))
             .expect("named authorization has a principal");
         run_named(req, next, principal).await
     } else {
@@ -266,6 +296,57 @@ mod tests {
 #[cfg(test)]
 mod registry_tests {
     use quipu::http_auth::{AccessDecision, AuthGeneration, authorize_bearers};
+
+    #[test]
+    fn replication_startup_requires_valid_separate_authority() {
+        use quipu::config::ServerConfig;
+        use quipu::http_auth::BearerPolicy;
+        use sha2::{Digest, Sha256};
+        let registry = tempfile::NamedTempFile::new().unwrap();
+        let config = ServerConfig {
+            replication_credentials_file: Some(registry.path().to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        let writer = || BearerPolicy::new(Some("writer-fixture".into()), None, None, 1).unwrap();
+        // Missing, malformed and empty registries must not leave an open fallback.
+        assert!(super::replication_policy(&config, writer()).is_err());
+        std::fs::write(registry.path(), b"{\"version\":1,\"credentials\":[]}").unwrap();
+        assert!(super::replication_policy(&config, writer()).is_err());
+        std::fs::write(registry.path(), serde_json::json!({"version":1,"credentials":[{
+            "credential_id":"standby-fixture", "principal":"urn:standby:fixture",
+            "audience":"quipu", "token_sha256":format!("{:x}", Sha256::digest(b"replica-fixture"))
+        }]}).to_string()).unwrap();
+        assert!(super::replication_policy(&config, writer()).is_ok());
+        let open = BearerPolicy::new(None, None, None, 1).unwrap();
+        assert!(super::replication_policy(&config, open).is_err());
+        let collision = BearerPolicy::new(Some("replica-fixture".into()), None, None, 1).unwrap();
+        assert!(super::replication_policy(&config, collision).is_err());
+        let mut incompatible = config.clone();
+        incompatible.read_only = true;
+        assert!(super::replication_policy(&incompatible, writer()).is_err());
+        incompatible = config.clone();
+        incompatible.session_keys.required = true;
+        assert!(super::replication_policy(&incompatible, writer()).is_err());
+        incompatible = config.clone();
+        incompatible.replica = Some(quipu::config::ReplicaConfig {
+            primary_url: "https://primary.example.invalid".into(),
+            expected_store_id: Some("urn:store:fixture".into()),
+        });
+        assert!(super::replication_policy(&incompatible, writer()).is_err());
+        incompatible = config.clone();
+        incompatible.relay = Some(quipu::config::RelayConfig {
+            upstream_url: "https://primary.example.invalid".into(),
+            upstream_credential_file: None,
+            upstream_store_id: "urn:store:fixture".into(),
+            upstream_key: "00".repeat(32),
+            graphs: vec!["urn:graph:fixture".into()],
+            context_graphs: vec![],
+        });
+        assert!(super::replication_policy(&incompatible, writer()).is_err());
+        incompatible = config.clone();
+        incompatible.replication_credentials_file = Some("/absent/private-fixture-registry".into());
+        assert!(super::replication_policy(&incompatible, writer()).is_err());
+    }
 
     #[test]
     fn invalid_optional_registry_preserves_shared_policy() {

@@ -1,0 +1,155 @@
+[
+    {
+        "@id": "ValidCommit/w8h350vjxkeap6tl68kaif6kf91ve8d",
+        "@type": "ValidCommit",
+        "author": "admin",
+        "identifier": "w8h350vjxkeap6tl68kaif6kf91ve8d",
+        "instance": "layer_data:Layer_986f9f8b5f76f96124c063dad3dc7c32ced93df149088cb627a4aab6a0cc17ee",
+        "message": "Add Grace and team",
+        "parent": "ValidCommit/yj7vstxb0rxa8if94c3kd5ym6vv64l7",
+        "schema": "layer_data:Layer_b21f8a1e57bad7d99f658e4c7feeb7936c940c0e673edd6e34b1cf37094c0e15",
+        "timestamp": 1793143851.358262,
+        "user": "terminusdb://system/data/User/admin"
+    },
+    {
+        "@id": "ValidCommit/yj7vstxb0rxa8if94c3kd5ym6vv64l7",
+        "@type": "ValidCommit",
+        "author": "admin",
+        "identifier": "yj7vstxb0rxa8if94c3kd5ym6vv64l7",
+        "instance": "layer_data:Layer_5b0eeb0a6e5311a1cbfa9f3381f18708697d05812ec79003c101c58a1b47f906",
+        "message": "Ada turns 36",
+        "parent": "ValidCommit/i7nlhxzncbio67dewovfr3ozn2yfbhn",
+        "schema": "layer_data:Layer_b21f8a1e57bad7d99f658e4c7feeb7936c940c0e673edd6e34b1cf37094c0e15",
+        "timestamp": 1793143851.344378,
+        "user": "terminusdb://system/data/User/admin"
+    },
+    {
+        "@id": "ValidCommit/i7nlhxzncbio67dewovfr3ozn2yfbhn",
+        "@type": "ValidCommit",
+        "author": "admin",
+        "identifier": "i7nlhxzncbio67dewovfr3ozn2yfbhn",
+        "instance": "layer_data:Layer_c2995d3157604f83e3224c30d9119ab2b9dbc7042f0154ecb8278cb35c50529e",
+        "message": "Add Ada",
+        "parent": "ValidCommit/xaj5r2yrmll55jgi7s038vopwx6ff6a",
+        "schema": "layer_data:Layer_b21f8a1e57bad7d99f658e4c7feeb7936c940c0e673edd6e34b1cf37094c0e15",
+        "timestamp": 1793143851.328619,
+        "user": "terminusdb://system/data/User/admin"
+    },
+    {
+        "@id": "ValidCommit/xaj5r2yrmll55jgi7s038vopwx6ff6a",
+        "@type": "ValidCommit",
+        "author": "admin",
+        "identifier": "xaj5r2yrmll55jgi7s038vopwx6ff6a",
+        "message": "schema",
+        "migration": [
+            {
+                "@type": "CreateClass",
+                "class_document": {
+                    "@id": "Contact",
+                    "@key": {
+                        "@type": "Random"
+                    },
+                    "@subdocument": [],
+                    "@type": "TaggedUnion",
+                    "email": "xsd:string",
+                    "none": "sys:Unit",
+                    "phone": "xsd:string"
+                }
+            },
+            {
+                "@type": "CreateClass",
+                "class_document": {
+                    "@abstract": [],
+                    "@id": "Entity",
+                    "@type": "Class",
+                    "name": "xsd:string"
+                }
+            },
+            {
+                "@type": "CreateClass",
+                "class_document": {
+                    "@id": "Person",
+                    "@inherits": "Entity",
+                    "@key": {
+                        "@fields": [
+                            "name"
+                        ],
+                        "@type": "Lexical"
+                    },
+                    "@type": "Class",
+                    "age": {
+                        "@class": "xsd:decimal",
+                        "@type": "Optional"
+                    },
+                    "contact": {
+                        "@class": "Contact",
+                        "@type": "Optional"
+                    },
+                    "emails": {
+                        "@class": "xsd:string",
+                        "@max_cardinality": 2,
+                        "@min_cardinality": 1,
+                        "@type": "Set"
+                    },
+                    "friends": {
+                        "@class": "Person",
+                        "@type": "Set"
+                    },
+                    "homepage": {
+                        "@class": "xdd:url",
+                        "@type": "Optional"
+                    },
+                    "nicknames": {
+                        "@class": "xsd:string",
+                        "@type": "List"
+                    },
+                    "profile": {
+                        "@class": "sys:JSON",
+                        "@type": "Optional"
+                    },
+                    "scores": {
+                        "@class": "xsd:integer",
+                        "@dimensions": 1,
+                        "@type": "Array"
+                    },
+                    "status": "Status"
+                }
+            },
+            {
+                "@type": "CreateClass",
+                "class_document": {
+                    "@id": "Status",
+                    "@type": "Enum",
+                    "@value": [
+                        "active",
+                        "retired"
+                    ]
+                }
+            },
+            {
+                "@type": "CreateClass",
+                "class_document": {
+                    "@id": "Team",
+                    "@key": {
+                        "@fields": [
+                            "name"
+                        ],
+                        "@type": "Lexical"
+                    },
+                    "@type": "Class",
+                    "lead": "Entity",
+                    "members": {
+                        "@class": "Person",
+                        "@max_cardinality": 5,
+                        "@min_cardinality": 1,
+                        "@type": "Cardinality"
+                    },
+                    "name": "xsd:string"
+                }
+            }
+        ],
+        "schema": "layer_data:Layer_b21f8a1e57bad7d99f658e4c7feeb7936c940c0e673edd6e34b1cf37094c0e15",
+        "timestamp": 1793143851.3147974,
+        "user": "terminusdb://system/data/User/admin"
+    }
+]

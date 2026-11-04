@@ -1,0 +1,13 @@
+# Violations of schema.json that TerminusDB itself would refuse at commit time:
+# missing mandatory name, an out-of-enum status, three emails (max 2), a non-decimal age.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <terminusdb:///schema#> .
+<terminusdb:///data/Person/Nobody> a schema:Person ;
+  schema:age "old"^^xsd:string ;
+  schema:status <terminusdb:///schema#Status/missing> ;
+  schema:emails "a@example.org", "b@example.org", "c@example.org" ;
+  schema:nicknames <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .
+# A lead must be an Entity (Person qualifies through @inherits); a Team does not.
+<terminusdb:///data/Team/Bad> a schema:Team ;
+  schema:name "Bad" ;
+  schema:lead <terminusdb:///data/Team/Bad> .

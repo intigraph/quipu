@@ -62,6 +62,8 @@ mod owl_materialize;
 #[cfg(test)]
 #[path = "server/parse_guard_tests.rs"]
 mod parse_guard_tests;
+#[path = "server/patch.rs"]
+mod patch;
 #[path = "server/point_reads.rs"]
 mod point_reads;
 #[path = "server/process_pool.rs"]
@@ -85,10 +87,15 @@ mod replica;
 mod request_middleware;
 #[path = "server/scoped_reads.rs"]
 mod scoped_reads;
+#[path = "server/search_observation.rs"]
+mod search_observation;
 #[path = "server/service_description.rs"]
 mod service_description;
 #[path = "server/snapshot_upload.rs"]
 mod snapshot_upload;
+#[cfg(test)]
+#[path = "server/stats_tests.rs"]
+mod stats_tests;
 #[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
@@ -190,6 +197,10 @@ async fn main() {
     // quipu #68: the floors and their consumer land together — a settable knob
     // that nothing reads is the bug config.rs guards against.
     store.labels_config_mut().clone_from(&config.label_floors);
+    // aegis-zev: `[quipu.import] refuse_internal` and its consumer land together.
+    store
+        .import_policy_config_mut()
+        .clone_from(&config.import_policy);
 
     // quipu #47: report the configured federation remotes at startup, and prove
     // they are REACHED rather than merely parsed. `federation.remotes` was
@@ -425,6 +436,8 @@ async fn main() {
         .route("/metrics", get(metrics_handler))
         .merge(query_endpoint::routes())
         .route("/update", post(update::update_post))
+        .route("/patch", post(patch::patch_post))
+        .route("/diff", get(patch::diff_get))
         .route("/export", post(publication::export))
         .merge(graph_store::routes())
         .route("/share", post(publication::share_payload))

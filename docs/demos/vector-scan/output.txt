@@ -1,0 +1,12 @@
+Script started on 2026-11-04 07:25:46-05:00 [COMMAND="bash docs/demos/vector-scan/demo.sh" <not executed on terminal>]
+Synthetic fixture: 20,000 vectors, 384 dimensions, eight alternating runs.
+Before: frozen 5d2fe613 scan. After: current SQLite vector_search.
+$ just vector-scan benchmark
+running 1 test
+paired_sqlite_vector_scan rows=20000 dims=384 rounds=8 exact_scores_and_ranking=true before_ms=[13.444714999999999, 13.491686, 13.520123, 13.521026, 13.596943, 13.617185000000001, 13.640299, 13.672157] after_ms=[10.940729, 10.97337, 11.016089, 11.217596, 11.235766, 11.329456, 11.430688, 12.45313] median_before_ms=13.559 median_after_ms=11.227 ratio=0.8280
+test vector::scoring::benchmark::paired_sqlite_vector_scan ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3402 filtered out; finished in 0.43s
+
+
+Script done on 2026-11-04 07:27:22-05:00 [COMMAND_EXIT_CODE="0"]

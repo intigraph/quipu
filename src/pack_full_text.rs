@@ -117,7 +117,7 @@ pub fn pack_full_text(
             // A declared exclusion that is ABSENT is normal, not an error:
             // `pack_loads` is created lazily by the unpack path.
             if present.iter().any(|t| t == table) {
-                conn.execute(&format!("DELETE FROM \"{table}\""), [])?;
+                crate::pack_full::prune_excluded_table(&conn, table)?;
                 pruned.push(table);
             }
         }

@@ -270,6 +270,7 @@ impl Store {
     pub fn query_load(&self, q: &StoredQuery, timestamp: &str) -> Result<()> {
         q.validate()?;
         let tx = self.latest_tx_id()?;
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_query_load")?;
         let result = (|| -> Result<()> {
             self.conn.execute(
@@ -311,13 +312,11 @@ impl Store {
         })();
         match result {
             Ok(()) => {
-                self.conn.execute_batch("RELEASE quipu_query_load")?;
+                crate::store::release::release(&self.conn, "quipu_query_load")?;
                 Ok(())
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_query_load; RELEASE quipu_query_load");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_query_load");
                 Err(e)
             }
         }

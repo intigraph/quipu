@@ -22,6 +22,7 @@ pub(crate) fn promote_snapshot(
     actor: Option<&str>,
     source: &str,
 ) -> Result<(i64, usize, usize)> {
+    store.ensure_ownership_writable()?;
     store
         .conn
         .execute_batch("SAVEPOINT quipu_snapshot_promotion")?;
@@ -33,15 +34,11 @@ pub(crate) fn promote_snapshot(
     })();
     match result {
         Ok(value) => {
-            store
-                .conn
-                .execute_batch("RELEASE quipu_snapshot_promotion")?;
+            crate::store::release::release(&store.conn, "quipu_snapshot_promotion")?;
             Ok(value)
         }
         Err(error) => {
-            store.conn.execute_batch(
-                "ROLLBACK TO quipu_snapshot_promotion; RELEASE quipu_snapshot_promotion",
-            )?;
+            crate::store::release::rollback_release(&store.conn, "quipu_snapshot_promotion")?;
             store.read_model.borrow_mut().clear();
             Err(error)
         }
@@ -266,6 +263,9 @@ pub(crate) fn promote_subjects_into_graph(
     };
     crate::time::check_request_deadline()?;
     if !changes.is_empty() {
+        // aegis-gxfm: target facts the staging copy lacks are closed here, so
+        // the removal half passes the deletion gate like any retraction.
+        store.enforce_retraction_shapes(&changes, g, None, actor, Some(source))?;
         moved.tx_id = store.transact_to_graph(&changes, timestamp, actor, Some(source), g)?;
     }
     #[cfg(test)]

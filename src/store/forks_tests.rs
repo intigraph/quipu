@@ -260,6 +260,7 @@ fn promote_applies_the_delta_to_root() {
         }
         #[cfg(feature = "shacl")]
         ForkPromotion::Refused(f) => panic!("unexpected refusal: {f:?}"),
+        ForkPromotion::Conflicts(c) => panic!("unexpected conflicts: {c:?}"),
     }
 
     // ROOT now matches the fork's present state.
@@ -320,7 +321,7 @@ ex:PersonShape a sh:NodeShape ;
             assert!(!feedback.conforms);
             assert!(feedback.violations > 0);
         }
-        ForkPromotion::Promoted { .. } => panic!("a SHACL-violating delta was promoted"),
+        other => panic!("expected a SHACL refusal, got {other:?}"),
     }
     // Nothing written, and the fork stays open for repair.
     assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
@@ -359,4 +360,474 @@ fn fork_create_mirrors_the_meta_graph_and_emits_an_event() {
         )
         .unwrap();
     assert_eq!(n, 1, "fork.created event not emitted");
+}
+
+// ---------------------------------------------------------------------------
+// Promote is a three-way merge against the fork's base (gap 1 of the
+// TerminusDB gap analysis): ROOT writes made after the fork's base survive.
+// ---------------------------------------------------------------------------
+
+fn root_has(store: &Store, e: i64, a: i64, v: &Value) -> bool {
+    store
+        .current_facts_in_graph(crate::schema::ROOT_GRAPH)
+        .unwrap()
+        .iter()
+        .any(|f| f.entity == e && f.attribute == a && f.value.term_key() == v.term_key())
+}
+
+fn expect_promoted(out: &ForkPromotion) -> (i64, usize, usize) {
+    let ForkPromotion::Promoted {
+        tx,
+        asserted,
+        retracted,
+    } = out
+    else {
+        panic!("expected Promoted, got {out:?}");
+    };
+    (*tx, *asserted, *retracted)
+}
+
+#[test]
+fn root_write_after_fork_survives_promotion() {
+    let (mut store, _, (alice, _, _, _)) = two_epoch_store();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("work", latest, TS, None).unwrap();
+
+    // ROOT moves on after the fork, touching nothing the fork touches.
+    let age = store.intern("urn:t:age").unwrap();
+    store
+        .transact(
+            &[datum(alice, age, Value::Int(30), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    // The fork makes its own, unrelated change.
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("work", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(
+        root_has(&store, alice, age, &Value::Int(30)),
+        "a ROOT fact written after the fork was silently retracted by promotion"
+    );
+    assert!(root_has(&store, alice, color, &Value::Str("teal".into())));
+}
+
+#[test]
+fn promoting_a_fork_of_old_history_keeps_later_root_history() {
+    // Forked at tx A (name = v1); ROOT has since moved to name = v2. A fork
+    // that never touched the name must not revert it to v1.
+    let (mut store, tx_a, (alice, name, _, _)) = two_epoch_store();
+    let fork = store.fork_create("old", tx_a, TS, None).unwrap();
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("old", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(root_has(&store, alice, name, &Value::Str("v2".into())));
+    assert!(!root_has(&store, alice, name, &Value::Str("v1".into())));
+    assert!(root_has(&store, alice, color, &Value::Str("teal".into())));
+}
+
+#[test]
+fn fork_retraction_still_applies_alongside_new_root_writes() {
+    let (mut store, _, (alice, _, knows, bob)) = two_epoch_store();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("prune", latest, TS, None).unwrap();
+    let age = store.intern("urn:t:age").unwrap();
+    store
+        .transact(
+            &[datum(alice, age, Value::Int(30), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, knows, Value::Ref(bob), Op::Retract)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (tx, asserted, retracted) =
+        expect_promoted(&store.fork_promote("prune", TS, None).unwrap());
+    assert!(tx > 0);
+    assert_eq!((asserted, retracted), (0, 1));
+    assert!(!root_has(&store, alice, knows, &Value::Ref(bob)));
+    assert!(root_has(&store, alice, age, &Value::Int(30)));
+}
+
+/// Type `node` as `ex:Named`, the class `NAME_MAX_ONE` targets.
+fn make_named(store: &mut Store, node: i64) {
+    let rdf_type = store.intern(crate::namespace::RDF_TYPE).unwrap();
+    let named = store.intern("urn:t:Named").unwrap();
+    store
+        .transact(
+            &[datum(node, rdf_type, Value::Ref(named), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+}
+
+const NAME_MAX_ONE: &str = r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <urn:t:> .
+
+ex:NamedShape a sh:NodeShape ;
+    sh:targetClass ex:Named ;
+    sh:property [ sh:path ex:name ; sh:maxCount 1 ] .
+"#;
+
+#[test]
+fn divergent_max_count_one_edits_conflict_and_write_nothing() {
+    let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    make_named(&mut store, alice);
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("rename", latest, TS, None).unwrap();
+
+    // Base: name = v2. ROOT moves it to v4; the fork moves it to v3.
+    store
+        .transact(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v4".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v3".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let root_before = triple_set(&store.current_facts().unwrap());
+    let tx_before = store.latest_tx_id().unwrap();
+    let out = store.fork_promote("rename", TS, None).unwrap();
+    let ForkPromotion::Conflicts(conflicts) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+    let c = &conflicts[0];
+    assert_eq!(c.subject, "<urn:t:alice>");
+    assert_eq!(c.predicate, "urn:t:name");
+    assert_eq!(c.max_count, 1);
+    assert_eq!(c.base, vec!["\"v2\"".to_string()]);
+    assert_eq!(c.ours, vec!["\"v4\"".to_string()]);
+    assert_eq!(c.theirs, vec!["\"v3\"".to_string()]);
+    // Nothing written; the fork stays open for a decision.
+    assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
+    assert_eq!(tx_before, store.latest_tx_id().unwrap());
+    assert!(root_has(&store, alice, name, &Value::Str("v4".into())));
+    assert_eq!(store.fork_lookup("rename").unwrap().unwrap().status, "open");
+}
+
+#[test]
+fn a_fork_without_a_usable_base_is_refused_clearly() {
+    let (mut store, _, (alice, _, _, _)) = two_epoch_store();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("legacy", latest, TS, None).unwrap();
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+    // A registry row whose base transaction was never recorded (the sentinel
+    // a pre-base registry row would carry).
+    store
+        .conn
+        .execute("UPDATE forks SET fork_tx = -1 WHERE name = 'legacy'", [])
+        .unwrap();
+
+    let root_before = triple_set(&store.current_facts().unwrap());
+    let err = store
+        .fork_promote("legacy", TS, None)
+        .expect_err("a fork with no base must not be promoted by guessing");
+    let msg = err.to_string();
+    assert!(msg.contains("base"), "unclear refusal: {msg}");
+    assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
+    assert_eq!(store.fork_lookup("legacy").unwrap().unwrap().status, "open");
+}
+
+#[test]
+fn unbounded_slot_edits_on_both_sides_union() {
+    let (mut store, _, (alice, _, _, _)) = two_epoch_store();
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("tags", latest, TS, None).unwrap();
+    let tag = store.intern("urn:t:tag").unwrap();
+    store
+        .transact(
+            &[datum(alice, tag, Value::Str("root".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, tag, Value::Str("fork".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("tags", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(root_has(&store, alice, tag, &Value::Str("root".into())));
+    assert!(root_has(&store, alice, tag, &Value::Str("fork".into())));
+}
+
+#[test]
+fn root_retraction_and_replacement_after_fork_stand_after_promotion() {
+    // The other direction of the same bug: a value ROOT retracted or replaced
+    // after the fork's base must not come back from the fork's stale copy.
+    let (mut store, _, (alice, name, knows, bob)) = two_epoch_store();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("stale", latest, TS, None).unwrap();
+    store
+        .transact(
+            &[
+                datum(alice, knows, Value::Ref(bob), Op::Retract),
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v5".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("stale", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(
+        !root_has(&store, alice, knows, &Value::Ref(bob)),
+        "a ROOT retraction after the fork was undone by promotion"
+    );
+    assert!(
+        !root_has(&store, alice, name, &Value::Str("v2".into())),
+        "a value ROOT replaced after the fork came back on promotion"
+    );
+    assert!(root_has(&store, alice, name, &Value::Str("v5".into())));
+    assert!(root_has(&store, alice, color, &Value::Str("teal".into())));
+}
+
+#[test]
+fn root_delete_versus_fork_replace_on_max_count_one_is_a_conflict() {
+    // Share merge flags delete-vs-replace on a single-value slot; fork
+    // promotion inherits that rule.
+    let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    make_named(&mut store, alice);
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("revive", latest, TS, None).unwrap();
+    store
+        .transact(
+            &[datum(alice, name, Value::Str("v2".into()), Op::Retract)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v3".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let root_before = triple_set(&store.current_facts().unwrap());
+    let out = store.fork_promote("revive", TS, None).unwrap();
+    let ForkPromotion::Conflicts(c) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(c.len(), 1, "{c:?}");
+    assert!(c[0].ours.is_empty());
+    assert_eq!(c[0].theirs, vec!["\"v3\"".to_string()]);
+    assert_eq!(root_before, triple_set(&store.current_facts().unwrap()));
+    assert_eq!(store.fork_lookup("revive").unwrap().unwrap().status, "open");
+}
+
+/// Review repro (#888): a pre-existing over-bound value set on a node outside
+/// the shape's target, untouched by either side, must not block promotion.
+#[test]
+fn an_untouched_out_of_target_slot_does_not_block_promotion() {
+    let (mut store, _, (alice, name, _, bob)) = two_epoch_store();
+    store
+        .transact(
+            &[
+                datum(bob, name, Value::Str("b1".into()), Op::Assert),
+                datum(bob, name, Value::Str("b2".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("color", latest, TS, None).unwrap();
+    let color = store.intern("urn:t:color").unwrap();
+    store
+        .transact_to_graph(
+            &[datum(alice, color, Value::Str("teal".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let (_, asserted, retracted) = expect_promoted(&store.fork_promote("color", TS, None).unwrap());
+    assert_eq!((asserted, retracted), (1, 0));
+    assert!(root_has(&store, bob, name, &Value::Str("b1".into())));
+    assert!(root_has(&store, bob, name, &Value::Str("b2".into())));
+}
+
+#[test]
+fn a_targeted_slot_conflicts_but_an_untargeted_one_merges() {
+    // NAME_MAX_ONE targets ex:Named. alice is Named, bob is not; both sides
+    // change both names differently. Only alice's slot may conflict.
+    let (mut store, _, (alice, name, _, bob)) = two_epoch_store();
+    make_named(&mut store, alice);
+    store
+        .transact(
+            &[datum(bob, name, Value::Str("b0".into()), Op::Assert)],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store.load_shapes("name-max-one", NAME_MAX_ONE, TS).unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("both", latest, TS, None).unwrap();
+    let edit = |side: &str| {
+        vec![
+            datum(alice, name, Value::Str("v2".into()), Op::Retract),
+            datum(alice, name, Value::Str(format!("a-{side}")), Op::Assert),
+            datum(bob, name, Value::Str("b0".into()), Op::Retract),
+            datum(bob, name, Value::Str(format!("b-{side}")), Op::Assert),
+        ]
+    };
+    store.transact(&edit("root"), TS, None, None).unwrap();
+    store
+        .transact_to_graph(&edit("fork"), TS, None, None, fork.g)
+        .unwrap();
+
+    let out = store.fork_promote("both", TS, None).unwrap();
+    let ForkPromotion::Conflicts(c) = &out else {
+        panic!("expected Conflicts, got {out:?}");
+    };
+    assert_eq!(c.len(), 1, "{c:?}");
+    assert_eq!(c[0].subject, "<urn:t:alice>");
+}
+
+#[test]
+fn an_emit_mode_bound_does_not_hold_promotion() {
+    let (mut store, _, (alice, name, _, _)) = two_epoch_store();
+    store
+        .load_shapes(
+            "name-observed",
+            r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <urn:t:> .
+@prefix quipu: <http://quipu.dev/ontology/> .
+
+ex:ObservedName a sh:NodeShape ;
+    quipu:onViolation "emit" ;
+    sh:targetSubjectsOf ex:name ;
+    sh:property [ sh:path ex:name ; sh:maxCount 1 ] .
+"#,
+            TS,
+        )
+        .unwrap();
+    let latest = store.latest_tx_id().unwrap();
+    let fork = store.fork_create("observed", latest, TS, None).unwrap();
+    store
+        .transact(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v4".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .transact_to_graph(
+            &[
+                datum(alice, name, Value::Str("v2".into()), Op::Retract),
+                datum(alice, name, Value::Str("v3".into()), Op::Assert),
+            ],
+            TS,
+            None,
+            None,
+            fork.g,
+        )
+        .unwrap();
+
+    let out = store.fork_promote("observed", TS, None).unwrap();
+    assert!(
+        !matches!(out, ForkPromotion::Conflicts(_)),
+        "an emit-mode shape gated the merge: {out:?}"
+    );
 }

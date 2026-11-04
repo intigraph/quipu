@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-GRAPH-LIST 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-graph\-list \- List registered named graphs
+.SH SYNOPSIS
+\fBquipu graph list\fR [\fB\-\-db\fR] [\fB\-\-kind\fR] [\fB\-\-graph\fR] [\fB\-\-frozen\fR] [\fB\-\-json\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+List registered named graphs
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-kind\fR \fI<VALUE>\fR
+Index or graph kind to select
+.TP
+\fB\-\-graph\fR \fI<VALUE>\fR
+Explicit graph IRI for this operation
+.TP
+\fB\-\-frozen\fR
+List only frozen graphs
+.TP
+\fB\-\-json\fR
+Print machine\-readable JSON
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

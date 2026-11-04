@@ -59,31 +59,30 @@ fn lines(input: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn update_text(parent: &str, result: &str) -> String {
-    let parent = lines(parent);
-    let result = lines(result);
-    let mut out = String::new();
-    let deleted = parent.difference(&result).collect::<Vec<_>>();
-    if !deleted.is_empty() {
-        out.push_str("DELETE DATA {\n");
-        for line in deleted {
-            out.push_str("  ");
-            out.push_str(line);
-            out.push('\n');
-        }
-        out.push_str("};\n");
+/// The delta document in the store-wide change-set format (aegis-4mk): the
+/// `quipu-changeset` header, then the restricted SPARQL Update body. Empty when
+/// parent and result agree, so "nothing changed" stays an empty file.
+fn update_text(parent: &str, result: &str, header: crate::changeset::Header) -> String {
+    let statements = |text: &str| {
+        lines(text)
+            .into_iter()
+            .map(|line| {
+                let triple = line
+                    .strip_suffix('.')
+                    .unwrap_or(&line)
+                    .trim_end()
+                    .to_string();
+                crate::changeset::Statement::new(triple, None)
+            })
+            .collect::<Vec<_>>()
+    };
+    let changes =
+        crate::changeset::ChangeSet::from_states(header, statements(parent), statements(result));
+    if changes.is_empty() {
+        String::new()
+    } else {
+        changes.to_sparql_update()
     }
-    let inserted = result.difference(&parent).collect::<Vec<_>>();
-    if !inserted.is_empty() {
-        out.push_str("INSERT DATA {\n");
-        for line in inserted {
-            out.push_str("  ");
-            out.push_str(line);
-            out.push('\n');
-        }
-        out.push_str("};\n");
-    }
-    out
 }
 
 fn manifest_bytes(manifest: &DeltaManifest, include_id: bool) -> Result<Vec<u8>> {
@@ -243,7 +242,15 @@ pub fn build_delta_with_limit(
     // The full result is needed for canonical identity and comparison, but
     // it is not the transported delta. Cap the delta files after diffing.
     let result = build_share_payload(store, &opts)?;
-    let update = update_text(parent_export_ntriples, &result.files["export.nt"]);
+    let header = crate::changeset::Header {
+        target_tx: Some(result.manifest.tx_anchor),
+        base_share: Some(parent_share_id.to_string()),
+        store_id: Some(result.manifest.store_id.clone()),
+        source: Some("share-delta".into()),
+        shapes_hash: Some(result.manifest.shapes_hash.clone()),
+        ..crate::changeset::Header::default()
+    };
+    let update = update_text(parent_export_ntriples, &result.files["export.nt"], header);
     if !update.is_empty() {
         crate::sparql_structure::parse_update(spargebra::SparqlParser::new(), &update)?.map_err(
             |e| Error::InvalidValue(format!("generated delta is not SPARQL Update: {e}")),

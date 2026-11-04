@@ -56,10 +56,13 @@ mod bind_join_tests;
 mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
+mod count_key;
 pub(crate) mod count_mmap;
 mod count_optional;
+mod count_star;
 mod count_state;
 mod count_stream;
+mod count_values_pushdown;
 #[cfg(test)]
 mod datetime_compare_tests;
 mod graph_filter;
@@ -71,6 +74,7 @@ mod join;
 #[cfg(test)]
 mod left_bind_join_tests;
 mod limited_scan;
+mod literal_exclusion;
 mod progress;
 mod read_snapshot;
 #[cfg(test)]
@@ -248,6 +252,11 @@ pub struct TemporalContext {
     /// disables). A join explosion is stopped the moment it is recognizable
     /// instead of burning the whole wall-clock budget at 100% CPU.
     pub row_cap: Option<usize>,
+    /// Explicit ceiling on a single scan's materialized bindings. Migration
+    /// planning sets this as well as the join budget, because even one seed
+    /// may exceed its work ceiling before a FILTER discards the rows. Ordinary
+    /// reads retain their existing join-budget behavior when this is absent.
+    pub materialization_cap: Option<usize>,
     /// LIMIT pushdown (quipu-0lr): stop producing BGP solutions once this
     /// many exist. Installed by the `Slice` operator ONLY when every operator
     /// between it and the BGP leaf is prefix-safe (`Project`/`Reduced`), so

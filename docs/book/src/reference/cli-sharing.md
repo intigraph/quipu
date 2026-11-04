@@ -80,12 +80,22 @@ nothing is scrubbed, including every share produced over HTTP: `POST /share`
 cannot select a destination, because a caller who could would be turning the
 guard off on a server they do not own.
 
-**What the marker buys you downstream.** `quipu import` of a stamped share runs
-the scrub the producer skipped. If the payload passes it imports normally — a
-share marked internal out of caution is not quarantined for it. If the payload
-fails, the import is refused unless the operator repeats the declaration with
-`quipu import <dir> --destination internal`. So internal facts cannot enter a
-store silently and then leave it in someone else's outward share.
+**What the marker buys you downstream.** The receiver reads the stamp from the
+verified manifest; the stamp is inside the share's hash, so it cannot be forged
+or stripped in transit. `quipu import` of a stamped share needs no flag. It
+prints `internal share: unscrubbed identifiers, kept internal`, and records
+`"destination": "internal"` on the import result and on the staged review
+record. The internal data cannot leave in someone else's outward share, because
+every outward `quipu share` runs the outward scrub over its whole payload,
+whatever the data's origin, and refuses on a match.
+
+A store that must never hold unscrubbed internal identifiers says so once in
+config, and then refuses every stamped share before anything is staged:
+
+```toml
+[quipu.import]
+refuse_internal = true   # default false
+```
 
 **Deltas are scrubbed separately, and they have to be.** `delta.ru` is not built
 from the store: its DELETE clause is lifted verbatim from the parent's
@@ -170,7 +180,7 @@ the member now says, sealed by the result manifest's `queries_hash`.
 
 ```text
 quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
-            [--destination internal] [--query-namespace NS]
+            [--destination <audience-json>] [--query-namespace NS]
             [--replace-queries] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
             [--query-namespace NS]
@@ -196,6 +206,7 @@ share graph hash mismatch: manifest=… actual=…
 | `--db <path>` | stage in this store, including archive and URL imports |
 | `--query-namespace <NS>` | install carried queries as `NS/<name>` (`[A-Za-z0-9._-]+`); default `pack-<12 hex>` from the producer's store identity |
 | `--replace-queries` | replace differing `NS/*` queries and close ones the share no longer carries; otherwise both are only reported |
+| `--destination <audience-json>` | accept an audience-bound share by naming this store's exact binding. An `internal` stamp needs no flag: it is read from the manifest, and `--destination internal` is accepted but no longer needed |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
@@ -224,7 +235,7 @@ the point rather than an inconvenience — see the [primitive](../sharing/index.
 
 ```text
 quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
-quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+quipu load <bundle-dir> [--actor <id>] [--db <path>]
 ```
 
 A repository commits its project's graph under `.quipu/`, tool-neutral:
@@ -347,6 +358,26 @@ assert and retract, without writing anything. A CI check uses it to validate a
 decided file before merge.
 
 Plain `quipu merge` without these flags behaves as before.
+
+### Showing and resolving decisions
+
+```text
+quipu merge show <decisions.json> [--format text|md|json]
+quipu merge resolve <decisions.json> <row> --choose ours|theirs|base|both|value|defer [--value <term>]... --by <who>
+```
+
+Both read and edit a decisions file of either merge kind (a share merge or
+a fork promotion) and touch no store. `show` prints the standard layout: one
+block per conflict with the entity and field by label, the rule, base, ours
+and theirs with who changed each and when, the suggestion, and the numbered
+choices, then the exact next command. `--format md` is the same layout for
+chat; `--format json` is its machine form (`merge-view/v1`).
+
+`resolve` records one choice on one row, with `decided_by` and `decided_at`.
+`both` (ours and theirs together) is accepted only when it fits the slot's
+`sh:maxCount`; `value` takes one or more `--value` N-Triples terms; `defer`
+clears the row so apply keeps refusing until it is decided. Applying a
+decisions file a second time reports `already-applied` and writes nothing.
 
 ## `quipu pack` / `quipu unpack` — legacy SQLite compatibility
 
@@ -708,6 +739,8 @@ and writes nothing.
 
 ```text
 quipu git-merge <ref>
+quipu git-merge show <dir> [--format text|md|json]
+quipu git-merge resolve <dir> <key> --choose <choice> --by <who>
 quipu merge-driver <base-file> <ours-file> <theirs-file> <path>
 quipu pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
 quipu pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>
@@ -751,15 +784,31 @@ These are proposals, never automatic identity assertions. No paid model or
 network call is used. This baseline can miss aliases and can propose false
 matches; the decision belongs to the reviewer.
 
-Exit 2 means decisions or Git conflicts remain. Inspect the sidecar, then choose:
+Exit 2 means decisions or Git conflicts remain. `git-merge` prints each
+pending pendant in the standard reconcile layout (the same one
+`quipu merge show` prints for share merges and fork promotions), ending with
+the exact next command. Then choose, inside the merge in progress:
+
+```bash
+quipu git-merge resolve pendant conflict:0 --choose ours --by steve
+quipu git-merge resolve pendant alias:0 --choose reject --by steve
+```
+
+`quipu merge show pendant/decisions.json` and
+`quipu merge resolve pendant/decisions.json <key> --choose <choice> --by <who>`
+are the same commands under the shared verb. The refs come from `HEAD` and
+`MERGE_HEAD`; `pendant-resolve` remains for scripts that pass them
+explicitly:
 
 ```bash
 quipu pendant-resolve "$base" "$ours" "$theirs" pendant conflict:0 ours
-quipu pendant-resolve "$base" "$ours" "$theirs" pendant alias:0 reject
 ```
 
-Conflict choices are `base`, `ours`, or `theirs`; alias choices are `accept`
-(add an explicit `owl:sameAs`) or `reject` (keep identities distinct). Resolution
+Conflict choices are `base`, `ours`, `theirs`, `both` (ours and theirs
+together, only within the slot's `sh:maxCount`) or `defer` (clear the choice);
+alias choices are `accept` (add an explicit `owl:sameAs`) or `reject` (keep
+identities distinct). `--by` is recorded beside the choice in `resolved_by`
+for display; the merge result depends on the choices alone. Resolution
 reconstructs the operator result from Git and refuses stale or altered proposal
 records. The last resolution must pass SHACL. It rewrites canonical `export.nt`,
 regenerates both manifests, drops old attestations and the optional derived
@@ -807,7 +856,7 @@ Measured on the repository's real Datalinks pendant, replacing the same function
 value on both branches produces a **text conflict**, not a clean double. Git
 writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
-correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+correctly. `tests/git_pendant_merge.rs` exercises those cases, decision resolution,
 and the driver-absent CI refusals using actual Git repositories.
 
 ## Carry alignment evidence
@@ -824,3 +873,27 @@ shapes. Use the existing alignment propose/decide/apply workflow for curation.
 The browser reader uses the same verification, and Explorer export preserves the
 imported carrier. A release needs a compatible engine and actual asset readback;
 source configuration alone does not establish availability.
+
+## Store ownership after a database copy
+
+```text
+quipu store adopt --db /data/graph.db
+quipu store restore /backups/graph.db --db /data/restored.db
+```
+
+Stage A new and legacy databases remain explicitly `INACTIVE`, preserving
+ordinary startup/writes/streams without ownership authorization. The read-only
+`quipu store status --db <path>` command reports this state. Explicit native
+adoption establishes
+sticky `ENFORCED` host/path ownership. Copies of enforced databases with missing
+or mismatched records permit read-only inspection, refusing writes/replication;
+default constructors cannot downgrade them to INACTIVE.
+Adoption always mints a new log epoch; old replication cursors must bootstrap
+again. `store restore` takes a consistent SQLite snapshot into a new destination
+and adopts it; it refuses to overwrite an existing destination. It is distinct
+from reconstruction-pack `quipu restore` above.
+
+These are operator actions, never automatic server startup repairs. Source
+installation does not authorize production adoption. See the
+ownership and failure contract in `docs/design/store-ownership.md` for partial
+completion, supported host identity and rollout limits.

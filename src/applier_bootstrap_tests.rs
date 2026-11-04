@@ -10,6 +10,9 @@ use crate::store::changes::Capture;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
+#[path = "applier_bootstrap_signature_tests.rs"]
+mod signed_bootstrap;
+
 const T: &str = "2026-10-24T00:00:00Z";
 const BOARD: &str = "urn:graph:board";
 

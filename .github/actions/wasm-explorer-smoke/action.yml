@@ -47,6 +47,7 @@ runs:
       shell: bash
       env:
         BUNDLE_DIR: ${{ inputs.bundle-dir }}
+        RUNTIME_DIR: ${{ inputs.runtime-dir }}
       run: |
         set -euo pipefail
         npm init -y >/dev/null

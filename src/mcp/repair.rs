@@ -151,6 +151,10 @@ pub(super) fn dedupe(plan: Vec<Datum>) -> Vec<Datum> {
 ///           "graph"?: "<registered committed-graph IRI>",
 ///           "timestamp"?: "...", "actor"?: "..." }`
 ///
+/// Applying is refused, nothing written, when the plan would leave a node
+/// newly missing a value a reject shape requires (aegis-gxfm). The repair
+/// ticket is not a bypass; fix the node, or the shape, first.
+///
 /// Output: `{ "source", "graph", "planned", "entities", "applied", "tx_id",
 ///            "retracted", "remaining", "repair_source", "sample" }`
 pub fn tool_retract_source(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
@@ -260,6 +264,9 @@ pub fn tool_retract_source(store: &mut Store, input: &JsonValue) -> Result<JsonV
         )));
     }
 
+    // aegis-gxfm: a repair is still a retraction. Refuse, naming the nodes,
+    // when it would leave one missing a value a reject shape requires.
+    store.enforce_retraction_shapes(&plan, graph, Some(source), actor, Some(&repair_source))?;
     let tx_id = store.transact_to_graph_scoped(
         &plan,
         timestamp,
