@@ -529,6 +529,11 @@ pub struct QuipuConfig {
     /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
     pub base_ns: String,
 
+    /// Which IRIs the golden-path vocabulary terms are written under
+    /// (`legacy` = under `base_ns`, the default; `intigraph` = published
+    /// Camayoc w3id terms). Individuals keep `base_ns` either way.
+    pub vocabulary: crate::term_vocabulary::Vocabulary,
+
     /// REST API server configuration.
     pub server: ServerConfig,
 
@@ -621,6 +626,7 @@ impl Default for QuipuConfig {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
+            vocabulary: crate::term_vocabulary::Vocabulary::default(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
