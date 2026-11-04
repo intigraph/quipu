@@ -1,6 +1,10 @@
 //! Writer jobs for the primary. Replica startup never calls this module.
 use super::{SharedStore, graph_metrics, wal_maintenance};
-pub(crate) fn start(push_store_outer: SharedStore, retention_days: u32) {
+pub(crate) fn start(
+    push_store_outer: SharedStore,
+    retention_days: u32,
+    vectors: &quipu::EmbeddingConfig,
+) {
     // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
     // real poster; each tick runs under spawn_blocking (SQLite + ureq are
     // sync). Cursor semantics make every tick idempotent, so the loop needs no
@@ -45,6 +49,8 @@ pub(crate) fn start(push_store_outer: SharedStore, retention_days: u32) {
 
     wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
     graph_metrics::spawn_refresh(&push_store_outer);
+
+    spawn_vector_retention(&push_store_outer, vectors);
 
     // Event-log retention (quipu-9z9, aegis-jio5.5). `[quipu.events]
     // retention_days`, default 30; `0` keeps every event and spawns nothing.
@@ -95,6 +101,86 @@ fn spawn_event_retention(store: SharedStore, days: u32) {
                 }
             })
             .await;
+        }
+    });
+}
+
+/// Rows deleted under one lock hold. Small enough that a writer waiting on
+/// the store lock is held up for one short delete, not the whole pass.
+const VECTOR_PRUNE_BATCH: usize = 2_000;
+
+/// Superseded-vector retention (aegis-jio5.3). On by default
+/// (`[quipu.embedding] superseded_retention_days`, 30); `0` spawns nothing.
+/// Hourly, first tick immediate. Each pass deletes at most
+/// `superseded_prune_max_per_pass` rows in batches, releasing the store lock
+/// between batches, so a store upgraded with a large backlog drains it over
+/// several hours rather than in one long delete under the writer lock.
+fn spawn_vector_retention(store: &SharedStore, cfg: &quipu::EmbeddingConfig) {
+    let days = cfg.superseded_retention_days;
+    let max_per_pass = cfg.superseded_prune_max_per_pass;
+    if days == 0 || max_per_pass == 0 {
+        return;
+    }
+    let prune_store = store.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            let mut pass = 0usize;
+            let mut failed = false;
+            while pass < max_per_pass {
+                let store = prune_store.clone();
+                let batch = VECTOR_PRUNE_BATCH.min(max_per_pass - pass);
+                let res = tokio::task::spawn_blocking(move || {
+                    let now = quipu::time::now_iso();
+                    let guard = store.lock();
+                    let held = std::time::Instant::now();
+                    let res = guard.prune_superseded_vectors(days, &now, batch);
+                    drop(guard);
+                    if let Ok(n) = &res {
+                        quipu::metrics::metrics()
+                            .observe_vector_prune_batch(*n as u64, held.elapsed().as_secs_f64());
+                    }
+                    res
+                })
+                .await;
+                match res {
+                    Ok(Ok(n)) => {
+                        pass += n;
+                        if n < batch {
+                            break;
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("vectors: retention prune failed: {e}");
+                        failed = true;
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("vectors: retention prune task failed: {e}");
+                        failed = true;
+                        break;
+                    }
+                }
+                tokio::task::yield_now().await;
+            }
+            // A failed pass records nothing: reporting it as uncapped would
+            // read as "drain complete". Its staleness shows in the end time.
+            if !failed {
+                let end = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0.0, |d| d.as_secs_f64());
+                quipu::metrics::metrics().observe_vector_prune_pass(
+                    pass as u64,
+                    pass >= max_per_pass,
+                    end,
+                );
+            }
+            if pass > 0 {
+                eprintln!(
+                    "vectors: retention pruned {pass} superseded vector(s) older than {days}d"
+                );
+            }
         }
     });
 }
