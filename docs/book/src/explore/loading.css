@@ -4,6 +4,7 @@
   border:1px solid var(--line); border-radius:12px; background:var(--panel);
 }
 #graph-loader h2 { color:var(--fg); font-size:24px; letter-spacing:-.02em; text-transform:none; margin:12px 0 0; }
+#loading-source { max-width:60ch; overflow-wrap:anywhere; margin:8px 0 0; }
 #loading-detail { color:var(--muted); max-width:60ch; overflow-wrap:anywhere; }
 .loading-mark { color:var(--indigo); font-size:44px; animation:loading-pulse 1.8s ease-in-out infinite; }
 #graph-loader ol { display:flex; gap:24px; list-style:none; padding:0; margin:20px 0; color:var(--muted); }

@@ -7,7 +7,7 @@ use crate::sparql::Bindings;
 use crate::types::Value;
 
 fn row(s: &str, n: i64) -> Bindings {
-    let mut b = Bindings::new();
+    let mut b = Bindings::default();
     b.insert("s".into(), Value::Str(s.into()));
     b.insert("n".into(), Value::Int(n));
     b
@@ -34,7 +34,7 @@ fn group_by_many_keys_is_linear_not_quadratic() {
 
 #[test]
 fn groups_keep_first_seen_order_and_unbound_keys() {
-    let mut unbound = Bindings::new();
+    let mut unbound = Bindings::default();
     unbound.insert("n".into(), Value::Int(9));
     let rows = vec![row("b", 1), row("a", 2), unbound, row("b", 3)];
     let groups = partition(rows, &["s".to_string()]);
