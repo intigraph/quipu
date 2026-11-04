@@ -8,9 +8,10 @@
 //! - **time** (spec §3.1): an incoming one-side change keeps its authored time;
 //!   a value received in a decided conflict starts at the decision time `Td`;
 //!   an incoming close is clamped so no row is reversed or emptied (R5, R6);
-//! - **sequencing** (R3): a `receive` step (the clean part plus every incoming
-//!   value of a decided slot) and a `decide` step (losers closed, chosen values
-//!   no side holds asserted);
+//! - **sequencing** (R3, ruling B on aegis-karb.2): a `receive` step (the clean
+//!   part, plus a receipt `[Td, Td)` for every incoming value of a decided
+//!   slot) and a `decide` step (losing ours values closed, every chosen value
+//!   ROOT lacks asserted live);
 //! - **reporting** (R2, R8): convergent slots are flagged with default decision
 //!   `continue`, and every plan carries `applied` / `held` counts;
 //! - **identity** (spec §2): a merge id that names one merge of one input.
@@ -102,6 +103,11 @@ pub(crate) enum FactOp<V> {
     Assert { value: V, from: String },
     /// Close the current row of `value` at `at`.
     Close { value: V, at: String },
+    /// Record an incoming `value` as received with the empty interval
+    /// `[at, at)`: in transaction history, current at no valid time, so the
+    /// write gate never sees two open values on one slot (aegis-karb.2,
+    /// malcolm's ruling B).
+    Receipt { value: V, at: String },
 }
 
 /// What the core decided for one slot.
@@ -246,27 +252,25 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
         }
         Some(Decision::Values(values)) => values.clone(),
     };
-    // R3: every incoming value ROOT lacks is received from `td` (ours held the
-    // slot until the decision, so an earlier start would overlap it, R6).
-    let received: BTreeSet<V> = tv.difference(&ov).cloned().collect();
-    for v in &received {
-        plan.receive.push(FactOp::Assert {
+    // R3 (ruling B): every incoming value ROOT lacks is received as a receipt
+    // `[td, td)`, so a loser never holds valid time and the store never holds
+    // two open values between the steps.
+    for v in tv.difference(&ov) {
+        plan.receive.push(FactOp::Receipt {
             value: v.clone(),
-            from: td.to_string(),
+            at: td.to_string(),
         });
     }
-    // Decide: a losing ours closes at `td` (R5); a losing received value closes
-    // at its own start, `[td, td)`; a chosen value no side holds starts at `td`.
-    for v in ov.difference(&target).chain(received.difference(&target)) {
+    // Decide: a losing ours closes at `td` (R5); every chosen value ROOT does
+    // not hold, a received winner included, is asserted live from `td` (R6:
+    // it starts where the loser ends).
+    for v in ov.difference(&target) {
         plan.decide.push(FactOp::Close {
             value: v.clone(),
             at: td.to_string(),
         });
     }
-    for v in target
-        .iter()
-        .filter(|v| !ov.contains(*v) && !received.contains(*v))
-    {
+    for v in target.difference(&ov) {
         plan.decide.push(FactOp::Assert {
             value: v.clone(),
             from: td.to_string(),
