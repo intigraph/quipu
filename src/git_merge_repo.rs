@@ -40,7 +40,7 @@ fn file(repo: &Path, r: &str, path: &str) -> Result<Option<String>> {
         return Ok(None);
     }
     if !entry.starts_with("100644 ") && !entry.starts_with("100755 ") {
-        return Err(invalid("qpack payload must be a regular Git blob"));
+        return Err(invalid("pendant payload must be a regular Git blob"));
     }
     text(repo, &["show", &format!("{r}:{path}")]).map(Some)
 }
@@ -81,13 +81,13 @@ fn safe_dir(repo: &Path, dir: &str) -> Result<PathBuf> {
             .components()
             .any(|c| !matches!(c, Component::Normal(_)))
     {
-        return Err(invalid("qpack path must be repository-relative"));
+        return Err(invalid("pendant path must be repository-relative"));
     }
     let mut out = repo.to_path_buf();
     for part in path.components() {
         out.push(part);
         if out.is_symlink() {
-            return Err(invalid("qpack path traverses a symlink"));
+            return Err(invalid("pendant path traverses a symlink"));
         }
     }
     for name in [
@@ -99,7 +99,7 @@ fn safe_dir(repo: &Path, dir: &str) -> Result<PathBuf> {
         "decisions.json",
     ] {
         if out.join(name).is_symlink() {
-            return Err(invalid("qpack output is a symlink"));
+            return Err(invalid("pendant output is a symlink"));
         }
     }
     Ok(out)
@@ -109,7 +109,7 @@ fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]
         .trim()
         .is_empty()
     {
-        return Err(invalid("run qpack Git commands from the repository root"));
+        return Err(invalid("run pendant Git commands from the repository root"));
     }
     let r = [
         commit(repo, base)?,
@@ -140,7 +140,7 @@ fn from_env(repo: &Path) -> Result<[String; 3]> {
 fn build(repo: &Path, r: &[String; 3], dir: &str) -> Result<Merged> {
     let get = |rev: &str| {
         pack(repo, rev, dir)?
-            .ok_or_else(|| invalid("driver requires an existing qpack in all three snapshots"))
+            .ok_or_else(|| invalid("driver requires an existing pendant in all three snapshots"))
     };
     plan(&get(&r[0])?, &get(&r[1])?, &get(&r[2])?)
 }
@@ -184,7 +184,7 @@ pub fn driver(repo: &Path, base: &Path, ours: &Path, theirs: &Path, path: &str) 
     let dir = p
         .parent()
         .and_then(Path::to_str)
-        .ok_or_else(|| invalid("driver path has no qpack directory"))?;
+        .ok_or_else(|| invalid("driver path has no pendant directory"))?;
     let name = p
         .file_name()
         .and_then(|s| s.to_str())
@@ -204,7 +204,7 @@ pub fn driver(repo: &Path, base: &Path, ours: &Path, theirs: &Path, path: &str) 
         "shapes.ttl" => merged.pack.shapes.as_bytes().to_vec(),
         "manifest.json" => manifest_bytes(&merged.pack.manifest, true)?,
         "manifest.ttl" => manifest_turtle(&merged.pack.manifest).into_bytes(),
-        _ => return Err(invalid("unsupported qpack driver file")),
+        _ => return Err(invalid("unsupported pendant driver file")),
     };
     std::fs::write(ours, bytes).map_err(io)?;
     if name == "export.nt" {
@@ -223,7 +223,7 @@ pub fn merge(repo: &Path, incoming: &str) -> Result<bool> {
     merge_with_pending(repo, incoming).map(|(ready, _)| ready)
 }
 
-/// [`merge`], also naming each qpack directory left with undecided rows.
+/// [`merge`], also naming each pendant directory left with undecided rows.
 pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<String>)> {
     if !text(repo, &["status", "--porcelain"])?.trim().is_empty() {
         return Err(invalid("git-merge requires a clean worktree/index"));
@@ -232,7 +232,7 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
     let theirs = commit(repo, incoming)?;
     let base = text(repo, &["merge-base", "--all", &ours, &theirs])?;
     let r = refs(repo, base.trim(), &ours, &theirs)?;
-    // Compute every overlapping qpack before Git mutates anything. Shapes conflicts
+    // Compute every overlapping pendant before Git mutates anything. Shapes conflicts
     // and incompatible envelopes fail here, irrespective of Git's per-file order.
     let mut plans = Vec::new();
     for dir in dirs(repo, &[&ours, &theirs])? {
@@ -273,10 +273,10 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         .map_err(|e| spawn_git(&e))?;
     if !plans.is_empty() && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs) {
         return Err(invalid(
-            "Git did not enter the expected merge; no qpack outputs rewritten",
+            "Git did not enter the expected merge; no pendant outputs rewritten",
         ));
     }
-    // Git may skip a driver when one file's bytes match. Reconcile whole qpacks
+    // Git may skip a driver when one file's bytes match. Reconcile whole pendants
     // explicitly as well, and leave staging to the reviewer.
     let mut ready = status.success();
     let mut pending = Vec::new();
@@ -428,7 +428,7 @@ fn check_snapshots(
             }
             _ => {
                 return Err(invalid(format!(
-                    "{dir}: committed qpack differs from shape-aware merge (including manifest/lineage)"
+                    "{dir}: committed pendant differs from shape-aware merge (including manifest/lineage)"
                 )));
             }
         }

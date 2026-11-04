@@ -974,7 +974,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--format=[Output or input format for this operation]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
-':arg-qpack-dir:_default' \
+':arg-pendant-dir:_default' \
 && ret=0
 ;;
 (resolve)
@@ -984,7 +984,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--by=[Identity recording a resolution]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
-':arg-qpack-dir:_default' \
+':arg-pendant-dir:_default' \
 ':arg-key:_default' \
 && ret=0
 ;;
@@ -2502,8 +2502,8 @@ _qp__subcmd__gate__subcmd__shadow_commands() {
 (( $+functions[_qp__subcmd__git-merge_commands] )) ||
 _qp__subcmd__git-merge_commands() {
     local commands; commands=(
-'show:Show a qpack'\''s pending merge decisions in the standard layout' \
-'resolve:Record one choice in the Git merge in progress and rewrite the qpack' \
+'show:Show a pendant'\''s pending merge decisions in the standard layout' \
+'resolve:Record one choice in the Git merge in progress and rewrite the pendant' \
     )
     _describe -t commands 'qp git-merge commands' commands "$@"
 }

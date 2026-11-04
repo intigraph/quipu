@@ -273,7 +273,7 @@ fn git_fixture() -> ReconcileFile {
 }
 
 const GIT_TEXT: &str = "\
-Merge needs your decision: qpack 'qpack' (Git merge: MERGE_HEAD -> HEAD)
+Merge needs your decision: pendant 'qpack' (Git merge: MERGE_HEAD -> HEAD)
 1 conflict, 1 alias proposal, 1 undecided. Nothing has been written.
 
 [conflict:0] Ticket 42 · urn:t:status
