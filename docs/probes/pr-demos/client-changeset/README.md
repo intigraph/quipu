@@ -8,7 +8,7 @@ edits. It uses actual library code, the real shared signer, registry gate,
 stream applier and SHACL validation; keys and stores are synthetic and disposable.
 It contacts no running service and does not install or activate a client.
 
-The base is `5d2fe613acd7cd2c172b23e3af8b2a5bddd612bf`. That revision has no
+The base is `21547f5a206dfc81788e7f70eef92f7f06051890`. That revision has no
 client-changeset library entry point, so the same library call cannot run on it.
 The recording demonstrates the new source fixture with its refusal control;
 it does not claim a live-service before/after comparison. The PR caption pins
