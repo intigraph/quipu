@@ -232,6 +232,8 @@ impl Owner {
     }
 
     /// Read on a free dedicated read-only connection or refuse immediately.
+    /// Identity checks and callback reads share one SQLite snapshot. Callbacks
+    /// run inside that read transaction; nested BEGIN operations are refused.
     /// No global writer, writer fallback or unbounded reader queue is acquired.
     pub fn read<T>(&self, query: impl FnOnce(&Store) -> Result<T>) -> Result<T> {
         self.placement.verify()?;
@@ -239,8 +241,11 @@ impl Owner {
         for offset in 0..self.readers.len() {
             let index = (start + offset) % self.readers.len();
             if let Some(reader) = self.readers[index].try_lock() {
+                let snapshot = reader.conn.unchecked_transaction()?;
                 Self::check_identity(&self.route, &reader)?;
-                return query(&reader);
+                let result = query(&reader)?;
+                snapshot.commit()?;
+                return Ok(result);
             }
         }
         Err(refused("owner read pool full; no writer fallback"))

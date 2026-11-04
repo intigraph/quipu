@@ -372,3 +372,46 @@ fn configured_shapes_are_enforced_through_the_real_knot_pipeline() {
     assert_eq!(observed["count"], 1);
     assert_eq!(observed["rows"][0]["name"], "valid");
 }
+
+#[test]
+fn read_identity_and_callback_share_one_snapshot_and_release_after_errors() {
+    let temp = tempfile::tempdir().unwrap();
+    let (store, route) = fixture(temp.path(), "a");
+    let owner = Owner::prepare(
+        catalog(vec![route.clone()]),
+        temp.path(),
+        &route.graph,
+        store,
+        "policy-v1",
+    )
+    .unwrap();
+    // A failed callback must not leak a transaction into the next request.
+    assert!(
+        owner
+            .read::<()>(|_| Err(refused("fixture callback failure")))
+            .is_err()
+    );
+    assert_eq!(owner.read(Store::log_epoch).unwrap(), route.log_epoch);
+    let admitted_epoch = owner
+        .read(|reader| {
+            let changed = owner
+                .writer
+                .lock()
+                .mint_log_epoch("private snapshot fixture")?;
+            assert_ne!(changed, route.log_epoch);
+            reader.log_epoch()
+        })
+        .unwrap();
+    assert_eq!(
+        admitted_epoch, route.log_epoch,
+        "callback crossed the admitted epoch cut"
+    );
+    assert!(
+        owner.read(Store::log_epoch).is_err(),
+        "next admission accepted changed epoch"
+    );
+    assert!(
+        owner.readers[0].lock().conn.is_autocommit(),
+        "read transaction leaked"
+    );
+}
