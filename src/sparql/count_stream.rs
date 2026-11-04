@@ -24,9 +24,7 @@ impl Drop for DirectRefs {
         DIRECT_REFS.with(|slot| slot.set(self.0));
     }
 }
-use spargebra::algebra::{
-    AggregateExpression, AggregateFunction, Expression, Function, GraphPattern,
-};
+use spargebra::algebra::{AggregateExpression, AggregateFunction, Expression, GraphPattern};
 use spargebra::term::{NamedNodePattern, TermPattern, Variable};
 use std::collections::HashMap;
 
@@ -267,7 +265,7 @@ pub(super) fn visit(
     }
 }
 
-use super::count_state::Counter;
+use super::count_state::{Counter, stable};
 struct Group {
     key: Vec<Option<Value>>,
     counters: Vec<Counter>,
@@ -370,7 +368,10 @@ fn evaluate(
     }
     let keys: Vec<String> = variables.iter().map(|v| v.as_str().into()).collect();
     let mut groups = Vec::<Group>::new();
-    let mut buckets = HashMap::<String, Vec<usize>>::new();
+    // Groups by [`super::count_key::hash_key`]: the same partition the old
+    // `format!("{key:?}")` buckets made, without formatting each row.
+    let mut buckets = HashMap::<u64, Vec<usize>>::new();
+    let hasher = foldhash::fast::RandomState::default();
     if keys.is_empty() {
         groups.push(new_group(vec![], aggregates.len()));
     }
@@ -380,17 +381,29 @@ fn evaluate(
         // to run an unbounded exploded join or pure-Rust filter past a deadline.
         super::pattern_util::check_eval_budget(ctx, produced, produced)?;
         produced += 1;
-        let key: Vec<Option<Value>> = keys.iter().map(|k| row.get(k).cloned()).collect();
         let index = if keys.is_empty() {
             0
         } else {
-            let bucket = buckets.entry(format!("{key:?}")).or_default();
-            if let Some(index) = bucket.iter().copied().find(|&i| groups[i].key == key) {
+            let key: Vec<Option<&Value>> = keys.iter().map(|k| row.get(k)).collect();
+            let bucket = buckets
+                .entry(super::count_key::hash_key(&key, &hasher))
+                .or_default();
+            if let Some(index) = bucket.iter().copied().find(|&i| {
+                super::count_key::same_key(&groups[i].key, &key)
+                    && groups[i]
+                        .key
+                        .iter()
+                        .zip(&key)
+                        .all(|(a, b)| a.as_ref() == *b)
+            }) {
                 index
             } else {
                 let index = groups.len();
                 bucket.push(index);
-                groups.push(new_group(key, aggregates.len()));
+                groups.push(new_group(
+                    key.iter().map(|v| v.cloned()).collect(),
+                    aggregates.len(),
+                ));
                 index
             }
         };
@@ -436,40 +449,6 @@ fn evaluate(
         })
         .collect();
     Ok(Some((rows, vars)))
-}
-
-// Only the pure arithmetic/date projection used alongside COUNT in metadata.
-// Volatile functions and other expressions retain the ordinary evaluator.
-fn stable(expr: &Expression) -> bool {
-    match expr {
-        Expression::Variable(_) | Expression::Literal(_) | Expression::NamedNode(_) => true,
-        Expression::Add(a, b)
-        | Expression::Subtract(a, b)
-        | Expression::Multiply(a, b)
-        | Expression::Divide(a, b)
-        | Expression::Equal(a, b)
-        | Expression::Less(a, b)
-        | Expression::LessOrEqual(a, b)
-        | Expression::Greater(a, b)
-        | Expression::GreaterOrEqual(a, b)
-        | Expression::And(a, b)
-        | Expression::Or(a, b) => stable(a) && stable(b),
-        Expression::UnaryPlus(a) | Expression::UnaryMinus(a) | Expression::Not(a) => stable(a),
-        Expression::If(a, b, c) => stable(a) && stable(b) && stable(c),
-        Expression::FunctionCall(
-            Function::Str
-            | Function::StrDt
-            | Function::Year
-            | Function::Month
-            | Function::Day
-            | Function::Hours
-            | Function::Minutes
-            | Function::Seconds
-            | Function::Floor,
-            args,
-        ) => args.iter().all(stable),
-        _ => false,
-    }
 }
 
 fn native_count(
