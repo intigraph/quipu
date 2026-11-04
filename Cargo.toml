@@ -114,6 +114,7 @@ name = "pendant_revoke_fixture"
 required-features = ["shacl"]
 
 [dependencies]
+foldhash = "0.2"
 # Immutable first shared signing release, independently acquired and checksum-qualified.
 quipu-signing = "=0.1.0"
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained

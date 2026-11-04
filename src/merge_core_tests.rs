@@ -132,6 +132,35 @@ fn c2_convergent_is_flagged_writes_nothing_and_value_overrides() {
 }
 
 #[test]
+fn c2_convergent_base_restores_base_at_decision_time() {
+    for (ours, theirs, expected) in [
+        (
+            vec![("c", TO)],
+            vec![("c", TT)],
+            vec![close("c", TD), assert_("a", TD)],
+        ),
+        (vec![], vec![], vec![assert_("a", TD)]),
+    ] {
+        let s = slot(&["a"], &ours, &theirs, Card::ONE);
+        let result = plan_slot(&s, Some(&Decision::Base), TD).unwrap();
+        assert_eq!(result.change, Change::Convergent);
+        assert!(!result.held);
+        assert!(result.receive.is_empty());
+        assert_eq!(result.decide, expected);
+    }
+}
+
+#[test]
+fn explicit_values_refuse_over_cardinality_in_conflicts_and_convergence() {
+    for theirs in ["c", "b"] {
+        let s = slot(&["a"], &[("b", TO)], &[(theirs, TT)], Card::ONE);
+        let decision = Decision::Values(set(&["d", "e"]));
+        assert!(plan_slot(&s, Some(&decision), TD).is_err());
+        assert!(plan_slot(&s, Some(&Decision::Values(set(&["d"]))), TD).is_ok());
+    }
+}
+
+#[test]
 fn c3_set_valued_divergence_unions_without_conflict() {
     let many = Card::Many(None);
     // C3a

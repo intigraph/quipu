@@ -165,7 +165,7 @@ fn clamp_close(incoming: Option<&String>, row_from: &str, td: &str) -> String {
 ///
 /// # Errors
 /// [`Error::InvalidValue`] for a decision the slot cannot take (`continue` on
-/// a conflict, `both` above the bound, a conflict decision on a clean slot).
+/// a conflict, a selected value set above the bound, a conflict decision on a clean slot).
 /// Nothing is planned in that case.
 pub(crate) fn plan_slot<V: Ord + Clone>(
     input: &SlotInput<V>,
@@ -200,7 +200,7 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
 
     if !change.is_conflict() {
         if change == Change::Convergent {
-            return convergent(plan, &ov, decision, td);
+            return convergent(plan, bv, &ov, input.card, decision, td);
         }
         if let Some(d) = decision
             && *d != Decision::Continue
@@ -272,19 +272,10 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
         Some(Decision::Ours) => ov.clone(),
         Some(Decision::Theirs) => tv.clone(),
         Some(Decision::Base) => bv.clone(),
-        Some(Decision::Both) => {
-            let both: BTreeSet<V> = ov.union(&tv).cloned().collect();
-            if input.card.bound().is_some_and(|n| both.len() > n) {
-                return Err(Error::InvalidValue(format!(
-                    "merge core: `both` would hold {} values, above sh:maxCount {}",
-                    both.len(),
-                    input.card.bound().unwrap_or_default()
-                )));
-            }
-            both
-        }
+        Some(Decision::Both) => ov.union(&tv).cloned().collect(),
         Some(Decision::Values(values)) => values.clone(),
     };
+    check_bound(&target, input.card)?;
     // R3 (ruling B): every incoming value ROOT lacks is received as a receipt
     // `[td, td)`, so a loser never holds valid time and the store never holds
     // two open values between the steps.
@@ -316,19 +307,23 @@ pub(crate) fn plan_slot<V: Ord + Clone>(
 /// override it as an ordinary decision at `td`.
 fn convergent<V: Ord + Clone>(
     mut plan: SlotPlan<V>,
+    bv: &BTreeSet<V>,
     ov: &BTreeSet<V>,
+    card: Card,
     decision: Option<&Decision<V>>,
     td: &str,
 ) -> Result<SlotPlan<V>> {
     let target = match decision {
         None | Some(Decision::Continue) => return Ok(plan),
+        Some(Decision::Base) => bv.clone(),
         Some(Decision::Values(values)) => values.clone(),
         Some(_) => {
             return Err(Error::InvalidValue(
-                "merge core: a convergent slot takes continue or value".into(),
+                "merge core: a convergent slot takes continue, base or value".into(),
             ));
         }
     };
+    check_bound(&target, card)?;
     for v in ov.difference(&target) {
         plan.decide.push(FactOp::Close {
             value: v.clone(),
@@ -342,6 +337,18 @@ fn convergent<V: Ord + Clone>(
         });
     }
     Ok(plan)
+}
+
+fn check_bound<V>(values: &BTreeSet<V>, card: Card) -> Result<()> {
+    if let Some(n) = card.bound()
+        && values.len() > n
+    {
+        return Err(Error::InvalidValue(format!(
+            "merge core: decision would hold {} values, above sh:maxCount {n}",
+            values.len(),
+        )));
+    }
+    Ok(())
 }
 
 /// A whole merge's plan: per-slot plans, the two ordered steps, and counts.
@@ -402,9 +409,9 @@ pub(crate) fn plan_merge<S: Ord + Clone, V: Ord + Clone>(
 /// identity and the decisions file's SHA-256 (of `[]` for a clean merge).
 /// Two different merges never share it; the same input merged again does,
 /// which is what lets a re-apply report `already-applied` (R7).
+#[must_use]
 // Merge sources carry the id from slice S3 (share merge) on.
 #[cfg_attr(not(test), allow(dead_code))]
-#[must_use]
 pub(crate) fn merge_id(path: &str, incoming: &str, base: &str, decisions_sha256: &str) -> String {
     let record = serde_json::json!({
         "schema": "quipu.merge-id/v1",
