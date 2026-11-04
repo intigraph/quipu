@@ -98,7 +98,7 @@ fn both_ways(
 ) -> (Vec<String>, Vec<String>, usize) {
     let p = where_clause(sparql);
     let (left, right, expression) = operands(&p);
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (left_rows, left_vars) = eval_pattern_seeded(store, left, ctx, &seed).unwrap();
     let (probed, header) =
         try_subject_bind_left_join(store, right, expression, ctx, &seed, &left_rows, &left_vars)
@@ -175,7 +175,7 @@ fn declines(store: &Store, sparql: &str) {
     let p = where_clause(sparql);
     let (left, right, expression) = operands(&p);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (left_rows, left_vars) = eval_pattern_seeded(store, left, &ctx, &seed).unwrap();
     assert!(
         try_subject_bind_left_join(
@@ -210,7 +210,7 @@ fn declines_above_the_left_row_ceiling() {
     );
     let (left, right, expression) = operands(&p);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (rows, vars) = eval_pattern_seeded(&store, left, &ctx, &seed).unwrap();
     let wide = vec![rows[0].clone(); LEFT_BIND_MAX_ROWS + 1];
     assert!(

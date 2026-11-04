@@ -62,15 +62,15 @@ mod ian_numeric_falsifier {
     fn ian_numeric_direct_heap_prefix() {
         let store = Store::open_in_memory().unwrap();
         let rows = vec![
-            Bindings::from([
+            Bindings::from_iter([
                 ("id".into(), Value::Int(0)),
                 ("x".into(), Value::Int(9007199254740993)),
             ]),
-            Bindings::from([
+            Bindings::from_iter([
                 ("id".into(), Value::Int(1)),
                 ("x".into(), Value::Float(9007199254740992.0)),
             ]),
-            Bindings::from([
+            Bindings::from_iter([
                 ("id".into(), Value::Int(2)),
                 ("x".into(), Value::Int(9007199254740992)),
             ]),
