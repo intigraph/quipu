@@ -35,9 +35,15 @@ fn err_js(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-/// Names the explorer mints for nodes added in the browser. The graph is local
-/// to the tab, so a fixed scratch namespace cannot collide with another store.
-const EXPLORER_NS: &str = "urn:quipu:explorer/";
+/// The namespace the explorer mints names and node types under.
+///
+/// Explicitly the legacy namespace, not a scratch one: episode node types
+/// resolve under it, and the packs the explorer opens declare their governed
+/// classes (the receiver's `InternalIdentifierPattern` scrub policy among them)
+/// there. A scratch namespace made every such type unknown to the loaded shapes,
+/// so a receiver could no longer author the policy its export depends on.
+/// Moving these terms is the vocabulary-pack follow-up, not the explorer's call.
+const EXPLORER_NS: &str = quipu::namespace::DEFAULT_BASE_NS;
 
 /// A loaded repository pack: an in-memory store plus the provenance a reader
 /// needs to check that what they are exploring is the artifact they think.
