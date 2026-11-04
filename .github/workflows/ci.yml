@@ -183,7 +183,7 @@ jobs:
         run: cargo test --features shacl,owl
 
       # Release correctness already requires this job. No path filter or driver config.
-      - name: Verify qpack Git merge semantics
+      - name: Verify pendant Git merge semantics
         if: matrix.name == 'shacl'
         run: |
           cargo build --locked --features shacl --bin quipu

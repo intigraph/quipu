@@ -44,11 +44,11 @@ pub enum ReconcileFile {
     Share(DecisionFile),
     /// `quipu fork promote <name> --emit-decisions`.
     Fork(ForkDecisionFile),
-    /// A Git pendant merge's `<qpack>/decisions.json` (`quipu git-merge`).
+    /// A Git pendant merge's `<pendant>/decisions.json` (`quipu git-merge`).
     /// Resolved in the repository, because each choice rewrites the pack.
     Git {
         decisions: GitDecisions,
-        /// The qpack directory, repository-relative.
+        /// The pendant directory, repository-relative.
         dir: String,
         /// `rdfs:label` per IRI, from the pack's `export.nt`.
         labels: BTreeMap<String, String>,
@@ -130,7 +130,7 @@ impl ReconcileFile {
     }
 
     /// Read a decisions file from disk. A Git pendant `decisions.json` is
-    /// read with its qpack directory (its parent) and the pack's labels.
+    /// read with its pendant directory (its parent) and the pack's labels.
     ///
     /// # Errors
     /// As [`Self::load`], or the file cannot be read.
@@ -193,9 +193,9 @@ impl ReconcileFile {
             }
             FORK_DECISIONS_SCHEMA => serde_json::from_value(value).map(Self::Fork).map_err(bad),
             GIT_DECISIONS_SCHEMA => Err(Error::InvalidValue(
-                "a Git pendant decisions.json is read from its qpack directory: \
-                 `quipu merge show <qpack>/decisions.json`, resolved with \
-                 `quipu git-merge resolve <qpack> <key> --choose <choice> --by <who>`"
+                "a Git pendant decisions.json is read from its pendant directory: \
+                 `quipu merge show <pendant>/decisions.json`, resolved with \
+                 `quipu git-merge resolve <pendant> <key> --choose <choice> --by <who>`"
                     .into(),
             )),
             other => Err(Error::InvalidValue(format!(
@@ -365,7 +365,7 @@ impl ReconcileFile {
                     .collect();
                 (
                     "git",
-                    format!("qpack '{dir}' (Git merge: MERGE_HEAD -> HEAD)"),
+                    format!("pendant '{dir}' (Git merge: MERGE_HEAD -> HEAD)"),
                     cards,
                     format!(
                         "git add {dir} && git commit (CI pendant-check re-runs the merge and verifies the result)"

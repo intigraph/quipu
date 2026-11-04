@@ -714,8 +714,8 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand show 'Show a qpack''s pending merge decisions in the standard layout'
-            cand resolve 'Record one choice in the Git merge in progress and rewrite the qpack'
+            cand show 'Show a pendant''s pending merge decisions in the standard layout'
+            cand resolve 'Record one choice in the Git merge in progress and rewrite the pendant'
         }
         &'quipu;git-merge;show'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

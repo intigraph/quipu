@@ -472,8 +472,8 @@ complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -l dry-run -d 'Pr
 complete -c qp -n "__fish_qp_using_subcommand migrate-vectors" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "show" -d 'Show a qpack\'s pending merge decisions in the standard layout'
-complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "resolve" -d 'Record one choice in the Git merge in progress and rewrite the qpack'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "show" -d 'Show a pendant\'s pending merge decisions in the standard layout'
+complete -c qp -n "__fish_qp_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "resolve" -d 'Record one choice in the Git merge in progress and rewrite the pendant'
 complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -l format -d 'Output or input format for this operation' -r
 complete -c qp -n "__fish_qp_using_subcommand git-merge; and __fish_seen_subcommand_from show" -s h -l help -d 'Print help'

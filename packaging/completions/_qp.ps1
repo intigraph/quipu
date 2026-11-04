@@ -792,8 +792,8 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show a qpack''s pending merge decisions in the standard layout')
-            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Record one choice in the Git merge in progress and rewrite the qpack')
+            [CompletionResult]::new('show', 'show', [CompletionResultType]::ParameterValue, 'Show a pendant''s pending merge decisions in the standard layout')
+            [CompletionResult]::new('resolve', 'resolve', [CompletionResultType]::ParameterValue, 'Record one choice in the Git merge in progress and rewrite the pendant')
             break
         }
         'qp;git-merge;show' {

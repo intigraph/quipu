@@ -1034,20 +1034,20 @@ qp git-merge <ref>
 
 ### `qp git-merge show`
 
-Show a qpack's pending merge decisions in the standard layout.
+Show a pendant's pending merge decisions in the standard layout.
 
 ```text
-qp git-merge show <qpack-dir>
+qp git-merge show <pendant-dir>
 ```
 
 - `--format <VALUE>`: Output or input format for this operation.
 
 ### `qp git-merge resolve`
 
-Record one choice in the Git merge in progress and rewrite the qpack.
+Record one choice in the Git merge in progress and rewrite the pendant.
 
 ```text
-qp git-merge resolve <qpack-dir> <key>
+qp git-merge resolve <pendant-dir> <key>
 ```
 
 - `--choose <VALUE>`: Conflict side to choose.
