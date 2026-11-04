@@ -1,38 +1,43 @@
 {
-  "title": "Quipu | turn a note into a queryable graph",
-  "description": "A local episode becomes a graph, then a query finds its relationship. No model or server is used.",
+  "title": "Quipu | insert a fact, watch the graph change",
+  "description": "Two plain Turtle facts are knotted into a local store and queried; the earlier version is then read back by transaction. No model or server is used.",
   "width": 1000,
   "height": 620,
   "font_size": 24,
   "line_height": 32,
   "inputs": [
-    "episode.json"
+    "ada.ttl",
+    "babbage.ttl"
   ],
   "steps": [
     {
+      "tool": "cat",
+      "args": [
+        "ada.ttl"
+      ],
+      "requires": [
+        ":Ada :studies :Engine ."
+      ],
+      "hold": 3
+    },
+    {
       "tool": "quipu",
       "args": [
-        "episode",
-        "episode.json",
-        "--base-ns",
-        "urn:demo:",
-        "--timestamp",
-        "2026-01-01T00:00:00Z",
+        "knot",
+        "ada.ttl",
         "--db",
         "demo.db"
       ],
       "requires": [
-        "14 facts",
-        "automatic embedding unavailable"
+        "knotted 1 facts from ada.ttl (tx 1)"
       ],
-      "allow_stderr": true,
-      "hold": 10
+      "hold": 3
     },
     {
       "tool": "quipu",
       "args": [
         "read",
-        "SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }",
+        "SELECT ?who ?what WHERE { ?who <urn:demo:studies> ?what }",
         "--db",
         "demo.db"
       ],
@@ -41,7 +46,65 @@
         "urn:demo:Engine",
         "1 results"
       ],
-      "hold": 10
+      "hold": 4
+    },
+    {
+      "tool": "cat",
+      "args": [
+        "babbage.ttl"
+      ],
+      "requires": [
+        ":Babbage :designed :Engine ."
+      ],
+      "hold": 3
+    },
+    {
+      "tool": "quipu",
+      "args": [
+        "knot",
+        "babbage.ttl",
+        "--db",
+        "demo.db"
+      ],
+      "requires": [
+        "knotted 1 facts from babbage.ttl (tx 2)"
+      ],
+      "hold": 3
+    },
+    {
+      "tool": "quipu",
+      "args": [
+        "read",
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+        "--db",
+        "demo.db"
+      ],
+      "requires": [
+        "urn:demo:Babbage",
+        "2 results"
+      ],
+      "hold": 4
+    },
+    {
+      "tool": "quipu",
+      "args": [
+        "read",
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o }",
+        "--tx",
+        "1",
+        "--db",
+        "demo.db"
+      ],
+      "requires": [
+        "urn:demo:Ada",
+        "1 results"
+      ],
+      "hold": 4
     }
-  ]
+  ],
+  "version_args": {
+    "cat": [
+      "/dev/null"
+    ]
+  }
 }

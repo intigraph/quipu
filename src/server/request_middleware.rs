@@ -75,6 +75,16 @@ pub(crate) fn request_write_provenance()
         .flatten()
 }
 
+/// Run `fut` with this request's write provenance credited with a VERIFIED
+/// attestation identity (aegis-7zp4rc.2). Call only after the attestation has
+/// verified. A request with no write provenance (not a write route) is left as
+/// it is.
+pub(crate) async fn with_verified_write_identity<F: std::future::Future>(fut: F) -> F::Output {
+    let credited =
+        request_write_provenance().map(|p| std::sync::Arc::new(p.with_verified_identity()));
+    REQUEST_WRITE_PROVENANCE.scope(credited, fut).await
+}
+
 /// Classify the request's provenance headers, for a write route only.
 fn write_provenance_of(
     headers: &axum::http::HeaderMap,

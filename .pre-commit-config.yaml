@@ -59,6 +59,20 @@ repos:
         language: system
         pass_filenames: false
         files: ^scripts/(search-outcome-replay|test_search_outcome_replay)\.py$
+      # #696 dropped the README badge row and nothing noticed for 12 days
+      # (aegis-58r). Cheap and always run, so a README-only PR is checked too.
+      - id: readme-badges
+        name: README badge row and DOI/arXiv links
+        entry: python3 scripts/check-readme-badges.py
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: readme-badges-controls
+        name: README badge guard controls
+        entry: python3 -B scripts/test_check_readme_badges.py
+        language: system
+        pass_filenames: false
+        files: ^(README\.md|scripts/(check-readme-badges|test_check_readme_badges)\.py)$
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --check

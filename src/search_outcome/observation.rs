@@ -352,6 +352,12 @@ pub fn emit(event: &Event) {
     EMITTED.fetch_add(1, Ordering::Relaxed);
     crate::metrics::metrics().observe_search(event);
     super::journal::append(event);
+    // A local CLI's stderr is the user's terminal, not a process log: the
+    // record there interleaved with every `quipu read` (aegis-4pbw). Metrics
+    // and the journal above still receive it.
+    if event.surface == Surface::CliLocal {
+        return;
+    }
     // Detailed query evidence belongs only in the private journal.
     use std::io::Write as _;
     let _ = writeln!(std::io::stderr().lock(), "{}", log_record(event));

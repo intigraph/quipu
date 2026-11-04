@@ -548,6 +548,11 @@ pub fn cmd_events(args: &[String], db_path: &str) {
             }
             println!("{}", "-".repeat(20));
             println!("total       {total}");
+            // Retention (default 30 days) prunes the log, so this is a count
+            // over the retained window, not all time (aegis-jio5.5).
+            if let Ok(Some(since)) = store.oldest_retained_event_ts() {
+                println!("counted over retained events from {since}");
+            }
         }
         Err(e) => {
             eprintln!("error: {e}");

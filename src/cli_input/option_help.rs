@@ -14,6 +14,24 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         ("project", "to") => Some("Destination entity IRI for shortest-path projection"),
         ("share", "project") => Some("Export this repository's project graph to .quipu/graph"),
         ("prime", "full") => Some("Print the full agent primer"),
+        ("align export", "license") => Some("License IRI for the mapping set; required"),
+        ("align export", "prefix") => Some("Extra CURIE prefix as name=<namespace>; repeatable"),
+        ("align export", "author-prefix") => {
+            Some("Declared prefix that turns a bare reviewer into an author_id")
+        }
+        ("propose plan", "format") => Some("Plan output format: text or json"),
+        ("propose plan", "risk-threshold") => {
+            Some("Fail the plan above this 0-100 risk score (default: the deployment threshold)")
+        }
+        ("propose accept", "risk-threshold") => Some(
+            "Refuse acceptance above this 0-100 risk score (default: the deployment threshold)",
+        ),
+        ("propose accept", "accept-risk") => {
+            Some("Accept despite a plan over the risk threshold; requires --reason")
+        }
+        ("propose accept", "reason") => {
+            Some("Why an over-threshold plan is accepted; recorded with the decision")
+        }
         _ => common(name),
     }
 }

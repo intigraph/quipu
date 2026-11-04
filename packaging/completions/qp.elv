@@ -77,7 +77,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand gate 'Judge a candidate policy set over recorded history without writing'
             cand path 'Golden-path analysis: provenance cone, backtest and draft'
             cand align 'Propose, decide and apply cross-graph alignments'
-            cand propose 'List, submit, accept or reject schema change proposals'
+            cand propose 'List, submit, plan, accept or reject schema change proposals'
             cand memory 'Read, export, receipt or commit versioned file memory'
             cand attest 'Register and manage attested session bindings'
             cand signer 'Enroll and manage hardware signers for attested writes'
@@ -714,8 +714,8 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
-            cand show 'Show a qpack''s pending merge decisions in the standard layout'
-            cand resolve 'Record one choice in the Git merge in progress and rewrite the qpack'
+            cand show 'Show a pendant''s pending merge decisions in the standard layout'
+            cand resolve 'Record one choice in the Git merge in progress and rewrite the pendant'
         }
         &'qp;git-merge;show'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -901,6 +901,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand propose 'Propose scored alignments between two named graphs as an SSSOM set'
             cand decide 'Apply reviewer accept and negate decisions to a mapping set'
             cand apply 'Materialize decided alignments into a derived alignment graph'
+            cand export 'Export a mapping set as standard SSSOM TSV or RDF Turtle'
         }
         &'qp;align;propose'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -926,6 +927,16 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;align;export'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --license 'License IRI for the mapping set; required'
+            cand --format 'Output or input format for this operation'
+            cand --prefix 'Extra CURIE prefix as name=<namespace>; repeatable'
+            cand --author-prefix 'Declared prefix that turns a bare reviewer into an author_id'
+            cand --out 'Output file'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;propose'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --status 'Status to record or filter'
@@ -933,7 +944,8 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --help 'Print help'
             cand list 'List schema change proposals, optionally by status'
             cand submit 'Submit a schema change proposal'
-            cand accept 'Accept a pending proposal'
+            cand plan 'Report a pending proposal''s blast radius and 0-100 risk score without writing; exit 0 pass, 1 over threshold, 2 not determined'
+            cand accept 'Accept a pending proposal; refused when its plan is over the risk threshold unless --accept-risk --reason'
             cand reject 'Reject a pending proposal'
         }
         &'qp;propose;list'= {
@@ -950,10 +962,20 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;propose;plan'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --format 'Plan output format: text or json'
+            cand --risk-threshold 'Fail the plan above this 0-100 risk score (default: the deployment threshold)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;propose;accept'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --decided-by 'Identity recording the alignment decision'
             cand --note 'Explanatory note recorded with the operation'
+            cand --reason 'Why an over-threshold plan is accepted; recorded with the decision'
+            cand --risk-threshold 'Refuse acceptance above this 0-100 risk score (default: the deployment threshold)'
+            cand --accept-risk 'Accept despite a plan over the risk threshold; requires --reason'
             cand -h 'Print help'
             cand --help 'Print help'
         }
