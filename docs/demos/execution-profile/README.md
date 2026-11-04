@@ -62,7 +62,9 @@ positive one-row query with profiling off, then on, over a local in-memory store
 The normal answer stays identical. Watch the filter report two candidates and
 one survivor. This is a source candidate demonstration, not an installed service
 or a production latency comparison. The base is `9a23c3b63e11a7879c6aa72ccbe5d70a7636ad81`;
-the base runtime was not rebuilt for this recording. Exact demonstrated source
+the base runtime was not rebuilt for this recording. The demonstration was built
+from candidate `23ebff249c143de88dde0d5af3a2023de22fe29d`; subsequent recording/caption-only
+changes preserve the demonstrated code. Exact demonstrated source
 file hashes are below; the PR identifies the candidate commit.
 
 Reproduce with `cargo run --no-default-features --example execution_profile`.
