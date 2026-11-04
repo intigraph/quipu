@@ -13,6 +13,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::error::Result;
 use crate::store::Store;
@@ -25,8 +26,9 @@ struct Memo {
     refs: HashMap<String, i64>,
     iris: HashMap<i64, String>,
     /// Constant subexpressions by address: the algebra is borrowed, unmoved,
-    /// for the whole evaluation.
-    constants: HashMap<usize, Option<Value>>,
+    /// for the whole evaluation. Shared, so a comparison reads the value
+    /// without copying it (aegis-pu7).
+    constants: HashMap<usize, Option<Rc<Value>>>,
     date_times: HashMap<String, Option<oxsdatatypes::DateTime>>,
 }
 
@@ -95,19 +97,37 @@ pub(super) fn constant(
     expr: &spargebra::algebra::Expression,
     compute: impl FnOnce() -> Option<Value>,
 ) -> Option<Value> {
+    match shared_constant(expr, compute) {
+        Shared::Memo(value) => value.as_deref().cloned(),
+        Shared::Computed(value) => value,
+    }
+}
+
+/// A constant's value from [`shared_constant`]: the memo's shared copy, or
+/// one computed outside any [`Scope`].
+pub(super) enum Shared {
+    Memo(Option<Rc<Value>>),
+    Computed(Option<Value>),
+}
+
+/// [`constant`] without copying the memoized value out.
+pub(super) fn shared_constant(
+    expr: &spargebra::algebra::Expression,
+    compute: impl FnOnce() -> Option<Value>,
+) -> Shared {
     let key = std::ptr::from_ref(expr) as usize;
     let active = MEMO.with(|memo| memo.borrow().is_some());
     if !active {
-        return compute();
+        return Shared::Computed(compute());
     }
     if let Some(value) = MEMO.with(|memo| {
         memo.borrow()
             .as_ref()
             .and_then(|m| m.constants.get(&key).cloned())
     }) {
-        return value;
+        return Shared::Memo(value);
     }
-    let value = compute();
+    let value = compute().map(Rc::new);
     MEMO.with(|memo| {
         if let Some(m) = memo.borrow_mut().as_mut()
             && m.constants.len() < MEMO_ENTRIES
@@ -115,7 +135,7 @@ pub(super) fn constant(
             m.constants.insert(key, value.clone());
         }
     });
-    value
+    Shared::Memo(value)
 }
 
 /// An `xsd:dateTime` lexical form parsed once inside a [`Scope`].

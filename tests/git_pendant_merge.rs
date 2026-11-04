@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
 
-#[path = "support/git_qpack_fixture.rs"]
+#[path = "support/git_pendant_fixture.rs"]
 mod fixture;
 use fixture::*;
 #[test]
@@ -280,7 +280,7 @@ fn derived_manifest_and_lineage_tampering_are_detected() {
 }
 
 #[test]
-fn repository_qpack_is_a_positive_control() {
+fn repository_pendant_is_a_positive_control() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
     assert_eq!(
         quipu::git_merge::check(repo, "HEAD", "HEAD", "HEAD", "HEAD").unwrap(),
