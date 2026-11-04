@@ -142,6 +142,95 @@ fn state(store: &Store) -> (i64, String, i64) {
 }
 
 #[test]
+fn explicit_rebase_admits_new_operation_once_and_never_retargets_old_signed_bytes() {
+    use crate::client_changeset::RebaseOutcome;
+    let mut f = fixture();
+    let previous = proposal(&f);
+    let original = serde_json::to_vec(&previous).unwrap();
+    write(
+        &mut f.store,
+        "<urn:item> <urn:p:note> \"upstream\" .",
+        "",
+        T1,
+    );
+    let current = f
+        .store
+        .client_base_journal(GRAPH, f.store.latest_tx_id().unwrap())
+        .unwrap();
+    let identity = ProposalIdentity {
+        key_id: f.registration.clone(),
+        signer: "client-fixture".into(),
+        operation_id: "00000000-0000-4000-8000-000000000002".into(),
+        issued_at: T1.into(),
+        nonce: "bb".repeat(16),
+    };
+    let RebaseOutcome::Prepared { rebased } = f
+        .overlay
+        .rebase(
+            &previous,
+            &quipu_signing::public_key_hex(&f.key),
+            &current,
+            SHAPES,
+            identity.clone(),
+        )
+        .unwrap()
+    else {
+        panic!("unrelated upstream fact must rebase")
+    };
+    assert_eq!(serde_json::to_vec(&previous).unwrap(), original);
+    assert_eq!(rebased.previous, previous);
+    let mut next = rebased.overlay.sign(&f.key, identity).unwrap();
+    let before = state(&f.store);
+    let correct = next.signature.clone();
+    next.signature = previous.signature;
+    assert!(f.store.admit_client_changeset(&next).is_err());
+    assert_eq!(state(&f.store), before);
+    next.signature = correct;
+    let Admission::Accepted {
+        receipt,
+        replayed: false,
+    } = f.store.admit_client_changeset(&next).unwrap()
+    else {
+        panic!("new signed operation must pass master admission")
+    };
+    assert_eq!(receipt.operation_id, rebased.supersession.new_operation_id);
+    let after = state(&f.store);
+    assert!(after.1.contains("upstream"));
+    assert!(after.1.contains("local"));
+    assert_eq!(after.0, before.0 + 1);
+    assert_eq!(after.2, before.2 + 1);
+    let Admission::Accepted {
+        receipt: retry,
+        replayed: true,
+    } = f.store.admit_client_changeset(&next).unwrap()
+    else {
+        panic!("retry must recover the same receipt")
+    };
+    assert_eq!(retry, receipt);
+    assert_eq!(state(&f.store), after);
+    assert!(
+        f.store
+            .client_changeset_receipt(&rebased.supersession.old_operation_id)
+            .unwrap()
+            .is_none()
+    );
+    println!(
+        "REBASE {}",
+        serde_json::json!({
+            "old_base_tx": f.overlay.base().base_tx(),
+            "new_base_tx": rebased.overlay.base().base_tx(),
+            "old_operation_id": rebased.supersession.old_operation_id,
+            "new_operation_id": receipt.operation_id,
+            "old_wire_unchanged": serde_json::to_vec(&rebased.previous).unwrap() == original,
+            "old_signature_refused": true,
+            "upstream_fact_retained": after.1.contains("upstream"),
+            "accepted_tx": receipt.accepted_tx,
+            "retry_added_transactions": state(&f.store).0 - after.0,
+        })
+    );
+}
+
+#[test]
 fn accepted_once_and_identical_retry_recovers_the_same_receipt_without_a_transaction() {
     let mut f = fixture();
     let p = proposal(&f);

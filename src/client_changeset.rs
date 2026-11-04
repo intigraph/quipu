@@ -320,6 +320,8 @@ mod overlay;
 pub use overlay::{ClientOverlay, PreparedChangeSet, ProposalIdentity};
 mod preview;
 pub use preview::OverlayPreview;
+mod rebase;
+pub use rebase::{RebaseOutcome, RebasedChangeSet, Supersession};
 
 #[cfg(test)]
 #[path = "client_changeset_tests.rs"]

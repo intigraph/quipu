@@ -8,6 +8,12 @@ edits. It uses actual library code, the real shared signer, registry gate,
 stream applier and SHACL validation; keys and stores are synthetic and disposable.
 It contacts no running service and does not install or activate a client.
 
+The second fixture rebases a private name edit over a new upstream note. Watch
+the old and new base transactions and operation IDs, the unchanged old wire
+object, rejection of its signature on the new operation, the acceptance receipt
+and an identical retry adding zero transactions. The old signed operation stays
+unchanged; the new operation preserves the upstream fact.
+
 The base is `21547f5a206dfc81788e7f70eef92f7f06051890`. That revision has no
 client-changeset library entry point, so the same library call cannot run on it.
 The recording demonstrates the new source fixture with its refusal control;
@@ -31,5 +37,5 @@ shown in this native recording.
 
 The library remains unwired and supports one complete graph with open valid
 intervals. This demonstration does not establish full P3 acceptance, runtime
-authority or completion of context, interval, rebase and resolver workflows.
+authority or completion of context, interval, cross-epoch rebase and resolver workflows.
 See [the library boundary](../../../design/client-changeset-library.md).

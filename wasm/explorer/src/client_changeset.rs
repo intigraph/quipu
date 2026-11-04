@@ -6,6 +6,27 @@ use wasm_bindgen::prelude::*;
 
 use super::err_js;
 
+/// Prepare a new operation over caught-up canonical state, preserving the old
+/// signed operation. The caller signs separately; this grants no authority.
+#[wasm_bindgen(js_name = rebaseClientOverlay)]
+pub fn rebase_client_overlay(
+    overlay_json: &str,
+    previous_json: &str,
+    previous_public_key: &str,
+    canonical_json: &str,
+    shapes: &str,
+    identity_json: &str,
+) -> Result<String, JsValue> {
+    let overlay: ClientOverlay = serde_json::from_str(overlay_json).map_err(err_js)?;
+    let previous: SignedChangeSet = serde_json::from_str(previous_json).map_err(err_js)?;
+    let canonical: BaseJournal = serde_json::from_str(canonical_json).map_err(err_js)?;
+    let identity: ProposalIdentity = serde_json::from_str(identity_json).map_err(err_js)?;
+    let result = overlay
+        .rebase(&previous, previous_public_key, &canonical, shapes, identity)
+        .map_err(err_js)?;
+    serde_json::to_string(&result).map_err(err_js)
+}
+
 /// Preview canonical catch-up plus private edits. Conflicts are explicit;
 /// this never rebases, authorizes or validates a proposal for admission.
 #[wasm_bindgen(js_name = previewClientOverlay)]

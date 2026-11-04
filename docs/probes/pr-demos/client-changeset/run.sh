@@ -23,3 +23,5 @@ PY
 )
 printf '%s\n' 'Execute the compiled fixture harness (one matching test, output uncaptured):'
 "$binary" "$probe" --nocapture
+printf '%s\n' 'Rebase over canonical catch-up: preserve the old signed operation, sign a fresh operation, admit once and retry:'
+"$binary" explicit_rebase_admits_new_operation_once_and_never_retargets_old_signed_bytes --nocapture

@@ -32,8 +32,18 @@ delta using the shared pure slot operator, returning either a complete graph or
 explicit conflicts. It retains both the frozen journal and proposals, refuses
 foreign lineage, stale cursors, changed shapes and bounded intervals, and makes
 no SHACL or authority decision. The compiled Wasm bridge exposes the same preview.
-Rebase, derived local graphs and the full resolver workflow remain implementation work. This
-library slice does not establish full P3 acceptance or production readiness.
+`rebase()` verifies that the previous signed operation describes the exact old
+overlay, composes canonical catch-up using the same preview, and prepares a new
+operation with a fresh UUID and nonce. It returns a new frozen journal, the
+remaining private delta, the unchanged previous wire object and local
+supersession fingerprints. The caller persists this result and signs the new
+request separately. A conflict returns decision records without a replacement
+proposal or supersession; neither input is mutated. Reusing the old signature,
+operation ID or nonce is refused. The Wasm bridge uses the same implementation.
+This first rebase supports the same lineage, epoch, shapes and complete-graph
+scope only. Restore/epoch migration, derived local graphs and the full resolver
+workflow remain implementation work. This library slice does not establish full
+P3 acceptance or production readiness.
 
 The portable Wasm bridge opens/replaces serialized overlays, prepares the exact
 shared signing message and verifies a caller-supplied signature. Cryptographic

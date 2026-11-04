@@ -45,6 +45,38 @@ const publicHex = publicKey.export({ type: "spki", format: "der" }).subarray(-32
 const proposal = { envelope: prepared.envelope, body: prepared.body,
   signature: sign(null, Buffer.from(prepared.message), privateKey).toString("hex") };
 assert.equal(wasm.verifyClientChangesetSignature(JSON.stringify(proposal), publicHex), true);
+const nextIdentity = { ...identity, operation_id: "00000000-0000-4000-8000-000000000002", nonce: "cd".repeat(16) };
+const rebase = (old, current, id = nextIdentity) => JSON.parse(wasm.rebaseClientOverlay(
+  overlay, JSON.stringify(old), publicHex, JSON.stringify(current), shapes, JSON.stringify(id)));
+const result = rebase(proposal, caughtUp);
+assert.equal(result.outcome, "prepared");
+const rebased = result.rebased;
+assert.deepEqual(rebased.previous, proposal, "old signed operation stays byte-equivalent");
+assert.deepEqual(rebased.overlay.base,
+  JSON.parse(wasm.openClientOverlay(JSON.stringify(caughtUp), "urn:fork:synthetic-client")).base);
+assert.deepEqual(rebased.overlay.proposed, preview.triples);
+assert.equal(rebased.supersession.old_operation_id, identity.operation_id);
+assert.equal(rebased.supersession.new_operation_id, nextIdentity.operation_id);
+assert.equal(rebased.prepared.envelope.base_tx, 4);
+assert.equal(rebased.prepared.envelope.delta_sha256, proposal.envelope.delta_sha256);
+const nextPrepared = JSON.parse(wasm.prepareClientChangeset(JSON.stringify(rebased.overlay), JSON.stringify(nextIdentity)));
+assert.deepEqual(nextPrepared.envelope, rebased.prepared.envelope);
+assert.equal(nextPrepared.body, rebased.prepared.body);
+assert.equal(rebased.supersession.new_fingerprint, hash(nextPrepared.message));
+const nextProposal = { envelope: nextPrepared.envelope, body: nextPrepared.body,
+  signature: sign(null, Buffer.from(nextPrepared.message), privateKey).toString("hex") };
+assert.equal(wasm.verifyClientChangesetSignature(JSON.stringify(nextProposal), publicHex), true);
+assert.throws(() => wasm.verifyClientChangesetSignature(JSON.stringify({ ...nextProposal, signature: proposal.signature }), publicHex));
+const rebaseConflict = rebase(proposal, conflicting);
+assert.equal(rebaseConflict.outcome, "conflicts");
+assert.equal(Object.hasOwn(rebaseConflict, "rebased"), false);
+assert.throws(() => rebase(proposal, caughtUp, { ...nextIdentity, operation_id: identity.operation_id }));
+assert.throws(() => rebase(proposal, caughtUp, { ...nextIdentity, nonce: identity.nonce }));
+assert.throws(() => rebase({ ...proposal, signature: "00".repeat(64) }, caughtUp));
+assert.throws(() => rebase(proposal, { ...caughtUp, log_epoch: "urn:other" }));
+const changedOverlay = wasm.replaceClientOverlay(overlay, JSON.stringify(['<urn:s> <urn:p> "different"']));
+assert.throws(() => wasm.rebaseClientOverlay(changedOverlay, JSON.stringify(proposal), publicHex,
+  JSON.stringify(caughtUp), shapes, JSON.stringify(nextIdentity)));
 const refuses = value => assert.throws(() => wasm.verifyClientChangesetSignature(JSON.stringify(value), publicHex));
 refuses({ ...proposal, signature: "00".repeat(64) });
 refuses({ ...proposal, envelope: { ...proposal.envelope, fork_id: "urn:fork:other" } });
@@ -54,4 +86,4 @@ refuses({ ...proposal, body: changedBody, envelope: { ...proposal.envelope, body
 refuses({ ...proposal, signature: sign(null, Buffer.from("v1|another-domain"), privateKey).toString("hex") });
 assert.throws(() => wasm.replaceClientOverlay(overlay, JSON.stringify(['_:blank <urn:p> "no"'])));
 assert.throws(() => wasm.prepareClientChangeset(overlay, JSON.stringify({ ...identity, signer: "bad\nrole=master" })));
-console.log("PASS: compiled Wasm overlay, frozen journal, shared canonical bytes, signature and refusal controls");
+console.log("PASS: compiled Wasm overlay, preview, rebase/supersession, canonical bytes, signature and refusal controls");

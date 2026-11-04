@@ -1,4 +1,4 @@
-Script started on 2026-11-04 08:53:17-05:00 [COMMAND="bash docs/probes/pr-demos/client-changeset/run.sh" <not executed on terminal>]
+Script started on 2026-11-04 10:12:58-05:00 [COMMAND="bash docs/probes/pr-demos/client-changeset/run.sh" <not executed on terminal>]
 Compile the disposable library fixture, then execute its real harness:
 $ just test --locked --offline --lib signed_cut_tail_private_overlay_admission_receipt_and_replica_convergence --no-run --message-format=json
 Execute the compiled fixture harness (one matching test, output uncaptured):
@@ -16,7 +16,15 @@ REPLICA_CONVERGED
 
 test store::client_admission::tests::loop_tests::signed_cut_tail_private_overlay_admission_receipt_and_replica_convergence ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3420 filtered out; finished in 0.06s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3429 filtered out; finished in 0.12s
+
+Rebase over canonical catch-up: preserve the old signed operation, sign a fresh operation, admit once and retry:
+
+running 1 test
+REBASE {"accepted_tx":4,"new_base_tx":3,"new_operation_id":"00000000-0000-4000-8000-000000000002","old_base_tx":2,"old_operation_id":"00000000-0000-4000-8000-000000000001","old_signature_refused":true,"old_wire_unchanged":true,"retry_added_transactions":0,"upstream_fact_retained":true}
+test store::client_admission::tests::explicit_rebase_admits_new_operation_once_and_never_retargets_old_signed_bytes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3429 filtered out; finished in 0.08s
 
 
-Script done on 2026-11-04 08:53:57-05:00 [COMMAND_EXIT_CODE="0"]
+Script done on 2026-11-04 10:13:46-05:00 [COMMAND_EXIT_CODE="0"]
