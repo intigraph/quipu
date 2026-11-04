@@ -133,6 +133,7 @@ async fn stats_does_not_start_a_second_scan_while_one_runs() {
     let poison = || StatsCache {
         generation: generation - 1,
         value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        computed_at: None,
     };
 
     *STATS_CACHE.lock().unwrap() = Some(poison());
@@ -167,4 +168,56 @@ async fn stats_does_not_start_a_second_scan_while_one_runs() {
         !STATS_RECOMPUTING.load(Ordering::SeqCst),
         "the recompute slot is released after the scan"
     );
+}
+
+/// aegis-67p0lj: a stale cache recomputed within `STATS_MIN_RECOMPUTE` is
+/// answered as is and labelled stale (no scan), even with the slot free. Once
+/// it is older than the interval, the next call recomputes. Every write moves the
+/// generation, so without this limit a busy store rescans on almost every call.
+#[tokio::test]
+async fn stats_recompute_is_rate_limited_after_a_recent_scan() {
+    let _serial = STATS_TEST_LOCK.lock().await;
+    let dir = tempfile::tempdir().unwrap();
+    let shared = pooled(&dir);
+    let generation = shared.lock().latest_tx_id().unwrap();
+    let poison = |computed_at| StatsCache {
+        generation: generation - 1,
+        value: Arc::new(json!({ "facts": 42, "entities": 7, "predicates": 3 })),
+        computed_at,
+    };
+    STATS_RECOMPUTING.store(false, Ordering::SeqCst);
+
+    // Recent: the slot is free and the generation moved, yet no scan runs.
+    *STATS_CACHE.lock().unwrap() = Some(poison(Some(std::time::Instant::now())));
+    let recent = stats(State(shared.clone()))
+        .await
+        .expect("stats handler should succeed")
+        .0;
+    assert_eq!(
+        recent["facts"].as_u64(),
+        Some(42),
+        "a recent aggregate answers without rescanning"
+    );
+    assert_eq!(recent["counts_stale"], json!(true), "and is labelled stale");
+    assert_eq!(recent["counts_as_of_tx"], json!(generation - 1));
+    assert!(
+        recent["store_id"].is_string(),
+        "store_id is still read fresh"
+    );
+
+    // Aged past the interval: the next call recomputes the true (empty) counts.
+    let aged = std::time::Instant::now()
+        .checked_sub(super::base::STATS_MIN_RECOMPUTE + Duration::from_secs(1))
+        .expect("monotonic clock far enough from its origin");
+    *STATS_CACHE.lock().unwrap() = Some(poison(Some(aged)));
+    let fresh = stats(State(shared.clone()))
+        .await
+        .expect("stats handler should succeed")
+        .0;
+    assert_eq!(
+        fresh["facts"].as_u64(),
+        Some(0),
+        "an aggregate older than the interval is recomputed"
+    );
+    assert_eq!(fresh["counts_stale"], json!(false));
 }

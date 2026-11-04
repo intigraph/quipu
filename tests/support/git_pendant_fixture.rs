@@ -1,4 +1,4 @@
-//! The real-Git qpack fixture shared by the Git merge tests.
+//! The real-Git pendant fixture shared by the Git merge tests.
 #![allow(dead_code)]
 use serde_json::Value;
 use std::path::{Path, PathBuf};
