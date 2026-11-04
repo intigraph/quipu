@@ -32,6 +32,19 @@ import tempfile
 from pathlib import Path
 
 PATTERN = re.compile(r"aegis|camayoc|gastown", re.IGNORECASE)
+# A work-item reference such as `(aegis-pu7)` or `aegis-xdvg.6` is provenance,
+# not vocabulary: it names no namespace, host or term the code depends on.
+# Such tokens are removed before matching, so citing an item in a comment does
+# not redden every open PR. A hostname-shaped token (`aegis-x.example`) or a longer
+# hyphenated name (`aegis-crew-...`) is not an item ID and still matches.
+ITEM_ID = re.compile(
+    r"(?<![a-z0-9/._-])aegis-[a-z0-9]{2,8}(?:\.[0-9]+)*(?![a-z0-9-]|\.[a-z0-9])",
+    re.IGNORECASE,
+)
+
+
+def names_stack_vocabulary(line: str) -> bool:
+    return bool(PATTERN.search(ITEM_ID.sub("", line)))
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST = ROOT / "scripts" / "stack-vocabulary-allowlist.tsv"
 
@@ -49,7 +62,7 @@ def count_matches(root: Path, paths: list[str]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for rel in paths:
         text = (root / rel).read_text(encoding="utf-8", errors="replace")
-        n = sum(1 for line in text.splitlines() if PATTERN.search(line))
+        n = sum(1 for line in text.splitlines() if names_stack_vocabulary(line))
         if n:
             counts[rel] = n
     return counts
@@ -138,6 +151,18 @@ def self_test() -> int:
         old.write_text("// legacy: Aegis\n")
         cases.append(("shrunk count fails until lowered", run(root, allow) == 1))
         cases.append(("--write lowers it", run(root, allow, write=True) == 0))
+        (root / "src" / "clean.rs").write_text(
+            "// fixed in (aegis-pu7), see aegis-xdvg.6 and AEGIS-67p0lj.\nfn y() {}\n"
+        )
+        cases.append(("item references are not vocabulary", run(root, allow) == 0))
+        for leak in (
+            '"http://aegis-node.example/"',
+            "// aegis-crew-process-rules",
+            "// fixed (aegis-pu7) on aegis",
+        ):
+            (root / "src" / "clean.rs").write_text(leak + "\n")
+            cases.append((f"still refused: {leak}", run(root, allow) == 1))
+        (root / "src" / "clean.rs").write_text("fn y() {}\n")
         cases.append(("then passes", run(root, allow) == 0))
         old.write_text("// legacy: Aegis\n// aegis again\n")
         cases.append(("--write refuses to grow", run(root, allow, write=True) == 1))
