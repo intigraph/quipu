@@ -27,7 +27,9 @@ on:
 # (aegis-0zr). Keep this suffix identical to release.yml's.
 concurrency:
   group: "ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
-  cancel-in-progress: true
+  # Superseded PR runs cancel; push-to-main and dispatch runs never do, so each
+  # main commit gets a complete verdict the CD can admit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

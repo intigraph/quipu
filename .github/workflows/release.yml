@@ -36,7 +36,9 @@ permissions:
 # release from the newer HEAD, and the shipped 0.16.4 section omits #878.
 concurrency:
   group: "release-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
-  cancel-in-progress: true
+  # Superseded PR runs cancel; push-to-main and dispatch runs never do, so each
+  # main commit gets a complete verdict the CD can admit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci-correctness:
