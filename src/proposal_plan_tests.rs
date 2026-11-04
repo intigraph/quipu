@@ -86,7 +86,7 @@ fn terms_names_classes_and_properties_and_implicit_targets() {
 #[cfg(feature = "shacl")]
 #[test]
 fn tightening_a_cardinality_reports_the_exact_count_that_would_newly_fail() {
-    let store = store_with(PEOPLE, 0);
+    let mut store = store_with(PEOPLE, 0);
     store.load_shapes("people", &email_shape(1, 2), T0).unwrap();
     let id = propose(&store, &ProposalKind::Shape, &email_shape(1, 1));
 
@@ -119,7 +119,7 @@ fn tightening_a_cardinality_reports_the_exact_count_that_would_newly_fail() {
 #[cfg(feature = "shacl")]
 #[test]
 fn a_plan_writes_nothing() {
-    let store = store_with(PEOPLE, 0);
+    let mut store = store_with(PEOPLE, 0);
     store.load_shapes("people", &email_shape(1, 2), T0).unwrap();
     let id = propose(&store, &ProposalKind::Shape, &email_shape(1, 1));
     let before = store.list_shapes().unwrap();
