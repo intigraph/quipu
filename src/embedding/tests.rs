@@ -814,3 +814,51 @@ fn exclude_predicates_reaches_the_store_from_the_config_file() {
         "default is unchanged behaviour"
     );
 }
+
+#[test]
+fn comment_cohort_is_order_independent_and_new_transaction_replaces_it() {
+    let mut store = Store::open_in_memory().unwrap();
+    let ingest = |store: &mut Store, comments: &str, at: &str| {
+        let ttl = format!(
+            "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . \
+             <urn:cohort> rdfs:label \"Fixture\" ; rdfs:comment {comments} ."
+        );
+        ingest_rdf(
+            store,
+            ttl.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            at,
+            None,
+            None,
+        )
+        .unwrap();
+    };
+    ingest(
+        &mut store,
+        "\"zulu service\", \"alpha container\"",
+        "2026-01-01",
+    );
+    let id = store.lookup("urn:cohort").unwrap().unwrap();
+    let mut facts = store.entity_facts(id).unwrap();
+    let expected = "Fixture. alpha container. zulu service";
+    assert_eq!(text_from_facts(&store, &facts).unwrap(), expected);
+    facts.reverse();
+    assert_eq!(text_from_facts(&store, &facts).unwrap(), expected);
+    // Duplicate input facts cannot repeat corroboration or change text bytes.
+    facts.extend(facts.clone());
+    assert_eq!(text_from_facts(&store, &facts).unwrap(), expected);
+    ingest(
+        &mut store,
+        "\"delta replacement\", \"beta replacement\"",
+        "2026-02-01",
+    );
+    assert_eq!(
+        build_entity_text(&store, id).unwrap(),
+        "Fixture. beta replacement. delta replacement"
+    );
+    // The prior comments remain asserted, but cannot re-enter current text.
+    assert_eq!(store.entity_facts(id).unwrap().len(), 5);
+    store.embedding_config_mut().exclude_predicates = vec![format!("{}comment", namespace::RDFS)];
+    assert_eq!(build_entity_text(&store, id).unwrap(), "Fixture");
+}

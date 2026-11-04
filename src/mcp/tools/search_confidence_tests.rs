@@ -213,3 +213,81 @@ fn six_historical_score_arrays_project_to_the_provisional_floor() {
         }
     }
 }
+
+/// aegis-xc7 diagnosis-only regression: all comments are asserted together, so
+/// none is a superseded description. A deterministic provider removes model
+/// quality and a missing vector from the failure being measured here.
+#[test]
+fn entity_terms_split_across_label_and_same_transaction_comments_are_admitted() {
+    struct AlignedProvider;
+    impl crate::embedding::EmbeddingProvider for AlignedProvider {
+        fn embed_text(&self, _text: &str) -> crate::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0])
+        }
+
+        fn dimension(&self) -> usize {
+            2
+        }
+    }
+
+    use crate::vector::KnowledgeVectorStore;
+    let mut store = crate::Store::open_in_memory().unwrap();
+    store.set_embedding_provider(std::sync::Arc::new(AlignedProvider));
+    store.embedding_config_mut().auto_embed = true;
+    let label = concat!("frob", "nix");
+    let entity = "https://example.invalid/subject/one";
+    let turtle = format!(
+        "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+         <{entity}> rdfs:label \"{label}\" ;\n\
+         rdfs:comment \"automation service\", \"container management\", \"inventory fixture\" ."
+    );
+    crate::rdf::ingest_rdf(
+        &mut store,
+        turtle.as_bytes(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let id = store.lookup(entity).unwrap().unwrap();
+    let comment = store
+        .lookup("http://www.w3.org/2000/01/rdf-schema#comment")
+        .unwrap()
+        .unwrap();
+    let facts = store.entity_facts(id).unwrap();
+    let comments: Vec<_> = facts.iter().filter(|f| f.attribute == comment).collect();
+    assert_eq!(
+        comments.len(),
+        3,
+        "all three comments must exist in the graph"
+    );
+    assert!(comments.iter().all(|f| f.tx == comments[0].tx));
+    assert_eq!(store.vector_count().unwrap(), 1, "the entity IS indexed");
+
+    let control = crate::tool_search(&store, &json!({"query":label,"verbose":true})).unwrap();
+    assert_eq!(control["context_results"][0]["entity"], entity);
+    let query = format!("{label} automation service container management inventory fixture");
+    let result = crate::tool_search(&store, &json!({"query":query,"verbose":true})).unwrap();
+    assert_eq!(result["results"][0]["entity"], entity);
+    assert_eq!(result["results"][0]["similarity"], 1.0);
+    assert_eq!(
+        result["insufficient_context"], false,
+        "an indexed entity must retain corroboration split across its label and current comments: {result}"
+    );
+    assert_eq!(result["context"]["top_term_coverage"], 1.0);
+    assert_eq!(result["context_results"][0]["entity"], entity);
+    for text in [
+        "automation service",
+        "container management",
+        "inventory fixture",
+    ] {
+        assert!(
+            result["context_results"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains(text)
+        );
+    }
+}

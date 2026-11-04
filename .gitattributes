@@ -35,3 +35,6 @@ docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space
 # quipu-docgen output (aegis-t7h): regenerate, do not edit.
 packaging/man/** linguist-generated=true
 packaging/completions/** linguist-generated=true
+
+# Lossless terminal recording for the comment-cohort source demonstration.
+docs/demos/comment-cohort/output.log -text whitespace=cr-at-eol

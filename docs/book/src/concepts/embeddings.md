@@ -40,6 +40,20 @@ vectors instead of treating matching text as proof of model identity.
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.
 
+## Entity description text
+
+Native entity text includes the label and every distinct `rdfs:comment` from
+its newest comment transaction, in stable lexical order. Several comments
+asserted together contribute evidence together. A later comment transaction
+replaces that description cohort for embedding, even when older assertions
+remain active; old transaction history is not concatenated into current text.
+Graph scope, predicate exclusions and deferred stale-text checks still apply.
+
+This text-construction rule applies when a vector is created or refreshed. It
+does not rewrite existing vectors or change search confidence thresholds.
+Existing indexed text needs a separately admitted bounded refresh before it
+can demonstrate this behavior; a source update alone is not search acceptance.
+
 ## Browser explorer boundary
 
 The explorer uses its separate JavaScript ONNX adapter and self-hosted model
