@@ -48,6 +48,15 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    // Admission identities, signed JSON and transaction ids are not term ids.
+    (
+        "client_changeset_receipts",
+        "operation_id",
+        TermIdKind::None,
+    ),
+    ("client_changeset_receipts", "fingerprint", TermIdKind::None),
+    ("client_changeset_receipts", "receipt", TermIdKind::None),
+    ("client_changeset_receipts", "tx", TermIdKind::None),
     ("store_identity", "id", TermIdKind::None),
     ("store_identity", "store_id", TermIdKind::None),
     ("log_epoch", "id", TermIdKind::None),
