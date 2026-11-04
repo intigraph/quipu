@@ -1,0 +1,18 @@
+Baseline396e7881 plus the new regression, unchanged actual test-output excerpt.
+
+running 1 test
+equal-instant close 2026-01-02T00:00:00Z, Many(Some(1)): [Close { value: "a", at: "2026-01-02T00:00:00Z" }]
+
+thread 'merge_core::tests::an_incoming_close_equal_to_root_start_must_preserve_root_history' (3044331) panicked at src/merge_core_tests.rs:391:13:
+assertion `left == right` failed
+  left: [Close { value: "a", at: "2026-01-02T00:00:00Z" }]
+ right: [Close { value: "a", at: "2026-01-10T00:00:00Z" }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test merge_core::tests::an_incoming_close_equal_to_root_start_must_preserve_root_history ... FAILED
+
+failures:
+
+failures:
+    merge_core::tests::an_incoming_close_equal_to_root_start_must_preserve_root_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3125 filtered out; finished in 0.00s
