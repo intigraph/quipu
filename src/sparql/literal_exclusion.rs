@@ -211,7 +211,7 @@ pub(super) fn candidates(
     let mut rows = Vec::new();
     for (i, id) in subjects.into_iter().enumerate() {
         super::pattern_util::check_eval_budget(ctx, i, rows.len())?;
-        let mut bound = Bindings::new();
+        let mut bound = Bindings::default();
         bound.insert(subject.as_str().into(), Value::Ref(id));
         rows.extend(super::triple::eval_bgp(store, patterns, ctx, &bound)?.0);
     }

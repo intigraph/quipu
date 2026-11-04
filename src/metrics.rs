@@ -31,6 +31,7 @@ pub mod inflight;
 mod search;
 use histogram::Hist;
 pub(crate) mod refusals;
+mod vector_retention;
 pub(crate) mod write_provenance;
 pub mod writes;
 
@@ -142,6 +143,7 @@ pub struct Metrics {
     attestation: attestation::AttestationMetrics,
     writes: writes::WriteMetrics,
     refusals: refusals::RefusalMetrics,
+    vector_retention: vector_retention::VectorRetentionMetrics,
     write_provenance: write_provenance::WriteProvenanceMetrics,
     /// (endpoint template, status) -> request count.
     requests: Mutex<BTreeMap<(String, u16), u64>>,
@@ -414,6 +416,7 @@ impl Metrics {
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.refusals.render(&mut out);
+        self.vector_retention.render(&mut out);
         self.write_provenance.render(&mut out);
         self.agent_queries.render(&mut out);
 

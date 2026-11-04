@@ -53,7 +53,7 @@ pub fn eval_pattern(
     pattern: &GraphPattern,
     ctx: &TemporalContext,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
-    eval_pattern_seeded(store, pattern, ctx, &Bindings::new())
+    eval_pattern_seeded(store, pattern, ctx, &Bindings::default())
 }
 
 /// Evaluate a top-level result with the service response ceiling pushed to the

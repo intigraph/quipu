@@ -1,7 +1,5 @@
 //! Pattern evaluation utilities — variable binding, resolution, and join logic.
 
-use std::collections::HashMap;
-
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern};
 
 use crate::error::Result;
@@ -10,7 +8,7 @@ use crate::types::Value;
 
 use super::TemporalContext;
 
-pub type Bindings = HashMap<String, Value>;
+pub use super::Bindings;
 
 /// Try to bind a variable. Returns false if incompatible with existing binding.
 pub fn bind_var(bindings: &mut Bindings, var: &str, value: Value, compatible: &mut bool) -> bool {

@@ -206,7 +206,7 @@ fn spill_path_matches_in_memory_order() {
                     offset.abs()
                 );
                 keyed.push((instant, i as i64));
-                Bindings::from([
+                Bindings::from_iter([
                     (
                         "x".to_owned(),
                         Value::Typed {
