@@ -153,3 +153,105 @@ fn import_carries_embeddings_re_keyed_by_iri() {
         "re-keyed onto THIS store's id for that IRI"
     );
 }
+
+fn protected_destination_must_refuse(lifecycle: Option<&str>, source: Option<&str>) {
+    let (_tmp, local, foreign) = paths("protected-destination");
+    let dst = Store::open(local.to_str().unwrap()).unwrap();
+    let graph = dst.graph_create("urn:protected-import").unwrap();
+    dst.conn
+        .execute(
+            "UPDATE graphs SET lifecycle=?1, source=?2 WHERE g=?3",
+            rusqlite::params![lifecycle, source, graph],
+        )
+        .unwrap();
+    let mut src = Store::open(foreign.to_str().unwrap()).unwrap();
+    let subject = src.intern("urn:import-must-not-land").unwrap();
+    let predicate = src.intern("urn:import-predicate").unwrap();
+    src.transact(
+        &[Datum {
+            entity: subject,
+            attribute: predicate,
+            value: Value::Str("probe".into()),
+            valid_from: "2026-01-01T00:00:00Z".into(),
+            valid_to: None,
+            op: crate::Op::Assert,
+        }],
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        src.conn
+            .query_row("SELECT COUNT(*) FROM facts", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    drop(src);
+    let counts = |store: &Store| {
+        store.conn.query_row(
+        "SELECT (SELECT COUNT(*) FROM terms), (SELECT COUNT(*) FROM transactions), (SELECT COUNT(*) FROM facts)",
+        [], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)),
+    ).unwrap()
+    };
+    let before = counts(&dst);
+    let result = import_graph(&local, &foreign, "urn:protected-import");
+    assert!(result.is_err(), "protected target imported: {result:?}");
+    let error = result.unwrap_err().to_string();
+    assert!(
+        error.contains("FROZEN") || error.contains("mounted read-only"),
+        "{error}"
+    );
+    assert_eq!(counts(&dst), before, "refused import mutated destination");
+    assert!(dst.lookup("urn:import-must-not-land").unwrap().is_none());
+}
+
+#[test]
+fn offline_import_refuses_frozen_destination_before_copy() {
+    protected_destination_must_refuse(Some("frozen"), None);
+}
+
+#[test]
+fn offline_import_refuses_attached_destination_before_copy() {
+    protected_destination_must_refuse(None, Some("synthetic_read_only_attachment"));
+}
+
+#[test]
+fn offline_import_refuses_lost_native_ownership_before_dictionary_copy() {
+    let (_tmp, local, foreign) = paths("lost-ownership");
+    drop(Store::open(local.to_str().unwrap()).unwrap());
+    Store::adopt(local.to_str().unwrap()).unwrap();
+    let source = Store::open(foreign.to_str().unwrap()).unwrap();
+    source.intern("urn:owned-initial-probe").unwrap();
+    drop(source);
+    let accepted = import_graph(&local, &foreign, "urn:owned-positive").unwrap();
+    assert!(accepted.terms > 0, "valid owned destination did not import");
+    let source = Store::open(foreign.to_str().unwrap()).unwrap();
+    source.intern("urn:ownership-import-probe").unwrap();
+    drop(source);
+    std::fs::remove_file(local.with_extension("db.ownership.json")).unwrap();
+    let inspect = Store::open(local.to_str().unwrap()).unwrap();
+    assert!(
+        inspect.ensure_ownership_writable().is_err(),
+        "fixture still writable"
+    );
+    let before: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    let error = import_graph(&local, &foreign, "urn:ownership-import-target")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("store ownership"), "{error}");
+    let after: i64 = inspect
+        .conn
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(after, before);
+    assert!(
+        inspect
+            .lookup("urn:ownership-import-probe")
+            .unwrap()
+            .is_none()
+    );
+}

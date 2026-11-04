@@ -26,6 +26,8 @@ pub struct ImportReport {
 /// destination dictionary, so an IRI present in both files has exactly one
 /// local id. The live source schema is classified before the destination is
 /// touched; an unknown column refuses the operation instead of being skipped.
+/// The destination retains its native ownership fence and refuses frozen or
+/// attached graph targets before copying any source terms or history.
 pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportReport> {
     if dst == src {
         return Err(Error::Store(
@@ -39,16 +41,26 @@ pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportRep
     // Migrate both views with the current binary. The source itself stays
     // read-only: migrate a VACUUM snapshot when an old schema needs upgrading.
     let dst_path = dst.to_string_lossy().to_string();
-    drop(super::Store::open(&dst_path)?);
+    let dest = super::Store::open(&dst_path)?;
     let source = Connection::open_with_flags(
         src,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
     )?;
     super::respace::classify_live_schema(&source)?;
 
-    let mut dest = Connection::open(&dst_path)?;
-    dest.execute_batch("PRAGMA foreign_keys = ON;")?;
-    let tx = dest.transaction()?;
+    // Keep the Store's native commit fence installed on the actual importing
+    // connection. A separate raw connection would discard that admission.
+    dest.ensure_ownership_writable()?;
+    dest.conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    let tx = dest.conn.unchecked_transaction()?;
+    let existing_graph = if graph_iri == crate::schema::ROOT_GRAPH_IRI {
+        Some(crate::schema::ROOT_GRAPH)
+    } else {
+        dest.lookup(graph_iri)?
+    };
+    if let Some(graph) = existing_graph {
+        dest.assert_graph_is_writable(graph)?;
+    }
 
     let source_terms: Vec<(i64, String)> = source
         .prepare("SELECT id, iri FROM terms ORDER BY id")?
