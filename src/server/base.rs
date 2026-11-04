@@ -280,10 +280,25 @@ pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 /// another caller is already scanning returns the previous aggregate rather than
 /// starting a second scan, so a burst of connections cannot take every reader.
 /// `store_id` is always read fresh.
+///
+/// Recompute is also RATE-LIMITED (aegis-67p0lj). The aggregate materialises
+/// every current row, and on a store of ~10.8M facts each scan is a transient
+/// ~3 GB allocation. Any write invalidates the generation, and every sd call
+/// reads /stats for `store_id`, so on a busy store a scan was essentially always
+/// running: a +3 GB sawtooth that walked the allocator up to the recycle
+/// ceiling (one production store, 2026-11-04: recycles 3 to 14 min apart).
+/// Within [`STATS_MIN_RECOMPUTE`] of the last recompute, a stale cache is
+/// answered as-is, labelled by `counts_as_of_tx` and `counts_stale`, exactly
+/// like the existing concurrent-scan path. `computed_at: None` (an entry no
+/// recompute produced) is never rate-limited.
 pub(crate) struct StatsCache {
     pub(crate) generation: i64,
     pub(crate) value: Arc<JsonValue>,
+    pub(crate) computed_at: Option<std::time::Instant>,
 }
+
+/// Minimum spacing between /stats aggregate recomputes (see [`StatsCache`]).
+pub(crate) const STATS_MIN_RECOMPUTE: std::time::Duration = std::time::Duration::from_secs(300);
 
 pub(crate) static STATS_CACHE: Mutex<Option<StatsCache>> = Mutex::new(None);
 
@@ -346,12 +361,18 @@ pub(crate) async fn stats(
             .lock()
             .unwrap()
             .as_ref()
-            .map(|c| (c.generation, c.value.clone()));
+            .map(|c| (c.generation, c.value.clone(), c.computed_at));
+        let recent = |at: Option<std::time::Instant>| {
+            at.is_some_and(|at| at.elapsed() < STATS_MIN_RECOMPUTE)
+        };
         let (counts_tx, value) = match cached {
-            Some((cached_generation, value)) if cached_generation == generation => {
+            Some((cached_generation, value, _)) if cached_generation == generation => {
                 (cached_generation, value)
             }
-            stale => match (stale, StatsRecompute::begin()) {
+            // Rate limit: a recent aggregate answers even though writes moved
+            // the generation; it is labelled stale below, never relabelled.
+            Some((cached_generation, value, at)) if recent(at) => (cached_generation, value),
+            stale => match (stale.map(|(g, v, _)| (g, v)), StatsRecompute::begin()) {
                 // Another caller is already scanning: answer with the last
                 // aggregate, labelled with the transaction it counted.
                 (Some((previous_tx, previous)), None) => (previous_tx, previous),
@@ -360,6 +381,7 @@ pub(crate) async fn stats(
                     *STATS_CACHE.lock().unwrap() = Some(StatsCache {
                         generation,
                         value: fresh.clone(),
+                        computed_at: Some(std::time::Instant::now()),
                     });
                     drop(slot);
                     (generation, fresh)
