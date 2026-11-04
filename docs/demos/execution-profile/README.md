@@ -57,7 +57,8 @@ is an ordinary revert of the diagnostic source change through the same lane.
 
 ## Local demonstration
 
-The [terminal recording](output.log) and [timing file](timing.log) show the same
+The [terminal recording](output.log), [timing file](timing.log), and
+[readable transcript](transcript.txt) show the same
 positive one-row query with profiling off, then on, over a local in-memory store.
 The normal answer stays identical. Watch the filter report two candidates and
 one survivor. This is a source candidate demonstration, not an installed service

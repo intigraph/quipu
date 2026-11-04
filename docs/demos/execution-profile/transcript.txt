@@ -1,0 +1,9 @@
+Script started on 2026-11-04 17:38:16-05:00 [COMMAND="./execution_profile" <not executed on terminal>]
+{"event":"search_outcome","logical_call_id":"1b46405286ed39bb80c4f2e0e5e24820","operation":"query","status":null,"summary":{"admitted_count":null,"candidate_count":null,"outcome":"hits","result_count":1,"zero_kind":null},"surface":"library"}
+{"event":"search_outcome","logical_call_id":"ddb54b11809fc4505f3f2f14f9a42bdb","operation":"query","status":null,"summary":{"admitted_count":null,"candidate_count":null,"outcome":"hits","result_count":1,"zero_kind":null},"surface":"library"}
+request: SELECT ?x WHERE { VALUES ?x { 1 2 } FILTER(?x = 1) }
+ordinary: {"count":1,"labels":null,"rows":[{"x":1}],"truncated":false,"variables":["x"]}
+profile: {"choices":[{"input_rows":1,"output_rows":2,"path":"filter_recursive"},{"input_rows":2,"output_rows":1,"path":"filter_output"}],"choices_complete":true,"choices_dropped":0,"contract":"quipu-execution-profile/v1","coverage":"algebra operators, BGP dispatch and filter_join; not SQL EXPLAIN or all optimizer decisions","elapsed_us":1041,"operators":[{"calls":1,"errors":0,"inclusive_us":79,"operator":"filter","output_rows_sum":1},{"calls":1,"errors":0,"inclusive_us":22,"operator":"other","output_rows_sum":2},{"calls":1,"errors":0,"inclusive_us":103,"operator":"project","output_rows_sum":1}],"paths":[{"calls":1,"calls_with_output":1,"input_rows_sum":2,"output_rows_sum":1,"path":"filter_output"},{"calls":1,"calls_with_output":1,"input_rows_sum":1,"output_rows_sum":2,"path":"filter_recursive"}],"scope":"local tool_query including inference and label reads","timing":"inclusive; overlapping operators are not additive"}
+control: normal answer is identical; count=1
+
+Script done on 2026-11-04 17:38:16-05:00 [COMMAND_EXIT_CODE="0"]
