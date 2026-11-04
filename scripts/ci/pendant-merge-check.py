@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay qpack merge from immutable Git parents; no local merge driver needed."""
+"""Replay pendant merge from immutable Git parents; no local merge driver needed."""
 import argparse
 import json
 import os
@@ -42,7 +42,7 @@ def main():
     for merge in git("rev-list", "--reverse", "--merges", f"{ours}..{theirs}").splitlines():
         parents = git("rev-list", "--parents", "-n", "1", merge).split()
         if len(parents) != 3:
-            raise SystemExit("refusing: qpack verification requires two-parent merges")
+            raise SystemExit("refusing: pendant verification requires two-parent merges")
         left, right = parents[1:]
         ancestor = git("merge-base", "--all", left, right)
         if "\n" in ancestor:
