@@ -22,6 +22,9 @@ _qp() {
             qp,align)
                 cmd="qp__subcmd__align"
                 ;;
+            qp,asof-rdf)
+                cmd="qp__subcmd__asof__subcmd__rdf"
+                ;;
             qp,attest)
                 cmd="qp__subcmd__attest"
                 ;;
@@ -533,7 +536,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -742,6 +745,36 @@ _qp() {
                     return 0
                     ;;
                 --out)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__asof__subcmd__rdf)
+            opts="-h --db --binding --frames --scratch --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --binding)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --frames)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --scratch)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

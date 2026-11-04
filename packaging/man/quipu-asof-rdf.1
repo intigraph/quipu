@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-ASOF-RDF 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-asof\-rdf \- Convert one retained as\-of share into bounded coherent RDF chunks offline
+.SH SYNOPSIS
+\fBquipu asof\-rdf\fR [\fB\-\-db\fR] [\fB\-\-binding\fR] [\fB\-\-frames\fR] [\fB\-\-scratch\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Convert one retained as\-of share into bounded coherent RDF chunks offline
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-binding\fR \fI<VALUE>\fR
+Private JSON cut/profile binding and finite resource limits
+.TP
+\fB\-\-frames\fR \fI<VALUE>\fR
+Private retained event/data JSONL file, with exact transport data strings
+.TP
+\fB\-\-scratch\fR \fI<VALUE>\fR
+Empty canonical private directory matching SQLITE_TMPDIR
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

@@ -63,6 +63,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand compose 'Compose verified packs into a named inspection dataset'
             cand changes 'Read whole transaction change pages from the change feed'
             cand follow 'Keep this database a read-only follower of a primary server'
+            cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
@@ -683,6 +684,14 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --page-txs 'Transactions per follower page'
             cand --page-gap-ms 'Delay between follower pages in milliseconds'
             cand --bootstrap-only 'Bootstrap a follower and exit without polling'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;asof-rdf'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --binding 'Private JSON cut/profile binding and finite resource limits'
+            cand --frames 'Private retained event/data JSONL file, with exact transport data strings'
+            cand --scratch 'Empty canonical private directory matching SQLITE_TMPDIR'
             cand -h 'Print help'
             cand --help 'Print help'
         }

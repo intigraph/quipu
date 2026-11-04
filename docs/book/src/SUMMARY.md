@@ -90,6 +90,7 @@
 - [Incident Correlation](recipes/incident-correlation.md)
 - [Knowledge Ingestion](recipes/knowledge-ingestion.md)
 - [Bulk Loads & Migrations](recipes/bulk-loads.md)
+- [Coherent RDF Chunks](recipes/asof-rdf-chunks.md)
 
 # Benchmarks
 

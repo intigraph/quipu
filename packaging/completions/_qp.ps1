@@ -66,6 +66,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('compose', 'compose', [CompletionResultType]::ParameterValue, 'Compose verified packs into a named inspection dataset')
             [CompletionResult]::new('changes', 'changes', [CompletionResultType]::ParameterValue, 'Read whole transaction change pages from the change feed')
             [CompletionResult]::new('follow', 'follow', [CompletionResultType]::ParameterValue, 'Keep this database a read-only follower of a primary server')
+            [CompletionResult]::new('asof-rdf', 'asof-rdf', [CompletionResultType]::ParameterValue, 'Convert one retained as-of share into bounded coherent RDF chunks offline')
             [CompletionResult]::new('acquire', 'acquire', [CompletionResultType]::ParameterValue, 'Measure the bounded scope of a direct-main graph acquisition')
             [CompletionResult]::new('migrate-vectors', 'migrate-vectors', [CompletionResultType]::ParameterValue, 'Move stored vectors between backends (lancedb feature)')
             [CompletionResult]::new('git-merge', 'git-merge', [CompletionResultType]::ParameterValue, 'Merge pendants from Git snapshots and stop before committing')
@@ -757,6 +758,15 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--page-txs', '--page-txs', [CompletionResultType]::ParameterName, 'Transactions per follower page')
             [CompletionResult]::new('--page-gap-ms', '--page-gap-ms', [CompletionResultType]::ParameterName, 'Delay between follower pages in milliseconds')
             [CompletionResult]::new('--bootstrap-only', '--bootstrap-only', [CompletionResultType]::ParameterName, 'Bootstrap a follower and exit without polling')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;asof-rdf' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--binding', '--binding', [CompletionResultType]::ParameterName, 'Private JSON cut/profile binding and finite resource limits')
+            [CompletionResult]::new('--frames', '--frames', [CompletionResultType]::ParameterName, 'Private retained event/data JSONL file, with exact transport data strings')
+            [CompletionResult]::new('--scratch', '--scratch', [CompletionResultType]::ParameterName, 'Empty canonical private directory matching SQLITE_TMPDIR')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

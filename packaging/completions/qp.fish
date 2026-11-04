@@ -68,6 +68,7 @@ complete -c qp -n "__fish_qp_needs_command" -f -a "import" -d 'Verify a share in
 complete -c qp -n "__fish_qp_needs_command" -f -a "compose" -d 'Compose verified packs into a named inspection dataset'
 complete -c qp -n "__fish_qp_needs_command" -f -a "changes" -d 'Read whole transaction change pages from the change feed'
 complete -c qp -n "__fish_qp_needs_command" -f -a "follow" -d 'Keep this database a read-only follower of a primary server'
+complete -c qp -n "__fish_qp_needs_command" -f -a "asof-rdf" -d 'Convert one retained as-of share into bounded coherent RDF chunks offline'
 complete -c qp -n "__fish_qp_needs_command" -f -a "acquire" -d 'Measure the bounded scope of a direct-main graph acquisition'
 complete -c qp -n "__fish_qp_needs_command" -f -a "migrate-vectors" -d 'Move stored vectors between backends (lancedb feature)'
 complete -c qp -n "__fish_qp_needs_command" -f -a "git-merge" -d 'Merge pendants from Git snapshots and stop before committing'
@@ -455,6 +456,11 @@ complete -c qp -n "__fish_qp_using_subcommand follow" -l page-txs -d 'Transactio
 complete -c qp -n "__fish_qp_using_subcommand follow" -l page-gap-ms -d 'Delay between follower pages in milliseconds' -r
 complete -c qp -n "__fish_qp_using_subcommand follow" -l bootstrap-only -d 'Bootstrap a follower and exit without polling'
 complete -c qp -n "__fish_qp_using_subcommand follow" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand asof-rdf" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand asof-rdf" -l binding -d 'Private JSON cut/profile binding and finite resource limits' -r
+complete -c qp -n "__fish_qp_using_subcommand asof-rdf" -l frames -d 'Private retained event/data JSONL file, with exact transport data strings' -r
+complete -c qp -n "__fish_qp_using_subcommand asof-rdf" -l scratch -d 'Empty canonical private directory matching SQLITE_TMPDIR' -r
+complete -c qp -n "__fish_qp_using_subcommand asof-rdf" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand acquire; and not __fish_seen_subcommand_from scope" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand acquire; and not __fish_seen_subcommand_from scope" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand acquire; and not __fish_seen_subcommand_from scope" -f -a "scope" -d 'Report the bounded row and byte scope of a direct-main acquisition'

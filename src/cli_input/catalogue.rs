@@ -101,6 +101,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("compose", "<pack>... | <key=pack>...", 0, usize::MAX, "repo shapes-from actor destination revoke-tombstone pack-key reason use-pointer declaration authority repo-remote pointer-cache", "rollback"),
     spec!("changes", "", 0, 0, "from capture limit graph", ""),
     spec!("follow", "", 0, 0, "primary page-txs page-gap-ms", "bootstrap-only"),
+    spec!("asof-rdf", "", 0, 0, "binding frames scratch", ""),
     spec!("acquire", "", GROUP, 0, "", ""),
     spec!("acquire scope", "", 0, 0, "source-store-id graph tx max-vm-steps deadline-ms", ""),
     spec!("migrate-vectors", "", 0, 0, "from to", "dry-run"),

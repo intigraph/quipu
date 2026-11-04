@@ -48,6 +48,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("compose", "Compose verified packs into a named inspection dataset"),
     ("changes", "Read whole transaction change pages from the change feed"),
     ("follow", "Keep this database a read-only follower of a primary server"),
+    ("asof-rdf", "Convert one retained as-of share into bounded coherent RDF chunks offline"),
     ("acquire", "Measure the bounded scope of a direct-main graph acquisition"),
     ("migrate-vectors", "Move stored vectors between backends (lancedb feature)"),
     ("git-merge", "Merge pendants from Git snapshots and stop before committing"),

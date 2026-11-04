@@ -54,7 +54,7 @@ fn object(term: &Term, dictionary: &BTreeMap<String, usize>) -> Result<String> {
     }
 }
 
-fn serialize(triples: &[Triple], limit: usize) -> Result<CompactRdf> {
+pub(crate) fn serialize(triples: &[Triple], limit: usize) -> Result<CompactRdf> {
     let mut iris = BTreeSet::new();
     for triple in triples {
         if let NamedOrBlankNode::NamedNode(node) = &triple.subject {
