@@ -31,6 +31,9 @@ _quipu() {
             quipu,changes)
                 cmd="quipu__subcmd__changes"
                 ;;
+            quipu,competency)
+                cmd="quipu__subcmd__competency"
+                ;;
             quipu,compose)
                 cmd="quipu__subcmd__compose"
                 ;;
@@ -276,6 +279,9 @@ _quipu() {
                 ;;
             quipu__subcmd__audit__subcmd__quarantine,purge)
                 cmd="quipu__subcmd__audit__subcmd__quarantine__subcmd__purge"
+                ;;
+            quipu__subcmd__competency,lint)
+                cmd="quipu__subcmd__competency__subcmd__lint"
                 ;;
             quipu__subcmd__db,attach)
                 cmd="quipu__subcmd__db__subcmd__attach"
@@ -533,7 +539,7 @@ _quipu() {
 
     case "${cmd}" in
         quipu)
-            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1150,6 +1156,42 @@ _quipu() {
                     return 0
                     ;;
                 --graph)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__competency)
+            opts="-h --db --help lint"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__competency__subcmd__lint)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

@@ -4,6 +4,20 @@
 
 Every `quipu` command path with its syntax, generated from the same catalogue that admits arguments, so it cannot list a command the binary refuses or miss one it accepts. `qp` is the same binary. Every command also takes `--db <path>` (default `.bobbin/quipu/quipu.db`). For explanations and examples see [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.
 
+## `qp competency`
+
+Inspect pendant competency contracts without opening a store.
+
+Subcommands: `competency lint`.
+
+### `qp competency lint`
+
+Validate competency.toml schema and query/command syntax offline; execute nothing.
+
+```text
+qp competency lint <pendant>
+```
+
 ## `qp store`
 
 Inspect native ownership, or explicitly adopt or restore a disk store.

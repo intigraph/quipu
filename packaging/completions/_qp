@@ -27,7 +27,34 @@ _qp() {
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:qp-command-$line[1]:"
         case $line[1] in
-            (store)
+            (competency)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__competency_commands" \
+"*::: :->competency" \
+&& ret=0
+
+    case $state in
+    (competency)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-competency-command-$line[1]:"
+        case $line[1] in
+            (lint)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-pendant:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(store)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -2083,6 +2110,7 @@ esac
 (( $+functions[_qp_commands] )) ||
 _qp_commands() {
     local commands; commands=(
+'competency:Inspect pendant competency contracts without opening a store' \
 'store:Inspect native ownership, or explicitly adopt or restore a disk store' \
 'version:Print the version and source commit' \
 'install-alias:Add the qp alias beside the quipu binary' \
@@ -2302,6 +2330,18 @@ _qp__subcmd__audit__subcmd__tree_commands() {
 _qp__subcmd__changes_commands() {
     local commands; commands=()
     _describe -t commands 'qp changes commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__competency_commands] )) ||
+_qp__subcmd__competency_commands() {
+    local commands; commands=(
+'lint:Validate competency.toml schema and query/command syntax offline; execute nothing' \
+    )
+    _describe -t commands 'qp competency commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__competency__subcmd__lint_commands] )) ||
+_qp__subcmd__competency__subcmd__lint_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp competency lint commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__compose_commands] )) ||
 _qp__subcmd__compose_commands() {
