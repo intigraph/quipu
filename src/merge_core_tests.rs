@@ -71,10 +71,33 @@ fn c1a_one_side_theirs_keeps_authored_time_and_closes_base_at_their_close() {
 }
 
 #[test]
-fn c1a_share_without_a_close_time_closes_at_td() {
-    // A share carries no per-fact close; the caller passes created_at when it
-    // has it. With none, the close falls back to the decision time.
+fn c1a_share_without_a_close_time_closes_at_the_replacement_start() {
+    // A share carries no per-fact close. On a single-valued slot the replaced
+    // value must end where its replacement starts (R6), never at Td.
     let p = plan(&slot(&["a"], &[("a", T0)], &[("c", TT)], Card::ONE), None);
+    assert_eq!(p.receive, vec![close("a", TT), assert_("c", TT)]);
+}
+
+#[test]
+fn a_single_value_replacement_never_starts_before_the_close() {
+    // ROOT's row starts after the incoming value's authored time (a re-claim),
+    // so the close clamps to Td and the replacement starts there too.
+    let p = plan(&slot(&["a"], &[("a", TR)], &[("c", TT)], Card::ONE), None);
+    assert_eq!(p.receive, vec![close("a", TD), assert_("c", TD)]);
+    // An incoming close later than the replacement's authored start wins, and
+    // the replacement waits for it.
+    let mut s = slot(&["a"], &[("a", T0)], &[("c", TT)], Card::ONE);
+    s.theirs_closed = rows(&[("a", TF)]);
+    assert_eq!(
+        plan(&s, None).receive,
+        vec![close("a", TF), assert_("c", TF)]
+    );
+    // A many-valued slot has no such coupling: unrelated values keep their
+    // own times.
+    let p = plan(
+        &slot(&["a"], &[("a", T0)], &[("c", TT)], Card::Many(None)),
+        None,
+    );
     assert_eq!(p.receive, vec![close("a", TD), assert_("c", TT)]);
 }
 
