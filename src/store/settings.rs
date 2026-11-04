@@ -116,6 +116,16 @@ impl Store {
         self.base_ns = base_ns.into();
     }
 
+    /// The golden-path vocabulary new terms are written under.
+    pub fn vocabulary(&self) -> crate::term_vocabulary::Vocabulary {
+        self.vocabulary
+    }
+
+    /// Set the golden-path vocabulary. Called once at startup from config.
+    pub fn set_vocabulary(&mut self, vocabulary: crate::term_vocabulary::Vocabulary) {
+        self.vocabulary = vocabulary;
+    }
+
     /// Get a mutable reference to the search/limit config.
     pub fn search_config_mut(&mut self) -> &mut SearchConfig {
         &mut self.search_config

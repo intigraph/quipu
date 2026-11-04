@@ -619,15 +619,18 @@ fn retention_with_no_consumers_prunes_by_age_alone() {
     );
 }
 
-/// Default behaviour is untouched: nothing prunes unless asked.
+/// Retention defaults to 30 days (aegis-jio5.5); `0` keeps every event.
 #[test]
-fn retention_is_opt_in() {
-    assert!(
-        crate::config::EventsConfig::default()
-            .retention_days
-            .is_none(),
-        "default must be keep-forever"
+fn retention_defaults_to_thirty_days() {
+    assert_eq!(
+        crate::config::EventsConfig::default().retention_days,
+        crate::config::DEFAULT_EVENTS_RETENTION_DAYS
     );
+    assert_eq!(crate::config::DEFAULT_EVENTS_RETENTION_DAYS, 30);
+    let keep: crate::config::EventsConfig = toml::from_str("retention_days = 0").unwrap();
+    assert_eq!(keep.retention_days, 0);
+    let unset: crate::config::EventsConfig = toml::from_str("").unwrap();
+    assert_eq!(unset.retention_days, 30);
 }
 
 // -- Refusal events (camayoc-0d3) -----------------------------------------

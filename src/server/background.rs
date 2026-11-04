@@ -2,7 +2,7 @@
 use super::{SharedStore, graph_metrics, wal_maintenance};
 pub(crate) fn start(
     push_store_outer: SharedStore,
-    retention_days: Option<u32>,
+    retention_days: u32,
     vectors: &quipu::EmbeddingConfig,
 ) {
     // Event push P2: the delivery worker. A 2s tick over deliver_tick with the
@@ -50,36 +50,59 @@ pub(crate) fn start(
     wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
     graph_metrics::spawn_refresh(&push_store_outer);
 
-    // Event-log retention (quipu-9z9). Opt-in via `[quipu.events]
-    // retention_days`; unset keeps today's keep-forever behaviour and spawns
-    // nothing. An hourly cadence (first tick immediate) is plenty: the policy
-    // is measured in days, and `prune_events` never touches an offset a
-    // registered consumer has not committed past, so an aggressive cadence
-    // could not break replay anyway — it would only burn cycles.
     spawn_vector_retention(&push_store_outer, vectors);
 
-    if let Some(days) = retention_days {
-        let prune_store = push_store_outer;
-        tokio::spawn(async move {
-            let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
-            loop {
-                tick.tick().await;
-                let store = prune_store.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    let cutoff = quipu::time::iso_days_ago(u64::from(days));
-                    let store = store.lock();
-                    match store.prune_events(&cutoff) {
-                        Ok(0) => {}
-                        Ok(n) => eprintln!(
-                            "events: retention pruned {n} event(s) older than {cutoff} ({days}d)"
-                        ),
-                        Err(e) => eprintln!("events: retention prune failed: {e}"),
-                    }
-                })
-                .await;
-            }
-        });
+    // Event-log retention (quipu-9z9, aegis-jio5.5). `[quipu.events]
+    // retention_days`, default 30; `0` keeps every event and spawns nothing.
+    if retention_days > 0 {
+        spawn_event_retention(push_store_outer, retention_days);
     }
+}
+
+/// Rows deleted per batch; the store lock is released between batches.
+const EVENT_PRUNE_BATCH: usize = 2_000;
+/// Rows deleted per hourly pass at most, so a large backlog drains over
+/// several passes instead of one long run of writer-held batches.
+const EVENT_PRUNE_MAX_PER_PASS: usize = 50_000;
+
+/// Hourly (first tick immediate) bounded prune. The policy is measured in
+/// days, and `prune_events_batch` never touches an offset a registered
+/// consumer has not committed past, so the cadence cannot break replay.
+fn spawn_event_retention(store: SharedStore, days: u32) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            tick.tick().await;
+            let store = store.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+                let cutoff = quipu::time::iso_days_ago(u64::from(days));
+                let mut pruned = 0usize;
+                while pruned < EVENT_PRUNE_MAX_PER_PASS {
+                    let limit = EVENT_PRUNE_BATCH.min(EVENT_PRUNE_MAX_PER_PASS - pruned);
+                    // The guard drops at the end of each statement, so other
+                    // writers run between batches.
+                    match store.lock().prune_events_batch(&cutoff, limit) {
+                        Ok(n) => {
+                            pruned += n;
+                            if n < limit {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("events: retention prune failed: {e}");
+                            break;
+                        }
+                    }
+                }
+                if pruned > 0 {
+                    eprintln!(
+                        "events: retention pruned {pruned} event(s) older than {cutoff} ({days}d)"
+                    );
+                }
+            })
+            .await;
+        }
+    });
 }
 
 /// Rows deleted under one lock hold. Small enough that a writer waiting on

@@ -424,13 +424,23 @@ plain curl without a signed envelope cannot produce the authenticated result.
 
 ### `GET /stats`
 
-Store statistics.
+Store statistics, and the store id that signed writes bind to (quipu-write-v2).
 
 ```bash
 curl localhost:3030/stats
 ```
 
-Response: `{"facts": 1234, "entities": 56, "predicates": 12}`
+Response:
+
+```json
+{"facts": 1234, "entities": 56, "predicates": 12,
+ "store_id": "urn:uuid:...", "counts_as_of_tx": 9876, "counts_stale": false}
+```
+
+`store_id` is always current. The counts are computed on a read connection, never
+the writer, and cached until the next write. `counts_as_of_tx` is the transaction
+they describe; `counts_stale` is `true` only when another request was already
+recomputing them and an earlier aggregate was returned instead of a second scan.
 
 ### `GET /query` and `POST /query`
 

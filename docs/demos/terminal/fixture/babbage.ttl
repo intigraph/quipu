@@ -1,0 +1,2 @@
+@prefix : <urn:demo:> .
+:Babbage :designed :Engine .

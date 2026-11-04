@@ -394,17 +394,27 @@ impl QuarantineConfig {
     }
 }
 
+/// Days of event log kept by default (aegis-jio5.5).
+pub const DEFAULT_EVENTS_RETENTION_DAYS: u32 = 30;
+
 /// Event-log retention policy (quipu-9z9).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct EventsConfig {
     /// Prune events older than this many days, provided every registered
     /// consumer has committed past them (`Store::prune_events` — a lagging
-    /// consumer's backlog is retained regardless of age). Unset = keep
-    /// forever, today's behaviour and the reactor-down-6wk guarantee.
-    /// Measured cost of forever at 10k episodes: the log is 30% of the
-    /// database (`docs/design/wasm-support.md` §5.1).
-    pub retention_days: Option<u32>,
+    /// consumer's backlog is retained regardless of age). Default 30; `0`
+    /// keeps every event forever. Measured cost of forever at 10k episodes:
+    /// the log is 30% of the database (`docs/design/wasm-support.md` §5.1).
+    pub retention_days: u32,
+}
+
+impl Default for EventsConfig {
+    fn default() -> Self {
+        Self {
+            retention_days: DEFAULT_EVENTS_RETENTION_DAYS,
+        }
+    }
 }
 
 /// Share-import policy, `[quipu.import]` (aegis-zev).
@@ -519,6 +529,11 @@ pub struct QuipuConfig {
     /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
     pub base_ns: String,
 
+    /// Which IRIs the golden-path vocabulary terms are written under
+    /// (`legacy` = under `base_ns`, the default; `intigraph` = published
+    /// Camayoc w3id terms). Individuals keep `base_ns` either way.
+    pub vocabulary: crate::term_vocabulary::Vocabulary,
+
     /// REST API server configuration.
     pub server: ServerConfig,
 
@@ -546,7 +561,7 @@ pub struct QuipuConfig {
     /// Governance enforcement policy (write-path gate).
     pub governance: GovernanceConfig,
 
-    /// Event-log retention (quipu-9z9). Default: keep forever.
+    /// Event-log retention (quipu-9z9). Default 30 days; `0` keeps every event.
     pub events: EventsConfig,
 
     /// Share-import policy (aegis-zev), `[quipu.import]`. Named
@@ -611,6 +626,7 @@ impl Default for QuipuConfig {
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
             base_ns: namespace::DEFAULT_BASE_NS.to_string(),
+            vocabulary: crate::term_vocabulary::Vocabulary::default(),
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
