@@ -82,3 +82,79 @@ mod tests {
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 }
+
+#[cfg(test)]
+mod profile_tests {
+    use axum::{body::Body, http::Request};
+    use serde_json::{Value, json};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn execution_profile_http_is_opt_in_and_refuses_uncovered_transports() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("profile.db");
+        let store = quipu::Store::open(path.to_str().unwrap()).unwrap();
+        let shared = std::sync::Arc::new(crate::StoreHandle::writer_only(store));
+        let app = super::routes().with_state(shared);
+        let query = "SELECT ?x WHERE { VALUES ?x { 1 2 } FILTER(?x = 1) }";
+        let mut answers = Vec::new();
+        for enabled in [false, true] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/query")
+                        .header("content-type", "application/json")
+                        .body(Body::from(
+                            json!({"query":query,"execution_profile":enabled}).to_string(),
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 200);
+            let bytes = axum::body::to_bytes(response.into_body(), 65536)
+                .await
+                .unwrap();
+            let mut body: Value = serde_json::from_slice(&bytes).unwrap();
+            let profile = body.as_object_mut().unwrap().remove("execution_profile");
+            assert_eq!(profile.is_some(), enabled);
+            if let Some(profile) = profile {
+                assert_eq!(profile["contract"], "quipu-execution-profile/v1");
+                assert!(!profile["operators"].as_array().unwrap().is_empty());
+            }
+            assert!(body.get("ignored_fields").is_none(), "{body}");
+            answers.push(body);
+        }
+        assert_eq!(answers[0], answers[1]);
+        for extra in [
+            json!({"federated":true}),
+            json!({"_sparql_protocol":true}),
+            json!({}),
+        ] {
+            let mut input = json!({"query":query,"execution_profile":true});
+            input
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::post("/query")
+                        .header("content-type", "application/json")
+                        .header(
+                            "accept",
+                            if extra == json!({}) {
+                                "application/sparql-results+json"
+                            } else {
+                                "application/json"
+                            },
+                        )
+                        .body(Body::from(input.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 400);
+        }
+    }
+}

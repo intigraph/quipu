@@ -97,6 +97,22 @@ pub fn eval_pattern_seeded(
     ctx: &TemporalContext,
     seed: &Bindings,
 ) -> Result<(Vec<Bindings>, Vec<String>)> {
+    let timer = super::profile::begin();
+    let result = eval_pattern_seeded_inner(store, pattern, ctx, seed);
+    super::profile::finish(
+        pattern,
+        timer,
+        result.as_ref().ok().map(|(rows, _)| rows.len()),
+    );
+    result
+}
+
+fn eval_pattern_seeded_inner(
+    store: &Store,
+    pattern: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+) -> Result<(Vec<Bindings>, Vec<String>)> {
     // Deadline check between operators. The SQLite progress
     // handler stops a grinding statement; this stops the Rust-side plan —
     // every operator recurses through here, so a multi-join over huge
@@ -159,22 +175,41 @@ pub fn eval_pattern_seeded(
             let (rows, vars) = match super::status_pushdown::candidates(
                 store, expr, inner, inner_ctx, inner_seed,
             )? {
-                Some(candidates) => candidates,
+                Some(candidates) => {
+                    super::profile::choice("filter_status_candidates", 1, Some(candidates.0.len()));
+                    candidates
+                }
                 // aegis-xacr: scan the pattern the filter can judge first.
                 None => {
                     match super::literal_exclusion::candidates(
                         store, expr, inner, inner_ctx, inner_seed,
                     )? {
-                        Some(candidates) => candidates,
+                        Some(candidates) => {
+                            super::profile::choice(
+                                "filter_literal_exclusion",
+                                1,
+                                Some(candidates.0.len()),
+                            );
+                            candidates
+                        }
                         None => match super::filter_drive::try_eval(
                             store, expr, inner, inner_ctx, inner_seed,
                         )? {
-                            Some(driven) => driven,
-                            None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                            Some(driven) => {
+                                super::profile::choice("filter_driven", 1, Some(driven.0.len()));
+                                driven
+                            }
+                            None => {
+                                let done =
+                                    eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?;
+                                super::profile::choice("filter_recursive", 1, Some(done.0.len()));
+                                done
+                            }
                         },
                     }
                 }
             };
+            let candidates = rows.len();
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches
@@ -190,6 +225,7 @@ pub fn eval_pattern_seeded(
                     filtered.push(row);
                 }
             }
+            super::profile::choice("filter_output", candidates, Some(filtered.len()));
             Ok((filtered, vars))
         }
 
