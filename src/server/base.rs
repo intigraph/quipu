@@ -91,6 +91,7 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
+    store.set_vocabulary(config.vocabulary);
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }
