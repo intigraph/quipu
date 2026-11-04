@@ -73,12 +73,20 @@ class Store:
     # -- lifecycle ---------------------------------------------------------
 
     @classmethod
-    def memory(cls) -> Store:
-        """A fresh in-memory store with no adopted schema."""
-        return cls(_Engine.memory())
+    def memory(cls, base_ns: str | None = None) -> Store:
+        """A fresh in-memory store with no adopted schema.
+
+        ``base_ns`` names the namespace episodes mint names under. There is no
+        default: an episode is refused until one is set (here or with
+        :meth:`set_base_ns`).
+        """
+        store = cls(_Engine.memory())
+        if base_ns is not None:
+            store.set_base_ns(base_ns)
+        return store
 
     @classmethod
-    def open(cls, path: str | os.PathLike[str]) -> Store:
+    def open(cls, path: str | os.PathLike[str], base_ns: str | None = None) -> Store:
         """Open (or create) a file-backed store. Adopted shapes persist.
 
         Do not open a database that a running quipu-server is serving. The
@@ -87,8 +95,18 @@ class Store:
         configuration rather than the server's governance, label and SHACL
         settings. Nothing detects that case yet: use the REST client
         (``quipu_client``) for a served store. One writer per database file.
+
+        ``base_ns`` is as for :meth:`memory`; it is not stored in the file.
         """
-        return cls(_Engine.open(os.fspath(path)))
+        store = cls(_Engine.open(os.fspath(path)))
+        if base_ns is not None:
+            store.set_base_ns(base_ns)
+        return store
+
+    def set_base_ns(self, base_ns: str) -> None:
+        """Name the namespace episodes mint names under (an absolute IRI
+        ending in ``/`` or ``#``). There is no default."""
+        self._engine.set_base_ns(base_ns)
 
     def close(self) -> None:
         """Release the store. Idempotent."""

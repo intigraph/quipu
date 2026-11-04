@@ -105,8 +105,9 @@ pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::
         );
         store.set_vocabulary(map);
     }
-    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
-        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    match quipu::namespace::require_base_ns(&config.base_ns) {
+        Ok(()) => eprintln!("minting IRIs under configured base_ns: {}", config.base_ns),
+        Err(e) => eprintln!("warning: writes that mint names will be refused: {e}"),
     }
     store.resolution_config_mut().clone_from(&config.resolution);
     if config.resolution.enabled {

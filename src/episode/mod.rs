@@ -129,6 +129,7 @@ pub fn ingest_episode_with_resolution(
     base_ns: &str,
     resolution_opts: Option<&IngestResolutionOpts>,
 ) -> Result<IngestResult> {
+    crate::namespace::require_base_ns(base_ns)?;
     // Resolve every node in ONE pass: it scans the label set once for the whole
     // episode rather than once per node, and it can see two nodes claiming one
     // existing entity — which a per-node loop structurally cannot.
@@ -245,6 +246,7 @@ pub fn ingest_episode_outcome(
     timestamp: &str,
     base_ns: &str,
 ) -> Result<(i64, usize, IngestOutcome)> {
+    crate::namespace::require_base_ns(base_ns)?;
     // One payload may mention a node name exactly once. Repeating it used to
     // look like the documented way to dual-type an entity, but each entry also
     // emitted its description as rdfs:comment. Two descriptions under one name

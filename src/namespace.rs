@@ -14,6 +14,27 @@ pub const DEFAULT_BASE_NS: &str = "http://aegis.gastown.local/ontology/";
 
 // ── W3C standard namespaces ────────────────────────────────────
 
+/// Refuse a write that would mint names without a base namespace.
+///
+/// Quipu has no default namespace: a store names its own individuals, and a
+/// guessed default would silently collide between stores and fork identity on
+/// a later change. Set `[quipu] base_ns` (or pass `--base-ns`).
+///
+/// # Errors
+///
+/// When `base_ns` is empty or is not an absolute IRI ending in `/` or `#`.
+pub fn require_base_ns(base_ns: &str) -> crate::error::Result<()> {
+    let absolute = base_ns.contains("://") || base_ns.starts_with("urn:");
+    if base_ns.is_empty() || !absolute || !(base_ns.ends_with('/') || base_ns.ends_with('#')) {
+        return Err(crate::error::Error::InvalidValue(format!(
+            "no usable base namespace ({base_ns:?}): this write mints names, and Quipu has \
+             no default namespace. Set [quipu] base_ns (or pass --base-ns) to an absolute \
+             IRI ending in '/' or '#'."
+        )));
+    }
+    Ok(())
+}
+
 pub const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 pub const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
 pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
@@ -273,5 +294,43 @@ mod tests {
         assert!(BOBBIN_IMPORTS.starts_with(DEFAULT_BASE_NS));
         assert!(CODE_BASE.starts_with("http://aegis.gastown.local/"));
         assert_ne!(CODE_BASE, DEFAULT_BASE_NS);
+    }
+
+    #[test]
+    fn a_base_namespace_is_required_and_must_be_an_absolute_iri_prefix() {
+        for ok in [
+            "http://example.org/kb/",
+            "https://example.org/v#",
+            "urn:example:kb/",
+        ] {
+            assert!(require_base_ns(ok).is_ok(), "{ok}");
+        }
+        for bad in ["", "kb/", "http://example.org/kb", "example.org/"] {
+            let err = require_base_ns(bad).unwrap_err().to_string();
+            assert!(err.contains("base_ns"), "{bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_fresh_store_has_no_namespace_and_refuses_to_mint_names() {
+        let mut store = crate::Store::open_in_memory().unwrap();
+        assert_eq!(store.base_ns(), "", "no implicit default namespace");
+        let ep: crate::Episode = serde_json::from_str(
+            r#"{"name": "ep", "nodes": [{"name": "n1", "type": "Thing"}], "edges": []}"#,
+        )
+        .unwrap();
+        let base = store.base_ns().to_string();
+        let err = crate::ingest_episode(&mut store, &ep, "2026-01-01T00:00:00Z", &base)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no usable base namespace"), "{err}");
+        // Naming one makes the same write succeed.
+        crate::ingest_episode(
+            &mut store,
+            &ep,
+            "2026-01-01T00:00:00Z",
+            "http://example.org/kb/",
+        )
+        .unwrap();
     }
 }

@@ -35,6 +35,10 @@ fn err_js(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
+/// Names the explorer mints for nodes added in the browser. The graph is local
+/// to the tab, so a fixed scratch namespace cannot collide with another store.
+const EXPLORER_NS: &str = "urn:quipu:explorer/";
+
 /// A loaded repository pack: an in-memory store plus the provenance a reader
 /// needs to check that what they are exploring is the artifact they think.
 #[wasm_bindgen]

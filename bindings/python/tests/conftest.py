@@ -32,7 +32,7 @@ def corpus():
 def store():
     import quipu
 
-    with quipu.Store.memory() as s:
+    with quipu.Store.memory(base_ns="http://example.org/kb/") as s:
         yield s
 
 

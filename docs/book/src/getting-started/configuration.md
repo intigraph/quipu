@@ -63,7 +63,7 @@ stops being read.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `store_path` | `.bobbin/quipu/quipu.db` | SQLite database path |
-| `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
+| `base_ns` | unset | Base namespace for the names a store mints: an absolute IRI ending in `/` or `#`. **Required** for any write that mints a name (episodes); there is no default, and such writes are refused until it is set. Set it before the first write and never change it on an existing store. `--base-ns` overrides per CLI call. |
 | `vocabulary_map` | unset | Path to a Turtle file of `owl:equivalentProperty` / `owl:equivalentClass` statements. For each term Quipu would mint under `base_ns` (the subject), the object IRI is written instead. Vocabulary packs ship their own map; Quipu names none. Individuals keep `base_ns`. Configure a map only once readers see the mapped IRIs. A map that cannot be read stops startup. |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |

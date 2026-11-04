@@ -123,7 +123,7 @@ fn speculative_batch_does_not_surface_an_eliminated_malformed_property() {
 #[ignore = "12,001-action dense-owner timing demonstration; run explicitly"]
 fn dense_owner_guard_demo() {
     println!("DENSE_GUARD_DEMO fixture_start=true");
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_read_model_enabled(false);
     for (gi, graph) in [
         "http://example.org/board",

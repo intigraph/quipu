@@ -41,6 +41,17 @@ impl Store {
         Self::init(conn)
     }
 
+    /// An in-memory store with the legacy test namespace set explicitly.
+    ///
+    /// Tests that mint names through episode ingest relied on the store's old
+    /// implicit default namespace. A store now has none, so those tests name it.
+    #[cfg(test)]
+    pub(crate) fn open_in_memory_test_ns() -> Result<Self> {
+        let mut store = Self::open_in_memory()?;
+        store.set_base_ns(crate::namespace::DEFAULT_BASE_NS.to_string());
+        Ok(store)
+    }
+
     /// Open an existing store READ-ONLY, for a reader in a connection pool.
     ///
     /// WAL already permits N concurrent readers alongside one writer; before
@@ -574,7 +585,7 @@ impl Store {
             principal_chain: Vec::new(),
             recording_verdicts: false,
             trust_root_bootstrap: None,
-            base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
+            base_ns: String::new(),
             vocabulary: std::sync::Arc::default(),
             namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,

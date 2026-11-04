@@ -25,8 +25,6 @@ pub use query_capture::QueryCaptureConfig;
 mod endpoint_pointers;
 pub use vector_backend::install_vector_backend;
 
-use crate::namespace;
-
 /// The single source of truth for how aggressively search layers oversample
 /// candidates before post-filtering. Previously scattered as inline `*10`,
 /// `*5`, `*3` literals across the search/graphiti/vector paths (hq-gkd).
@@ -526,7 +524,8 @@ pub struct QuipuConfig {
     // parse-safe (this struct is `#[serde(default)]`, no `deny_unknown_fields`,
     // so an old config carrying `schema_path` is simply ignored). If a schema
     // directory is wanted later, add it back WITH the code that reads it.
-    /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
+    /// Base namespace for the names a store mints. Required for any write that
+    /// mints a name; there is no default (see `namespace::require_base_ns`).
     pub base_ns: String,
 
     /// Optional Turtle file mapping the vocabulary terms Quipu mints to the
@@ -625,7 +624,7 @@ impl Default for QuipuConfig {
             memory_files: MemoryFilesConfig::default(),
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
-            base_ns: namespace::DEFAULT_BASE_NS.to_string(),
+            base_ns: String::new(),
             vocabulary_map: None,
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
