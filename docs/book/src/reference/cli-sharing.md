@@ -856,7 +856,7 @@ Measured on the repository's real Datalinks pendant, replacing the same function
 value on both branches produces a **text conflict**, not a clean double. Git
 writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
-correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+correctly. `tests/git_pendant_merge.rs` exercises those cases, decision resolution,
 and the driver-absent CI refusals using actual Git repositories.
 
 ## Carry alignment evidence

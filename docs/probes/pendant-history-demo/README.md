@@ -28,5 +28,5 @@ Historical mode skips only directories without a manifest in all four checked
 snapshots. Every declared pack keeps hash, lineage, conflict and SHACL validation.
 The final CI check remains strict, including manifest-less exports. The mixed
 fixture/pack tests prove invalid historical pack merges still fail while valid
-ones pass. Run `cargo test --features shacl --test git_qpack_history
---test git_qpack_merge` for these controls and the malformed final-head refusal.
+ones pass. Run `cargo test --features shacl --test git_pendant_history
+--test git_pendant_merge` for these controls and the malformed final-head refusal.

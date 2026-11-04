@@ -653,7 +653,7 @@ async function downloadPack() {
     $("#export-status").textContent = "Export refused by the graph's policy. Inspect the editor's report for details.";
   } finally {
     button.disabled = false;
-    button.textContent = "Download .qpack.tar.gz";
+    button.textContent = "Download .pendant.tar.gz";
   }
 }
 
