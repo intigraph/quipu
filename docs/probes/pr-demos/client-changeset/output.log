@@ -1,0 +1,22 @@
+Script started on 2026-11-04 08:44:16-05:00 [COMMAND="bash docs/probes/pr-demos/client-changeset/run.sh" <not executed on terminal>]
+Compile the disposable library fixture, then execute its real harness:
+$ just test --locked --offline --lib signed_cut_tail_private_overlay_admission_receipt_and_replica_convergence --no-run --message-format=json
+Execute the compiled fixture harness (one matching test, output uncaptured):
+
+running 1 test
+SIGNED_CUT graph=urn:graph:client-test source_tx=2
+TAIL_APPLIED frozen_base_retained=true local_proposal_retained=true
+ADMISSION {"accepted_tx":4,"operation_id":"00000000-0000-4000-8000-000000000001","verdict":"accepted"}
+IDENTICAL_RETRY replayed=true additional_transactions=0
+BAD_SIGNATURE cannot verify: quipu-changeset-v1: invalid signature
+REPLICA_CONVERGED
+<urn:item> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:Item> .
+<urn:item> <urn:p:name> "local" .
+<urn:item> <urn:p:note> "master while offline" .
+
+test store::client_admission::tests::loop_tests::signed_cut_tail_private_overlay_admission_receipt_and_replica_convergence ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3420 filtered out; finished in 0.10s
+
+
+Script done on 2026-11-04 08:45:06-05:00 [COMMAND_EXIT_CODE="0"]

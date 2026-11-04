@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS transaction_auth (
     auth_class TEXT NOT NULL
 );
 
+-- Admission receipts are not current RDF assertions. Their transaction and
+-- complete signed fingerprint commit atomically with the accepted proposal.
+CREATE TABLE IF NOT EXISTS client_changeset_receipts (
+    operation_id TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    receipt TEXT NOT NULL,
+    tx INTEGER NOT NULL REFERENCES transactions(id)
+);
+
 CREATE TABLE IF NOT EXISTS store_identity (
     id       INTEGER PRIMARY KEY CHECK (id = 1),
     store_id TEXT NOT NULL UNIQUE

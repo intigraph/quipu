@@ -10,6 +10,21 @@ pub const SCHEMA: &str = "quipu-asof-share/v1";
 /// Read policy identity of the supported scoped cut.
 pub const POLICY: &str = "quipu-asof-policy/write-class-principal/v1";
 
+/// Portable scope digest used by cuts, stream sessions and client proposals.
+/// The lists are tagged and sorted; context never becomes writable scope.
+#[must_use]
+pub fn scope_digest(scope: &[String], context: &[String]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut scope = scope.to_vec();
+    let mut context = context.to_vec();
+    scope.sort();
+    context.sort();
+    let text = crate::replicate_wire::canonical(
+        &serde_json::json!({"scope": scope, "context_graphs": context}),
+    );
+    format!("sha256:{}", hex::encode(Sha256::digest(text.as_bytes())))
+}
+
 #[path = "signature.rs"]
 mod signature;
 pub use signature::{manifest_message, sign_manifest, verify_manifest};

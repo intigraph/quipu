@@ -35,3 +35,4 @@ docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space
 # quipu-docgen output (aegis-t7h): regenerate, do not edit.
 packaging/man/** linguist-generated=true
 packaging/completions/** linguist-generated=true
+docs/probes/pr-demos/client-changeset/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

@@ -10,6 +10,8 @@ pub mod attestation;
 pub mod attested_write;
 mod batches;
 pub mod changes;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod client_admission;
 pub mod conditional;
 pub mod datasets;
 #[cfg(not(target_arch = "wasm32"))]

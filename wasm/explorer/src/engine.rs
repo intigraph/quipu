@@ -60,8 +60,7 @@ impl Database {
     /// false until a freshness challenge exists.
     #[wasm_bindgen(js_name = replicaFreshness)]
     pub fn replica_freshness(&self, now_ms: f64) -> Result<String, JsValue> {
-        serde_json::to_string(&self.engine.replica_freshness(millis(now_ms)))
-            .map_err(super::err_js)
+        serde_json::to_string(&self.engine.replica_freshness(millis(now_ms))).map_err(super::err_js)
     }
 
     /// Invoke a supported native handler with lossless JSON text in and out.

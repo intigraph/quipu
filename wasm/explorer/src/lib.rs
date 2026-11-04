@@ -16,6 +16,7 @@
 use quipu::share::{ShareOptions, ShareScope};
 use wasm_bindgen::prelude::*;
 
+mod client_changeset;
 mod engine;
 mod features;
 mod history;

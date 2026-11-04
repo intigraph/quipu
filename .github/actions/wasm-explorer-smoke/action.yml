@@ -70,6 +70,12 @@ runs:
         NODE_BUNDLE_DIR: ${{ inputs.node-bundle-dir }}
       run: node scripts/smoke-wasm-node.mjs "$NODE_BUNDLE_DIR"
 
+    - name: Portable signed client changeset controls
+      shell: bash
+      env:
+        NODE_BUNDLE_DIR: ${{ inputs.node-bundle-dir }}
+      run: node scripts/smoke-wasm-client-changeset.mjs "$NODE_BUNDLE_DIR"
+
     - name: Full browser engine acceptance
       shell: bash
       env:

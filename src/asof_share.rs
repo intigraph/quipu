@@ -213,12 +213,7 @@ fn invalid(message: impl Into<String>) -> CutError {
 /// changes the digest.
 #[must_use]
 pub fn scope_digest(scope: &[String], context: &[String]) -> String {
-    let mut scope = scope.to_vec();
-    let mut context = context.to_vec();
-    scope.sort();
-    context.sort();
-    let text = json!({"scope": scope, "context_graphs": context}).to_string();
-    crate::share::sha256(text.as_bytes())
+    crate::replica_manifest::scope_digest(scope, context)
 }
 
 /// Take a cut into a new spool under `spool_dir`.
