@@ -20,6 +20,7 @@ use crate::{namespace, store::Store};
 mod commit;
 mod descriptions;
 mod edge_predicate;
+mod hash;
 #[cfg(test)]
 use edge_predicate::KNOWN_PREFIXES;
 use edge_predicate::resolve_edge_predicate;
@@ -499,17 +500,7 @@ fn episode_content_hash(episode: &Episode) -> String {
     parts.extend(nodes);
     parts.extend(edges);
 
-    format!("{:016x}", fnv1a_64(parts.join("\n").as_bytes()))
-}
-
-/// FNV-1a 64-bit hash — small, dependency-free, and deterministic across runs.
-fn fnv1a_64(bytes: &[u8]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in bytes {
-        hash ^= u64::from(b);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
+    format!("{:016x}", hash::fnv1a_64(parts.join("\n").as_bytes()))
 }
 
 /// Validate `data_turtle` against `shapes_turtle`, returning a `ValidationFailed`
@@ -740,7 +731,10 @@ fn episode_to_turtle(
         if let Some(conf) = &edge.confidence
             && let Some(literal) = confidence_literal(conf)
         {
-            let stmt_hash = format!("{:016x}", fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes()));
+            let stmt_hash = format!(
+                "{:016x}",
+                hash::fnv1a_64(format!("{src}|{rel}|{tgt}").as_bytes())
+            );
             ttl.push_str(&format!("aegis:stmt_{stmt_hash} a rdf:Statement ;\n"));
             ttl.push_str(&format!("    rdf:subject {} ;\n", node_term(&src, base_ns)));
             ttl.push_str(&format!("    rdf:predicate {rel} ;\n"));
