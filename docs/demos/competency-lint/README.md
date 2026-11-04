@@ -21,5 +21,5 @@ scriptreplay --log-out terminal.output --log-timing terminal.timing
 The output file is also a readable transcript. Replay was checked with the
 installed util-linux `scriptreplay`; both raw logs and replay output were
 inspected. This proves syntax lint and its rejection behavior, not query results,
-shape validity, command authorization, or share/import integration. Later commits
-that add only these demonstration files preserve the demonstrated source.
+shape validity, command authorization, or share/import integration. The later top-level help-index correction changes discoverability; the lint
+implementation and fixtures remain identical to the demonstrated revision.

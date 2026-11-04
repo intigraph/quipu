@@ -397,6 +397,7 @@ fn print_usage() {
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
+    qp competency lint <pendant>  Validate contract schema and syntax offline
     qp prime [--brief] [--section <name>] [--static] [--json] [--db <path>]  Agent primer + live store summary
     qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
