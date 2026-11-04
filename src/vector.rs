@@ -15,6 +15,7 @@ use crate::error::Result;
 use crate::store::Store;
 
 mod scoped;
+mod scoring;
 
 /// Schema for the vectors table, created alongside the fact log.
 pub(crate) const VECTORS_SQL: &str = r#"
@@ -292,27 +293,33 @@ impl Store {
             stmt.query([])?
         };
 
+        let query_norm = squared_norm(query_embedding).sqrt();
         let mut scored: Vec<(i64, f64)> = Vec::new();
         while let Some(row) = rows.next()? {
             let entity_id: i64 = row.get(0)?;
-            let blob: Vec<u8> = row.get(1)?;
-
-            let stored = bytes_to_f32_slice(&blob);
+            let value = row.get_ref(1)?;
+            let blob = value.as_blob().map_err(|_| {
+                rusqlite::Error::InvalidColumnType(1, "embedding".into(), value.data_type())
+            })?;
+            let dimensions = blob.len() / 4;
             // Fail loud on a dimension mismatch instead of silently scoring 0.0
             // (hq-7v0): a stored vector whose dim ≠ the query/provider dim means
             // the embedding model or dimension changed without a re-embed, and
             // every cosine would be a meaningless 0.0.
-            if !stored.is_empty() && stored.len() != query_embedding.len() {
+            if dimensions != 0 && dimensions != query_embedding.len() {
                 return Err(crate::Error::Store(format!(
                     "embedding dimension mismatch: query has {} dims but the stored \
                      vector for entity {} has {} — re-embed after changing the \
                      embedding model/dimension",
                     query_embedding.len(),
                     entity_id,
-                    stored.len()
+                    dimensions
                 )));
             }
-            scored.push((entity_id, cosine_similarity(query_embedding, &stored)));
+            scored.push((
+                entity_id,
+                scoring::cosine_bytes(query_embedding, blob, query_norm),
+            ));
         }
 
         drop(scan_trace);
