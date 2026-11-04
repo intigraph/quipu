@@ -11,6 +11,7 @@
 use std::fmt::Write as _;
 
 use crate::error::{Error, Result};
+use crate::term_vocabulary::{CAMAYOC_CORE_NS, Vocabulary};
 
 use super::cone::{ConeReport, ConeVerdict};
 
@@ -26,8 +27,12 @@ pub struct DraftOptions {
     pub human_omissions: Vec<(String, String)>,
     /// Step IRIs preserved as dead-end hazards.
     pub dead_ends: Vec<String>,
-    /// Namespace the vocabulary and the new IRIs live in.
+    /// Namespace the new IRIs (and, under the legacy vocabulary, the terms)
+    /// live in.
     pub base_ns: String,
+    /// Which IRIs the golden-path terms are written under; see
+    /// [`crate::term_vocabulary`]. Classes and new IRIs stay under `base_ns`.
+    pub vocabulary: crate::term_vocabulary::Vocabulary,
 }
 
 /// Emit the `GoldenPath` + `PathOmission` Turtle for `cone_report`'s trajectory.
@@ -55,10 +60,25 @@ pub fn draft(cone_report: &ConeReport, opts: &DraftOptions) -> Result<String> {
         }
     }
 
-    let ns = &opts.base_ns;
+    let ns = opts.base_ns.as_str();
+    let v = super::PathVocab::with_vocabulary(ns, opts.vocabulary);
+    // Compact a term IRI with the prefix it lives under. Legacy terms keep the
+    // `aegis:` form, so a legacy draft is byte-identical to before.
+    let t = |iri: &str| -> String {
+        if let Some(local) = iri.strip_prefix(ns) {
+            format!("aegis:{local}")
+        } else if let Some(local) = iri.strip_prefix(CAMAYOC_CORE_NS) {
+            format!("core:{local}")
+        } else {
+            format!("<{iri}>")
+        }
+    };
     let path_iri = format!("{ns}{}", opts.name);
     let mut ttl = String::new();
     let _ = writeln!(ttl, "@prefix aegis: <{ns}> .");
+    if opts.vocabulary != Vocabulary::Legacy {
+        let _ = writeln!(ttl, "@prefix core:  <{CAMAYOC_CORE_NS}> .");
+    }
     let _ = writeln!(
         ttl,
         "@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> ."
@@ -71,8 +91,13 @@ pub fn draft(cone_report: &ConeReport, opts: &DraftOptions) -> Result<String> {
     );
     let _ = writeln!(ttl, "<{path_iri}> a aegis:GoldenPath ;");
     let _ = writeln!(ttl, "    rdfs:label {} ;", turtle_str(&opts.label));
-    let _ = writeln!(ttl, "    aegis:sourceKind \"declared\" ;");
-    let _ = writeln!(ttl, "    aegis:prunedFrom <{}> ;", cone_report.trajectory);
+    let _ = writeln!(ttl, "    {} \"declared\" ;", t(&v.source_kind));
+    let _ = writeln!(
+        ttl,
+        "    {} <{}> ;",
+        t(&v.pruned_from),
+        cone_report.trajectory
+    );
 
     let mut omissions: Vec<(String, String, Option<String>)> = Vec::new();
     for step in &cone_report.steps {
@@ -91,10 +116,10 @@ pub fn draft(cone_report: &ConeReport, opts: &DraftOptions) -> Result<String> {
     }
 
     for (i, _) in omissions.iter().enumerate() {
-        let _ = writeln!(ttl, "    aegis:omitsStep <{path_iri}/omission-{i}> ;");
+        let _ = writeln!(ttl, "    {} <{path_iri}/omission-{i}> ;", t(&v.omits_step));
     }
     for dead in &opts.dead_ends {
-        let _ = writeln!(ttl, "    aegis:deadEnd <{dead}> ;");
+        let _ = writeln!(ttl, "    {} <{dead}> ;", t(&v.dead_end));
     }
     ttl.truncate(ttl.trim_end_matches([' ', '\n', ';']).len());
     ttl.push_str(" .\n");
@@ -107,15 +132,15 @@ pub fn draft(cone_report: &ConeReport, opts: &DraftOptions) -> Result<String> {
             "    rdfs:label {} ;",
             turtle_str(&format!("omission {i} of {}", opts.label))
         );
-        let _ = writeln!(ttl, "    aegis:sourceKind \"declared\" ;");
-        let _ = writeln!(ttl, "    aegis:omittedStep <{step}> ;");
+        let _ = writeln!(ttl, "    {} \"declared\" ;", t(&v.source_kind));
+        let _ = writeln!(ttl, "    {} <{step}> ;", t(&v.omitted_step));
         match decision {
             Some(d) => {
-                let _ = writeln!(ttl, "    aegis:omissionAuthority \"{authority}\" ;");
-                let _ = writeln!(ttl, "    aegis:omissionRuling <{d}> .");
+                let _ = writeln!(ttl, "    {} \"{authority}\" ;", t(&v.omission_authority));
+                let _ = writeln!(ttl, "    {} <{d}> .", t(&v.omission_ruling));
             }
             None => {
-                let _ = writeln!(ttl, "    aegis:omissionAuthority \"{authority}\" .");
+                let _ = writeln!(ttl, "    {} \"{authority}\" .", t(&v.omission_authority));
             }
         }
     }
@@ -152,6 +177,7 @@ mod tests {
             )],
             dead_ends: vec!["http://ex/s2-detour".into()],
             base_ns: "http://ex/v/".into(),
+            vocabulary: Vocabulary::Legacy,
         }
     }
 
@@ -203,5 +229,61 @@ mod tests {
         let ttl = draft(&r, &opts()).unwrap();
         assert_eq!(ttl.matches("a aegis:GoldenPath").count(), 1);
         assert_eq!(ttl.matches("a aegis:PathOmission").count(), 2);
+    }
+
+    /// Every predicate the draft writes, parsed as real Turtle.
+    fn predicates(ttl: &str) -> std::collections::BTreeSet<String> {
+        oxttl::TurtleParser::new()
+            .for_reader(ttl.as_bytes())
+            .map(|t| {
+                t.expect("draft must parse as Turtle")
+                    .predicate
+                    .as_str()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    /// The term predicates a draft may use, resolved for `vocabulary`.
+    fn term_iris(vocabulary: Vocabulary) -> Vec<String> {
+        let v = super::super::PathVocab::with_vocabulary("http://ex/v/", vocabulary);
+        vec![
+            v.source_kind,
+            v.pruned_from,
+            v.omits_step,
+            v.dead_end,
+            v.omitted_step,
+            v.omission_authority,
+            v.omission_ruling,
+        ]
+    }
+
+    #[test]
+    fn a_draft_writes_exactly_the_vocabulary_readers_query() {
+        // A drafted path must be readable by the same PathVocab the store uses,
+        // under either vocabulary, or a loaded draft is invisible to its readers.
+        let (_s, _v, r) = report();
+        for vocabulary in [Vocabulary::Legacy, Vocabulary::Intigraph] {
+            let mut o = opts();
+            o.vocabulary = vocabulary;
+            let used = predicates(&draft(&r, &o).unwrap());
+            for iri in term_iris(vocabulary) {
+                assert!(used.contains(&iri), "{vocabulary:?}: draft lacks {iri}");
+            }
+            let other = match vocabulary {
+                Vocabulary::Legacy => Vocabulary::Intigraph,
+                Vocabulary::Intigraph => Vocabulary::Legacy,
+            };
+            for iri in term_iris(other) {
+                assert!(!used.contains(&iri), "{vocabulary:?}: draft wrote {iri}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_legacy_draft_declares_no_extra_prefix() {
+        let (_s, _v, r) = report();
+        let ttl = draft(&r, &opts()).unwrap();
+        assert!(!ttl.contains("@prefix core:"), "{ttl}");
     }
 }

@@ -117,6 +117,7 @@ pub fn cmd_path(args: &[String], db_path: &str, base_ns: &str) {
                 human_omissions: omissions.into_iter().zip(rulings).collect(),
                 dead_ends: flag_values(rest, "--dead-end"),
                 base_ns: base_ns.to_string(),
+                vocabulary: crate::cli_open::config().vocabulary,
             };
             match draft(&report, &draft_opts) {
                 Ok(ttl) => print!("{ttl}"),
