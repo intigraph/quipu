@@ -117,29 +117,68 @@ owner did; it grants nothing by itself.
 
 ### Record layout
 
-The witness is an append-only set of immutable records, one key per
-`(store_id, generation, phase)`:
+The witness is an append-only set of immutable records. A generation has one
+`ACTIVE` record and a sequence of handoff **attempts** `k = 0, 1, ...`, each
+with a reservation and at most one outcome:
 
 ```text
-<prefix>/<store_id>/g<generation>/ACTIVE      body: Authority
-<prefix>/<store_id>/g<generation>/RESERVED    body: Request (predecessor = this generation)
-<prefix>/<store_id>/g<generation>/RETIRED     body: Certificate
-<prefix>/<store_id>/g<generation+1>/ACTIVE    body: Authority (successor)
+<prefix>/<store_id>/g<g>/ACTIVE             body: Authority (genesis or successor)
+<prefix>/<store_id>/g<g>/r<k>/RESERVED      body: Request (predecessor g, exact destination, operation ID)
+<prefix>/<store_id>/g<g>/r<k>/OUTCOME       body: RETIRED { Certificate } | ABANDONED { request digest, operator, reason }
+<prefix>/<store_id>/g<g+1>/ACTIVE           body: Authority (successor named by the RETIRED certificate)
 ```
+
+A single `OUTCOME` key per attempt makes retirement and abandonment mutually
+exclusive at the witness: whichever create wins is the attempt's only
+outcome. A reservation is never rewritten or re-targeted. A different
+destination, or a retry after abandonment, is a new attempt `k+1` with its own
+operation ID. Attempt `k+1` may exist only after attempt `k` has an
+`ABANDONED` outcome.
 
 Every write is **create-only** (conditional on the key not existing). Nothing
 is ever overwritten or deleted by Quipu. The storage location must also
 retain records: no lifecycle expiry, and versioning or object lock where
 available. A deleted record makes the head walk stop early. The result is
 "head behind the journal", which refuses (fail closed) but blocks that
-lineage's startup until reconciled. The head is found by walking keys in
-that fixed order from the journal's generation until the first absent key.
-With strong read-after-write consistency, that walk is exact. A conditional
-create that loses returns a conflict; it never silently overwrites.
+lineage's startup until reconciled. A conditional create that loses returns a
+conflict; it never silently overwrites.
 
-The head-walk result maps directly onto `WitnessHead`. `ACTIVE(g)` alone is
-`Active`. `RESERVED(g)` without `RETIRED(g)` is `Reserved`. `RETIRED(g)`
-without `ACTIVE(g+1)` is `Retired`. `ACTIVE(g+1)` is the successor's `Active`.
+### Head walk and its anchor
+
+The walk starts at an **anchor generation chosen by the reader's journal
+role**, never blindly at the journal's own generation:
+
+| Journal role | Anchor | Why |
+| --- | --- | --- |
+| `ACTIVE(g)`, `RETIRING` or `RETIRED` at `g` | `g` | The journal names the generation it holds or is leaving |
+| `PENDING(g+1)` | `g`, the predecessor named in the journal's retained certificate | A pending destination has no `ACTIVE(g+1)` yet; its authority comes from `g`'s outcome |
+| none (enrollment) | `0` | Genesis |
+
+From the anchor `a`, the walk reads `g<a>/ACTIVE`, then attempts `k = 0, 1, ...`.
+It continues past an `ABANDONED` outcome, and stops at the first attempt
+whose `RESERVED` is absent, whose `OUTCOME` is absent, or whose `OUTCOME` is
+`RETIRED`. After a `RETIRED` outcome it reads `g<a+1>/ACTIVE`, and if that
+exists it continues the same walk at `a+1`. The walk also reads one key past
+its stopping point. A `RESERVED` at attempt `k+1` without an `ABANDONED`
+outcome at `k`, any attempt after a `RETIRED` outcome, or an `ACTIVE(a+1)`
+without a `RETIRED` outcome naming it, is an illegal sequence. Object storage
+cannot refuse those writes, so the walker reports them as `UNKNOWN`
+(tampering or a defective writer), never as a head.
+
+With strong read-after-write consistency the walk is exact. Its result maps
+onto `WitnessHead`:
+- `ACTIVE(g)` with no unresolved attempt is `Active`.
+- A `RESERVED` attempt without an `OUTCOME` is `Reserved`.
+- A `RETIRED` outcome without `ACTIVE(g+1)` is `Retired`.
+- `ACTIVE(g+1)` is the successor's `Active`.
+- An `ABANDONED` outcome returns the head to `Active(g)` for the same tuple.
+
+**Model change required before W1:** the accepted model (#939) has no abandon
+transition. P0 must add an `Abandon` action, `Reserved -> Active` at the same
+tuple, guarded by the source journal still being `ACTIVE(g)`, and re-run the
+state enumeration. Two active owners and a stale-B activation must remain
+unreachable. The model's rule that a request's destination is never its
+source stays unchanged: abandonment is not a self-handoff.
 
 ### Freshness and the startup nonce
 
@@ -160,12 +199,16 @@ changing the protocol.
 `AuthorityWitness` is a trait with four operations, each returning
 `Ok`, `Conflict` or `Unknown`, never a guess:
 
-- `head(store_id, from_generation)`: the head walk.
-- `reserve(request)`: create `RESERVED(g)`.
-- `retire(certificate)`: create `RETIRED(g)`; requires `RESERVED(g)` with the
-  same request.
-- `activate(authority)`: create `ACTIVE(g+1)`; requires `RETIRED(g)` whose
-  certificate names this destination.
+- `head(store_id, anchor)`: the anchored head walk.
+- `reserve(request)`: create `g/r<k>/RESERVED` for the next attempt `k`. A
+  concurrent reserver for the same `k` gets `Conflict`.
+- `retire(certificate)`: create `g/r<k>/OUTCOME = RETIRED`; the certificate
+  must bind attempt `k`'s exact request.
+- `abandon(attempt, reason)`: create `g/r<k>/OUTCOME = ABANDONED`. This is a
+  source-side transition only (D4): it is admitted only while the source
+  journal is still `ACTIVE(g)`, that is, before step 2.
+- `activate(authority)`: create `g<g+1>/ACTIVE`; requires a `RETIRED` outcome
+  whose certificate names this destination and this successor tuple.
 
 An `Unknown` result (timeout, transport error, unexpected status, unreadable
 body) never advances a local state. Lost replies are resolved by reading the
@@ -187,10 +230,10 @@ A crash between any two steps leaves no owner, or the same owner, never two.
 
 | Step | Source A | Witness | Destination B |
 | --- | --- | --- | --- |
-| 1 | | `reserve`: create `RESERVED(g)` | |
+| 1 | | `reserve`: create `g/r<k>/RESERVED` | |
 | 2 | journal `ACTIVE(g)` -> `RETIRING`; held handles refuse from here | | |
 | 3 | seal cut, commit retirement record and outbox; journal -> `RETIRED` | | |
-| 4 | | `retire`: create `RETIRED(g)` | |
+| 4 | | `retire`: create `g/r<k>/OUTCOME = RETIRED` | |
 | 5 | release the receipt from the outbox | | |
 | 6 | | | journal `PENDING`; install and verify the artifact |
 | 7 | | `activate`: create `ACTIVE(g+1)` | |
@@ -200,25 +243,41 @@ Crash analysis:
 
 - **After 1, before 2.** The witness says `Reserved`. A running A keeps
   writing (the design allows an admitted A to continue until its barrier). A
-  *restarted* A refuses, because startup sees `Reserved`. Recovery resumes the
-  same operation through the transition path, or abandons it. **Abandoning is
-  a handoff from A to itself**: the same eight steps with A's own placement as
-  the destination, ending at `ACTIVE(g+1)` for A. It reuses the protocol, needs
-  no new witness phase, and never deletes or rewrites `RESERVED(g)`. A
-  reservation is therefore never a dead end, and there is still no silent
-  un-reserve.
+  *restarted* A refuses, because startup sees `Reserved`. Recovery has exactly
+  two exits, both through the transition path on A:
+  - **resume** the identical operation to the same destination;
+  - **abandon** the attempt with `OUTCOME = ABANDONED`. This is admitted only
+    while A's journal is still `ACTIVE(g)`. Afterwards the head is `Active(g)`
+    and A may restart.
+
+  After abandonment, B's attempt-`k` request can never activate, because
+  activation requires a `RETIRED` outcome. A later handoff is attempt `k+1`.
+  No receipt exists before step 4, so B cannot have reached `PENDING`.
+- **A restored from backup.** Suppose a whole-host restore brings A's journal
+  back to `ACTIVE(g)` after A had crossed step 2 or 3 but before step 4. An
+  abandon then loses A's commits after the restore point, which is ordinary
+  rollback loss. It cannot create a second owner: no `RETIRED` outcome
+  exists, so no receipt was ever released.
 - **After 2 or 3, before 4.** A is fenced locally. No receipt exists, so B
   cannot activate. Recovery retries step 4 with the identical certificate.
 - **After 4, before 5 or 6.** No owner is active. B can fetch the same receipt.
-- **After 6, before 7.** B is `PENDING` and refuses writes. Retrying
-  `activate` is idempotent by key.
+- **After 6, before 7.** B is `PENDING(g+1)` and refuses writes. Its walk is
+  anchored at `g` (its certificate's predecessor), finds the `RETIRED` outcome
+  equal to its retained certificate and naming B, and finds no `ACTIVE(g+1)`.
+  That is the legitimate pending state, so the transition path retries
+  `activate`, which is idempotent by key.
 - **After 7, before 8.** The witness names B, but B's journal is still
   `PENDING`, so B refuses writes. B's startup sees `ACTIVE(g+1)` naming its own
   authority and completes step 8. Any other host claiming `g+1` sees a
   conflict.
 
-Concurrent B and C: only one `RESERVED(g)` can be created. The loser gets
+Concurrent B and C: only one `g/r<k>/RESERVED` can be created. The loser gets
 `Conflict` at step 1 and stays a non-owner.
+
+Retirement against abandonment: both are source-side and run under A's
+exclusive latch, and abandon is refused once A's journal leaves `ACTIVE(g)`.
+If both are attempted anyway, the single create-only `OUTCOME` key admits
+exactly one.
 
 ## D3. Startup adapter
 
@@ -226,8 +285,9 @@ An enrolled writable open runs these checks before admitting any write,
 after the D1 binding succeeds:
 
 1. Read the protected journal. `Unknown` refuses.
-2. Head-walk the witness from the journal's generation with a fresh nonce.
-   `Unknown` (including an outage) refuses writable startup.
+2. Head-walk the witness from the anchor its journal role selects (see "Head
+   walk and its anchor"), with a fresh nonce. `Unknown`, including an outage
+   or an illegal sequence, refuses writable startup.
 3. Compare:
 
 | Journal | Witness head | Result |
@@ -236,9 +296,10 @@ after the D1 binding succeeds:
 | `ACTIVE(g)` | `Reserved(g)` | Refuse ordinary startup; only the transition path may resume the reserved operation |
 | `ACTIVE(g)` | `Retired(g)` or `Active(g+1)` or later | Refuse: this journal was rolled back or superseded; the store is a non-owner |
 | `RETIRING` or `RETIRED` | any | Refuse writes; the transition path may finish the identical retirement |
-| `PENDING(g+1)` | `Retired(g)` naming this destination | Refuse writes; the transition path may run `activate` |
-| `PENDING(g+1)` | `Active(g+1)`, same successor | Transition path completes journal `ACTIVE`; then admit |
-| any | head behind the journal | `UNKNOWN`: refuse. Under this protocol the journal never gets ahead of the witness, so this means witness loss or tampering |
+| `PENDING(g+1)` | anchored at `g`: `Retired(g)` whose certificate equals the journal's and names this destination | Refuse writes; the transition path may run `activate` (legitimate crash after step 6) |
+| `PENDING(g+1)` | `Active(g+1)`, same successor | Transition path completes journal `ACTIVE`; then admit (crash after step 7) |
+| `PENDING(g+1)` | predecessor outcome absent, `ABANDONED`, or a certificate that differs or names another destination | `UNKNOWN`: refuse |
+| any | the anchor's own records missing (`ACTIVE(g)` for an `ACTIVE`/`RETIRING`/`RETIRED` journal; the predecessor `RETIRED` outcome for `PENDING`) | `UNKNOWN`: refuse. The journal never gets ahead of its anchor under this protocol, so this means witness loss or tampering |
 
 A running, already admitted owner does **not** consult the witness per commit.
 A witness outage blocks startup and handoff, not running commits. This is the
@@ -253,7 +314,7 @@ recorded; no pin when any check is `UNKNOWN`.
 ## D4. Transition authority
 
 The transition token stays a crate-private type. It is constructed only inside
-three operations: `enroll`, `retire` and `admit`. There is no HTTP route for
+four operations: `enroll`, `retire`, `abandon` and `admit`. There is no HTTP route for
 any of them in this design. They are exposed only as an operator CLI that:
 
 - requires the exclusive per-lineage latch, which also proves no server process
@@ -276,7 +337,7 @@ No production principal is involved.
 
 Option A gives no takeover while A might still be running. If A's host is
 destroyed, its lineage cannot be handed off by protocol. A break-glass
-retirement would have to create `RESERVED(g)` and `RETIRED(g)` without A's
+retirement would have to create a reservation and a `RETIRED` outcome without A's
 participation. If A is in fact still running, its already-open handles keep
 committing until they next restart. That is exactly the split brain this work
 removes. The design therefore does **not** include break-glass in v1. If the
@@ -300,6 +361,12 @@ records are quarantined evidence, never replayed.
 | Rollback | Journal `ACTIVE(g)` restored after the witness reached `Retired(g)` | Unrestored journal at the witness head admits |
 | Outage | Witness unreachable at startup | Running owner keeps committing through the outage |
 | Ordering | Crash injected after each of the eight steps | Never two owners; identical operation resumes |
+| Abandon | Reserve A->B, crash, abandon; then B tries to activate attempt `k` | B refused (no `RETIRED` outcome); A restarts at `Active(g)`; a new handoff is attempt `k+1` |
+| Abandon after barrier | Abandon while A's journal is `RETIRING` | Refused locally; the identical retirement must complete |
+| Outcome race | Retire and abandon of the same attempt race | Exactly one `OUTCOME`; the loser gets `Conflict` |
+| Illegal sequence | `r<k+1>/RESERVED` without `ABANDONED` at `k`; `ACTIVE(g+1)` without `RETIRED` | Walk returns `UNKNOWN`; startup refuses |
+| Pending recovery | Crash after step 6, and after step 7 | Anchored walk finds the predecessor outcome; activation resumes, or the journal completes `ACTIVE` |
+| Wrong predecessor | `PENDING(g+1)` with a certificate that differs from the witness outcome, or names another destination | `UNKNOWN`; no activation |
 | Retained fixture | A's already-open handle after an admitted retirement | B admitted exactly once; A refuses |
 
 ## Decisions needed before W2 and rollout
