@@ -94,6 +94,9 @@ mod service_description;
 #[path = "server/snapshot_upload.rs"]
 mod snapshot_upload;
 #[cfg(test)]
+#[path = "server/stats_tests.rs"]
+mod stats_tests;
+#[cfg(test)]
 #[path = "server/tests.rs"]
 mod tests;
 #[path = "server/tools.rs"]
@@ -194,6 +197,10 @@ async fn main() {
     // quipu #68: the floors and their consumer land together — a settable knob
     // that nothing reads is the bug config.rs guards against.
     store.labels_config_mut().clone_from(&config.label_floors);
+    // aegis-zev: `[quipu.import] refuse_internal` and its consumer land together.
+    store
+        .import_policy_config_mut()
+        .clone_from(&config.import_policy);
 
     // quipu #47: report the configured federation remotes at startup, and prove
     // they are REACHED rather than merely parsed. `federation.remotes` was

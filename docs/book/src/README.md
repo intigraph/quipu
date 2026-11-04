@@ -48,13 +48,39 @@ An embeddable Rust library and server for building knowledge graphs with:
   components, shortest-path algorithms
 - **"SQLite energy"** — single process, no server required
 
-## Three Ways to Use It
+## Ways to Use It
 
-| Interface | Use case |
-|-----------|----------|
-| **Rust crate** | Embed in your application |
-| **CLI** (`quipu`) | Interactive queries and scripting |
-| **REST API** (`quipu-server`) | Service deployment |
+Choose how your application or agent connects to the graph:
+
+| Surface | Use case | Start here |
+|---------|----------|------------|
+| **Rust crate** (`quipu-ai`) | Embed the store and query engine in a Rust application | [Rust API](reference/api.md) |
+| **CLI** (`quipu`, alias `qp`) | Query and manage a local database from a terminal or script | [CLI reference](reference/cli.md) |
+| **REST API** (`quipu-server`) | Access a shared store through Quipu's HTTP endpoints | [REST reference](reference/rest-api.md) |
+| **Server web UI** | Explore the running server's graph and use its SPARQL workbench in a browser | [Web UI tour](why-quipu.md#rest-api--web-ui) |
+| **SPARQL protocol** | Use standard query and update HTTP transports with a SPARQL client | [Query and update](reference/rest-api.md#get-query-and-post-query) |
+| **MCP over stdio** (`quipu mcp --db <path>`) | Connect an agent to a local store through the sibling server | [Local MCP setup](getting-started/agent-setup.md#local-stdio-mcp) |
+| **MCP over HTTP** (`quipu-server` at `/mcp`) | Connect agents to a running server using streamable HTTP | [HTTP MCP setup](getting-started/agent-setup.md#connect-to-an-http-server) |
+| **Browser WebAssembly** | Run the engine in a browser, explore and edit a graph, and exchange verified pendants | [Browser explorer](explore/) |
+| **Node.js WebAssembly** | Load the released headless engine without a browser | [Node release usage](https://github.com/intigraph/quipu/blob/quipu-ai-v0.16.6/.github/workflows/release.yml#L363-L412), [query builders](reference/query-builder.md#javascript-and-wasm) |
+| **Local Python library** (`quipu-kg`, `import quipu`) | Run the engine in-process; build the wheel from source | [Local Python engine](reference/python-client.md#local-python-engine) |
+| **Python REST client** (`quipu_client`) | Call a running server from Python with no runtime dependencies | [Python client](reference/python-client.md) |
+| **Query-first agent skill** (`skills/quipu`) | Give a coding agent instructions for consulting an existing graph | [Agent setup and skills](getting-started/agent-setup.md) |
+| **Embedded-artifacts agent skill** (`skills/quipu-embedded-artifacts`) | Build graph-backed pages using the released Wasm engine | [Artifact skill](https://github.com/intigraph/quipu/blob/quipu-ai-v0.16.6/skills/quipu-embedded-artifacts/SKILL.md) |
+
+These surfaces are present in [release 0.16.6](https://github.com/intigraph/quipu/releases/tag/quipu-ai-v0.16.6):
+native binaries and browser/Node Wasm are release assets; the Python packages
+and skills are included in the [tagged source](https://github.com/intigraph/quipu/tree/quipu-ai-v0.16.6).
+The local Python wheel is **not published on PyPI** and implements a subset of
+the engine's operations. Skills supply instructions, not another server or
+model. The [MCP reference](reference/mcp-tools.md) describes the available tools.
+
+Local CLI, Rust and Python use can open a single-file store without a server;
+the Wasm engine also runs locally. Storing facts and running SPARQL need no
+model. Semantic search additionally needs a configured embedding provider and
+index; see [configuration](getting-started/configuration.md).
+For declared IRI namespaces and `quipu namespaces list|apply`, see
+[Stable Entity References](reference/namespaces.md).
 
 ## Who Is This For?
 

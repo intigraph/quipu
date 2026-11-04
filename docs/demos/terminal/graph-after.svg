@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" role="img" aria-labelledby="title desc">
+<title id="title">The graph after two facts</title><desc id="desc">The current native read returns Ada studies Engine and Babbage designed Engine.</desc>
+<rect width="1000" height="420" rx="16" fill="#101827"/>
+<g fill="none" stroke-width="4">
+<path d="M200 205C300 90 400 320 500 205" stroke="#6ee7b7"/>
+<path d="M800 205C700 320 600 90 500 205" stroke="#6ee7b7"/>
+<path d="M200 95V315" stroke="#475569"/><circle cx="200" cy="205" r="12" stroke="#6ee7b7"/>
+<path d="M500 95V315" stroke="#475569"/><circle cx="500" cy="205" r="12" stroke="#6ee7b7"/>
+<path d="M800 95V315" stroke="#475569"/><circle cx="800" cy="205" r="12" stroke="#6ee7b7"/>
+</g><g fill="#f1f5f9" font-family="DejaVu Sans Mono, Menlo, monospace" font-size="28" text-anchor="middle">
+<text x="200" y="78">Ada</text>
+<text x="500" y="78">Engine</text>
+<text x="800" y="78">Babbage</text>
+<text x="350" y="150" fill="#6ee7b7" font-size="24">studies</text>
+<text x="650" y="290" fill="#6ee7b7" font-size="24">designed</text>
+<text x="500" y="380" font-size="24">tx 2: Babbage joins the Engine</text></g></svg>

@@ -19,7 +19,7 @@ impl Store {
 
 impl Store {
     pub(crate) fn has_fact_claim(&self, e: i64, a: i64, value: &Value, graph: i64) -> Result<bool> {
-        let mut stmt = self.prepare("SELECT 1 FROM facts WHERE e=?1 AND a=?2 AND v=?3 AND g=?4 AND op=1 AND valid_to IS NULL LIMIT 1")?;
+        let mut stmt = self.prepare_cached("SELECT 1 FROM facts WHERE e=?1 AND a=?2 AND v=?3 AND g=?4 AND op=1 AND valid_to IS NULL LIMIT 1")?;
         for bytes in self.literal_aliases(value, false)? {
             if stmt.exists(params![e, a, bytes, graph])? {
                 return Ok(true);
@@ -34,7 +34,7 @@ impl Store {
         graph: i64,
         source: Option<&str>,
     ) -> Result<bool> {
-        let mut stmt = self.prepare("SELECT 1 FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.e=?1 AND f.a=?2 AND f.v=?3 AND f.g=?4 AND f.op=1 AND f.valid_to IS NULL AND t.source IS ?5 LIMIT 1")?;
+        let mut stmt = self.prepare_cached("SELECT 1 FROM facts f JOIN transactions t ON t.id=f.tx WHERE f.e=?1 AND f.a=?2 AND f.v=?3 AND f.g=?4 AND f.op=1 AND f.valid_to IS NULL AND t.source IS ?5 LIMIT 1")?;
         for bytes in self.literal_aliases(&datum.value, false)? {
             if stmt.exists(params![datum.entity, datum.attribute, bytes, graph, source])? {
                 return Ok(true);

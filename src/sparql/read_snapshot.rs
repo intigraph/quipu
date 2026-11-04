@@ -62,6 +62,8 @@ fn query_temporal_inner(store: &Store, sparql: &str, ctx: &TemporalContext) -> R
 
     let started = crate::time::Stopwatch::start();
     root_scope::check(&parsed)?;
+    // One read transaction: identical stars may share one scan (aegis-xdvg.6).
+    let _stars = super::count_star::Cache::install();
     // Precedence, widest-scope last: an explicit caller deadline wins; then the
     // request deadline stamped at ADMISSION, which already includes whatever
     // this request spent queueing (aegis-raq1ok); then the per-query default,

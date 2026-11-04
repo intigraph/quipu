@@ -5,6 +5,7 @@
 //! which keeps store work off the async reactor, and [`AppError`], the
 //! error-to-response mapping.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
@@ -90,6 +91,7 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
+    store.set_vocabulary(config.vocabulary);
     if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
         eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
     }
@@ -259,63 +261,134 @@ pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 
 /// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
 ///
-/// /stats full-scans every triple (`SELECT ?s ?p ?o`) and builds distinct
-/// subject/predicate sets — ~1.0s at 152k triples, paid on EVERY call, which
-/// matters when a monitor polls it. The aggregate is cached and
+/// /stats counts every current triple (the population of `SELECT ?s ?p ?o`)
+/// in one streamed scan, [`quipu::Store::current_triple_counts`] — a cost paid
+/// per recompute that matters when a monitor polls it. The aggregate is cached and
 /// keyed on `Store::latest_tx_id()`, the same pattern as `SpotlightCache`: under
-/// polling only the first call after a write pays the scan; the rest hold the
-/// store lock for one indexed MAX. Any write moves the generation and
-/// invalidates naturally, so the counts are exact, never stale.
+/// polling only the first call after a write pays the scan; the rest pay one
+/// indexed MAX. Any write moves the generation and invalidates naturally.
+///
+/// The whole handler runs on a pooled READ connection, never the writer
+/// (aegis-fclp). Every sd connection reads /stats for its signing audience, and on
+/// a busy store the generation moves every few seconds, so most calls rescan:
+/// ~5 s over ~3M facts. Held on the writer, that scan blocked every write behind
+/// it (one production store, 2026-11-02: up to 4,300 s of /stats per hour, write waits p95 6.6 s,
+/// clients timing out at 3 s and 30 s). With `read_pool_size = 0`, `read()` is the
+/// writer, exactly as before.
+///
+/// One recompute runs at a time. A caller that finds the cache stale while
+/// another caller is already scanning returns the previous aggregate rather than
+/// starting a second scan, so a burst of connections cannot take every reader.
+/// `store_id` is always read fresh.
+///
+/// Recompute is also RATE-LIMITED (aegis-67p0lj). The aggregate used to
+/// materialise every current row: on a store of ~3.0M triples, a transient
+/// ~3 GB allocation per scan. It now streams, holding one subject/predicate
+/// group at a time, but each scan still reads every current row. Any write
+/// invalidates the generation, and every sd call
+/// reads /stats for `store_id`, so on a busy store a scan was essentially always
+/// running: a +3 GB sawtooth that walked the allocator up to the recycle
+/// ceiling (one production store, 2026-11-04: recycles 3 to 14 min apart).
+/// Within [`STATS_MIN_RECOMPUTE`] of the last recompute, a stale cache is
+/// answered as-is, labelled by `counts_as_of_tx` and `counts_stale`, exactly
+/// like the existing concurrent-scan path. `computed_at: None` (an entry no
+/// recompute produced) is never rate-limited.
 pub(crate) struct StatsCache {
     pub(crate) generation: i64,
     pub(crate) value: Arc<JsonValue>,
+    pub(crate) computed_at: Option<std::time::Instant>,
 }
 
+/// Minimum spacing between /stats aggregate recomputes (see [`StatsCache`]).
+pub(crate) const STATS_MIN_RECOMPUTE: std::time::Duration = std::time::Duration::from_secs(300);
+
 pub(crate) static STATS_CACHE: Mutex<Option<StatsCache>> = Mutex::new(None);
+
+/// Set while one caller recomputes the /stats aggregate (see [`StatsCache`]).
+pub(crate) static STATS_RECOMPUTING: AtomicBool = AtomicBool::new(false);
+
+/// Serializes the tests that set the process-wide /stats statics.
+#[cfg(test)]
+pub(crate) static STATS_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Holds the single recompute slot; releasing it on drop also covers an error.
+struct StatsRecompute;
+
+impl StatsRecompute {
+    fn begin() -> Option<Self> {
+        STATS_RECOMPUTING
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+            .then_some(Self)
+    }
+}
+
+impl Drop for StatsRecompute {
+    fn drop(&mut self) {
+        STATS_RECOMPUTING.store(false, Ordering::Release);
+    }
+}
+
+/// The counts of `SELECT ?s ?p ?o WHERE { ?s ?p ?o }`, streamed rather than
+/// materialised (aegis-67p0lj): see [`quipu::Store::current_triple_counts`].
+fn stats_aggregate(store: &quipu::Store) -> quipu::Result<JsonValue> {
+    let (facts, entities, predicates) = store.current_triple_counts()?;
+    Ok(json!({
+        "facts": facts,
+        "entities": entities,
+        "predicates": predicates
+    }))
+}
 
 pub(crate) async fn stats(
     State(store): State<SharedStore>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
     blocking(move || {
-        let (store_id, value) = {
-            let store = store.lock();
-            // Which store answered (aegis-72cpbx). It is the audience a
-            // quipu-write-v2 client signs for, and a caller that resolved a
-            // server by default port can tell its own store from a stranger.
-            // Lineage, not identity: a file-level copy of a store shares it.
-            let store_id = store.store_id()?;
-            let generation = store.latest_tx_id()?;
-            let mut cache = STATS_CACHE.lock().unwrap();
-            let value = match cache.as_ref() {
-                Some(c) if c.generation == generation => c.value.clone(),
-                _ => {
-                    let result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
-                    let mut entities = std::collections::HashSet::new();
-                    let mut predicates = std::collections::HashSet::new();
-                    for row in result.rows() {
-                        if let Some(quipu::Value::Ref(id)) = row.get("s") {
-                            entities.insert(*id);
-                        }
-                        if let Some(quipu::Value::Ref(id)) = row.get("p") {
-                            predicates.insert(*id);
-                        }
-                    }
-                    let fresh = Arc::new(json!({
-                        "facts": result.rows().len(),
-                        "entities": entities.len(),
-                        "predicates": predicates.len()
-                    }));
-                    *cache = Some(StatsCache {
+        let reader = store.read();
+        // Which store answered (aegis-72cpbx). It is the audience a
+        // quipu-write-v2 client signs for, and a caller that resolved a
+        // server by default port can tell its own store from a stranger.
+        // Lineage, not identity: a file-level copy of a store shares it.
+        let store_id = reader.store_id()?;
+        let generation = reader.latest_tx_id()?;
+        let cached = STATS_CACHE
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|c| (c.generation, c.value.clone(), c.computed_at));
+        let recent = |at: Option<std::time::Instant>| {
+            at.is_some_and(|at| at.elapsed() < STATS_MIN_RECOMPUTE)
+        };
+        let (counts_tx, value) = match cached {
+            Some((cached_generation, value, _)) if cached_generation == generation => {
+                (cached_generation, value)
+            }
+            // Rate limit: a recent aggregate answers even though writes moved
+            // the generation; it is labelled stale below, never relabelled.
+            Some((cached_generation, value, at)) if recent(at) => (cached_generation, value),
+            stale => match (stale.map(|(g, v, _)| (g, v)), StatsRecompute::begin()) {
+                // Another caller is already scanning: answer with the last
+                // aggregate, labelled with the transaction it counted.
+                (Some((previous_tx, previous)), None) => (previous_tx, previous),
+                (_, slot) => {
+                    let fresh = Arc::new(stats_aggregate(&reader)?);
+                    *STATS_CACHE.lock().unwrap() = Some(StatsCache {
                         generation,
                         value: fresh.clone(),
+                        computed_at: Some(std::time::Instant::now()),
                     });
-                    fresh
+                    drop(slot);
+                    (generation, fresh)
                 }
-            };
-            (store_id, value)
+            },
         };
+        drop(reader);
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
+        // The counts describe this transaction; `counts_stale` is true only when
+        // a concurrent recompute was running and an older aggregate was returned.
+        value["counts_as_of_tx"] = json!(counts_tx);
+        value["counts_stale"] = json!(counts_tx != generation);
         Ok(axum::Json(value))
     })
     .await

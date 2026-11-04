@@ -51,7 +51,13 @@ pub(crate) async fn handle(
         .insert(quipu::http_auth::AuthenticatedPrincipal::attested(
             &identity.principal,
         ));
-    let mut response = super::run_identified(Some(identity), next.run(req)).await;
+    // The verified binding names the writer, so the write is counted with that
+    // agent and session even though a signed client omits those headers
+    // (aegis-7zp4rc.2).
+    let mut response = crate::request_middleware::with_verified_write_identity(
+        super::run_identified(Some(identity), next.run(req)),
+    )
+    .await;
     if let AttestState::Refused { verdict, message } = pending.state() {
         return refuse(&Refusal { verdict, message });
     }

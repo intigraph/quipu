@@ -424,13 +424,23 @@ plain curl without a signed envelope cannot produce the authenticated result.
 
 ### `GET /stats`
 
-Store statistics.
+Store statistics, and the store id that signed writes bind to (quipu-write-v2).
 
 ```bash
 curl localhost:3030/stats
 ```
 
-Response: `{"facts": 1234, "entities": 56, "predicates": 12}`
+Response:
+
+```json
+{"facts": 1234, "entities": 56, "predicates": 12,
+ "store_id": "urn:uuid:...", "counts_as_of_tx": 9876, "counts_stale": false}
+```
+
+`store_id` is always current. The counts are computed on a read connection, never
+the writer, and cached until the next write. `counts_as_of_tx` is the transaction
+they describe; `counts_stale` is `true` only when another request was already
+recomputing them and an earlier aggregate was returned instead of a second scan.
 
 ### `GET /query` and `POST /query`
 
@@ -2067,7 +2077,11 @@ migration) are not counted as that client's writes:
 - `quipu_write_provenance_missing_total{client,field}` — commits missing a
   required field (`agent`, `harness`, `host`, `session`, `model`).
 
-A header that is present but blank counts as missing. Coverage per client is
+A header that is present but blank counts as missing. A write signed with a
+verified `x-quipu-attestation` takes its agent and session from the key
+binding, so a signed client that omits those two headers can still be
+`complete`. Harness, host and model still come from the headers, and a
+refused signature counts nothing. Coverage per client is
 `rate(...{provenance="complete"}[1h]) / rate(...[1h])`; the counters reset when
 the process restarts, so use rates rather than raw values.
 

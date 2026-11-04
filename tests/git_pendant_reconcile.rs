@@ -1,6 +1,6 @@
 //! aegis-k7l: the Git merge tool uses the shared show / resolve and layout.
 #![cfg(feature = "shacl")]
-#[path = "support/git_qpack_fixture.rs"]
+#[path = "support/git_pendant_fixture.rs"]
 mod fixture;
 use fixture::*;
 use serde_json::Value;
@@ -16,7 +16,7 @@ fn git_merge_prints_the_standard_layout_and_the_shared_resolve_finishes_it() {
     assert_eq!(o.status.code(), Some(2));
     let text = out(&o);
     assert!(
-        text.contains("Merge needs your decision: qpack 'qpack' (Git merge: MERGE_HEAD -> HEAD)"),
+        text.contains("Merge needs your decision: pendant 'qpack' (Git merge: MERGE_HEAD -> HEAD)"),
         "{text}"
     );
     assert!(text.contains("[conflict:0] "), "{text}");
