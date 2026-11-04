@@ -85,8 +85,8 @@ meta-graph are per-database and are not contributed. Two guarantees follow:
   enforced by SQLite; writing a local fact *into* an attached graph is
   refused at the Rust layer.
 
-Permanently out, per the design's §6: cross-DB writes and cross-DB
-transactions (SQLite's multi-file atomic commit does not work in WAL mode,
+Unsupported by this read-only composition model, per the design's §6:
+cross-DB writes and cross-DB transactions (SQLite's multi-file atomic commit does not work in WAL mode,
 and quipu is WAL). Transaction ids are file-local with no cross-file
 ordering, so `as_of_tx` over a composed store is refused with an error rather
 than answered wrongly — **valid-time travel works** (`valid_from`/`valid_to`
@@ -116,3 +116,12 @@ agree.
   provider seam, federation above it
 - `docs/design/multi-db-composition.md` — the full design, including the
   consumer-gated blob sidecar (§7)
+
+## Proposed writable graph owners
+
+The separate `docs/design/per-graph-writable-stores.md` proposal describes
+independent graph files, writer owners and read pools, with Seeds as the first
+application pilot. Existing attachments remain read-only. The proposal defines
+explicit multi-file cuts and a durable participant/publication protocol because
+WAL does not make attached multi-file writes crash-atomic. It is a design and
+phased qualification plan, not an available routing mode or migration permission.

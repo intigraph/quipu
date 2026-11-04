@@ -1,0 +1,16 @@
+Script started on 2026-10-29 23:44:20-04:00 [COMMAND="python3 run.py base candidate query.rq" <not executed on terminal>]
+Offline: 7,500 synthetic closed items across two named graphs.
+Engine base: ed79bf881ec99e100d7fe3b047cb08d315bbdb59
+Engine candidate: eb738e7b61bbe0cfdfd5cfac8d543cb7a271f1e8
+
+$ profile BASE query.rq 6000
+MEASURE rows=Ok(39) elapsed_ms=989 statements=75172 sqlite_rows=83149 sqlite_ms=418
+
+$ profile CANDIDATE query.rq 6000
+MEASURE rows=Ok(39) elapsed_ms=100 statements=912 sqlite_rows=8377 sqlite_ms=47
+
+Exact sorted answers: identical
+Answer SHA256: a9b1d610a66d6d31c2298186bcc17e13ba3bfbbbdd774213cfb17ae23144baae
+SQL statements: 75172 -> 912
+
+Script done on 2026-10-29 23:44:29-04:00 [COMMAND_EXIT_CODE="0"]

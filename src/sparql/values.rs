@@ -57,6 +57,63 @@ pub fn eval_values(
     Ok((rows, vars))
 }
 
+/// The inline table's rows as values, converted once (aegis-xdvg.6). `None`
+/// is UNDEF.
+pub(super) fn values_table(
+    store: &Store,
+    bindings: &[Vec<Option<GroundTerm>>],
+) -> Result<Vec<Vec<Option<Value>>>> {
+    bindings
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|term| {
+                    term.as_ref()
+                        .map(|t| ground_term_to_value(store, t))
+                        .transpose()
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Join `row` with each table row in place (aegis-xdvg.6): bind what the row
+/// lacks, skip a table row that disagrees with a bound variable (as
+/// [`eval_values`] does), call `emit`, then restore the row.
+pub(super) fn join_row(
+    variables: &[Variable],
+    table: &[Vec<Option<Value>>],
+    row: &mut Bindings,
+    emit: &mut dyn FnMut(&mut Bindings) -> Result<()>,
+) -> Result<()> {
+    let mut added: Vec<&str> = Vec::with_capacity(variables.len());
+    'row: for values in table {
+        added.clear();
+        for (variable, value) in variables.iter().zip(values) {
+            let Some(value) = value else { continue };
+            match row.get(variable.as_str()) {
+                Some(existing) if existing != value => {
+                    for name in &added {
+                        row.remove(*name);
+                    }
+                    continue 'row;
+                }
+                Some(_) => {}
+                None => {
+                    row.insert(variable.as_str().to_owned(), value.clone());
+                    added.push(variable.as_str());
+                }
+            }
+        }
+        let result = emit(row);
+        for name in &added {
+            row.remove(*name);
+        }
+        result?;
+    }
+    Ok(())
+}
+
 /// Convert a `VALUES` ground term into the store's `Value` representation.
 ///
 /// An IRI resolves to the interned `Ref` the fact log uses, so it joins with a

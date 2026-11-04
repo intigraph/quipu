@@ -80,12 +80,22 @@ nothing is scrubbed, including every share produced over HTTP: `POST /share`
 cannot select a destination, because a caller who could would be turning the
 guard off on a server they do not own.
 
-**What the marker buys you downstream.** `quipu import` of a stamped share runs
-the scrub the producer skipped. If the payload passes it imports normally — a
-share marked internal out of caution is not quarantined for it. If the payload
-fails, the import is refused unless the operator repeats the declaration with
-`quipu import <dir> --destination internal`. So internal facts cannot enter a
-store silently and then leave it in someone else's outward share.
+**What the marker buys you downstream.** The receiver reads the stamp from the
+verified manifest; the stamp is inside the share's hash, so it cannot be forged
+or stripped in transit. `quipu import` of a stamped share needs no flag. It
+prints `internal share: unscrubbed identifiers, kept internal`, and records
+`"destination": "internal"` on the import result and on the staged review
+record. The internal data cannot leave in someone else's outward share, because
+every outward `quipu share` runs the outward scrub over its whole payload,
+whatever the data's origin, and refuses on a match.
+
+A store that must never hold unscrubbed internal identifiers says so once in
+config, and then refuses every stamped share before anything is staged:
+
+```toml
+[quipu.import]
+refuse_internal = true   # default false
+```
 
 **Deltas are scrubbed separately, and they have to be.** `delta.ru` is not built
 from the store: its DELETE clause is lifted verbatim from the parent's
@@ -170,7 +180,7 @@ the member now says, sealed by the result manifest's `queries_hash`.
 
 ```text
 quipu import <share-dir|archive|URL> [--source <uri>] [--actor <id>]
-            [--destination internal] [--query-namespace NS]
+            [--destination <audience-json>] [--query-namespace NS]
             [--replace-queries] [--db <path>]
 quipu import delta <parent-share> <delta-share> [--actor <id>]
             [--query-namespace NS]
@@ -196,6 +206,7 @@ share graph hash mismatch: manifest=… actual=…
 | `--db <path>` | stage in this store, including archive and URL imports |
 | `--query-namespace <NS>` | install carried queries as `NS/<name>` (`[A-Za-z0-9._-]+`); default `pack-<12 hex>` from the producer's store identity |
 | `--replace-queries` | replace differing `NS/*` queries and close ones the share no longer carries; otherwise both are only reported |
+| `--destination <audience-json>` | accept an audience-bound share by naming this store's exact binding. An `internal` stamp needs no flag: it is read from the manifest, and `--destination internal` is accepted but no longer needed |
 
 `import delta` verifies the full parent and the delta's lineage, hashes and
 restricted `DELETE DATA` / `INSERT DATA` operations, materializes the declared
@@ -224,7 +235,7 @@ the point rather than an inconvenience — see the [primitive](../sharing/index.
 
 ```text
 quipu share --project [<id>] [--no-shapes] [--destination internal] [--db <path>]
-quipu load <bundle-dir> [--destination internal] [--actor <id>] [--db <path>]
+quipu load <bundle-dir> [--actor <id>] [--db <path>]
 ```
 
 A repository commits its project's graph under `.quipu/`, tool-neutral:
@@ -845,7 +856,7 @@ Measured on the repository's real Datalinks pendant, replacing the same function
 value on both branches produces a **text conflict**, not a clean double. Git
 writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
-correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+correctly. `tests/git_pendant_merge.rs` exercises those cases, decision resolution,
 and the driver-absent CI refusals using actual Git repositories.
 
 ## Carry alignment evidence
@@ -862,3 +873,27 @@ shapes. Use the existing alignment propose/decide/apply workflow for curation.
 The browser reader uses the same verification, and Explorer export preserves the
 imported carrier. A release needs a compatible engine and actual asset readback;
 source configuration alone does not establish availability.
+
+## Store ownership after a database copy
+
+```text
+quipu store adopt --db /data/graph.db
+quipu store restore /backups/graph.db --db /data/restored.db
+```
+
+Stage A new and legacy databases remain explicitly `INACTIVE`, preserving
+ordinary startup/writes/streams without ownership authorization. The read-only
+`quipu store status --db <path>` command reports this state. Explicit native
+adoption establishes
+sticky `ENFORCED` host/path ownership. Copies of enforced databases with missing
+or mismatched records permit read-only inspection, refusing writes/replication;
+default constructors cannot downgrade them to INACTIVE.
+Adoption always mints a new log epoch; old replication cursors must bootstrap
+again. `store restore` takes a consistent SQLite snapshot into a new destination
+and adopts it; it refuses to overwrite an existing destination. It is distinct
+from reconstruction-pack `quipu restore` above.
+
+These are operator actions, never automatic server startup repairs. Source
+installation does not authorize production adoption. See the
+ownership and failure contract in `docs/design/store-ownership.md` for partial
+completion, supported host identity and rollout limits.

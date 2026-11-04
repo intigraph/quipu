@@ -144,7 +144,7 @@ fn page_sql(graph: bool) -> &'static str {
 /// JSON's worst case: a control character escapes to six bytes (`\u0000`).
 pub const ESCAPE_FACTOR: u64 = 6;
 /// A record's keys, numbers and punctuation, beyond its strings.
-pub const RECORD_OVERHEAD: u64 = 256;
+pub const RECORD_OVERHEAD: u64 = 288;
 
 fn id_list(graphs: &[i64]) -> String {
     if graphs.is_empty() {
@@ -292,7 +292,10 @@ impl Store {
         // A Ref is tag 0 plus an 8-byte id; only those blobs are read whole.
         let sql = format!(
             "SELECT e, a, g, length(v), CASE WHEN substr(v, 1, 1) = x'00' THEN v END, \
-                    length(CAST(valid_from AS BLOB)) + COALESCE(length(CAST(valid_to AS BLOB)), 0) \
+                    length(CAST(valid_from AS BLOB)) + COALESCE(length(CAST(valid_to AS BLOB)), 0) + \
+                    COALESCE((SELECT MAX(length(CAST(c.valid_to AS BLOB))) FROM facts c \
+                      WHERE facts.op=0 AND c.op=1 AND c.retracted_tx=facts.tx \
+                      AND c.e=facts.e AND c.a=facts.a AND c.v=facts.v AND c.g=facts.g), 0) \
              FROM facts WHERE tx = ?1 AND g IN ({})",
             id_list(graphs)
         );
@@ -435,6 +438,9 @@ impl Store {
                 "valid_from": valid_from,
                 "valid_to": valid_to,
             });
+            if op == 0 {
+                record["retracted_valid_at"] = json!(self.retracted_valid_at(tx, e, a, &v, g)?);
+            }
             match (op_name, capture) {
                 // A retract under new_values identifies the fact but not the
                 // value it ended — the mode exists for consumers that only
@@ -453,6 +459,23 @@ impl Store {
             out.push(record);
         }
         Ok(())
+    }
+
+    /// Recover the actual close, including historical fork promotions whose
+    /// audit row did not carry it. Never substitute the commit timestamp.
+    fn retracted_valid_at(&self, tx: i64, e: i64, a: i64, v: &[u8], g: i64) -> Result<String> {
+        let (close, count): (Option<String>, i64) = self.conn.query_row(
+            "SELECT MIN(valid_to), COUNT(DISTINCT valid_to) + (COUNT(*) != COUNT(valid_to)) FROM facts \
+             WHERE op=1 AND retracted_tx=?1 AND e=?2 AND a=?3 AND v=?4 AND g=?5",
+            params![tx, e, a, v, g],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        match (close, count) {
+            (Some(close), 1) => Ok(close),
+            _ => Err(crate::Error::InvalidValue(format!(
+                "retraction in tx {tx} has no unambiguous valid-time close"
+            ))),
+        }
     }
 
     /// The entity's full state in `graph` as of transaction `tx` — the same

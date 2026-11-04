@@ -487,7 +487,23 @@ pub fn format_value(store: &quipu::Store, val: &quipu::Value) -> String {
 }
 
 fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalContext) {
-    match quipu::sparql_query_temporal(store, sparql, ctx) {
+    use quipu::search_outcome::{
+        Operation, Summary,
+        observation::{Call, Surface, emit, run_with},
+    };
+    let call = Call::new(Surface::CliLocal, Operation::Query);
+    let result = call.scope(|| {
+        run_with(
+            Operation::Query,
+            &serde_json::json!({"query":sparql}),
+            || quipu::sparql_query_temporal(store, sparql, ctx),
+            Summary::query_result,
+        )
+    });
+    if let Some(event) = call.finish(None, None) {
+        emit(&event);
+    }
+    match result {
         Ok(result) => match result {
             quipu::QueryResult::Select { variables, rows } => {
                 println!("{}", variables.join("\t"));

@@ -31,6 +31,10 @@ pub(super) fn is_group(spec: &Spec) -> bool {
 
 #[rustfmt::skip]
 pub(super) static SPECS: &[Spec] = &[
+    spec!("store", "", GROUP, 0, "", ""),
+    spec!("store status", "", 0, 0, "", ""),
+    spec!("store adopt", "", 0, 0, "", ""),
+    spec!("store restore", "<source.db>", 1, 1, "", ""),
     spec!("version", "", 0, 0, "", ""),
     spec!("install-alias", "", 0, 0, "bin-dir", "check"),
     spec!("knot", "<file.ttl>", 1, 1, "shapes graph timestamp blank-node-scope", ""),
@@ -58,6 +62,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("namespaces apply", "", 0, 0, "", ""),
     spec!("entity-ref mint", "<request.json>", 1, 1, "", ""),
     spec!("entity-ref resolve", "<request.json>", 1, 1, "", ""),
+    spec!("entity-ref verify", "<request.json>", 1, 1, "", ""),
     spec!("ontology", "", 0, 0, "", ""),
     spec!("ontology list", "", 0, 0, "", ""),
     spec!("ontology load", "<name> <file.ttl>", 2, 2, "", ""),
@@ -100,8 +105,8 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("acquire scope", "", 0, 0, "source-store-id graph tx max-vm-steps deadline-ms", ""),
     spec!("migrate-vectors", "", 0, 0, "from to", "dry-run"),
     spec!("git-merge", "<ref>", 1, 1, "", ""),
-    spec!("git-merge show", "<qpack-dir>", 1, 1, "format", ""),
-    spec!("git-merge resolve", "<qpack-dir> <key>", 2, 2, "choose by", ""),
+    spec!("git-merge show", "<pendant-dir>", 1, 1, "format", ""),
+    spec!("git-merge resolve", "<pendant-dir> <key>", 2, 2, "choose by", ""),
     spec!("merge-driver", "<base> <ours> <theirs> <path>", 4, 4, "", ""),
     spec!("pendant-resolve", "<base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>", 6, 6, "", ""),
     spec!("pendant-check", "<base-ref> <ours-ref> <theirs-ref> <result-ref>", 4, 4, "", "history"),
@@ -127,10 +132,12 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("align propose", "<graph-a> <graph-b>", 2, 2, "set-id out", ""),
     spec!("align decide", "<set.tsv>", 1, 1, "decisions reviewer out", ""),
     spec!("align apply", "<set.tsv>", 1, 1, "graph-a graph-b expected-version actor", ""),
+    spec!("align export", "<set.tsv>", 1, 1, "license format prefix author-prefix out", ""),
     spec!("propose", "", 0, 0, "status", ""),
     spec!("propose list", "", 0, 0, "status", ""),
     spec!("propose submit", "<kind> <target> <diff-file>", 3, 3, "proposer rationale trigger", ""),
-    spec!("propose accept", "<id>", 1, 1, "decided-by note", ""),
+    spec!("propose plan", "<id>", 1, 1, "format risk-threshold", ""),
+    spec!("propose accept", "<id>", 1, 1, "decided-by note reason risk-threshold", "accept-risk"),
     spec!("propose reject", "<id>", 1, 1, "decided-by note", ""),
     spec!("memory", "", GROUP, 0, "", ""),
     spec!("memory read", "<owner.json>", 1, 1, "graph", ""),
@@ -194,3 +201,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("audit quarantine list", "", 0, 0, "verdict", "json"),
     spec!("audit quarantine purge", "", 0, 0, "graph before older-than", "all json"),
 ];
+
+#[path = "option_help.rs"]
+mod descriptions;
+pub(super) use descriptions::option_help;

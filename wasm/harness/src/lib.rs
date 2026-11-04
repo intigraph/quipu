@@ -61,13 +61,21 @@ pub fn scenario_write(path: &str, n: u32) -> Result<String, JsValue> {
     for i in 0..n as usize {
         let episode: quipu::episode::Episode =
             serde_json::from_str(&episode_json(i)).map_err(err_js)?;
-        let ts = format!("2026-08-13T{:02}:{:02}:{:02}Z", i % 24, i % 60, (i / 60) % 60);
+        let ts = format!(
+            "2026-08-13T{:02}:{:02}:{:02}Z",
+            i % 24,
+            i % 60,
+            (i / 60) % 60
+        );
         let (_tx, count, _outcome) =
             quipu::episode::ingest_episode_outcome(&mut store, &episode, &ts, NS)
                 .map_err(err_js)?;
         triples += count;
     }
-    Ok(format!(r#"{{"triples":{triples}}}"#))
+    Ok(serde_json::json!({"triples":triples,
+        "ownership":store.ownership_state().map_err(err_js)?,
+        "ownership_authorized":store.require_ownership().is_ok()})
+    .to_string())
 }
 
 /// Timed bench for the quipu-ajz spike — the wasm half of the wasm-vs-native
@@ -86,7 +94,12 @@ pub fn scenario_bench(path: &str, n: u32, read_model: bool) -> Result<String, Js
     for i in 0..n as usize {
         let episode: quipu::episode::Episode =
             serde_json::from_str(&episode_json(i)).map_err(err_js)?;
-        let ts = format!("2026-08-13T{:02}:{:02}:{:02}Z", i % 24, i % 60, (i / 60) % 60);
+        let ts = format!(
+            "2026-08-13T{:02}:{:02}:{:02}Z",
+            i % 24,
+            i % 60,
+            (i / 60) % 60
+        );
         let (_tx, count, _outcome) =
             quipu::episode::ingest_episode_outcome(&mut store, &episode, &ts, NS)
                 .map_err(err_js)?;
@@ -111,8 +124,14 @@ pub fn scenario_bench(path: &str, n: u32, read_model: bool) -> Result<String, Js
         rm_build_ms.map_or("null".into(), |ms| format!("{ms:.1}")),
     );
     let queries = [
-        ("point", format!("SELECT ?p ?o WHERE {{ <{NS}service-1> ?p ?o }}")),
-        ("scan", format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100")),
+        (
+            "point",
+            format!("SELECT ?p ?o WHERE {{ <{NS}service-1> ?p ?o }}"),
+        ),
+        (
+            "scan",
+            format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"),
+        ),
         (
             "join",
             format!("SELECT ?d ?s WHERE {{ ?d <{NS}targets> ?s . ?s a <{NS}Service> }} LIMIT 100"),
@@ -167,7 +186,9 @@ pub fn scenario_import(bytes: &[u8]) -> Result<String, JsValue> {
             _ => Err(JsValue::from_str("expected SELECT result")),
         }
     };
-    let scan = count(&format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"))?;
+    let scan = count(&format!(
+        "SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"
+    ))?;
     Ok(format!(r#"{{"scan":{scan}}}"#))
 }
 
@@ -188,9 +209,7 @@ pub fn scenario_pack(path: &str) -> Result<Vec<u8>, JsValue> {
             TS,
         )
         .map_err(err_js)?;
-    store
-        .graph_create("urn:test:pack-policy")
-        .map_err(err_js)?;
+    store.graph_create("urn:test:pack-policy").map_err(err_js)?;
     quipu::tool_knot(
         &mut store,
         &serde_json::json!({
@@ -256,9 +275,34 @@ pub fn scenario_read(path: &str) -> Result<String, JsValue> {
         }
     };
     let point = count(&format!("SELECT ?p ?o WHERE {{ <{NS}service-1> ?p ?o }}"))?;
-    let scan = count(&format!("SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"))?;
+    let scan = count(&format!(
+        "SELECT ?s WHERE {{ ?s a <{NS}Service> }} LIMIT 100"
+    ))?;
     let join = count(&format!(
         "SELECT ?d ?s WHERE {{ ?d <{NS}targets> ?s . ?s a <{NS}Service> }} LIMIT 100"
     ))?;
-    Ok(format!(r#"{{"point":{point},"scan":{scan},"join":{join}}}"#))
+    Ok(serde_json::json!({"point":point,"scan":scan,"join":join,
+        "ownership":store.ownership_state().map_err(err_js)?,
+        "ownership_authorized":store.require_ownership().is_ok()})
+    .to_string())
+}
+
+/// An actual virtual DB carrying an enforced marker must not be downgraded
+/// merely because the native physical-host provider is unavailable in a browser.
+#[wasm_bindgen]
+pub fn scenario_ownership_refusal(path: &str) -> Result<bool, JsValue> {
+    let legacy = quipu::Store::open(path).map_err(err_js)?;
+    if legacy.ownership_state().map_err(err_js)? != quipu::store::OwnershipState::Inactive {
+        return Err(JsValue::from_str("fixture was not INACTIVE"));
+    }
+    drop(legacy);
+    let conn = rusqlite::Connection::open(path).map_err(err_js)?;
+    conn.execute_batch("CREATE TABLE ownership_enforcement(id INTEGER PRIMARY KEY, version INTEGER, phase TEXT, adopted_epoch TEXT); INSERT INTO ownership_enforcement VALUES(1,1,'ready','fixture');").map_err(err_js)?;
+    drop(conn);
+    match quipu::Store::open(path) {
+        Err(_) => Ok(true),
+        Ok(store) => Ok(store.ownership_state().is_err()
+            && store.require_ownership().is_err()
+            && store.graph_create("urn:test:forbidden-downgrade").is_err()),
+    }
 }

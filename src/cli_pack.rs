@@ -300,7 +300,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             request.actor = actor.map(String::from);
             request.query_namespace = flag_value(args, "--query-namespace").map(String::from);
             let mut store = quipu::Store::open_in_memory()?;
-            crate::cli_open::configure_embeddings(&mut store);
+            crate::cli_open::configure_transient_import(&mut store);
             quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
         });
         match imported {
@@ -346,7 +346,7 @@ pub fn cmd_import(args: &[String], db_path: &str) {
         .unwrap_or_else(|| {
             eprintln!(
                 "usage: quipu import <share-dir|archive|URL> [--actor <id>] \
-                 [--destination internal] [--query-namespace <ns>] [--replace-queries] \
+                 [--destination <audience-json>] [--query-namespace <ns>] [--replace-queries] \
                  [--db <path>]\n\
                  Stages and validates; ROOT is untouched. Next step: \
                  quipu import promote <share-id> [--actor <id>] [--db <path>]"
@@ -354,6 +354,16 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             std::process::exit(1);
         });
     warn_deprecated_extension(reference);
+    // aegis-zev: an `internal` stamp is read from the verified manifest, so
+    // `--destination internal` on import is no longer needed. It is still
+    // accepted, so existing scripts keep working. An audience declaration
+    // (a JSON binding) is still the receiver's to make.
+    if flag_value(args, "--destination") == Some("internal") {
+        eprintln!(
+            "note: --destination internal is not needed on import; \
+             the share's destination stamp is read from its verified manifest"
+        );
+    }
     let actor = flag_value(args, "--actor");
     // Keep no-file archive/URL verification as the default, but an explicit
     // database selects the same local shapes, bindings and staging as a directory.
@@ -375,12 +385,21 @@ pub fn cmd_import(args: &[String], db_path: &str) {
             crate::cli_open::open_store(db_path)
         };
         if transient {
-            crate::cli_open::configure_embeddings(&mut store);
+            crate::cli_open::configure_transient_import(&mut store);
         }
         quipu::share_import::import_share(&mut store, &request, &timestamp, actor)
     });
     match imported {
-        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap()),
+        Ok(result) => {
+            if result
+                .destination
+                .as_ref()
+                .is_some_and(quipu::share::ShareDestination::is_internal)
+            {
+                eprintln!("internal share: unscrubbed identifiers, kept internal");
+            }
+            println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        }
         Err(error) => {
             eprintln!("import error: {error}");
             std::process::exit(1);

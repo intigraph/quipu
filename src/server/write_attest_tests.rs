@@ -531,3 +531,85 @@ async fn a_v2_signed_write_is_bound_to_this_store_and_settles_under_the_lock() {
 
 #[path = "write_attest_v2_tests.rs"]
 mod v2;
+
+/// aegis-7zp4rc.2: a signed write is counted with the VERIFIED identity, so
+/// sd's signed shape (no agent/session headers) is complete. A bad signature
+/// is refused before the handler, and the same headers unsigned stay partial:
+/// a header alone never earns the credit.
+#[tokio::test]
+async fn a_verified_signed_write_counts_complete_and_headers_alone_do_not() {
+    use axum::http::StatusCode;
+    use tower::ServiceExt;
+    async fn seen() -> String {
+        crate::request_middleware::request_write_provenance().map_or_else(
+            || "none".to_string(),
+            |p| format!("{}|{}", p.completeness.as_str(), p.missing.join(",")),
+        )
+    }
+    let (store, key, binding) = identity_fixture();
+    let app = |store: SharedStore| {
+        axum::Router::new()
+            .route("/graph/create", axum::routing::post(seen))
+            .layer(axum::middleware::from_fn(move |req, next| {
+                super::handle(store.clone(), false, req, next)
+            }))
+            .layer(axum::middleware::from_fn(
+                crate::request_middleware::log_request,
+            ))
+    };
+    let body = |r: axum::response::Response| async move {
+        String::from_utf8(
+            axum::body::to_bytes(r.into_body(), 1 << 16)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    };
+    let sd_headers = [
+        ("x-quipu-client", "seeds"),
+        ("X-Quipu-Harness", "claude"),
+        ("X-Quipu-Host", "host-a"),
+        ("X-Quipu-Model", "m"),
+    ];
+
+    let signed = signed_post(
+        &key,
+        &binding,
+        "000000000000000000000000000000b1",
+        "/graph/create",
+        &sd_headers,
+    );
+    let response = app(store.clone()).oneshot(signed).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body(response).await, "complete|");
+
+    // Same headers, wrong key: refused, and the handler never counts it.
+    let wrong = Ed25519KeyPair::from_seed_unchecked(&[53; 32]).unwrap();
+    let forged = signed_post(
+        &wrong,
+        &binding,
+        "000000000000000000000000000000b2",
+        "/graph/create",
+        &sd_headers,
+    );
+    let response = app(store.clone()).oneshot(forged).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_ne!(body(response).await, "complete|");
+
+    // Control: the same declaration without an attestation stays partial.
+    let unsigned = axum::Router::new()
+        .route("/graph/create", axum::routing::post(seen))
+        .layer(axum::middleware::from_fn(
+            crate::request_middleware::log_request,
+        ));
+    let mut request = axum::http::Request::post("/graph/create");
+    for (name, value) in sd_headers {
+        request = request.header(name, value);
+    }
+    let response = unsigned
+        .oneshot(request.body(axum::body::Body::from("{}")).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(body(response).await, "partial|agent,session");
+}

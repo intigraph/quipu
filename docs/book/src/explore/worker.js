@@ -13,9 +13,12 @@ import init, { Explorer, explorerVersion, validateShapes, remoteLabel } from "./
 
 import { BrowserSemanticSearch, BrowserRemoteProvider, BrowserFederatedProvider } from "./pkg/runtime/browser-runtime.mjs";
 
-const ready = init();
+import { initializeEngine, restoreDefault } from "./default-store.js";
+
+const ready = initializeEngine(init);
 let explorer = null;
 let semantic = null;
+let loadedPack = null;
 
 const need = () => {
   if (!explorer) throw new Error("no pack loaded");
@@ -34,7 +37,7 @@ const parseEntityHistory = (text) => JSON.parse(text, (_key, value, context) => 
 onmessage = async (e) => {
   const { id, cmd, bytes, source, sparql, entity, predicate, value, episode } = e.data;
   try {
-    await ready;
+    const engineIdentity = await ready;
     switch (cmd) {
       case "version":
         return postMessage({ id, ok: true, result: JSON.parse(explorerVersion()) });
@@ -48,19 +51,41 @@ onmessage = async (e) => {
         // newest RELEASE, which may predate the qpack -> pendant rename and so
         // export only `loadQpack` (aegis-fxpbys.3). Prefer the new name and
         // fall back to the old one until a release carrying it is out.
-        const load = Explorer.loadPendant ?? Explorer.loadQpack;
-        explorer = load.call(
+        const started = performance.now();
+        const progress = phase => postMessage({ type: "quipu:load-progress", phase, elapsed_ms: performance.now() - started });
+        const restored = e.data.defaultPack
+          ? await restoreDefault(Explorer, bytes, source, engineIdentity, progress) : null;
+        const load = Explorer.loadPendantWithProgress ?? Explorer.loadPendant ?? Explorer.loadQpack;
+        const nextExplorer = restored?.explorer ?? load.call(
           Explorer,
           new Uint8Array(bytes),
           source,
           new Date().toISOString(),
+          (text) => postMessage({ type: "quipu:load-progress", ...JSON.parse(text) }),
         );
+        explorer?.free();
+        explorer = nextExplorer;
+        loadedPack = { bytes, source };
         semantic = new BrowserSemanticSearch(explorer, {
           runtimeUrl: new URL("./pkg/runtime/transformers.mjs", import.meta.url).href,
           modelPath: new URL("./pkg/runtime/models/", import.meta.url).href,
           wasmPath: new URL("./pkg/runtime/", import.meta.url).href,
         });
-        return postMessage({ id, ok: true, result: JSON.parse(explorer.loadReport()) });
+        return postMessage({ id, ok: true, result: { ...JSON.parse(explorer.loadReport()),
+          load_timings: restored ? [{ phase: "restore_default", duration_ms: performance.now() - started }]
+            : JSON.parse(explorer.loadReport()).load_timings,
+          defaultViews: restored?.views ?? null,
+          receiving: restored?.receiving ?? { mode: "receiver-validated" } } });
+      }
+
+      case "validatePack": {
+        need();
+        if (!loadedPack) throw Error("No original pack to validate");
+        const load = Explorer.loadPendantWithProgress ?? Explorer.loadPendant ?? Explorer.loadQpack;
+        const checked = load.call(Explorer, new Uint8Array(loadedPack.bytes), loadedPack.source,
+          new Date().toISOString(), text => postMessage({ type: "quipu:load-progress", ...JSON.parse(text) }));
+        try { return postMessage({ id, ok: true, result: JSON.parse(checked.loadReport()) }); }
+        finally { checked.free(); }
       }
 
       case "capabilities":

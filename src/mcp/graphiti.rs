@@ -19,6 +19,14 @@ use crate::vector::KnowledgeVectorStore;
 /// Uses vector search when an `EmbeddingProvider` is configured, falling back to
 /// SPARQL FILTER on `rdfs:label` / `rdfs:comment`.
 pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(
+        crate::search_outcome::Operation::SearchNodes,
+        input,
+        || search_nodes(store, input),
+    )
+}
+
+fn search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let query_text = input
         .get("query")
         .and_then(|v| v.as_str())

@@ -75,6 +75,16 @@ pub(crate) fn request_write_provenance()
         .flatten()
 }
 
+/// Run `fut` with this request's write provenance credited with a VERIFIED
+/// attestation identity (aegis-7zp4rc.2). Call only after the attestation has
+/// verified. A request with no write provenance (not a write route) is left as
+/// it is.
+pub(crate) async fn with_verified_write_identity<F: std::future::Future>(fut: F) -> F::Output {
+    let credited =
+        request_write_provenance().map(|p| std::sync::Arc::new(p.with_verified_identity()));
+    REQUEST_WRITE_PROVENANCE.scope(credited, fut).await
+}
+
 /// Classify the request's provenance headers, for a write route only.
 fn write_provenance_of(
     headers: &axum::http::HeaderMap,
@@ -149,6 +159,33 @@ async fn log_request_tracked_stores(
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map_or_else(|| "unmatched".to_string(), |m| m.as_str().to_string());
+    let surface = req
+        .extensions()
+        .get::<super::search_observation::Surface>()
+        .copied()
+        .unwrap_or(super::search_observation::Surface::Http);
+    let search = req
+        .extensions()
+        .get::<std::sync::Arc<super::search_observation::Call>>()
+        .cloned()
+        .or_else(|| super::search_observation::start(&endpoint, surface));
+    if let Some(call) = &search {
+        let header = |name| {
+            req.headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok())
+        };
+        call.declare(&[
+            ("agent", header("x-quipu-agent")),
+            ("session", header("x-quipu-session")),
+            ("harness", header("x-quipu-harness")),
+            ("host", header("x-quipu-host")),
+            ("model", header("x-quipu-model")),
+            ("task", header("x-quipu-task")),
+            ("client", header("x-quipu-client")),
+            ("purpose", header("x-quipu-purpose")),
+        ]);
+    }
     let lane = if quipu::http_auth::is_write_request(&endpoint, method.as_str()) {
         quipu::metrics::inflight::Lane::Write
     } else if quipu::http_auth::READ_ENDPOINTS.contains(&endpoint.as_str()) {
@@ -219,6 +256,7 @@ async fn log_request_tracked_stores(
     );
     let completion_provenance = provenance.clone();
     let mut completion = request_completion::Completion {
+        search: search.clone(),
         id,
         client: client.clone(),
         task,
@@ -253,7 +291,10 @@ async fn log_request_tracked_stores(
                 quipu::write_kind::WriteKind::for_route(&endpoint),
                 REQUEST_ID.scope(
                     id,
-                    REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                    super::search_observation::REQUEST.scope(
+                        search,
+                        REQUEST_WRITE_PROVENANCE.scope(provenance.clone(), next.run(req)),
+                    ),
                 ),
             ),
         )

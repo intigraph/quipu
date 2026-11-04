@@ -1,0 +1,82 @@
+Before: 6ba582d19e405a977d7bda5ac1f5c09702993bb9 plus regression tests only
+After: 76a408af0311a2beef2f8d4259ed8dcde4f22716
+SYNTHETIC FIXTURE: before
+$ before/quipu-tests sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history --exact --nocapture
+
+running 1 test
+
+thread 'sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history' (2555621) panicked at src/sparql/graph_membership/tests.rs:827:5:
+current lookup walked dense history: 42648 VM instructions
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history ... FAILED
+
+failures:
+
+failures:
+    sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3224 filtered out; finished in 0.25s
+
+Observed exit: 101 expected: 101
+$ before/quipu-tests sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes --exact --nocapture
+
+running 1 test
+
+thread 'sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes' (2555879) panicked at src/sparql/graph_membership/tests.rs:879:5:
+assertion `left == right` failed: preflight absence must not fetch fact payload pages
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes ... FAILED
+
+failures:
+
+failures:
+    sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3224 filtered out; finished in 0.02s
+
+Observed exit: 101 expected: 101
+$ before/quipu-tests sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses --exact --nocapture
+
+running 1 test
+
+thread 'sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses' (2555899) panicked at src/sparql/status_pushdown_tests.rs:515:5:
+selective/absent owner decoded unrelated statuses: 12014
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses ... FAILED
+
+failures:
+
+failures:
+    sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3224 filtered out; finished in 1.39s
+
+Observed exit: 101 expected: 101
+SYNTHETIC FIXTURE: after
+$ after/quipu-tests sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history --exact --nocapture
+
+running 1 test
+test sparql::graph_membership::tests::dense_historical_object_lookup_does_not_walk_payload_history ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3228 filtered out; finished in 0.26s
+
+Observed exit: 0 expected: 0
+$ after/quipu-tests sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes --exact --nocapture
+
+running 1 test
+test sparql::graph_membership::tests::unbound_predicate_presence_keeps_reads_on_covering_indexes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3228 filtered out; finished in 0.02s
+
+Observed exit: 0 expected: 0
+$ after/quipu-tests sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses --exact --nocapture
+
+running 1 test
+test sparql::status_pushdown_tests::absence_with_selective_owner_does_not_decode_unrelated_statuses ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3228 filtered out; finished in 1.42s
+
+Observed exit: 0 expected: 0
+DEMO COMPLETE: three old failures become three passes; synthetic data only.

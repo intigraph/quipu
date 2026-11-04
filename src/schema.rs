@@ -126,6 +126,13 @@ CREATE TABLE IF NOT EXISTS proposals (
 );
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status, created_at);
 
+-- The data-migration program a proposal carries (aegis-esd): a JSON array of
+-- operations run as one transaction when the proposal is accepted.
+CREATE TABLE IF NOT EXISTS proposal_migrations (
+    proposal_id INTEGER PRIMARY KEY REFERENCES proposals(id),
+    program     TEXT NOT NULL
+);
+
 -- Persistent OWL ontology storage for class hierarchy and reasoning.
 CREATE TABLE IF NOT EXISTS ontologies (
     name      TEXT PRIMARY KEY,

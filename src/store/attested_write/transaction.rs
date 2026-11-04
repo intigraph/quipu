@@ -28,6 +28,7 @@ impl Store {
         if !self.conn.is_autocommit() {
             return Err(refuse("requires an independent writer transaction"));
         }
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_attest")?;
         let ts = crate::time::now_iso();
         self.set_write_in_progress(true);
@@ -63,10 +64,8 @@ impl Store {
         })();
         match result {
             Ok((value, written)) => {
-                if let Err(error) = self.conn.execute_batch("RELEASE quipu_attest") {
-                    let _ = self
-                        .conn
-                        .execute_batch("ROLLBACK TO quipu_attest; RELEASE quipu_attest");
+                if let Err(error) = crate::store::release::release(&self.conn, "quipu_attest") {
+                    let _ = crate::store::release::rollback_release(&self.conn, "quipu_attest");
                     self.set_write_in_progress(false);
                     self.term_cache.borrow_mut().clear_persistent();
                     return Err(error.into());
@@ -86,9 +85,7 @@ impl Store {
                 Ok(value)
             }
             Err(error) => {
-                let rollback = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_attest; RELEASE quipu_attest");
+                let rollback = crate::store::release::rollback_release(&self.conn, "quipu_attest");
                 self.set_write_in_progress(false);
                 self.term_cache.borrow_mut().clear_persistent();
                 // Zero accepted mutation, but the refusal is still audited,

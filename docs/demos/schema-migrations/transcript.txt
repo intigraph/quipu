@@ -1,0 +1,20 @@
+Script started on 2026-10-29 05:12:59-04:00 [COMMAND="bash run.sh" <not executed on terminal>]
+BEFORE: retained baseline output, not a live replay of the old executable.
+test proposal_migration::tests::repeated_template_facts_are_bounded_before_netting ... FAILED
+called `Result::unwrap_err()` on an `Ok` value: MigrationPlan { ops: [OpReport { index: 0, op: "sparql", update: "INSERT DATA { <http://example.org/new> <http://example.org/p> 1 . <http://example.org/new> <http://example.org/p> 1 . <http://example.org/new> <http://example.org/p> 1 . <http://example.org/new> <http://example.org/p> 1 .  }", retracted: 0, asserted: 4 }], retract: [], assert: [Planned { subject: "http://example.org/new", predicate: "http://example.org/p", object: Lit(Int(1)) }] }
+AFTER: current candidate; four materialized duplicates refuse at three and accept at four.
+
+running 1 test
+test proposal_migration::tests::repeated_template_facts_are_bounded_before_netting ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3208 filtered out; finished in 0.30s
+
+FILTER CONTROL: ten intermediates refuse at three, succeed at ten; stricter native ceiling wins.
+
+running 1 test
+test proposal_migration::tests::filtered_where_intermediates_share_the_migration_ceiling ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3208 filtered out; finished in 0.30s
+
+
+Script done on 2026-10-29 05:12:59-04:00 [COMMAND_EXIT_CODE="0"]

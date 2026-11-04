@@ -114,17 +114,14 @@ fn functions(dir: &Path, found: &mut BTreeMap<String, Reads>) {
     }
 }
 
-#[test]
-fn audit_schema_fields() {
-    let mut fs = BTreeMap::new();
-    functions(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut fs);
+fn expanded_reads(fs: &BTreeMap<String, Reads>) -> BTreeMap<String, BTreeSet<String>> {
     let mut expanded: BTreeMap<_, _> = fs
         .iter()
         .map(|(n, r)| (n.clone(), r.keys.clone()))
         .collect();
     loop {
         let old = expanded.clone();
-        for (name, reads) in &fs {
+        for (name, reads) in fs {
             for callee in &reads.calls {
                 if let Some(keys) = old.get(callee) {
                     expanded.get_mut(name).unwrap().extend(keys.clone());
@@ -135,6 +132,14 @@ fn audit_schema_fields() {
             break;
         }
     }
+    expanded
+}
+
+#[test]
+fn audit_schema_fields() {
+    let mut fs = BTreeMap::new();
+    functions(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut fs);
+    let expanded = expanded_reads(&fs);
     let mut gaps = BTreeMap::new();
     for def in quipu::tool_definitions() {
         let name = def["name"].as_str().unwrap();
@@ -246,6 +251,7 @@ fn episode_struct_fields_are_declared() {
 fn http_only_fields_match_handler_reads() {
     let mut fs = BTreeMap::new();
     functions(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut fs);
+    let expanded = expanded_reads(&fs);
     let source = syn::parse_file(include_str!("../src/server/input_fields.rs")).unwrap();
     let fields = source
         .items
@@ -317,8 +323,8 @@ fn http_only_fields_match_handler_reads() {
             assert!(serde_json::from_value::<quipu::render::RenderRequest>(value).is_err());
         } else {
             assert_eq!(
-                declared,
-                fs.get(function).expect("handler found").keys,
+                &declared,
+                expanded.get(function).expect("handler found"),
                 "{function}"
             );
         }

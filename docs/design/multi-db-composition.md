@@ -276,9 +276,15 @@ boundary, surfaced at the federation edge.
 > unlabelled local graph: undeclared, never fabricated, and failing a
 > configured freshness/trust floor.
 
-## 6. Not possible — permanently, and this document says so
+## 6. Limits of the current read-only composition model
 
-- **Cross-DB writes: out.** Not deferred — out. Every write is `main`-only.
+The proposed [per-graph writable-store design](per-graph-writable-stores.md)
+considers a separate router/owner protocol. It does not enable writes to these
+attachments or remove the current refusals. Its multi-file atomicity requires
+an application participant/publication protocol, not SQLite WAL atomic commit.
+Until that separately reviewed implementation exists, the following limits hold.
+
+- **Cross-DB writes: out in this model.** Every write is `main`-only.
 - **Cross-DB transactions: out.** SQLite's atomic multi-file commit uses a
   super-journal that **does not work in WAL mode**, and Quipu is WAL. Since
   attachments are never written this never arises — but it is the reason

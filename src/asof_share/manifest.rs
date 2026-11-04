@@ -4,6 +4,27 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// Contract version of the manifest.
+pub const SCHEMA: &str = "quipu-asof-share/v1";
+
+/// Read policy identity of the supported scoped cut.
+pub const POLICY: &str = "quipu-asof-policy/write-class-principal/v1";
+
+#[path = "signature.rs"]
+mod signature;
+pub use signature::{manifest_message, sign_manifest, verify_manifest};
+
+/// Compact UTF-8 JSON with recursively sorted keys, independent of target or
+/// `serde_json` map feature flags.
+///
+/// # Errors
+/// Serialization failure.
+pub fn manifest_bytes(manifest: &Manifest) -> crate::Result<Vec<u8>> {
+    let value = serde_json::to_value(manifest)
+        .map_err(|error| crate::Error::InvalidValue(error.to_string()))?;
+    Ok(crate::replicate_wire::canonical(&value).into_bytes())
+}
+
 /// The source log a follower ties the cut to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,7 +91,7 @@ pub struct Manifest {
     pub scope: Vec<String>,
     /// Declared context graphs, sorted.
     pub context_graphs: Vec<String>,
-    /// [`scope_digest`] of the scope and context lists.
+    /// Digest of the scope and context lists.
     pub scope_digest: String,
     /// SHA-256 of the read rule the cut was served under ([`POLICY`]).
     pub policy_digest: String,

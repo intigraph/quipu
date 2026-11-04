@@ -108,18 +108,18 @@ impl Store {
         supported: &BTreeSet<(i64, i64)>,
         timestamp: &str,
     ) -> Result<usize> {
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_demotion")?;
         let result = self.reconcile_demotion_snapshot(
             attribute, source, premise, companion, supported, timestamp,
         );
         match result {
             Ok(count) => {
-                self.conn.execute_batch("RELEASE quipu_demotion")?;
+                crate::store::release::release(&self.conn, "quipu_demotion")?;
                 Ok(count)
             }
             Err(error) => {
-                self.conn
-                    .execute_batch("ROLLBACK TO quipu_demotion; RELEASE quipu_demotion")?;
+                crate::store::release::rollback_release(&self.conn, "quipu_demotion")?;
                 self.read_model.borrow_mut().clear();
                 Err(error)
             }

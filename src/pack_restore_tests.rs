@@ -305,7 +305,7 @@ fn the_format_gate_decides_before_the_hash_does() {
 }
 
 #[test]
-fn restore_reproduces_every_row_of_every_table() {
+fn restore_preserves_every_portable_row_and_establishes_a_new_local_epoch() {
     let dir = tmpdir("round-trip");
     let pack = full_pack(&dir, "src.pendant");
     let dest = at(&dir, "restored.db");
@@ -326,6 +326,15 @@ fn restore_reproduces_every_row_of_every_table() {
         // `pack_manifest` describes the ARTIFACT; the restored store carries it
         // as lineage and it is excluded from the pack's own content hash too.
         if table == "pack_manifest" {
+            continue;
+        }
+        if table == "log_epoch" {
+            // A full pack explicitly strips source-local epochs. Explicit
+            // restoration establishes exactly one new local epoch, never an
+            // inherited cursor. Every other row comparison remains exact.
+            assert!(rows.is_empty());
+            assert_eq!(restored[table].len(), 1);
+            assert!(restored[table][0].contains("explicit store adopt"));
             continue;
         }
         assert_eq!(
@@ -440,4 +449,39 @@ fn verify_full_leaves_the_pack_byte_identical() {
         std::fs::read(&pack).unwrap() == before,
         "verify_full changed the bytes of the pack it verified (aegis-s8jra2)"
     );
+}
+
+#[test]
+fn ownership_enforcement_never_travels_in_full_pack_schema_or_rows() {
+    let dir = tmpdir("ownership-exclusion");
+    let source = at(&dir, "owned.db");
+    store_with_history()
+        .conn
+        .execute("VACUUM INTO ?1", [&source])
+        .unwrap();
+    Store::adopt(&source).unwrap();
+    let owned = Store::open(&source).unwrap();
+    owned.require_ownership().unwrap();
+    let pack = at(&dir, "owned.pendant");
+    let m = crate::pack_full::pack_full(&owned, &pack, &internal(), TS).unwrap();
+    let artifact =
+        rusqlite::Connection::open_with_flags(&pack, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    let markers: i64 = artifact
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name='ownership_enforcement'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(markers, 0);
+    drop(artifact);
+    let target = at(&dir, "restored.db");
+    restore(&pack, &target, false).unwrap();
+    let restored = Store::open(&target).unwrap();
+    restored.require_ownership().unwrap();
+    assert_ne!(restored.log_epoch().unwrap(), owned.log_epoch().unwrap());
+    let again = at(&dir, "again.pendant");
+    let repacked = crate::pack_full::pack_full(&restored, &again, &internal(), TS).unwrap();
+    assert_eq!(m.content_hash, repacked.content_hash);
 }

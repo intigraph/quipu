@@ -164,24 +164,15 @@ pub(crate) fn print_help(path: &str) {
             format!(" {}", spec.operands)
         };
         println!("    qp {}{operands}", spec.path);
-        if !spec.values.is_empty() {
+        for (name, suffix) in spec
+            .values
+            .split_whitespace()
+            .map(|v| (v, " <VALUE>"))
+            .chain(spec.switches.split_whitespace().map(|v| (v, "")))
+        {
             println!(
-                "      Value options: {}",
-                spec.values
-                    .split_whitespace()
-                    .map(|v| format!("--{v} <VALUE>"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-        }
-        if !spec.switches.is_empty() {
-            println!(
-                "      Switches: {}",
-                spec.switches
-                    .split_whitespace()
-                    .map(|v| format!("--{v}"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                "      --{name}{suffix}: {}",
+                catalogue::option_help(spec.path, name).expect("catalogue option description")
             );
         }
     }

@@ -9,10 +9,10 @@ pub fn run(args: &[String], db_path: &str) {
                 quipu::entity_reference::tool_namespaces(&store, &serde_json::json!({}))
             }
             ("namespaces", "apply") => quipu::entity_namespaces::apply(&mut store),
-            ("entity-ref", "mint" | "resolve") => {
+            ("entity-ref", "mint" | "resolve" | "verify") => {
                 let path = args.get(3).ok_or_else(|| {
                     quipu::Error::InvalidValue(
-                        "entity-ref mint|resolve needs a request JSON file".into(),
+                        "entity-ref mint|resolve|verify needs a request JSON file".into(),
                     )
                 })?;
                 let text = std::fs::read_to_string(path).map_err(|e| {
@@ -32,7 +32,7 @@ pub fn run(args: &[String], db_path: &str) {
                 quipu::entity_reference::tool_entity_ref(&mut store, &input)
             }
             _ => Err(quipu::Error::InvalidValue(
-                "use namespaces list|apply or entity-ref mint|resolve <file.json>".into(),
+                "use namespaces list|apply or entity-ref mint|resolve|verify <file.json>".into(),
             )),
         }
     })();

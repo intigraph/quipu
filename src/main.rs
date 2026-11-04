@@ -76,6 +76,7 @@ mod cli_pointer;
 mod cli_policy;
 mod cli_prime;
 mod cli_propose;
+mod cli_propose_plan;
 mod cli_quarantine;
 mod cli_render;
 mod cli_rule_answers;
@@ -83,6 +84,7 @@ mod cli_search;
 mod cli_share_diff;
 mod cli_share_review;
 mod cli_signer;
+mod cli_store;
 mod cli_trust_root;
 mod cli_validate;
 mod hook_session_capture;
@@ -239,6 +241,7 @@ fn main() {
         "fork" => cli_fork::cmd_fork(&args, db_path),
         "unpack" => cli_pack::cmd_unpack(&args, db_path),
         "restore" => cli_pack::cmd_restore(&args, db_path),
+        "store" => cli_store::run(&args, db_path),
         "migrate-vectors" => cmd_migrate_vectors(&args, &config),
         "--help" | "-h" | "help" => print_usage(),
         _ => {
@@ -412,7 +415,7 @@ COMMANDS:
     qp episode <file.json> [--base-ns <ns>] [--timestamp <ISO-8601>] [--db <path>]
     qp retract <entity-IRI> [--predicate <IRI>] [--db <path>]
     qp namespaces list|apply [--db <path>]
-    qp entity-ref mint|resolve <request.json> [--db <path>]
+    qp entity-ref mint|resolve|verify <request.json> [--db <path>]
     qp shapes load|list|remove [--db <path>]
     qp policy draft --exemplar <iri> --name <slug> --label <sentence> --targets <type-IRI> --claim <ask> [--out <file.ttl>]
     qp policy backtest <candidate.ttl> [--last-txs N] [--from-tx A --to-tx B] [--db <path>]
@@ -446,6 +449,9 @@ COMMANDS:
     qp fork <tx> [--name <n>] | list | diff <a> <b> | drop <n> | promote <n>  [--db <path>]
     qp unpack <file.pendant.db> [--into <graph-iri>] [--db <path>]   MERGES a published pack
     qp restore <file.pendant | text-pack-dir> [--force] [--db <path>]
+    qp store status [--db <path>]
+    qp store adopt [--db <path>]
+    qp store restore <source.db> [--db <new-path>]
                                                                      REPLACES the store with a --full pack, binary or text
     qp share --output <dir> [--graph IRI|--group-id ID|--construct QUERY] [--shapes NAME]... [--no-shapes] [--parent-share ID] [--since <parent-reference>] [--turtle]
     qp share ... [--destination internal]   skip the outward scrub and stamp the manifest; LAN-internal destinations only
@@ -477,6 +483,7 @@ COMMANDS:
     qp align propose <graph-a> <graph-b> [--set-id <id>] [--out <set.tsv>] [--db <path>]
     qp align decide <set.tsv> --decisions <rows.tsv> --reviewer <who> [--out <set.tsv>]
     qp align apply <set.tsv> --graph-a <iri> --graph-b <iri> --expected-version <sha> [--actor <who>] [--db <path>]
+    qp align export <set.tsv> --license <iri> [--format tsv|ttl] [--prefix <name>=<iri>]... [--author-prefix <name>] [--out <file>]
     qp status <share-dir> [--db <path>]
     qp merge <share-dir> [--actor <id>] [--db <path>]
     qp merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]

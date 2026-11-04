@@ -15,7 +15,11 @@ use crate::types::Value;
 
 use super::Bindings;
 
+mod cast_eval;
+pub(super) mod eval_memo;
+mod operand;
 mod regex_cache;
+pub(super) use eval_memo::Scope as EvalMemo;
 pub(super) use regex_cache::build_regex;
 mod temporal_sort;
 pub(super) use temporal_sort::temporal_sort_order;
@@ -185,16 +189,20 @@ fn eval_filter_two_valued(
 /// an indeterminate or ill-typed pair is an error (aegis-u93). Everything else
 /// falls back to term identity (`expr_eq`), which is what `sameTerm` uses.
 fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> Option<bool> {
-    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+    let (Some(a), Some(b)) = (
+        operand::operand(store, left, row),
+        operand::operand(store, right, row),
+    ) else {
         return Some(false);
     };
+    let (a, b) = (&*a, &*b);
     if a == b {
         return Some(true);
     }
-    if let Some(order) = temporal_equality_order(&a, &b) {
+    if let Some(order) = temporal_equality_order(a, b) {
         return order.map(|o| o == std::cmp::Ordering::Equal);
     }
-    Some(crate::numeric_value::equal(&a, &b))
+    Some(crate::numeric_value::equal(a, b))
 }
 
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {
@@ -316,7 +324,7 @@ fn eval_regex(store: &Store, args: &[Expression], row: &Bindings) -> Result<bool
 /// Refs resolve to their IRI string.
 fn value_to_string(store: &Store, v: &Value) -> String {
     match v {
-        Value::Ref(id) => store.resolve(*id).unwrap_or_else(|_| format!("ref:{id}")),
+        Value::Ref(id) => eval_memo::resolve(store, *id).unwrap_or_else(|_| format!("ref:{id}")),
         other => lexical(other).unwrap_or_default(),
     }
 }
@@ -342,7 +350,7 @@ pub(super) fn lexical(v: &Value) -> Option<String> {
 pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Value> {
     match expr {
         Expression::Variable(var) => row.get(var.as_str()).cloned(),
-        Expression::NamedNode(n) => store.query_ref(n.as_str()).ok().map(Value::Ref),
+        Expression::NamedNode(n) => eval_memo::query_ref(store, n.as_str()).ok().map(Value::Ref),
         Expression::Literal(lit) => Some(literal_to_value(lit)),
         Expression::Equal(_, _)
         | Expression::SameTerm(_, _)
@@ -466,11 +474,11 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
                 Value::Float(_) => namespace::XSD_DOUBLE,
                 Value::Bool(_) => namespace::XSD_BOOLEAN,
                 Value::Typed { datatype, .. } => {
-                    return store.query_ref(&datatype).ok().map(Value::Ref);
+                    return eval_memo::query_ref(store, &datatype).ok().map(Value::Ref);
                 }
                 Value::Ref(_) | Value::Bytes(_) => return None,
             };
-            store.query_ref(datatype).ok().map(Value::Ref)
+            eval_memo::query_ref(store, datatype).ok().map(Value::Ref)
         }
         Expression::FunctionCall(Function::Now, _) => Some(Value::Typed {
             lexical: crate::time::now_iso(),
@@ -515,13 +523,7 @@ pub fn eval_expr(store: &Store, expr: &Expression, row: &Bindings) -> Option<Val
         Expression::FunctionCall(Function::Custom(function), args)
             if super::casts::is_cast(function.as_str()) =>
         {
-            super::casts::cast(
-                store,
-                function.as_str(),
-                eval_expr(store, args.first()?, row)?,
-                canonical_double,
-                format_decimal,
-            )
+            cast_eval::cast(store, expr, function.as_str(), args, row)
         }
         Expression::FunctionCall(Function::StrLang, args) => {
             let lexical = simple_string_literal(eval_expr(store, args.first()?, row)?)?;

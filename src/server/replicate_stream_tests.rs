@@ -288,3 +288,28 @@ async fn a_follower_that_goes_away_frees_its_session() {
 
 #[path = "replicate_stream_relay_tests.rs"]
 mod relay;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ownership_unadopted_disk_copy_is_forbidden_before_http_stream_admission() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy.db");
+    let original = Store::open_in_memory().unwrap();
+    original.graph_create(BOARD).unwrap();
+    let bytes = original.serialize_db().unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    Store::adopt(path.to_str().unwrap()).unwrap();
+    std::fs::remove_file(path.with_extension("db.ownership.json")).unwrap();
+    let mut copy = Store::open(path.to_str().unwrap()).unwrap();
+    let doc = Ed25519KeyPair::generate_pkcs8(&ring::rand::SystemRandom::new()).unwrap();
+    copy.set_signing_identity(Arc::new(quipu::signing::SigningIdentity::new(
+        Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap(),
+        "quipu",
+    )));
+    let shared = Arc::new(StoreHandle::writer_only(copy));
+    let response = stream(State(shared.clone()), axum::Json(request(&shared))).await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    Store::adopt(path.to_str().unwrap()).unwrap();
+    // Same data/handler/signing identity, now an explicitly owned placement.
+    let response = stream(State(shared.clone()), axum::Json(request(&shared))).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}

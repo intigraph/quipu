@@ -64,8 +64,12 @@ let browser;
         check("preview keeps queries and writes disabled", await page.locator("#tab-ask").isDisabled()
           && await page.locator("#bad-write").isDisabled() && await page.locator("#run").isDisabled());
       }
-      await page.waitForFunction(() => !document.documentElement.dataset.mapPreview
-        && document.querySelector('#node-card[aria-busy="false"]'), null, { timeout: 120000 });
+      await page.waitForFunction(() => {
+        const loader = document.querySelector("#graph-loader");
+        return !document.documentElement.dataset.mapPreview
+          && document.querySelector('#node-card[aria-busy="false"]')
+          && (!loader || loader.dataset.state === "ready");
+      }, null, { timeout: 120000 });
       fullReadySamples.push(Date.now() - start);
     }
     check("embed URL opens real populated Map", await page.locator("#tab-map").getAttribute("aria-selected") === "true"
@@ -95,7 +99,12 @@ let browser;
       await frame.locator("#graph-targets button").first().waitFor({ timeout: 120000 });
       await page.waitForFunction(() => window.heights.some((h) => h > 400));
       check("iframe receives height messages", await page.evaluate(() => window.heights.every((h) => Number.isInteger(h) && h > 0)));
-      await frame.locator('#node-card[aria-busy="false"]').waitFor();
+      const embedded = page.frames().find((f) => f !== page.mainFrame());
+      await embedded.waitForFunction(() => {
+        const loader = document.querySelector("#graph-loader");
+        return document.querySelector('#node-card[aria-busy="false"]')
+          && (!loader || loader.dataset.state === "ready");
+      }, null, { timeout: 120000 });
       const mapHeight = await page.evaluate(() => window.heights.at(-1));
       await frame.locator("#tab-ask").click();
       await page.waitForFunction((old) => Math.abs(window.heights.at(-1) - old) > 1, mapHeight);

@@ -22,6 +22,12 @@ mirror exactly which facts did.
   time. An assert reports the bound it was written with; when a later
   transaction closes the fact, that closing arrives as its own `retract`
   record, and the assert's record reads the same before and after.
+- **Retractions carry `retracted_valid_at`**, the valid-time close of the
+  assertion they ended, independently of their transaction `timestamp` and
+  audit-row interval. A correction valid in March but promoted in June closes
+  the replica's old value in March too. The producer recovers this bound from
+  the actual closed assertion rows, including existing promoted history; it
+  refuses missing or disagreeing closes rather than inventing a timestamp.
 - **The cursor is a transaction id, and pages end on transaction
   boundaries.** Every cursor is therefore a consistent prefix of commit
   history: a reader never observes half a transaction.
@@ -100,6 +106,29 @@ to look like one. Bytes arrive as `{"bytes_len": n, "base64": "..."}` — the
 whole body, so a replica built from the feed holds the same value.
 
 ## First consumers
+
+### Retraction compatibility
+
+`retracted_valid_at` is an additive record field, emitted in every capture
+mode for retractions only. Its supported representation is an ISO date or an
+RFC 3339 timestamp string, preserved without normalization. Explicit null,
+malformed values, unsupported representations and use on assertions are
+refused by the shared applier without advancing that transaction's cursor.
+Assertion `valid_from`/`valid_to` semantics are unchanged.
+
+An incoming legacy retraction without the field is refused: its actual close
+cannot be inferred safely from transaction time. Upgrade the source; legacy
+assertions remain supported. For retained transaction identities, a close equal
+to the transaction timestamp keeps the legacy digest, so an ordinary historical
+retraction can still be recognized as a duplicate without rewriting it. A
+different close on redelivery stops the replica rather than silently accepting
+changed history. Page and chunked delivery share these checks.
+
+Upgrade consumers before relying on the extension; older consumers ignore it.
+Reading existing source history with the new producer recovers available close
+bounds, but does not repair replicas that already applied the wrong interval.
+Any rebuild, replay or stored-data repair requires separate operational
+admission. This source change performs none of those actions.
 
 The intended first consumer is incremental index/embedding maintenance
 (bobbin): re-embed exactly the entities whose facts changed rather than

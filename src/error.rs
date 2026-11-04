@@ -66,3 +66,11 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<quipu_signing::error::Error> for Error {
+    fn from(error: quipu_signing::error::Error) -> Self {
+        match error {
+            quipu_signing::error::Error::Store(message) => Self::Store(message),
+        }
+    }
+}

@@ -28,29 +28,13 @@ pub mod agents;
 pub(crate) mod attestation;
 mod histogram;
 pub mod inflight;
+mod search;
 use histogram::Hist;
 pub(crate) mod write_provenance;
 pub mod writes;
 
-/// Current process (resident, virtual) memory in bytes, from `/proc/self/statm`
-/// on Linux; `(0, 0)` elsewhere. `statm` fields are in pages; on the `x86_64`
-/// Linux quipu runs on the page size is 4096. Cheap in-kernel read — safe to
-/// call at scrape time and after each write (memory telemetry: the balloon was
-/// invisible because NO memory metric existed).
-#[must_use]
-pub fn process_memory() -> (u64, u64) {
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
-            let mut it = statm.split_whitespace();
-            let vsz_pages: u64 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-            let rss_pages: u64 = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-            const PAGE: u64 = 4096;
-            return (rss_pages * PAGE, vsz_pages * PAGE);
-        }
-    }
-    (0, 0)
-}
+mod process;
+pub use process::process_memory;
 
 /// Unix seconds at which this process started serving, recorded by
 /// [`init_start_time`] during startup.
@@ -219,6 +203,7 @@ fn request_key<V>(
 
 #[derive(Default)]
 pub struct Metrics {
+    search_outcomes: search::SearchMetrics,
     attestation: attestation::AttestationMetrics,
     writes: writes::WriteMetrics,
     write_provenance: write_provenance::WriteProvenanceMetrics,
@@ -288,6 +273,10 @@ pub fn metrics() -> &'static Metrics {
 }
 
 impl Metrics {
+    /// Count one canonical terminal search event, without query/identity labels.
+    pub fn observe_search(&self, event: &crate::search_outcome::observation::Event) {
+        self.search_outcomes.observe(event);
+    }
     /// Count 401s separately from successful requests, without task/host labels.
     /// Observed successful methods initialize a zero counter for that series.
     pub fn observe_auth_result(&self, client: &str, endpoint: &str, method: &str, status: u16) {
@@ -465,6 +454,8 @@ impl Metrics {
         wal_bytes: Option<u64>,
     ) -> String {
         let mut out = String::new();
+        self.search_outcomes.render(&mut out);
+        crate::search_outcome::render_capture_health(&mut out);
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.write_provenance.render(&mut out);

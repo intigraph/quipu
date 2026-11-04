@@ -2194,7 +2194,7 @@ fn test_propose_and_list_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_proposal_roundtrip() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a valid shape proposal.
     let shape_turtle = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -2225,7 +2225,7 @@ ex:PersonShape a sh:NodeShape ;
         "note": "Approved — looks correct",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let accept_result = super::proposal::tool_accept_proposal(&store, &accept).unwrap();
+    let accept_result = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap();
     assert_eq!(accept_result["status"], "accepted");
     assert_eq!(accept_result["proposal_id"], id);
 
@@ -2269,7 +2269,7 @@ fn test_reject_proposal_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_invalid_turtle_stays_pending() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
 
     // Create a shape proposal with invalid Turtle.
     let propose = serde_json::json!({
@@ -2288,7 +2288,7 @@ fn test_accept_invalid_turtle_stays_pending() {
         "decided_by": "agent/reviewer",
         "timestamp": "2026-04-13T01:00:00Z"
     });
-    let err = super::proposal::tool_accept_proposal(&store, &accept).unwrap_err();
+    let err = super::proposal::tool_accept_proposal(&mut store, &accept).unwrap_err();
     assert!(err.to_string().contains("invalid"));
 
     // Proposal should still be pending.

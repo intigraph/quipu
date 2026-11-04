@@ -493,6 +493,16 @@ pub fn tool_query_with_federation(
     input: &JsonValue,
     federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
 ) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(crate::search_outcome::Operation::Query, input, || {
+        query_with_federation(store, input, federation)
+    })
+}
+
+fn query_with_federation(
+    store: &Store,
+    input: &JsonValue,
+    federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
+) -> Result<JsonValue> {
     // quipu #68: label floors are enforced HERE, at the service boundary, and
     // deliberately not inside `query_temporal`.
     //

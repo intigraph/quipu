@@ -6,7 +6,7 @@ Three Quipu merges can stop on a conflict:
 |---|---|---|
 | Share reconnect | `quipu merge <share-dir>` | exit 2, conflicts in the JSON result |
 | Fork promotion | `quipu fork promote <name>` | "promotion held", exit 1, the fork stays open |
-| Git pendant merge | `quipu git-merge <ref>` | exit 2, `<qpack>/decisions.json` beside the pack |
+| Git pendant merge | `quipu git-merge <ref>` | exit 2, `<pendant>/decisions.json` beside the pack |
 
 All three use the same shape-aware operator. A slot (one subject and
 predicate) that both sides changed differently, past an `sh:maxCount` bound,
@@ -18,9 +18,9 @@ page is the one way to finish such a merge, for a person or an agent.
 | Step | Share | Fork | Git |
 |---|---|---|---|
 | 1. Emit | `quipu merge <dir> --emit-decisions f.json --propose` | `quipu fork promote <name> --emit-decisions f.json --propose` | written by `quipu git-merge` |
-| 2. Show | `quipu merge show f.json` | same | `quipu merge show <qpack>/decisions.json` |
-| 3. Resolve | `quipu merge resolve f.json <row> --choose <choice> --by <who>` | same | same, or `quipu git-merge resolve <qpack> <key> ...` |
-| 4. Apply | `quipu merge <dir> --decisions f.json --reviewer <who>` | `quipu fork promote <name> --decisions f.json --reviewer <who>` | `git add <qpack>` and commit; CI `pendant-check` verifies |
+| 2. Show | `quipu merge show f.json` | same | `quipu merge show <pendant>/decisions.json` |
+| 3. Resolve | `quipu merge resolve f.json <row> --choose <choice> --by <who>` | same | same, or `quipu git-merge resolve <pendant> <key> ...` |
+| 4. Apply | `quipu merge <dir> --decisions f.json --reviewer <who>` | `quipu fork promote <name> --decisions f.json --reviewer <who>` | `git add <pendant>` and commit; CI `pendant-check` verifies |
 
 Over MCP, step 1 is `quipu_merge_decisions` (`fork: <name>` for a fork,
 `present: true` for the layout), step 3 is `quipu_merge_resolve`, and step 4

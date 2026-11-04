@@ -50,6 +50,28 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
     let request: Request = serde_json::from_value(input.clone())
         .map_err(|e| Error::InvalidValue(format!("entity reference: {e}")))?;
     let namespaces = entity_namespaces::list(store)?;
+    if request.action == "verify" {
+        if request.keys.is_some()
+            || request.as_of.is_some()
+            || request.namespace.is_some()
+            || request.node_type.is_some()
+            || request.label.is_some()
+            || request.source.is_some()
+        {
+            return Err(Error::InvalidValue(
+                "verify accepts only iri and optional graph".into(),
+            ));
+        }
+        let iri = required(&request.iri, "iri")?;
+        oxrdf::NamedNode::new(iri).map_err(|e| Error::InvalidValue(e.to_string()))?;
+        let graph = match request.graph.as_deref() {
+            None => 0,
+            Some(iri) => store
+                .lookup(iri)?
+                .ok_or_else(|| Error::InvalidValue("unknown graph".into()))?,
+        };
+        return crate::entity_key_guard::verify(store, iri, graph);
+    }
     if request.action == "resolve" {
         if request.keys.is_some() {
             return Err(Error::InvalidValue(
@@ -88,7 +110,7 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
     }
     if request.action != "mint" || request.iri.is_some() || request.as_of.is_some() {
         return Err(Error::InvalidValue(
-            "use mint (without iri/asOf) or resolve".into(),
+            "use mint (without iri/asOf), resolve or verify".into(),
         ));
     }
     let prefix = required(&request.namespace, "namespace")?;
@@ -256,10 +278,10 @@ pub fn definitions() -> Vec<Value> {
         }),
         json!({
             "name":"quipu_entity_ref",
-            "description":"Mint a typed stable entity in a registered namespace, or describe an exact registered reference without fetching. Uncertain mint responses must be reconciled, never blindly retried.",
+            "description":"Mint a typed stable entity, resolve a registered reference or verify a local key IRI against its key triples without fetching. Uncertain mint responses must be reconciled, never blindly retried.",
             "inputSchema":{"type":"object","additionalProperties":false,
                 "required":["action"],"properties":{
-                    "action":{"type":"string","enum":["mint","resolve"]},
+                    "action":{"type":"string","enum":["mint","resolve","verify"]},
                     "namespace":{"type":"string"},"type":{"type":"string"},
                     "graph":{"type":"string"},"label":{"type":"string"},
                     "iri":{"type":"string"},"source":{"type":"string"},

@@ -55,7 +55,7 @@ strings alone do not establish that two binaries contain the same code.
 
 ## Commands
 
-### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve`
+### `quipu namespaces list|apply` and `quipu entity-ref mint|resolve|verify`
 
 List or explicitly apply the configured namespace registry, then mint stable
 entity identities or resolve reference descriptors. See [entity namespaces](namespaces.md)
@@ -789,6 +789,7 @@ rather than applying it directly.
 ```bash
 quipu propose list --status pending --db my.db
 quipu propose submit shape ex:PersonShape new-shape.ttl --proposer agent-1 --rationale "tighten cardinality"
+quipu propose plan 3 --db my.db
 quipu propose accept 3 --note "LGTM" --db my.db
 quipu propose reject 4 --note "breaks existing data" --db my.db
 ```
@@ -797,7 +798,8 @@ quipu propose reject 4 --note "breaks existing data" --db my.db
 |------------|-------------|
 | `list [--status pending]` | List proposals |
 | `submit <kind> <target> <file.ttl> --proposer <id> [--rationale <text>] [--trigger <ref>]` | Queue a change |
-| `accept <id> [--note <text>]` | Apply and record the decision |
+| `plan <id> [--format text\|json] [--risk-threshold <0-100>]` | Blast radius and 0-100 risk score, no write; exit 0 pass, 1 fail, 2 not determined ([details](../concepts/schema-evolution.md#blast-radius-plan-and-risk-gate)) |
+| `accept <id> [--note <text>] [--risk-threshold <0-100>] [--accept-risk --reason <why>]` | Apply and record the decision; refused when the plan fails unless the risk is accepted |
 | `reject <id> --note <reason>` | Reject with a reason |
 
 ### `quipu policy`
@@ -1144,6 +1146,10 @@ the write gates record; the raw events are served by
 `GET /events?types=write.refused`. See the REST API reference for what a
 refusal event records (metadata only, never the refused bodies) and the
 speculate exclusion.
+
+The counts cover the retained event log only. Event retention (default 30
+days, `[quipu.events] retention_days`) prunes older events, so the output
+ends with the timestamp of the oldest retained event the counts start from.
 
 ```bash
 quipu events refusals --db my.db

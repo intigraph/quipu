@@ -1198,7 +1198,7 @@ fn identity_orphan_planning_obeys_the_store_query_budget() {
 }
 
 #[test]
-fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
+fn explicit_adopt_migrates_a_pre_quad_store_through_the_real_init_path() {
     // Regression for aegis-akb8. The test above calls migrate_named_graphs()
     // DIRECTLY, so it never runs schema::INIT_SQL first — and INIT_SQL is where
     // the real bug lived: its `CREATE INDEX ... ON facts(g, ...)` executed
@@ -1226,6 +1226,8 @@ fn open_migrates_a_pre_quad_store_through_the_real_init_path() {
         .unwrap();
     }
 
+    // Explicit ownership admits the legacy migration; ordinary open is read-only.
+    Store::adopt(path_str).expect("adopt must migrate a pre-quad store");
     // THE regression: this used to return `no such column: g` and abort open.
     let store =
         Store::open(path_str).expect("open() must migrate a pre-quad store, not crash on idx_geav");
@@ -3217,4 +3219,95 @@ fn read_only_connections_have_explicit_replica_busy_timeout() {
         timeout == 1_000,
         "short follower apply locks must not fail immediately"
     );
+}
+
+/// What /stats computed before aegis-67p0lj: materialise `?s ?p ?o`, count
+/// rows, and distinct subject/predicate refs. The streaming counter must agree.
+fn materialised_triple_counts(store: &Store) -> (u64, u64, u64) {
+    let result = crate::sparql_query(store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }").unwrap();
+    let mut entities = std::collections::HashSet::new();
+    let mut predicates = std::collections::HashSet::new();
+    for row in result.rows() {
+        if let Some(Value::Ref(id)) = row.get("s") {
+            entities.insert(*id);
+        }
+        if let Some(Value::Ref(id)) = row.get("p") {
+            predicates.insert(*id);
+        }
+    }
+    (
+        result.rows().len() as u64,
+        entities.len() as u64,
+        predicates.len() as u64,
+    )
+}
+
+/// aegis-67p0lj: the streamed /stats counts equal the materialised query's on
+/// every population edge: a repeated assertion, two encodings of one term, a
+/// retraction, a closed valid time, a tenant overlay, and a Ref object.
+#[test]
+fn current_triple_counts_match_the_materialised_query() {
+    let (mut store, e, root_attr, _ov) = store_with_tenant_overlay();
+    let other = store.intern("http://ex/other").unwrap();
+    let link = store.intern("http://ex/link").unwrap();
+    let n = store.intern("http://ex/n").unwrap();
+    let gone = store.intern("http://ex/gone").unwrap();
+    let datum = |entity, attribute, value: Value, valid_to: Option<&str>, op| Datum {
+        entity,
+        attribute,
+        value,
+        valid_from: "2026-01-01T00:00:00Z".into(),
+        valid_to: valid_to.map(Into::into),
+        op,
+    };
+    let closed = Some("2026-01-02T00:00:00Z");
+    store
+        .transact(
+            &[
+                datum(e, link, Value::Ref(other), None, Op::Assert),
+                datum(other, n, Value::Int(5), None, Op::Assert),
+                datum(other, n, Value::Int(6), None, Op::Assert),
+                datum(other, gone, Value::Str("closed".into()), closed, Op::Assert),
+                datum(e, gone, Value::Str("retracted".into()), None, Op::Assert),
+            ],
+            "2026-01-03T00:00:00Z",
+            None,
+            None,
+        )
+        .unwrap();
+    let retract = datum(e, gone, Value::Str("retracted".into()), None, Op::Retract);
+    store
+        .transact(&[retract], "2026-01-04T00:00:00Z", None, None)
+        .unwrap();
+    // Raw rows the write path no longer produces but older stores hold: a
+    // legacy encoding of the integer 5 (`"5"^^xsd:integer` beside the
+    // canonical Int, one term) and ROOT's live triple again in a later tx.
+    let copy = |v: Vec<u8>, entity: i64, attribute: i64, from: Vec<u8>| {
+        let inserted = store
+            .conn
+            .execute(
+                "INSERT INTO facts (e, a, v, g, tx, valid_from, valid_to, op) \
+                 SELECT e, a, ?1, g, (SELECT MAX(id) FROM transactions), valid_from, NULL, 1 \
+                 FROM facts WHERE e = ?2 AND a = ?3 AND v = ?4 AND g = 0 AND valid_to IS NULL",
+                rusqlite::params![v, entity, attribute, from],
+            )
+            .unwrap();
+        assert_eq!(inserted, 1, "fixture row copied");
+    };
+    let legacy = Value::Typed {
+        lexical: "5".into(),
+        datatype: crate::namespace::XSD_INTEGER.into(),
+    };
+    copy(legacy.to_bytes(), other, n, Value::Int(5).to_bytes());
+    let root = Value::Str("ROOT".into()).to_bytes();
+    copy(root.clone(), e, root_attr, root);
+
+    let streamed = store.current_triple_counts().unwrap();
+    assert_eq!(streamed, materialised_triple_counts(&store));
+    // Pin the population, so a fixture that stopped exercising an edge fails:
+    // ROOT (two rows), link, 5 (two encodings), 6 = 4 triples over 6 live
+    // rows; the overlay, the retraction and the closed valid time are absent.
+    assert_eq!(streamed, (4, 2, 3), "facts, entities, predicates");
+    let (_, physical, _) = store.graph_counts().unwrap();
+    assert_eq!(physical, 6, "two live rows the dedup must remove");
 }

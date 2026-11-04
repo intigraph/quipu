@@ -472,8 +472,11 @@ fn temporal_order(a: &Value, b: &Value) -> Option<Option<std::cmp::Ordering>> {
     };
     let (x, y) = (x.trim(), y.trim());
     Some(match kind {
-        Temporal::DateTime => match (x.parse::<oxsdatatypes::DateTime>(), y.parse()) {
-            (Ok(x), Ok(y)) => x.partial_cmp(&y),
+        Temporal::DateTime => match (
+            super::filter::eval_memo::date_time(x),
+            super::filter::eval_memo::date_time(y),
+        ) {
+            (Some(x), Some(y)) => x.partial_cmp(&y),
             _ => None,
         },
         Temporal::Date => match (x.parse::<oxsdatatypes::Date>(), y.parse()) {
@@ -508,20 +511,24 @@ pub fn compare_values(
     row: &Bindings,
     pred: impl Fn(std::cmp::Ordering) -> bool,
 ) -> Option<bool> {
-    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+    let (Some(a), Some(b)) = (
+        operand::operand(store, left, row),
+        operand::operand(store, right, row),
+    ) else {
         return Some(false);
     };
+    let (a, b) = (&*a, &*b);
     if a.datatype().is_some_and(namespace::is_numeric_datatype)
         && b.datatype().is_some_and(namespace::is_numeric_datatype)
     {
-        return Some(crate::numeric_value::compare(&a, &b).is_some_and(pred));
+        return Some(crate::numeric_value::compare(a, b).is_some_and(pred));
     }
     // Temporal literals compare by VALUE (aegis-jd2t): offsets normalised, an
     // ill-typed lexeme, a mixed pair or an indeterminate (timezoned against
     // untimezoned) comparison is the SPARQL type error (`None`), so it fails
     // under `!` as well (aegis-u93). A lexical compare ordered 06:00-05:00
     // before 10:00Z and let "not-a-time" pass.
-    if let Some(order) = temporal_order(&a, &b) {
+    if let Some(order) = temporal_order(a, b) {
         return order.map(pred);
     }
     // String comparison uses the LEXICAL form, so "hello"@en compares as

@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.16.5"
+version = "0.16.6"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -114,6 +114,9 @@ name = "pendant_revoke_fixture"
 required-features = ["shacl"]
 
 [dependencies]
+foldhash = "0.2"
+# Immutable first shared signing release, independently acquired and checksum-qualified.
+quipu-signing = "=0.1.0"
 # Fair (FIFO) store mutex for the server: with std's unfair Mutex a sustained
 # writer stream can starve readers indefinitely (the mfg0 write-flood incident).
 parking_lot = "0.12"
@@ -179,7 +182,7 @@ clap_mangen = { version = "0.2", optional = true }
 clap_complete = { version = "4.5", optional = true }
 ndarray = { version = "0.16", optional = true }
 
-# The store-free Git qpack merge (`src/git_merge*.rs`) writes outputs atomically
+# The store-free Git pendant merge (`src/git_merge*.rs`) writes outputs atomically
 # and runs `git merge-file` on temporary copies. Both are filesystem-bound, so the
 # dependency is native-only, like the modules that use it.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

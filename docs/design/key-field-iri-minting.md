@@ -140,14 +140,35 @@ refused elsewhere, and on resolve. The mint path derives the IRI
 type, optional label and key triples through the existing guarded RDF write
 path.
 
-## Follow-ups (not in this PR)
+## Identity protection and optional verification
 
-1. Refuse raw writes that retract or replace a key field on a key-minted
-   subject, outside the merge path.
-2. Refuse shape loads that change `quipu:keyFields` or the strategy for a type
-   that already has key IRIs.
-3. An optional `entity_ref verify` that recomputes a received key IRI from its
-   key triples on share import.
+Raw guarded writes refuse retraction or replacement of an existing key field,
+or removal/change of its selected identity type. Identical key assertions and
+non-key labels remain writable. The guard runs before functional-property
+supersede and applies to normal, attested and decision-deck transactions.
+A subject's retained assertions in the selected write graph establish this
+contract. A first incoming identity is not automatically verified by this guard;
+the explicit verification step below checks its derivation.
+A failed batch rolls back atomically. This deliberately also refuses an
+in-place retract/reassert of an identical key; add supersession links to a new
+entity rather than retiring its key facts through a raw write.
+
+Once a configured or retained key namespace has a typed subject in any graph,
+shape loads and removals must retain that type's effective key contract: ordered fields,
+value kinds, exactly-one constraints and strategy. Historical assertions retain
+this protection after retirement. Equivalent shape spelling, explicit default
+hash and unrelated shape edits remain allowed. Before allocation, the contract
+may still change. These checks do not repair earlier corrupt identities.
+The contract check and registry write share one SQLite snapshot: concurrent
+allocation invalidates a stale shape edit instead of letting it commit.
+
+After importing/promoting a share, a receiver may explicitly check a reference
+with `entity-ref verify` (REST/MCP action `verify`). It uses the receiver's
+configured or retained owner namespace and current local shapes/triples,
+validates the RDF kinds and recomputes the exact IRI. This read-only check never imports, repairs,
+allocates, fetches a resolver or trusts namespace policy from the incoming RDF.
+It is optional; import itself does not silently enable verification or change
+its acceptance policy. Only `iri` and optional exact `graph` are accepted.
 
 ## Test plan
 
@@ -173,6 +194,9 @@ Implemented in `src/entity_key_tests.rs` (in-memory stores only):
 - Lexical: readable and percent-encoded, and refused when the namespace selects
   more than one type.
 
-Still to add with the follow-ups: a merge-operator test (two forks mint the
-same key and the merge yields one node with zero decisions; a forced divergent
-port raises one decision), plus the raw-write and shape-edit refusals.
+`entity_key_guard_tests` also covers raw-write atomic refusals and positive
+idempotent/label controls, effective shape-contract freeze, read-only reference
+verification and corruption controls. Two fork writers derive the same key:
+promoting both yields one node and zero decisions. A forced divergent incoming
+port yields exactly one decision, writes nothing and retains the fork. These
+operator fixtures use isolated stores, not production history.

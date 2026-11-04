@@ -55,9 +55,8 @@ pub(super) fn tx_digest(
     Ok(hex::encode(Sha256::digest(&out)))
 }
 
-/// One record as the fields the applier writes, with the same defaults
-/// (`valid_from` falls back to the transaction time; a retract carries no
-/// `valid_to`).
+/// One record's semantic identity, retaining transaction-time encoding for
+/// already-covered legacy retractions. New retractions require a close.
 fn encode_record(record: &Json, tx_timestamp: &str) -> std::result::Result<Vec<u8>, String> {
     let (Some(entity), Some(attribute), Some(op)) = (
         record["entity"].as_str(),
@@ -67,6 +66,7 @@ fn encode_record(record: &Json, tx_timestamp: &str) -> std::result::Result<Vec<u
         return Err("record lacks entity, attribute or op".into());
     };
     let retract = op_is_retract(op)?;
+    let close = super::record::retracted_valid_at(record, retract)?;
     let value = encode_value(&record[if retract { "old_value" } else { "value" }])?;
     let mut out = Vec::new();
     put(
@@ -83,7 +83,14 @@ fn encode_record(record: &Json, tx_timestamp: &str) -> std::result::Result<Vec<u
             .unwrap_or(tx_timestamp)
             .as_bytes(),
     );
-    match record["valid_to"].as_str().filter(|_| !retract) {
+    // Preserve old digests when the explicit close has legacy semantics.
+    // A backdated close must differ, including on redelivery after upgrade.
+    let valid_to = if retract {
+        close.filter(|close| *close != tx_timestamp)
+    } else {
+        record["valid_to"].as_str()
+    };
+    match valid_to {
         Some(to) => put(&mut out, &[b"\x01", to.as_bytes()].concat()),
         None => put(&mut out, b"\x00"),
     }

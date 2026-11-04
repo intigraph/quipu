@@ -4,7 +4,7 @@
 set -euo pipefail
 SOURCE=${1:-docs/book/src/explore}
 OUTPUT=${2:-docs/book/book/explore}
-for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js constellation.js constellation.css entity.js relation.js; do
+for f in index.html explorer.js engine-api.js worker.js workbench.js workbench.css presentation.js presentation.css map-cache.js pack-loader.js default-store.js default-pack-proof.js worker-progress.js provenance.js loading.js loading.css constellation.js constellation-queries.js constellation.css entity.js relation.js; do
   test -s "$OUTPUT/$f" || { echo "missing from book output: explore/$f"; exit 1; }
 done
 pending=false
@@ -23,5 +23,12 @@ for f in pkg/quipu_wasm_explorer.js pkg/quipu_wasm_explorer_bg.wasm repository.p
     echo "::warning::no release bundle staged: $f"
   else
     echo "missing release asset beyond publication grace: explore/$f"; exit 1
+  fi
+done
+
+for f in default-pack-proof.js default-store.db.gz; do
+  if test -s "$SOURCE/$f"; then
+    test -s "$OUTPUT/$f" && cmp -s "$SOURCE/$f" "$OUTPUT/$f" \
+      || { echo "validated default asset was not published unchanged: $f"; exit 1; }
   fi
 done

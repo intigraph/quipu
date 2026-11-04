@@ -23,6 +23,7 @@ pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
 pub mod entity_key;
+mod entity_key_guard;
 pub mod entity_namespaces;
 pub mod entity_reference;
 pub mod episode;
@@ -52,11 +53,15 @@ mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+/// Portable bootstrap manifest and signature verification, including WASM.
+#[path = "asof_share/manifest.rs"]
+pub mod replica_manifest;
 pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
 pub mod replicate_wire;
 mod search_graph_scope;
+pub mod search_outcome;
 pub mod search_trace;
 pub mod substring;
 pub mod transaction_auth;
@@ -78,10 +83,13 @@ mod pack_load;
 mod pack_turtle;
 pub mod path;
 pub mod proposal;
+pub mod proposal_migration;
+pub mod proposal_plan;
 pub mod provider;
 pub mod rdf;
 mod rdf_compact;
 mod rdf_export;
+pub mod term_vocabulary;
 pub use rdf_compact::{COMPACT_RDF_LIMIT, CompactRdf, export_compact_graph};
 /// Oversized-transaction parts shared by the change stream and the as-of share.
 pub mod feed_parts;
@@ -95,6 +103,8 @@ pub mod fork_merge_decisions;
 /// Inactive SQLite-only HA read profile; no serving adapter is installed.
 #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
 pub mod ha_read;
+/// Experimental pure ownership-handoff model; no Store or runtime integration.
+pub mod ownership_handoff_model;
 mod rdf_graph_store;
 mod rdf_scope;
 pub mod read_authorization;
@@ -119,6 +129,8 @@ pub mod shacl_context;
 pub mod shacl_cycles;
 #[cfg(feature = "shacl")]
 mod shacl_debt;
+/// Refuse SHACL-SPARQL shapes, which are not evaluated (aegis-rk4).
+pub mod shacl_unsupported;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod verified_write;
@@ -186,6 +198,7 @@ pub mod vector_lance;
 pub mod verdict_schemes;
 pub mod vocabulary;
 pub mod w3c;
+pub mod write_gate;
 
 /// The crate version this build was compiled from.
 ///

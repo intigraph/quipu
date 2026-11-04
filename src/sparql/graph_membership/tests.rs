@@ -770,3 +770,123 @@ fn constant_subject_fields_use_the_same_covering_graph_membership() {
         format!("SELECT ?text WHERE {{ GRAPH <{EX}g> {{ <{EX}foreign> <{EX}title> ?text }} }}");
     assert!(query(&store, &foreign).unwrap().rows().is_empty());
 }
+
+#[test]
+fn dense_historical_object_lookup_does_not_walk_payload_history() {
+    let (store, graph) = fixture();
+    index(&store);
+    let predicate_id = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let value = crate::Value::Str("SEEDS alpha".into()).to_bytes();
+    let tx: i64 = store
+        .conn
+        .query_row("SELECT MIN(id) FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    store
+        .conn
+        .execute_batch("SAVEPOINT history_fixture")
+        .unwrap();
+    for i in 0..6000 {
+        let entity = store.intern(&format!("{EX}history{i}")).unwrap();
+        store.conn.execute(
+            "INSERT INTO facts(e,a,v,g,tx,valid_from,valid_to,op) VALUES(?1,?2,?3,?4,?5,'2025-01-01','2025-02-01',1)",
+            rusqlite::params![entity,predicate_id,value,graph,tx],
+        ).unwrap();
+    }
+    store.conn.execute_batch("RELEASE history_fixture").unwrap();
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let seed = Bindings::from([("text".into(), crate::Value::Str("SEEDS alpha".into()))]);
+    let steps = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let seen = Arc::clone(&steps);
+    store
+        .conn
+        .progress_handler(
+            1,
+            Some(move || {
+                seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                false
+            }),
+        )
+        .unwrap();
+    let result =
+        crate::sparql::triple::eval_triple_pattern_limited(&store, &pattern, &seed, &ctx, None)
+            .unwrap();
+    store
+        .conn
+        .progress_handler(0, None::<fn() -> bool>)
+        .unwrap();
+    assert_eq!(
+        result.len(),
+        1,
+        "historical and foreign rows must remain excluded"
+    );
+    let work = steps.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        work < 40_000,
+        "current lookup walked dense history: {work} VM instructions"
+    );
+    // A same-named but incomplete partial index must not change the result or
+    // force an unusable plan. Missing indexes retain the existing point seek.
+    store
+        .conn
+        .execute_batch(
+            "DROP INDEX idx_current_aev;
+        CREATE INDEX idx_current_aev ON facts(a,e,v)
+        WHERE op=1 AND valid_to IS NULL AND a=0",
+        )
+        .unwrap();
+    let fallback =
+        crate::sparql::triple::eval_triple_pattern_limited(&store, &pattern, &seed, &ctx, None)
+            .unwrap();
+    assert_eq!(fallback, result);
+    store
+        .conn
+        .execute_batch("DROP INDEX idx_current_aev")
+        .unwrap();
+    let missing =
+        crate::sparql::triple::eval_triple_pattern_limited(&store, &pattern, &seed, &ctx, None)
+            .unwrap();
+    assert_eq!(missing, result);
+}
+
+#[test]
+fn unbound_predicate_presence_keeps_reads_on_covering_indexes() {
+    let (store, graph) = fixture();
+    index(&store);
+    let (pattern, _) = shape();
+    let ctx = TemporalContext {
+        graph: GraphScope::Named(vec![graph]),
+        ..Default::default()
+    };
+    let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(a)];
+    let membership = predicate(
+        &store,
+        &ctx,
+        &pattern,
+        &Bindings::new(),
+        &[graph],
+        &mut params,
+    )
+    .unwrap()
+    .unwrap_or_else(|| "g=?2".into());
+    let sql = format!(
+        "SELECT e,a,v FROM facts INDEXED BY idx_current_aev WHERE a=?1 AND {membership} AND op=1 AND valid_to IS NULL"
+    );
+    assert_eq!(
+        table_columns(&store, &sql, &[a, graph]),
+        0,
+        "preflight absence must not fetch fact payload pages"
+    );
+    let present = format!(
+        "SELECT (\"yes\" AS ?probe) WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}title> ?v }} }} LIMIT 1"
+    );
+    assert_eq!(query(&store, &present).unwrap().rows().len(), 1);
+    let missing = format!(
+        "SELECT (\"yes\" AS ?probe) WHERE {{ GRAPH <{EX}g> {{ ?s <{EX}missing> ?v }} }} LIMIT 1"
+    );
+    assert!(query(&store, &missing).unwrap().rows().is_empty());
+}

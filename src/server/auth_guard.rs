@@ -3,6 +3,10 @@
 use super::{auth, auth_response, relay, replica};
 use axum::{http::StatusCode, response::IntoResponse};
 
+#[cfg(test)]
+#[path = "replication_guard_tests.rs"]
+mod replication_guard_tests;
+
 pub(crate) struct Config {
     pub auth_policy: quipu::http_auth::BearerPolicy,
     pub session_keys: quipu::http_auth::SessionKeyPolicy,

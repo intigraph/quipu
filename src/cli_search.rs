@@ -103,7 +103,16 @@ pub fn cmd_search(args: &[String], db: &str) {
         input["all_graphs"] = serde_json::json!(true);
     }
     let store = crate::cli_open::open_store(db);
-    match quipu::tool_search(&store, &input) {
+    use quipu::search_outcome::{
+        Operation,
+        observation::{Call, Surface, emit},
+    };
+    let call = Call::new(Surface::CliLocal, Operation::Search);
+    let result = call.scope(|| quipu::tool_search(&store, &input));
+    if let Some(event) = call.finish(None, None) {
+        emit(&event);
+    }
+    match result {
         Ok(out) => println!("{}", serde_json::to_string_pretty(&out).unwrap()),
         Err(e) => {
             eprintln!("error: {e}");

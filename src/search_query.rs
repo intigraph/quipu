@@ -18,6 +18,14 @@ fn invalid(message: &str) -> Error {
 /// Search-rooted SELECT. Keyword mode needs no embeddings; hybrid requires both
 /// retrievers to succeed. Search provenance is returned separately from rows.
 pub fn tool_search_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    crate::search_outcome::observation::run(
+        crate::search_outcome::Operation::SearchQuery,
+        input,
+        || search_query(store, input),
+    )
+}
+
+fn search_query(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     let mode = input
         .get("mode")
         .and_then(JsonValue::as_str)

@@ -176,6 +176,7 @@ impl Store {
             }
         }
 
+        self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_dataset")?;
         let result = (|| -> Result<()> {
             self.transact_to_graph(&datums, timestamp, actor, Some("dataset"), meta_g)?;
@@ -198,13 +199,11 @@ impl Store {
 
         match result {
             Ok(()) => {
-                self.conn.execute_batch("RELEASE quipu_dataset")?;
+                crate::store::release::release(&self.conn, "quipu_dataset")?;
                 Ok(())
             }
             Err(e) => {
-                let _ = self
-                    .conn
-                    .execute_batch("ROLLBACK TO quipu_dataset; RELEASE quipu_dataset");
+                let _ = crate::store::release::rollback_release(&self.conn, "quipu_dataset");
                 Err(e)
             }
         }
