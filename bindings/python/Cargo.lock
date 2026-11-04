@@ -1738,6 +1738,7 @@ dependencies = [
  "cap-std",
  "datafrog",
  "flate2",
+ "foldhash 0.2.0",
  "getrandom 0.3.4",
  "glob",
  "hex",
