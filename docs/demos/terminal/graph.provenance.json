@@ -1,10 +1,27 @@
 {
-  "input_manifest_sha256": "bf542fd101cb9d16dcf96ea8e7169abd20596f11b2f4c4eca15ee0deee713e75",
-  "source": "native query stdout, command index 1; exact one-row assertion",
-  "row": [
-    "urn:demo:Ada",
-    "urn:demo:Engine"
+  "input_manifest_sha256": "19968c1d1480936c162e87dd415c4a8102282d918edcd00ec37b48c524f5d157",
+  "source": "native read stdout: command 6 (--tx 1) for before, command 5 for after; exact row assertions",
+  "before_rows": [
+    [
+      "Ada",
+      "studies",
+      "Engine"
+    ]
   ],
-  "relation": "urn:demo:studies",
-  "graph_sha256": "fb6353e5cbec215004ea97972b10bacb402f6ee29cfa697c52c41e89a3b09426"
+  "after_rows": [
+    [
+      "Ada",
+      "studies",
+      "Engine"
+    ],
+    [
+      "Babbage",
+      "designed",
+      "Engine"
+    ]
+  ],
+  "graph_sha256": {
+    "graph-before.svg": "198a88ec2737493e88d31c067d431599df19a3c1e1fd53d0660190e5ad2fc54b",
+    "graph-after.svg": "6dade3276a53af1665864004cfe5c503f2b87909e5e644bea510eabfaa83d0f8"
+  }
 }

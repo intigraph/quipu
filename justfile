@@ -184,6 +184,7 @@ demo name="explorer":
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;
+        transition-trust-root) cargo run --quiet --locked --offline --no-default-features --example transition_trust_root ;;
         ownership-startup-boundary) cargo run --quiet --locked --offline --no-default-features --example ownership_startup_boundary ;;
         cast-filter) cargo run --quiet --locked --no-default-features --example cast_filter_profile -- examples/cast-filter-profile.rq 6000 ;;
         explorer)
@@ -320,7 +321,10 @@ docs cmd="build":
         fmt)      npx prettier --write "docs/book/src/**/*.md" --prose-wrap preserve ;;
         vale)     vale docs/book/src/ ;;
         check)    just docs lint && just docs build ;;
-        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check" ;;
+        generate) cargo run --locked --features docgen --bin quipu-docgen ;;
+        generated-check) cargo run --locked --features docgen --bin quipu-docgen -- --check ;;
+        references-test) python3 scripts/test-repository-knowledge.py ;;
+        *)        echo "Unknown: {{cmd}}. Try: build serve lint fix fmt vale check generate generated-check references-test" ;;
     esac
 
 # === Public benchmarks ===

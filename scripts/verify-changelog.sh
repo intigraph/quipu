@@ -137,12 +137,33 @@ missing="$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || t
 # touched CHANGELOG.md was dropped from the required set, and the section
 # release-plz generated for it documents nothing but an unresolvable placeholder.
 MECHANICS_RE='^(CHANGELOG\.md|Cargo\.toml|Cargo\.lock)$'
+# The Python binding's manifest and lock joined the release commit with #902
+# (aegis-sw4): release-pr-daily syncs their version to the crate's. Without them
+# every release commit read as content and failed its own verify (aegis-0zr). They
+# count as mechanics ONLY inside the canonical release commit below, and only when
+# BOTH checks agree: check-release-mechanics.py (canonical identities, version-only
+# Cargo data) and python-binding-sync-only.py (byte-identical outside the synced
+# versions). A dependency or lock-entry change there is content (#910 review).
+SYNC_ONLY="$(dirname "${BASH_SOURCE[0]}")/python-binding-sync-only.py"
 missing="$(printf '%s\n' "$missing" | while read -r h; do
   [[ -z "$h" ]] && continue
   files="$(git show --name-only --format= "$h" 2>/dev/null | grep -c . || true)"
   mech="$(git show --name-only --format= "$h" 2>/dev/null | grep -cE "$MECHANICS_RE" || true)"
   # Every file it touched is release mechanics, and it touched at least one.
   if [[ "$files" -gt 0 && "$files" -eq "$mech" ]]; then continue; fi
+  # The Python crate pins the core version too. Admit its synchronization only
+  # for the exact canonical release subject (including GitHub's squash suffix),
+  # matching this section, and only canonical package version changes in Cargo data.
+  subject="$(git log -1 --format=%s "$h")"
+  release_subject="chore: release v${newest_ver}"
+  suffix="${subject#"$release_subject"}"
+  binding_mech="$(git show --name-only --format= "$h" | grep -cE '^(CHANGELOG\.md|Cargo\.(toml|lock)|bindings/python/Cargo\.(toml|lock))$' || true)"
+  if [[ "$subject" == "$release_subject" || ( "$subject" == "$release_subject"* && "$suffix" =~ ^\ \(#[0-9]+\)$ ) ]]; then
+    if [[ "$files" -gt 0 && "$files" -eq "$binding_mech" ]]; then
+      if python3 scripts/check-release-mechanics.py "$h" "$newest_ver" \
+          && python3 "$SYNC_ONLY" "$h"; then continue; fi
+    fi
+  fi
   echo "$h"
 done)"
 

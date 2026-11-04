@@ -452,3 +452,75 @@ fn enclosed_migration_cannot_close_a_decided_pin_without_its_settlement() {
         "flagged"
     );
 }
+
+/// Main's unsupported-SHACL refusal must survive C1's shared registry
+/// preparation, including a load enclosed by a proposal migration.
+#[cfg(feature = "shacl")]
+#[test]
+fn unsupported_shape_replacement_preserves_decided_pins_in_both_load_paths() {
+    let unsupported = concat!(
+        "@prefix sh: <http://www.w3.org/ns/shacl#> .\n",
+        "<urn:fixture:Shape> a sh:NodeShape ; sh:targetClass <urn:fixture:Ticket> ;\n",
+        "sh:sparql [ sh:select \"SELECT $this WHERE { }\" ] .\n"
+    );
+    for enclosed in [false, true] {
+        let (mut store, mapping) = fixture();
+        apply(&mut store, &mapping);
+        let before_tx = store.latest_tx_id().unwrap();
+        let before_shapes = store.list_shapes().unwrap();
+        let before_pins = store
+            .current_shape_pins(RegistryKind::Shapes, "fixture")
+            .unwrap();
+        let event_count = |store: &Store| -> i64 {
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+                .unwrap()
+        };
+        let before_events = event_count(&store);
+        let error = if enclosed {
+            store
+                .conn
+                .execute_batch("SAVEPOINT unsupported_shape_fixture")
+                .unwrap();
+            let result = store.load_shapes_enclosed("fixture", unsupported, NEXT);
+            // Inspect before rolling back: refusal itself must not mutate.
+            assert_eq!(store.list_shapes().unwrap(), before_shapes);
+            assert_eq!(store.latest_tx_id().unwrap(), before_tx);
+            assert_eq!(event_count(&store), before_events);
+            store
+                .conn
+                .execute_batch(
+                    "ROLLBACK TO unsupported_shape_fixture; RELEASE unsupported_shape_fixture",
+                )
+                .unwrap();
+            result.unwrap_err()
+        } else {
+            store.load_shapes("fixture", unsupported, NEXT).unwrap_err()
+        };
+        assert!(
+            error
+                .to_string()
+                .contains(crate::shacl_unsupported::REFUSAL),
+            "{error}"
+        );
+        assert!(store.conn.is_autocommit());
+        assert_eq!(store.latest_tx_id().unwrap(), before_tx);
+        assert_eq!(store.list_shapes().unwrap(), before_shapes);
+        assert_eq!(
+            store
+                .current_shape_pins(RegistryKind::Shapes, "fixture")
+                .unwrap(),
+            before_pins
+        );
+        assert_eq!(event_count(&store), before_events);
+        assert_eq!(
+            store
+                .shape_mapping_receipt(&mapping.id)
+                .unwrap()
+                .unwrap()
+                .status,
+            "decided"
+        );
+    }
+}

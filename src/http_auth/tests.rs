@@ -374,6 +374,8 @@ fn routes_in_server_source() -> Vec<String> {
         "server/event_cursor.rs",
         "server/feed_stream_tests.rs",
         "server/feed_read_pool_tests.rs",
+        // /stats off-writer tests (aegis-fclp): test-only, no routes.
+        "server/stats_tests.rs",
         "server/graph_metrics.rs",
         "server/handle.rs",
         "server/input_fields.rs",

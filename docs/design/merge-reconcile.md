@@ -3,6 +3,9 @@
 **Status:** design for aegis-k7l (2026-10-28). Builds on shipped work; it does
 not replace it.
 
+The expected graph outcome of every merge case, decided or not, is specified in
+[merge-behaviour.md](merge-behaviour.md) (aegis-karb.1), which extends this design.
+
 Steve's ask: agents need one way to reconcile a merge that could not finish,
 need to know how to do it, and need a standard way to show it to the user,
 including in the Git merge tool.

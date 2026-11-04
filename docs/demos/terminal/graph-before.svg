@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" role="img" aria-labelledby="title desc">
+<title id="title">The graph after one fact</title><desc id="desc">The native read at transaction 1 returns Ada studies Engine.</desc>
+<rect width="1000" height="420" rx="16" fill="#101827"/>
+<g fill="none" stroke-width="4">
+<path d="M200 205C300 90 400 320 500 205" stroke="#6ee7b7"/>
+<path d="M200 95V315" stroke="#475569"/><circle cx="200" cy="205" r="12" stroke="#6ee7b7"/>
+<path d="M500 95V315" stroke="#475569"/><circle cx="500" cy="205" r="12" stroke="#6ee7b7"/>
+</g><g fill="#f1f5f9" font-family="DejaVu Sans Mono, Menlo, monospace" font-size="28" text-anchor="middle">
+<text x="200" y="78">Ada</text>
+<text x="500" y="78">Engine</text>
+<text x="350" y="150" fill="#6ee7b7" font-size="24">studies</text>
+<text x="500" y="380" font-size="24">tx 1: one fact</text></g></svg>

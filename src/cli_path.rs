@@ -28,7 +28,7 @@ pub fn cmd_path(args: &[String], db_path: &str, base_ns: &str) {
     let Some(trajectory) = args.get(3).filter(|a| !a.starts_with("--")) else {
         die(USAGE);
     };
-    let vocab = PathVocab::new(base_ns);
+    let vocab = PathVocab::with_vocabulary(base_ns, crate::cli_open::config().vocabulary);
     let rest = &args[4..];
     let json = rest.iter().any(|a| a == "--json");
 

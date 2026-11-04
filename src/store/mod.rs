@@ -17,6 +17,9 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+// Protected per-lineage authority journal (aegis-s24.8 P1); native only.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_journal;
 mod ownership_startup;
 #[cfg(test)]
 mod ownership_startup_tests;
@@ -42,6 +45,7 @@ pub mod demotions;
 #[cfg(test)]
 mod demotions_tests;
 pub mod events;
+mod events_retention;
 pub mod forks;
 mod forks_merge;
 pub mod freeze;
@@ -227,6 +231,9 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
+    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
+    /// startup. Defaults to legacy (every term under `base_ns`).
+    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.

@@ -12,6 +12,10 @@ has no compatible mapping API, so the demonstration compares an empty fixture
 with its decided and flagged states on the candidate. It proves source behavior,
 not an installed service, production grant, or consumer activation.
 
+The mapping shape file is excluded from the production load plan. Loading it
+into an isolated demonstration store does not authorize schema activation in a
+running service.
+
 Repeat the observable behavior from the repository root:
 
 ```sh

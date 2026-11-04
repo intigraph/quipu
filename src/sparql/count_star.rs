@@ -1,0 +1,550 @@
+//! A typed subject with single-pattern OPTIONALs, read in one ordered pass
+//! (aegis-xdvg.6).
+//!
+//! `GRAPH <g> { ?s a <T> . OPTIONAL { ?s <p1> ?o1 } ... }` used to cost one
+//! scan for the type and one per OPTIONAL, each walking an index and looking
+//! up every row in the table, then sorting for its GROUP BY: 69% of the 2fa
+//! stats aggregate's star was SQLite reads. The partial index
+//! `idx_current_gea (g, e, a, v) WHERE op = 1 AND valid_to IS NULL` already
+//! holds every current fact of a graph in subject order, so one covering scan
+//! fills each subject's slots: is it a `<T>`, and which objects does each
+//! OPTIONAL see.
+//!
+//! The rows are exactly those of the nested left joins: subjects in ascending
+//! id (the order the type scan emits), each OPTIONAL's objects in term-key
+//! order with identical values once (the order and dedup of the per-property
+//! scans' `GROUP BY e, a, quipu_term_key(v)`), the first OPTIONAL outermost,
+//! and a row kept once when an OPTIONAL matches nothing. A subject holding two
+//! DIFFERENT encodings of one term (`"1"^^xsd:integer` and `"01"^^xsd:integer`)
+//! is where SQL keeps one representative of its choosing; the pass declines
+//! before emitting anything and the existing scans run instead.
+//!
+//! Admitted only where the existing streaming OPTIONAL path is: one named
+//! graph at the current time, no attachments, no inference or string narrows,
+//! nothing pre-bound.
+
+use super::filter::eval_filter;
+use super::pattern_util::check_eval_budget;
+use super::{Bindings, GraphScope, TemporalContext};
+use crate::{Result, Store, Value};
+use rusqlite::OptionalExtension;
+use spargebra::algebra::{Expression, GraphPattern};
+use spargebra::term::{NamedNodePattern, TermPattern};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+#[cfg(test)]
+thread_local! {
+    /// How many stars took the single pass (tests prove the path ran).
+    pub(super) static PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// How many covering scans ran (tests prove a shared star scans once).
+    pub(super) static SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+struct Optional<'a> {
+    predicate: &'a str,
+    object: &'a str,
+    expression: Option<&'a Expression>,
+}
+
+struct Star<'a> {
+    subject: &'a str,
+    class: &'a str,
+    /// At most one `?s <p> ?o` beside the type in the base BGP: every value
+    /// is a row and a subject without one has none (an inner join).
+    required: Option<(&'a str, &'a str)>,
+    optionals: Vec<Optional<'a>>,
+}
+
+fn shape(pattern: &GraphPattern) -> Option<Star<'_>> {
+    match pattern {
+        GraphPattern::Bgp { patterns } => {
+            // The SQL BGP keeps written order when a type pattern is present;
+            // with one other pattern either order yields subjects ascending
+            // and that pattern's values in term-key order.
+            let (mut class, mut required, mut subject_var) = (None, None, None);
+            if patterns.is_empty() || patterns.len() > 2 {
+                return None;
+            }
+            for tp in patterns {
+                let (TermPattern::Variable(subject), NamedNodePattern::NamedNode(predicate)) =
+                    (&tp.subject, &tp.predicate)
+                else {
+                    return None;
+                };
+                if subject_var.is_some_and(|s: &str| s != subject.as_str()) {
+                    return None;
+                }
+                subject_var = Some(subject.as_str());
+                match &tp.object {
+                    TermPattern::NamedNode(c)
+                        if predicate.as_str() == crate::namespace::RDF_TYPE && class.is_none() =>
+                    {
+                        class = Some(c.as_str());
+                    }
+                    TermPattern::Variable(o)
+                        if predicate.as_str() != crate::namespace::RDF_TYPE
+                            && o.as_str() != subject.as_str()
+                            && required.is_none() =>
+                    {
+                        required = Some((predicate.as_str(), o.as_str()));
+                    }
+                    _ => return None,
+                }
+            }
+            Some(Star {
+                subject: subject_var?,
+                class: class?,
+                required,
+                optionals: Vec::new(),
+            })
+        }
+        GraphPattern::LeftJoin {
+            left,
+            right,
+            expression,
+        } => {
+            let mut star = shape(left)?;
+            let GraphPattern::Bgp { patterns } = &**right else {
+                return None;
+            };
+            let [tp] = patterns.as_slice() else {
+                return None;
+            };
+            let (
+                TermPattern::Variable(subject),
+                NamedNodePattern::NamedNode(predicate),
+                TermPattern::Variable(object),
+            ) = (&tp.subject, &tp.predicate, &tp.object)
+            else {
+                return None;
+            };
+            let object = object.as_str();
+            if subject.as_str() != star.subject
+                || object == star.subject
+                || predicate.as_str() == crate::namespace::RDF_TYPE
+                || star.optionals.iter().any(|o| o.object == object)
+                || star.required.is_some_and(|(_, r)| r == object)
+            {
+                return None;
+            }
+            star.optionals.push(Optional {
+                predicate: predicate.as_str(),
+                object,
+                expression: expression.as_ref(),
+            });
+            Some(star)
+        }
+        _ => None,
+    }
+}
+
+fn covering_index(store: &Store) -> Result<bool> {
+    let definition: Option<String> = store
+        .conn
+        .query_row(
+            "SELECT sql FROM main.sqlite_master WHERE type='index' AND name='idx_current_gea'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(definition.is_some_and(|sql| {
+        sql.chars()
+            .filter(|c| !c.is_ascii_whitespace())
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+            == "createindexidx_current_geaonfacts(g,e,a,v)whereop=1andvalid_toisnull"
+    }))
+}
+
+/// Every buffered subject's slots, flat: one value arena and, per subject,
+/// where each of its `width` slots starts. No allocation per subject.
+struct Buffered {
+    width: usize,
+    subjects: Vec<i64>,
+    starts: Vec<usize>,
+    values: Vec<Value>,
+}
+
+impl Buffered {
+    fn push(&mut self, subject: i64, slots: &mut [Vec<Value>]) {
+        self.subjects.push(subject);
+        for slot in slots {
+            self.starts.push(self.values.len());
+            self.values.append(slot);
+        }
+    }
+
+    /// Subject `k`'s slot `j`.
+    fn slot(&self, k: usize, j: usize) -> &[Value] {
+        let i = k * self.width + j;
+        let end = self.starts.get(i + 1).copied().unwrap_or(self.values.len());
+        &self.values[self.starts[i]..end]
+    }
+}
+
+/// Put each slot in the per-property scans' order: term-key order, identical
+/// values once. `false` when a slot holds two encodings of one term, where
+/// SQL keeps a representative of its choosing.
+///
+/// Rows arrive in index (byte) order and the sort is stable. Two encodings
+/// that decode to one value write back identically, and any representative
+/// would decode to that same value, so comparing written-back bytes is enough.
+/// Single values, the common case, need no key at all.
+fn settle(values: &mut [Vec<Value>]) -> bool {
+    for slot in values.iter_mut() {
+        if slot.len() < 2 {
+            continue;
+        }
+        let mut keyed: Vec<(Vec<u8>, Value)> = slot.drain(..).map(|v| (v.term_key(), v)).collect();
+        keyed.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut previous: Option<(Vec<u8>, Vec<u8>)> = None;
+        for (key, value) in keyed {
+            let bytes = value.to_bytes();
+            if let Some((last_key, last_bytes)) = &previous
+                && *last_key == key
+            {
+                if *last_bytes == bytes {
+                    continue;
+                }
+                return false;
+            }
+            previous = Some((key, bytes));
+            slot.push(value);
+        }
+    }
+    true
+}
+
+/// Stream the star's rows if its shape and store admit the single pass;
+/// `Ok(false)` (nothing emitted) otherwise.
+pub(super) fn try_visit(
+    store: &Store,
+    pattern: &GraphPattern,
+    ctx: &TemporalContext,
+    seed: &Bindings,
+    emit: super::count_stream::Emit<'_>,
+) -> Result<bool> {
+    let Some(star) = shape(pattern) else {
+        return Ok(false);
+    };
+    let GraphScope::Named(graphs) = &ctx.graph else {
+        return Ok(false);
+    };
+    let [graph] = graphs.as_slice() else {
+        return Ok(false);
+    };
+    if *graph <= 0
+        || !seed.is_empty()
+        || store.has_attachments()
+        || ctx.valid_at.is_some()
+        || ctx.as_of_tx.is_some()
+        || ctx.string_narrows.is_some()
+        || ctx.entails_rdfs
+        || !covering_index(store)?
+    {
+        return Ok(false);
+    }
+    let (Some(type_id), Some(class_id)) = (
+        store.lookup(crate::namespace::RDF_TYPE)?,
+        store.lookup(star.class)?,
+    ) else {
+        // No such class or no type facts: the type scan finds nothing either.
+        #[cfg(test)]
+        PASSES.with(|n| n.set(n.get() + 1));
+        return Ok(true);
+    };
+    // Slot 0 is the required pattern's, when there is one.
+    let predicates = star
+        .required
+        .iter()
+        .map(|(p, _)| *p)
+        .chain(star.optionals.iter().map(|o| o.predicate))
+        .map(|p| store.lookup(p))
+        .collect::<Result<Vec<_>>>()?;
+    let Some(buffered) = scan_shared(store, ctx, *graph, type_id, class_id, predicates)? else {
+        return Ok(false);
+    };
+
+    #[cfg(test)]
+    PASSES.with(|n| n.set(n.get() + 1));
+    let mut emitted = 0usize;
+    let mut slots: Vec<&[Value]> = Vec::with_capacity(buffered.width);
+    // One row for every subject, and each variable's key String allocated
+    // once and handed back after each use: the expansion allocates per value
+    // only for the value itself (aegis-xdvg.6).
+    let mut row = seed.clone();
+    let mut keys: Vec<Option<String>> = vec![None; star.optionals.len()];
+    let mut subject_key: Option<String> = None;
+    let mut required_key: Option<String> = None;
+    for (k, subject) in buffered.subjects.iter().enumerate() {
+        slots.clear();
+        slots.extend((0..buffered.width).map(|j| buffered.slot(k, j)));
+        bind(
+            &mut row,
+            &mut subject_key,
+            star.subject,
+            Value::Ref(*subject),
+        );
+        let result = match star.required {
+            Some((_, object)) => {
+                let (values, optional_values) = slots.split_first().expect("required slot");
+                let mut result = Ok(());
+                for value in *values {
+                    bind(&mut row, &mut required_key, object, value.clone());
+                    result = expand(
+                        store,
+                        ctx,
+                        &star.optionals,
+                        optional_values,
+                        0,
+                        &mut row,
+                        &mut keys,
+                        &mut emitted,
+                        emit,
+                    );
+                    unbind(&mut row, &mut required_key, object);
+                    if result.is_err() {
+                        break;
+                    }
+                }
+                result
+            }
+            None => expand(
+                store,
+                ctx,
+                &star.optionals,
+                &slots,
+                0,
+                &mut row,
+                &mut keys,
+                &mut emitted,
+                emit,
+            ),
+        };
+        unbind(&mut row, &mut subject_key, star.subject);
+        result?;
+    }
+    Ok(true)
+}
+
+/// One covering scan of `graph`: every subject of the class with its slots,
+/// or `None` (decline) when a slot holds two encodings of one term.
+fn scan(
+    store: &Store,
+    ctx: &TemporalContext,
+    graph: i64,
+    type_id: i64,
+    class: &[u8],
+    predicates: &[Option<i64>],
+) -> Result<Option<Buffered>> {
+    #[cfg(test)]
+    SCANS.with(|n| n.set(n.get() + 1));
+    let mut wanted: Vec<i64> = predicates.iter().flatten().copied().collect();
+    wanted.push(type_id);
+    wanted.sort_unstable();
+    wanted.dedup();
+    let placeholders = (0..wanted.len())
+        .map(|i| format!("?{}", i + 2))
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT e, a, v FROM facts INDEXED BY idx_current_gea \
+         WHERE g = ?1 AND op = 1 AND valid_to IS NULL AND a IN ({placeholders})"
+    );
+    let mut params: Vec<i64> = vec![graph];
+    params.extend(&wanted);
+
+    // Read every subject before emitting any, so a decline emits nothing.
+    let slot_of: Vec<(i64, usize)> = predicates
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, predicate)| predicate.map(|p| (p, slot)))
+        .collect();
+    let mut buffered = Buffered {
+        width: predicates.len(),
+        subjects: Vec::new(),
+        starts: Vec::new(),
+        values: Vec::new(),
+    };
+    {
+        let mut statement = store.conn.prepare_cached(&sql)?;
+        let mut rows = statement.query(rusqlite::params_from_iter(params.iter()))?;
+        let mut current: Option<i64> = None;
+        let mut typed = false;
+        // Reused for every subject; `push` moves the values out.
+        let mut values: Vec<Vec<Value>> = vec![Vec::new(); predicates.len()];
+        // Rows read over the whole scan: never reset per subject, so the
+        // deadline is polled every stride however small the subjects are.
+        let mut scanned = 0usize;
+        loop {
+            let row = rows.next()?;
+            let e = match row {
+                Some(row) => Some(row.get::<_, i64>(0)?),
+                None => None,
+            };
+            if let Some(done) = current
+                && e != current
+            {
+                if typed {
+                    if !settle(&mut values) {
+                        return Ok(None);
+                    }
+                    buffered.push(done, &mut values);
+                } else {
+                    values.iter_mut().for_each(Vec::clear);
+                }
+                typed = false;
+            }
+            let Some(row) = row else { break };
+            current = e;
+            scanned += 1;
+            check_eval_budget(ctx, scanned, 0)?;
+            let a: i64 = row.get(1)?;
+            // Borrowed, decoded once into its slot; never copied.
+            let rusqlite::types::ValueRef::Blob(v) = row.get_ref(2)? else {
+                return Ok(None);
+            };
+            if a == type_id && v == class {
+                typed = true;
+            }
+            for &(predicate, slot) in &slot_of {
+                if predicate == a {
+                    values[slot].push(Value::from_bytes(v)?);
+                }
+            }
+        }
+    }
+
+    Ok(Some(buffered))
+}
+
+/// Identical stars scanned once per query: the 2fa closed query reads the
+/// same star in its `closed` and `total` subqueries. The query runs in one
+/// read transaction, so a buffered scan stays exact for all of it.
+type StarKey = (i64, i64, Vec<Option<i64>>);
+
+/// At most this many buffered stars are kept for one query.
+const CACHED_STARS: usize = 16;
+
+thread_local! {
+    static CACHE: RefCell<Option<HashMap<StarKey, Option<Rc<Buffered>>>>> =
+        const { RefCell::new(None) };
+}
+
+/// Share buffered stars until dropped; restores any enclosing query's cache.
+pub(in crate::sparql) struct Cache(Option<HashMap<StarKey, Option<Rc<Buffered>>>>);
+
+impl Cache {
+    pub(in crate::sparql) fn install() -> Self {
+        Self(CACHE.with(|cache| cache.replace(Some(HashMap::new()))))
+    }
+}
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        CACHE.with(|cache| *cache.borrow_mut() = self.0.take());
+    }
+}
+
+/// [`scan`], shared within the installed [`Cache`] (declines included).
+fn scan_shared(
+    store: &Store,
+    ctx: &TemporalContext,
+    graph: i64,
+    type_id: i64,
+    class_id: i64,
+    predicates: Vec<Option<i64>>,
+) -> Result<Option<Rc<Buffered>>> {
+    let key: StarKey = (graph, class_id, predicates);
+    if let Some(found) =
+        CACHE.with(|cache| cache.borrow().as_ref().and_then(|c| c.get(&key).cloned()))
+    {
+        return Ok(found);
+    }
+    let class = Value::Ref(class_id).to_bytes();
+    let scanned = scan(store, ctx, graph, type_id, &class, &key.2)?.map(Rc::new);
+    CACHE.with(|cache| {
+        if let Some(c) = cache.borrow_mut().as_mut()
+            && c.len() < CACHED_STARS
+        {
+            c.insert(key, scanned.clone());
+        }
+    });
+    Ok(scanned)
+}
+
+/// Bind `name` (not yet bound) to `value`, reusing the key String in `key`.
+fn bind(row: &mut Bindings, key: &mut Option<String>, name: &str, value: Value) {
+    row.insert(key.take().unwrap_or_else(|| name.to_owned()), value);
+}
+
+/// Unbind `name`, keeping its key String in `key` for the next bind.
+fn unbind(row: &mut Bindings, key: &mut Option<String>, name: &str) {
+    if let Some((owned, _)) = row.remove_entry(name) {
+        *key = Some(owned);
+    }
+}
+
+/// The rows of OPTIONALs `i..` over `row`, in nested left-join order.
+#[allow(clippy::too_many_arguments)]
+fn expand(
+    store: &Store,
+    ctx: &TemporalContext,
+    optionals: &[Optional<'_>],
+    values: &[&[Value]],
+    i: usize,
+    row: &mut Bindings,
+    keys: &mut [Option<String>],
+    emitted: &mut usize,
+    emit: super::count_stream::Emit<'_>,
+) -> Result<()> {
+    let Some(optional) = optionals.get(i) else {
+        check_eval_budget(ctx, *emitted, *emitted)?;
+        *emitted += 1;
+        return emit(row);
+    };
+    let mut matched = false;
+    for value in values[i] {
+        bind(row, &mut keys[i], optional.object, value.clone());
+        let result = match optional.expression {
+            Some(e) => eval_filter(store, e, row, ctx),
+            None => Ok(true),
+        }
+        .and_then(|keep| {
+            if keep {
+                matched = true;
+                expand(
+                    store,
+                    ctx,
+                    optionals,
+                    values,
+                    i + 1,
+                    row,
+                    keys,
+                    emitted,
+                    emit,
+                )
+            } else {
+                Ok(())
+            }
+        });
+        unbind(row, &mut keys[i], optional.object);
+        result?;
+    }
+    if !matched {
+        expand(
+            store,
+            ctx,
+            optionals,
+            values,
+            i + 1,
+            row,
+            keys,
+            emitted,
+            emit,
+        )?;
+    }
+    Ok(())
+}

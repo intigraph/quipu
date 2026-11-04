@@ -132,6 +132,9 @@ impl Store {
                 Some(turtle) => {
                     let candidate = format!("{}\n{turtle}", others.join("\n"));
                     crate::shacl_cycles::refuse_cyclic_shapes(&candidate)?;
+                    // The incoming set must be enforceable before closing a
+                    // pinned version, for atomic and enclosed loads alike.
+                    crate::shacl_unsupported::refuse_unsupported_shapes(turtle)?;
                     candidate
                 }
                 None => others.join("\n"),

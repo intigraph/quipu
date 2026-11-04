@@ -109,10 +109,14 @@
       "reason": "Owner-local policy carrier, not a served-graph profile. Protected owner-store semantic validation remains enforced; tenant imports never establish effective read authority."
     },
     {
+      "file": "access-grants.ttl",
+      "action": "exclude",
+      "reason": "Staged JIT access-grant records (aegis-bqc); activation needs the Goldblum classification and schema review."
+    },
+    {
       "file": "shape-mappings.ttl",
-      "action": "load",
-      "name": "shape-mappings",
-      "reason": "C1 mapping declarations and atomic lifecycle records use these constraints; no mapping or read grant is created by loading vocabulary."
+      "action": "exclude",
+      "reason": "C1 mapping schema remains unloaded pending separately admitted schema activation; source shipment does not activate constraints."
     }
   ]
 }

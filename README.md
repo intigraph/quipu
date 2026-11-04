@@ -8,14 +8,21 @@
 
 <h1 align="center">Quipu</h1>
 <p align="center"><em>Governed knowledge your agents can read, reuse and share</em></p>
+<!-- badges:start (scripts/check-readme-badges.py fails CI if this row or the DOI/arXiv links go missing) -->
 <p align="center">
-  <a href="LICENSE">Apache-2.0</a> ·
-  <a href="https://github.com/intigraph/quipu/actions/workflows/ci.yml">CI</a> ·
-  <a href="https://intigraph.github.io/quipu/">Read the book</a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache-2.0"/></a>
+  <a href="https://github.com/intigraph/quipu/actions/workflows/ci.yml"><img src="https://github.com/intigraph/quipu/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://crates.io/crates/quipu-ai"><img src="https://img.shields.io/crates/v/quipu-ai.svg" alt="crates.io: quipu-ai"/></a>
+  <a href="https://intigraph.github.io/quipu/"><img src="https://img.shields.io/badge/docs-the_book-8B5E3C.svg" alt="Docs: the Quipu book"/></a>
+  <a href="https://doi.org/10.5281/zenodo.21878428"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21878428-blue.svg" alt="DOI: 10.5281/zenodo.21878428"/></a>
+  <a href="https://arxiv.org/abs/2608.16813"><img src="https://img.shields.io/badge/arXiv-2608.16813-b31b1b.svg" alt="arXiv: 2608.16813"/></a>
+  <a href="https://github.com/intigraph/tambo"><img src="https://img.shields.io/badge/stack-tambo-8B5E3C.svg" alt="Part of the Tambo stack"/></a>
 </p>
+<!-- badges:end -->
+<p align="center"><strong><a href="https://intigraph.github.io/quipu/">Read the book →</a></strong></p>
 
-**Quipu is a governed, bitemporal knowledge store for AI agents and the people
-who run them.** Use it from the command line, REST, MCP or a Rust application.
+**Quipu is a governed, bitemporal knowledge store for AI coding agents and the
+people who run them.** Use it from the command line, REST, MCP or a Rust application.
 A quipu is an Andean knotted-cord record: cords are entities, knots are facts.
 
 ## Why you would want it
@@ -43,26 +50,35 @@ The installer verifies the published archive checksum and executable version.
 Then run `quipu --version`. [Install, upgrade or remove Quipu](https://intigraph.github.io/quipu/getting-started/installation.html).
 For the whole stack, use [Tambo's guided onboarding](https://github.com/intigraph/tambo).
 
-## First success in three commands
+## First success: insert a fact, watch the graph change
 
-In an empty directory, fetch the public fixture, store its episode, then ask about its relationship:
+Write one fact in plain Turtle, knot it into a local store, and ask for it back:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/intigraph/quipu/main/docs/demos/terminal/fixture/episode.json -o episode.json
-quipu episode episode.json --base-ns urn:demo: --timestamp 2026-01-01T00:00:00Z --db demo.db
-quipu read 'SELECT ?person ?thing WHERE { ?person <urn:demo:studies> ?thing }' --db demo.db
+printf '@prefix : <urn:demo:> .\n:Ada :studies :Engine .\n' > ada.ttl
+quipu knot ada.ttl --db demo.db
+quipu read 'SELECT ?who ?what WHERE { ?who <urn:demo:studies> ?what }' --db demo.db
 ```
 
-The query returns **Ada → Engine**. Here is the real local episode and query:
+Add a second fact and the graph grows. The first version is still there to query:
 
-![Animated terminal: a public note becomes a queryable Quipu graph](docs/demos/terminal/demo.svg)
+```sh
+printf '@prefix : <urn:demo:> .\n:Babbage :designed :Engine .\n' > babbage.ttl
+quipu knot babbage.ttl --db demo.db
+quipu read 'SELECT ?s ?p ?o WHERE { ?s ?p ?o }' --db demo.db
+quipu read 'SELECT ?s ?p ?o WHERE { ?s ?p ?o }' --tx 1 --db demo.db
+```
 
-The resulting row, drawn as cords and knots:
+![Animated terminal: two plain facts are inserted and queried, then the earlier version is read back](docs/demos/terminal/demo.svg)
 
-![Generated graph: Ada studies Engine, with one entity per cord and the relationship joining them](docs/demos/terminal/graph.svg)
+<table>
+<tr><th>After the first fact</th><th>After the second fact</th></tr>
+<tr>
+<td><img src="docs/demos/terminal/graph-before.svg" alt="Graph before: Ada studies Engine" width="440"/></td>
+<td><img src="docs/demos/terminal/graph-after.svg" alt="Graph after: Ada studies Engine, and Babbage designed Engine" width="440"/></td>
+</tr>
+</table>
 
-The recording uses a local public fixture, without a server or model. Its native
-warning is retained: loading facts is not proof that a semantic index is ready.
 [Transcript, tool version and reproducible capture](docs/demos/terminal.md).
 
 ## On your own code

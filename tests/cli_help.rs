@@ -348,3 +348,37 @@ fn render_options_reach_the_render_handler() {
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert_eq!(snapshot(root), before);
 }
+
+#[test]
+fn help_describes_options_in_their_command_context() {
+    let dir = sandbox();
+    let before = snapshot(dir.path());
+    for (args, expected) in [
+        (
+            vec!["search", "--help"],
+            "--limit <VALUE>: Maximum number of results",
+        ),
+        (
+            vec!["db", "respace", "--help"],
+            "--into <VALUE>: New integer namespace space number",
+        ),
+        (
+            vec!["audit", "--help"],
+            "--from <VALUE>: Base Git revision for the audit",
+        ),
+        (
+            vec!["project", "--help"],
+            "--from <VALUE>: Start entity IRI for shortest-path projection",
+        ),
+        (
+            vec!["memory", "commit", "--help"],
+            "--local-authority: Explicitly authorize a local memory commit",
+        ),
+    ] {
+        let output = run(dir.path(), &args);
+        assert!(output.status.success(), "{output:?}");
+        let help = String::from_utf8(output.stdout).unwrap();
+        assert!(help.contains(expected), "{args:?}: {help}");
+    }
+    assert_eq!(snapshot(dir.path()), before);
+}
