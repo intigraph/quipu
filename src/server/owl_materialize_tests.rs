@@ -7,6 +7,56 @@ const TS: &str = "2026-01-01T00:00:00Z";
 const ASK: &str = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
     { <urn:twin> <urn:likes> <urn:object> }";
 
+#[tokio::test]
+async fn ontology_window_production_handler_preview_and_apply() {
+    let (_dir, store) = seeded();
+    let (before, through) = {
+        let mut live = store.lock();
+        let graph = live.ensure_companion_inferred_graph(0, TS).unwrap();
+        let before = live.latest_tx_id().unwrap();
+        let d = quipu::Datum {
+            entity: live.intern("urn:window:derived").unwrap(),
+            attribute: live.intern("urn:window:predicate").unwrap(),
+            value: quipu::Value::Str("entailed".into()),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: quipu::Op::Assert,
+        };
+        let through = live
+            .transact_to_graph(&[d], TS, None, Some("owl:materialize"), graph)
+            .unwrap();
+        (before, through)
+    };
+    let body = json!({"action":"retract_materialization", "name":"test", "after_tx":before, "through_tx":through});
+    let preview = crate::tools::ontology(
+        State(store.clone()),
+        axum::http::HeaderMap::new(),
+        None,
+        axum::Json(body.clone()),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(preview["planned"], 1);
+    assert_eq!(preview["applied"], false);
+    let mut apply = body;
+    apply["apply"] = json!(true);
+    apply["expect"] = preview["expect"].clone();
+    let result = crate::tools::ontology(
+        State(store.clone()),
+        axum::http::HeaderMap::new(),
+        None,
+        axum::Json(apply),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(result["remaining"], 0);
+    assert_eq!(result["retracted"], 1);
+    assert_eq!(result["ontology_removed"], false);
+    assert_eq!(store.lock().list_ontologies().unwrap().len(), 1);
+}
+
 fn seeded() -> (tempfile::TempDir, SharedStore) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");

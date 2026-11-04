@@ -12,6 +12,9 @@ use crate::store::Store;
 /// - `load`: Parse and store an OWL ontology from Turtle, then materialize.
 /// - `list`: List stored ontologies.
 /// - `remove`: Remove a stored ontology by name.
+/// - `retract_materialization`: Preview/apply one bounded rollback batch from
+///   a named ontology's explicit OWL materialization transaction window. The
+///   registry stays loaded; after `remaining: 0`, use `remove` separately.
 /// - `materialize`: Re-derive entailments from the ALREADY-loaded ontologies,
 ///   without loading anything. The scheduled half of the aegis-2s6xpb
 ///   mitigation — see below.
@@ -22,6 +25,46 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
         .unwrap_or("list");
 
     match action {
+        "retract_materialization" => {
+            let name = input
+                .get("name")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| Error::InvalidValue("missing 'name' parameter".into()))?;
+            let integer = |key| {
+                input.get(key).and_then(JsonValue::as_i64).ok_or_else(|| {
+                    Error::InvalidValue(format!("missing integer '{key}' parameter"))
+                })
+            };
+            let apply = match input.get("apply") {
+                None => false,
+                Some(JsonValue::Bool(value)) => *value,
+                Some(_) => return Err(Error::InvalidValue("apply must be a boolean".into())),
+            };
+            let expect = if apply {
+                Some(
+                    input
+                        .get("expect")
+                        .and_then(JsonValue::as_str)
+                        .ok_or_else(|| {
+                            Error::InvalidValue("apply requires the preview's expect token".into())
+                        })?,
+                )
+            } else {
+                None
+            };
+            let now = crate::time::now_iso();
+            store.retract_ontology_window(
+                name,
+                integer("after_tx")?,
+                integer("through_tx")?,
+                expect,
+                input
+                    .get("timestamp")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or(&now),
+                input.get("actor").and_then(JsonValue::as_str),
+            )
+        }
         "load" => {
             let name = input
                 .get("name")
@@ -176,7 +219,7 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
             }))
         }
         _ => Err(Error::InvalidValue(format!(
-            "unknown action '{action}'; use 'load', 'materialize', 'list', or 'remove'"
+            "unknown action '{action}'; use 'load', 'materialize', 'retract_materialization', 'list', or 'remove'"
         ))),
     }
 }

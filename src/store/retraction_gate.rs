@@ -50,6 +50,20 @@ impl Store {
         actor: Option<&str>,
         source: Option<&str>,
     ) -> Result<()> {
+        self.enforce_retraction_shapes_window(datums, graph, scope, actor, source, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg_attr(not(feature = "shacl"), allow(clippy::unused_self))]
+    pub(super) fn enforce_retraction_shapes_window(
+        &self,
+        datums: &[Datum],
+        graph: i64,
+        scope: Option<&str>,
+        actor: Option<&str>,
+        source: Option<&str>,
+        window: Option<super::source_claims::ClaimWindow>,
+    ) -> Result<()> {
         #[cfg(feature = "shacl")]
         {
             use crate::types::Op;
@@ -61,7 +75,7 @@ impl Store {
                 let out = match datum.op {
                     Op::Retract => {
                         if let Some(scope) = scope
-                            && self.claimed_outside(datum, graph, scope)?
+                            && self.claimed_outside(datum, graph, scope, window)?
                         {
                             continue;
                         }
@@ -77,7 +91,7 @@ impl Store {
         }
         #[cfg(not(feature = "shacl"))]
         {
-            let _ = (datums, graph, scope, actor, source);
+            let _ = (datums, graph, scope, actor, source, window);
             Ok(())
         }
     }
@@ -96,12 +110,18 @@ impl Store {
     /// Does a producer other than `scope` hold a live claim on `datum` in
     /// `graph`? Then a retraction scoped to `scope` leaves it visible.
     #[cfg(feature = "shacl")]
-    fn claimed_outside(&self, datum: &Datum, graph: i64, scope: &str) -> Result<bool> {
+    fn claimed_outside(
+        &self,
+        datum: &Datum,
+        graph: i64,
+        scope: &str,
+        window: Option<super::source_claims::ClaimWindow>,
+    ) -> Result<bool> {
         let mut stmt = self.conn.prepare_cached(
             "SELECT 1 FROM facts f JOIN transactions t ON f.tx = t.id \
              WHERE f.e = ?1 AND f.a = ?2 AND f.v = ?3 AND f.g = ?4 \
                AND f.op = 1 AND f.valid_to IS NULL \
-               AND (t.source IS NULL OR t.source <> ?5) \
+               AND (t.source IS NULL OR t.source <> ?5 OR (?6 IS NOT NULL AND (f.tx <= ?6 OR f.tx > ?7))) \
              LIMIT 1",
         )?;
         for bytes in self.literal_aliases(&datum.value, false)? {
@@ -110,7 +130,9 @@ impl Store {
                 datum.attribute,
                 bytes,
                 graph,
-                scope
+                scope,
+                window.map(|w| w.after),
+                window.map(|w| w.through)
             ])? {
                 return Ok(true);
             }

@@ -1059,10 +1059,36 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `action` | No | `load`, `list`, or `remove` (default: list) |
-| `name` | For load/remove | Ontology name |
+| `action` | No | `load`, `materialize`, `retract_materialization`, `list`, or `remove` (default: list) |
+| `name` | For load/remove/retract_materialization | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+| `after_tx` | For retract_materialization | Exclusive lower transaction watermark |
+| `through_tx` | For retract_materialization | Inclusive upper transaction watermark |
+| `apply` | No | Apply one cleanup batch; defaults to a read-only preview |
+| `expect` | With apply | Exact cleanup token from the latest preview or batch response |
+
+`retract_materialization` closes only live `owl:materialize` claims in ROOT's
+companion inferred graph whose assertion transaction is in
+`(after_tx, through_tx]`. The graph and source are fixed. Preview returns an
+`expect` token bound to the store, current transaction head, named ontology
+version, remaining physical claims and selected batch. Apply requires that
+token and rechecks the head and ontology under the writer reservation. A stale
+token refuses without closing claims; preview again after inspecting the change.
+
+Each apply selects at most 5,000 statements, preserves claims outside the
+window and other producers' claims, and passes normal write and deletion-floor
+gates. History remains append-only. The response measures `retracted` and
+`remaining`; `window_complete` means the selected window is empty. Continue
+using each response's token until `remaining` is zero. An interrupted or failed
+request requires read-back before another apply.
+
+The ontology name binds a registry version, **not causal ownership**: OWL uses
+one source across ontologies. Choose bounds from the retained materialization
+receipt, with materializers held throughout cleanup. Registry removal remains
+the separate `remove` action after the window is empty; cleanup reports
+`ontology_removed: false`. This operation does not remove later materializations
+or infer their ownership from the ontology name.
 
 Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
 weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
