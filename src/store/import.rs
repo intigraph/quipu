@@ -27,7 +27,9 @@ pub struct ImportReport {
 /// local id. The live source schema is classified before the destination is
 /// touched; an unknown column refuses the operation instead of being skipped.
 /// The destination retains its native ownership fence and refuses frozen or
-/// attached graph targets before copying any source terms or history.
+/// attached graph targets before copying any source terms or history. An
+/// unresolved attachment registry refuses import even into unrelated graphs,
+/// because the missing dictionary prevents establishing target ownership.
 pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportReport> {
     if dst == src {
         return Err(Error::Store(
@@ -61,6 +63,26 @@ pub fn import_graph(dst: &Path, src: &Path, graph_iri: &str) -> Result<ImportRep
     if let Some(graph) = existing_graph {
         dest.assert_graph_is_writable(graph)?;
     }
+
+    // Attachment graph IRIs can live only in their foreign dictionaries. A
+    // retained registry without that dictionary cannot prove an unknown IRI
+    // is local: importing it could shadow a read-only graph.
+    let mut registered = tx.prepare("SELECT source FROM main.graphs WHERE source IS NOT NULL")?;
+    let mut rows = registered.query([])?;
+    while let Some(row) = rows.next()? {
+        let alias: String = row.get(0)?;
+        if !dest
+            .attachments()
+            .iter()
+            .any(|attachment| attachment.alias == alias)
+        {
+            return Err(Error::Store(format!(
+                "graph import refuses: unmounted attached graph registry ({alias}); target ownership cannot be established"
+            )));
+        }
+    }
+    drop(rows);
+    drop(registered);
 
     let source_terms: Vec<(i64, String)> = source
         .prepare("SELECT id, iri FROM terms ORDER BY id")?
