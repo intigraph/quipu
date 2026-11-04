@@ -46,7 +46,8 @@ fn dense_subject_batch_is_selected_and_unsupported_scopes_decline() {
             ..Default::default()
         };
         let found =
-            crate::sparql::batch_star::try_eval(&store, &patterns, &ctx, &Bindings::new()).unwrap();
+            crate::sparql::batch_star::try_eval(&store, &patterns, &ctx, &Bindings::default())
+                .unwrap();
         assert!(
             found.is_some(),
             "must exercise batched plan, composed={composed}"
@@ -55,23 +56,38 @@ fn dense_subject_batch_is_selected_and_unsupported_scopes_decline() {
         let mut unsupported = ctx.clone();
         unsupported.graph = crate::sparql::GraphScope::default();
         assert!(
-            crate::sparql::batch_star::try_eval(&store, &patterns, &unsupported, &Bindings::new())
-                .unwrap()
-                .is_none()
+            crate::sparql::batch_star::try_eval(
+                &store,
+                &patterns,
+                &unsupported,
+                &Bindings::default()
+            )
+            .unwrap()
+            .is_none()
         );
         unsupported = ctx.clone();
         unsupported.as_of_tx = Some(1);
         assert!(
-            crate::sparql::batch_star::try_eval(&store, &patterns, &unsupported, &Bindings::new())
-                .unwrap()
-                .is_none()
+            crate::sparql::batch_star::try_eval(
+                &store,
+                &patterns,
+                &unsupported,
+                &Bindings::default()
+            )
+            .unwrap()
+            .is_none()
         );
         unsupported = ctx.clone();
         unsupported.row_limit = Some(1);
         assert!(
-            crate::sparql::batch_star::try_eval(&store, &patterns, &unsupported, &Bindings::new())
-                .unwrap()
-                .is_none()
+            crate::sparql::batch_star::try_eval(
+                &store,
+                &patterns,
+                &unsupported,
+                &Bindings::default()
+            )
+            .unwrap()
+            .is_none()
         );
     }
 }
@@ -207,9 +223,14 @@ fn oversized_speculative_relation_falls_back_without_losing_rows() {
                     ..Default::default()
                 };
                 assert!(
-                    crate::sparql::batch_star::try_eval(&store, &patterns, &ctx, &Bindings::new())
-                        .unwrap()
-                        .is_none(),
+                    crate::sparql::batch_star::try_eval(
+                        &store,
+                        &patterns,
+                        &ctx,
+                        &Bindings::default()
+                    )
+                    .unwrap()
+                    .is_none(),
                     "large literals must decline before retaining the complete speculative relation"
                 );
                 break;
@@ -275,7 +296,7 @@ fn windows_split_a_dense_star_without_changing_its_rows() {
                 &store,
                 &patterns,
                 &ctx,
-                &Bindings::new(),
+                &Bindings::default(),
                 window,
             )
             .unwrap()
@@ -345,7 +366,7 @@ fn an_owner_denser_than_one_window_is_batched_not_probed_per_subject() {
         &store,
         &star_patterns(text),
         &board_ctx(&store),
-        &Bindings::new(),
+        &Bindings::default(),
     )
     .unwrap()
     .expect("a dense owner must batch in windows");

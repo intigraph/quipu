@@ -149,7 +149,7 @@ fn filter_of(sparql: &str) -> (spargebra::algebra::Expression, GraphPattern) {
 fn only_licensed_shapes_narrow() {
     let narrows = |q: &str| {
         let (expr, inner) = filter_of(q);
-        collect(&expr, &inner, &Bindings::new()).len()
+        collect(&expr, &inner, &Bindings::default()).len()
     };
     assert_eq!(
         narrows("SELECT * WHERE { ?s ?p ?o FILTER(CONTAINS(STR(?s), \"x\")) }"),
