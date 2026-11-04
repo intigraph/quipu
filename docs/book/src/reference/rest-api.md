@@ -1924,7 +1924,9 @@ optional `timestamp`.
 
 ### `POST /entity_history`
 
-Return the full fact history (across transactions) for an entity. The body field is
+Without an explicit graph, return retained **ROOT-only** fact history for an entity.
+An empty ROOT result says nothing about that entity's named-graph history.
+The body field is
 **`iri`**, not `entity` — `{"entity": ...}` returns
 `{"error": "missing 'iri' parameter"}`.
 
@@ -1935,7 +1937,60 @@ curl -s localhost:3030/entity_history -X POST -H "Content-Type: application/json
 
 Returns `{"iri", "count", "history": [{"op", "predicate", "value", "tx",
 "valid_from", "valid_to"}, ...]}`. The `tx` is the handle for `/transactions` below —
-together they answer "which write path asserted this fact, and who owned it".
+together they answer "which write path asserted this fact, and who owned it" in
+that local file. A bare transaction ID is not a composed or cross-store pin.
+
+#### Qualified retained MAIN history
+
+First require `quipu-entity-history/main-v1` in `/version.read_contracts`.
+Supply `iri`, `graph`, and the expected `source_store_id` from trusted MAIN
+metadata. A graph is mandatory: wrong identities, missing registration,
+datasets, overlays, frozen graphs and ambiguous composed term aliases refuse;
+they never fall back to ROOT or reinterpret another provider's IDs.
+
+```json
+{
+  "iri": "https://example.org/item/one",
+  "graph": "https://example.org/project/board",
+  "source_store_id": "<expected-main-store-id>"
+}
+```
+
+The response contains `schema`, exact `iri` and `graph`, `history`, `count`,
+and `source_receipt`. Each history entry carries a `qualified_tx` with provider
+`main`, persistent source lineage, current generation and file-local transaction,
+plus transaction timestamp/actor/source, authenticated evidence and separate
+caller declarations. Values carry explicit types: integer lexical strings,
+IEEE float64 bits, hex bytes, full IRI references, strings, booleans, and
+language/datatype literals preserve their original representation.
+
+`source_receipt.complete` means every retained MAIN physical row in this exact
+subject/graph/range was returned. It does **not** mean continuous historical
+coverage. The receipt says `continuous_history: false` and
+`historical_policy_proof: false`, names excluded attachment aliases, and binds
+the current connection incarnation, graph/policy generation, source head and
+retained transaction-log floor. It never reads attached fact tables or claims
+their history. Current graph label floors still apply. The scope remains
+owner-only when scoped read authorization is enabled.
+
+Optional `since_tx` (exclusive) and `until_tx` (inclusive) require the previously
+observed `expected_generation`. Reopen/remount, policy, graph metadata or retained
+log-floor changes invalidate that generation. Unknown, old and future bounds
+refuse; no historical composition is inferred from a current MAIN transaction.
+For a subject too large for one response, bootstrap with `observation_only: true`.
+That metadata-only response has the distinct schema
+`quipu-entity-history/observation-v1`, generation, head and floor, and **no**
+history/count/completeness claim. It cannot include transaction bounds. Use its
+generation for explicit smaller ranges; the observation grants no history access.
+
+Defaults are 1000 entries and 1 MiB; `max_entries` and `max_bytes` may select
+positive caps up to 10000 entries and 4 MiB. Overflow, an expired request or the
+one-second SQLite read budget refuses the whole response, never partial success.
+History reads reject signed-write attestations before acquiring a non-settling
+canonical handle, so reading does not spend a write nonce. Neither retained
+declarations nor this receipt authenticate a physical host. This contract does
+not include comment-child entities automatically or certify that a reconstructed
+seed version is complete across archived providers.
 
 ### `GET /transactions`
 

@@ -200,7 +200,7 @@ impl crate::Store {
     ) -> crate::Result<Option<std::collections::BTreeMap<String, String>>> {
         use rusqlite::OptionalExtension;
         let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='transaction_declarations')",
+            "SELECT EXISTS(SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='transaction_declarations')",
             [], |row| row.get(0),
         )?;
         if !exists {
@@ -209,7 +209,7 @@ impl crate::Store {
         let value: Option<String> = self
             .conn
             .query_row(
-                "SELECT declarations FROM transaction_declarations WHERE tx=?1",
+                "SELECT declarations FROM main.transaction_declarations WHERE tx=?1",
                 [tx],
                 |row| row.get(0),
             )

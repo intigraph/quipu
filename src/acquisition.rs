@@ -17,6 +17,10 @@ pub mod composed;
 #[path = "acquisition/eligibility.rs"]
 pub mod eligibility;
 
+/// Bounded retained fact history in one explicitly qualified MAIN graph.
+#[path = "acquisition/history.rs"]
+pub mod history;
+
 /// Bounded physical row/byte scope of a direct-main acquisition (G1).
 #[path = "acquisition/scope.rs"]
 pub mod scope;

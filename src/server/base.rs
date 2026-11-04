@@ -211,6 +211,8 @@ pub(crate) async fn version() -> impl IntoResponse {
             "quipu-acquisition/v1",
             "quipu-acquisition/composed-v1",
             quipu::acquisition::eligibility::CONTRACT,
+            quipu::acquisition::history::CONTRACT,
+            quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
         "features": compiled_features(),
     }))

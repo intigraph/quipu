@@ -20,12 +20,26 @@ pub(crate) async fn entity_history(
     State(store): State<SharedStore>,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    blocking(move || {
-        let store = store.lock();
-        Ok(axum::Json(quipu::tool_entity_history(&store, &input)?))
-    })
-    .await
+    super::admission::read_blocking(move || Ok(axum::Json(history_read(&store, &input)?))).await
 }
+
+pub(crate) fn history_read(
+    store: &super::StoreHandle,
+    input: &JsonValue,
+) -> Result<JsonValue, AppError> {
+    if quipu::transaction_auth::current_attestation().is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "history reads do not accept a signed write attestation".into(),
+        )
+        .into());
+    }
+    let store = store.metadata_lock();
+    Ok(quipu::tool_entity_history(&store, input)?)
+}
+
+#[cfg(test)]
+#[path = "entity_history_tests.rs"]
+mod history_tests;
 
 pub(crate) async fn entity_conneg(
     State(store): State<SharedStore>,

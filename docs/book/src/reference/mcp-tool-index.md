@@ -165,11 +165,19 @@ Dereference an exact IRI as JSON-LD. IRIs are encoded as query values, including
 
 ## `quipu_entity_history`
 
-Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
+| `expected_generation` | string | no |  |
+| `graph` | string | no |  |
 | `iri` | string | yes |  |
+| `max_bytes` | integer | no |  |
+| `max_entries` | integer | no |  |
+| `observation_only` | boolean | no |  |
+| `since_tx` | integer | no |  |
+| `source_store_id` | string | no |  |
+| `until_tx` | integer | no |  |
 
 ## `quipu_entity_ref`
 
