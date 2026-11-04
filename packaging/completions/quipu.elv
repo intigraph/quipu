@@ -48,6 +48,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand validate 'Validate a data file against a shapes file without writing'
             cand repl 'Open an interactive SPARQL prompt'
             cand export 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query'
+            cand databook 'Export a graph as a DataBook, or import a DataBook''s graph data'
             cand render 'Render graph data into files in an owned directory'
             cand stats 'Show store statistics'
             cand prime 'Print the agent primer and a bounded, read-only summary of the store'
@@ -382,6 +383,37 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand export 'Write one graph, current or as of a past point, as a DataBook'
+            cand import 'Load a DataBook''s graph blocks in one write; never runs its queries'
+        }
+        &'quipu;databook;export'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'Explicit graph IRI for this operation'
+            cand --tx 'Historical transaction to read'
+            cand --valid-at 'Valid-time instant to query'
+            cand --id 'DataBook IRI written to its frontmatter'
+            cand --title 'DataBook title written to its frontmatter'
+            cand --version 'DataBook version, 1.0.0 when omitted'
+            cand --timestamp 'Creation time recorded in the DataBook''s provenance'
+            cand --out 'Output file'
+            cand --with-shapes 'Also export the loaded SHACL shapes'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;databook;import'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'Explicit graph IRI for this operation'
+            cand --timestamp 'Valid-time timestamp for the operation'
+            cand --actor 'Actor recorded in operation provenance'
+            cand --source 'Source identifier recorded in provenance'
+            cand --with-shapes 'Also load the DataBook''s SHACL shape blocks'
             cand -h 'Print help'
             cand --help 'Print help'
         }

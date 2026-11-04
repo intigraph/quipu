@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bindings: Vec<Bindings> = (0..rows)
         .map(|i| {
             if unbound {
-                Bindings::new()
+                Bindings::default()
             } else {
                 let id = if duplicates { i / 2 } else { i };
                 [("s".to_string(), Value::Ref(id as i64 + 1))]

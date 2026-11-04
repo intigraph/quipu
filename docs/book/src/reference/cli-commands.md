@@ -468,6 +468,56 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+## `qp databook`
+
+Export a graph as a DataBook, or import a DataBook's graph data.
+
+Subcommands: `databook export`, `databook import`.
+
+### `qp databook export`
+
+Write one graph, current or as of a past point, as a DataBook.
+
+```text
+qp databook export
+```
+
+- `--graph <VALUE>`: Explicit graph IRI for this operation.
+
+- `--tx <VALUE>`: Historical transaction to read.
+
+- `--valid-at <VALUE>`: Valid-time instant to query.
+
+- `--id <VALUE>`: DataBook IRI written to its frontmatter.
+
+- `--title <VALUE>`: DataBook title written to its frontmatter.
+
+- `--version <VALUE>`: DataBook version, 1.0.0 when omitted.
+
+- `--timestamp <VALUE>`: Creation time recorded in the DataBook's provenance.
+
+- `--out <VALUE>`: Output file.
+
+- `--with-shapes`: Also export the loaded SHACL shapes.
+
+### `qp databook import`
+
+Load a DataBook's graph blocks in one write; never runs its queries.
+
+```text
+qp databook import <file.databook.md>
+```
+
+- `--graph <VALUE>`: Explicit graph IRI for this operation.
+
+- `--timestamp <VALUE>`: Valid-time timestamp for the operation.
+
+- `--actor <VALUE>`: Actor recorded in operation provenance.
+
+- `--source <VALUE>`: Source identifier recorded in provenance.
+
+- `--with-shapes`: Also load the DataBook's SHACL shape blocks.
+
 ## `qp render`
 
 Render graph data into files in an owned directory.

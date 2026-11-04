@@ -53,6 +53,7 @@ complete -c qp -n "__fish_qp_needs_command" -f -a "ontology" -d 'Load, list or r
 complete -c qp -n "__fish_qp_needs_command" -f -a "validate" -d 'Validate a data file against a shapes file without writing'
 complete -c qp -n "__fish_qp_needs_command" -f -a "repl" -d 'Open an interactive SPARQL prompt'
 complete -c qp -n "__fish_qp_needs_command" -f -a "export" -d 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query'
+complete -c qp -n "__fish_qp_needs_command" -f -a "databook" -d 'Export a graph as a DataBook, or import a DataBook\'s graph data'
 complete -c qp -n "__fish_qp_needs_command" -f -a "render" -d 'Render graph data into files in an owned directory'
 complete -c qp -n "__fish_qp_needs_command" -f -a "stats" -d 'Show store statistics'
 complete -c qp -n "__fish_qp_needs_command" -f -a "prime" -d 'Print the agent primer and a bounded, read-only summary of the store'
@@ -263,6 +264,28 @@ complete -c qp -n "__fish_qp_using_subcommand export" -l group-id -d 'Select fac
 complete -c qp -n "__fish_qp_using_subcommand export" -l construct -d 'SPARQL CONSTRUCT query selecting the share' -r
 complete -c qp -n "__fish_qp_using_subcommand export" -l format -d 'Output or input format for this operation' -r
 complete -c qp -n "__fish_qp_using_subcommand export" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand databook; and not __fish_seen_subcommand_from export import" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and not __fish_seen_subcommand_from export import" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand databook; and not __fish_seen_subcommand_from export import" -f -a "export" -d 'Write one graph, current or as of a past point, as a DataBook'
+complete -c qp -n "__fish_qp_using_subcommand databook; and not __fish_seen_subcommand_from export import" -f -a "import" -d 'Load a DataBook\'s graph blocks in one write; never runs its queries'
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l graph -d 'Explicit graph IRI for this operation' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l tx -d 'Historical transaction to read' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l valid-at -d 'Valid-time instant to query' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l id -d 'DataBook IRI written to its frontmatter' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l title -d 'DataBook title written to its frontmatter' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l version -d 'DataBook version, 1.0.0 when omitted' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l timestamp -d 'Creation time recorded in the DataBook\'s provenance' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l out -d 'Output file' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -l with-shapes -d 'Also export the loaded SHACL shapes'
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from export" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l graph -d 'Explicit graph IRI for this operation' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l timestamp -d 'Valid-time timestamp for the operation' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l actor -d 'Actor recorded in operation provenance' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l source -d 'Source identifier recorded in provenance' -r
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -l with-shapes -d 'Also load the DataBook\'s SHACL shape blocks'
+complete -c qp -n "__fish_qp_using_subcommand databook; and __fish_seen_subcommand_from import" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand render" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand render" -l dest -d 'Render output destination' -r
 complete -c qp -n "__fish_qp_using_subcommand render" -l graph -d 'Explicit graph IRI for this operation' -r
