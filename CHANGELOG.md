@@ -25,6 +25,8 @@ All notable changes to this project will be documented in this file.
 - *(store)* Add opt-in SQLite HA read eligibility profile (#1025)([82fa933](https://github.com/scbrown/quipu/commit/82fa9338b8bcc1c60a2ec041251b8ef40388aef7))
 - *(search)* Add opt-in text-free cross-process outcome counters (#1020)([72f1947](https://github.com/scbrown/quipu/commit/72f1947fd52894a2d80f210b50a1e35994d646aa))
 
+
+
 ### Changed
 
 - *(signing)* Consume the published shared signing crate (#942)([cf03e65](https://github.com/scbrown/quipu/commit/cf03e657b39ca284633285c070c3d83969ff336a))
@@ -66,15 +68,6 @@ All notable changes to this project will be documented in this file.
 - *(sparql)* Streaming-count operands without copies and group keys without formatting (#984)([e8d17f4](https://github.com/scbrown/quipu/commit/e8d17f4e3513eaf1b4f1340be407a569678863de))
 - *(search)* Score borrowed SQLite vector blobs (#1012)([af7bae6](https://github.com/scbrown/quipu/commit/af7bae62dadfe63b8d343644b7ca3d30b98e561a))
 - *(sparql)* [**breaking**] Hash binding rows with foldhash (public Bindings type change) (#985)([bd4cbde](https://github.com/scbrown/quipu/commit/bd4cbde25894fe5938db00fd18756f520eebfdf6))
-
-### Added
-
-- *(store)* Add opt-in SQLite HA read eligibility profile (#1025)([82fa933](https://github.com/scbrown/quipu/commit/82fa9338b8bcc1c60a2ec041251b8ef40388aef7))
-- *(metrics)* Count refused writes in metrics and stats (#1005)([9f8566f](https://github.com/scbrown/quipu/commit/9f8566f4bd99e2be937b36c4d32c75c35a7a42e3))
-
-### Fixed
-
-- *(admission)* Bound declared owner-row reads before shared admission (#868)([ea7f417](https://github.com/scbrown/quipu/commit/ea7f417a1ea40af84987b9f680dea889e3e765ca))
 
 ## [0.16.6] - 2026-10-30
 
