@@ -1238,6 +1238,8 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
+            cand writer-instance 'Read a local committed graph instance pin for owner enrollment'
+            cand writer-grant 'Apply an owner-local scoped writer grant revision or revocation'
             cand create 'Register a committed named graph'
             cand label 'Declare lattice labels on a registered graph'
             cand list 'List registered named graphs'
@@ -1247,6 +1249,16 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand overlay-create 'Create an overlay graph bound to a committed parent'
             cand overlay-write 'Assert, retract or tombstone a triple in an overlay'
             cand overlay-compose 'Resolve an overlay''s composed view over its parent'
+        }
+        &'quipu;graph;writer-instance'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;graph;writer-grant'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'quipu;graph;create'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'

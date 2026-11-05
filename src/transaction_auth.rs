@@ -196,6 +196,12 @@ pub fn with_identity<T>(identity: Option<Identity>, work: impl FnOnce() -> T) ->
     work()
 }
 
+/// Owned evidence established by the serving adapter, never declared metadata.
+#[must_use]
+pub fn current_identity() -> Option<Identity> {
+    IDENTITY.with(|slot| slot.borrow().clone())
+}
+
 /// Create a locally authored transaction inside the caller's savepoint.
 pub(crate) fn begin(
     conn: &Connection,

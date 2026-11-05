@@ -40,8 +40,18 @@ pub(super) fn apply_update_observed(
     let wait = waiting.elapsed().as_secs_f64();
     let acquired = Instant::now();
     let mut times = UpdateTimes::default();
-    let (result, profile) = store
-        .observe_poststate(|store| apply_locked(store, &plan, update, attribution, &mut times));
+    let targets = if quipu::writer_scope::is_scoped_request() {
+        super::writer_targets::update(update)?
+    } else {
+        Default::default()
+    };
+    let (result, profile) = store.observe_poststate(|store| {
+        store.with_writer_scope(
+            quipu::writer_scope::WriteOperation::Update,
+            &targets,
+            |store| apply_locked(store, &plan, update, attribution, &mut times),
+        )
+    });
     // While the guard is still alive, as /query does, so `held` is the
     // lock-holding interval.
     let held = acquired.elapsed().as_secs_f64();

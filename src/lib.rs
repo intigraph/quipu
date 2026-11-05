@@ -106,6 +106,7 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+pub mod grant_scope;
 /// Inactive SQLite-only HA read profile; no serving adapter is installed.
 #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
 pub mod ha_read;
@@ -140,6 +141,7 @@ pub mod shacl_unsupported;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod verified_write;
+pub mod writer_scope;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
 // inside the module. The wasm explorer produces the same `share-delta/v1`
 // artifact the CLI does, and it can only do that if the builder compiles there

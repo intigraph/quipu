@@ -74,6 +74,7 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
+mod writer_scope;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };

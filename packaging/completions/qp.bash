@@ -376,6 +376,12 @@ _qp() {
             qp__subcmd__graph,thaw)
                 cmd="qp__subcmd__graph__subcmd__thaw"
                 ;;
+            qp__subcmd__graph,writer-grant)
+                cmd="qp__subcmd__graph__subcmd__writer__subcmd__grant"
+                ;;
+            qp__subcmd__graph,writer-instance)
+                cmd="qp__subcmd__graph__subcmd__writer__subcmd__instance"
+                ;;
             qp__subcmd__hook,session-capture)
                 cmd="qp__subcmd__hook__subcmd__session__subcmd__capture"
                 ;;
@@ -2146,7 +2152,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__graph)
-            opts="-h --db --help create label list import freeze thaw overlay-create overlay-write overlay-compose"
+            opts="-h --db --help writer-instance writer-grant create label list import freeze thaw overlay-create overlay-write overlay-compose"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2371,6 +2377,42 @@ _qp() {
                     return 0
                     ;;
                 --actor)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__graph__subcmd__writer__subcmd__grant)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__graph__subcmd__writer__subcmd__instance)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

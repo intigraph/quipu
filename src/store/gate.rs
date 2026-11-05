@@ -344,6 +344,9 @@ impl Store {
     /// keyed by the verdict it backs, and an entry for a verdict that was never
     /// written would be evidence for nothing.
     pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str, actor: Option<&str>) {
+        if crate::writer_scope::defer_verdicts(timestamp, actor) {
+            return;
+        }
         // Gate bookkeeping, counted as such rather than as the request that
         // triggered it (aegis-gwkd76).
         crate::write_kind::scoped(Some(crate::write_kind::WriteKind::Verdict), || {
@@ -422,6 +425,11 @@ impl Store {
     /// at once. What the flag buys is that a chain, once supplied, is BINDING —
     /// so adopting attribution is opt-in per caller and cannot silently widen.
     pub(crate) fn enforce_graph_authority(&self, graph: i64) -> Result<()> {
+        // Only this private server-audit path may write its signed verdicts
+        // outside the caller's graph. Actor/source strings never set this flag.
+        if !self.recording_verdicts {
+            crate::writer_scope::check(self, graph)?;
+        }
         if !self.governance_config.enforce_authority
             || self.recording_verdicts
             || self.principal_chain.is_empty()

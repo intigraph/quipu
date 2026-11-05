@@ -264,8 +264,20 @@ pub(crate) async fn knot(
     blocking(move || {
         let (result, work) = {
             let mut st = store.lock();
-            let result = quipu::tool_knot(&mut st, &input)?;
-            (result, st.take_deferred_embed())
+            let targets = super::update::writer_targets::json(&input);
+            let result =
+                st.with_writer_scope(quipu::writer_scope::WriteOperation::Knot, &targets, |st| {
+                    quipu::tool_knot(st, &input)
+                })?;
+            (
+                result,
+                if quipu::writer_scope::is_scoped_request() {
+                    let _ = st.take_deferred_embed();
+                    None
+                } else {
+                    st.take_deferred_embed()
+                },
+            )
         };
         if let Some(work) = work {
             finish_deferred_embed(&store, &work)?;
