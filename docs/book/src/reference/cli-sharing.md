@@ -898,7 +898,6 @@ installation does not authorize production adoption. See the
 ownership and failure contract in `docs/design/store-ownership.md` for partial
 completion, supported host identity and rollout limits.
 
-
 ## Export a cold snapshot without writes
 
 Use `qp export --read-only --db /path/to/snapshot.db --graph <iri>` for a
