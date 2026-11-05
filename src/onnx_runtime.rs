@@ -146,10 +146,10 @@ fn default_core() -> crate::Result<(PathBuf, &'static str)> {
         let mut temporary = tempfile::NamedTempFile::new_in(&directory).map_err(io_error)?;
         temporary.write_all(&bytes).map_err(io_error)?;
         temporary.as_file().sync_all().map_err(io_error)?;
-        if let Err(error) = temporary.persist_noclobber(&destination) {
-            if error.error.kind() != std::io::ErrorKind::AlreadyExists {
-                return Err(io_error(error.error));
-            }
+        if let Err(error) = temporary.persist_noclobber(&destination)
+            && error.error.kind() != std::io::ErrorKind::AlreadyExists
+        {
+            return Err(io_error(error.error));
         }
     }
     let metadata = std::fs::symlink_metadata(&destination).map_err(io_error)?;
@@ -181,10 +181,10 @@ fn retain_notice(directory: &Path, name: &str, bytes: &[u8]) -> crate::Result<()
     if !path.try_exists().map_err(io_error)? {
         let mut temporary = tempfile::NamedTempFile::new_in(directory).map_err(io_error)?;
         temporary.write_all(bytes).map_err(io_error)?;
-        if let Err(error) = temporary.persist_noclobber(&path) {
-            if error.error.kind() != std::io::ErrorKind::AlreadyExists {
-                return Err(io_error(error.error));
-            }
+        if let Err(error) = temporary.persist_noclobber(&path)
+            && error.error.kind() != std::io::ErrorKind::AlreadyExists
+        {
+            return Err(io_error(error.error));
         }
     }
     let metadata = std::fs::symlink_metadata(&path).map_err(io_error)?;
@@ -212,6 +212,8 @@ fn verify_core(bytes: &[u8], expected: usize) -> crate::Result<()> {
 }
 
 #[cfg(feature = "bundled-onnx")]
+// map_err and tempfile persistence pass owned errors to this adapter.
+#[allow(clippy::needless_pass_by_value)]
 fn io_error(error: std::io::Error) -> crate::Error {
     crate::Error::Store(format!("bundled ONNX Runtime cache failed: {error}"))
 }
