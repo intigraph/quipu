@@ -36,3 +36,6 @@ docs/demos/store-ownership/output.log whitespace=blank-at-eol,blank-at-eof,space
 packaging/man/** linguist-generated=true
 packaging/completions/** linguist-generated=true
 docs/probes/pr-demos/client-changeset/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Preserve the replayable vector-scan PTY recording byte-for-byte.
+docs/demos/vector-scan/output.txt -text whitespace=cr-at-eol
