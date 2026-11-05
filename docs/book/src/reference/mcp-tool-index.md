@@ -491,6 +491,7 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `action` | string: `load`, `list`, `remove` | no | Action to perform (default: list) |
+| `materialize` | string: `inline`, `deferred` | no | load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize. |
 | `name` | string | no | Ontology name (required for load/remove) |
 | `timestamp` | string | no | ISO-8601 timestamp |
 | `turtle` | string | no | OWL ontology in Turtle format (required for load) |
