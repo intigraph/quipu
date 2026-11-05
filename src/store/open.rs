@@ -270,7 +270,7 @@ impl Store {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;",
         )?;
-        super::search_scope_policy::initialize_schema(&conn)?;
+        let created_fact_schema = super::search_scope_policy::initialize_schema(&conn)?;
         Self::ensure_store_identity(&conn)?;
         Self::ensure_log_epoch(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
@@ -352,6 +352,10 @@ impl Store {
         alias::build_term_alias(&conn, attachments)?;
 
         let mut store = Self::with_connection(conn);
+        store.created_fact_schema = created_fact_schema;
+        // A later direct-library vector write must not activate FTS on an old
+        // unindexed store merely because the global new-store default is on.
+        store.search_config.keyword = created_fact_schema || store.lexical_progress()?.is_some();
         store.attachments = attachments.to_vec();
         store.pack_manifests = pack_manifests;
         store.facts_source = facts_source;
@@ -564,6 +568,7 @@ impl Store {
             resolution_config: ResolutionConfig::default(),
             resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
+            created_fact_schema: false,
             labels_config: crate::config::LabelsConfig::default(),
             import_policy_config: crate::config::ImportPolicyConfig::default(),
             shacl_config: ShaclConfig::default(),

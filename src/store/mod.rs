@@ -147,6 +147,7 @@ pub struct Store {
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
+    pub(crate) created_fact_schema: bool,
     pub(crate) labels_config: crate::config::LabelsConfig,
     pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode

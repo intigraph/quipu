@@ -16,6 +16,11 @@ pub enum Payload {
         /// Immutable operation.
         request: Request,
     },
+    /// Immutable abandoned-attempt outcome; never an activation receipt.
+    Abandonment {
+        /// Reserved request and operator reason.
+        abandonment: Abandonment,
+    },
     /// Retained source cut/outbox record.
     Retirement {
         /// Candidate completed retirement.
@@ -56,6 +61,7 @@ impl Record {
         require(self.version == RECORD_VERSION, "unknown record version")?;
         match &self.payload {
             Payload::Operation { request } => request.validate(),
+            Payload::Abandonment { abandonment } => abandonment.validate(),
             Payload::Retirement { certificate } => certificate.validate(),
             Payload::Startup { head, nonce } => {
                 head.validate()?;

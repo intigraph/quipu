@@ -7,6 +7,41 @@ use std::sync::{
 };
 
 struct ForbiddenEmbed(Arc<AtomicUsize>);
+
+#[tokio::test]
+async fn fresh_http_defaults_search_without_a_model() {
+    let directory = tempfile::tempdir().unwrap();
+    let db = directory.path().join("fresh.db");
+    let path = db.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    quipu::ingest_rdf(
+        &mut store,
+        br#"<urn:library> <http://www.w3.org/2000/01/rdf-schema#label> "Clockwork" ."#.as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let readers = super::super::ReadPool::open(path, &store, 1);
+    let shared = Arc::new(super::super::StoreHandle::serving(
+        store,
+        readers,
+        path,
+        Default::default(),
+    ));
+    let response =
+        super::super::tools::search(State(shared), axum::Json(json!({"query":"Clockwork"})))
+            .await
+            .unwrap()
+            .0;
+    assert_eq!(response["count"], 1);
+    assert_eq!(response["ranking"], "keyword");
+    assert_eq!(response["mode_reason"], "no_embedding_provider");
+}
+
 impl EmbeddingProvider for ForbiddenEmbed {
     fn embed_text(&self, _: &str) -> quipu::Result<Vec<f32>> {
         self.0.fetch_add(1, Ordering::SeqCst);
@@ -262,4 +297,22 @@ async fn search_query_http_is_read_only_and_keyword_default_never_embeds() {
         super::super::tools::search(State(shared), axum::Json(json!({"query":"walneedle"}))).await;
     assert!(semantic.is_err());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn existing_store_needs_explicit_keyword_activation() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let mut store = Store::open(path.to_str().unwrap()).unwrap();
+    assert!(!store.created_fact_schema());
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    assert!(!store.search_config().keyword);
+    assert!(store.lexical_progress().unwrap().is_none());
+    let explicit: quipu::SearchConfig = toml::from_str("keyword = true").unwrap();
+    super::super::base::apply_search(&mut store, &explicit);
+    assert!(store.search_config().keyword);
+    assert!(store.lexical_progress().unwrap().is_some());
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    assert!(store.search_config().keyword);
 }

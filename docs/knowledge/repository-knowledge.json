@@ -1,6 +1,6 @@
 {
-  "source_revision": "a302d90d5bfc5feaa666adc71005201e7bbf7499",
-  "reviewed_at": "2026-11-05T20:56:34Z",
+  "source_revision": "d707ec62fe105f3296143321e681aec8daa46f28",
+  "reviewed_at": "2026-11-01T18:44:51.782380Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "77b596e70c3e1afec1baed4391b8f556a23cde43e10ab09ba32ce82131335740",
+      "source_sha256": "638f346f5de7eded5d687a4125b954d7ea0502e718d256545da8c29699428939",
       "type": "Concept"
     },
     {
@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "3bfc9a72475341ece598d7cb4b372bdf4cae4df6029b93dcdda01e7a373bdb68",
+      "source_sha256": "0bfbd94ed27e460dd680c402268dd2a6158ff78e2aa04963c211671cd9da814c",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "330ffe015beb2b4189f4f9d5c035c31a7de96ecf5c4b6d7222fd029b5fbed15f",
+      "source_sha256": "49ca7195f62afcb370d389ada5dca327d6e60b2654a56d9a446d9d34e727c478",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "2e045b01c851610aa172f492cd98ee12d220e06139fe6e341b294ddbed5412c1",
+      "source_sha256": "436e61796beb2a1df219f77848cb5564e691edc07d3ae452fc47b3f561158018",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "976f505819cd563e9d8d3cd9a3e5ad665b02a5eabe3ff4ec88df0e0227841bd4",
+      "source_sha256": "64de6d287c5b448cd3898eeb932a8f153ea3c57836c3630ee53aff6dd5b319fe",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "b6f28e87273068a932dfa631a06b3690727266563f693ff2e6f4e4193b477b80",
+      "source_sha256": "b93723df9d09d08fe7393dcca9a505774615ecf9655c994835f2aa854bdbbda6",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "064529b2f71300629852c06a9bbd5ed77d4e5491d60b2a08cea0e3aa6e7895c2",
+      "source_sha256": "ee109ed646005464530caf696b12e84e77670468bb1a0ae57ec5be855db4767f",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "3aee7d7d2ce3c4273784b6b2b82bfd2c03e5fe5176933bb8b7069e50e03bc2f1",
+      "source_sha256": "baed318457519265988ead6f0618902992ff6cc44dc69bca32ea6b68a04c6e7b",
       "properties": {
         "startHereOrder": 5
       }
