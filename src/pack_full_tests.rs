@@ -84,6 +84,37 @@ fn internal() -> PackOptions {
 }
 
 #[test]
+fn full_pack_retains_declared_history_without_local_credential_evidence() {
+    let mut store = store_with_history();
+    let tx = store
+        .transact(&[], TS, Some("claimed-actor"), None)
+        .unwrap();
+    let declarations = r#"{"host":"claimed-host","agent":"claimed-agent"}"#;
+    store
+        .conn
+        .execute(
+            "INSERT INTO transaction_declarations (tx, declarations) VALUES (?1, ?2)",
+            rusqlite::params![tx, declarations],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO transaction_auth (tx, principal, auth_class) VALUES (?1, ?2, ?3)",
+            rusqlite::params![tx, "local-principal", "bearer"],
+        )
+        .unwrap();
+    let (_dir, out) = tmp("declared-history");
+    pack_full(&store, &out, &internal(), TS).unwrap();
+    let packed = Store::open(&out).unwrap();
+    assert_eq!(
+        packed.transaction_declarations(tx).unwrap().unwrap(),
+        serde_json::from_str::<std::collections::BTreeMap<String, String>>(declarations).unwrap()
+    );
+    assert!(packed.transaction_auth(tx).unwrap().is_none());
+}
+
+#[test]
 fn the_full_pack_carries_every_row_of_every_carried_table() {
     let store = store_with_history();
     let alignment = "# retained evidence, not an applied mapping\n";
