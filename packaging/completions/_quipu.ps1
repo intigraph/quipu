@@ -56,8 +56,9 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show store statistics')
             [CompletionResult]::new('prime', 'prime', [CompletionResultType]::ParameterValue, 'Print the agent primer and a bounded, read-only summary of the store')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search entities by keyword, vector or hybrid ranking')
+            [CompletionResult]::new('model', 'model', [CompletionResultType]::ParameterValue, 'Manage the pinned default embedding model')
             [CompletionResult]::new('search-index', 'search-index', [CompletionResultType]::ParameterValue, 'Report, backfill or drop the search indexes')
-            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift or search backend readiness')
             [CompletionResult]::new('pack', 'pack', [CompletionResultType]::ParameterValue, 'Export a graph, or the whole store, as a pack; or verify a pack')
             [CompletionResult]::new('unpack', 'unpack', [CompletionResultType]::ParameterValue, 'Merge a published pack into a local graph')
             [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Replace the store with a full pack, binary or text')
@@ -523,6 +524,28 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;model' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Download and verify the default embedding model and tokenizer')
+            [CompletionResult]::new('backfill', 'backfill', [CompletionResultType]::ParameterValue, 'Embed one bounded batch of existing ROOT subjects')
+            break
+        }
+        'quipu;model;install' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;model;backfill' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'Number of entries per indexing batch')
+            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'Resume after this cursor')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;search-index' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
@@ -561,9 +584,16 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('labels', 'labels', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Report search backend readiness and remedies')
             break
         }
         'quipu;doctor;labels' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;doctor;search' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

@@ -53,8 +53,9 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand stats 'Show store statistics'
             cand prime 'Print the agent primer and a bounded, read-only summary of the store'
             cand search 'Search entities by keyword, vector or hybrid ranking'
+            cand model 'Manage the pinned default embedding model'
             cand search-index 'Report, backfill or drop the search indexes'
-            cand doctor 'Report graph-label drift and recommended floors'
+            cand doctor 'Report graph-label drift or search backend readiness'
             cand pack 'Export a graph, or the whole store, as a pack; or verify a pack'
             cand unpack 'Merge a published pack into a local graph'
             cand restore 'Replace the store with a full pack, binary or text'
@@ -470,6 +471,25 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;model'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand install 'Download and verify the default embedding model and tokenizer'
+            cand backfill 'Embed one bounded batch of existing ROOT subjects'
+        }
+        &'quipu;model;install'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;model;backfill'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --batch-size 'Number of entries per indexing batch'
+            cand --after 'Resume after this cursor'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;search-index'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --kind 'Index or graph kind to select'
@@ -504,8 +524,14 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand labels 'Report graph-label drift and recommended floors'
+            cand search 'Report search backend readiness and remedies'
         }
         &'quipu;doctor;labels'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;doctor;search'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

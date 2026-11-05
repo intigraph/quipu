@@ -85,7 +85,18 @@ pub fn open_store(db_path: &str) -> Store {
     // Unset stays unset: governance then refuses (`Store::governance_ns`).
     store.set_base_ns(config().base_ns.clone());
     store.set_code_base(config().code_base.clone());
-    if config().search.keyword
+    let fresh = store.created_fact_schema();
+    let initialized = store
+        .lexical_progress()
+        .unwrap_or_else(|e| {
+            eprintln!("error reading keyword index state: {e}");
+            std::process::exit(1);
+        })
+        .is_some();
+    let keyword = config().search.keyword_for_store(fresh, initialized);
+    store.search_config_mut().keyword = keyword;
+    if keyword
+        && (fresh || config().search.keyword_explicit)
         && let Err(e) = store.initialize_lexical_index()
     {
         eprintln!("error initializing keyword index: {e}");
