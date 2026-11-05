@@ -32,8 +32,8 @@ restate the mechanism.
    readers. Graphs on another host are read only through `SERVICE` or a pinned
    as-of copy. There is no transparent distributed join.
 5. **Every answer carries its cut.** A result that reads more than one store reports
-   the coordinate `(store_id, log_epoch, tx)` of every graph it read. No scalar
-   transaction ID crosses a store boundary.
+   the coordinate `(store_id, log_epoch, tx)` and state of every graph it read, plus
+   a `complete` flag. No scalar transaction ID crosses a store boundary.
 6. **Trust never rises along a link.** A row is no more trusted than the least
    trusted graph that produced it. A link from a trusted graph into a quarantined
    peer graph does not promote anything in the peer graph.
@@ -112,7 +112,9 @@ graphs that hold facts about the objects of `G`'s edges. It is recomputable,
 never authoritative and never used to grant access. It exists so that an
 operator can see "the code graph links into the work-item graph" before moving
 either of them, and so that the first pilot can report dangling links (build
-step F1).
+step F1). Because it names which graphs hold facts about which IRIs, the derived
+set is operator-only catalog data; readers see only the grant-limited audit
+described under "Link audit visibility".
 
 ## 2. Query composition
 
@@ -155,6 +157,25 @@ variables shared with the `SERVICE` block, send them as a `VALUES` block in the
 remote query. If the left side exceeds `N`, refuse with a message that names the
 limit. Do not silently fall back to the unbounded pull, and do not build a
 cost-based distributed planner.
+
+A bind join **discloses local data to the remote**: the IRIs and literals in the
+`VALUES` block are whatever the local graphs produced, including values from graphs
+the remote operator could never read. So pushdown is governed by a disclosure rule,
+not only by the size limit:
+
+- Each configured endpoint declares the local graphs whose terms may be sent to it
+  (`disclose_from`). The default is empty, which means no pushdown: the endpoint
+  gets the unbound inner query, exactly as today.
+- Before sending, the evaluator traces every pushed-down binding to the graphs that
+  produced it. If any contributing graph is not in `disclose_from`, the query is
+  **refused**. It does not strip the offending values or fall back to an unbound
+  pull, because either would silently change the answer.
+- Constants written in the query text are the caller's own disclosure and are sent
+  as today.
+
+F5's acceptance therefore includes a negative control: a binding produced from a
+graph outside `disclose_from` makes the query refuse, and a capturing test endpoint
+records that it received **no request at all**.
 
 The provider seam (`POST /query` with `federated: true`) stays what it is:
 whole-query fan-out with concatenated, tagged results. It is not a join engine and
@@ -210,8 +231,29 @@ Two read modes, matching the per-graph store design:
 | Not selected | Not read; the edge's object is returned as an IRI only |
 | `store_id` or `log_epoch` differs from the pinned copy's | The copy is from another lineage; refuse rather than join across lineages |
 
-An unresolved link is never reported as "no match". Absence of evidence is
-`UNKNOWN`.
+SPARQL itself cannot carry this distinction. An `OPTIONAL` over a graph that was
+not read returns the variable unbound, exactly as it does when the graph was read
+and has no match. Per-row tri-state values would mean changing SPARQL semantics,
+and this design does not attempt that. The mechanism is at the **answer** level:
+
+- The `cut` lists every graph the answer actually read and its state (`present`,
+  `unavailable`, `stale`, `lineage-mismatch`). A graph that is not in the `cut` was
+  not read.
+- `complete: true` is returned only when every graph the query names is `present`
+  at the cut. In strict mode, anything else refuses. In vector mode it returns
+  `complete: false` with the offending graphs listed. A caller may treat an unbound
+  `OPTIONAL` as "no match" only for graphs that are `present` in a `complete`
+  answer.
+- Remote `SERVICE` rows whose endpoint reports no coordinate make the answer
+  `complete: false`.
+- What the answer does **not** do is decide, per unbound variable, which graph
+  "should" have bound it. A caller who needs that must name the target graph and
+  check its entry in the `cut`.
+
+F2's acceptance includes the control that distinguishes the two cases: the same
+`OPTIONAL` query with the target graph present but lacking the fact, and with the
+target graph unavailable. Both return the variable unbound. Only the first may
+carry `complete: true`.
 
 ### As of a time
 
@@ -282,15 +324,31 @@ they point from routed ingest graphs at entities that stay in ROOT.
 | Step | Scope | Lines up with | Done when |
 |---|---|---|---|
 | F0 | This document; no code | Pilot step 1 (producer/consumer matrix) | Accepted |
-| F1 | Read-only link audit for a graph: count edges whose object IRI has facts in another selected graph, in no selected graph, or only in a graph the caller cannot read | Pilot step 1 and step 4 (composed reads) | Reports for the three pilot producers, with dangling links listed |
-| F2 | `cut` vector in composed-read responses; refusal of scalar `as_of_tx` across files stays as is | Pilot step 4 | Negative controls: unavailable selected graph refuses; a vector answer is labelled as a vector |
+| F1 | Read-only link audit for a graph (see "Link audit visibility" below) | Pilot step 1 and step 4 (composed reads) | Reports for the three pilot producers, with dangling links listed; a non-admin caller's report is identical whether or not the target exists in a graph it cannot read |
+| F2 | `cut` vector and the answer-level `complete` flag in composed-read responses; refusal of scalar `as_of_tx` across files stays as is | Pilot step 4 | Negative controls: unavailable selected graph refuses (strict) or yields `complete: false` (vector); an `OPTIONAL` against an absent fact and against an unavailable graph are told apart only by `complete` |
 | F3 | Opt-in alias mode over a decided alignment graph | After the pilot; independent of routing | Alias-justified rows stamped; revoked row stops matching; ungranted alignment graph refuses |
 | F4 | Declared, pinned SHACL context for cross-store constraints, with `UNKNOWN` on missing context | Before any routed graph has a shape that depends on ROOT | Shape load refuses undeclared dependency; missing context yields `UNKNOWN`, never pass |
-| F5 | Bounded `VALUES` bind join for `SERVICE`, refusing above the limit | Independent; first remote consumer | Remote receives only the bound values; over-limit query refuses with the limit named |
+| F5 | Bounded `VALUES` bind join for `SERVICE` under the per-endpoint `disclose_from` rule | Independent; first remote consumer | Remote receives only the bound values; over-limit query refuses with the limit named; a binding from a graph outside `disclose_from` refuses and the capturing endpoint receives nothing |
 | F6 | Trust minimum per row and the inference floor for quarantined graphs | Peer network work | A peer-graph edge never appears in derived facts; row trust equals the minimum contributor |
 
 F1 and F2 need no new storage and no new write path, so they can run inside the
 pilot's qualification without adding a second write-path PR.
+
+### Link audit visibility
+
+The F1 audit must not become an existence oracle for graphs the caller cannot
+read. For an ordinary reader it reports exactly two buckets, computed only over
+graphs in that reader's grant:
+
+- **resolved**: the object IRI has facts in another granted graph;
+- **unresolved**: it has facts in no granted graph.
+
+An object that exists only in an ungranted graph is reported as unresolved, so the
+report is identical whether or not it exists there. A third bucket, "present only
+in a graph outside the grant", is available only to an operator with an
+administrative read of the catalog, and is never returned on the reader routes.
+F1's acceptance includes the negative control: the same audit run by a reader
+with and without a hidden target graph produces byte-identical output.
 
 ## Open questions
 
