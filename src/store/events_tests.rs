@@ -810,12 +810,21 @@ fn recording_failure_does_not_mask_the_refusal() {
     let mut store = Store::open_in_memory().unwrap();
     define_require_label_policy(&mut store);
     store.conn.execute_batch("DROP TABLE events").unwrap();
+    let before = crate::metrics::metrics().write_refusal_stats()["event_record_failures"]
+        .as_u64()
+        .unwrap();
 
     let bad = unlabelled_doc(&store);
     let err = store.transact(&bad, RTS, None, None);
     assert!(
         matches!(err, Err(crate::error::Error::PolicyDenied(_))),
         "the caller must still see the gate's own refusal, got {err:?}"
+    );
+    assert!(
+        crate::metrics::metrics().write_refusal_stats()["event_record_failures"]
+            .as_u64()
+            .unwrap()
+            > before
     );
 }
 
@@ -1278,4 +1287,29 @@ fn lag_is_measured_within_the_readers_graph() {
     let board_head = store.latest_event_offset_in(Some(BOARD)).unwrap();
     assert!(board_head > 0);
     assert_eq!(store.latest_event_offset_in(Some(OTHER)).unwrap(), 0);
+}
+
+#[test]
+fn refusal_categories_do_not_call_an_unverifiable_write_invalid() {
+    let unverified = super::PendingRefusal::from_error(
+        "shacl",
+        &crate::Error::CannotVerify("missing value set".into()),
+        1,
+    );
+    assert_eq!(unverified.reason_code, "cannot_verify");
+    let unavailable = super::PendingRefusal::from_error(
+        "policy",
+        &crate::Error::Store("read unavailable".into()),
+        1,
+    );
+    assert_eq!(unavailable.reason_code, "operational_failure");
+    let invalid = super::PendingRefusal::from_error(
+        "shacl",
+        &crate::Error::ValidationFailed {
+            violations: 1,
+            messages: vec![],
+        },
+        1,
+    );
+    assert_eq!(invalid.reason_code, "shacl");
 }

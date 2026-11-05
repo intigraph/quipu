@@ -2,13 +2,21 @@ name: Merge load
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
 
+# Superseded PR runs are cancelled (aegis-9w9l, runner starvation); main
+# pushes and dispatches keep one group per run and are never cancelled.
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   shipped-paths:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Seeded merge paths (1000 edits per replica)
     runs-on: ubuntu-latest
     timeout-minutes: 45

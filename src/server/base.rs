@@ -385,6 +385,7 @@ pub(crate) async fn stats(
         drop(reader);
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
+        value["write_refusals"] = quipu::metrics::metrics().write_refusal_stats();
         // The counts describe this transaction; `counts_stale` is true only when
         // a concurrent recompute was running and an older aggregate was returned.
         value["counts_as_of_tx"] = json!(counts_tx);
