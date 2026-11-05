@@ -103,15 +103,19 @@ fn a_populated_store_whose_index_exists_resolves_on() {
 #[test]
 fn an_explicit_setting_always_wins_over_the_default() {
     let mut store = Store::open_in_memory().unwrap();
-    let mut off = SearchConfig::default();
-    off.keyword = Some(false);
+    let off = SearchConfig {
+        keyword: Some(false),
+        ..SearchConfig::default()
+    };
     assert!(
         !store.adopt_search_config(&off).unwrap(),
         "explicit false on a fresh store stays off"
     );
     fact(&mut store, "populated");
-    let mut on = SearchConfig::default();
-    on.keyword = Some(true);
+    let on = SearchConfig {
+        keyword: Some(true),
+        ..SearchConfig::default()
+    };
     assert!(
         store.adopt_search_config(&on).unwrap(),
         "explicit true on a populated store stays on"

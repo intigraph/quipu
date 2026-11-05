@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
     let mut store = Store::open(path.to_str().ok_or("non-UTF8 fixture path")?)?;
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.initialize_lexical_index()?;
     for (graph, entity, name) in [
         (None, "urn:root", "shared root"),
