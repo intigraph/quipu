@@ -149,14 +149,14 @@ pub struct SearchConfig {
     /// default until its evaluation gate passes; an anchored request on a
     /// server with this off is refused, never silently answered unanchored.
     pub anchored: bool,
-    /// SQLite FTS5 keyword search. Default off; activation creates only empty
+    /// SQLite FTS5 keyword search. Default on; activation creates only empty
     /// schema/triggers. Historical rows require explicit bounded backfill.
     pub keyword: bool,
     /// Explicit structured candidate filters. SQLite-only, default off.
     pub structured: bool,
     /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
     pub hybrid: bool,
-    /// Default search mode; semantic preserves the existing API.
+    /// Default mode: auto selects semantic with a provider, keyword otherwise.
     pub mode: String,
     /// Semantic contribution, with exact pure-mode endpoints.
     pub alpha: f64,
@@ -187,10 +187,10 @@ impl Default for SearchConfig {
             episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
-            keyword: false,
+            keyword: true,
             structured: false,
             hybrid: false,
-            mode: "semantic".into(),
+            mode: "auto".into(),
             alpha: 0.5,
             fusion: "rrf".into(),
             rrf_k: 60.0,

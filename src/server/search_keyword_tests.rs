@@ -7,6 +7,41 @@ use std::sync::{
 };
 
 struct ForbiddenEmbed(Arc<AtomicUsize>);
+
+#[tokio::test]
+async fn fresh_http_defaults_search_without_a_model() {
+    let directory = tempfile::tempdir().unwrap();
+    let db = directory.path().join("fresh.db");
+    let path = db.to_str().unwrap();
+    let mut store = Store::open(path).unwrap();
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    quipu::ingest_rdf(
+        &mut store,
+        br#"<urn:library> <http://www.w3.org/2000/01/rdf-schema#label> "Clockwork" ."#.as_slice(),
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    )
+    .unwrap();
+    let readers = super::super::ReadPool::open(path, &store, 1);
+    let shared = Arc::new(super::super::StoreHandle::serving(
+        store,
+        readers,
+        path,
+        Default::default(),
+    ));
+    let response =
+        super::super::tools::search(State(shared), axum::Json(json!({"query":"Clockwork"})))
+            .await
+            .unwrap()
+            .0;
+    assert_eq!(response["count"], 1);
+    assert_eq!(response["ranking"], "keyword");
+    assert_eq!(response["mode_reason"], "no_embedding_provider");
+}
+
 impl EmbeddingProvider for ForbiddenEmbed {
     fn embed_text(&self, _: &str) -> quipu::Result<Vec<f32>> {
         self.0.fetch_add(1, Ordering::SeqCst);

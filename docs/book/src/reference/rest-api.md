@@ -1302,7 +1302,11 @@ Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
-omitted mode or `mode: "semantic"` preserves vector search.
+omitted mode follows `[quipu.search] mode`, which defaults to `"auto"`: semantic
+when an embedding provider or query embedding is present, keyword otherwise.
+Explicit `mode: "semantic"` always requires embeddings; it never falls back.
+Automatic keyword responses include `search_mode: "keyword"` and
+`mode_reason: "no_embedding_provider"`. Explicit configured modes remain authoritative.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
@@ -1349,7 +1353,7 @@ keyword index, request `mode: "hybrid"`, `alpha` in `[0,1]`,
 Alpha is the semantic contribution: `alpha: 1` returns the existing semantic
 response exactly, without accessing the lexical index; `alpha: 0` returns the
 keyword response exactly, without embedding. Omitted mode and parameters use
-the server search configuration; the default mode remains semantic.
+the server search configuration; the default mode is `auto`.
 
 Weighted fusion min-max normalizes each candidate list independently. A
 nonempty equal-score list normalizes to one; missing candidates contribute zero.
@@ -1384,8 +1388,8 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
-activation installs an empty FTS5 index and same-transaction fact triggers; it
+Keyword search is enabled by default (`[quipu.search] keyword = true`).
+Startup installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
 assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`
