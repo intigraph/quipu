@@ -64,6 +64,8 @@ pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
 pub mod replicate_wire;
+/// Prospective resolver types and content-bound validation evidence; no admission authority.
+pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
