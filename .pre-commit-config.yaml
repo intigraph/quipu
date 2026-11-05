@@ -73,6 +73,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(README\.md|scripts/(check-readme-badges|test_check_readme_badges)\.py)$
+      - id: stack-installer-current-command
+        name: stack installer current command and review boundary
+        entry: python3 scripts/test-install-stack.py
+        language: system
+        pass_filenames: false
+        files: ^scripts/(install-stack\.sh|test-install-stack\.py)$
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --check

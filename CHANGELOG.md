@@ -4,6 +4,71 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-05
+
+### Added
+
+- *(share)* Import reads the internal destination stamp itself (#954)([d707ec6](https://github.com/scbrown/quipu/commit/d707ec62fe105f3296143321e681aec8daa46f28))
+- *(embedding)* Exclude configured predicates from embedding text (#975)([2ef3afc](https://github.com/scbrown/quipu/commit/2ef3afc738364de8235ced79eb0778c6c3bba8b5))
+- *(store)* Protected ownership journal file adapter (P1, s24.8) (#972)([16688e6](https://github.com/scbrown/quipu/commit/16688e633d46d06508a23b63b7e42a909a9b46a6))
+- *(proposal)* Blast-radius plan and risk gate before accepting a schema change (#962)([78a6e3c](https://github.com/scbrown/quipu/commit/78a6e3cb00e0d66504c299678198f91868f034cc))
+- *(shapes)* AccessGrant and AccessGrantEvent records and an active-grants query (#969)([8068110](https://github.com/scbrown/quipu/commit/8068110a5454b13107534bc7783398f67d4fca24))
+- *(share)* Publish pendant entities under w3id.org/intigraph names (#970)([a6306a5](https://github.com/scbrown/quipu/commit/a6306a5536d8842ebed3c0549f4e9abcad3420cd))
+- *(align)* Export mapping sets as standard SSSOM TSV and RDF (#968)([a6034a5](https://github.com/scbrown/quipu/commit/a6034a5f535dc3fef376bbe0ce7e4f0033b30251))
+- *(events)* [**breaking**] Retain 30 days of event log by default (#987)([853f6fd](https://github.com/scbrown/quipu/commit/853f6fdf081cbdf57ea3c73b969d5c211b400cea))
+- *(vocabulary)* Select golden-path term IRIs separately from base_ns (#994)([678f687](https://github.com/scbrown/quipu/commit/678f687ef02cae46a38dd24fa9e6f0367e9c960e))
+- *(databook)* Export a graph as a DataBook and import one back (#964)([9751c7a](https://github.com/scbrown/quipu/commit/9751c7a749870ecd18d2dfc2d090d9c018a38351))
+- *(store)* Generation pin re-reads the protected journal at every commit (P1, s24.8) (#973)([9711015](https://github.com/scbrown/quipu/commit/9711015d56b6a94b62fc523cb88c60a7acbb92a8))
+- *(vectors)* Prune superseded embeddings after a retention window (#982)([ddb6fb0](https://github.com/scbrown/quipu/commit/ddb6fb0926e27a8a1b9af42419744534cf814843))
+- *(resolver)* Publish content-bound prospective contract and joint vectors (#1030)([3b6cf9e](https://github.com/scbrown/quipu/commit/3b6cf9e554cef7c99ca363ad0a97fd7007797f44))
+- *(metrics)* Count refused writes in metrics and stats (#1005)([9f8566f](https://github.com/scbrown/quipu/commit/9f8566f4bd99e2be937b36c4d32c75c35a7a42e3))
+- *(store)* Add opt-in SQLite HA read eligibility profile (#1025)([82fa933](https://github.com/scbrown/quipu/commit/82fa9338b8bcc1c60a2ec041251b8ef40388aef7))
+- *(search)* Add opt-in text-free cross-process outcome counters (#1020)([72f1947](https://github.com/scbrown/quipu/commit/72f1947fd52894a2d80f210b50a1e35994d646aa))
+
+
+
+### Changed
+
+- *(signing)* Consume the published shared signing crate (#942)([cf03e65](https://github.com/scbrown/quipu/commit/cf03e657b39ca284633285c070c3d83969ff336a))
+- *(vocabulary)* Load the term map as data; guard src/ against stack vocabulary (#1000)([f275c3b](https://github.com/scbrown/quipu/commit/f275c3b04ec62bb1a00f56a7c83e9223ada96394))
+
+### Documentation
+
+- *(governance)* Historical registry reads, enrolled-workflow gating, probe zero-test guard (#976)([e20bcba](https://github.com/scbrown/quipu/commit/e20bcbac8940714db21a2bda8355d96b3cd2afab))
+- *(readme)* Restore badges, show a fact changing the graph, no demo warnings (#990)([dafe8bf](https://github.com/scbrown/quipu/commit/dafe8bfedddfa01adf39cbc96e0d2f7e2a82e50f))
+- Link README agent setup to published guide (#993)([904dfa1](https://github.com/scbrown/quipu/commit/904dfa16226b315c1ede0c7de96d6e04fc736b80))
+
+### Fixed
+
+- *(store)* Refuse enrolled startup before migrations and retain writer revocation (#947)([8eaf183](https://github.com/scbrown/quipu/commit/8eaf1831cad75ec0ba3f9e13c7223feac8f9886e))
+- *(docs)* Require agent references in pendants and describe CLI flags (#965)([f772562](https://github.com/scbrown/quipu/commit/f772562d5c6b4bcc18f02d829e30257477da483e))
+- *(governance)* Require root-endorsed transition keys (#963)([4b2ea31](https://github.com/scbrown/quipu/commit/4b2ea3114c9207cf35853eb7854b56847005e2aa))
+- *(provenance)* Credit a verified signer's agent and session (#979)([b1bbba0](https://github.com/scbrown/quipu/commit/b1bbba0b071675ac53ab4debf70816485ecea742))
+- *(shacl)* Refuse SHACL-SPARQL shapes instead of loading and ignoring them (#967)([1487c81](https://github.com/scbrown/quipu/commit/1487c81700e69e5653f0561e236b9d518b6edba9))
+- *(server)* Compute /stats off the writer, one recompute at a time (#989)([cb48a5c](https://github.com/scbrown/quipu/commit/cb48a5ce65152a572eadfe6547628c9f53684920))
+- *(server)* Rate-limit /stats aggregate recompute to once per 300 s (#1006)([5d2fe61](https://github.com/scbrown/quipu/commit/5d2fe613acd7cd2c172b23e3af8b2a5bddd612bf))
+- *(server)* Count /stats triples by streaming, not materialising every row (#1013)([ed9797c](https://github.com/scbrown/quipu/commit/ed9797c2626b0c1ede4ff5fb38ccfb55e7c4afc6))
+- *(shacl)* One shape can no longer make every write fail (#1009)([b3d6707](https://github.com/scbrown/quipu/commit/b3d670721a10c1af1a065f718771710b54569b0f))
+- *(admission)* Bound declared owner-row reads before shared admission (#868)([ea7f417](https://github.com/scbrown/quipu/commit/ea7f417a1ea40af84987b9f680dea889e3e765ca))
+
+### Miscellaneous
+
+- *(naming)* Retire the deprecated 'qpack' name from user-facing text (#998)([21547f5](https://github.com/scbrown/quipu/commit/21547f5a206dfc81788e7f70eef92f7f06051890))
+- *(gitleaks)* List the reviewed CI-only TerminusDB password false positive (#1021)([9a23c3b](https://github.com/scbrown/quipu/commit/9a23c3b63e11a7879c6aa72ccbe5d70a7636ad81))
+- *(conformance)* Re-derive ledgers at 07c6a9bb (#1028)([43dc5df](https://github.com/scbrown/quipu/commit/43dc5df861b3c962d34dd49a19b9f8131316fba5))
+
+### Testing
+
+- *(shacl)* Cover inverse members in alternative write paths (#1033)([fb9bd6a](https://github.com/scbrown/quipu/commit/fb9bd6a28b4d2b53e9cc4eb0157792f32bb5d511))
+
+### Perf
+
+- *(explore)* Restore the build-validated default store (#955)([46a26ac](https://github.com/scbrown/quipu/commit/46a26acddee30c6f23e0033bab79ef1e47468f8f))
+- *(sparql)* Stream board aggregates in one pass (4-5x faster, 7x less memory) (#980)([e28ec31](https://github.com/scbrown/quipu/commit/e28ec311d18734bed1bee986734cc010c2c00172))
+- *(sparql)* Streaming-count operands without copies and group keys without formatting (#984)([e8d17f4](https://github.com/scbrown/quipu/commit/e8d17f4e3513eaf1b4f1340be407a569678863de))
+- *(search)* Score borrowed SQLite vector blobs (#1012)([af7bae6](https://github.com/scbrown/quipu/commit/af7bae62dadfe63b8d343644b7ca3d30b98e561a))
+- *(sparql)* [**breaking**] Hash binding rows with foldhash (public Bindings type change) (#985)([bd4cbde](https://github.com/scbrown/quipu/commit/bd4cbde25894fe5938db00fd18756f520eebfdf6))
+
 ## [0.16.6] - 2026-10-30
 
 ### Added

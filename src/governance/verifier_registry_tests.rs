@@ -1,6 +1,7 @@
 //! Bitemporal verifier registry tests (signing-plane S1). Size-exempt.
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::store::Datum;
 use crate::types::Op;
 
@@ -87,7 +88,7 @@ fn keys(store: &Store, w: &Witness) -> Vec<String> {
 
 #[test]
 fn rotation_keeps_what_the_old_key_signed_and_refuses_it_afterwards() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     register(&mut store, "http://ex/reg", "stiwi", "AAAA", P, T0);
     let before = sign(&mut store, "http://ex/v1", "sig1", T1);
 
@@ -118,7 +119,7 @@ fn rotation_keeps_what_the_old_key_signed_and_refuses_it_afterwards() {
 
 #[test]
 fn a_revocation_can_reach_back_to_the_compromise() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     register(&mut store, "http://ex/reg", "stiwi", "AAAA", P, T0);
     let honest = sign(&mut store, "http://ex/v1", "sig1", T1);
     let suspect = sign(&mut store, "http://ex/v2", "sig2", T3);
@@ -143,7 +144,7 @@ fn a_revocation_can_reach_back_to_the_compromise() {
 
 #[test]
 fn a_revoked_key_cannot_back_date_its_way_in() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     register(&mut store, "http://ex/reg", "stiwi", "AAAA", P, T0);
     close_key(&mut store, "http://ex/reg", "AAAA", T2);
     // The holder of the revoked key writes a signature whose transaction is
@@ -155,7 +156,7 @@ fn a_revoked_key_cannot_back_date_its_way_in() {
 
 #[test]
 fn as_of_tx_replays_what_the_store_knew_then() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let early = sign(&mut store, "http://ex/v0", "sig0", T1);
     register(&mut store, "http://ex/reg", "stiwi", "AAAA", P, T0);
     // valid-time covers T1, but at that tx the registration did not exist yet
@@ -173,7 +174,7 @@ fn as_of_tx_replays_what_the_store_knew_then() {
 
 #[test]
 fn the_key_and_the_scope_must_be_the_same_registration() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     // AAAA may attest only another policy; P is granted to BBBB.
     register(
         &mut store,
@@ -191,7 +192,7 @@ fn the_key_and_the_scope_must_be_the_same_registration() {
 
 #[test]
 fn activation_and_expiry_follow_the_valid_interval() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     register(
         &mut store,
         "http://ex/reg_future",
@@ -213,7 +214,7 @@ fn activation_and_expiry_follow_the_valid_interval() {
 
 #[test]
 fn scope_root_ignores_named_graph_registrations() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let g = store.graph_create("http://ex/identity").unwrap();
     let class = Value::Ref(store.intern(&ns("VerifierRegistration")).unwrap());
     let datums: Vec<Datum> = [

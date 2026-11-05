@@ -13,7 +13,7 @@
 //! - [`crate::governance::authority::Authority::intersect`] — delegation only
 //!   narrows; an empty intersection is a refusal, never a fallback.
 //! - SHACL branch composition — a branch may only *add* constraints.
-//! - Hank's confidence rule — a policy is only as confident as its
+//! - Yupana's confidence rule — a policy is only as confident as its
 //!   least-confident leaf.
 //!
 //! The invariant is deliberately **not** "everything is a meet", because the
@@ -31,7 +31,7 @@
 //! ## Why `meet`/`join` are fallible
 //!
 //! Trust ranks are only comparable **within a declared chain** (§2). Comparing
-//! `smac:canonical` against Hank's `attested` is not a small number vs a large
+//! `smac:canonical` against Yupana's `attested` is not a small number vs a large
 //! one — it is a category error, and silently comparing the ints is exactly how
 //! a "learned tactic outranks canonical" bug ships. So the trait methods return
 //! [`Result`] and [`Trust`] returns an error naming *both* chains.
@@ -89,7 +89,7 @@ pub trait Join: Sized {
 // Axis 1: freshness
 // ---------------------------------------------------------------------------
 
-/// How current a graph's contents are — Hank's exact vocabulary (§2).
+/// How current a graph's contents are — Yupana's exact vocabulary (§2).
 ///
 /// A total order, composed by meet (`min`). Quipu **never observes** staleness;
 /// a producer declares it. There is no synthesized `fresh` tag, ever.
@@ -214,7 +214,7 @@ impl Meet for Durability {
 // ---------------------------------------------------------------------------
 
 /// The default trust chain Quipu ships. Consumers declare their own; Quipu
-/// learns neither Hank's nor `NeuralAmplifier`'s vocabulary (§2).
+/// learns neither Yupana's nor `NeuralAmplifier`'s vocabulary (§2).
 ///
 /// `https:`, matching [`crate::namespace::QUIPU`]. The design doc writes the
 /// `quipu:` namespace as `http:`; this codebase has always used `https:`, and

@@ -365,7 +365,7 @@ pub const CATALOG: &[NamedQuery] = &[
     // self-describing catalog per the issue's "use quipu_ask, not a bespoke
     // tool" guidance. Deterministic set-overlap over the provenance chain
     // `Bead <-aegis:implements- GitCommit -aegis:modifies-> entity`; NOT a
-    // statistical mine (that stays in Bobbin). Returns nothing until Hank's
+    // statistical mine (that stays in Bobbin). Returns nothing until Yupana's
     // Phase-4 promotion (#18/FR-19) populates the modifies/implements edges —
     // the query layer lands first per #37. (Catalog queries are non-temporal;
     // for "as of <date>" use quipu_cooccurrence.)

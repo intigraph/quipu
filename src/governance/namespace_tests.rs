@@ -44,7 +44,7 @@ const DRIFT: &str = r#"{
 fn an_empty_store_reports_nothing() {
     // Nothing minted, nothing to report — and the summary says it is unmeasured
     // rather than clean, because those are different states.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let report = check(&store, DEFAULT_BASE_NS, None).unwrap();
     assert!(report.ungoverned.is_empty(), "{report:#?}");
     assert_eq!(report.governed, 0);
@@ -59,7 +59,7 @@ fn an_empty_store_reports_nothing() {
 
 #[test]
 fn episode_minted_predicates_absent_from_every_shape_are_reported() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(&mut store, TS, DRIFT);
 
     let report = check(&store, DEFAULT_BASE_NS, None).unwrap();
@@ -72,7 +72,7 @@ fn episode_minted_predicates_absent_from_every_shape_are_reported() {
 
 #[test]
 fn a_predicate_a_loaded_shape_mentions_is_not_reported() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     shape(
         &store,
         "hosts",
@@ -96,7 +96,7 @@ fn a_predicate_a_loaded_shape_mentions_is_not_reported() {
 
 #[test]
 fn counts_and_seen_window_span_every_use() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(&mut store, TS, DRIFT);
     ingest(
         &mut store,
@@ -134,7 +134,7 @@ fn structural_predicates_are_not_agent_drift() {
     // The episode ACTIVITY carries aegis:groupId and aegis:contentHash. Neither
     // was minted by a properties key, and reporting the writer's own vocabulary
     // would put a permanent floor under every report.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(
         &mut store,
         TS,
@@ -155,7 +155,7 @@ fn an_edge_relation_is_not_reported_as_a_minted_property() {
     // Edge relations already pass through `resolve_edge_predicate`, which is a
     // fence. They resolve to node REFERENCES, and this report is about the
     // unfenced literal path.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(
         &mut store,
         TS,
@@ -184,7 +184,7 @@ fn facts_no_episode_wrote_are_out_of_scope() {
     use crate::store::Datum;
     use crate::types::{Op, Value};
 
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let entity = store.intern("http://example.org/hand-written").unwrap();
     let attribute = store.intern(&iri("handMinted")).unwrap();
     store
@@ -213,7 +213,7 @@ fn a_predicate_outside_the_base_namespace_is_out_of_scope() {
     // Only the base namespace can be minted by `sanitize_iri_local`. Scanning
     // with a DIFFERENT base namespace configured must therefore find nothing,
     // which is the check that the base-namespace filter is real.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(&mut store, TS, DRIFT);
 
     let report = check(&store, "https://other.example/ontology/", None).unwrap();
@@ -226,14 +226,14 @@ fn a_predicate_outside_the_base_namespace_is_out_of_scope() {
 
 #[test]
 fn an_unknown_graph_is_an_error_not_an_empty_report() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let err = check(&store, DEFAULT_BASE_NS, Some("urn:quipu:graph:nope")).unwrap_err();
     assert!(format!("{err}").contains("no such graph"), "{err}");
 }
 
 #[test]
 fn the_root_iri_names_the_root_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     ingest(&mut store, TS, DRIFT);
 
     let named = check(&store, DEFAULT_BASE_NS, Some(crate::schema::ROOT_GRAPH_IRI)).unwrap();

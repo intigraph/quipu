@@ -41,20 +41,20 @@ fn read_entry(
         RDF_VALUE.to_string(),
         LABEL.to_string(),
         judgment::MARKER.to_string(),
-        ns("decisionPolicy"),
-        ns("question"),
-        ns("option"),
-        ns("outcome"),
-        ns("by"),
-        ns("evidenceHash"),
-        ns("gate"),
+        ns(store, "decisionPolicy")?,
+        ns(store, "question")?,
+        ns(store, "option")?,
+        ns(store, "outcome")?,
+        ns(store, "by")?,
+        ns(store, "evidenceHash")?,
+        ns(store, "gate")?,
     ];
     // A judgment is a gate ruling: aegis:GateApproval, or a pre-split
     // aegis:Decision read for one release. rdf:type is sealed, so an old
     // ruling is never retyped. Any other type is refused.
     let ruling_types = [
-        store.lookup(&ns("GateApproval"))?,
-        store.lookup(&ns("Decision"))?,
+        store.lookup(&ns(store, "GateApproval")?)?,
+        store.lookup(&ns(store, "Decision")?)?,
     ];
     let mut typed = false;
     for (predicate, value) in &facts {
@@ -67,7 +67,7 @@ fn read_entry(
             if !matches!(value, Value::Str(_)) {
                 return Err(invalid("non-scalar sealed field"));
             }
-        } else if predicate != &ns("signature")
+        } else if predicate != &ns(store, "signature")?
             && predicate != "http://www.w3.org/ns/prov#wasGeneratedBy"
         {
             return Err(invalid("unsupported sealed field"));
@@ -75,7 +75,7 @@ fn read_entry(
     }
     if !typed
         || scalar(&facts, judgment::MARKER)? != digest
-        || scalar(&facts, &ns("decisionPolicy"))? != request.judgment_policy
+        || scalar(&facts, &ns(store, "decisionPolicy")?)? != request.judgment_policy
     {
         return Err(invalid("Decision claim/type/policy mismatch"));
     }
@@ -95,9 +95,9 @@ fn read_entry(
             "judgment record identity/authority/reason mismatch",
         ));
     }
-    if scalar(&facts, &ns("outcome"))? != "approve"
-        || scalar(&facts, &ns("by"))? != record.authority
-        || scalar(&facts, &ns("evidenceHash"))? != format!("sha256:{digest}")
+    if scalar(&facts, &ns(store, "outcome")?)? != "approve"
+        || scalar(&facts, &ns(store, "by")?)? != record.authority
+        || scalar(&facts, &ns(store, "evidenceHash")?)? != format!("sha256:{digest}")
     {
         return Err(invalid(
             "Decision approval carrier does not endorse this claim and authority",
@@ -108,33 +108,37 @@ fn read_entry(
         .ok_or_else(|| invalid("missing Decision"))?;
     let decision_digest = decision_seal::decision_digest(store, decision)?;
     let mut verdicts = Vec::new();
-    for presentation in subjects(store, &ns("forDecision"), &Value::Ref(decision_id))? {
+    for presentation in subjects(store, &ns(store, "forDecision")?, &Value::Ref(decision_id))? {
         // Bound all entities the seal's scalar readers inspect before calling it.
         let presentation_facts = entity(store, &presentation)?;
-        let nonce = scalar(&presentation_facts, &ns("nonce"))?;
+        let nonce = scalar(&presentation_facts, &ns(store, "nonce")?)?;
         if nonce.len() != 64
             || !nonce.bytes().all(|byte| byte.is_ascii_hexdigit())
-            || presentation != ns(&format!("presentation_{nonce}"))
+            || presentation != ns(store, &format!("presentation_{nonce}"))?
         {
             return Err(invalid("presentation identity does not match native nonce"));
         }
-        if reference(&presentation_facts, &ns("forDecision"))? != decision_id
-            || scalar(&presentation_facts, &ns("sealedDigest"))? != decision_digest
+        if reference(&presentation_facts, &ns(store, "forDecision")?)? != decision_id
+            || scalar(&presentation_facts, &ns(store, "sealedDigest")?)? != decision_digest
         {
             return Err(invalid("presentation does not seal this exact Decision"));
         }
         let presentation_id = store
             .lookup(&presentation)?
             .ok_or_else(|| invalid("missing presentation"))?;
-        for verdict in subjects(store, &ns("forPresentation"), &Value::Ref(presentation_id))? {
+        for verdict in subjects(
+            store,
+            &ns(store, "forPresentation")?,
+            &Value::Ref(presentation_id),
+        )? {
             let verdict_facts = entity(store, &verdict)?;
-            if reference(&verdict_facts, &ns("forPresentation"))? != presentation_id {
+            if reference(&verdict_facts, &ns(store, "forPresentation")?)? != presentation_id {
                 return Err(invalid("verdict does not name this exact presentation"));
             }
-            if scalar(&verdict_facts, &ns("verifier"))? != record.authority {
+            if scalar(&verdict_facts, &ns(store, "verifier")?)? != record.authority {
                 return Err(invalid("authority differs from admitted verifier"));
             }
-            if scalar(&verdict_facts, &ns("outcome"))? != "approve"
+            if scalar(&verdict_facts, &ns(store, "outcome")?)? != "approve"
                 || decision_seal::verify_recorded(store, &verdict)?.is_err()
             {
                 return Err(invalid(

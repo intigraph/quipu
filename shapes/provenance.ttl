@@ -2,8 +2,8 @@
 #
 # The substrate for auditable, DETERMINISTIC work-item co-occurrence — "what work
 # touched this entity, and what else did that work touch" — as a graph query over
-# typed provenance edges, NOT a statistical mine (that stays in Bobbin). Hank
-# promotes the raw provenance at commit time (hank #18 / FR-19); Quipu aggregates.
+# typed provenance edges, NOT a statistical mine (that stays in Bobbin). Yupana
+# promotes the raw provenance at commit time (yupana #18 / FR-19); Quipu aggregates.
 #
 # The provenance chain (predicates already in aegis-ontology.shapes.ttl):
 #
@@ -21,7 +21,7 @@
 # This file adds only the ONE edge the chain was missing — epic membership — so
 # an epic touches the union of its beads' entities. `aegis:modifies` and
 # `aegis:implements` are confirmed (not redefined) here; their PropertyShapes live
-# in aegis-ontology.shapes.ttl and stay permissive per hank-spec §9.2
+# in aegis-ontology.shapes.ttl and stay permissive per yupana-spec §9.2
 # ("start permissive, tighten deliberately").
 #
 # Load via POST /shapes:

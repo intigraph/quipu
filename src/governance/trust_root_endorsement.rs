@@ -40,11 +40,11 @@ pub fn chain_of(store: &Store, registration: &str) -> Result<Chain> {
     // fingerprint of one of the registration's keys.
     if let (Some(t), Some(class), Some(enrolled), Some(reg)) = (
         rdf_type,
-        store.lookup(&ns("TrustRootBootstrap"))?,
-        store.lookup(&ns("enrolled"))?,
+        store.lookup(&ns(store, "TrustRootBootstrap"))?,
+        store.lookup(&ns(store, "enrolled"))?,
         store.lookup(registration)?,
     ) {
-        let keys = strings(store, registration, &ns("publicKey"))?;
+        let keys = strings(store, registration, &ns(store, "publicKey"))?;
         let mut stmt = store.prepare(
             "SELECT DISTINCT f.e FROM facts f JOIN facts c ON c.e = f.e AND c.a = ?3 \
              AND c.v = ?4 AND c.g = 0 AND c.op = 1 AND c.valid_to IS NULL \
@@ -63,7 +63,7 @@ pub fn chain_of(store: &Store, registration: &str) -> Result<Chain> {
             .collect::<std::result::Result<Vec<_>, _>>()?;
         for id in records {
             let record = store.resolve(id)?;
-            let Some(fp) = sole(strings(store, &record, &ns("keyFingerprint"))?) else {
+            let Some(fp) = sole(strings(store, &record, &ns(store, "keyFingerprint"))?) else {
                 continue;
             };
             if keys.iter().any(|k| fingerprint(k).is_ok_and(|f| f == fp)) {
@@ -78,8 +78,8 @@ pub fn chain_of(store: &Store, registration: &str) -> Result<Chain> {
     // signature verifies under a current human trust-root key.
     let (Some(t), Some(class), Some(amends), Some(reg)) = (
         rdf_type,
-        store.lookup(&ns("RegistryAmendment"))?,
-        store.lookup(&ns("amends"))?,
+        store.lookup(&ns(store, "RegistryAmendment"))?,
+        store.lookup(&ns(store, "amends"))?,
         store.lookup(registration)?,
     ) else {
         return Ok(Chain::GateOnly);
@@ -106,10 +106,10 @@ pub fn chain_of(store: &Store, registration: &str) -> Result<Chain> {
     for id in candidates {
         let iri = store.resolve(id)?;
         let (Some(digest), Some(signer), Some(nonce), Some(signature)) = (
-            sole(strings(store, &iri, &ns("amendedDigest"))?),
-            sole(strings(store, &iri, &ns("amendmentSigner"))?),
-            sole(strings(store, &iri, &ns("amendmentNonce"))?),
-            sole(strings(store, &iri, &ns("amendmentSignature"))?),
+            sole(strings(store, &iri, &ns(store, "amendedDigest"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentSigner"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentNonce"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentSignature"))?),
         ) else {
             continue;
         };
@@ -191,7 +191,7 @@ pub fn endorse_challenge(
     Ok(EndorseChallenge {
         store_id,
         tier: tier.to_string(),
-        keys: strings(store, registration, &ns("publicKey"))?,
+        keys: strings(store, registration, &ns(store, "publicKey"))?,
         digest,
         nonce,
         message,
@@ -212,7 +212,7 @@ pub fn endorse(
 ) -> Result<String> {
     let marker = endorsement_marker(store, registration, tier, timestamp)?;
     let digest = digest_after(store, registration, std::slice::from_ref(&marker))?;
-    let amendment = ns(&format!("registry_amendment_{nonce}"));
+    let amendment = ns(store, &format!("registry_amendment_{nonce}"));
     let d = |store: &Store, p: &str, v: Value| -> Result<Datum> {
         Ok(Datum {
             entity: store.intern(&amendment)?,
@@ -228,19 +228,27 @@ pub fn endorse(
         d(
             store,
             RDF_TYPE,
-            Value::Ref(store.intern(&ns("RegistryAmendment"))?),
+            Value::Ref(store.intern(&ns(store, "RegistryAmendment"))?),
         )?,
         d(
             store,
-            &ns("amends"),
+            &ns(store, "amends"),
             Value::Ref(store.intern(registration)?),
         )?,
-        d(store, &ns("amendedDigest"), Value::Str(digest))?,
-        d(store, &ns("amendmentSigner"), Value::Str(signer.into()))?,
-        d(store, &ns("amendmentNonce"), Value::Str(nonce.into()))?,
+        d(store, &ns(store, "amendedDigest"), Value::Str(digest))?,
         d(
             store,
-            &ns("amendmentSignature"),
+            &ns(store, "amendmentSigner"),
+            Value::Str(signer.into()),
+        )?,
+        d(
+            store,
+            &ns(store, "amendmentNonce"),
+            Value::Str(nonce.into()),
+        )?,
+        d(
+            store,
+            &ns(store, "amendmentSignature"),
             Value::Str(signature.into()),
         )?,
     ];
@@ -261,7 +269,11 @@ pub fn unendorsed(store: &Store) -> Result<Vec<(String, String)>> {
         return Ok(Vec::new());
     };
     let mut out = Vec::new();
-    for namespace in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
+    let base = store.governance_ns().ok();
+    for namespace in base
+        .into_iter()
+        .chain(["https://scbrown.github.io/quechua/ns#"])
+    {
         let Some(class) = store.lookup(&format!("{namespace}VerifierRegistration"))? else {
             continue;
         };
@@ -279,7 +291,7 @@ pub fn unendorsed(store: &Store) -> Result<Vec<(String, String)>> {
             if governed.contains_key(&iri) || out.iter().any(|(r, _)| *r == iri) {
                 continue;
             }
-            let verifier = sole(strings(store, &iri, &ns("verifier"))?).unwrap_or_default();
+            let verifier = sole(strings(store, &iri, &ns(store, "verifier"))?).unwrap_or_default();
             out.push((iri, verifier));
         }
     }

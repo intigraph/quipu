@@ -25,8 +25,6 @@ pub use query_capture::QueryCaptureConfig;
 mod endpoint_pointers;
 pub use vector_backend::install_vector_backend;
 
-use crate::namespace;
-
 /// The single source of truth for how aggressively search layers oversample
 /// candidates before post-filtering. Previously scattered as inline `*10`,
 /// `*5`, `*3` literals across the search/graphiti/vector paths (hq-gkd).
@@ -526,13 +524,18 @@ pub struct QuipuConfig {
     // parse-safe (this struct is `#[serde(default)]`, no `deny_unknown_fields`,
     // so an old config carrying `schema_path` is simply ignored). If a schema
     // directory is wanted later, add it back WITH the code that reads it.
-    /// Base namespace URI for ontology entities (default: `DEFAULT_BASE_NS`).
+    /// Base namespace for the names a store mints. Required for any write that
+    /// mints a name; there is no default (see `namespace::require_base_ns`).
     pub base_ns: String,
 
-    /// Which IRIs the golden-path vocabulary terms are written under
-    /// (`legacy` = under `base_ns`, the default; `intigraph` = published
-    /// Camayoc w3id terms). Individuals keep `base_ns` either way.
-    pub vocabulary: crate::term_vocabulary::Vocabulary,
+    /// Base for code-entity IRIs (`{code_base}{repo}/{path}`), which the import
+    /// reconciler reads. No default: a store names its own code entities.
+    pub code_base: String,
+
+    /// Optional Turtle file mapping the vocabulary terms Quipu mints to the
+    /// IRIs to write instead (see [`crate::term_vocabulary`]). Unset: every
+    /// term stays under `base_ns`. Individuals keep `base_ns` either way.
+    pub vocabulary_map: Option<PathBuf>,
 
     /// REST API server configuration.
     pub server: ServerConfig,
@@ -625,8 +628,9 @@ impl Default for QuipuConfig {
             memory_files: MemoryFilesConfig::default(),
             store_path: PathBuf::from(".bobbin/quipu/quipu.db"),
             label_floors: LabelsConfig::default(),
-            base_ns: namespace::DEFAULT_BASE_NS.to_string(),
-            vocabulary: crate::term_vocabulary::Vocabulary::default(),
+            base_ns: String::new(),
+            code_base: String::new(),
+            vocabulary_map: None,
             server: ServerConfig::default(),
             federation: FederationConfig::default(),
             embedding: EmbeddingConfig::default(),
@@ -761,6 +765,15 @@ pub struct ServerConfig {
     /// the remaining readers and admission permits. No extra connection opens.
     pub reserve_point_reads: bool,
 
+    /// Cooperative scheduling cap for declared heavy /query operations.
+    /// Empty by default: no scheduling change. Initially supports owner-rows.
+    /// This is neither authorization nor a classifier for undeclared queries.
+    pub heavy_read_operations: Vec<String>,
+
+    /// Maximum listed operations occupying ordinary readers simultaneously.
+    /// When enabled, must be positive and less than actual ordinary readers.
+    pub heavy_read_permits: usize,
+
     /// Include an optional permit-acquisition timestamp in query observation
     /// logs. Off by default; does not change admission or enable point reads.
     pub log_query_admission: bool,
@@ -811,6 +824,8 @@ impl Default for ServerConfig {
             read_processes: 0,
             read_process_base_port: 3031,
             reserve_point_reads: false,
+            heavy_read_operations: Vec::new(),
+            heavy_read_permits: 1,
             log_query_admission: false,
             log_query_phases: false,
             deck_http: false,
@@ -820,6 +835,33 @@ impl Default for ServerConfig {
         }
     }
 }
+
+impl ServerConfig {
+    /// Validate against actual usable ordinary readers, after point reservation.
+    ///
+    /// # Errors
+    /// Returns an error for unsupported operations or a cap that cannot leave
+    /// at least one ordinary reader free for other operations.
+    pub fn validate_heavy_reads(&self, ordinary_readers: usize) -> std::result::Result<(), String> {
+        if self.heavy_read_operations.is_empty() {
+            return Ok(());
+        }
+        if self.heavy_read_operations.as_slice() != ["owner-rows"] {
+            return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
+        }
+        if self.read_processes > 0
+            || self.heavy_read_permits == 0
+            || self.heavy_read_permits >= ordinary_readers
+        {
+            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "config/heavy_reads_tests.rs"]
+mod heavy_reads_tests;
 
 /// Embedding configuration for auto-embedding on write.
 #[derive(Debug, Clone, Deserialize)]
@@ -852,7 +894,27 @@ pub struct EmbeddingConfig {
     /// skip keeps the vector when only an excluded predicate changed. The
     /// facts are still stored and queryable; only the embedding ignores them.
     pub exclude_predicates: Vec<String>,
+
+    /// Days a superseded vector (one whose `valid_to` is set) is kept before
+    /// the server deletes it (default: 30; `0` keeps every version forever).
+    /// Current vectors are never deleted. The cost is recall for
+    /// `search --valid-at`: a point in time older than this window finds
+    /// only the entities whose vector was still current then or is current
+    /// now, not the older text of entities that changed since. A row whose
+    /// `valid_to` is not a parseable timestamp is kept.
+    pub superseded_retention_days: u32,
+
+    /// Most superseded vectors deleted in one hourly retention pass
+    /// (default: 50 000). A store upgraded with a large backlog drains it
+    /// over several passes instead of in one long delete.
+    pub superseded_prune_max_per_pass: usize,
 }
+
+/// Default for [`EmbeddingConfig::superseded_retention_days`].
+pub const DEFAULT_SUPERSEDED_RETENTION_DAYS: u32 = 30;
+
+/// Default for [`EmbeddingConfig::superseded_prune_max_per_pass`].
+pub const DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS: usize = 50_000;
 
 impl Default for EmbeddingConfig {
     fn default() -> Self {
@@ -864,6 +926,8 @@ impl Default for EmbeddingConfig {
             dimension: 384,
             max_sequence_length: 256,
             exclude_predicates: Vec::new(),
+            superseded_retention_days: DEFAULT_SUPERSEDED_RETENTION_DAYS,
+            superseded_prune_max_per_pass: DEFAULT_SUPERSEDED_PRUNE_MAX_PER_PASS,
         }
     }
 }

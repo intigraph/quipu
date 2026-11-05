@@ -208,7 +208,7 @@ quipu compose --use-pointer urn:project:api \
 ```
 
 The receiver supplies the repository remote and local authority. The command
-runs `caboodle packs trust check` against that repository and the pointed
+runs `tambo packs trust check` against that repository and the pointed
 archive hash before reading the cache or fetching. A missing trust tool or a
 refused decision stops the operation. Foreign bundles never become global
 shape policy, and nothing is promoted into ROOT. Use the returned `dataset` in
@@ -242,7 +242,7 @@ const rows = engine.query(`SELECT ?s ?p ?o FROM <${result.dataset}> WHERE { ?s ?
 ```
 
 `authorize(pointer)` is the receiving application's policy decision, such as a
-Caboodle policy exported by its trusted host. It must return the literal
+Tambo policy exported by its trusted host. It must return the literal
 boolean `true`; the archive cannot supply consent. The helper checks it before
 cache or network access. Rust checks trust and both integrity layers before
 composition, using the same implementation as native. Browser requests omit

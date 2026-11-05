@@ -26,7 +26,7 @@ const ANYTHING: &str = "ASK { $target ?p ?o }";
 const CANARY: &str = "QUARANTINE-CANARY-7f3a";
 
 fn signed_store(full: bool) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     if full {
         store.governance_config_mut().quarantine.retain_full = vec!["*".into()];
@@ -398,7 +398,7 @@ fn a_disabled_quarantine_records_nothing_and_the_denial_is_attestation_only() {
 
 #[test]
 fn an_unsigned_store_records_no_entry() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store);
     let datums = unlabeled_doc(&store, "http://ex/doc1", CANARY);
@@ -452,7 +452,7 @@ fn an_unknown_verdict_is_an_error() {
 
 #[test]
 fn the_canonical_delta_round_trips_every_value_kind() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let values = [
         Value::Ref(store.intern("http://ex/o").unwrap()),
         Value::Str("s".into()),

@@ -5,7 +5,7 @@
 > `src/store/ops.rs`), the seven governance/overlay MCP tools
 > (`src/mcp/governance.rs`), v1 verdict signing (`src/signing.rs`,
 > `src/governance/verdict_facts.rs`), authority intersection, and the
-> audit/replay machinery. ⬜ Not built: the hank-side structural-policy
+> audit/replay machinery. ⬜ Not built: the Yupana-side structural-policy
 > projection (Phase B), `boundary:"transition"` enforcement, the workflow half
 > of `require-approval`, and everything from §5 of the signing-plane design
 > (shared signing crate, bitemporal key registry, task signing).

@@ -3,7 +3,7 @@ use crate::{Store, tool_search};
 use serde_json::json;
 
 fn fixture(kind: &str, extra: &str) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let base = store.base_ns().to_string();
     let ttl = format!(
         "@prefix ex: <http://example.org/> .\n\

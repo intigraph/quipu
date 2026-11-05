@@ -157,6 +157,16 @@ impl Engine {
             .map_err(|e| raise_refusal(py, &refusal("open_failed", "open", e.to_string())))
     }
 
+    /// Name the namespace this store mints names under. There is no default:
+    /// an episode write is refused until a namespace is set.
+    fn set_base_ns(&self, py: Python<'_>, base_ns: &str) -> PyResult<()> {
+        self.with(py, "set_base_ns", |facade| {
+            facade.set_base_ns(base_ns).map_err(|e| {
+                raise_refusal(py, &refusal("invalid_input", "set_base_ns", e.to_string()))
+            })
+        })
+    }
+
     /// The capability manifest as Python objects.
     fn capabilities(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.with(py, "capabilities", |facade| {

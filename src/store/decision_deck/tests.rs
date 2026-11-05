@@ -1,5 +1,6 @@
 //! Temporary stores and software authenticators only; no human enrollment.
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::verdict_schemes::webauthn_tests::{Authenticator, Ceremony, ORIGIN, RP_ID, Signed};
 
 fn config() -> Config {
@@ -55,7 +56,7 @@ fn refused<T: std::fmt::Debug>(r: Result<T>, fragment: &str) {
 
 #[test]
 fn default_off_and_operator_scope_are_required() {
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     refused(s.deck_present("x", 1, "x", "approve"), "disabled");
     let mut c = config();
     c.origin = "http://approve.example.org".into();
@@ -67,7 +68,7 @@ fn default_off_and_operator_scope_are_required() {
 
 #[test]
 fn request_author_choice_and_revision_are_explicit() {
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     let a = Authenticator::es256();
     prepare(&mut s, &a);
     let mut r = request();
@@ -101,9 +102,11 @@ fn request_author_choice_and_revision_are_explicit() {
 #[test]
 fn accepted_es256_and_eddsa_have_reverifiable_receipts_and_replay_refusal() {
     for a in [Authenticator::es256(), Authenticator::ed25519()] {
-        let mut s = Store::open_in_memory().unwrap();
+        let mut s = Store::open_in_memory_test_ns().unwrap();
         prepare(&mut s, &a);
-        let empty = crate::sparql::query(&s, &audit_query().template).unwrap();
+        let empty =
+            crate::sparql::query(&s, &audit_query(crate::namespace::DEFAULT_BASE_NS).template)
+                .unwrap();
         assert_eq!(empty.rows().len(), 0);
         let control = crate::sparql::query(&s, &format!("PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?r FROM <{GRAPH}> WHERE {{ ?r a a:DecisionRequest }} LIMIT 2")).unwrap();
         assert_eq!(control.rows().len(), 1);
@@ -123,7 +126,7 @@ fn accepted_es256_and_eddsa_have_reverifiable_receipts_and_replay_refusal() {
             "curation must retain prior decision audit facts"
         );
         assert!(s.deck_verify_receipt(&c.nonce).unwrap());
-        let audit = audit_query();
+        let audit = audit_query(crate::namespace::DEFAULT_BASE_NS);
         s.query_load(&audit, &crate::time::now_iso()).unwrap();
         let stored = s.query_get(&audit.name).unwrap().unwrap();
         let rows = crate::sparql::query(&s, &stored.template).unwrap();
@@ -171,7 +174,7 @@ fn accepted_es256_and_eddsa_have_reverifiable_receipts_and_replay_refusal() {
 #[test]
 fn independent_challenges_cannot_double_decide_one_revision() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let first = present(&mut s);
     let second = present(&mut s);
@@ -197,7 +200,7 @@ fn independent_challenges_cannot_double_decide_one_revision() {
 #[test]
 fn signature_origin_rp_flags_and_content_negatives_preserve_positive_control() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let c = present(&mut s);
     let make = || Ceremony::for_message(&c.message().unwrap());
@@ -242,7 +245,7 @@ fn signature_origin_rp_flags_and_content_negatives_preserve_positive_control() {
 fn stale_expired_revoked_and_disabled_are_refused() {
     for case in ["stale", "expired", "revoked", "disabled", "audience"] {
         let a = Authenticator::es256();
-        let mut s = Store::open_in_memory().unwrap();
+        let mut s = Store::open_in_memory_test_ns().unwrap();
         prepare(&mut s, &a);
         let c = present(&mut s);
         match case {
@@ -288,7 +291,7 @@ fn stale_expired_revoked_and_disabled_are_refused() {
 #[test]
 fn late_settlement_failure_rolls_back_graph_nonce_counter_and_receipt() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let c = present(&mut s);
     let before = s
@@ -310,7 +313,7 @@ fn late_settlement_failure_rolls_back_graph_nonce_counter_and_receipt() {
     assert!(s.deck_receipt(&c.nonce).unwrap().is_none());
     assert_eq!(s.deck_credential("dGVzdA").unwrap().1, 0);
     assert_eq!(
-        crate::sparql::query(&s, &audit_query().template)
+        crate::sparql::query(&s, &audit_query(crate::namespace::DEFAULT_BASE_NS).template)
             .unwrap()
             .rows()
             .len(),
@@ -320,7 +323,7 @@ fn late_settlement_failure_rolls_back_graph_nonce_counter_and_receipt() {
     s.deck_attest(&c.nonce, &signed(&a, &c).as_assertion())
         .unwrap();
     assert_eq!(
-        crate::sparql::query(&s, &audit_query().template)
+        crate::sparql::query(&s, &audit_query(crate::namespace::DEFAULT_BASE_NS).template)
             .unwrap()
             .rows()
             .len(),
@@ -331,7 +334,7 @@ fn late_settlement_failure_rolls_back_graph_nonce_counter_and_receipt() {
 #[test]
 fn graph_store_cannot_replace_or_delete_protected_projection() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let ts = crate::time::now_iso();
     assert!(crate::delete_rdf_graph(&mut s, &ts, Some("test-curator"), Some(GRAPH)).is_err());
@@ -358,7 +361,7 @@ fn graph_store_cannot_replace_or_delete_protected_projection() {
 #[test]
 fn malformed_client_data_and_counter_regression_do_not_consume_challenge() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let c = present(&mut s);
     let mut bad = signed(&a, &c);
@@ -389,7 +392,7 @@ fn malformed_client_data_and_counter_regression_do_not_consume_challenge() {
 #[test]
 fn nested_transaction_is_refused_before_any_decision_write() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     s.conn.execute_batch("SAVEPOINT outer_fixture").unwrap();
     refused(
@@ -408,7 +411,7 @@ fn nested_transaction_is_refused_before_any_decision_write() {
 #[test]
 fn failed_outer_savepoint_discards_provisional_term_memo() {
     let a = Authenticator::es256();
-    let mut s = Store::open_in_memory().unwrap();
+    let mut s = Store::open_in_memory_test_ns().unwrap();
     prepare(&mut s, &a);
     let result: Result<()> = s.deck_atomic("test-human", |store, _| {
         let term = store.intern("urn:test:tentative-deck-term")?;
@@ -430,12 +433,14 @@ fn durable_reopen_and_lost_response_recovery() {
     let c;
     {
         let mut s = Store::open(file.to_str().unwrap()).unwrap();
+        s.set_base_ns(crate::namespace::DEFAULT_BASE_NS);
         prepare(&mut s, &a);
         c = present(&mut s);
         s.deck_attest(&c.nonce, &signed(&a, &c).as_assertion())
             .unwrap();
     }
     let mut s = Store::open(file.to_str().unwrap()).unwrap();
+    s.set_base_ns(crate::namespace::DEFAULT_BASE_NS);
     assert!(s.deck_receipt(&c.nonce).unwrap().is_some());
     assert!(s.deck_verify_receipt(&c.nonce).unwrap());
     refused(

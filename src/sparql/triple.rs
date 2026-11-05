@@ -188,7 +188,7 @@ pub(super) fn count_triple_pattern(
     visit_triple_pattern_limited(
         store,
         tp,
-        &Bindings::new(),
+        &Bindings::default(),
         ctx,
         None,
         ScanMode::Streamed,

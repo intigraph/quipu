@@ -9,7 +9,7 @@ use rusqlite::params;
 
 use super::VerdictJoin;
 use crate::error::Result;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::store::Store;
 use crate::types::Value;
 
@@ -17,8 +17,9 @@ use crate::types::Value;
 pub(super) type GatedIndex = BTreeMap<i64, Vec<(String, String, String)>>;
 
 pub(super) fn gated_tx_index(store: &Store) -> Result<GatedIndex> {
+    let ns = store.governance_ns()?;
     let mut out = GatedIndex::new();
-    let Some(gated) = store.lookup(&format!("{DEFAULT_BASE_NS}gatedTx"))? else {
+    let Some(gated) = store.lookup(&format!("{ns}gatedTx"))? else {
         return Ok(out);
     };
     let mut stmt =
@@ -46,8 +47,9 @@ pub(super) fn gated_tx_index(store: &Store) -> Result<GatedIndex> {
 
 /// (predicateId, targetRef, outcome) of one verdict entity, current values.
 fn verdict_fields(store: &Store, verdict: i64) -> Result<Option<(String, String, String)>> {
+    let ns = store.governance_ns()?;
     let field = |name: &str| -> Result<Option<String>> {
-        let Some(a) = store.lookup(&format!("{DEFAULT_BASE_NS}{name}"))? else {
+        let Some(a) = store.lookup(&format!("{ns}{name}"))? else {
             return Ok(None);
         };
         let mut stmt = store.prepare(
@@ -77,13 +79,14 @@ fn verdict_fields(store: &Store, verdict: i64) -> Result<Option<(String, String,
 /// The verdicts the historical convention attributes to `tx`: those written
 /// by the verdict-recording transaction immediately after it.
 fn next_tx_verdicts(store: &Store, tx: i64) -> Result<Vec<(String, String, String)>> {
+    let ns = store.governance_ns()?;
     let Some(meta) = store.get_transaction(tx + 1)? else {
         return Ok(Vec::new());
     };
     if meta.source.as_deref() != Some("write-gate verdict") {
         return Ok(Vec::new());
     }
-    let Some(verdict_class) = store.lookup(&format!("{DEFAULT_BASE_NS}Verdict"))? else {
+    let Some(verdict_class) = store.lookup(&format!("{ns}Verdict"))? else {
         return Ok(Vec::new());
     };
     let Some(rdf_type) = store.lookup(RDF_TYPE)? else {
