@@ -64,3 +64,40 @@ fn help_does_not_read_files_and_unknown_subcommand_is_refused() {
     assert_eq!(bad.status.code(), Some(2));
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 }
+
+#[test]
+fn lint_uses_the_pendant_operand_with_db_in_every_admitted_position() {
+    let root = tempfile::tempdir().unwrap();
+    // A valid decoy at the option token makes args[3] a false pass.
+    std::fs::create_dir(root.path().join("--db")).unwrap();
+    std::fs::write(
+        root.path().join("--db/competency.toml"),
+        r#"schema = "quipu-competency/1""#,
+    )
+    .unwrap();
+    let broken = root.path().join("broken");
+    std::fs::create_dir(&broken).unwrap();
+    std::fs::write(
+        broken.join("competency.toml"),
+        r#"schema = "quipu-competency/1"
+[[question]]
+id = "broken-target"
+ask = "Is someone present?"
+query = "BROKEN { ?p a <urn:Person> }"
+justifies = ["urn:PersonShape"]
+"#,
+    )
+    .unwrap();
+    for args in [
+        vec!["competency", "lint", "--db", "missing.db", "./broken"],
+        vec!["competency", "--db", "missing.db", "lint", "./broken"],
+        vec!["competency", "lint", "./broken", "--db", "missing.db"],
+        vec!["competency", "lint", "--db", "--help", "./broken"],
+    ] {
+        let output = run(root.path(), &args);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("broken-target"));
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("syntax pass"));
+    }
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+}
