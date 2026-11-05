@@ -70,6 +70,11 @@ commit_preprocessors = [
     # Repair the merged #202 subject without rewriting history. Keep this exact
     # correction so automatic regeneration retains its reviewed release entry.
     { pattern = '(?m)^Support bearer rotation with a restart-safe grace deadline \(#202\)$', replace = "feat(auth): support bearer rotation with a restart-safe grace deadline (#202)" },
+    # Repair the merged #868, #1025 and #1005 subjects without rewriting history.
+    # Keep these exact corrections so automatic regeneration retains their entries.
+    { pattern = '(?m)^Bound declared owner-row reads before shared admission \(#868\)$', replace = "fix(admission): bound declared owner-row reads before shared admission (#868)" },
+    { pattern = '(?m)^Add opt-in SQLite HA read eligibility profile \(#1025\)$', replace = "feat(store): add opt-in SQLite HA read eligibility profile (#1025)" },
+    { pattern = '(?m)^Count refused writes in metrics and stats \(#1005\)$', replace = "feat(metrics): count refused writes in metrics and stats (#1005)" },
     # "(ID, rest)" -> "(rest)"   e.g. (proj-1a2b, #36/#37) -> (#36/#37)
     { pattern = '\((?:aegis|hq|gassy|qp)-[a-z0-9]{3,6}(?:\.[0-9]+)*,[ \t]*', replace = "(" },
     # "(rest, ID)" -> "(rest)"
