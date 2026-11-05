@@ -22,9 +22,11 @@ def request(base, path, payload=None, authorized=False):
                                  data=None if payload is None else json.dumps(payload).encode())
     try:
         with urllib.request.urlopen(req, timeout=3) as response:
-            return response.status, json.load(response), response.headers
+            raw = response.read()
+            return response.status, json.loads(raw) if raw else None, response.headers
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read()), error.headers
+        raw = error.read()
+        return error.code, json.loads(raw) if raw else None, error.headers
 
 
 def run(server, cli, mode):
