@@ -142,7 +142,7 @@ fn named_presence_eligibility_is_narrow() {
             panic!("slice")
         };
         assert_eq!(
-            limited_scan::named_presence(&inner, &ctx, &Bindings::new()),
+            limited_scan::named_presence(&inner, &ctx, &Bindings::default()),
             expected,
             "{query}"
         );
@@ -153,7 +153,7 @@ fn named_presence_eligibility_is_narrow() {
         assert!(!limited_scan::named_presence(
             &inner,
             &historical,
-            &Bindings::new()
+            &Bindings::default()
         ));
         let historical = TemporalContext {
             valid_at: Some("2026-01-01".into()),
@@ -162,7 +162,7 @@ fn named_presence_eligibility_is_narrow() {
         assert!(!limited_scan::named_presence(
             &inner,
             &historical,
-            &Bindings::new()
+            &Bindings::default()
         ));
         let inferred = TemporalContext {
             entails_rdfs: true,
@@ -171,9 +171,9 @@ fn named_presence_eligibility_is_narrow() {
         assert!(!limited_scan::named_presence(
             &inner,
             &inferred,
-            &Bindings::new()
+            &Bindings::default()
         ));
-        let bound = Bindings::from([("outside".into(), crate::Value::Int(1))]);
+        let bound = Bindings::from_iter([("outside".into(), crate::Value::Int(1))]);
         assert!(!limited_scan::named_presence(&inner, &ctx, &bound));
     }
 }

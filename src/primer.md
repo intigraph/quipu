@@ -37,6 +37,7 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | `quipu stats` / `quipu doctor labels` | Store statistics and a graph-label drift report |
 | `quipu store status` | Inspect native ownership; explicit `store adopt` / `store restore` mint a new epoch, while ordinary legacy opens remain INACTIVE |
 | `quipu export` | Export RDF from ROOT or one graph |
+| `quipu databook export` / `import` | One graph as a DataBook (Markdown + YAML + Turtle), and back; import never runs its queries |
 | `quipu memory read <owner.json>` | Read versioned file memory (`export`, `commit` for the rest; off unless configured) |
 | `quipu share` / `quipu import` | Hand a graph to another store and verify one in |
 | `quipu mcp` | Serve the MCP tools over stdio |
@@ -82,10 +83,10 @@ Run `quipu help <command>` for the exact syntax of any command.
 A share merge, fork promotion or Git pendant merge that hits a conflict writes nothing and holds the slot.
 Finish all three the same way:
 
-1. Emit decisions with proposals: `quipu merge <share-dir> --emit-decisions f.json --propose`, `quipu fork promote <name> --emit-decisions f.json --propose`, or `quipu git-merge <ref>` (writes `<qpack>/decisions.json`). MCP: `quipu_merge_decisions` with `propose` and `present`.
+1. Emit decisions with proposals: `quipu merge <share-dir> --emit-decisions f.json --propose`, `quipu fork promote <name> --emit-decisions f.json --propose`, or `quipu git-merge <ref>` (writes `<pendant>/decisions.json`). MCP: `quipu_merge_decisions` with `propose` and `present`.
 2. Show the user `quipu merge show f.json --format md` (MCP: the `presentation` field) as printed; do not paraphrase it.
 3. Record each choice: `quipu merge resolve f.json <row> --choose ours|theirs|base|both|value|defer --by <who>` (MCP: `quipu_merge_resolve`).
-4. Apply with `--decisions f.json --reviewer <who>`, `--dry-run` first, on the same `quipu merge` or `quipu fork promote` command (MCP: `quipu_merge_apply`); for Git, `git add` the qpack and commit. Re-applying reports `already-applied` and writes nothing.
+4. Apply with `--decisions f.json --reviewer <who>`, `--dry-run` first, on the same `quipu merge` or `quipu fork promote` command (MCP: `quipu_merge_apply`); for Git, `git add` the pendant and commit. Re-applying reports `already-applied` and writes nothing.
 
 Decide a row yourself only when every side was written by agents and you take the suggested choice; record your agent id with `--by` and say so.
 Otherwise ask the user once, for all rows, with the numbered choices: always when a person wrote either side or you cannot tell, for `value` and `both`, and for `sh:maxCount` conflicts on human-owned data.

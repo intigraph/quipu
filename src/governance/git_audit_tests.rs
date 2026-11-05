@@ -67,7 +67,7 @@ impl Fixture {
     }
 }
 pub(super) fn store(effect: &str, paths: &[&str], selector: bool) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let entity = store
         .intern(&format!("{DEFAULT_BASE_NS}path-policy"))
         .unwrap();
@@ -233,7 +233,9 @@ fn selector_and_empty_catalogue_are_explicitly_unresolved() {
             .any(|d| d.detail.contains("selector/predicate replay"))
     );
     assert_eq!(
-        f.check(&Store::open_in_memory().unwrap(), &[]).1.unresolved,
+        f.check(&Store::open_in_memory_test_ns().unwrap(), &[])
+            .1
+            .unresolved,
         1
     );
 }

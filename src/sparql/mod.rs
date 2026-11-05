@@ -56,6 +56,7 @@ mod bind_join_tests;
 mod constant_bind_join_tests;
 mod construct;
 mod count_cover;
+mod count_key;
 pub(crate) mod count_mmap;
 mod count_optional;
 mod count_star;
@@ -103,8 +104,21 @@ pub(crate) fn sparql_parser() -> spargebra::SparqlParser {
         .expect("the static SPARQL base IRI is valid")
 }
 
+/// The hasher of [`Bindings`]: `foldhash`'s fast state, seeded per process.
+///
+/// Name it through this alias rather than through `foldhash`. Which hasher it
+/// is may change in any release, and callers should not depend on it.
+pub type BindingsHasher = foldhash::fast::RandomState;
+
 /// A single row of variable bindings from a query result.
-pub type Bindings = HashMap<String, Value>;
+///
+/// Build one with `Bindings::default()`, `Bindings::from_iter([..])` or
+/// `Bindings::with_capacity_and_hasher(n, Default::default())`.
+/// `Bindings::new()` and `Bindings::from([..])` exist only for std's
+/// hasher. Iteration order is unspecified and differs between processes, as
+/// it always did. Code that named a row `HashMap<String, Value>` must name it
+/// `Bindings`.
+pub type Bindings = HashMap<String, Value, BindingsHasher>;
 
 /// An RDF triple (used by CONSTRUCT and DESCRIBE results).
 #[derive(Debug, Clone, PartialEq)]

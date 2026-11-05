@@ -69,7 +69,7 @@ fn violations(report: &Report) -> Vec<&Discrepancy> {
 fn a_constraint_dropped_deeper_on_a_target_it_already_decided_is_a_violation() {
     // The STRONG case: it decided for this target once, so its absence deeper
     // is a drop rather than an inapplicability.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator"], "src/a.rs", &["no-secrets"]),
@@ -85,7 +85,7 @@ fn a_constraint_dropped_deeper_on_a_target_it_already_decided_is_a_violation() {
 #[test]
 fn the_control_a_deeper_action_that_does_evaluate_it_is_fine() {
     // Without this the test above proves only that the pass can complain.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator"], "src/a.rs", &["no-secrets"]),
@@ -101,7 +101,7 @@ fn the_control_a_deeper_action_that_does_evaluate_it_is_fine() {
 fn a_different_target_deeper_is_not_a_drop() {
     // The constraint decided for a.rs; nothing says it applies to b.rs, and
     // claiming so would be inventing the selector quipu does not have.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator"], "src/a.rs", &["no-secrets"]),
@@ -116,7 +116,7 @@ fn a_sibling_chain_is_not_below_and_is_not_a_drop() {
     // `is_below` is a prefix test on purpose. A different branch of the tree is
     // not a delegation of this one, and flagging it would make every parallel
     // worker look like a laundering event.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator", "left"], "src/a.rs", &["no-secrets"]),
@@ -128,7 +128,7 @@ fn a_sibling_chain_is_not_below_and_is_not_a_drop() {
 #[test]
 fn a_shallower_action_after_a_deeper_one_is_not_a_drop() {
     // Direction matters: returning to the orchestrator is not delegating.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator", "worker"], "src/a.rs", &["no-secrets"]),
@@ -141,7 +141,7 @@ fn a_shallower_action_after_a_deeper_one_is_not_a_drop() {
 fn a_constraint_that_is_not_declared_inherited_is_not_checked() {
     // Inheritance is a declaration. Assuming it would make every constraint's
     // ordinary scope look like a laundering event.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "local-only", false);
     let trace = [
         rec(&["orchestrator"], "src/a.rs", &["local-only"]),
@@ -163,7 +163,7 @@ fn a_constraint_that_is_not_declared_inherited_is_not_checked() {
 fn a_spec_declaring_no_inheritance_says_so_rather_than_reporting_clean() {
     // Otherwise a deployment that never declared inheritance reads as one where
     // inheritance was checked and found clean.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let report = check(&store, &[]).unwrap();
     assert!(report.conforms());
     assert!(!report.is_complete());
@@ -174,7 +174,7 @@ fn a_constraint_that_stops_at_the_delegation_boundary_is_the_weak_finding() {
     // Might be laundering, might be a selector that matched nothing deeper, and
     // the record cannot tell. Reported — but not as a contradiction, because
     // calling it one would flag every constraint that simply did not apply.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [
         rec(&["orchestrator", "worker"], "src/a.rs", &["no-secrets"]),
@@ -200,7 +200,7 @@ fn a_constraint_that_stops_at_the_delegation_boundary_is_the_weak_finding() {
 fn a_constraint_evaluated_at_a_root_with_no_delegation_says_nothing() {
     // Inheritance was never exercised, so there is nothing to report and a
     // finding here would be noise on every single-agent deployment.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let trace = [rec(&["solo"], "src/a.rs", &["no-secrets"])];
     let report = check(&store, &trace).unwrap();
@@ -217,7 +217,7 @@ fn a_constraint_evaluated_at_a_root_with_no_delegation_says_nothing() {
 
 #[test]
 fn check_jsonl_carries_the_unreadable_count() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-secrets", true);
     let jsonl = concat!(
         r#"{"kind":"guard","path":"a.rs","principal_chain":["o"],"constraints":[{"id":"no-secrets","outcome":"satisfied","response":"no-action"}]}"#,

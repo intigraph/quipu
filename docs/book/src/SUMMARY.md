@@ -47,6 +47,7 @@
 - [CLI Commands](reference/cli.md)
   - [CLI Command Index](reference/cli-commands.md)
 - [CLI: Sharing & Legacy Packs](reference/cli-sharing.md)
+- [DataBooks](reference/databooks.md)
 - [Render graph data into files](reference/render.md)
 - [REST API](reference/rest-api.md)
   - [Scoped current reads](reference/scoped-reads.md)
@@ -99,6 +100,7 @@
 
 # Operations
 
+- [Write refusal accounting](reference/write-refusals.md)
 - [Search outcome accounting](reference/search-outcomes.md)
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)

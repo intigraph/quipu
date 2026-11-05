@@ -7,7 +7,7 @@
 //!
 //! ## Why this is data and not a paragraph
 //!
-//! hank's `docs/work-scoped-governance.md` §"What this cannot reach" is an
+//! yupana's `docs/work-scoped-governance.md` §"What this cannot reach" is an
 //! honest list of bypass surfaces — CI pipelines, cron, the far side of a remote
 //! shell, a sibling session's VCS index, a hostile agent. It is also prose, and
 //! prose goes stale the first time a harness adds a tool: nothing recomputes,
@@ -36,7 +36,6 @@ use std::collections::BTreeSet;
 use super::audit::{Discrepancy, Pass, Report, Severity};
 use super::audit_spec;
 use crate::error::Result;
-use crate::namespace::DEFAULT_BASE_NS;
 use crate::sparql::{self, QueryResult};
 use crate::store::Store;
 use crate::types::Value;
@@ -75,8 +74,9 @@ impl ToolClass {
 
 /// Read the declared inventory from `store`.
 pub fn load(store: &Store) -> Result<Vec<ToolClass>> {
+    let ns = store.governance_ns()?;
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT ?c ?label ?by ?executable ?point ?reason ?instead ?imports ?origin \
          WHERE {{ \

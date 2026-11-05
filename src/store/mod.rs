@@ -27,6 +27,8 @@ pub(crate) mod release;
 pub use ownership::OwnershipState;
 #[cfg(test)]
 mod ownership_held_handle_tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ownership_pin_tests;
 #[cfg(test)]
 mod ownership_stage_a_tests;
 #[cfg(test)]
@@ -229,9 +231,11 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
-    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
-    /// startup. Defaults to legacy (every term under `base_ns`).
-    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
+    /// Code-entity IRI base, from `[quipu].code_base` (empty when unset).
+    pub(crate) code_base: String,
+    /// Vocabulary term map, loaded from `[quipu].vocabulary_map` at startup.
+    /// Empty by default (every term under `base_ns`).
+    pub(crate) vocabulary: std::sync::Arc<crate::term_vocabulary::VocabularyMap>,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.
@@ -424,6 +428,58 @@ impl Store {
             u64::try_from(row.get::<_, i64>(1)?).unwrap_or(0),
             u64::try_from(row.get::<_, i64>(2)?).unwrap_or(0),
         ))
+    }
+
+    /// The /stats triple counts: (facts, entities, predicates) over the triples
+    /// `SELECT ?s ?p ?o WHERE { ?s ?p ?o }` answers, computed WITHOUT
+    /// materialising them (aegis-67p0lj).
+    ///
+    /// Same population as that query: live ROOT rows (`g = 0 AND op = 1 AND
+    /// valid_to IS NULL`), one triple per `(e, a, term_key(v))`. Repeated
+    /// assertions and different encodings of one term (`"1"^^xsd:integer` and
+    /// `"01"^^xsd:integer`) count once, exactly as `collect_visible_facts`
+    /// dedups them. This differs from [`Store::graph_counts`], which counts
+    /// physical rows.
+    ///
+    /// Rows stream in `(e, a)` order and only the current `(e, a)` group's term
+    /// keys are held, so memory is bounded by the largest group, not the store.
+    /// The query it replaces built every row (one production store, 2026-11-04:
+    /// ~3.0M triples, a transient ~3 GB allocation per call).
+    pub fn current_triple_counts(&self) -> Result<(u64, u64, u64)> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e, a, v FROM facts \
+             WHERE g = 0 AND op = 1 AND valid_to IS NULL ORDER BY e, a",
+        )?;
+        let mut rows = stmt.query([])?;
+        let (mut facts, mut entities) = (0u64, 0u64);
+        let mut predicates = std::collections::HashSet::new();
+        let mut group: Option<(i64, i64)> = None;
+        let mut last_entity: Option<i64> = None;
+        let mut terms: std::collections::HashSet<Vec<u8>> = std::collections::HashSet::new();
+        while let Some(row) = rows.next()? {
+            let (e, a): (i64, i64) = (row.get(0)?, row.get(1)?);
+            if group != Some((e, a)) {
+                terms.clear();
+                group = Some((e, a));
+            }
+            let bytes = row.get_ref(2)?.as_blob().map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    2,
+                    rusqlite::types::Type::Blob,
+                    Box::new(e),
+                )
+            })?;
+            let key = crate::Value::from_bytes(bytes)?.term_key();
+            if terms.insert(key) {
+                facts += 1;
+                predicates.insert(a);
+                if last_entity != Some(e) {
+                    entities += 1;
+                    last_entity = Some(e);
+                }
+            }
+        }
+        Ok((facts, entities, predicates.len() as u64))
     }
 
     /// The latest committed transaction id (0 for an empty store).

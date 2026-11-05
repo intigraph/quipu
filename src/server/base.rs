@@ -91,9 +91,24 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
-    store.set_vocabulary(config.vocabulary);
-    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
-        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    store.set_code_base(config.code_base.clone());
+    if let Some(path) = &config.vocabulary_map {
+        // A configured map that cannot be read must stop startup: writing the
+        // unmapped IRIs instead would be a silent change of vocabulary.
+        let map = quipu::term_vocabulary::VocabularyMap::load(path).unwrap_or_else(|e| {
+            eprintln!("error loading vocabulary map: {e}");
+            std::process::exit(1);
+        });
+        eprintln!(
+            "vocabulary map {} loaded: {} term(s) written under their mapped IRIs",
+            path.display(),
+            map.len()
+        );
+        store.set_vocabulary(map);
+    }
+    match quipu::namespace::require_base_ns(&config.base_ns) {
+        Ok(()) => eprintln!("minting IRIs under configured base_ns: {}", config.base_ns),
+        Err(e) => eprintln!("warning: writes that mint names will be refused: {e}"),
     }
     store.resolution_config_mut().clone_from(&config.resolution);
     if config.resolution.enabled {
@@ -261,9 +276,9 @@ pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 
 /// Generation-keyed cache of the /stats aggregate (facts/entities/predicates).
 ///
-/// /stats full-scans every triple (`SELECT ?s ?p ?o`) and builds distinct
-/// subject/predicate sets — ~1.0s at 152k triples, paid on EVERY call, which
-/// matters when a monitor polls it. The aggregate is cached and
+/// /stats counts every current triple (the population of `SELECT ?s ?p ?o`)
+/// in one streamed scan, [`quipu::Store::current_triple_counts`] — a cost paid
+/// per recompute that matters when a monitor polls it. The aggregate is cached and
 /// keyed on `Store::latest_tx_id()`, the same pattern as `SpotlightCache`: under
 /// polling only the first call after a write pays the scan; the rest pay one
 /// indexed MAX. Any write moves the generation and invalidates naturally.
@@ -281,9 +296,11 @@ pub(crate) use blocking_work::{blocking, blocking_pretracked, spawn_tracked};
 /// starting a second scan, so a burst of connections cannot take every reader.
 /// `store_id` is always read fresh.
 ///
-/// Recompute is also RATE-LIMITED (aegis-67p0lj). The aggregate materialises
-/// every current row, and on a store of ~10.8M facts each scan is a transient
-/// ~3 GB allocation. Any write invalidates the generation, and every sd call
+/// Recompute is also RATE-LIMITED (aegis-67p0lj). The aggregate used to
+/// materialise every current row: on a store of ~3.0M triples, a transient
+/// ~3 GB allocation per scan. It now streams, holding one subject/predicate
+/// group at a time, but each scan still reads every current row. Any write
+/// invalidates the generation, and every sd call
 /// reads /stats for `store_id`, so on a busy store a scan was essentially always
 /// running: a +3 GB sawtooth that walked the allocator up to the recycle
 /// ceiling (one production store, 2026-11-04: recycles 3 to 14 min apart).
@@ -327,22 +344,14 @@ impl Drop for StatsRecompute {
     }
 }
 
+/// The counts of `SELECT ?s ?p ?o WHERE { ?s ?p ?o }`, streamed rather than
+/// materialised (aegis-67p0lj): see [`quipu::Store::current_triple_counts`].
 fn stats_aggregate(store: &quipu::Store) -> quipu::Result<JsonValue> {
-    let result = quipu::sparql_query(store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
-    let mut entities = std::collections::HashSet::new();
-    let mut predicates = std::collections::HashSet::new();
-    for row in result.rows() {
-        if let Some(quipu::Value::Ref(id)) = row.get("s") {
-            entities.insert(*id);
-        }
-        if let Some(quipu::Value::Ref(id)) = row.get("p") {
-            predicates.insert(*id);
-        }
-    }
+    let (facts, entities, predicates) = store.current_triple_counts()?;
     Ok(json!({
-        "facts": result.rows().len(),
-        "entities": entities.len(),
-        "predicates": predicates.len()
+        "facts": facts,
+        "entities": entities,
+        "predicates": predicates
     }))
 }
 
@@ -391,6 +400,7 @@ pub(crate) async fn stats(
         drop(reader);
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
+        value["write_refusals"] = quipu::metrics::metrics().write_refusal_stats();
         // The counts describe this transaction; `counts_stale` is true only when
         // a concurrent recompute was running and an older aggregate was returned.
         value["counts_as_of_tx"] = json!(counts_tx);

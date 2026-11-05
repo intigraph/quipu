@@ -198,6 +198,19 @@ impl Engine {
     }
 
     /// Report this build and actual dispatch availability, not global parity.
+    /// Name the namespace this store mints names under (see
+    /// [`crate::namespace::require_base_ns`]). There is no default: an
+    /// episode write is refused until a namespace is set.
+    ///
+    /// # Errors
+    ///
+    /// When `base_ns` is not an absolute IRI ending in `/` or `#`.
+    pub fn set_base_ns(&mut self, base_ns: &str) -> Result<()> {
+        crate::namespace::require_base_ns(base_ns)?;
+        self.store.set_base_ns(base_ns.to_string());
+        Ok(())
+    }
+
     pub fn capabilities(&self) -> Value {
         let schema_adopted = crate::vocabulary::sanctioned(&self.store).map(|v| !v.is_empty());
         json!({

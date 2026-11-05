@@ -17,6 +17,7 @@ fn setup(full: bool) -> (SharedStore, Ed25519KeyPair) {
     let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
     let kp = Ed25519KeyPair::from_pkcs8(doc.as_ref()).unwrap();
     let mut s = Store::open_in_memory().unwrap();
+    s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     s.governance_config_mut().enforce_workflows = true;
     let shared = Arc::new(StoreHandle::writer_only(s));
     let seed = format!(
@@ -129,7 +130,9 @@ fn concurrent_cas_advances_create_only_one_event() {
 
 #[tokio::test]
 async fn capabilities_reports_actual_opt_in() {
-    let store = Arc::new(StoreHandle::writer_only(Store::open_in_memory().unwrap()));
+    let mut legacy = Store::open_in_memory().unwrap();
+    legacy.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
+    let store = Arc::new(StoreHandle::writer_only(legacy));
     let value = super::super::base::workflow_capabilities(axum::extract::State(store.clone()))
         .await
         .unwrap()

@@ -538,8 +538,8 @@ refuses as `revoked`, which is a different finding from an unbound key. Rotation
 new binding plus a revoke of the old one.
 
 To set up an agent end to end (its own user, `sd key init`, enrollment, verification
-and revocation), follow CABOODLE's
-[agent identity and write access](https://scbrown.github.io/caboodle/agents.html#agent-identity-and-write-access)
+and revocation), follow Tambo's
+[agent identity and write access](https://intigraph.github.io/tambo/agents.html#agent-identity-and-write-access)
 guide.
 
 **Importing a share never registers its producer.** This is the point, not an
@@ -856,7 +856,7 @@ Measured on the repository's real Datalinks pendant, replacing the same function
 value on both branches produces a **text conflict**, not a clean double. Git
 writes three marker lines into the RDF. Separate new IRIs with identical labels
 merge cleanly without an identity decision; disjoint additions merge cleanly and
-correctly. `tests/git_qpack_merge.rs` exercises those cases, decision resolution,
+correctly. `tests/git_pendant_merge.rs` exercises those cases, decision resolution,
 and the driver-absent CI refusals using actual Git repositories.
 
 ## Carry alignment evidence

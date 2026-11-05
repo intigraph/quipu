@@ -12,7 +12,7 @@ use crate::tool_ask;
 use crate::vector::KnowledgeVectorStore;
 
 fn test_store_with_data() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = r#"
 @prefix ex: <http://example.org/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -156,7 +156,7 @@ fn search_iris_are_compact_by_default_and_verbose_round_trips() {
 
 #[test]
 fn test_tool_knot() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "turtle": "@prefix ex: <http://example.org/> .\nex:carol a ex:Person ; ex:name \"Carol\" .",
         "timestamp": "2026-04-04T01:00:00Z",
@@ -171,13 +171,13 @@ fn test_tool_knot() {
 
 #[test]
 fn knot_snapshot_replacement_retracts_removed_turtle_facts() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let snapshot = |turtle: &str| {
         serde_json::json!({
             "turtle": turtle,
             "timestamp": "2026-08-07T10:00:00Z",
-            "actor": "hank",
-            "source": "hank promote demo@abc (cli)",
+            "actor": "yupana",
+            "source": "yupana promote demo@abc (cli)",
             "replace_snapshot": true,
             "snapshot": "code:demo"
         })
@@ -236,7 +236,7 @@ fn tx_stamp(store: &Store, tx_id: i64) -> String {
 
 #[test]
 fn knot_valid_from_is_independent_of_transaction_time() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     // A commit authored in March, ingested in September.
     let result = tool_knot(
         &mut store,
@@ -276,7 +276,7 @@ fn knot_without_valid_from_collapses_both_axes_exactly_as_before() {
     // Backwards compatibility, asserted as an EQUALITY between the two axes
     // rather than as a hardcoded string, so it keeps meaning if the default
     // timestamp changes.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let result = tool_knot(
         &mut store,
         &serde_json::json!({
@@ -302,7 +302,7 @@ fn knot_without_valid_from_collapses_both_axes_exactly_as_before() {
 fn knot_defaults_valid_from_to_now_when_neither_is_given() {
     // The both-absent path: `timestamp` defaults to now and `valid_from`
     // follows it, so the facts must be live at that same instant.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let result = tool_knot(
         &mut store,
         &serde_json::json!({"turtle": "@prefix ex: <http://example.org/> . ex:c3 a ex:Commit ."}),
@@ -317,7 +317,7 @@ fn knot_defaults_valid_from_to_now_when_neither_is_given() {
 fn knot_normalizes_a_local_offset_valid_from_and_echoes_the_stored_key() {
     // git's %aI emits the author's local offset. Stored verbatim it would sort
     // wrongly against every Z-shaped stamp in the store.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let result = tool_knot(
         &mut store,
         &serde_json::json!({
@@ -335,7 +335,7 @@ fn knot_normalizes_a_local_offset_valid_from_and_echoes_the_stored_key() {
 
 #[test]
 fn knot_refuses_a_malformed_valid_from_and_writes_nothing() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     // A control write first, so "nothing changed" is measured against a store
     // that demonstrably CAN change rather than against an empty one.
     tool_knot(
@@ -403,7 +403,7 @@ fn knot_snapshot_arm_backdates_the_assertion_but_not_the_retraction() {
     // believed TONIGHT. Back-dating its valid_to to the incoming datum's
     // valid-time would assert it stopped being TRUE in March, which is a
     // different and false claim.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let snapshot = |turtle: &str, valid_from: &str, timestamp: &str| {
         serde_json::json!({
             "turtle": turtle,
@@ -471,7 +471,7 @@ fn knot_snapshot_arm_backdates_the_assertion_but_not_the_retraction() {
 
 #[test]
 fn knot_snapshot_arm_defaults_to_the_old_behaviour_without_valid_from() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let result = tool_knot(
         &mut store,
         &serde_json::json!({
@@ -489,7 +489,7 @@ fn knot_snapshot_arm_defaults_to_the_old_behaviour_without_valid_from() {
 
 #[test]
 fn knot_snapshot_replacement_requires_stable_identity() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let err = tool_knot(
         &mut store,
         &serde_json::json!({"turtle": "", "replace_snapshot": true}),
@@ -500,7 +500,7 @@ fn knot_snapshot_replacement_requires_stable_identity() {
 
 #[test]
 fn knot_writes_to_a_registered_committed_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let plane = "http://example.org/graph/records";
     store.graph_create(plane).unwrap();
 
@@ -534,7 +534,7 @@ fn knot_writes_to_a_registered_committed_graph() {
 #[test]
 #[cfg(feature = "shacl")]
 fn knot_chunked_write_into_a_named_graph_gets_repair_context_from_that_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let plane = "http://example.org/graph/plane";
     store.graph_create(plane).unwrap();
 
@@ -602,7 +602,7 @@ ex:SymbolShape a sh:NodeShape ;
 
 #[test]
 fn knot_refuses_an_unknown_graph_without_interning_it() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let iri = "http://example.org/graph/never-created";
     let err = tool_knot(
         &mut store,
@@ -620,7 +620,7 @@ fn knot_refuses_an_unknown_graph_without_interning_it() {
 
 #[test]
 fn knot_refuses_an_overlay_class_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let overlay = "http://example.org/graph/scratch";
     store.overlay_create(overlay, 0).unwrap();
     let err = tool_knot(
@@ -636,7 +636,7 @@ fn knot_refuses_an_overlay_class_graph() {
 
 #[test]
 fn knot_snapshot_replacement_is_scoped_to_the_target_graph() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let plane = "http://example.org/graph/records";
     store.graph_create(plane).unwrap();
     let snapshot = |turtle: &str, graph: Option<&str>| {
@@ -692,7 +692,7 @@ fn omitted_timestamp_defaults_to_now_not_epoch() {
     // hq-tb4: a write with no explicit timestamp must be stamped with the real
     // clock, not 1970 — defaulting to epoch silently corrupts the bitemporal
     // log and breaks time-travel queries (quipu's flagship feature).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "turtle": "@prefix ex: <http://example.org/> .\nex:dave a ex:Person ; ex:name \"Dave\" .",
     });
@@ -721,7 +721,7 @@ fn omitted_timestamp_defaults_to_now_not_epoch() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_tool_knot_with_validation_failure() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <http://example.org/> .
@@ -759,7 +759,7 @@ fn test_tool_cord_all() {
 
 #[test]
 fn test_tool_unravel() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     crate::rdf::ingest_rdf(
         &mut store,
@@ -806,7 +806,7 @@ fn tool_episode_mints_under_configured_base_ns() {
     // and querying the entity back under the configured base — not by reading
     // config — because a wrong namespace fragments the graph silently.
     let custom = "http://example.org/kb/";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_base_ns(custom);
 
     let input = serde_json::json!({
@@ -841,7 +841,7 @@ fn tool_episode_mints_under_configured_base_ns() {
 
 #[test]
 fn test_tool_episode() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "deploy-event",
         "episode_body": "Deployed new version of tapestry to ct-236",
@@ -877,7 +877,7 @@ fn test_tool_episode() {
 
 #[test]
 fn graphiti_episode_time_is_server_stamped() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episodes_complete(
         &mut store,
         &serde_json::json!({
@@ -923,7 +923,7 @@ fn ask(store: &Store, pattern: &str) -> bool {
 /// episode's facts survive — the core shared-IRI guarantee of aegis-hxb.
 #[test]
 fn test_retract_episode_scoped_isolation() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     tool_episode(
         &mut store,
@@ -997,7 +997,7 @@ fn test_retract_episode_scoped_isolation() {
 
 #[test]
 fn test_retract_episode_idempotent_and_unknown() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1038,7 +1038,7 @@ fn test_retract_triple_level_removes_exactly_one_statement() {
     // "retract the episode" — 33 statements for a 2-statement target. entity +
     // predicate + value pins one triple, so the blunt tool is no longer the
     // only tool.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1103,7 +1103,7 @@ fn test_retract_without_value_still_takes_the_whole_predicate() {
     // POSITIVE CONTROL for the test above: drop the `value` narrowing and BOTH
     // instance_of edges go. If `value` were silently ignored, the test above
     // would pass for the wrong reason — this pins the difference.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1144,7 +1144,7 @@ fn test_retract_without_value_still_takes_the_whole_predicate() {
 /// identity, episode B only adds an inbound edge (the re-asserted identical
 /// label is skipped as already-active, so episode A still OWNS the identity).
 fn ghost_store() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1375,7 +1375,7 @@ fn service_row_ceiling_does_not_push_through_filter() {
 fn test_tool_episode_surfaces_resolution_hints() {
     // hq-uye: the episode handler must read the store's resolution policy and
     // surface dedup hints in its response (the engine was previously inert).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     *store.resolution_config_mut() = crate::config::ResolutionConfig {
         cache_labels: true,
         enabled: true,
@@ -1409,7 +1409,7 @@ fn test_tool_episode_surfaces_resolution_hints() {
 
 #[test]
 fn test_tool_retract_entity() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .";
     crate::rdf::ingest_rdf(
         &mut store,
@@ -1437,7 +1437,7 @@ fn test_tool_retract_entity() {
 
 #[test]
 fn test_tool_retract_predicate() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = "@prefix ex: <http://example.org/> .\nex:bob a ex:Person ; ex:name \"Bob\" ; ex:age \"30\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
     crate::rdf::ingest_rdf(
         &mut store,
@@ -1470,7 +1470,7 @@ fn test_tool_retract_predicate() {
 /// which is retract-old-edge then assert-new, is unblocked end to end.
 #[test]
 fn test_tool_retract_bare_string_for_an_iri_edge_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_episode(
         &mut store,
         &serde_json::json!({
@@ -1560,7 +1560,7 @@ fn seed_reports_to(store: &mut Store, extra_edges: &[(&str, &str)]) {
 /// ONE call and ONE transaction; afterwards exactly one edge exists.
 #[test]
 fn test_tool_set_reparents_in_one_call_one_tx() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
     let tx_before = store.list_transactions().unwrap().len();
 
@@ -1603,7 +1603,7 @@ fn test_tool_set_reparents_in_one_call_one_tx() {
 /// repaired by one /set: ALL current objects replaced.
 #[test]
 fn test_tool_set_replaces_all_current_values() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[("kprobe-a", "kprobe-c")]);
     assert!(ask(
         &store,
@@ -1643,7 +1643,7 @@ fn test_tool_set_replaces_all_current_values() {
 /// the bitemporal history for nothing).
 #[test]
 fn test_tool_set_idempotent_noop() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
     let tx_before = store.list_transactions().unwrap().len();
 
@@ -1671,7 +1671,7 @@ fn test_tool_set_idempotent_noop() {
 /// follow, replacing a real edge with a mis-shaped one.
 #[test]
 fn test_tool_set_bare_string_for_an_iri_edge_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
 
     let footgun = tool_set(
@@ -1701,7 +1701,7 @@ fn test_tool_set_bare_string_for_an_iri_edge_is_refused() {
 /// over-broad guard that treated every IRI-shaped string as a mistake.
 #[test]
 fn test_tool_set_url_literal_on_str_predicate_allowed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
 
     // Seed a Str-holding predicate (a template-ish placeholder, like the
@@ -1741,7 +1741,7 @@ fn test_tool_set_url_literal_on_str_predicate_allowed() {
 /// still refused (first-write of a URL-valued literal must be expressible).
 #[test]
 fn test_tool_set_explicit_str_tag_is_an_escape_hatch() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
 
     // Bare IRI-shaped string on an EMPTY predicate: still the loud refusal.
@@ -1781,7 +1781,7 @@ fn test_tool_set_explicit_str_tag_is_an_escape_hatch() {
 /// entity, by contrast, is a legitimate first write.
 #[test]
 fn test_tool_set_unknown_entity_refused_new_predicate_allowed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     seed_reports_to(&mut store, &[]);
 
     let missing = tool_set(
@@ -1827,7 +1827,7 @@ fn test_tool_set_unknown_entity_refused_new_predicate_allowed() {
 /// is a documented caller and must keep working (aegis-rtht / aegis-1y3q).
 #[test]
 fn test_tool_shapes_get_and_unknown_action() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let shapes = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n@prefix ex: <http://example.org/> .\nex:S a sh:NodeShape ; sh:targetClass ex:T .\n";
 
     tool_shapes(
@@ -1881,7 +1881,7 @@ fn test_tool_shapes_get_and_unknown_action() {
 
 #[test]
 fn test_tool_shapes_vocabulary_unions_targets_and_abstract_parents() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -1914,7 +1914,7 @@ aegis:WebApplication rdfs:subClassOf aegis:Service .
 #[test]
 #[cfg(feature = "shacl")]
 fn test_tool_shapes_load_and_enforce() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -2155,7 +2155,7 @@ fn counts_before(hay: &str, marker: &str) -> Vec<usize> {
 
 #[test]
 fn test_propose_and_list_roundtrip() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "kind": "shape",
         "target": "PersonShape",
@@ -2194,7 +2194,7 @@ fn test_propose_and_list_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_proposal_roundtrip() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     // Create a valid shape proposal.
     let shape_turtle = r#"@prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -2236,7 +2236,7 @@ ex:PersonShape a sh:NodeShape ;
 
 #[test]
 fn test_reject_proposal_roundtrip() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     let propose = serde_json::json!({
         "kind": "property",
@@ -2269,7 +2269,7 @@ fn test_reject_proposal_roundtrip() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_accept_invalid_turtle_stays_pending() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     // Create a shape proposal with invalid Turtle.
     let propose = serde_json::json!({
@@ -2300,7 +2300,7 @@ fn test_accept_invalid_turtle_stays_pending() {
 
 #[test]
 fn test_reject_missing_note_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     let propose = serde_json::json!({
         "kind": "class",
@@ -2324,7 +2324,7 @@ fn test_reject_missing_note_errors() {
 
 #[test]
 fn test_propose_missing_required_fields_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     // Missing 'kind'.
     let input = serde_json::json!({
@@ -2342,7 +2342,7 @@ fn test_propose_missing_required_fields_errors() {
 #[test]
 #[cfg(feature = "shacl")]
 fn test_knot_validation_failure_includes_proposal_hint() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <http://example.org/> .
@@ -2400,7 +2400,7 @@ fn test_extract_type_filter_no_type_returns_none() {
 
 #[test]
 fn test_hybrid_search_includes_pushdown_filter() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ttl = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .";
     crate::rdf::ingest_rdf(
         &mut store,
@@ -2457,7 +2457,7 @@ fn test_hybrid_search_vector_only() {
 
 #[test]
 fn test_hybrid_search_with_sparql_filter() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
 
     // Ingest two entities.
     let ttl = "@prefix ex: <http://example.org/> .\nex:alice a ex:Person ; ex:name \"Alice\" .\nex:bob a ex:Bot ; ex:name \"Bob\" .";
@@ -2499,7 +2499,7 @@ fn test_hybrid_search_with_sparql_filter() {
 
 #[test]
 fn hybrid_scope_keeps_matches_below_the_global_top_k() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::rdf::ingest_rdf(
         &mut store,
         &b"@prefix ex: <http://example.org/> . ex:plan ex:kind \"planned\" . ex:noise ex:kind \"ordinary\" ."[..],
@@ -2623,7 +2623,7 @@ fn test_tool_search_dedupes_by_entity() {
 /// "group", not "tenant": this is best-effort PROVENANCE scoping, not an isolation
 /// boundary (docs/design/group-isolation.md).
 fn two_group_store() -> (Store, Vec<f32>) {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ns = crate::namespace::DEFAULT_BASE_NS;
     tool_episode(
         &mut store,
@@ -2722,7 +2722,7 @@ fn test_tool_search_scope_is_not_truncated_by_limit() {
     // entities — on the live graph that made 357 of one group's 457 entities
     // permanently unsearchable, and the smaller the caller's limit the more of
     // the group vanished.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let n = 30;
     let nodes: Vec<_> = (0..n)
         .map(|i| serde_json::json!({"name": format!("Svc{i:02}"), "type": "WebApplication"}))
@@ -2820,7 +2820,7 @@ impl EmbeddingProvider for TestProvider {
 
 #[test]
 fn test_search_with_query_text() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(TestProvider));
     store.embedding_config_mut().auto_embed = true;
 
@@ -2851,7 +2851,7 @@ ex:bob rdfs:label "Bob" ; rdfs:comment "A data scientist" .
 
 #[test]
 fn test_search_query_text_without_provider_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     // No embedding provider → query-text search should fail with a clear message.
     let input = serde_json::json!({ "query": "software engineer" });
@@ -2861,7 +2861,7 @@ fn test_search_query_text_without_provider_errors() {
 
 #[test]
 fn test_search_missing_both_params_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     // Neither query nor embedding → error.
     let input = serde_json::json!({ "limit": 5 });
@@ -2871,7 +2871,7 @@ fn test_search_missing_both_params_errors() {
 
 #[test]
 fn test_search_explicit_embedding_preferred_over_query() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(TestProvider));
     store.embedding_config_mut().auto_embed = true;
 
@@ -2905,7 +2905,7 @@ ex:alice rdfs:label "Alice" .
 
 #[test]
 fn test_hybrid_search_with_query_text() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(TestProvider));
     store.embedding_config_mut().auto_embed = true;
 
@@ -2937,7 +2937,7 @@ ex:alice a ex:Person ; rdfs:label "Alice" .
 
 #[test]
 fn test_hybrid_search_query_text_without_provider_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
 
     let input = serde_json::json!({ "query": "test" });
     let err = tool_hybrid_search(&store, &input).unwrap_err();
@@ -3006,7 +3006,7 @@ fn test_tool_search_nodes_returns_label_and_types() {
 
 #[test]
 fn test_tool_search_nodes_with_group_ids() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "test-ep",
         "source": "test",
@@ -3086,7 +3086,7 @@ fn test_tool_search_facts_no_match() {
 
 #[test]
 fn test_tool_search_facts_with_provenance() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "deploy-ep",
         "source": "test",
@@ -3121,7 +3121,7 @@ fn test_tool_search_facts_with_provenance() {
 
 #[test]
 fn test_search_nodes_sparql_fallback() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = r#"
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ex: <http://example.org/> .
@@ -3154,7 +3154,7 @@ ex:quipu a aegis:KnowledgeGraph ;
 
 #[test]
 fn test_search_nodes_with_type_filter() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = r#"
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix aegis: <https://aegis.dev/ns/> .
@@ -3195,7 +3195,7 @@ aegis:quipu a aegis:KnowledgeGraph ;
 
 #[test]
 fn test_search_nodes_missing_query_errors() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({ "max_results": 5 });
     let err = tool_search_nodes(&store, &input).unwrap_err();
     assert!(err.to_string().contains("missing 'query'"));
@@ -3203,7 +3203,7 @@ fn test_search_nodes_missing_query_errors() {
 
 #[test]
 fn test_search_nodes_with_vector_search() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(TestProvider));
     store.embedding_config_mut().auto_embed = true;
 
@@ -3232,7 +3232,7 @@ ex:bob rdfs:label "Bob" ; rdfs:comment "A data scientist" .
 
 #[test]
 fn test_episodes_complete_basic() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "meeting-notes-2026-04",
         "episode_body": "Discussed the new auth middleware requirements",
@@ -3248,7 +3248,7 @@ fn test_episodes_complete_basic() {
 
 #[test]
 fn test_episodes_complete_minimal() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "quick-note"
     });
@@ -3259,7 +3259,7 @@ fn test_episodes_complete_minimal() {
 
 #[test]
 fn test_episodes_complete_missing_name_errors() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "episode_body": "some text"
     });
@@ -3269,7 +3269,7 @@ fn test_episodes_complete_missing_name_errors() {
 
 #[test]
 fn test_episodes_complete_provenance_queryable() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "deploy-v2",
         "episode_body": "Deployed version 2 to production",
@@ -3291,7 +3291,7 @@ fn test_episodes_complete_provenance_queryable() {
 fn test_cooccurrence_deterministic_set_overlap() {
     // quipu#37: two work-items co-occur iff they share a touched entity, via
     // Bead <-implements- GitCommit -modifies-> entity. Deterministic, not mined.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
         a:c1 a a:GitCommit ; a:implements a:beadT ; a:modifies a:E1, a:E2 .\n\
         a:c2 a a:GitCommit ; a:implements a:beadX ; a:modifies a:E1 .\n\
@@ -3333,7 +3333,7 @@ fn test_entity_centric_provenance_named_queries() {
     // and cochanged_with (entities sharing a touching work-item), via the same
     // Bead <-implements- GitCommit -modifies-> entity provenance chain, served
     // through the quipu_ask named-query catalog.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     // c1 implements beadT, touches E1+E2; c2 implements beadX, touches E1;
     // c3 implements beadY, touches E9. So via beadT/E1, E1 co-changes with E2
     // (same commit c1) and — through shared beadT? no — via shared work-items:
@@ -3404,7 +3404,7 @@ fn test_entity_centric_provenance_named_queries() {
 fn test_policy_check_committed_tier_evaluation() {
     // The loom's committed-tier eval: a Policy claim (ASK) over the graph of
     // record yields a Verdict {satisfied|unsatisfied|unknown}, reproducibly.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
         a:sym1 a a:CodeSymbol ; a:hasTest a:test1 .\n\
         a:sym2 a a:CodeSymbol .\n";
@@ -3472,7 +3472,7 @@ fn test_policy_check_committed_tier_evaluation() {
 
 #[test]
 fn test_verifier_registry_authority() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ttl = "@prefix a: <http://aegis.gastown.local/ontology/> .\n\
         a:reg1 a a:VerifierRegistration ; a:verifier \"quipu\" ; a:attests \"has-test\" .\n\
         a:sym1 a a:CodeSymbol ; a:hasTest a:t1 .\n";
@@ -3532,7 +3532,7 @@ fn test_verifier_registry_authority() {
 #[test]
 fn test_signed_verdict_end_to_end_root_of_trust() {
     use std::sync::Arc;
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     // v1 signing identity (host-file key in a temp dir).
     let dir = tempfile::tempdir().unwrap();
     let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
@@ -3612,7 +3612,7 @@ fn test_signed_verdict_end_to_end_root_of_trust() {
 
 #[test]
 fn triple_retraction_can_name_a_lang_tagged_literal() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::rdf::ingest_rdf(
         &mut store,
         r#"<http://example.org/s> <http://example.org/g> "hello"@en .
@@ -3666,7 +3666,7 @@ fn triple_retraction_can_name_a_lang_tagged_literal() {
 
 #[test]
 fn triple_retraction_can_name_a_typed_literal() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::rdf::ingest_rdf(
         &mut store,
         r#"<http://example.org/s> <http://example.org/d> "2026-07-15"^^<http://www.w3.org/2001/XMLSchema#date> .
@@ -3710,7 +3710,7 @@ fn triple_retraction_can_name_a_typed_literal() {
 #[test]
 fn test_tool_export_named_graph_subset() {
     use crate::types::{Op, Value};
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let ts = "2026-04-04T00:00:00Z";
     let g_iri = "http://example.org/g/t1";
     let g = store.overlay_create(g_iri, 0).unwrap();
@@ -3775,7 +3775,7 @@ fn test_tool_export_named_graph_subset() {
 
 #[test]
 fn knot_refuses_when_a_type_no_shape_targets_and_writes_nothing() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -3811,7 +3811,7 @@ fn knot_refuses_when_a_type_no_shape_targets_and_writes_nothing() {
 
 #[test]
 fn knot_is_silent_when_every_type_is_governed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -3860,7 +3860,7 @@ fn knot_is_silent_when_every_type_is_governed() {
 /// refused atomically.
 #[test]
 fn knot_refuses_the_undeclared_half_of_a_dual_typed_node_atomically() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -3899,7 +3899,7 @@ fn knot_refuses_the_undeclared_half_of_a_dual_typed_node_atomically() {
 /// the same way or it reports governed types as ungoverned.
 #[test]
 fn episode_refuses_when_a_node_type_no_shape_targets_and_writes_nothing() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -3940,7 +3940,7 @@ fn episode_refuses_when_a_node_type_no_shape_targets_and_writes_nothing() {
 
 #[test]
 fn episode_is_silent_when_every_node_type_is_governed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -3974,7 +3974,7 @@ fn episode_is_silent_when_every_node_type_is_governed() {
 
 #[test]
 fn vocabulary_gate_accepts_prefix_neutral_targets_and_declared_parents() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_shapes(
         &store,
         &serde_json::json!({
@@ -4028,7 +4028,7 @@ fn vocabulary_gate_accepts_prefix_neutral_targets_and_declared_parents() {
 fn kind_store() -> Store {
     use crate::store::Datum;
     use crate::types::{Op, Value};
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let cold = store.graph_create("urn:test:graph:cold").unwrap();
     let label = crate::store::labels::GraphLabel {
         kind: Some(crate::lattice_kind::DataKind::parse("archive").unwrap()),
@@ -4126,7 +4126,7 @@ fn graph_list_filters_by_kind_and_probes_lifecycle() {
 fn episode_graph_field_registers_the_graph_so_it_can_be_labelled() {
     // camayoc-s0h: /episode's graph field used to intern without registering,
     // leaving graphs that set_graph_label refused forever after.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let input = serde_json::json!({
         "name": "ep-registers",
         "graph": "urn:test:graph:episodic",
@@ -4169,7 +4169,7 @@ const ENT_G: &str = "http://example.org/graph/ent";
 /// no pattern rewrite can produce `b2` — the triple has to exist. That makes the
 /// row count a direct measure of whether the closure was in the dataset.
 fn entailment_fixture() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     for (s, p, o) in [
         ("http://ex/a", "http://ex/b1", "http://ex/c"),
         (
@@ -4206,7 +4206,7 @@ fn entailment_fixture() -> Store {
 /// scope the subject side used to bind as a string and the object side as a
 /// Ref, so the blank-node row silently vanished under entailment only.
 fn bnode_join_fixture() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     for (s, p, o) in [
         ("http://ex/x", "http://ex/p", "http://ex/y"),
         ("http://ex/y", crate::namespace::RDF_TYPE, "http://ex/c"),
@@ -4373,7 +4373,7 @@ fn entailment_refuses_a_non_string() {
 const SUP_TS: &str = "2026-09-05T00:00:00Z";
 
 fn superset_fixture() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let assert_root = |store: &mut Store, s: &str, p: &str, o: &str| {
         let (e, a) = (store.intern(s).unwrap(), store.intern(p).unwrap());
         let v = store.intern(o).unwrap();
@@ -4750,7 +4750,7 @@ fn assert_namespace_reader(name: &str, params: &serde_json::Value, expected_coun
         ("e2", "filePath", "\"src/two.rs\""),
     ];
     for mode in ["old", "new", "mixed", "both"] {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         let mut turtle = String::new();
         for (i, (subject, predicate, object)) in facts.iter().enumerate() {
             let namespaces: Vec<&str> = match mode {
@@ -4886,7 +4886,7 @@ fn assert_group_namespace_reader(reader: &str) {
     let old = crate::namespace::DEFAULT_BASE_NS;
     let new = "https://scbrown.github.io/quechua/ns#";
     for namespaces in [vec![old], vec![new], vec![old, new]] {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         let mut turtle = String::from(
             "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
              @prefix prov: <http://www.w3.org/ns/prov#> .\n\
@@ -4969,7 +4969,7 @@ fn test_verdict_verify_answers_as_of_the_recorded_signature() {
     use crate::types::{Op, Value};
     use std::sync::Arc;
     let ns = "http://aegis.gastown.local/ontology/";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let dir = tempfile::tempdir().unwrap();
     let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
     let old_key = id.public_key_hex();
@@ -5074,7 +5074,7 @@ fn test_verdict_verify_never_trusts_a_caller_supplied_instant() {
     use crate::types::Value;
     use std::sync::Arc;
     let ns = "http://aegis.gastown.local/ontology/";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let dir = tempfile::tempdir().unwrap();
     let id = crate::signing::SigningIdentity::load(&dir.path().join("k.pk8"), "quipu").unwrap();
     let key = id.public_key_hex();
@@ -5153,7 +5153,7 @@ mod knot_on_violation {
         aegis:knot-untraced-rule a aegis:Directive ; rdfs:label \"knot untraced\" ; rdfs:comment \"x\" .";
 
     fn store_with(shapes: &str) -> Store {
-        let store = Store::open_in_memory().unwrap();
+        let store = Store::open_in_memory_test_ns().unwrap();
         store
             .load_shapes("aegis-ontology", shapes, "2026-10-01T00:00:00Z")
             .unwrap();

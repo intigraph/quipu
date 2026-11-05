@@ -123,7 +123,7 @@ fn verdict_ledger(ctx: &Ctx, item: &crate::phases::ReplayItem) -> serde_json::Va
     let Ok(QueryResult::Select { rows, .. }) = sparql::query(&ctx.store, &q) else {
         return serde_json::json!({ "present": false });
     };
-    let str_of = |row: &std::collections::HashMap<String, Value>, k: &str| match row.get(k) {
+    let str_of = |row: &quipu::sparql::Bindings, k: &str| match row.get(k) {
         Some(Value::Str(s)) => Some(s.clone()),
         _ => None,
     };

@@ -1,4 +1,4 @@
-# Canonical tree-sitter-tier policy catalog — the source of truth Hank projects.
+# Canonical tree-sitter-tier policy catalog — the source of truth Yupana projects.
 #
 # These are the "structural / lexical" policies a linter finds hard or slow to
 # express, composed from the governance atoms in shapes/governance.ttl: a
@@ -6,10 +6,10 @@
 # regex over their text + a direction — what they must / must not be), bound into
 # an aegis:Policy at the boundary:"action" (pre-edit) seam.
 #
-# Evidence locality (hank docs/book/src/design/policy-edit-hooks.md): these carry
-# tier "tree-sitter", so Hank — which holds that evidence hot — evaluates them at
-# `hank hook pre-edit`. The definitions live HERE regardless; Hank holds only a
-# projected read cache. The field names line up with Hank's rules::Rule:
+# Evidence locality (yupana docs/book/src/design/policy-edit-hooks.md): these carry
+# tier "tree-sitter", so Yupana — which holds that evidence hot — evaluates them at
+# `yupana hook pre-edit`. The definitions live HERE regardless; Yupana holds only a
+# projected read cache. The field names line up with Yupana's rules::Rule:
 #   aegis:Selector.evidenceSource   <->  Rule.query   (.scm)
 #   aegis:Predicate.evidenceSource  <->  Rule.pattern (regex)
 #   aegis:Predicate.matchType       <->  Rule.match_type
@@ -104,7 +104,7 @@ aegis:policy_no_ticket_in_comment a aegis:Policy ;
     # written and report it afterwards.
     aegis:constraintClass "hard" ;
     aegis:verificationPoint "PAG" ;
-    # Orchestration, not tool: Hank's pre-edit hook is the host. That is the
+    # Orchestration, not tool: Yupana's pre-edit hook is the host. That is the
     # honest layer — an agent that writes the file by another route is not
     # governed by this, and claiming `tool` would say otherwise.
     aegis:hostedAtLayer "orchestration" ;
@@ -143,18 +143,20 @@ aegis:pred_no_ticket_in_comment_v2 a aegis:Predicate ;
     aegis:tier "tree-sitter+graph" .
 
 # ═══════════════════════════════════════════════════════════════════
-# VerifierRegistration — the root of trust for Hank's edit-time verdicts.
-# Registers the `hank` verifier identity as authorized to attest these two
+# VerifierRegistration — the root of trust for Yupana's edit-time verdicts.
+# Registers the `yupana` verifier identity as authorized to attest these two
 # structural predicates, so a promoted aegis:Verdict is accepted (Phase 4,
-# H-PROMOTE-VERDICT). `publicKey` is omitted until Hank verdict signing lands —
+# H-PROMOTE-VERDICT). `publicKey` is omitted until Yupana verdict signing lands —
 # the registration is a meaningful authority record before signatures exist.
 # ═══════════════════════════════════════════════════════════════════
 
+# Compatibility: preserve the registered verifier identity used by existing signed verdicts.
+# Product naming does not migrate an authority or its registered key.
 aegis:reg_hank_structural a aegis:VerifierRegistration ;
     aegis:verifier "hank" ;
     aegis:attests "todo-needs-ticket" , "no-ticket-in-comment" .
-    # A human adds hank's public key once hank's signing identity is provisioned:
-    #   aegis:publicKey "<hex from `hank verifier`>" .
-    # Until then this is a valid AUTHORITY record (publicKey is optional); a hank
+    # A human adds yupana's public key once yupana's signing identity is provisioned:
+    #   aegis:publicKey "<hex from `yupana verifier`>" .
+    # Until then this is a valid AUTHORITY record (publicKey is optional); a yupana
     # verdict is accepted at write, and TRUSTED once the key is registered —
     # mirroring quipu's own "a human registers the verifier's key" model.

@@ -23,7 +23,7 @@ const REQUIRE_COLOR: &str = "ASK { $target <http://ex/color> ?c }";
 const ALWAYS: &str = "ASK { $target ?p ?o }";
 
 fn signed_store(enforce: bool) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = enforce;
     let dir = tempfile::tempdir().unwrap();
     let identity =
@@ -105,7 +105,7 @@ fn candidate(policies: &[(&str, &str)]) -> Candidate {
              a:boundary \"action\" ; a:effect \"deny\" .\n"
         ));
     }
-    Candidate::from_turtle(&ttl).unwrap()
+    Candidate::from_turtle(&ttl, crate::namespace::DEFAULT_BASE_NS).unwrap()
 }
 
 fn all(store: &Store, mode: Mode) -> Options {
@@ -331,7 +331,11 @@ fn max_txs_truncates_and_says_where() {
 
 #[test]
 fn a_candidate_with_no_enforceable_policy_is_refused() {
-    let err = Candidate::from_turtle("<http://ex/x> <http://ex/p> \"o\" .").unwrap_err();
+    let err = Candidate::from_turtle(
+        "<http://ex/x> <http://ex/p> \"o\" .",
+        crate::namespace::DEFAULT_BASE_NS,
+    )
+    .unwrap_err();
     assert!(err.to_string().contains("Nothing to shadow"), "{err}");
 }
 
@@ -392,7 +396,7 @@ fn since_selects_recent_transactions_and_an_empty_window_is_empty() {
     let w = window_since(&store, 3_600).unwrap();
     assert_eq!((w.from_tx, w.to_tx), (recent, recent));
     assert!(old < w.from_tx);
-    let empty = Store::open_in_memory().unwrap();
+    let empty = Store::open_in_memory_test_ns().unwrap();
     let w = window_since(&empty, 3_600).unwrap();
     assert!(w.from_tx > w.to_tx, "no transactions -> empty range");
 }

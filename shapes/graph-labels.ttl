@@ -121,7 +121,7 @@ quipu:GraphFreshnessShape
 # ═══════════════════════════════════════════════════════════════════
 #
 # Trust is NOT a hardcoded enum, so there is no sh:in here: the values are IRIs
-# and the ORDERING is data (quipu:trustRank + quipu:inChain below). Hank ships
+# and the ORDERING is data (quipu:trustRank + quipu:inChain below). Yupana ships
 # live|lsp|tree-sitter|committed|attested; NeuralAmplifier ships
 # canonical|house-rule|engine-observed|aspirational. Quipu must learn neither.
 #

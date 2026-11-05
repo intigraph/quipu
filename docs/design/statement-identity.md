@@ -77,7 +77,7 @@ distinct rather than solving them with one feature flag.
 |---|---|---|
 | Governance / agentic dev | Per-occurrence identity for dispatch and tool-call events | Blocked by §2 |
 | Homelab / infrastructure | Qualifiers on edges (`dependsOn` hard vs soft), and traversal that can filter on them | Needs §4 + §5 |
-| Code graph (Hank) | Depth-bounded transitive paths with the path returned | Needs §5 |
+| Code graph (Yupana) | Depth-bounded transitive paths with the path returned | Needs §5 |
 
 **Governance.** Beyond §2's collapse, `src/governance/tree.rs` and
 `src/governance/inheritance.rs` perform real graph work — tree reconstruction,
@@ -100,11 +100,11 @@ query that follows is the one nothing in Quipu can express today: *walk
 `dependsOn+` from a cluster, only through hard edges, bounded at 4 hops, and
 return the paths.*
 
-**Code graph.** Hank promotes `calls` / `imports` / `definedIn` edges
-(`hank/src/export.rs`). Interesting questions about a call graph are transitive
-reachability with a bound. Note that `hank-spec.md` §9.6 deliberately keeps
-Hank's *interactive* reachability in its own in-memory graph, so this is not a
-request to serve Hank's hot path. It is about the promoted, governed graph:
+**Code graph.** Yupana promotes `calls` / `imports` / `definedIn` edges
+(`yupana/src/export.rs`). Interesting questions about a call graph are transitive
+reachability with a bound. Note that `yupana-spec.md` §9.6 deliberately keeps
+Yupana's *interactive* reachability in its own in-memory graph, so this is not a
+request to serve Yupana's hot path. It is about the promoted, governed graph:
 §9.3's code-archaeology example (`--valid-at`) is one-hop today, and the
 transitive version of that question is what needs the bound.
 
@@ -275,7 +275,7 @@ unmeasured claim.
 
 ### 7.6 The naming discipline applies here
 
-Hank's convention is that a tree-sitter approximation is never presented as
+Yupana's convention is that a tree-sitter approximation is never presented as
 LSP-precise, and Quipu tags every fact with a tier for the same reason. The same
 rule governs this: a twenty-clause traversal DSL is useful, but calling it
 Gremlin or Cypher sets an expectation measured by a suite it would fail, and the
@@ -288,8 +288,8 @@ reject the rest loudly.
 Build Proposals A and B for their own sake — governance needs statement identity
 regardless of any query language, and that case does not depend on this section.
 Then reassess, because the demand may not survive contact: NeuralAmplifier does
-no traversal at all, and Hank's interactive reachability stays in its own
-in-memory graph by design (`hank-spec.md` §9.6). The concrete consumers are the
+no traversal at all, and Yupana's interactive reachability stays in its own
+in-memory graph by design (`yupana-spec.md` §9.6). The concrete consumers are the
 promoted code graph and homelab blast radius, and bounded property paths serve
 both without a second language.
 

@@ -172,6 +172,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // that cursor's lineage, which makes it ready to serve reads (aegis-tnh).
     // A copy has not bootstrapped anything: excluded with the cursor.
     ("follow_caught_up", Disposition::Excluded),
+    // The HA profile's complete-cut pin and halt state qualify THIS replica's
+    // cursor. A reconstructed copy has not completed that bootstrap: never
+    // carry the marker as authority to serve eligible reads on the copy.
+    ("ha_read_cut", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.

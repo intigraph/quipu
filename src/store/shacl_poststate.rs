@@ -503,3 +503,7 @@ fn context_budget_exhausted(message: &str) -> bool {
             || message.contains("exceeds 1024 nodes")
             || message.contains("exceeds 1024 classes"))
 }
+
+#[cfg(all(test, feature = "shacl"))]
+#[path = "shacl_write_path_tests.rs"]
+mod write_path_tests;

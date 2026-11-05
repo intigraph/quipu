@@ -63,8 +63,9 @@ stops being read.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `store_path` | `.bobbin/quipu/quipu.db` | SQLite database path |
-| `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
-| `vocabulary` | `legacy` | Which IRIs golden-path terms (`stepOf`, `sourceKind`, …) are written under: `legacy` = under `base_ns`; `intigraph` = the published Camayoc `https://w3id.org/intigraph/camayoc/core/ns#` terms. Individuals keep `base_ns` either way. Switch only once readers see both IRIs for new writes. |
+| `base_ns` | unset | Base namespace for the names a store mints: an absolute IRI ending in `/` or `#`. **Required** for any write that mints a name (episodes); there is no default, and such writes are refused until it is set. Set it before the first write and never change it on an existing store. `--base-ns` overrides per CLI call. |
+| `code_base` | unset | Base of code-entity IRIs (`{code_base}{repo}/{path}`), which the import reconciler (`quipu::reconcile`) reads; the code vocabulary (`imports`, `name`, `language`, `definedIn`) is read under `base_ns`. No default: reconciliation is refused until it is set. Set it to the scheme your code producer actually mints, and never change it on an existing store. |
+| `vocabulary_map` | unset | Path to a Turtle file of `owl:equivalentProperty` / `owl:equivalentClass` statements. For each term Quipu would mint under `base_ns` (the subject), the object IRI is written instead. Vocabulary packs ship their own map; Quipu names none. Individuals keep `base_ns`. Configure a map only once readers see the mapped IRIs. A map that cannot be read stops startup. |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
@@ -73,6 +74,8 @@ stops being read.
 | `server.read_only` | `false` | Refuse all write endpoints |
 | `server.cors_allowed_origins` | `[]` | CORS allowlist for the UI/API |
 | `server.read_pool_size` | `4` | Read-only connection pool size (0 = all reads take the writer lock) |
+| `server.heavy_read_operations` | `[]` | Opt-in cooperative `/query` cap; initially accepts only `["owner-rows"]`. Does not classify undeclared queries or grant permissions. |
+| `server.heavy_read_permits` | `1` | When the cap is enabled, must be positive and less than the actual ordinary reader count after point reservation; in-process readers required. |
 | `server.update_full_copy_max_facts` | `250000` | Facts an unsliceable `/update` (open subject AND open predicate) may copy before it is refused with advice; 0 = unbounded |
 | `events.retention_days` | `30` | Prune events older than N days, never past any registered consumer's committed offset; `0` keeps every event |
 | `labels.min_freshness` | unset | Graph-label floor: refuse results staler than this |
@@ -109,6 +112,8 @@ stops being read.
 | `embedding.model_path` / `tokenizer_path` | unset | ONNX model + tokenizer for embeddings |
 | `embedding.dimension` / `max_sequence_length` / `embed_batch_size` | `384` / `256` / `32` | Embedding runtime parameters |
 | `embedding.exclude_predicates` | `[]` | Predicate IRIs whose values are left out of embedding text, so a value that changes on every write (a probe marker) does not create a new vector each time; the facts are still stored and queryable |
+| `embedding.superseded_retention_days` | `30` | Days a superseded (closed) embedding is kept before the server deletes it; `0` keeps them forever. Narrows `search` with `valid_at` older than the window to entities whose embedding was current then and now (see [Vector Search](../architecture/vector-search.md#retention-of-superseded-embeddings)); fact reads are unaffected |
+| `embedding.superseded_prune_max_per_pass` | `50000` | Most superseded embeddings deleted in one hourly pass, so a large backlog drains over several passes |
 | `vector.backend` | `sqlite` | `sqlite` or `lancedb`; selects the store's vector backend at open (see below) |
 | `federation.remotes` | `[]` | Remote quipu endpoints (`{name, url, auth_token?, timeout_ms?}`); health-checked at startup, queried via `federated: true` |
 | `attachments` | `[]` | Read-only databases mounted alongside the store (`[[quipu.attachments]]` with `alias` and `path`); see below |

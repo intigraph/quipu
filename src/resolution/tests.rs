@@ -4,6 +4,8 @@
 //! was 477 lines against a 500-line ceiling, and everything added here since
 //! (the union-scoped label read, `quipu:distinctFrom`, the episode-level
 //! contention pass) needed room the single file did not have.
+//! Compatibility: historical commit-name fixtures retain the former repository
+//! spelling so identity resolution still recognizes previously stored records.
 
 use std::sync::Arc;
 
