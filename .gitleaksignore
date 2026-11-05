@@ -1,0 +1,8 @@
+# Reviewed gitleaks false positives, one exact fingerprint per line
+# (commit:file:rule:line). Add a line only with the reason beside it; a real
+# credential is rotated and removed, never listed here.
+#
+# #890 TerminusDB live-CI opt-in: `-u admin:ci-only` is the literal admin
+# password of a disposable container bound to 127.0.0.1 inside one CI job
+# (TERMINUSDB_ADMIN_PASS=ci-only on the line above it). It guards nothing.
+c13aa833acbf5c0d0d962e6d8a0c67cd7159cc66:.github/workflows/ci.yml:curl-auth-user:223

@@ -2627,7 +2627,7 @@ in `transact` — appends a `write.refused` event *after* the refused write's
 savepoint has rolled back, so the event survives the rollback that the refusal
 caused. A failure to record never masks the refusal error itself.
 
-Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+Payload: `{gate, graph, actor, source, reason, reason_code, shape, client, refused_datums}` where `gate`
 is one of `shacl | policy | authority | owl | placement`, `graph` is the
 destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
 constraint name; truncated), and `refused_datums` counts what was refused.
@@ -2640,7 +2640,9 @@ whole speculation rolls back by design, so a hypothetical write's refusal is
 not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
-`quipu events refusals`.
+`quipu events refusals`. The additive `reason_code`, `shape` and `client` fields
+provide bounded classifications and structured attribution. See [write refusal
+accounting](write-refusals.md) for counters, `/stats` and reset semantics.
 
 ### Admitted debt events (`shacl.debt_admitted`)
 
