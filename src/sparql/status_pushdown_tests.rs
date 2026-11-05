@@ -153,11 +153,11 @@ fn status_pushdown_preserves_nonempty_rdf_identity_and_graph_isolation() {
         ..TemporalContext::default()
     };
     let (expr, inner) = shape();
-    let (optimized, vars) = candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+    let (optimized, vars) = candidates(&s, &expr, &inner, &ctx, &Bindings::default())
         .unwrap()
         .unwrap();
     assert_eq!(vars, vec!["s"]);
-    let (original, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    let (original, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::default()).unwrap();
     assert!(
         optimized.len() < original.len(),
         "the optimization never narrowed"
@@ -176,7 +176,7 @@ fn status_pushdown_preserves_nonempty_rdf_identity_and_graph_isolation() {
 fn status_pushdown_keeps_root_inference_and_historical_seeded_or_other_shapes_on_fallback() {
     let s = store();
     let (expr, inner) = shape();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     assert!(
         candidates(&s, &expr, &inner, &TemporalContext::default(), &seed)
             .unwrap()
@@ -211,7 +211,7 @@ fn status_pushdown_keeps_root_inference_and_historical_seeded_or_other_shapes_on
                 .is_none()
         );
     }
-    let mut bound = Bindings::new();
+    let mut bound = Bindings::default();
     bound.insert(
         "s".into(),
         Value::Ref(s.lookup(&format!("{EX}absent")).unwrap().unwrap()),
@@ -288,11 +288,11 @@ fn status_pushdown_composed_aliases_use_exact_fallback() {
     };
     let (expr, inner) = shape();
     assert!(
-        candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+        candidates(&s, &expr, &inner, &ctx, &Bindings::default())
             .unwrap()
             .is_none()
     );
-    let (original, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    let (original, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::default()).unwrap();
     assert_eq!(
         accepted(&s, original, &expr, &ctx),
         vec![format!("{EX}layer_absent")]
@@ -332,7 +332,7 @@ fn status_pushdown_dataset_restrictions_empty_graph_and_missing_index_keep_exact
         };
         let (expr, inner) = shape();
         assert!(
-            candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+            candidates(&s, &expr, &inner, &ctx, &Bindings::default())
                 .unwrap()
                 .is_none()
         );
@@ -382,10 +382,10 @@ fn status_pushdown_constant_owner_and_duplicate_type_match_full_evaluator() {
         graph: GraphScope::Named(vec![graph]),
         ..TemporalContext::default()
     };
-    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::default())
         .unwrap()
         .expect("constrained shape must use the anti-join");
-    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::default()).unwrap();
     assert!(
         narrow.len() < full.len(),
         "must narrow, not just return correct rows"
@@ -405,7 +405,7 @@ fn status_pushdown_constant_owner_and_duplicate_type_match_full_evaluator() {
         object: TermPattern::Variable(var("owner")),
     });
     assert!(
-        candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+        candidates(&s, &expr, &inner, &ctx, &Bindings::default())
             .unwrap()
             .is_none(),
         "extra variable must retain full evaluator"
@@ -446,10 +446,10 @@ fn status_pushdown_constant_literal_owner_preserves_term_aliases() {
         graph: GraphScope::Named(vec![graph]),
         ..TemporalContext::default()
     };
-    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::new())
+    let (narrow, _) = candidates(&s, &expr, &inner, &ctx, &Bindings::default())
         .unwrap()
         .expect("literal owner shape must be recognized");
-    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::new()).unwrap();
+    let (full, _) = eval_pattern_seeded(&s, &inner, &ctx, &Bindings::default()).unwrap();
     let actual = accepted(&s, narrow, &expr, &ctx);
     assert_eq!(actual, accepted(&s, full, &expr, &ctx));
     assert_eq!(actual, ["absent", "lang"].map(|name| format!("{EX}{name}")));

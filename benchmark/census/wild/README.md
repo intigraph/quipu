@@ -1,4 +1,4 @@
-# Census-in-the-wild — a real hank trace through the real audit
+# Census-in-the-wild — a real Yupana trace through the real audit
 
 Census is synthetic by construction (that is what makes it an oracle);
 this directory bounds its external-validity gap with a trace recorded
@@ -6,9 +6,9 @@ from the real governed writer and replayed through the same audit.
 
 ## The recording
 
-`hank-pre-edit.jsonl` — five Pre-Action Gate decisions recorded by
-**hank's actual pre-edit guard** (hank `aee6beb`, `hank hook pre-edit
---tenant polecat`, `mode = "enforce"`), driving edits against a
+The compatibility fixture keeps its original filename, `hank-pre-edit.jsonl`.
+It contains five Pre-Action Gate decisions recorded by the actual pre-rename
+Yupana guard at `aee6beb` (`mode = "enforce"`, tenant `polecat`), driving edits against a
 four-file project where `leaf()` has three callers and the `polecat`
 scope allows `max_impacted_files = 1`:
 
@@ -16,10 +16,13 @@ scope allows `max_impacted_files = 1`:
   scope's blast radius (`max_impacted_files` unsatisfied → blocked);
 - three **allows** — single-caller edits inside the radius.
 
-No hand-editing; the spool is byte-for-byte what
+No hand-editing; the spool is byte-for-byte what the original compatibility environment
 `$HANK_METRICS_PATH` received.
 
 ## The replay
+
+The legacy fixture path below is deliberate compatibility: existing replay
+commands must continue to load the original, unmodified recording.
 
 ```bash
 quipu knot shapes/policies/treesitter.ttl --db /tmp/wild.db

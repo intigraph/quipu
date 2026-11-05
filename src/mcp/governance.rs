@@ -61,10 +61,19 @@ pub(super) fn run_ask(store: &Store, ask: &str, ctx: &TemporalContext) -> Result
 fn fetch_scalar(store: &Store, subject: &str, local_name: &str) -> Result<Option<String>> {
     guard_iri(subject)?;
     guard_iri(local_name)?;
-    let old = crate::namespace::DEFAULT_BASE_NS;
+    // The store's own governance namespace and the public Quechua twin. A
+    // store with none reads the twin alone.
     let public = "https://scbrown.github.io/quechua/ns#";
+    let predicates = store
+        .governance_ns()
+        .ok()
+        .into_iter()
+        .chain([public])
+        .map(|ns| format!("<{ns}{local_name}>"))
+        .collect::<Vec<_>>()
+        .join(" ");
     let q = format!(
-        "SELECT DISTINCT ?o WHERE {{ VALUES ?predicate {{ <{old}{local_name}> <{public}{local_name}> }} <{subject}> ?predicate ?o }} LIMIT 2"
+        "SELECT DISTINCT ?o WHERE {{ VALUES ?predicate {{ {predicates} }} <{subject}> ?predicate ?o }} LIMIT 2"
     );
     match sparql::query_temporal(store, &q, &TemporalContext::default())? {
         QueryResult::Select { rows, .. } => {
@@ -218,7 +227,7 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 /// work-items that share at least one touched code entity, via the provenance
 /// chain `Bead <-implements- GitCommit -modifies-> entity`. This is a **graph
 /// query, not a statistical mine** — set-overlap over typed provenance edges
-/// (Hank promotes the raw `commit -> touched` edge per #18; Quipu aggregates).
+/// (Yupana promotes the raw `commit -> touched` edge per #18; Quipu aggregates).
 ///
 /// Bitemporal: pass `valid_at` for "which work co-occurred as of `<date>`, and
 /// via which commit/actor". Input: `{ "work_item": "<iri>", "valid_at"?: "...",

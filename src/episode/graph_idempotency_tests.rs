@@ -51,7 +51,7 @@ fn generated_at(store: &Store, graph: Option<&str>) -> u64 {
 
 #[test]
 fn an_identical_graph_scoped_repost_is_unchanged() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let first = post(&mut store, &body("v1", Some(GRAPH)));
     assert_eq!(first["outcome"], "created", "{first}");
     let again = post(&mut store, &body("v1", Some(GRAPH)));
@@ -62,7 +62,7 @@ fn an_identical_graph_scoped_repost_is_unchanged() {
 
 #[test]
 fn a_changed_graph_scoped_episode_replaces_its_activity_facts() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     post(&mut store, &body("v1", Some(GRAPH)));
     // A different second, so a stale timestamp would be a distinct value.
     std::thread::sleep(std::time::Duration::from_millis(1100));
@@ -89,7 +89,7 @@ fn a_changed_graph_scoped_episode_replaces_its_activity_facts() {
 
 #[test]
 fn the_graph_scoped_episode_never_writes_into_root() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     post(&mut store, &body("v1", Some(GRAPH)));
     post(&mut store, &body("v2", Some(GRAPH)));
     assert_eq!(generated_at(&store, None), 0);
@@ -97,7 +97,7 @@ fn the_graph_scoped_episode_never_writes_into_root() {
 
 #[test]
 fn root_episodes_keep_their_behaviour() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     assert_eq!(post(&mut store, &body("v1", None))["outcome"], "created");
     assert_eq!(post(&mut store, &body("v1", None))["outcome"], "unchanged");
     assert_eq!(post(&mut store, &body("v2", None))["outcome"], "updated");
@@ -108,7 +108,7 @@ fn root_episodes_keep_their_behaviour() {
 fn the_same_episode_in_root_does_not_satisfy_the_graph_lookup() {
     // Hash present in ROOT only: a graph-scoped post of the same body must
     // still write into its graph, not short-circuit on ROOT's hash.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     post(&mut store, &body("v1", None));
     let scoped = post(&mut store, &body("v1", Some(GRAPH)));
     assert_ne!(scoped["outcome"], "unchanged", "{scoped}");

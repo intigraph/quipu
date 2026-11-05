@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.16.6"
+version = "0.17.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -153,6 +153,8 @@ rudof_iri = { version = "=0.3.25", default-features = false, optional = true }
 shacl_engine = { package = "shacl", version = "=0.3.25", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# DataBook frontmatter (src/databook.rs). Pure Rust, MIT/Apache-2.0.
+yaml-rust2 = "0.10"
 # The sandbox validates the parser's AST; pin its explicitly unstable API.
 minijinja = { version = "=2.24.0", default-features = false, features = ["builtins", "serde", "fuel", "unstable_machinery"] }
 # `ws`: GET /feed/ws (docs/design/event-push.md §3) brings tokio-tungstenite.
@@ -214,6 +216,8 @@ tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_
 
 [features]
 default = ["shacl"]
+# Source-only HA profile: not in default/full, no server/config/packaging caller.
+ha-read-profile = ["rustix/time"]
 # Rudof enables RDF 1.2 terms; every parser/serializer must agree in this
 # feature bundle. Defaultless builds retain their existing RDF 1.1 matches.
 shacl = ["dep:rudof_rdf", "dep:rudof_iri", "dep:shacl_engine", "oxttl/rdf-12", "oxrdfio/rdf-12", "sparesults/sparql-12", "spargebra/sparql-12"]

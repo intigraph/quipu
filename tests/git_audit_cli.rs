@@ -23,9 +23,25 @@ fn git(repo: &Path, args: &[&str]) -> String {
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     String::from_utf8(o.stdout).unwrap().trim().into()
 }
+
+/// A HOME holding a user config that names the store namespace: Quipu has no
+/// default, and writes that mint names refuse without one.
+fn config_home(home: &Path) {
+    let dir = home.join(".config/bobbin");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("config.toml"),
+        "[quipu]\nbase_ns = \"http://aegis.gastown.local/ontology/\"\n",
+    )
+    .unwrap();
+}
+
 fn audit(dir: &Path, args: &[&str]) -> Output {
+    let home = tempfile::tempdir().unwrap();
+    config_home(home.path());
     Command::new(env!("CARGO_BIN_EXE_quipu"))
         .current_dir(dir)
+        .env("HOME", home.path())
         .args(["audit", "trace.jsonl", "--db", "store.db", "--json"])
         .args(args)
         .output()
@@ -34,6 +50,8 @@ fn audit(dir: &Path, args: &[&str]) -> Output {
 fn seed(dir: &Path) {
     fs::write(dir.join("trace.jsonl"), "").unwrap();
     let mut store = quipu::Store::open(dir.join("store.db").to_str().unwrap()).unwrap();
+    // The shipped policy pack is written under the legacy namespace.
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     quipu::ingest_rdf(
         &mut store,
         &include_bytes!("../shapes/policies/tripwire.ttl")[..],

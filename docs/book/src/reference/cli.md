@@ -181,6 +181,8 @@ forms: 0 when the data conforms, 1 otherwise or on an error.
 ### `quipu export`
 
 Export deterministic RDF from ROOT or one explicit scope.
+To export one graph as a self-describing DataBook instead, with frontmatter,
+provenance and per-block digests, see [`quipu databook`](databooks.md).
 
 ```bash
 quipu export --db my.db                        # N-Triples (default)
@@ -397,7 +399,7 @@ Check an enforcement trace against the constraint specification in the store —
 SARC's `T ⊨ Σ`.
 
 ```bash
-quipu audit ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit ~/.local/state/yupana/metrics.jsonl --db my.db
 quipu audit trace.jsonl --json --db my.db
 ```
 
@@ -642,7 +644,7 @@ Re-check a recorded window against the **current** Σ and report what promoting
 each rule from `advise` to `enforce` would do.
 
 ```bash
-quipu audit replay ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit replay ~/.local/state/yupana/metrics.jsonl --db my.db
 quipu audit replay trace.jsonl --json --db my.db
 ```
 

@@ -138,7 +138,7 @@ claude mcp add quipu -- quipu mcp --db /path/to/knowledge.db
 ```
 
 The MCP Registry identifier is `mcp-name: io.github.intigraph/quipu`.
-Other clients, HTTP MCP and credential configuration: [Agent Setup](https://github.com/intigraph/quipu/blob/main/docs/book/src/getting-started/agent-setup.md).
+Other clients, HTTP MCP and credential configuration: [Agent Setup](https://intigraph.github.io/quipu/getting-started/agent-setup.html).
 Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tools together.
 
 ## Before you start

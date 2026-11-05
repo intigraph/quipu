@@ -220,6 +220,14 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
             let refusal = crate::store::events::PendingRefusal {
                 gate: "shacl",
                 reason,
+                reason_code: "shacl",
+                shape: crate::metrics::refusals::shape_id(
+                    feedback
+                        .results
+                        .iter()
+                        .filter(|r| r.severity.eq_ignore_ascii_case("violation"))
+                        .map(|r| r.source_shape.as_deref()),
+                ),
                 refused_datums: 0,
             };
             store.record_refusal(

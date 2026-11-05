@@ -26,6 +26,19 @@ pub fn config() -> &'static QuipuConfig {
     })
 }
 
+/// The configured vocabulary map (empty when none is configured), or exit
+/// naming the failure: writing unmapped IRIs instead of a configured map's
+/// would silently change vocabulary.
+pub fn vocabulary_map() -> quipu::term_vocabulary::VocabularyMap {
+    match &config().vocabulary_map {
+        None => quipu::term_vocabulary::VocabularyMap::default(),
+        Some(path) => quipu::term_vocabulary::VocabularyMap::load(path).unwrap_or_else(|error| {
+            eprintln!("error loading vocabulary map: {error}");
+            std::process::exit(1);
+        }),
+    }
+}
+
 /// Open the store at `db_path` with the configured attachments mounted, or
 /// exit naming the failure.
 ///
@@ -67,6 +80,11 @@ pub fn open_store(db_path: &str) -> Store {
     // of the configured value, from the current directory and from the store's
     // directory alike.
     store.search_config_mut().clone_from(&config().search);
+    // `[quipu].base_ns` names the store's governance vocabulary as well as
+    // the names it mints, so every command needs it, as the server sets it.
+    // Unset stays unset: governance then refuses (`Store::governance_ns`).
+    store.set_base_ns(config().base_ns.clone());
+    store.set_code_base(config().code_base.clone());
     if config().search.keyword
         && let Err(e) = store.initialize_lexical_index()
     {

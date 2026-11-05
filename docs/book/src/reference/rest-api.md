@@ -194,7 +194,7 @@ an active server bearer. For a named credential, the administrator registers its
 verifier and activates the validated registry before supplying the plaintext to
 the client. Installing an arbitrary token on a client cannot grant access.
 
-Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+Shantytown and Tambo use `~/.config/quipu/token` as the default credential
 file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
 overrides this default. Files are read at request time. This is a client
 convention; the server neither reads your home directory nor distributes secrets.
@@ -202,8 +202,8 @@ convention; the server neither reads your home directory nor distributes secrets
 ```sh
 install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
 st ops doctor quipu --no-latest
-# Or, on a CABOODLE host:
-caboodle doctor
+# Or, on a Tambo host:
+tambo doctor
 ```
 
 Keep an existing explicit file override until provisioning and rotation move
@@ -2229,7 +2229,7 @@ through to `list`.
 ### `POST /ontology`
 
 Manage OWL ontologies: `{"action": "load"|"materialize"|"list"|"remove",
-"name", "turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered
+"name", "turtle", "timestamp", "materialize"}` (mirrors `quipu_load_ontology`). Registered
 even without the `owl` feature — a build without it answers with an explicit
 error naming the missing feature rather than a 404, so "not compiled in"
 and "no such route" stay distinguishable.
@@ -2279,6 +2279,31 @@ publication. Earlier committed batches can remain as partial historical
 entailments after an error or interruption, but no new freshness marker is
 published. Retry on the next scheduled run. Consumers must inspect freshness;
 the companion graph does not automatically hide historical entailments.
+
+**`load` with `"materialize": "deferred"`** persists the ontology under the
+writer lock, then runs this same off-lock materialisation in the same request.
+The default, `"inline"`, is unchanged: it derives while holding the writer, and
+every ordinary write waits for the whole derivation. A deferred load takes
+materialisation admission first, so a server without a read pool, or with a
+materialisation already running, refuses it **before** anything is persisted.
+An unknown mode is refused before the Turtle is parsed. If derivation fails
+after the ontology was persisted, the response is still the successful load,
+with `"materialization": {"complete": false, "error": ..., "retry":
+{"action": "materialize"}}`: the load committed and is not undone, and the
+retry is an ordinary `materialize`. On success, `materialized` carries the
+counts and `materialization` carries `complete`, `snapshot_tx`, `elapsed_ms` and
+`applied_proposals`. Like `materialize`, a deferred load derives over the
+**combined** ontology, not only the document just loaded.
+
+```bash
+curl -s localhost:3030/ontology -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $QUIPU_AUTH_TOKEN" \
+  -d '{"action": "load", "name": "bridge", "turtle": "...", "materialize": "deferred"}'
+# {"action":"load","name":"bridge","materialize":"deferred",
+#  "materialized":{"equivalent_property_inferences":42, ...},
+#  "materialization":{"complete":true,"snapshot_tx":1234,...}}
+```
 
 Input snapshots are limited to three million current facts, and derivation is
 limited to 200,000 new assertions and 64 passes. Exhausting a budget is an error,
@@ -2627,7 +2652,7 @@ in `transact` — appends a `write.refused` event *after* the refused write's
 savepoint has rolled back, so the event survives the rollback that the refusal
 caused. A failure to record never masks the refusal error itself.
 
-Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+Payload: `{gate, graph, actor, source, reason, reason_code, shape, client, refused_datums}` where `gate`
 is one of `shacl | policy | authority | owl | placement`, `graph` is the
 destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
 constraint name; truncated), and `refused_datums` counts what was refused.
@@ -2640,7 +2665,9 @@ whole speculation rolls back by design, so a hypothetical write's refusal is
 not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
-`quipu events refusals`.
+`quipu events refusals`. The additive `reason_code`, `shape` and `client` fields
+provide bounded classifications and structured attribution. See [write refusal
+accounting](write-refusals.md) for counters, `/stats` and reset semantics.
 
 ### Admitted debt events (`shacl.debt_admitted`)
 

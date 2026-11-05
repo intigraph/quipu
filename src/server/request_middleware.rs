@@ -33,6 +33,14 @@ pub(super) fn request_id() -> Option<u64> {
     REQUEST_ID.try_with(|id| *id).ok()
 }
 
+/// The same finite, duplicate-refusing declaration used by completion logs.
+/// This is cooperative scheduling metadata, never an authorization result.
+pub(super) fn declared_operation(headers: &axum::http::HeaderMap) -> Option<String> {
+    request_command::CommandContext::from_headers(headers)
+        .operation()
+        .map(str::to_owned)
+}
+
 /// Arrivals include pending/cancelled requests and the metrics scrape itself.
 /// Completion counters cannot distinguish low traffic from stalled handlers.
 pub(crate) fn render_request_starts(out: &mut String) {
