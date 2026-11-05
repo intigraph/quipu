@@ -33,7 +33,7 @@ class BadgeGuard(unittest.TestCase):
 
     def test_retired_owner_fails(self):
         broken = README.replace("https://github.com/intigraph/tambo\"><img",
-                                "https://github.com/scbrown/caboodle\"><img", 1)
+                                "https://github.com/intigraph/tambo\"><img", 1)
         found = badges.problems(broken)
         self.assertTrue(any("retired" in p for p in found), found)
 

@@ -16,7 +16,7 @@ because a copied number rots silently while its source moves on.
 |---|---|---|---|
 | [SPARQL 1.1 conformance](conformance.md) | Quipu's query engine against the W3C RDF Tests at a pinned revision | this repository | **published**, re-derivable |
 | [Agent-run branches](agent-branches.md) | questions asked, silent losses and as-of correctness when N scripted agents' forks are promoted; Quipu vs TerminusDB 12.0.8 vs the merge paper's strategies | this repository (`benchmark/agent-branches/`) | **published**, re-derivable |
-| [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/scbrown/caboodle) `0a1b169` | **published**, with the boundary below |
+| [Extraction → ingress](#extraction--ingress-text2kgbench) | a governed RML write of frozen upstream extractions into a disposable Quipu | [caboodle](https://github.com/intigraph/tambo) `0a1b169` | **published**, with the boundary below |
 | [Bulk ingest](#bulk-ingest-watdiv) | Quipu's own load rate for a pinned WatDiv dataset | this repository (`benchmark/public/watdiv_ingest.py`) | **published**, re-derivable |
 | [WatDiv 1M diagnostic](#watdiv-1m-diagnostic-checkpoint) | one-off query latency and process memory on a pinned 1M dataset | this repository (`docs/design/persistence-evidence/watdiv-1m-20260914/`) | **MEASURED, CONTROL-INVALID** — diagnostic only |
 | [Separate-process memory](#separate-process-memory-comparison) | memory residency by phase, Quipu SQLite versus Oxigraph RocksDB | this repository, [published evidence](https://github.com/intigraph/quipu/tree/314642efeb94434831efda1f12cf5a48fd534c6b/docs/design/persistence-evidence/separate-process-1m-20260914/run4) | **published**, limited to the stated memory observations |
@@ -25,7 +25,7 @@ because a copied number rots silently while its source moves on.
 ## Extraction → ingress (Text2KGBench)
 
 Caboodle publishes a pinned Text2KGBench run at
-[`evaluations/text2kgbench/results/2026-09-03/report.json`](https://github.com/scbrown/caboodle/blob/0a1b169/evaluations/text2kgbench/results/2026-09-03/report.json)
+[`evaluations/text2kgbench/results/2026-09-03/report.json`](https://github.com/intigraph/tambo/blob/0a1b169/evaluations/text2kgbench/results/2026-09-03/report.json)
 (commit `0a1b169`). Read it there; this page deliberately does not restate its
 score table.
 

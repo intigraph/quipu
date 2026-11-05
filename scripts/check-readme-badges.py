@@ -24,7 +24,7 @@ REQUIRED = [
     ("arXiv", "https://arxiv.org/abs/2608.16813", "img.shields.io/badge/arXiv-2608.16813"),
     ("stack", "https://github.com/intigraph/tambo", "img.shields.io/badge/stack-"),
 ]
-RETIRED = ("github.com/scbrown/", "github.com/scbrown/caboodle", "caboodle")
+RETIRED = ("github.com/scbrown/", "github.com/intigraph/tambo", "caboodle")
 BLOCK = re.compile(r"<!-- badges:start\b.*?-->(.*?)<!-- badges:end -->", re.S)
 LINK = re.compile(r'<a href="([^"]+)"><img src="([^"]+)" alt="[^"]+"/></a>')
 
