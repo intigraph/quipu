@@ -133,6 +133,15 @@ impl Drop for ProcessPool {
     }
 }
 
+/// A pool with no workers: every request is served in-process.
+#[cfg(test)]
+pub(crate) fn in_process() -> ProcessPool {
+    ProcessPool {
+        children: Vec::new(),
+        routing: None,
+    }
+}
+
 pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool, String> {
     let mut pool = ProcessPool {
         children: Vec::new(),
