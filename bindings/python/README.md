@@ -52,10 +52,16 @@ with quipu.Store.open("kg.db") as store:          # or quipu.Store.memory()
   serving.** The file stays consistent, but the server's caches, read models
   and change feed never see this library's writes, and the library runs with
   default configuration, not the server's governance, label and SHACL
-  settings. Nothing detects this yet. Use the REST client
+  settings. Native bindings and writer-mode servers now take a shared
+  nonblocking advisory lock on the database file for the handle's lifetime.
+  A second participant refuses before SQLite initialization. Older servers,
+  raw SQLite and other nonparticipating writers are not detected. Do not
+  replace or unlink a database while it is open. Use the REST client
   ([`quipu_client`](../../python/README.md)) for a served store.
+  File opens require a plain filesystem path; SQLite `file:` URIs refuse
+  rather than lock a different file. Memory stores need no process lock.
 - **Threads**: a store belongs to the thread that opened it. Calls from other
-  threads raise `quipu.ThreadAffinityError`. Open one store per thread. No
+  threads raise `quipu.ThreadAffinityError`. Open a separate database per thread. No
   free-threaded CPython support yet.
 
 This first slice covers query, export, entity history, knot, episode, set,

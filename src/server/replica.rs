@@ -9,6 +9,17 @@ use serde::{Deserialize, Serialize};
 
 use super::SharedStore;
 
+pub(crate) fn writer_lock(
+    path: &str,
+    config: &QuipuConfig,
+) -> quipu::Result<Option<quipu::writer_lock::WriterLock>> {
+    if config.server.replica.is_some() || path.is_empty() || path == ":memory:" {
+        Ok(None) // The read-only follower has no local SQLite writer.
+    } else {
+        quipu::writer_lock::WriterLock::acquire(path).map(Some)
+    }
+}
+
 pub(crate) fn open_store(path: &str, config: &QuipuConfig) -> quipu::Result<quipu::Store> {
     if let Some(replica) = &config.server.replica {
         let url = url::Url::parse(&replica.primary_url).map_err(|_| {

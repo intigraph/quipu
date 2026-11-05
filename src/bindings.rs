@@ -160,6 +160,9 @@ pub struct Engine {
     /// From then on it is read-only to local callers: only the applier
     /// writes, and it writes what the source already accepted.
     replica: Option<crate::applier::Applier>,
+    // Last field: release ownership only after the store/applier are dropped.
+    #[cfg(not(target_arch = "wasm32"))]
+    writer_lock: Option<crate::writer_lock::WriterLock>,
 }
 
 impl Engine {
@@ -177,11 +180,23 @@ impl Engine {
     /// writer) is serving. `SQLite` keeps the file consistent, but the server's
     /// in-process state (term cache, read models, change feed) never sees this
     /// engine's writes, and this engine runs with default configuration, not
-    /// the server's governance, label or SHACL settings. Nothing detects that
-    /// case yet (no shared writer lock exists): talk to a served store through
-    /// its REST API instead.
+    /// the server's governance, label or SHACL settings. Native engines and
+    /// writer-mode servers take the same nonblocking advisory lock before
+    /// initialization. Older or nonparticipating writers cannot be detected.
+    /// Talk to a served store through its REST API instead.
     pub fn open(path: &str) -> Result<Self> {
-        Ok(Self::governed(Store::open(path)?, "file"))
+        if path.is_empty() || path == ":memory:" {
+            return Self::open_in_memory();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let writer_lock = crate::writer_lock::WriterLock::acquire(path)?;
+        #[allow(unused_mut)] // wasm has no native file-lock guard.
+        let mut engine = Self::governed(Store::open(path)?, "file");
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            engine.writer_lock = Some(writer_lock);
+        }
+        Ok(engine)
     }
 
     #[cfg_attr(not(feature = "shacl"), allow(unused_mut))]
@@ -194,6 +209,8 @@ impl Engine {
             store,
             storage,
             replica: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            writer_lock: None,
         }
     }
 

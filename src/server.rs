@@ -143,13 +143,15 @@ async fn main() {
     let db_path = config.store_path.to_string_lossy().to_string();
     let bind_addr = config.server.bind.clone();
 
-    // warn LOUDLY about documented, settable knobs this server does not
-    // act on (vector.backend = lancedb, federation.remotes), rather than accepting
-    // them and silently doing nothing.
+    // Warn about configured knobs this build does not act on.
     for warning in config.unwired_warnings() {
         eprintln!("warning: {warning}");
     }
 
+    let _writer_lock = replica::writer_lock(&db_path, &config).unwrap_or_else(|e| {
+        eprintln!("error claiming store {db_path}: {e}");
+        std::process::exit(1);
+    });
     let mut store = replica::open_store(&db_path, &config).unwrap_or_else(|e| {
         eprintln!("error opening store {db_path}: {e}");
         std::process::exit(1);
@@ -350,6 +352,7 @@ async fn main() {
 
     let relay = relay::open_configured(&store, &config);
     let mut handle = StoreHandle::serving(store, read_pool, &db_path, config.federation.clone());
+    handle.process_writer_lock = _writer_lock;
     handle.relay = relay.clone();
     handle.log_query_admission = config.server.log_query_admission;
     handle.log_query_phases = config.server.log_query_phases;

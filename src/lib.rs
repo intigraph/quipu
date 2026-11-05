@@ -73,6 +73,8 @@ pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;
 pub mod write_provenance;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod writer_lock;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
 #[cfg(feature = "owl")]
