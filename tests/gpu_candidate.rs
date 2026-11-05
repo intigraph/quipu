@@ -64,3 +64,48 @@ fn discovery_leaf() {
     assert!(quipu::onnx_runtime::gpu_candidate().unwrap().is_none());
     assert!(quipu::onnx_runtime::current().is_none());
 }
+
+/// An explicitly requested native qualification, never a CI download/model/GPU
+/// side effect. Cargo admission and the operator's native scope apply.
+#[test]
+#[ignore = "requires an eligible NVIDIA GPU, an existing verified matched bundle and explicitly supplied local model"]
+fn matched_gpu_loader_creates_a_strict_cuda_session() {
+    let model = std::env::var_os("QUIPU_GPU_TEST_MODEL").expect("explicit local model");
+    assert!(
+        std::env::var_os("ORT_DYLIB_PATH").is_none(),
+        "automatic-loader proof must not use an override"
+    );
+    assert!(
+        std::env::var_os("LD_LIBRARY_PATH").is_none(),
+        "prove absolute dependency preload without startup loader hints"
+    );
+    let candidate = quipu::onnx_runtime::gpu_candidate()
+        .unwrap()
+        .expect("existing verified GPU candidate");
+    assert!(quipu::onnx_runtime::current().is_none());
+    let loaded = quipu::onnx_runtime::initialize(Some(&candidate)).unwrap();
+    assert!(loaded.available);
+    assert_eq!(loaded.linkage, "dynamic-selected");
+    // A repeated request for the original candidate resolves to the same
+    // privately staged core; it cannot select or initialize a second runtime.
+    assert_eq!(
+        quipu::onnx_runtime::initialize(Some(&candidate))
+            .unwrap()
+            .path,
+        loaded.path
+    );
+    let session = ort::session::Session::builder()
+        .unwrap()
+        .with_execution_providers([ort::ep::CUDA::default()
+            .with_tf32(false)
+            .build()
+            .error_on_failure()])
+        .unwrap()
+        .commit_from_file(std::path::Path::new(&model))
+        .unwrap();
+    assert!(!session.outputs().is_empty());
+    println!(
+        "MATCHED_GPU_STRICT_SESSION:{}",
+        serde_json::to_string(&loaded).unwrap()
+    );
+}
