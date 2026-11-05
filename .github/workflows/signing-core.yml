@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   merge_group:
     types: [checks_requested]
@@ -12,8 +13,15 @@ on:
 permissions:
   contents: read
 
+# Superseded PR runs are cancelled (aegis-9w9l, runner starvation); main
+# pushes and dispatches keep one group per run and are never cancelled.
+concurrency:
+  group: pr-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   core:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Shared signing native and Wasm
     runs-on: ubuntu-latest
     steps:
