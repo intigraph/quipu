@@ -16,19 +16,39 @@ pub(crate) async fn materialize(
     store: SharedStore,
     input: Value,
 ) -> Result<axum::Json<Value>, AppError> {
+    let permit = admit(&store)?;
+    run(store, timestamp_of(&input), permit).await
+}
+
+/// Single-flight admission plus the read-pool requirement, separate from the
+/// run so a deferred `/ontology` load (aegis-fej9) can be refused for either
+/// reason BEFORE it persists anything.
+pub(crate) fn admit(
+    store: &SharedStore,
+) -> Result<tokio::sync::SemaphorePermit<'static>, quipu::Error> {
     let permit = MATERIALIZE
         .try_acquire()
         .map_err(|_| quipu::Error::InvalidValue("OWL materialisation already running".into()))?;
     if store.readers.len() == 0 {
         return Err(quipu::Error::InvalidValue(
             "scheduled OWL materialisation requires a read pool; refusing writer fallback".into(),
-        )
-        .into());
+        ));
     }
-    let timestamp = input
+    Ok(permit)
+}
+
+pub(crate) fn timestamp_of(input: &Value) -> String {
+    input
         .get("timestamp")
         .and_then(Value::as_str)
-        .map_or_else(quipu::time::now_iso, str::to_owned);
+        .map_or_else(quipu::time::now_iso, str::to_owned)
+}
+
+pub(crate) async fn run(
+    store: SharedStore,
+    timestamp: String,
+    permit: tokio::sync::SemaphorePermit<'static>,
+) -> Result<axum::Json<Value>, AppError> {
     let started = std::time::Instant::now();
     let reader = store.clone();
     // Move the permit into blocking work: a disconnected client must not release

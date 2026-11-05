@@ -2078,3 +2078,70 @@ fn promoted_owl_materialization_is_not_restated_into_the_companion() {
          nothing about the seen-set. Got {control:?}"
     );
 }
+
+#[test]
+fn deferred_load_persists_without_deriving_until_materialize() {
+    // aegis-fej9 (gju5 Q1), library half. `deferred` persists the ontology and
+    // derives NOTHING under the caller's lock; `action: materialize` closes it.
+    let mut store = Store::open_in_memory().unwrap();
+    sn_ingest(
+        &mut store,
+        r#"
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix ex:  <http://example.org/> .
+ex:twin owl:sameAs ex:original .
+ex:original ex:likes ex:rex .
+"#,
+    );
+    let ask = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+               { <http://example.org/twin> <http://example.org/likes> <http://example.org/rex> }";
+    let derived = |store: &Store| {
+        matches!(
+            crate::sparql::query(store, ask).unwrap(),
+            crate::sparql::QueryResult::Ask(true)
+        )
+    };
+
+    let out = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "load", "name": "t", "turtle": SN_ONT,
+                            "materialize": "deferred"}),
+    )
+    .unwrap();
+    assert_eq!(out["materialize"], "deferred");
+    assert!(out["materialized"].is_null());
+    assert_eq!(
+        store.list_ontologies().unwrap().len(),
+        1,
+        "the load persisted"
+    );
+    assert!(!derived(&store), "a deferred load derives nothing itself");
+
+    let run = crate::mcp::owl::tool_load_ontology(
+        &mut store,
+        &serde_json::json!({"action": "materialize"}),
+    )
+    .unwrap();
+    assert!(run["materialized"]["total"].as_u64().unwrap() > 0);
+    assert!(derived(&store));
+
+    // An unknown mode is refused before anything is parsed or persisted.
+    let mut fresh = Store::open_in_memory().unwrap();
+    for mode in [
+        serde_json::json!("Deferred"),
+        serde_json::json!(false),
+        serde_json::json!({}),
+    ] {
+        let err = crate::mcp::owl::tool_load_ontology(
+            &mut fresh,
+            &serde_json::json!({"action": "load", "name": "t", "turtle": "not turtle",
+                                "materialize": mode}),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("unknown materialize mode"),
+            "{err}"
+        );
+    }
+    assert!(fresh.list_ontologies().unwrap().is_empty());
+}

@@ -469,6 +469,12 @@ impl AppError {
         self.1 = Some(usage);
         self
     }
+
+    /// The underlying error's message, for a response that must report a
+    /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
+    pub(crate) fn message(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl IntoResponse for AppError {
