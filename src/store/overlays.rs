@@ -1,5 +1,5 @@
 //! Named-graph overlays — the multi-tenant / multi-branch extension substrate
-//! (aegis-g1al / quipu #36/#37), implementing the model settled with hank/weaver
+//! (aegis-g1al / quipu #36/#37), implementing the model settled with yupana/weaver
 //! (see aegis `docs/designs/quipu-named-graph-overlays-20260718.md`).
 //!
 //! An overlay extends a committed **parent branch** (ROOT by default) WITHOUT
@@ -16,7 +16,7 @@
 //!   tombstoned**, nearest-overlay-wins. Overlay asserts shadow the root; overlay
 //!   tombstones hide root triples; everything else falls through to root.
 //!
-//! Cardinality lives in the caller (hank emits `tombstone(old)+assert(new)` for a
+//! Cardinality lives in the caller (yupana emits `tombstone(old)+assert(new)` for a
 //! single-valued replace); quipu stays semantics-agnostic and carries no
 //! per-predicate cardinality — one rule for every predicate.
 

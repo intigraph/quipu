@@ -226,7 +226,7 @@ datalinks graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
 # Ingest the sibling repos as code + doc entities, then serve them.
 # Produces CodeModule / CodeSymbol / Document / Section against the
 # shapes/code-entities.ttl vocabulary, validated on load.
-ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
+ingest-repos +repos="../quipu ../yupana ../NeuralAmplifier ../thinker":
     ./scripts/ingest-repos.py {{repos}} -o /tmp/quipu-code.ttl
     rm -f /tmp/quipu-code.db
     cargo run --bin quipu --features shacl -- knot /tmp/quipu-code.ttl --db /tmp/quipu-code.db

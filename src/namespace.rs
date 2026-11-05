@@ -54,7 +54,7 @@ pub const BOBBIN: &str = DEFAULT_BASE_NS;
 /// | any subject under `CODE_BASE` | **0** |
 /// | `CodeSymbol` under `{DEFAULT_BASE_NS}code/…::{name}` | **10,425** |
 ///
-/// The live producer of every code entity is **hank** (`hank-src/src/export.rs`),
+/// The live producer of every code entity is **yupana** (`yupana-src/src/export.rs`),
 /// which mints `{DEFAULT_BASE_NS}code/{repo}/{path}::{scope}::{name}` — under the
 /// ONTOLOGY base, `::`-separated, with a hierarchical scope chain and no line
 /// number. Neither difference is cosmetic: the scope chain exists because

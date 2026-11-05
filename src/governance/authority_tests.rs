@@ -121,7 +121,7 @@ fn a_declared_principal_reads_back_its_graphs() {
         d(
             &store,
             &format!("{DEFAULT_BASE_NS}authorityOver"),
-            Value::Str("g:hank".into()),
+            Value::Str("g:yupana".into()),
         ),
         d(
             &store,
@@ -132,8 +132,8 @@ fn a_declared_principal_reads_back_its_graphs() {
     store.transact(&datums, TS, None, None).unwrap();
 
     let a = authority_of(&store, "weaver").unwrap();
-    assert_eq!(a.graphs(), vec!["g:hank", "g:quipu"]);
-    assert!(a.permits("g:hank"));
+    assert_eq!(a.graphs(), vec!["g:quipu", "g:yupana"]);
+    assert!(a.permits("g:yupana"));
     assert!(!a.permits("g:secrets"));
 }
 

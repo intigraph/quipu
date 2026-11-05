@@ -2,6 +2,8 @@
 //! (shapes/governance.ttl) — Phase 1 definition-time verification. A workflow /
 //! policy / step / verdict definition that violates its shape is rejected at
 //! write; well-formed ones conform. See the governance-plane design.
+//! Compatibility fixtures retain the pre-rename registered verifier identity:
+//! product naming must not rewrite stored authority or signed-verdict identities.
 
 use crate::shacl::{Validator, validate_shapes};
 
@@ -291,7 +293,7 @@ fn transition_requires_on_and_to() {
 fn policy_can_assign_a_workflow() {
     // A policy's require-approval / escalate effect names the workflow to run via
     // aegis:assignsWorkflow -> a well-formed aegis:Workflow. This is the seam a
-    // Hank guard / Shantytown subscriber reads.
+    // Yupana guard / Shantytown subscriber reads.
     let data = format!(
         "{NS}\n\
          aegis:uidemo a aegis:Workflow ; rdfs:label \"ui-demo-required\" ; aegis:hasStep aegis:demo .\n\
@@ -386,8 +388,8 @@ const TREESITTER_CATALOG: &str = include_str!("../shapes/policies/treesitter.ttl
 
 #[test]
 fn treesitter_policy_catalog_conforms() {
-    // The shipped tree-sitter-tier catalog — the canonical source Hank projects —
-    // must validate against the governance shapes, the same in-graph check Hank
+    // The shipped tree-sitter-tier catalog — the canonical source Yupana projects —
+    // must validate against the governance shapes, the same in-graph check Yupana
     // runs before it promotes. A drift here is caught at `cargo test`, not at load.
     let fb = validate_shapes(SHAPES, TREESITTER_CATALOG).unwrap();
     assert!(
@@ -558,7 +560,7 @@ fn policy_operating_point_must_point_at_an_operating_point() {
 
 #[test]
 fn the_shipped_catalog_declares_a_class_and_a_placement_for_every_action_policy() {
-    // The catalog is what Hank projects. A policy in it that carries no class
+    // The catalog is what Yupana projects. A policy in it that carries no class
     // projects as an unplaced constraint, which is the state this whole change
     // exists to make impossible — so assert on the shipped file, not a fixture.
     for (policy, class, point) in [

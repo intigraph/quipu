@@ -478,7 +478,7 @@ recomputes a different identity; it never silently drops them.
 
 `quipu compose` reports every input's pointers, each with the share that
 declared it, and never follows them. Loading a pointer is the consumer's trust
-decision (caboodle `packs trust`). Following `kind = "pack"` pointers on first
+decision (Tambo `packs trust`). Following `kind = "pack"` pointers on first
 use, and joining `kind = "endpoint"` pointers to the federation list, are
 separate steps.
 
@@ -555,7 +555,7 @@ deviation because query data cannot widen the operator's remote allowlist.
 See [SPARQL 1.1 conformance](../benchmarks/conformance.md) for the measured
 score and named verdicts.
 
-### Endpoint pointers and Caboodle consent
+### Endpoint pointers and Tambo consent
 
 A pendant can declare a `kind = "endpoint"` pointer without carrying that
 remote graph. Register the **local** declaring pendant and its repository remote
@@ -568,12 +568,12 @@ repo_remote = "https://github.com/example/project.git"
 ```
 
 On each `SERVICE <exact-endpoint-url>` use, Quipu verifies the pendant's share
-identity and invokes `caboodle packs trust check-endpoint <repo-remote> <url>`.
-That command requires Tambo/Caboodle with endpoint decision support. Missing,
+identity and invokes `tambo packs trust check-endpoint <repo-remote> <url>`.
+That command requires Tambo with endpoint decision support. Missing,
 refused, invalid or timed-out policy checks fail before network access; the error
 names the endpoint and pointing repository. Consent is rechecked after policy
 changes, including revocation. A foreign archive allow alone does not admit its
-endpoint. Use Caboodle's `packs trust allow-endpoint` or owner policy to grant
+endpoint. Use Tambo's `packs trust allow-endpoint` or owner policy to grant
 consent; Quipu keeps no second trust policy or persistent admission cache.
 
 An admitted pointer contributes a credential-free, unlabelled endpoint only to
@@ -592,7 +592,7 @@ quipu query 'SELECT ?s WHERE { SERVICE <https://example.org/sparql> { ?s ?p ?o }
 ```
 
 Without the `remote` build feature, `SERVICE` remains unsupported. Local
-filesystem declarations and the native Caboodle policy process are not a browser
+filesystem declarations and the native Tambo policy process are not a browser
 API; browser pack resolution is a separate host interface.
 
 ## The whole stack speaks it

@@ -194,7 +194,7 @@ an active server bearer. For a named credential, the administrator registers its
 verifier and activates the validated registry before supplying the plaintext to
 the client. Installing an arbitrary token on a client cannot grant access.
 
-Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+Shantytown and Tambo use `~/.config/quipu/token` as the default credential
 file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
 overrides this default. Files are read at request time. This is a client
 convention; the server neither reads your home directory nor distributes secrets.
@@ -202,8 +202,8 @@ convention; the server neither reads your home directory nor distributes secrets
 ```sh
 install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
 st ops doctor quipu --no-latest
-# Or, on a CABOODLE host:
-caboodle doctor
+# Or, on a Tambo host:
+tambo doctor
 ```
 
 Keep an existing explicit file override until provisioning and rotation move

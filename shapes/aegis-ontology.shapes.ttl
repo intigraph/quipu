@@ -1963,7 +1963,7 @@ aegis:CapabilityShape a sh:NodeShape ;
 #
 #   Tool — same shape, smaller: children CLI and AgentTool, 18 asserted, 11 of
 #   them bare. The bare ones are guards, skills and probes (dangerous-command-
-#   guard, hank-census, st_doctor); "a tool" is the honest claim for those and
+#   guard, yupana-census, st_doctor); "a tool" is the honest claim for those and
 #   inventing a child to hold them would be modelling for the checker's benefit.
 #
 # NOT a tightening, and measured before landing exactly as ec1f082 required:

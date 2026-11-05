@@ -67,7 +67,7 @@ pub use labels::{normalize_client, normalize_task};
 /// scraping Prometheus. The cap converts that from an outage into a lost label.
 ///
 /// 32 is sized against the KNOWN caller list on `aegis-ma1hy` (`SessionStart`
-/// query-first hooks, hank's pre-edit/pre-bash policy hooks, st subscribe,
+/// query-first hooks, yupana's pre-edit/pre-bash policy hooks, st subscribe,
 /// agent `/episode` writes, the ingest path, bobbin) with room to spare. If
 /// `other` ever dominates, that is the signal to raise it — deliberately, not
 /// by removing the cap.

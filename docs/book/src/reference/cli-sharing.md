@@ -538,7 +538,7 @@ refuses as `revoked`, which is a different finding from an unbound key. Rotation
 new binding plus a revoke of the old one.
 
 To set up an agent end to end (its own user, `sd key init`, enrollment, verification
-and revocation), follow CABOODLE's
+and revocation), follow Tambo's
 [agent identity and write access](https://intigraph.github.io/tambo/agents.html#agent-identity-and-write-access)
 guide.
 
