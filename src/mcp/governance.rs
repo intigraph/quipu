@@ -227,7 +227,7 @@ pub fn tool_policy_check(store: &Store, input: &JsonValue) -> Result<JsonValue> 
 /// work-items that share at least one touched code entity, via the provenance
 /// chain `Bead <-implements- GitCommit -modifies-> entity`. This is a **graph
 /// query, not a statistical mine** — set-overlap over typed provenance edges
-/// (Hank promotes the raw `commit -> touched` edge per #18; Quipu aggregates).
+/// (Yupana promotes the raw `commit -> touched` edge per #18; Quipu aggregates).
 ///
 /// Bitemporal: pass `valid_at` for "which work co-occurred as of `<date>`, and
 /// via which commit/actor". Input: `{ "work_item": "<iri>", "valid_at"?: "...",

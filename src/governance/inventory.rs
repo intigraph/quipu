@@ -7,7 +7,7 @@
 //!
 //! ## Why this is data and not a paragraph
 //!
-//! hank's `docs/work-scoped-governance.md` §"What this cannot reach" is an
+//! yupana's `docs/work-scoped-governance.md` §"What this cannot reach" is an
 //! honest list of bypass surfaces — CI pipelines, cron, the far side of a remote
 //! shell, a sibling session's VCS index, a hostile agent. It is also prose, and
 //! prose goes stale the first time a harness adds a tool: nothing recomputes,

@@ -79,7 +79,7 @@ fn cross_chain_trust_comparison_errors_naming_both_chains() {
     // #66 acceptance. A silent int compare here is how "learned tactic beats
     // canonical" ships.
     let a = t("smac:canonical", "smac:ruleTierChain", 40);
-    let b = t("hank:attested", "hank:tierChain", 10);
+    let b = t("yupana:attested", "yupana:tierChain", 10);
     let err = a.meet(&b).expect_err("cross-chain must refuse");
     let msg = err.to_string();
     assert!(
@@ -87,7 +87,7 @@ fn cross_chain_trust_comparison_errors_naming_both_chains() {
         "names the first chain: {msg}"
     );
     assert!(
-        msg.contains("hank:tierChain"),
+        msg.contains("yupana:tierChain"),
         "names the second chain: {msg}"
     );
     assert!(
@@ -101,7 +101,7 @@ fn cross_chain_refusal_is_not_rescued_by_equal_ranks() {
     // Equal ints across chains is the case most likely to look "obviously
     // fine" to a future simplifier. It is still a category error.
     let a = t("smac:canonical", "chain:a", 10);
-    let b = t("hank:attested", "chain:b", 10);
+    let b = t("yupana:attested", "chain:b", 10);
     assert!(
         a.meet(&b).is_err(),
         "equal ranks do not make chains comparable"

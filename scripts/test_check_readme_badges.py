@@ -31,6 +31,7 @@ class BadgeGuard(unittest.TestCase):
         broken = README.replace(line, '  <a href="https://arxiv.org/abs/2608.16813">arXiv</a>')
         self.assertTrue(any("arXiv badge missing" in p for p in badges.problems(broken)))
 
+    # Deliberate former-name refusal control, never a current installation link.
     def test_retired_owner_fails(self):
         broken = README.replace("https://github.com/intigraph/tambo\"><img",
                                 "https://github.com/scbrown/caboodle\"><img", 1)

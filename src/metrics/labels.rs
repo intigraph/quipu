@@ -4,7 +4,7 @@
 ///
 /// Precedence: the explicit `X-Quipu-Client` header, then `User-Agent`, then
 /// `unattributed`. Everything is lowercased, cut at the first `/` (so
-/// `curl/8.5.0` and `hank/0.4.1` collapse to `curl` and `hank` rather than
+/// `curl/8.5.0` and `yupana/0.4.1` collapse to `curl` and `yupana` rather than
 /// minting a label per released version), restricted to `[a-z0-9._-]`, and
 /// truncated to 32 bytes.
 ///

@@ -97,7 +97,7 @@ pub fn load_as_of(store: &Store, as_of: Option<&crate::store::AsOf>) -> Result<S
         // A policy row can repeat across the OPTIONAL cross-product. Merging
         // rather than replacing means a row that happened to bind fewer
         // OPTIONALs cannot erase a field an earlier row supplied — the same
-        // one-policy-is-one-constraint collapse hank's projection decode does.
+        // one-policy-is-one-constraint collapse yupana's projection decode does.
         let entry = spec.entry(id.clone()).or_insert_with(|| Constraint {
             iri: iri.clone(),
             id,

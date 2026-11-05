@@ -176,8 +176,8 @@ fn knot_snapshot_replacement_retracts_removed_turtle_facts() {
         serde_json::json!({
             "turtle": turtle,
             "timestamp": "2026-08-07T10:00:00Z",
-            "actor": "hank",
-            "source": "hank promote demo@abc (cli)",
+            "actor": "yupana",
+            "source": "yupana promote demo@abc (cli)",
             "replace_snapshot": true,
             "snapshot": "code:demo"
         })

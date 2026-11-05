@@ -503,7 +503,7 @@ fn an_unreadable_line_is_counted_never_skipped() {
 
 #[test]
 fn an_unknown_field_does_not_stop_the_read() {
-    // A checker that refused a spool because hank had added a field would stop
+    // A checker that refused a spool because yupana had added a field would stop
     // auditing at exactly the moment the two repos drifted.
     let (records, unreadable) = parse_trace(r#"{"kind":"guard","brand_new_field":42}"#);
     assert_eq!(unreadable, 0);

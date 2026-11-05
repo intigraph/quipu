@@ -62,7 +62,7 @@ fn a_policy_is_keyed_by_its_label() {
 
 #[test]
 fn an_unlabelled_policy_falls_back_to_its_local_name() {
-    // The trace cites whatever hank named the rule, and hank's projection falls
+    // The trace cites whatever yupana named the rule, and yupana's projection falls
     // back the same way. A checker that dropped unlabelled policies would report
     // them as never exercised no matter what the trace said.
     let mut store = Store::open_in_memory_test_ns().unwrap();

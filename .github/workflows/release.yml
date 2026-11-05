@@ -534,7 +534,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
           # macOS had NO release asset at all until aegis-oifbu9, and a missing
-          # checksummed asset for the host triple ABORTED the whole caboodle
+          # checksummed asset for the host triple ABORTED the whole stack
           # install run, not just the quipu step. macOS has no glibc-style floor
           # tied to the build image: rustc stamps its own minimum OS version
           # (11.0 on arm64, 10.12 on x86_64) whatever image links the binary, so

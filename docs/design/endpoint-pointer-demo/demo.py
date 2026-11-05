@@ -53,12 +53,12 @@ try:
         root = pathlib.Path(scratch)
         bin_dir = root / 'bin'
         bin_dir.mkdir()
-        for source, name in [(args.candidate, 'quipu-service-candidate'), (args.fixture, 'endpoint_pointer_fixture'), (args.trust_cli, 'caboodle')]:
+        for source, name in [(args.candidate, 'quipu-service-candidate'), (args.fixture, 'endpoint_pointer_fixture'), (args.trust_cli, 'tambo')]:
             shutil.copy2(source, bin_dir / name)
         endpoint = f'http://127.0.0.1:{server.server_port}/sparql/'
         remote = 'https://github.com/foreign/project.git'
         env = dict(os.environ, HOME=str(root), XDG_CONFIG_HOME=str(root/'.config'), PATH=str(bin_dir))
-        policy = root/'.config/caboodle/pack-trust.toml'
+        policy = root/'.config/tambo/pack-trust.toml'
         policy.parent.mkdir(parents=True)
         cfg = root/'.bobbin/config.toml'
         cfg.parent.mkdir()
@@ -115,20 +115,20 @@ try:
         print('tampered declaration: refused before network')
         policy.write_text(allow)
         if args.old_trust_cli:
-            shutil.copy2(args.old_trust_cli, bin_dir / 'caboodle')
+            shutil.copy2(args.old_trust_cli, bin_dir / 'tambo')
             text = run(bin_dir/'quipu-service-candidate', 1)
             assert 'unavailable' in text and len(requests) == 3
             print('older trust CLI: unavailable, no policy denial invented, no request')
-        (bin_dir/'caboodle').unlink()
+        (bin_dir/'tambo').unlink()
         text = run(bin_dir/'quipu-service-candidate', 1)
         assert 'unavailable' in text and len(requests) == 3
-        shutil.copy2(args.trust_cli, bin_dir/'caboodle')
+        shutil.copy2(args.trust_cli, bin_dir/'tambo')
         print('missing trust CLI: unavailable, no fallback or request')
-        (bin_dir/'caboodle').write_text('#!/bin/sh\nexec /bin/sleep 10\n')
-        (bin_dir/'caboodle').chmod(0o755)
+        (bin_dir/'tambo').write_text('#!/bin/sh\nexec /bin/sleep 10\n')
+        (bin_dir/'tambo').chmod(0o755)
         text = run(bin_dir/'quipu-service-candidate', 1)
         assert 'did not complete' in text and len(requests) == 3
-        shutil.copy2(args.trust_cli, bin_dir/'caboodle')
+        shutil.copy2(args.trust_cli, bin_dir/'tambo')
         print('hung trust CLI: bounded refusal, child reaped, no request')
         policy.write_text('unknown_key = true\n')
         run(bin_dir/'quipu-service-candidate', 1)
