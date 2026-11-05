@@ -12,6 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{Error, Result, Store};
 
+pub(crate) mod mutants;
 pub mod profile;
 pub mod routes;
 mod view;
@@ -332,12 +333,12 @@ impl ReadPolicy {
         }
         let mut graphs = BTreeSet::new();
         let mut expiry = identity.valid_until;
+        use mutants::{Mutant, active};
         for grant in self.grants.values().filter(|g| {
-            !g.revoked
-                && g.principal == identity.principal
-                && g.operations.contains(&operation)
-                && g.valid_from <= now
-                && now < g.valid_until
+            (!g.revoked || active(Mutant::RevokedGrant))
+                && (g.principal == identity.principal || active(Mutant::PrincipalMatch))
+                && (g.operations.contains(&operation) || active(Mutant::OperationMatch))
+                && ((g.valid_from <= now && now < g.valid_until) || active(Mutant::GrantValidity))
         }) {
             graphs.extend(grant.graphs.iter().cloned());
             expiry = expiry.min(grant.valid_until);
@@ -346,7 +347,9 @@ impl ReadPolicy {
             return Err(denied());
         }
         if let Some(selected) = dataset {
-            if selected.is_empty() || !selected.is_subset(&graphs) {
+            if selected.is_empty()
+                || (!selected.is_subset(&graphs) && !active(Mutant::DatasetSubset))
+            {
                 return Err(denied());
             }
             graphs = selected.clone();

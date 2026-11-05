@@ -476,3 +476,117 @@ fn an_oversized_value_refuses_before_materializing_a_partial_view() {
         .unwrap();
     assert!(authorization.open(&source, 2).is_err());
 }
+
+/// True when a scoped query result exposes the hidden fact stored only in B.
+fn exposes_hidden(view: &ReadView) -> bool {
+    let bytes = view
+        .query(
+            "SELECT ?o WHERE { GRAPH ?g { ?s <urn:predicate:hidden> ?o } }",
+            false,
+            2,
+        )
+        .unwrap();
+    String::from_utf8(bytes).unwrap().contains("secret")
+}
+
+/// Each enforcement point has a paired negative. With the point intact the
+/// negative holds; with exactly that point disabled the same negative must
+/// observe the disclosure. A mutant that changes nothing would mean the
+/// negative does not actually test its enforcement point.
+#[test]
+fn controlled_mutants_each_turn_their_paired_negative_red() {
+    use super::mutants::{Mutant, with};
+    let policy = policy();
+    let source = source("secret");
+    let snapshot = policy.snapshot().unwrap();
+    let selected_ab: BTreeSet<String> = [A.into(), B.into()].into();
+    let p_view = || view(&policy, &source, P, ReadOperation::Query);
+
+    let mut revoked_policy = OwnerReadPolicy::open(":memory:", OWNER).unwrap();
+    let original = grant(P, &[A], ReadOperation::Query);
+    revoked_policy.apply(&original, "fixture:grant").unwrap();
+    let mut revoked = original.clone();
+    revoked.revoked = true;
+    revoked.revision = 2;
+    revoked_policy.apply(&revoked, "fixture:revoke").unwrap();
+    let revoked_snapshot = revoked_policy.snapshot().unwrap();
+
+    // (mutant, disclosed?) where `disclosed` is the paired negative's observation.
+    let cases: Vec<(Mutant, Box<dyn Fn() -> bool + '_>)> = vec![
+        (
+            // Q's grant over B must never widen P's default view.
+            Mutant::PrincipalMatch,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
+            // P holds no Replicate grant; query/export grants must not stand in.
+            Mutant::OperationMatch,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Replicate, None, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            Mutant::RevokedGrant,
+            Box::new(|| {
+                revoked_snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            // now=0 is before every fixture grant's valid_from=1.
+            Mutant::GrantValidity,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, None, 0)
+                    .is_ok()
+            }),
+        ),
+        (
+            // An explicit {A,B} dataset must refuse in full, never open B.
+            Mutant::DatasetSubset,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, Some(&selected_ab), 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
+            // The scoped copy holds only A and C, so the observable failure is
+            // the refusal itself turning into an answer about an ungranted graph.
+            Mutant::QueryDatasetClause,
+            Box::new(|| {
+                p_view()
+                    .query("ASK FROM <urn:graph:b> { ?s ?p ?o }", false, 2)
+                    .is_ok()
+            }),
+        ),
+        (
+            Mutant::QueryGraphScope,
+            Box::new(|| {
+                p_view()
+                    .query("ASK { GRAPH <urn:graph:b> { ?s ?p ?o } }", false, 2)
+                    .is_ok()
+            }),
+        ),
+    ];
+    for (mutant, disclosed) in &cases {
+        assert!(
+            !disclosed(),
+            "{mutant:?}: negative must hold with enforcement intact"
+        );
+        assert!(
+            with(*mutant, || disclosed()),
+            "{mutant:?}: disabling this enforcement point went undetected"
+        );
+        assert!(!disclosed(), "{mutant:?}: the switch must clear after use");
+    }
+}
