@@ -41,9 +41,9 @@ fn read_policy(conn: &Connection) -> Result<(&'static str, &'static str)> {
 
 /// Schema creation and the first default choice share the same writer lock.
 /// Concurrent opens cannot mistake newly-created facts for an older store.
-pub(super) fn initialize_schema(conn: &Connection) -> Result<()> {
+pub(super) fn initialize_schema(conn: &Connection) -> Result<bool> {
     conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result: Result<()> = (|| {
+    let result: Result<bool> = (|| {
         let existing = has_table(conn, "facts")?;
         conn.execute_batch(crate::schema::INIT_SQL)?;
         if !has_table(conn, "search_default_policy")? {
@@ -59,20 +59,31 @@ pub(super) fn initialize_schema(conn: &Connection) -> Result<()> {
             )?;
         }
         read_policy(conn)?;
-        Ok(())
+        Ok(!existing)
     })();
-    if let Err(error) = result {
-        let _ = conn.execute_batch("ROLLBACK");
-        return Err(error);
-    }
+    let fresh = match result {
+        Ok(fresh) => fresh,
+        Err(error) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(error);
+        }
+    };
     if let Err(error) = conn.execute_batch("COMMIT") {
         let _ = conn.execute_batch("ROLLBACK");
         return Err(error.into());
     }
-    Ok(())
+    Ok(fresh)
 }
 
 impl Store {
+    /// True only when this handle created the fact schema under the startup
+    /// writer transaction. Existing files/schema and concurrent openers cannot
+    /// be mistaken for the creating handle. This does not activate any index.
+    #[must_use]
+    pub fn created_fact_schema(&self) -> bool {
+        self.created_fact_schema
+    }
+
     /// Resolve intent, never infer it from a UUID, FTS layout, or config age.
     pub(crate) fn default_search_graph_scope(&self) -> Result<(&'static str, &'static str)> {
         match self.search_config().default_graph_scope.as_deref() {
@@ -104,14 +115,43 @@ mod tests {
                     conn.busy_timeout(std::time::Duration::from_secs(5))
                         .unwrap();
                     barrier.wait();
-                    initialize_schema(&conn).unwrap();
+                    let fresh = initialize_schema(&conn).unwrap();
                     assert_eq!(read_policy(&conn).unwrap(), ("all", "store_default"));
+                    fresh
                 })
             })
             .collect();
-        for worker in workers {
-            worker.join().unwrap();
-        }
+        let fresh_count = workers
+            .into_iter()
+            .map(|worker| usize::from(worker.join().unwrap()))
+            .sum::<usize>();
+        assert_eq!(fresh_count, 1);
+    }
+
+    #[test]
+    fn reopening_an_unindexed_store_does_not_enable_fts_on_vector_write() {
+        use crate::vector::KnowledgeVectorStore;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("legacy.db");
+        let fresh = Store::open(path.to_str().unwrap()).unwrap();
+        assert!(fresh.created_fact_schema());
+        assert!(fresh.search_config().keyword);
+        assert!(fresh.lexical_progress().unwrap().is_none());
+        drop(fresh);
+        let existing = Store::open(path.to_str().unwrap()).unwrap();
+        assert!(!existing.created_fact_schema());
+        assert!(!existing.search_config().keyword);
+        let entity = existing.intern("urn:existing-vector").unwrap();
+        existing
+            .embed_entity(
+                entity,
+                "existing vector",
+                &[1.0, 0.0],
+                "2026-01-01T00:00:00Z",
+            )
+            .unwrap();
+        assert_eq!(existing.vector_count().unwrap(), 1);
+        assert!(existing.lexical_progress().unwrap().is_none());
     }
 
     #[test]
