@@ -575,7 +575,7 @@ impl Store {
             recording_verdicts: false,
             trust_root_bootstrap: None,
             base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
-            vocabulary: crate::term_vocabulary::Vocabulary::default(),
+            vocabulary: std::sync::Arc::default(),
             namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,
             local_vector_backend: None,
