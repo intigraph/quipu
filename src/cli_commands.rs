@@ -390,6 +390,28 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
             eprintln!("doctor search vector status: {error}");
             std::process::exit(1);
         });
+        // Inspect the bootstrap selected by provider setup. Diagnostics must not
+        // initialize ORT, acquire a GPU candidate, or change device selection.
+        #[cfg(feature = "onnx")]
+        let runtime = quipu::onnx_runtime::current().map_or_else(
+            || {
+                serde_json::json!({
+                    "available": false, "linkage": null, "path": null,
+                    "state": "not_initialized"
+                })
+            },
+            |info| {
+                serde_json::json!({
+                    "available": info.available, "linkage": info.linkage,
+                    "path": info.path, "state": "initialized"
+                })
+            },
+        );
+        #[cfg(not(feature = "onnx"))]
+        let runtime = serde_json::json!({
+            "available": false, "linkage": null, "path": null,
+            "state": "not_compiled"
+        });
         println!(
             "{}",
             serde_json::json!({
@@ -405,6 +427,7 @@ pub fn cmd_doctor(args: &[String], db_path: &str) {
                 "vector_rows": vector_rows,
                 "semantic_ready": store.has_embedding_provider() && vector_rows > 0,
                 "onnx_compiled": cfg!(feature = "onnx"),
+                "onnx_runtime": runtime,
                 "semantic_remedy": if !store.has_embedding_provider() {
                     Some("run quipu model install in a full build, or configure [quipu.embedding] model_path and tokenizer_path")
                 } else if vector_rows == 0 {

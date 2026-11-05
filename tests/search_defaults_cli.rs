@@ -11,6 +11,8 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .env("HOME", dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_DATA_HOME", dir.join("data"))
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .env_remove("ORT_DYLIB_PATH")
         .args(args)
         .output()
         .unwrap()
@@ -68,6 +70,21 @@ fn fresh_ingest_search_and_doctor_need_no_model() {
     let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "fresh.db"]));
     assert_eq!(doctor["keyword_ready"], true);
     assert_eq!(doctor["semantic_ready"], false);
+    assert_eq!(doctor["onnx_runtime"]["available"], false);
+    assert!(doctor["onnx_runtime"]["linkage"].is_null());
+    assert!(doctor["onnx_runtime"]["path"].is_null());
+    assert_eq!(
+        doctor["onnx_runtime"]["state"],
+        if cfg!(feature = "onnx") {
+            "not_initialized"
+        } else {
+            "not_compiled"
+        }
+    );
+    assert!(
+        !dir.path().join("cache").exists(),
+        "doctor must not stage a runtime without a model"
+    );
     let explicit = run(
         dir.path(),
         &[
