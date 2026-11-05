@@ -24,13 +24,21 @@ pub(super) fn defs() -> Vec<Value> {
         }),
         serde_json::json!({
             "name": "quipu_entity_history",
-            "description": "Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.",
+            "description": "Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "iri": {
                         "type": "string"
-                    }
+                    },
+                    "graph": {"type":"string"},
+                    "source_store_id": {"type":"string"},
+                    "expected_generation": {"type":"string"},
+                    "since_tx": {"type":"integer","minimum":0},
+                    "until_tx": {"type":"integer","minimum":1},
+                    "max_entries": {"type":"integer","minimum":1,"maximum":10000},
+                    "max_bytes": {"type":"integer","minimum":1,"maximum":4194304},
+                    "observation_only": {"type":"boolean"}
                 },
                 "required": [
                     "iri"

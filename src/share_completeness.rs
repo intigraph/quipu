@@ -49,6 +49,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // is the entire gap 9f899e exists to close.
     ("facts", Disposition::Content),
     ("transactions", Disposition::Content),
+    // Untrusted caller declarations are historical content, like actor/source.
+    // Retaining them does not authenticate a transaction: the receiver's local
+    // credential evidence in `transaction_auth` is explicitly excluded below.
+    ("transaction_declarations", Disposition::Content),
     ("terms", Disposition::Content),
     ("graphs", Disposition::Content),
     ("shapes", Disposition::Content),
