@@ -1,4 +1,7 @@
 //! One pre-session runtime bootstrap. No runtime network access.
+mod gpu;
+pub use gpu::{acquire_gpu_candidate, gpu_candidate, provision_gpu_candidate};
+
 use serde::Serialize;
 #[cfg(feature = "bundled-onnx")]
 use std::io::{Read, Write};
@@ -20,6 +23,7 @@ pub struct RuntimeInfo {
 
 struct Initialized {
     info: RuntimeInfo,
+    requested: PathBuf,
 }
 static RUNTIME: OnceLock<Initialized> = OnceLock::new();
 static INITIALIZE: Mutex<()> = Mutex::new(());
@@ -33,7 +37,9 @@ pub fn current() -> Option<RuntimeInfo> {
 /// Explicit `ORT_DYLIB_PATH` wins, then the caller's verified device core, then
 /// the compiled CPU bundle. A failed explicit selection never falls back.
 pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
-    let (path, linkage) = if let Some(path) = std::env::var_os("ORT_DYLIB_PATH") {
+    let override_path = std::env::var_os("ORT_DYLIB_PATH");
+    let explicit = override_path.is_some();
+    let (path, linkage) = if let Some(path) = override_path {
         if path.is_empty() {
             return Err(crate::Error::Store("ORT_DYLIB_PATH is empty".into()));
         }
@@ -54,12 +60,18 @@ pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
         .lock()
         .map_err(|_| crate::Error::Store("runtime initialization lock failed".into()))?;
     if let Some(state) = RUNTIME.get() {
-        return if state.info.path == path {
+        return if state.info.path == path || state.requested == path {
             Ok(state.info.clone())
         } else {
             Err(crate::Error::Store("ONNX Runtime already initialized with a different core; choose the device before initialization".into()))
         };
     }
+    let requested = path.clone();
+    let path = if !explicit && selected.is_some() {
+        gpu::prepare_selected(&path)?
+    } else {
+        path
+    };
     // A failed load does not seal our state: the device selector may explicitly
     // choose CPU after a GPU core failed before initialization. This function
     // never makes that fallback decision, especially for an explicit override.
@@ -75,7 +87,10 @@ pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
         path,
     };
     RUNTIME
-        .set(Initialized { info: info.clone() })
+        .set(Initialized {
+            info: info.clone(),
+            requested,
+        })
         .map_err(|_| crate::Error::Store("runtime initialization raced".into()))?;
     Ok(info)
 }

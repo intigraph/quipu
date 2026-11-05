@@ -124,6 +124,8 @@ parking_lot = "0.12"
 # GitHub), so the remote feature must carry ureq's TLS backend.
 ureq = { version = "2", features = ["tls"], optional = true }
 flate2 = "1"
+# Same pinned ZIP decoder as build-time ORT packaging; GPU acquisition owns one path.
+runtime-zip = { package = "zip", version = "=8.6.0", default-features = false, features = ["deflate-flate2"], optional = true }
 tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
@@ -237,7 +239,7 @@ server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxig
 # carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
 jemalloc = ["dep:tikv-jemallocator"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
-onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
+onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray", "dep:ureq", "dep:runtime-zip"]
 # The Cargo-install default embeds a checksum-pinned CPU runtime at build time.
 # `full` alone keeps the existing externally supplied dynamic runtime contract.
 bundled-onnx = ["onnx", "dep:ureq", "dep:runtime-zip"]
