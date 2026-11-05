@@ -83,9 +83,9 @@ stops being read.
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
-| `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
+| `search.keyword` | new stores on; existing unindexed stores off | SQLite FTS5 keyword search. Explicit `true` activates an existing store and bounded backfill prepares its facts. Explicit `false` opts out on any store. Omission preserves an already initialized index without a schema upgrade. |
 | `search.hybrid` | `false` | Enable lexical/vector fusion after offline evaluation; no startup backfill. |
-| `search.mode` | `"semantic"` | Default mode for requests omitting it: semantic, keyword or hybrid. |
+| `search.mode` | `"auto"` | Omitted-mode requests use semantic search with a provider or supplied embedding, otherwise keyword search. Explicit semantic, keyword and hybrid modes remain authoritative. |
 | `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
 | `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
 | `search.rrf_k` | `60.0` | Positive RRF denominator offset. |

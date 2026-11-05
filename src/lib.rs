@@ -54,6 +54,10 @@ pub mod merge_reconcile;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_assets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_backfill;
 pub mod namespace;
 mod namespace_publication;
 mod numeric_value;
