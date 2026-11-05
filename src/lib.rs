@@ -106,6 +106,9 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+/// Inactive SQLite-only HA read profile; no serving adapter is installed.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+pub mod ha_read;
 /// Experimental pure ownership-handoff model; no Store or runtime integration.
 pub mod ownership_handoff_model;
 mod rdf_graph_store;
