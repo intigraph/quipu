@@ -212,7 +212,7 @@ pub(super) fn try_eval(
         rows.len()
     };
     let rows =
-        eval_triple_pattern_limited(store, &patterns[drive], seed, ctx, Some(MAX_SCAN_ROWS + 1))?;
+        super::filter_relation::collect(store, &patterns[drive], seed, ctx, MAX_SCAN_ROWS + 1)?;
     if rows.len() > MAX_SCAN_ROWS {
         return Ok(None);
     }

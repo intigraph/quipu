@@ -17,6 +17,7 @@ mod filter_join;
 pub mod filter_pushdown;
 #[cfg(test)]
 mod filter_pushdown_tests;
+mod filter_relation;
 pub mod left_join;
 #[cfg(test)]
 mod left_join_tests;

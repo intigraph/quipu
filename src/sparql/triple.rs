@@ -446,13 +446,12 @@ fn visit_triple_pattern_limited(
         format!(
             "SELECT {columns}, EXISTS(SELECT 1 FROM main.terms AS primary_term WHERE primary_term.id=e) FROM {facts}{where_clause}"
         )
-    } else if matches!(mode, ScanMode::Retained) && limit.is_some() && super::limited_scan::active()
+    } else if matches!(mode, ScanMode::Retained)
+        && limit.is_some()
+        && (super::limited_scan::active() || super::filter_relation::active())
     {
-        // Only an explicitly limited, independent single leaf can enter this
-        // scope. Retained scans already canonicalize and deduplicate each row
-        // below; do that lazily instead of grouping the whole physical graph
-        // before SQLite can return the first row. No SQL LIMIT: duplicates do
-        // not consume the bound-row budget.
+        // Independent limited leaf or speculative complete FILTER relation.
+        // Canonical dedup below precedes the bound-row cap; no SQL LIMIT.
         let columns = if want_g { "e,a,v,g" } else { "e,a,v" };
         format!("SELECT {columns} FROM {facts}{where_clause}")
     } else if want_g {
