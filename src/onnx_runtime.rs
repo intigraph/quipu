@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::io::{Read, Write};
 use std::{
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{Mutex, OnceLock},
 };
 
 /// The loaded native runtime; model and execution-provider readiness are separate.
@@ -21,14 +21,12 @@ pub struct RuntimeInfo {
 struct Initialized {
     info: RuntimeInfo,
 }
-static RUNTIME: OnceLock<std::result::Result<Initialized, String>> = OnceLock::new();
+static RUNTIME: OnceLock<Initialized> = OnceLock::new();
+static INITIALIZE: Mutex<()> = Mutex::new(());
 
 /// Inspect the selected core without initializing or changing device selection.
 pub fn current() -> Option<RuntimeInfo> {
-    RUNTIME
-        .get()
-        .and_then(|result| result.as_ref().ok())
-        .map(|state| state.info.clone())
+    RUNTIME.get().map(|state| state.info.clone())
 }
 
 /// Call AFTER device selection and BEFORE any other ORT API.
@@ -43,29 +41,47 @@ pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
     } else if let Some(path) = selected {
         (path.to_path_buf(), "dynamic-selected")
     } else {
-        default_core()?
+        #[cfg(feature = "bundled-onnx")]
+        {
+            default_core()?
+        }
+        #[cfg(not(feature = "bundled-onnx"))]
+        {
+            default_core()
+        }
     };
-    let state = RUNTIME.get_or_init(|| {
-        ort::init_from(&path)
-            .map_err(|error| format!("ONNX Runtime load failed: {error}"))?
-            .commit();
-        Ok(Initialized {
-            info: RuntimeInfo {
-                available: true,
-                linkage: linkage.into(),
-                path: path.clone(),
-            },
-        })
-    });
-    match state {
-        Ok(state) if state.info.path == path => Ok(state.info.clone()),
-        Ok(_) => Err(crate::Error::Store("ONNX Runtime already initialized with a different core; choose the device before initialization".into())),
-        Err(error) => Err(crate::Error::Store(error.clone())),
+    let _guard = INITIALIZE
+        .lock()
+        .map_err(|_| crate::Error::Store("runtime initialization lock failed".into()))?;
+    if let Some(state) = RUNTIME.get() {
+        return if state.info.path == path {
+            Ok(state.info.clone())
+        } else {
+            Err(crate::Error::Store("ONNX Runtime already initialized with a different core; choose the device before initialization".into()))
+        };
     }
+    // A failed load does not seal our state: the device selector may explicitly
+    // choose CPU after a GPU core failed before initialization. This function
+    // never makes that fallback decision, especially for an explicit override.
+    if !ort::init_from(&path)
+        .map_err(|error| crate::Error::Store(format!("ONNX Runtime load failed: {error}")))?
+        .commit()
+    {
+        return Err(crate::Error::Store("ONNX Runtime was configured outside the bootstrap; runtime selection cannot be attested".into()));
+    }
+    let info = RuntimeInfo {
+        available: true,
+        linkage: linkage.into(),
+        path,
+    };
+    RUNTIME
+        .set(Initialized { info: info.clone() })
+        .map_err(|_| crate::Error::Store("runtime initialization raced".into()))?;
+    Ok(info)
 }
 
 #[cfg(not(feature = "bundled-onnx"))]
-fn default_core() -> crate::Result<(PathBuf, &'static str)> {
+fn default_core() -> (PathBuf, &'static str) {
     let name = if cfg!(target_os = "windows") {
         "onnxruntime.dll"
     } else if cfg!(target_os = "macos") {
@@ -73,7 +89,7 @@ fn default_core() -> crate::Result<(PathBuf, &'static str)> {
     } else {
         "libonnxruntime.so"
     };
-    Ok((name.into(), "dynamic-system"))
+    (name.into(), "dynamic-system")
 }
 
 #[cfg(feature = "bundled-onnx")]
