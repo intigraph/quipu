@@ -657,6 +657,7 @@ Execute a SPARQL SELECT query against the knowledge graph (supports time-travel 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entailment` | string | no | Entailment regime; currently rdfs. |
+| `execution_profile` | boolean | no | Opt in to bounded actual local execution-path counts and inclusive timings; bespoke JSON only, not a static plan or SQL EXPLAIN. |
 | `fork` | string | no | Named fork to query. |
 | `graph` | string | no | Named graph to query. |
 | `include_kinds` | array | no | Graph kinds included in the query dataset. |
