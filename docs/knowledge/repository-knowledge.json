@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "dc776cff8e19642ba9a191d0ef0f8a87a559ba59c42ba12a234320e41d33c8c3",
+      "source_sha256": "4b25f06716213ffcdd5b6afb1bef4f3b1e5e7caa337fb774315bf535d45685b6",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "c26a52a4d1f3053525b8178995e377b5bbb9247097d49b190b3cd0525814564d",
+      "source_sha256": "85f362b4f2f2a073fd29b12d2a2c49f03b7ce3ba8a1a11b11a1313a67c08eae1",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
