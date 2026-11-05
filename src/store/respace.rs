@@ -180,9 +180,53 @@ fn classify_optional_column(table: &str, column: &str) -> Option<TermIdKind> {
         "payload",
     ];
     const OWNERSHIP: &[&str] = &["id", "version", "phase", "adopted_epoch"];
+    // These are derived FTS data, including graph IDs. They are validated
+    // here but dropped and rebuilt on the private copy before remapping.
+    const LEXICAL_COLUMNS: &[(&str, &[&str])] = &[
+        (
+            "lexical_fts",
+            &[
+                "label",
+                "alt_label",
+                "description",
+                "attributes",
+                "type_names",
+                "iri_tokens",
+                "entity_iri",
+                "type_iri",
+                "language",
+                "datatype",
+                "graph_id",
+            ],
+        ),
+        ("lexical_fts_config", &["k", "v"]),
+        (
+            "lexical_fts_content",
+            &[
+                "id", "c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10",
+            ],
+        ),
+        ("lexical_fts_data", &["id", "block"]),
+        ("lexical_fts_docsize", &["id", "sz"]),
+        ("lexical_fts_idx", &["segid", "term", "pgno"]),
+        (
+            "lexical_progress",
+            &[
+                "id",
+                "cursor",
+                "highwater",
+                "complete",
+                "documents",
+                "scope_version",
+            ],
+        ),
+    ];
     ((table == "pack_manifest" && PACK_MANIFEST.contains(&column))
         || (table == "import_reviews" && IMPORT_REVIEWS.contains(&column))
-        || (table == "ownership_enforcement" && OWNERSHIP.contains(&column)))
+        || (table == "ownership_enforcement" && OWNERSHIP.contains(&column))
+        || LEXICAL_COLUMNS
+            .iter()
+            .any(|(t, columns)| *t == table && columns.contains(&column)))
     .then_some(TermIdKind::None)
 }
 
@@ -303,7 +347,15 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     // have. `Store::open` is the one definition of "current"; it is opened and
     // dropped purely for its migrations.
     crate::store::Store::adopt(&path)?;
-    drop(crate::store::Store::open(&path)?);
+    let store = crate::store::Store::open(&path)?;
+    // Validate before dropping derived data: an unknown added column must
+    // still refuse rather than disappearing during index reconstruction.
+    classify_live_schema(&store.conn)?;
+    let rebuild_lexical = store.lexical_progress()?.is_some();
+    if rebuild_lexical {
+        store.drop_lexical_index()?;
+    }
+    drop(store);
     let mut conn = Connection::open(&path)?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 
@@ -380,6 +432,11 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
     assert_respaced(&conn, &classified, to_space)?;
     drop(conn);
     crate::store::Store::adopt(&path)?;
+    if rebuild_lexical {
+        let store = crate::store::Store::open(&path)?;
+        store.initialize_lexical_index()?;
+        while !store.backfill_lexical_batch(10_000)?.complete {}
+    }
     Ok(report)
 }
 
