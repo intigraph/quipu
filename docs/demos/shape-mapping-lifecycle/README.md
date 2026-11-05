@@ -6,8 +6,8 @@ Loading a replacement pinned shape flags the mapping, makes the target
 non-writable, and refuses application with the old pin. The recording shows the
 actual receipts and transaction IDs; preparation itself creates no transaction.
 
-Source: `ecf50cb1d227761ffbe11588b53ed0b475673ed4`, based on
-`e4ede323402cfcb0068d613d95d3fc4acd5f712e`. This is a new capability: the base
+Source: `ef442d1dcb6e0f44404ef5a666705545222c2b6f`, based on
+`5db25139fecbe3a302a31cdc62fc598636d62096`. This is a new capability: the base
 has no compatible mapping API, so the demonstration compares an empty fixture
 with its decided and flagged states on the candidate. It proves source behavior,
 not an installed service, production grant, or consumer activation.
