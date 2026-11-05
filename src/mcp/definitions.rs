@@ -5,6 +5,7 @@ use serde_json::Value as JsonValue;
 
 mod core;
 mod episodes;
+mod mapping;
 mod parity;
 mod policy_overlays;
 mod projection;
@@ -16,6 +17,7 @@ mod search;
 pub fn tool_definitions() -> Vec<JsonValue> {
     #[allow(unused_mut)]
     let mut defs = core::defs();
+    defs.extend(mapping::defs());
     defs.extend(episodes::defs());
     defs.extend(crate::entity_reference::definitions());
     defs.extend(parity::defs());

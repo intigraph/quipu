@@ -104,6 +104,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
     "/align/apply",
+    "/mapping/apply",
     // aegis-yavo9c: finishes a share merge from decided conflicts — one
     // transaction asserting and retracting ROOT facts.
     "/merge/apply",
@@ -176,6 +177,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // writer of the three is /align/apply, above.
     "/align/propose",
     "/align/decide",
+    "/mapping/propose",
+    "/mapping/decide",
     // aegis-yavo9c: emits (and optionally proposes) merge decisions from
     // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
     "/merge/decisions",

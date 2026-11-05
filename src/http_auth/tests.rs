@@ -305,6 +305,7 @@ fn routes_in_server_source() -> Vec<String> {
         ),
         ("server/cors.rs", include_str!("../server/cors.rs")),
         ("server/align.rs", include_str!("../server/align.rs")),
+        ("server/mapping.rs", include_str!("../server/mapping.rs")),
         ("server/deck.rs", include_str!("../server/deck.rs")),
         ("server/attest.rs", include_str!("../server/attest.rs")),
         (

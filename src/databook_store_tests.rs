@@ -562,7 +562,7 @@ fn a_refused_graph_write_registers_no_new_graph() {
 #[cfg(feature = "shacl")]
 #[test]
 fn colliding_shape_slugs_get_distinct_ids() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
     store.load_shapes("core_v1", shape, T0).unwrap();
     store.load_shapes("core-v1", shape, T0).unwrap();
@@ -583,7 +583,7 @@ fn colliding_shape_slugs_get_distinct_ids() {
 #[cfg(feature = "shacl")]
 #[test]
 fn crlf_shapes_survive_their_checksum() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\r\n<urn:S> a sh:NodeShape .\r\n";
     store.load_shapes("people", shape, T0).unwrap();
     let opts = ExportOptions {
@@ -626,7 +626,7 @@ fn a_refused_shape_set_rolls_back_the_graph_data() {
 #[cfg(feature = "shacl")]
 #[test]
 fn a_shape_set_name_with_a_bare_cr_cannot_export() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
     let hostile = "people\r```turtle\r<urn:injected> <urn:p> <urn:o> .\r```";
     store.load_shapes(hostile, shape, T0).unwrap();
@@ -637,7 +637,7 @@ fn a_shape_set_name_with_a_bare_cr_cannot_export() {
     let err = export(&store, &opts).unwrap_err().to_string();
     assert!(err.contains("cannot hold"), "{err}");
 
-    let store = seeded();
+    let mut store = seeded();
     store.load_shapes("people", shape, T0).unwrap();
     let text = export(&store, &opts).unwrap();
     let mut target = Store::open_in_memory().unwrap();

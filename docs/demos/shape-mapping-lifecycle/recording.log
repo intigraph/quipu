@@ -1,0 +1,6 @@
+Script started on 2026-10-25 22:23:22-04:00 [COMMAND="bash run-demo.sh" <not executed on terminal>]
+{"mapping":null,"stage":"before"}
+{"receipt":{"assert_writable":{"urn:demo:Task":true},"digest":"sha256:15d6208fade1bc63dce9ac77abcc9b91be4351bcdea4c640325b6b35de507708","mapping":"urn:demo:mapping:tickets","record":"urn:quipu:mapping:record:bd1ffdd047c2b03beb762441be96d79877e8179edfea414d1301c332387124ba:2","replayed":false,"status":"decided","tx":2},"stage":"applied"}
+{"old_pin_apply":"refused","receipt":{"assert_writable":{"urn:demo:Task":false},"digest":"sha256:15d6208fade1bc63dce9ac77abcc9b91be4351bcdea4c640325b6b35de507708","mapping":"urn:demo:mapping:tickets","record":"urn:quipu:mapping:record:bd1ffdd047c2b03beb762441be96d79877e8179edfea414d1301c332387124ba:3","replayed":false,"status":"flagged","tx":3},"stage":"shape_changed"}
+
+Script done on 2026-10-25 22:23:22-04:00 [COMMAND_EXIT_CODE="0"]

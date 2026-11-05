@@ -1,6 +1,6 @@
 {
-  "source_revision": "d707ec62fe105f3296143321e681aec8daa46f28",
-  "reviewed_at": "2026-11-01T18:44:51.782380Z",
+  "source_revision": "a302d90d5bfc5feaa666adc71005201e7bbf7499",
+  "reviewed_at": "2026-11-05T20:56:34Z",
   "max_age_seconds": 2592000,
   "records": [
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "af73a2ae5daa8038eb8d6d9d210a184469285d956e1c26d5ba13bb7e46eabe31",
+      "source_sha256": "330ffe015beb2b4189f4f9d5c035c31a7de96ecf5c4b6d7222fd029b5fbed15f",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "a49e104080d96d0b107641238a021f769f002c409f0c68e298b7e1da0027f5c0",
+      "source_sha256": "2e045b01c851610aa172f492cd98ee12d220e06139fe6e341b294ddbed5412c1",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "6b444f17a769152a438f3d6aabbf060d4e206ef1d2344a00b32379dd9c256bf2",
+      "source_sha256": "064529b2f71300629852c06a9bbd5ed77d4e5491d60b2a08cea0e3aa6e7895c2",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"

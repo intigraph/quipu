@@ -112,6 +112,11 @@
       "file": "access-grants.ttl",
       "action": "exclude",
       "reason": "Staged JIT access-grant records (aegis-bqc); activation needs the Goldblum classification and schema review."
+    },
+    {
+      "file": "shape-mappings.ttl",
+      "action": "exclude",
+      "reason": "C1 mapping schema remains unloaded pending separately admitted schema activation; source shipment does not activate constraints."
     }
   ]
 }

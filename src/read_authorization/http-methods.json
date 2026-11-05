@@ -182,6 +182,15 @@
   "/knot/stage": [
     "post"
   ],
+  "/mapping/apply": [
+    "post"
+  ],
+  "/mapping/decide": [
+    "post"
+  ],
+  "/mapping/propose": [
+    "post"
+  ],
   "/memory/commit": [
     "post"
   ],

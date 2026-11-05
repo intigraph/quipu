@@ -36,6 +36,7 @@ pub use graphs::{tool_graph_create, tool_graph_freeze, tool_graph_list, tool_gra
 pub use queries::tool_queries;
 pub use read::{tool_cord, tool_unravel};
 pub use search::{tool_hybrid_search, tool_search};
+pub(crate) use shapes::list_shapes_json;
 pub use shapes::{resolve_validation_shapes, tool_shapes, tool_subscriptions, tool_validate};
 pub use write::{
     PreparedEpisode, tool_episode, tool_episode_commit, tool_episode_prepare, tool_retract,
