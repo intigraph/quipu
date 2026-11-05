@@ -279,4 +279,6 @@ if __name__ == '__main__':
     if sys.argv[1:] == ['--self-test']:
         liveness_controls()
     else:
+        subprocess.run([sys.executable, str(Path(__file__).with_name(
+            'test-read-process-startup.py')), *sys.argv[1:3]], check=True)
         run(str(Path(sys.argv[1]).resolve()), str(Path(sys.argv[2]).resolve()))
