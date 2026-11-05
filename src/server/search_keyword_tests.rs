@@ -298,3 +298,21 @@ async fn search_query_http_is_read_only_and_keyword_default_never_embeds() {
     assert!(semantic.is_err());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn existing_store_needs_explicit_keyword_activation() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let mut store = Store::open(path.to_str().unwrap()).unwrap();
+    assert!(!store.created_fact_schema());
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    assert!(!store.search_config().keyword);
+    assert!(store.lexical_progress().unwrap().is_none());
+    let explicit: quipu::SearchConfig = toml::from_str("keyword = true").unwrap();
+    super::super::base::apply_search(&mut store, &explicit);
+    assert!(store.search_config().keyword);
+    assert!(store.lexical_progress().unwrap().is_some());
+    super::super::base::apply_search(&mut store, &quipu::SearchConfig::default());
+    assert!(store.search_config().keyword);
+}

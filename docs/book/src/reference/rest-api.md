@@ -1388,7 +1388,11 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is enabled by default (`[quipu.search] keyword = true`).
+Keyword search is enabled automatically for new stores. Existing unindexed stores
+require explicit opt-in (`[quipu.search] keyword = true`); opening them with an
+omitted setting installs no keyword tables or triggers. Explicit `false` also
+disables automatic activation for new stores. Already initialized indexes remain
+enabled when the setting is omitted.
 Startup installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are

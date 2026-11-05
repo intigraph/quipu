@@ -86,8 +86,7 @@ impl LabelsConfig {
 
 /// Search/limit guardrails (hq-gkd). Without these, callers could pass
 /// `limit: 1_000_000` and unbounded SPARQL could scan the whole fact log.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone)]
 pub struct SearchConfig {
     /// Result count used when a caller omits a limit (default: 10).
     pub default_limit: usize,
@@ -149,9 +148,12 @@ pub struct SearchConfig {
     /// default until its evaluation gate passes; an anchored request on a
     /// server with this off is refused, never silently answered unanchored.
     pub anchored: bool,
-    /// SQLite FTS5 keyword search. Default on; activation creates only empty
-    /// schema/triggers. Historical rows require explicit bounded backfill.
+    /// SQLite FTS5 keyword search. Automatic activation is new-store only;
+    /// an existing store requires explicit configuration to install triggers.
     pub keyword: bool,
+    /// Whether keyword was explicitly configured. Set this for programmatic
+    /// opt-in on an existing unindexed store; TOML loading tracks it directly.
+    pub keyword_explicit: bool,
     /// Explicit structured candidate filters. SQLite-only, default off.
     pub structured: bool,
     /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
@@ -175,6 +177,55 @@ pub struct SearchConfig {
     pub exclude_graphs: Vec<String>,
 }
 
+// Preserve the distinction between an omitted default and an operator opt-in.
+// The boolean remains the effective runtime API; startup resolves the omitted
+// setting against store age/index state before any lexical DDL can run.
+impl<'de> serde::Deserialize<'de> for SearchConfig {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let serde_json::Value::Object(mut fields) = value else {
+            return Err(serde::de::Error::custom(
+                "search configuration must be a table",
+            ));
+        };
+        let mut config = Self {
+            keyword_explicit: fields.contains_key("keyword"),
+            ..Self::default()
+        };
+        macro_rules! read {
+            ($($field:ident),* $(,)?) => { $(
+                if let Some(value) = fields.remove(stringify!($field)) {
+                    config.$field = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+                }
+            )* };
+        }
+        read!(
+            default_limit,
+            max_limit,
+            oversample_factor,
+            max_sparql_rows,
+            query_timeout_ms,
+            request_timeout_ms,
+            episode_request_timeout_ms,
+            max_join_rows,
+            anchored,
+            keyword,
+            structured,
+            hybrid,
+            mode,
+            alpha,
+            fusion,
+            rrf_k,
+            named_graphs,
+            default_graph_scope,
+            exclude_graphs
+        );
+        Ok(config)
+    }
+}
+
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
@@ -188,6 +239,7 @@ impl Default for SearchConfig {
             max_join_rows: 1_000_000,
             anchored: false,
             keyword: true,
+            keyword_explicit: false,
             structured: false,
             hybrid: false,
             mode: "auto".into(),
@@ -202,6 +254,16 @@ impl Default for SearchConfig {
 }
 
 impl SearchConfig {
+    /// Resolve omitted keyword configuration without activating an old store.
+    #[must_use]
+    pub fn keyword_for_store(&self, fresh: bool, initialized: bool) -> bool {
+        if self.keyword_explicit || !self.keyword {
+            self.keyword
+        } else {
+            fresh || initialized
+        }
+    }
+
     /// Resolve a caller-supplied limit: fall back to `default_limit` when
     /// absent, clamp to `max_limit`, and never return 0.
     pub fn clamp_limit(&self, requested: Option<u64>) -> usize {

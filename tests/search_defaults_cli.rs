@@ -90,7 +90,7 @@ fn fresh_ingest_search_and_doctor_need_no_model() {
 }
 
 #[test]
-fn old_unindexed_store_requires_bounded_backfill() {
+fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("old.db");
     let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
@@ -101,7 +101,76 @@ fn old_unindexed_store_requires_bounded_backfill() {
     drop(store);
     let out = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("backfill"));
     let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "old.db"]));
     assert_eq!(doctor["keyword_ready"], false);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let before: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name LIKE 'lexical_%'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        before, 0,
+        "opening an existing store must not install FTS tables/triggers"
+    );
+    std::fs::create_dir_all(dir.path().join(".bobbin")).unwrap();
+    std::fs::write(
+        dir.path().join(".bobbin/config.toml"),
+        "[quipu.search]\nkeyword = true\n",
+    )
+    .unwrap();
+    let opted_in = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
+    assert!(!opted_in.status.success());
+    assert!(String::from_utf8_lossy(&opted_in.stderr).contains("backfill"));
+    let after: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name LIKE 'lexical_%'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        after > 0,
+        "explicit opt-in installs the bounded-backfill index"
+    );
+    let backfill = success(&run(
+        dir.path(),
+        &[
+            "search-index",
+            "backfill",
+            "--batch-size",
+            "500",
+            "--db",
+            "old.db",
+        ],
+    ));
+    assert!(backfill.is_object());
+    let result = success(&run(dir.path(), &["search", "Clockwork", "--db", "old.db"]));
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["ranking"], "keyword");
+}
+
+#[test]
+fn explicit_false_preserves_fresh_store_opt_out() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join(".bobbin")).unwrap();
+    std::fs::write(
+        dir.path().join(".bobbin/config.toml"),
+        "[quipu.search]\nkeyword = false\n",
+    )
+    .unwrap();
+    let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "fresh.db"]));
+    assert_eq!(doctor["keyword_ready"], false);
+    let conn = rusqlite::Connection::open(dir.path().join("fresh.db")).unwrap();
+    assert_eq!(
+        conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name LIKE 'lexical_%'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
 }

@@ -5,7 +5,9 @@ Fresh CLI and server stores support keyword search without a model. The default
 configured, then semantic search. A supplied query embedding also selects
 semantic search. Explicit modes never fall back. `quipu doctor search` reports
 provider readiness, keyword index completion, and remediation. Existing stores
-need explicit bounded keyword backfill before keyword search can return results.
+need explicit `[quipu.search] keyword = true` opt-in and bounded keyword backfill
+before keyword search can return results. Opening an existing unindexed store
+with the setting omitted creates no keyword tables or write triggers.
 
 Quipu answers two different kinds of question. **Lexical** retrieval (SPARQL,
 `CONTAINS`, exact match) needs nothing but the fact log. **Semantic** retrieval
