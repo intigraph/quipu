@@ -2,6 +2,22 @@ use super::*;
 use crate::config::EndpointPendant;
 use crate::share::{PointerTarget, ShareDestination, ShareOptions, SharePointer};
 
+#[test]
+fn endpoint_trust_uses_the_current_installer_command() {
+    let command = trust_command("https://example.org/repo.git", "https://example.org/sparql");
+    assert_eq!(command.get_program(), "tambo");
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        [
+            "packs",
+            "trust",
+            "check-endpoint",
+            "https://example.org/repo.git",
+            "https://example.org/sparql",
+        ]
+    );
+}
+
 fn declaration() -> (tempfile::TempDir, FederationConfig) {
     let dir = tempfile::tempdir().unwrap();
     let mut store = crate::Store::open_in_memory().unwrap();

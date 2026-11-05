@@ -30,6 +30,7 @@ fn ask(store: &Store, query: &str) -> bool {
 #[test]
 fn policy_sees_linked_evidence_in_the_same_transaction_but_not_a_future_one() {
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     store.governance_config_mut().enforce_on_write = true;
     let policy = format!("{NS}policy");
     let parent_type = format!("{NS}Parent");
@@ -126,6 +127,7 @@ fn policy_sees_linked_evidence_in_the_same_transaction_but_not_a_future_one() {
 #[cfg(feature = "shacl")]
 fn contextual_shacl_repairs_class_without_promoting_new_context_violations() {
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     let shapes = r#"
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix ex: <https://example.org/poststate/> .

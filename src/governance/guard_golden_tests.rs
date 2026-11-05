@@ -662,7 +662,7 @@ pub(super) fn run_corpus(perturb: &dyn Fn(&mut Vec<Pol<'static>>)) -> String {
     let mut out = String::new();
     for case in cases() {
         // A fresh store per case: no case sees another's facts or requests.
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         store.governance_config_mut().enforce_on_write = false;
         let mut pols = policies();
         perturb(&mut pols);

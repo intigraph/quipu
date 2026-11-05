@@ -1,4 +1,5 @@
-//! Finite diagnostic caller declarations; never authorization or metric labels.
+//! Finite caller declarations; never authorization or metric labels.
+//! An explicit server policy may additionally cap owner-rows scheduling.
 
 #[derive(Clone, Default)]
 pub(super) struct CommandContext {
@@ -7,6 +8,10 @@ pub(super) struct CommandContext {
 }
 
 impl CommandContext {
+    pub(super) fn operation(&self) -> Option<&str> {
+        self.operation.as_deref()
+    }
+
     pub(super) fn from_headers(headers: &axum::http::HeaderMap) -> Self {
         let one = |name: &str| {
             let mut values = headers.get_all(name).iter();
@@ -99,6 +104,22 @@ impl CommandContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heavy_scheduling_uses_the_same_finite_duplicate_refusing_parser() {
+        let mut headers = axum::http::HeaderMap::new();
+        assert_eq!(super::super::declared_operation(&headers), None);
+        headers.insert("x-quipu-operation", "owner-rows".parse().unwrap());
+        assert_eq!(
+            super::super::declared_operation(&headers).as_deref(),
+            Some("owner-rows")
+        );
+        headers.append("x-quipu-operation", "owner-rows".parse().unwrap());
+        assert_eq!(super::super::declared_operation(&headers), None);
+        headers.remove("x-quipu-operation");
+        headers.insert("x-quipu-operation", "invented".parse().unwrap());
+        assert_eq!(super::super::declared_operation(&headers), None);
+    }
 
     #[test]
     fn demo_command_attribution_before_and_after() {

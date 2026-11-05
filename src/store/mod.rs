@@ -231,9 +231,11 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
-    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
-    /// startup. Defaults to legacy (every term under `base_ns`).
-    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
+    /// Code-entity IRI base, from `[quipu].code_base` (empty when unset).
+    pub(crate) code_base: String,
+    /// Vocabulary term map, loaded from `[quipu].vocabulary_map` at startup.
+    /// Empty by default (every term under `base_ns`).
+    pub(crate) vocabulary: std::sync::Arc<crate::term_vocabulary::VocabularyMap>,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.

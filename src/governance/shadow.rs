@@ -85,9 +85,12 @@ impl Candidate {
     ///
     /// # Errors
     /// Unparseable Turtle, or no action-boundary `aegis:Policy` carrying
-    /// `aegis:targets` and `aegis:claim` (the only kind the gate enforces).
-    pub fn from_turtle(turtle: &str) -> Result<Self> {
+    /// `aegis:targets` and `aegis:claim` (the only kind the gate enforces);
+    /// and an unusable `base_ns`, the judged store's governance namespace,
+    /// which the candidate is compiled under.
+    pub fn from_turtle(turtle: &str, base_ns: &str) -> Result<Self> {
         let mut scratch = Store::open_in_memory()?;
+        scratch.set_base_ns(base_ns);
         crate::rdf::ingest_rdf(
             &mut scratch,
             turtle.as_bytes(),

@@ -27,7 +27,7 @@ try:
   cfg.write_text('[quipu.search]\nquery_timeout_ms=20\n[[quipu.federation.pendants]]\npath='+json.dumps(str(pendant))+'\nrepo_remote="https://github.com/foreign/project.git"\n')
   query=f'SELECT ?s WHERE {{ SERVICE <{endpoint}> {{ ?s ?p ?o }} }}'
   for label,delay in [('immediate',0),('delayed',0.25)]:
-   trust=bins/'caboodle';trust.write_text('#!/bin/sh\n'+('/bin/sleep '+str(delay)+'\n' if delay else '')+'exit 0\n');trust.chmod(0o755)
+   trust=bins/'tambo';trust.write_text('#!/bin/sh\n'+('/bin/sleep '+str(delay)+'\n' if delay else '')+'exit 0\n');trust.chmod(0o755)
    before=len(requests);start=time.monotonic()
    p=subprocess.run([str(bins/'quipu-service-candidate'),'query',query,'--federation','--db',str(root/(label+'.db'))],env=env,cwd=root,capture_output=True,text=True,timeout=8)
    results.append({'label':label,'trust_delay_ms':int(delay*1000),'query_budget_ms':20,'elapsed_ms':round((time.monotonic()-start)*1000,3),'exit':p.returncode,'requests':len(requests)-before,'output':(p.stdout+p.stderr)[-600:]})

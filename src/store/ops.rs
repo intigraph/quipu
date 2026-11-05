@@ -110,11 +110,7 @@ impl Store {
         self.assert_write_target_allowed(graph, source)?;
         // Authority precedes the savepoint: its refusal survives rollback.
         if let Err(e) = self.enforce_graph_authority(graph) {
-            let refusal = super::events::PendingRefusal {
-                gate: "authority",
-                reason: e.to_string(),
-                refused_datums: datums.len(),
-            };
+            let refusal = super::events::PendingRefusal::from_error("authority", &e, datums.len());
             self.record_refusal(
                 &refusal,
                 &self.graph_iri_of(graph),

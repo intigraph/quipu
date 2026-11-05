@@ -122,6 +122,7 @@ fn transaction_ids_are_positive_integers() {
 #[test]
 fn loaded_product_vocabulary_accepts_record_through_knot() {
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     store
         .load_shapes("demoted-derivation", SHAPES, "2026-01-01T00:00:00Z")
         .unwrap();
@@ -134,6 +135,7 @@ fn loaded_product_vocabulary_accepts_record_through_knot() {
 fn declares_standard_reification_superclass() {
     // Parse the shipped schema and query the declaration, rather than matching text.
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     tool_knot(&mut store, &json!({"turtle": SHAPES})).unwrap();
     let result = quipu::tool_query(&store, &json!({"query":
         "ASK { <http://quipu.local/graph#DemotedDerivation> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> }"

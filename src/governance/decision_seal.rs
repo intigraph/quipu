@@ -60,7 +60,7 @@
 use std::collections::BTreeSet;
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -79,8 +79,10 @@ const UNSEALED: [&str; 2] = [
     "http://www.w3.org/ns/prov#wasGeneratedBy",
 ];
 
-fn ns(name: &str) -> String {
-    format!("{DEFAULT_BASE_NS}{name}")
+/// A decision-seal term under the store's governance namespace. Refuses on a
+/// store with none: seals are both written and verified under it.
+fn ns(store: &Store, name: &str) -> Result<String> {
+    Ok(format!("{}{name}", store.governance_ns()?))
 }
 
 /// `sha256:<hex>` over the RDFC-1.0 canonical form of the decision's content.
@@ -183,7 +185,7 @@ pub fn present(store: &mut Store, decision: &str, ttl_secs: i64, now: i64) -> Re
         .map_err(|_| Error::InvalidValue("could not draw a nonce".into()))?;
     let nonce = hex::encode(bytes);
     let presentation = Presentation {
-        iri: ns(&format!("presentation_{nonce}")),
+        iri: ns(store, &format!("presentation_{nonce}"))?,
         decision: decision.to_string(),
         digest,
         nonce,
@@ -204,25 +206,29 @@ pub fn present(store: &mut Store, decision: &str, ttl_secs: i64, now: i64) -> Re
         d(
             store,
             RDF_TYPE,
-            Value::Ref(store.intern(&ns("DecisionPresentation"))?),
+            Value::Ref(store.intern(&ns(store, "DecisionPresentation")?)?),
         )?,
         d(
             store,
-            &ns("forDecision"),
+            &ns(store, "forDecision")?,
             Value::Ref(store.intern(decision)?),
         )?,
         d(
             store,
-            &ns("sealedDigest"),
+            &ns(store, "sealedDigest")?,
             Value::Str(presentation.digest.clone()),
         )?,
-        d(store, &ns("nonce"), Value::Str(presentation.nonce.clone()))?,
         d(
             store,
-            &ns("presentationExpiresAt"),
+            &ns(store, "nonce")?,
+            Value::Str(presentation.nonce.clone()),
+        )?,
+        d(
+            store,
+            &ns(store, "presentationExpiresAt")?,
             Value::Int(presentation.expires_at),
         )?,
-        d(store, &ns("purpose"), Value::Str(PURPOSE.into()))?,
+        d(store, &ns(store, "purpose")?, Value::Str(PURPOSE.into()))?,
     ];
     store.transact(&datums, &ts, None, Some("decision-seal"))?;
     Ok(presentation)
@@ -275,7 +281,7 @@ pub fn attest(
     if let Err(refusal) = check_content(store, &p.decision, &p.digest, outcome)? {
         return Ok(Err(refusal));
     }
-    let Some(policy) = scalar(store, &p.decision, &ns("decisionPolicy"))? else {
+    let Some(policy) = scalar(store, &p.decision, &ns(store, "decisionPolicy")?)? else {
         return Ok(Err(Refusal::NoPolicy));
     };
     let message = p.challenge(outcome);
@@ -293,7 +299,7 @@ pub fn attest(
         return Ok(Err(Refusal::BadSignature));
     }
 
-    let verdict = ns(&format!("decision_verdict_{nonce}"));
+    let verdict = ns(store, &format!("decision_verdict_{nonce}"))?;
     let ts = crate::time::format_iso(u64::try_from(now).unwrap_or(0));
     let d = |store: &Store, pr: &str, v: Value| -> Result<Datum> {
         Ok(Datum {
@@ -309,16 +315,20 @@ pub fn attest(
         d(
             store,
             RDF_TYPE,
-            Value::Ref(store.intern(&ns("DecisionVerdict"))?),
+            Value::Ref(store.intern(&ns(store, "DecisionVerdict")?)?),
         )?,
         d(
             store,
-            &ns("forPresentation"),
+            &ns(store, "forPresentation")?,
             Value::Ref(store.intern(&p.iri)?),
         )?,
-        d(store, &ns("outcome"), Value::Str(outcome.into()))?,
-        d(store, &ns("verifier"), Value::Str(verifier.into()))?,
-        d(store, &ns("sealSignature"), Value::Str(signature.into()))?,
+        d(store, &ns(store, "outcome")?, Value::Str(outcome.into()))?,
+        d(store, &ns(store, "verifier")?, Value::Str(verifier.into()))?,
+        d(
+            store,
+            &ns(store, "sealSignature")?,
+            Value::Str(signature.into()),
+        )?,
     ];
     match store.transact_spending_decision_nonce(
         nonce,
@@ -343,29 +353,30 @@ const ATTESTED: [&str; 4] = ["forPresentation", "outcome", "verifier", "sealSign
 /// presentation expired, and the signature must verify under a key
 /// registered, for the decision's policy, when the store recorded it.
 pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Result<(), Refusal>> {
-    let Some(presentation) = ref_of(store, verdict, &ns("forPresentation"))? else {
+    let Some(presentation) = ref_of(store, verdict, &ns(store, "forPresentation")?)? else {
         return Ok(Err(Refusal::UnknownPresentation));
     };
-    let Some(nonce) = scalar(store, &presentation, &ns("nonce"))? else {
+    let Some(nonce) = scalar(store, &presentation, &ns(store, "nonce")?)? else {
         return Ok(Err(Refusal::UnknownPresentation));
     };
     let Some(p) = read_presentation(store, &nonce)? else {
         return Ok(Err(Refusal::UnknownPresentation));
     };
     let (Some(outcome), Some(verifier), Some(signature)) = (
-        scalar(store, verdict, &ns("outcome"))?,
-        scalar(store, verdict, &ns("verifier"))?,
-        scalar(store, verdict, &ns("sealSignature"))?,
+        scalar(store, verdict, &ns(store, "outcome")?)?,
+        scalar(store, verdict, &ns(store, "verifier")?)?,
+        scalar(store, verdict, &ns(store, "sealSignature")?)?,
     ) else {
         return Ok(Err(Refusal::BadSignature));
     };
     if let Err(refusal) = check_content(store, &p.decision, &p.digest, &outcome)? {
         return Ok(Err(refusal));
     }
-    let Some(policy) = scalar(store, &p.decision, &ns("decisionPolicy"))? else {
+    let Some(policy) = scalar(store, &p.decision, &ns(store, "decisionPolicy")?)? else {
         return Ok(Err(Refusal::NoPolicy));
     };
-    let Some(witness) = Witness::of_fact(store, verdict, &ns("sealSignature"), &signature)? else {
+    let Some(witness) = Witness::of_fact(store, verdict, &ns(store, "sealSignature")?, &signature)?
+    else {
         return Ok(Err(Refusal::BadSignature));
     };
     // Recorded before the presentation expired. An unparseable instant fails
@@ -378,7 +389,7 @@ pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Resu
     }
     // Admitted by attest: the one verdict this nonce's spend names, written
     // by the spending transaction.
-    if verdict != ns(&format!("decision_verdict_{nonce}")) {
+    if verdict != ns(store, &format!("decision_verdict_{nonce}"))? {
         return Ok(Err(Refusal::NotAttested));
     }
     let Some(spend) = store.decision_nonce_spend(&nonce)? else {
@@ -391,7 +402,7 @@ pub fn verify_recorded(store: &Store, verdict: &str) -> Result<std::result::Resu
         return Ok(Err(Refusal::NotAttested));
     }
     for field in ATTESTED {
-        if sole_fact_tx(store, verdict, &ns(field))? != Some(spend_tx) {
+        if sole_fact_tx(store, verdict, &ns(store, field)?)? != Some(spend_tx) {
             return Ok(Err(Refusal::NotAttested));
         }
     }
@@ -422,7 +433,7 @@ fn check_content(
             current,
         }));
     }
-    let options = scalars(store, decision, &ns("option"))?;
+    let options = scalars(store, decision, &ns(store, "option")?)?;
     if !options.is_empty() && !options.iter().any(|o| o == outcome) {
         return Ok(Err(Refusal::NotAnOption));
     }
@@ -430,16 +441,16 @@ fn check_content(
 }
 
 fn read_presentation(store: &Store, nonce: &str) -> Result<Option<Presentation>> {
-    let iri = ns(&format!("presentation_{nonce}"));
+    let iri = ns(store, &format!("presentation_{nonce}"))?;
     let (Some(decision), Some(digest), Some(expires_at)) = (
-        ref_of(store, &iri, &ns("forDecision"))?,
-        scalar(store, &iri, &ns("sealedDigest"))?,
-        int_of(store, &iri, &ns("presentationExpiresAt"))?,
+        ref_of(store, &iri, &ns(store, "forDecision")?)?,
+        scalar(store, &iri, &ns(store, "sealedDigest")?)?,
+        int_of(store, &iri, &ns(store, "presentationExpiresAt")?)?,
     ) else {
         return Ok(None);
     };
-    if scalar(store, &iri, &ns("nonce"))?.as_deref() != Some(nonce)
-        || scalar(store, &iri, &ns("purpose"))?.as_deref() != Some(PURPOSE)
+    if scalar(store, &iri, &ns(store, "nonce")?)?.as_deref() != Some(nonce)
+        || scalar(store, &iri, &ns(store, "purpose")?)?.as_deref() != Some(PURPOSE)
     {
         return Ok(None);
     }

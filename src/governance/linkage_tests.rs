@@ -39,7 +39,7 @@ impl TextSimilarity for Broken {
 
 /// A store holding one work item with a describable label.
 fn store_with_item() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let entity = store.intern(ITEM).unwrap();
     let d = |attribute: i64, value: Value| Datum {
         entity,

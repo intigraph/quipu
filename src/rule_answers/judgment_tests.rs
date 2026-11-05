@@ -1,4 +1,9 @@
-use super::{Answer, Object, Request, Truth, judgment::*, ledger::ns, query};
+use super::{Answer, Object, Request, Truth, judgment::*, query};
+
+/// Legacy-namespace term, as the fixtures write them.
+fn ns(local: &str) -> String {
+    format!("{}{local}", crate::namespace::DEFAULT_BASE_NS)
+}
 use crate::{Datum, Op, Store, Value, governance::decision_seal};
 
 const TS: &str = "2026-01-01T00:00:00Z";
@@ -19,7 +24,7 @@ fn put(store: &mut Store, subject: &str, predicate: &str, value: Value) {
 }
 
 fn setup(positive: bool, negative: bool) -> (Store, Request, ring::signature::Ed25519KeyPair) {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.load_shapes("rule-answers", PROFILE, TS).unwrap();
     let request = Request {
         subject: "urn:claim".into(),

@@ -17,11 +17,8 @@ pub fn cmd_episode(args: &[String], db_path: &str, config_base_ns: &str) {
     };
 
     // Namespace IRIs are minted in (quipu #28). Precedence: --base-ns flag >
-    // configured [quipu].base_ns > built-in aegis default. Before aegis-4h3x the
-    // fallback was DEFAULT_BASE_NS directly, so the CLI ignored config just like
-    // the REST/MCP paths did; the config value (which itself defaults to
-    // DEFAULT_BASE_NS) is now the fallback, so a non-aegis deployment's config is
-    // honoured while the flag still wins.
+    // configured [quipu].base_ns. There is no built-in default: with neither,
+    // the write that mints names is refused (`namespace::require_base_ns`).
     let base_ns = flag_value(args, "--base-ns").unwrap_or(config_base_ns);
 
     let json_str = if file_arg == "-" {

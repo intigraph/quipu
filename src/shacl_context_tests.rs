@@ -290,7 +290,7 @@ fn reported_violations_are_always_a_subset_of_the_payload_alone_verdict() {
 /// on this input, the fixture is not reproducing aegis-fp17f and the zero above
 /// means nothing.
 ///
-///     QUIPU_SOAK_PAYLOAD=/tmp/hank-promote-….ttl \
+///     QUIPU_SOAK_PAYLOAD=/tmp/yupana-promote-….ttl \
 ///       cargo test --features shacl --release -- --ignored --nocapture partition_soak
 #[test]
 #[ignore = "needs QUIPU_SOAK_PAYLOAD; minutes, not milliseconds"]

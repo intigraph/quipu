@@ -126,7 +126,8 @@ release_doc = yaml.load(release, Loader=UniqueSafeLoader)
 for name, doc in (("ci.yml", ci_doc), ("release.yml", release_doc)):
     group = doc["concurrency"]["group"]
     assert group.endswith(EXEMPT), f"{name}: release commits need their own concurrency group"
-    assert doc["concurrency"]["cancel-in-progress"] is True
+    assert doc["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}", \
+        f"{name}: only superseded PR runs may cancel; main pushes must finish"
 
 # aegis-0zr: the cut is verified BEFORE release-plz tags, on the guarded state.
 cut = [s for s in steps if s.get("name") == "Refuse to cut a version whose section misses packaged commits"]

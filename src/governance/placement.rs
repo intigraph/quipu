@@ -65,7 +65,7 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::sparql::{self, QueryResult};
 use crate::store::{Datum, Store};
 use crate::types::Value;
@@ -469,7 +469,10 @@ impl Grounding {
 /// savepoint — so a write that supplies the missing field in the same
 /// transaction passes, and one that removes it fails.
 pub fn validate_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
-    let policies = touched_of_type(store, datums, graph, "Policy")?;
+    let Some(ns) = store.governance_ns_for_write(datums)? else {
+        return Ok(());
+    };
+    let policies = touched_of_type(store, ns, datums, graph, "Policy")?;
     if !policies.is_empty() {
         let placements = read_placements(store, &policies)?;
         for iri in &policies {
@@ -483,7 +486,7 @@ pub fn validate_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()>
     // through the policies composing them: a grounded predicate with no query
     // is malformed before any policy names it, and catching it at ITS
     // definition is what keeps the refusal adjacent to the author's mistake.
-    let predicates = touched_of_type(store, datums, graph, "Predicate")?;
+    let predicates = touched_of_type(store, ns, datums, graph, "Predicate")?;
     if !predicates.is_empty() {
         let groundings = read_groundings(store, &predicates)?;
         for iri in &predicates {
@@ -509,13 +512,14 @@ pub fn validate_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()>
 /// "what did this write touch" would eventually disagree.
 pub(crate) fn touched_of_type(
     store: &Store,
+    ns: &str,
     datums: &[Datum],
     graph: i64,
     class: &str,
 ) -> Result<Vec<String>> {
     let (Some(rdf_type_id), Some(class_type_id)) = (
         store.lookup(RDF_TYPE)?,
-        store.lookup(&format!("{DEFAULT_BASE_NS}{class}"))?,
+        store.lookup(&format!("{ns}{class}"))?,
     ) else {
         // Either term un-interned => no instance can exist yet.
         return Ok(Vec::new());
@@ -559,12 +563,13 @@ fn is_typed(
 
 /// Read the SARC metadata of the touched policies in one SPARQL pass.
 fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, Placement>> {
+    let ns = store.governance_ns()?;
     // Every OPTIONAL-bound variable must ALSO be in the SELECT projection:
     // `Project` strips non-projected variables, so a binding left out here is
     // silently `None` at `row.get` — which is how the hostedAtLayer refusal
     // was dead code (quipu-sio).
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          SELECT ?p ?boundary ?class ?point ?effect ?window ?timeout ?layer \
                 ?backoff ?ptier ?op ?fp WHERE {{ \
             ?p a a:Policy . \
@@ -676,8 +681,9 @@ fn read_placements(store: &Store, touched: &[String]) -> Result<HashMap<String, 
 /// Read the grounding metadata of the touched predicates in one SPARQL pass,
 /// over the same pending post-state as [`read_placements`].
 fn read_groundings(store: &Store, touched: &[String]) -> Result<HashMap<String, Grounding>> {
+    let ns = store.governance_ns()?;
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          SELECT ?pr ?match ?query WHERE {{ \
             ?pr a a:Predicate . \
             OPTIONAL {{ ?pr a:matchType ?match }} \

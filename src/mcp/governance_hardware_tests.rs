@@ -60,7 +60,7 @@ fn govern_all(store: &mut Store) {
 }
 
 fn enabled_store() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().hardware_verdict_schemes = true;
     store
 }
@@ -100,7 +100,7 @@ fn webauthn_verdict(auth: &Authenticator, ceremony: &Ceremony) -> serde_json::Va
 
 #[test]
 fn hardware_registrations_are_refused_while_the_gate_is_off() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     assert!(
         !store.governance_config().hardware_verdict_schemes,
         "the gate must default to off"

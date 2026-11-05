@@ -399,7 +399,7 @@ Check an enforcement trace against the constraint specification in the store —
 SARC's `T ⊨ Σ`.
 
 ```bash
-quipu audit ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit ~/.local/state/yupana/metrics.jsonl --db my.db
 quipu audit trace.jsonl --json --db my.db
 ```
 
@@ -644,7 +644,7 @@ Re-check a recorded window against the **current** Σ and report what promoting
 each rule from `advise` to `enforce` would do.
 
 ```bash
-quipu audit replay ~/.local/state/hank/metrics.jsonl --db my.db
+quipu audit replay ~/.local/state/yupana/metrics.jsonl --db my.db
 quipu audit replay trace.jsonl --json --db my.db
 ```
 

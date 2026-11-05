@@ -39,6 +39,7 @@ fn setup(graph: i64) -> (Store, Ed25519KeyPair) {
 }
 fn setup_with_loop(graph: i64, loop_plan: bool) -> (Store, Ed25519KeyPair) {
     let mut s = Store::open_in_memory().unwrap();
+    s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
     s.governance_config_mut().enforce_workflows = true;
     let graph = if graph == 0 {
         0
@@ -297,6 +298,7 @@ fn unrelated_write_remains_allowed() {
 fn a_signed_undefined_run_is_refused_only_when_processing_is_enrolled() {
     for enabled in [false, true] {
         let mut s = Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS);
         s.governance_config_mut().enforce_workflows = enabled;
         s.governance_config_mut().verify_transitions = true;
         let doc = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();

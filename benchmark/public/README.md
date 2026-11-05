@@ -31,7 +31,7 @@ and totals. The script refuses a dirty or differently pinned suite unless
 |---|---|---|
 | conformance | W3C RDF Tests, SPARQL 1.1 | Selected; syntax runner implemented here. Query-evaluation manifests are the next slice. |
 | performance | WatDiv 0.6 | Selected over LUBM because its query-shape diversity directly tests pathological join shapes; its publisher supplies 10M, 100M, and 1B datasets. |
-| extraction | Text2KGBench | Feasible in principle, but not store-only: it requires a frozen model/prompt configuration and ontology-guided triple scorer. Keep it in the Caboodle end-to-end phase. |
+| extraction | Text2KGBench | Feasible in principle, but not store-only: it requires a frozen model/prompt configuration and ontology-guided triple scorer. Keep it in the Tambo end-to-end phase. |
 
 ## SPARQL 1.1 evaluation classes
 

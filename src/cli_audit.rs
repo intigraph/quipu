@@ -25,6 +25,10 @@ mod git;
 /// transaction, `audit quarantine` for the refused-attempt evidence behind it,
 /// `audit namespace` for base-namespace drift.
 pub fn cmd_audit(args: &[String], db_path: &str, base_ns: &str) {
+    if let Err(e) = quipu::namespace::require_base_ns(base_ns) {
+        eprintln!("error: {e}");
+        std::process::exit(2);
+    }
     let Some(subject) = args.get(2).filter(|a| !a.starts_with("--")) else {
         eprintln!(
             "usage: quipu audit <trace.jsonl>|inventory|namespace|replay <trace.jsonl>|\

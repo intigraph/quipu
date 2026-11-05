@@ -7,7 +7,7 @@
 # Every class of action this stack can dispatch, and whether it traverses a
 # point where a constraint could stop it. `quipu audit inventory` checks it.
 #
-# Seeded from hank's `docs/work-scoped-governance.md` §"What this cannot reach",
+# Seeded from yupana's `docs/work-scoped-governance.md` §"What this cannot reach",
 # which was an honest list and also prose: prose goes stale the first time a
 # harness adds a tool, and nothing recomputes. Here, a new ungoverned class is a
 # failing check rather than an omission nobody sees.
@@ -32,7 +32,7 @@
     aegis:executable true ;
     aegis:governedAt "PAG" ;
     aegis:governedAt "PAA" ;
-    rdfs:comment "PreToolUse fires `hank hook pre-edit` before the edit lands; PostToolUse fires the auditor after it does." .
+    rdfs:comment "PreToolUse fires `yupana hook pre-edit` before the edit lands; PostToolUse fires the auditor after it does." .
 
 <http://aegis.gastown.local/tool/write> a aegis:ToolClass ;
     rdfs:label "Write" ;
