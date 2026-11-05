@@ -584,7 +584,7 @@ fn controlled_mutants_each_turn_their_paired_negative_red() {
             "{mutant:?}: negative must hold with enforcement intact"
         );
         assert!(
-            with(*mutant, || disclosed()),
+            with(*mutant, disclosed),
             "{mutant:?}: disabling this enforcement point went undetected"
         );
         assert!(!disclosed(), "{mutant:?}: the switch must clear after use");

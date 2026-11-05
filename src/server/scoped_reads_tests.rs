@@ -804,7 +804,7 @@ async fn scoped_reads_guard_covers_the_real_assembled_route_table() {
                     }
                 }
                 RouteClass::Scoped(_) => {
-                    assert_eq!(status, StatusCode::OK, "{method} {path}: {body}")
+                    assert_eq!(status, StatusCode::OK, "{method} {path}: {body}");
                 }
                 _ => {
                     assert_eq!(status, StatusCode::FORBIDDEN, "{method} {path}: {body}");
