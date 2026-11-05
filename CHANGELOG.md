@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- *(store)* Add opt-in SQLite HA read eligibility profile (#1025)([82fa933](https://github.com/scbrown/quipu/commit/82fa9338b8bcc1c60a2ec041251b8ef40388aef7))
+- *(metrics)* Count refused writes in metrics and stats (#1005)([9f8566f](https://github.com/scbrown/quipu/commit/9f8566f4bd99e2be937b36c4d32c75c35a7a42e3))
+
+### Fixed
+
+- *(admission)* Bound declared owner-row reads before shared admission (#868)([ea7f417](https://github.com/scbrown/quipu/commit/ea7f417a1ea40af84987b9f680dea889e3e765ca))
+
 ## [0.16.6] - 2026-10-30
 
 ### Added
