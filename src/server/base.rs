@@ -227,6 +227,7 @@ pub(crate) async fn version() -> impl IntoResponse {
             "quipu-acquisition/composed-v1",
             quipu::acquisition::eligibility::CONTRACT,
         ],
+        "write_contracts": [crate::knot_completion::CONTRACT],
         "features": compiled_features(),
     }))
 }

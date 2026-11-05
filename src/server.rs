@@ -49,6 +49,11 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/knot_completion.rs"]
+mod knot_completion;
+#[cfg(test)]
+#[path = "server/knot_completion_tests.rs"]
+mod knot_completion_tests;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]

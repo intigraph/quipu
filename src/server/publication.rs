@@ -259,22 +259,33 @@ pub(crate) async fn promote_import(
 
 pub(crate) async fn knot(
     State(store): State<SharedStore>,
+    headers: axum::http::HeaderMap,
     axum::Json(input): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
+    let mut completion = super::knot_completion::begin(&store, &headers, &input)?;
     blocking(move || {
-        let (result, work) = {
-            let mut st = store.lock();
-            let result = quipu::tool_knot(&mut st, &input)?;
-            (result, st.take_deferred_embed())
-        };
-        if let Some(work) = work {
-            finish_deferred_embed(&store, &work)?;
+        if let Some(completion) = &mut completion {
+            completion.running();
         }
-        Ok(axum::Json(super::input_fields::annotate(
-            "quipu_knot",
-            &input,
-            result,
-        )))
+        let outcome = (|| {
+            let (result, work) = {
+                let mut st = store.lock();
+                let result = quipu::tool_knot(&mut st, &input)?;
+                (result, st.take_deferred_embed())
+            };
+            if let Some(work) = work {
+                finish_deferred_embed(&store, &work)?;
+            }
+            Ok(axum::Json(super::input_fields::annotate(
+                "quipu_knot",
+                &input,
+                result,
+            )))
+        })();
+        if let Some(completion) = &mut completion {
+            completion.finish(outcome.as_ref().ok().map(|value| &value.0));
+        }
+        outcome
     })
     .await
 }

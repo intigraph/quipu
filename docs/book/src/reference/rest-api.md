@@ -652,6 +652,55 @@ Response: `{"tx_id": 1, "count": 2, "conforms": true,
 "valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
 normalised key the facts were actually stored under.
 
+#### Completion evidence after a lost response
+
+For an ordinary `/knot` request, persist a fresh random 64-character lowercase
+hex ID alongside the exact request object **before sending it**, then send that
+ID in `X-Quipu-Write-Id`. The server records completion independently of the HTTP
+future. A client timeout or disconnect does not stop a blocking write.
+
+Inspect it with `POST /knot/status`:
+
+```json
+{"write_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request":{"turtle":"<urn:example:item> <urn:example:label> \"example\" ."}}
+```
+
+Use the same authenticated principal and credential as the original request.
+The lookup binds the ID to the original JSON object, not to a caller-supplied
+claim about its outcome. A missing or different credential or request cannot
+read another receipt. With configured bearer authentication, status lookup
+requires that credential even though it is a read and works on a read-only
+server. Scoped-current read profiles retain their existing unsupported-route
+refusal; this endpoint does not bypass that profile.
+
+Every successful status lookup declares `"contract":"quipu.knot-completion/v1"`.
+The same contract appears in `/version` under `write_contracts`.
+
+| State | Evidence and permitted next step |
+| --- | --- |
+| `queued`, `running` | The worker can still commit. Retain custody; do not resend. |
+| `not_started` | A retained record proves the uncalled worker was dropped. It cannot later start. |
+| `finished` | All synchronous work, including deferred embedding, ended. `receipt` retains bounded native transaction fields. Verify the exact effect before resolving custody. |
+| `stopped` | The worker ended with an error or panic. This does **not** prove rollback: an error can follow a commit. Read back the effect before resolving custody. |
+| `unknown` | No usable proof. Retain custody; do not resend. |
+
+Only explicit `not_started` evidence, or `finished`/`stopped` followed by complete
+readback proving non-application of the pending effect, permits a **new** write
+with a new ID. An exact matching effect is verified without another write.
+Partial, truncated, conflicting or unreadable effects remain indeterminate.
+Missing/malformed contract fields, HTTP errors, and expired or disabled request
+timeouts supply no completion proof.
+
+Receipts are process-local, capped at 512 entries and one hour from registration.
+The oldest entry may be evicted under load, including an in-flight entry;
+its eventual completion cannot recreate the receipt. Evicted, expired,
+never-seen, restarted-server and foreign-owner lookups all return `unknown`,
+never `not_started`. Losing a receipt can therefore require operator recovery.
+This is not durable idempotency: never replay a `/knot` request to poll it, or
+reuse a write ID. A still-retained duplicate ID is refused before dispatch.
+Callers omitting the header retain the ordinary write interface and have no
+per-write completion proof. No maximum write lifetime is promised.
+
 ### Resumable snapshot promotion and cancellation
 
 `POST /knot/stage` stores inert, content-addressed parts. Transport parts are
