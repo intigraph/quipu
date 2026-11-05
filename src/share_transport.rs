@@ -12,8 +12,8 @@ use crate::share_import::ShareImportRequest;
 
 /// Maximum compressed response accepted by the CLI importer.
 pub const MAX_SHARE_DOWNLOAD_BYTES: usize = 16 * 1024 * 1024;
-/// Maximum total payload bytes expanded from an archive.
-pub const MAX_SHARE_EXPANDED_BYTES: usize = 64 * 1024 * 1024;
+/// Bounded expansion, including both RDF views; the v0.17 repository is 69,411,571 bytes.
+pub const MAX_SHARE_EXPANDED_BYTES: usize = 96 * 1024 * 1024;
 
 const REQUIRED: [&str; 3] = ["manifest.json", "export.nt", "shapes.ttl"];
 const QUERIES: &str = crate::share_queries::QUERIES_FILE;
@@ -332,6 +332,9 @@ pub fn import_in_memory(
 }
 
 #[cfg(test)]
+#[path = "share_transport_limits_tests.rs"]
+mod limits_tests;
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::share::{ShareOptions, share};
@@ -456,10 +459,7 @@ mod tests {
         assert_eq!(ids, vec![manifest.share_id.clone(), manifest.share_id]);
     }
 
-    // The bounds are what make it safe to hand this a network download, so they
-    // are worth a test that FAILS if someone relaxes them. A truncated archive
-    // is the cheap way to prove the reader is actually parsing rather than
-    // accepting anything with a manifest-shaped name in it.
+    // A whole-archive control distinguishes truncation from a broken fixture.
     #[test]
     fn read_archive_bytes_refuses_a_truncated_archive() {
         let temp = tempfile::tempdir().unwrap();

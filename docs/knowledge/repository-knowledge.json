@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "bd06c4dbaf19678c1a3609985626c3afbe314d12bcffded4735723d44b8f40be",
+      "source_sha256": "ed4043abba71af45a5a2f66ee455f44020e3456dd5c02deee95ce7ad3c83284c",
       "properties": {
         "startHereOrder": 2
       }
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "dc776cff8e19642ba9a191d0ef0f8a87a559ba59c42ba12a234320e41d33c8c3",
+      "source_sha256": "3e8086abeda322de96b35eab9e0cb1252e81a8b89cf5d886fa063849b872e9df",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "c26a52a4d1f3053525b8178995e377b5bbb9247097d49b190b3cd0525814564d",
+      "source_sha256": "33756141ce36abbd0eff8b5a99dd8474fcb4822363f4ed8c6f3bea50ae7fb00b",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
