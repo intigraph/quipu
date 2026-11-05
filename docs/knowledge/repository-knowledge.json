@@ -8,7 +8,7 @@
       "source": "README.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/README.md",
       "summary": "Quipu is a governed, bitemporal knowledge store with provenance and SPARQL access through command-line, REST, Rust library and MCP interfaces.",
-      "source_sha256": "87789b7f13a32cab43a6f2fc3bd0f32eb7870797cec94dbcf7c5330498208b96",
+      "source_sha256": "77b596e70c3e1afec1baed4391b8f556a23cde43e10ab09ba32ce82131335740",
       "type": "Concept"
     },
     {
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "e08a41f38ecabb8eba56d792245fa7ef7358f63488f6f93e240db3e26dfd8d4a",
+      "source_sha256": "46576889a3990fcdbadf79ae3866823a44dbd832d70c822fb5169a965fbb9996",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "3e8086abeda322de96b35eab9e0cb1252e81a8b89cf5d886fa063849b872e9df",
+      "source_sha256": "a49e104080d96d0b107641238a021f769f002c409f0c68e298b7e1da0027f5c0",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "33756141ce36abbd0eff8b5a99dd8474fcb4822363f4ed8c6f3bea50ae7fb00b",
+      "source_sha256": "6b444f17a769152a438f3d6aabbf060d4e206ef1d2344a00b32379dd9c256bf2",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
