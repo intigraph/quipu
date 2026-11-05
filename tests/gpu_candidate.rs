@@ -79,9 +79,15 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
         std::env::var_os("LD_LIBRARY_PATH").is_none(),
         "prove absolute dependency preload without startup loader hints"
     );
-    let candidate = quipu::onnx_runtime::gpu_candidate()
-        .unwrap()
-        .expect("existing verified GPU candidate");
+    let candidate = if std::env::var_os("QUIPU_GPU_TEST_ACQUIRE").is_some() {
+        quipu::onnx_runtime::acquire_gpu_candidate()
+            .unwrap()
+            .expect("fresh verified GPU candidate")
+    } else {
+        quipu::onnx_runtime::gpu_candidate()
+            .unwrap()
+            .expect("existing verified GPU candidate")
+    };
     assert!(quipu::onnx_runtime::current().is_none());
     let loaded = quipu::onnx_runtime::initialize(Some(&candidate)).unwrap();
     assert!(loaded.available);

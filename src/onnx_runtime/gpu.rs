@@ -98,8 +98,8 @@ fn verify(root: &Path, expected: &Receipt) -> crate::Result<PathBuf> {
 }
 
 /// Discover a verified optional GPU core without fetching or initializing ORT.
-/// Explicit ORT overrides bypass discovery, even when invalid. Linux x86_64
-/// uses QUIPU_GPU_CACHE, then BOBBIN_GPU_CACHE, then Bobbin's XDG data contract.
+/// Explicit ORT overrides bypass discovery, even when invalid. Linux `x86_64`
+/// uses `QUIPU_GPU_CACHE`, then `BOBBIN_GPU_CACHE`, then Bobbin's XDG data contract.
 /// An absent cache yields None; malformed or changed bytes remain an error so
 /// the device selector can report an explicit CPU fallback reason.
 pub fn gpu_candidate() -> crate::Result<Option<PathBuf>> {
@@ -199,10 +199,10 @@ fn provision(source: &Path, cache: &Path, expected: &Receipt) -> crate::Result<P
     verify(stage.path(), expected)?;
     // A concurrent successful publisher is reused; a corrupt prior cache is
     // retained and refused, never silently repaired or overwritten.
-    if let Err(failure) = fs::rename(stage.path(), &destination) {
-        if !present(&destination)? {
-            return Err(error(failure));
-        }
+    if let Err(failure) = fs::rename(stage.path(), &destination)
+        && !present(&destination)?
+    {
+        return Err(error(failure));
     }
     verify(&destination, expected)
 }
@@ -578,7 +578,7 @@ fn extract(
 
 /// Prepare matched dependencies only for the caller-selected GPU core. All
 /// files are privately staged and verified before dlopen. This is Linux-only;
-/// explicit ORT overrides bypass it in initialize(). No ORT API is called here.
+/// explicit ORT overrides bypass it in `initialize()`. No ORT API is called here.
 pub(super) fn prepare_selected(core: &Path) -> crate::Result<PathBuf> {
     if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
         return Err(error("automatic GPU loader requires Linux x86_64"));
