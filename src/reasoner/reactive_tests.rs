@@ -78,6 +78,11 @@ ex:r1 a rule:Rule ;
     );
     let mut store = setup_store_with_observer(&ttl);
 
+    // Register the inferred companion as committed so this fixture emits
+    // graph events; an unregistered companion intentionally has no event log.
+    let companion = store.companion_inferred_iri(0).unwrap();
+    store.graph_create(&companion).unwrap();
+
     // Transact a base fact — the reactive observer should auto-derive.
     let s = store.intern("ex:a").unwrap();
     let p = store.intern(&format!("{PFX}p")).unwrap();
@@ -104,6 +109,21 @@ ex:r1 a rule:Rule ;
         1,
         "reactive observer should have derived h(ex:a, ex:b)"
     );
+
+    // The reactive writer generates transaction time; a source label such as
+    // "reactive" must never enter the event timestamp (legacy retention leak).
+    let (emitted, parseable): (i64, i64) = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*), COUNT(julianday(e.ts)) FROM graph_events e \
+             JOIN transactions t ON t.id = e.tx_id \
+             WHERE t.source = 'reasoner:R1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert!(emitted > 0, "the regression must observe reasoner events");
+    assert_eq!(parseable, emitted, "every reasoner event needs an age");
 }
 
 #[test]
