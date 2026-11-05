@@ -43,6 +43,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "apply": { "type": "boolean", "default": false, "description": "Apply one bounded cleanup batch; default previews without writes" },
                 "expect": { "type": "string", "description": "Exact token from the latest cleanup preview, required with apply" },
                 "materialize": { "type": "string", "enum": ["inline", "deferred"], "description": "load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize." },
+                "actor": { "type": "string", "description": "Declared actor for retract_materialization; not authentication" },
                 "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
             }
         }

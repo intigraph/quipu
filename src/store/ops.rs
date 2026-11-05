@@ -12,6 +12,7 @@ pub use super::retraction::{IdentityOrphan, OrphanPolicy, RetractEpisodeOutcome}
 #[path = "ops_post_commit.rs"]
 mod post_commit;
 
+// Refusal ordering provenance (camayoc-0d3) remains in the transaction helper.
 #[path = "ops_transaction.rs"]
 mod transaction;
 

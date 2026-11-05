@@ -185,7 +185,7 @@ impl Store {
                 // evidence in the facts it wrote, a refused one leaves nothing.
                 self.flush_pending_verdicts(timestamp, actor);
                 // Same reason, same ordering, for the refusal event
-                // (camayoc-0d3): recorded only after the rollback succeeded,
+                // recorded only after the rollback succeeded,
                 // on the same connection, and never able to mask `e` —
                 // `record_refusal` swallows its own failures. Refusals under
                 // speculate() are skipped inside (actor/source "speculate").
