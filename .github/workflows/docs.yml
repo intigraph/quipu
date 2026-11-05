@@ -5,6 +5,7 @@ name: Docs
 # Keep them identical.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'docs/**'
       - 'README.md'
@@ -71,6 +72,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build docs
     runs-on: ubuntu-latest
     steps:

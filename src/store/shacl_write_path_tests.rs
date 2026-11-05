@@ -24,6 +24,78 @@ const SEQUENCE: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .
 ex:ChainShape a sh:NodeShape ; sh:targetClass ex:Chained ;
     sh:property [ sh:path ( ex:parent ex:name ) ; sh:maxCount 1 ] .";
 
+const ALTERNATIVE_WITH_INVERSE: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix ex: <http://ex.test/> .
+ex:LabelledShape a sh:NodeShape ; sh:targetClass ex:Labelled ;
+    sh:property [ sh:path [ sh:alternativePath ( ex:p [ sh:inversePath ex:q ] ) ] ;
+                  sh:maxCount 1 ] .";
+
+#[test]
+fn an_alternative_with_an_inverse_member_counts_existing_incoming_values() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes(
+            "alt-inverse",
+            ALTERNATIVE_WITH_INVERSE,
+            "2026-11-04T00:00:00Z",
+        )
+        .unwrap();
+    // The inverse edge is already stored, not present in the candidate delta.
+    knot(&mut store, "ex:incoming ex:q ex:l .").unwrap();
+    let err = knot(&mut store, "ex:l a ex:Labelled ; ex:p ex:outgoing .")
+        .expect_err("the incoming and outgoing values violate maxCount 1");
+    match err {
+        crate::Error::ValidationFailed {
+            violations,
+            messages,
+        } => {
+            assert!(violations > 0);
+            assert!(
+                messages.iter().any(|message| {
+                    message.contains("http://www.w3.org/ns/shacl#MaxCountConstraintComponent")
+                        && message.contains("http://ex.test/l")
+                }),
+                "{messages:?}"
+            );
+        }
+        other => panic!("expected a cardinality violation, got {other}"),
+    }
+    let rows = crate::sparql::query(
+        &store,
+        "SELECT (COUNT(*) AS ?n) WHERE { <http://ex.test/l> ?p ?o }",
+    )
+    .unwrap();
+    assert_eq!(rows.rows()[0].get("n"), Some(&crate::Value::Int(0)));
+    let rows = crate::sparql::query(
+        &store,
+        "SELECT (COUNT(*) AS ?n) WHERE { <http://ex.test/incoming> <http://ex.test/q> <http://ex.test/l> }",
+    )
+    .unwrap();
+    assert_eq!(rows.rows()[0].get("n"), Some(&crate::Value::Int(1)));
+}
+
+#[test]
+fn an_alternative_with_an_inverse_member_unions_equal_values_once() {
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes(
+            "alt-inverse",
+            ALTERNATIVE_WITH_INVERSE,
+            "2026-11-04T00:00:00Z",
+        )
+        .unwrap();
+    knot(&mut store, "ex:only ex:q ex:l .").unwrap();
+    // Both arms reach the same RDF term: maxCount 1 must still conform.
+    let out = knot(&mut store, "ex:l a ex:Labelled ; ex:p ex:only .").unwrap();
+    assert_eq!(out["conforms"], true, "{out}");
+    let rows = crate::sparql::query(
+        &store,
+        "SELECT (COUNT(*) AS ?n) WHERE { <http://ex.test/l> <http://ex.test/p> <http://ex.test/only> }",
+    )
+    .unwrap();
+    assert_eq!(rows.rows()[0].get("n"), Some(&crate::Value::Int(1)));
+}
+
 #[test]
 fn an_alternative_path_cardinality_shape_loads_and_leaves_unrelated_writes_working() {
     let mut store = Store::open_in_memory().unwrap();
