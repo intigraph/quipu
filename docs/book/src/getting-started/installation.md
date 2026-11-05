@@ -295,8 +295,8 @@ tambo apply
 tambo verify
 ```
 
-The former product name remains in persisted filenames for compatibility;
-Tambo continues to read these existing plans and state directories.
+The plan filenames and state directories below are compatibility interfaces.
+Tambo continues to read existing plans and state directories.
 Select the knowledge-graph (`kg`) profile in the guided interview. For an
 unattended plan, first provide a completed `caboodle-intent.toml`, then run
 `tambo plan --profile kg`; `plan` refuses a fresh directory without that intent.
