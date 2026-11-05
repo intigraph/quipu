@@ -32,10 +32,9 @@ fn fixture(n: usize) -> (Store, i64, i64, i64) {
 }
 
 fn call(store: &mut Store, before: i64, through: i64, apply: bool, expect: Json) -> Result<Json> {
-    tool_load_ontology(
-        store,
-        &json!({"action":"retract_materialization", "name":"selected", "after_tx":before, "through_tx":through, "apply":apply, "expect":expect}),
-    )
+    let mut request = json!({"action":"retract_materialization", "name":"selected", "after_tx":before, "through_tx":through, "apply":apply});
+    request["expect"] = expect;
+    tool_load_ontology(store, &request)
 }
 
 #[test]
@@ -88,7 +87,7 @@ fn ontology_window_token_binds_registry_version_and_transaction_head() {
 
 #[test]
 fn ontology_window_guard_checks_registry_even_without_a_fact_head_change() {
-    let (mut store, before, through, _) = fixture(1);
+    let (store, before, through, _) = fixture(1);
     let plan = store
         .ontology_window_plan(
             "selected",

@@ -42,16 +42,15 @@ impl Store {
         window: Option<crate::store::source_claims::ClaimWindow>,
         window_guard: Option<&crate::store::source_claims::WindowGuard>,
     ) -> Result<i64> {
-        if let Some(window) = window {
-            if window.after < 0
+        if let Some(window) = window
+            && (window.after < 0
                 || window.through <= window.after
                 || retract_source.is_none()
-                || datums.iter().any(|d| d.op != Op::Retract)
-            {
-                return Err(crate::Error::InvalidValue(
-                    "invalid retract-only claim window".into(),
-                ));
-            }
+                || datums.iter().any(|d| d.op != Op::Retract))
+        {
+            return Err(crate::Error::InvalidValue(
+                "invalid retract-only claim window".into(),
+            ));
         }
         // Ownership is revalidated on this handle, before any gate can write an
         // audit row: a handle opened earlier must not outlive invalid ownership.

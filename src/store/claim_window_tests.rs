@@ -55,7 +55,13 @@ fn claim_window_preserves_same_source_outside_bounds_and_other_producers() {
     let d = datum(&mut store, "shared");
     let graph = store.ensure_companion_inferred_graph(0, TS).unwrap();
     let early = store
-        .transact_to_graph(&[d.clone()], TS, None, Some("owl:materialize"), graph)
+        .transact_to_graph(
+            std::slice::from_ref(&d),
+            TS,
+            None,
+            Some("owl:materialize"),
+            graph,
+        )
         .unwrap();
     // Historical databases may contain repeated claims by one source even
     // though new same-source assertions are idempotent. Construct those exact
@@ -76,7 +82,13 @@ fn claim_window_preserves_same_source_outside_bounds_and_other_producers() {
             .unwrap();
     }
     let foreign = store
-        .transact_to_graph(&[d.clone()], TS, None, Some("reasoner:other"), graph)
+        .transact_to_graph(
+            std::slice::from_ref(&d),
+            TS,
+            None,
+            Some("reasoner:other"),
+            graph,
+        )
         .unwrap();
     apply(
         &mut store,
@@ -106,13 +118,25 @@ fn claim_window_never_closes_root_or_foreign_source_claims() {
     let d = datum(&mut store, "only");
     let graph = store.ensure_companion_inferred_graph(0, TS).unwrap();
     let root = store
-        .transact(&[d.clone()], TS, None, Some("owl:materialize"))
+        .transact(std::slice::from_ref(&d), TS, None, Some("owl:materialize"))
         .unwrap();
     let selected = store
-        .transact_to_graph(&[d.clone()], TS, None, Some("owl:materialize"), graph)
+        .transact_to_graph(
+            std::slice::from_ref(&d),
+            TS,
+            None,
+            Some("owl:materialize"),
+            graph,
+        )
         .unwrap();
     let foreign = store
-        .transact_to_graph(&[d.clone()], TS, None, Some("reasoner:other"), graph)
+        .transact_to_graph(
+            std::slice::from_ref(&d),
+            TS,
+            None,
+            Some("reasoner:other"),
+            graph,
+        )
         .unwrap();
     apply(
         &mut store,
@@ -161,7 +185,7 @@ fn claim_window_runs_deletion_floor_gate_and_preserves_outside_claims() {
     kind.value = Value::Ref(class);
     store.transact(&[kind], TS, None, Some("types")).unwrap();
     let selected = store
-        .transact(&[d.clone()], TS, None, Some("owl:materialize"))
+        .transact(std::slice::from_ref(&d), TS, None, Some("owl:materialize"))
         .unwrap();
     store
         .load_shapes(
