@@ -163,6 +163,12 @@ REQUIRED_PREDICATE_PROVEN = {
             "schema-first zero-instance contract + producer/negative fixtures 2026-09-26"
         for predicate in ("firedBy", "focus", "startedAt")
     },
+    **{
+        ("aegis:CommandDiskImpactSummaryShape", f"aegis:{predicate}"):
+            "schema-first zero-instance bounded summary contract + positive/negative fixtures"
+        for predicate in ("commandClass", "filesystemIdentity", "runCount", "maxDiskDeltaBytes",
+                          "p90DiskDeltaBytes", "diskImpactState", "observedAt")
+    },
     # (shape, predicate): "<measured coverage> <date> <who>"
     ("aegis:TextRuleShape", "aegis:regex"):
         "7/7 TextRule instances (via rdfs:subClassOf*) 2026-08-24 grant",

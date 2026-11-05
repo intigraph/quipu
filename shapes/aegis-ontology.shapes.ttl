@@ -928,6 +928,45 @@ aegis:CommandDiskImpactObservationShape a sh:NodeShape ;
         sh:minCount 1 ;
     ] .
 
+# ── CommandDiskImpactSummary ──────────────────────────────────────
+# A bounded durable summary per opaque filesystem and finite command class.
+# Historical raw Observation nodes retain their schema until an admitted migration.
+aegis:CommandDiskImpactSummary rdfs:subClassOf aegis:Observation .
+aegis:CommandDiskImpactSummaryShape a sh:NodeShape ;
+    sh:targetClass aegis:CommandDiskImpactSummary ;
+    sh:property [
+        sh:path aegis:commandClass ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "cargo:build" "cargo:test" "cargo:check" "cargo:clippy" "cargo:doc" "cargo:install" "cargo:clean" "cargo:other" "rustc:compile" "npm:install" "npm:ci" "npm:run" "npm:other" "pnpm:install" "pnpm:add" "pnpm:run" "pnpm:other" "yarn:install" "yarn:add" "yarn:run" "yarn:other" "docker:build" "docker:pull" "docker:load" "docker:other" "podman:build" "podman:pull" "podman:load" "podman:other" "dd:write" "fallocate:allocate" "cp:copy" "rsync:sync" "tar:archive" "tambo:install" "tambo:other" "other:other" ) ;
+    ] ;
+    sh:property [
+        sh:path aegis:filesystemIdentity ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^(root|tmpfs|mount):[a-f0-9]{24}$" ;
+    ] ;
+    sh:property [
+        sh:path aegis:runCount ; sh:datatype xsd:integer ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ;
+        sh:maxInclusive 9223372036854775807 ;
+    ] ;
+    sh:property [
+        sh:path aegis:maxDiskDeltaBytes ; sh:datatype xsd:integer ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:p90DiskDeltaBytes ; sh:datatype xsd:integer ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path aegis:diskImpactState ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:maxLength 8192 ;
+    ] ;
+    sh:property [
+        sh:path aegis:observedAt ; sh:datatype xsd:dateTime ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ] .
+
 # ── DecisionRecord ──────────���────────────────────────────────��───
 #
 # An architectural decision record (ADR).

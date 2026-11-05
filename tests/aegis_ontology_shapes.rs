@@ -534,3 +534,44 @@ fn bead_is_declared_a_deprecated_subclass_of_work_item() {
         SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
     );
 }
+
+fn disk_summary_fixture() -> String {
+    r#"
+        @prefix aegis: <http://aegis.gastown.local/ontology/> .
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+        aegis:test-summary a aegis:CommandDiskImpactSummary ;
+            rdfs:label "cargo build disk summary" ;
+            aegis:commandClass "cargo:build" ;
+            aegis:filesystemIdentity "root:0123456789abcdef01234567" ;
+            aegis:runCount "2"^^xsd:integer ;
+            aegis:maxDiskDeltaBytes "-3"^^xsd:integer ;
+            aegis:p90DiskDeltaBytes "-3"^^xsd:integer ;
+            aegis:diskImpactState "{}" ;
+            aegis:observedAt "2026-01-01T00:00:00Z"^^xsd:dateTime .
+    "#.to_string()
+}
+
+#[test]
+fn disk_summary_accepts_signed_deltas_and_requires_bounded_canonical_fields() {
+    let complete = disk_summary_fixture();
+    assert!(quipu::validate_shapes(SHAPES, &complete).unwrap().conforms);
+    for predicate in ["commandClass", "filesystemIdentity", "runCount", "maxDiskDeltaBytes",
+                      "p90DiskDeltaBytes", "diskImpactState", "observedAt"] {
+        let without = complete.lines()
+            .filter(|line| !line.contains(&format!("aegis:{predicate} ")))
+            .collect::<Vec<_>>().join("\n");
+        assert!(!quipu::validate_shapes(SHAPES, &without).unwrap().conforms,
+                "missing {predicate} must refuse");
+    }
+    for invalid in [
+        complete.replace("cargo:build", "cargo:private-argument"),
+        complete.replace("root:0123456789abcdef01234567", "/private/path"),
+        complete.replace("\"2\"^^xsd:integer", "\"0\"^^xsd:integer"),
+        complete.replace("\"{}\"", &format!("\"{}\"", "x".repeat(8193))),
+        complete.replace("aegis:runCount \"2\"^^xsd:integer ;",
+                         "aegis:runCount \"2\"^^xsd:integer, \"3\"^^xsd:integer ;"),
+    ] {
+        assert!(!quipu::validate_shapes(SHAPES, &invalid).unwrap().conforms);
+    }
+}
