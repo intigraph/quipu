@@ -539,7 +539,7 @@ new binding plus a revoke of the old one.
 
 To set up an agent end to end (its own user, `sd key init`, enrollment, verification
 and revocation), follow CABOODLE's
-[agent identity and write access](https://scbrown.github.io/caboodle/agents.html#agent-identity-and-write-access)
+[agent identity and write access](https://intigraph.github.io/tambo/agents.html#agent-identity-and-write-access)
 guide.
 
 **Importing a share never registers its producer.** This is the point, not an
