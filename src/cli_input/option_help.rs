@@ -2,6 +2,9 @@
 
 pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
     match (path, name) {
+        ("share", "competency") => {
+            Some("Verbatim competency.toml to compile and seal with the share")
+        }
         ("db respace", "into") => Some("New integer namespace space number"),
         ("db attach", "list") => Some("List mounted read-only databases"),
         ("render", "path") => Some("Relative output path template"),

@@ -22,7 +22,7 @@ exits 1; a checked, clean share exits 0. `--no-shapes` does not bypass this chec
 ```text
 quipu share --output <dir> [--graph IRI|--group-id ID|--construct QUERY]
             [--shapes NAME]... [--no-shapes] [--queries NAME]... [--no-queries]
-            [--parent-share ID] [--since <parent-reference>] [--turtle]
+            [--competency competency.toml] [--parent-share ID] [--since <parent-reference>] [--turtle]
             [--destination internal]
 ```
 
@@ -40,11 +40,27 @@ when there are any), and JSON plus PROV-O/DCAT/SPDX Turtle manifests.
 | `--shapes <NAME>` | include a named shape set; repeatable |
 | `--no-shapes` | omit `shapes.ttl` — the receiver then has no constraints to validate against, so prefer not to |
 | `--queries <NAME>` | carry exactly these stored queries in `queries.ttl`; repeatable. Default: every query *registered against* the scope — see [Stored queries](#stored-queries-queriesttl) |
-| `--no-queries` | carry no stored queries; no `queries.ttl` is written |
+| `--no-queries` | carry no independent stored queries; competency contracts still produce their compiled question member |
+| `--competency <FILE>` | carry verbatim authoring source and compiled question/command RDF, with every member sealed into the share identity |
 | `--parent-share <ID>` | record lineage: the share this one descends from |
 | `--since <reference>` | emit a parent-bound SPARQL Update delta instead of a full share; the parent may be a directory, archive or URL, not a `share_id` |
 | `--turtle` | additionally write a Turtle view for humans |
 | `--destination internal` | skip the outward scrub and stamp the manifest `destination: internal`. LAN-internal destinations only — see below |
+
+### Competency contract carriage
+
+`--competency competency.toml` compiles the offline contract and carries its
+source bytes, `queries.ttl` and `commands.ttl`. All three SHA-256 digests are
+part of the share identity. References resolve only against the selected carried
+queries; unresolved references and conflicting question/query names refuse.
+A share without this option retains the legacy member layout and identity.
+
+Import checks declarations and hashes, recompiles the source, and refuses any
+compiled RDF difference before staging. It retains the verified source and RDF
+as inert contract data. Only independent stored queries enter the existing
+query-promotion path; competency definitions do not become unconstrained legacy
+executable queries, and import never executes a command. Graph-only merge,
+composition and delta consumers currently refuse competency-enabled shares.
 
 ### The outward scrub, and `--destination internal`
 

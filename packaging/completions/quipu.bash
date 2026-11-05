@@ -4458,7 +4458,7 @@ _quipu() {
             return 0
             ;;
         quipu__subcmd__share)
-            opts="-h --db --output --graph --group-id --construct --shapes --queries --alignments --parent-share --since --destination --pack-dir --actor --attest-key --attest-issued-at --attest-ttl --attest-agent --attest-session --attest-introducer --attest-nonce --pointers --no-shapes --no-queries --turtle --attest --project --help diff"
+            opts="-h --db --output --graph --group-id --construct --shapes --queries --competency --alignments --parent-share --since --destination --pack-dir --actor --attest-key --attest-issued-at --attest-ttl --attest-agent --attest-session --attest-introducer --attest-nonce --pointers --no-shapes --no-queries --turtle --attest --project --help diff"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -4489,6 +4489,10 @@ _quipu() {
                     return 0
                     ;;
                 --queries)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --competency)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

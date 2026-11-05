@@ -760,6 +760,8 @@ qp share
 
 - `--queries <VALUE>`: Stored queries to include.
 
+- `--competency <VALUE>`: Verbatim competency.toml to compile and seal with the share.
+
 - `--alignments <VALUE>`: Reviewed SSSOM/RDF alignment file to carry.
 
 - `--parent-share <VALUE>`: Parent share for a delta export.

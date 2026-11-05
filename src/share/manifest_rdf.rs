@@ -33,6 +33,11 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
     let alignments = manifest.alignments_hash.as_ref().map_or_else(String::new, |hash| {
         format!(",\n  [ a dcat:Distribution ; dcat:mediaType \"text/turtle\" ; dcat:downloadURL <payload:alignments.ttl> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
     });
+    let competency = [("competency.toml", "application/toml", &manifest.competency_hash),
+        ("commands.ttl", "text/turtle", &manifest.commands_hash)]
+        .into_iter().filter_map(|(name, mime, hash)| hash.as_ref().map(|hash| {
+            format!(",\n  [ a dcat:Distribution ; dcat:mediaType {} ; dcat:downloadURL <payload:{name}> ; spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue {} ] ]", literal(mime), literal(hash.strip_prefix("sha256:").unwrap_or(hash)))
+        })).collect::<String>();
     let destination = manifest.destination.as_ref().map_or_else(String::new, |d| {
         let text = serde_json::to_string(d).expect("destination JSON");
         format!(
@@ -65,7 +70,7 @@ pub(crate) fn manifest_turtle(manifest: &ShareManifest) -> String {
   [ a dcat:Distribution ; dcat:mediaType "text/turtle" ;
     dcat:downloadURL <payload:shapes.ttl> ;
     spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-      spdx:checksumValue {} ] ]{queries}{alignments} .
+      spdx:checksumValue {} ] ]{queries}{alignments}{competency} .
 "#,
         literal(&manifest.share_id),
         literal(&manifest.created_at),

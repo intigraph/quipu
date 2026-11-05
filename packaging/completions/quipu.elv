@@ -553,6 +553,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --shapes 'Shapes used for validation or packaging'
             cand --queries 'Stored queries to include'
+            cand --competency 'Verbatim competency.toml to compile and seal with the share'
             cand --alignments 'Reviewed SSSOM/RDF alignment file to carry'
             cand --parent-share 'Parent share for a delta export'
             cand --since 'Starting share or transaction for incremental output'

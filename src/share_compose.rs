@@ -247,6 +247,7 @@ pub(crate) fn compose_scoped(
     let mut attestations = Vec::new();
     for request in requests {
         crate::share_import::verify_share(request)?;
+        crate::competency::carriage::refuse_unsupported(&request.manifest, "share composition")?;
         crate::namespace_publication::receive(store, request)?;
         if authority.is_none() && request.manifest.shapes_hash != chosen.manifest.shapes_hash {
             return Err(Error::InvalidValue(format!(
