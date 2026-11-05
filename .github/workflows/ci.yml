@@ -105,7 +105,7 @@ jobs:
           - name: default
             flags: "--no-default-features"
           - name: shacl
-            flags: "--features shacl"
+            flags: "--no-default-features --features shacl"
           # The `full` bundle (Cargo.toml) is what releases ship, and it is a
           # superset of shacl+onnx. Before it existed NOTHING linted quipu-server
           # (required-features shacl+onnx) nor the owl / reactive-reasoner code —
@@ -155,7 +155,7 @@ jobs:
           - name: default
             flags: "--no-default-features"
           - name: shacl
-            flags: "--features shacl"
+            flags: "--no-default-features --features shacl"
           # `owl` is a PUSH-matrix arm, not an extended-features one, and both
           # halves of that are deliberate (aegis-0bk90r).
           #

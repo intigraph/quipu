@@ -329,3 +329,8 @@ sha2 = "0.10"
 tar = "0.4"
 flate2 = "1"
 runtime-zip = { package = "zip", version = "=8.6.0", default-features = false, features = ["deflate-flate2"], optional = true }
+
+# docs.rs builds offline: document the full API without acquiring a native bundle.
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["full"]
