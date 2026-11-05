@@ -131,9 +131,35 @@ def run(server, cli):
             occupied.bind(('127.0.0.1', port + 1))
             occupied.listen()
             occupied.settimeout(.2)
-            collision = subprocess.run([server, '--db', str(db), '--bind', f'127.0.0.1:{port}'],
-                                       cwd=root, env=env, capture_output=True, timeout=20)
-            assert collision.returncode != 0, 'occupied worker port must refuse startup'
+            with (root / 'collision.log').open('w+') as log:
+                collision = subprocess.Popen(
+                    [server, '--db', str(db), '--bind', f'127.0.0.1:{port}'],
+                    cwd=root, env=env, stdout=log, stderr=log, start_new_session=True)
+                try:
+                    deadline = time.monotonic() + 30
+                    while collision.poll() is None and time.monotonic() < deadline:
+                        try:
+                            status, body, _ = request(base, '/health')
+                            break
+                        except OSError:
+                            time.sleep(.1)
+                    else:
+                        log.seek(0)
+                        raise AssertionError('collision killed primary: ' + log.read())
+                    health = json.loads(body)
+                    assert status == 503 and health['read_processes'] == 2
+                    assert health['read_processes_alive'] == 1
+                    status, body, headers = request(base, '/query', query)
+                    assert status == 200 and json.loads(body)['result'] is True
+                    assert int(headers['X-Quipu-Read-Worker-Pid']) != collision.pid
+                    assert request(base, '/knot', {
+                        'turtle': '<urn:collision> <urn:predicate> "writer" .'}, token=True)[0] == 200
+                finally:
+                    try:
+                        os.killpg(collision.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    collision.wait(timeout=5)
             try:
                 connection, _ = occupied.accept()
                 connection.close()
@@ -233,7 +259,7 @@ def run(server, cli):
                                   'slow_reader_writer_and_other_reader_seconds': isolated_seconds,
                                   'worker_loss': '503_no_writer_fallback', 'writes': 'primary_only',
                                   'parent_death': 'live_child_stopped',
-                                  'occupied_port': 'refused_without_contact',
+                                  'occupied_port': 'degraded_pool_without_contact',
                                   'sampled_running_pss_peak_bytes': max(memory),
                                   'memory_samples': len(memory),
                                   'scope': 'scratch_only'}))
