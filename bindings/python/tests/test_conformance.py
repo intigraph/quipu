@@ -45,7 +45,7 @@ def pointer(doc, path):
 
 def run_case(corpus, case, call):
     env = {f"shape:{k}": v for k, v in corpus["shapes"].items()}
-    with quipu.Store.memory() as store:
+    with quipu.Store.memory(base_ns=corpus["base_ns"]) as store:
         for i, step in enumerate(case["steps"]):
             where = f"{case['name']}[{i}] {step['op']}"
             payload = substitute(step["input"], env)

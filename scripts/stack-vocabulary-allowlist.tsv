@@ -4,7 +4,7 @@
 src/align/tests.rs	1
 src/align/verify.rs	1
 src/cli.rs	2
-src/cli_commands.rs	3
+src/cli_commands.rs	1
 src/cli_trust_root.rs	1
 src/code_entity_tests.rs	23
 src/config.rs	7
@@ -73,7 +73,7 @@ src/mcp/verdict_trust_root_tests.rs	1
 src/mcp/verdict_witness.rs	6
 src/metrics.rs	1
 src/metrics/tests.rs	3
-src/namespace.rs	15
+src/namespace.rs	3
 src/owl_materialize.rs	1
 src/owl_tests.rs	3
 src/pack_tests.rs	4
@@ -86,7 +86,6 @@ src/reasoner/parse.rs	1
 src/reasoner/parse_tests.rs	6
 src/reasoner/reactive.rs	3
 src/reasoner/reactive_tests.rs	2
-src/reconcile/mod.rs	1
 src/resolution/tests.rs	2
 src/rule_answers/judgment_read.rs	2
 src/rule_answers/judgment_tests.rs	1

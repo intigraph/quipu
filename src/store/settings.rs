@@ -18,6 +18,30 @@ use crate::error::Result;
 use crate::vector::KnowledgeVectorStore;
 use crate::vector_delegate::{DelegatingVectorStore, VectorSearchDelegate};
 
+/// Local names of the governance classes the always-on write gates scope to
+/// (`governance::{placement, transition, trust_root}`): they judge entities
+/// typed with these, and nothing else. See [`Store::governance_ns_for_write`].
+const GOVERNANCE_CLASSES: &[&str] = &[
+    "Policy",
+    "Predicate",
+    "TransitionEvent",
+    "VerifierRegistration",
+    "RegistryAmendment",
+    "TrustRootBootstrap",
+];
+
+/// Local names of the distinctive predicates the always-on gates read on
+/// entities of any type (the signature-scheme gate, the trust tier).
+/// Deliberately narrow: generic words such as `predicate` or `effect` are
+/// ordinary vocabulary elsewhere and only matter on a governance class.
+const GOVERNANCE_PREDICATES: &[&str] = &[
+    "signatureScheme",
+    "trustTier",
+    "signCount",
+    "amendmentSignature",
+    "transitionVersion",
+];
+
 impl Store {
     /// Stable identity assigned once to this store and preserved on reopen.
     pub fn store_id(&self) -> Result<String> {
@@ -114,6 +138,96 @@ impl Store {
     /// config; a per-call `--base-ns` still overrides at the ingest call site.
     pub fn set_base_ns(&mut self, base_ns: impl Into<String>) {
         self.base_ns = base_ns.into();
+    }
+
+    /// The namespace the governance vocabulary (`Policy`, `claim`, `Verdict`,
+    /// `signatureScheme`, …) is read and written under: the store's `base_ns`.
+    ///
+    /// There is no fallback. Governance reads its rules by IRI, so resolving
+    /// them under an empty or guessed namespace would not fail, it would find
+    /// nothing, and a guard that finds no policies denies nothing. A store with
+    /// no usable `base_ns` therefore refuses governance outright.
+    ///
+    /// The vocabulary map is deliberately not applied: governance reads its
+    /// terms with `PREFIX a: <base_ns>`, so a map that moved only the written
+    /// terms would split every rule from its reader.
+    ///
+    /// # Errors
+    ///
+    /// When `base_ns` is not usable (see [`crate::namespace::require_base_ns`]).
+    pub fn governance_ns(&self) -> Result<&str> {
+        crate::namespace::require_base_ns(&self.base_ns).map_err(|_| {
+            crate::error::Error::InvalidValue(format!(
+                "governance is unavailable: its vocabulary is resolved under the store's \
+                 base namespace, and {:?} is not usable. Set [quipu] base_ns to an absolute \
+                 IRI ending in '/' or '#'.",
+                self.base_ns
+            ))
+        })?;
+        Ok(&self.base_ns)
+    }
+
+    /// [`Self::governance_ns`] for the write gates that run on EVERY write
+    /// (placement, transition signatures, signature schemes, trust root).
+    ///
+    /// `Some(ns)` when the store has a usable `base_ns`. With none, those gates
+    /// cannot read the rules they enforce, and neither refusing every write
+    /// nor waving every write through is right: a store with no namespace
+    /// still takes plain writes. So the write itself decides. `None` (the
+    /// gate has nothing to check) when the write neither types nor touches an
+    /// entity of a governance class, nor uses a distinctive governance
+    /// predicate, matched by local name in ANY namespace; an error when it
+    /// does, because it would define or amend governance the store cannot
+    /// evaluate.
+    ///
+    /// # Errors
+    ///
+    /// The [`Self::governance_ns`] refusal, for a governance-shaped write on a
+    /// store with no usable `base_ns`; and term-resolution errors.
+    pub(crate) fn governance_ns_for_write(
+        &self,
+        datums: &[crate::store::Datum],
+    ) -> Result<Option<&str>> {
+        if let Ok(ns) = self.governance_ns() {
+            return Ok(Some(ns));
+        }
+        let local = |id: i64| -> Result<String> {
+            let iri = self.resolve(id)?;
+            Ok(iri.rsplit(['/', '#']).next().unwrap_or(&iri).to_string())
+        };
+        let rdf_type = self.lookup(crate::namespace::RDF_TYPE)?;
+        let governance_class = |v: &crate::types::Value| -> Result<bool> {
+            Ok(matches!(v, crate::types::Value::Ref(c)
+                if GOVERNANCE_CLASSES.contains(&local(*c)?.as_str())))
+        };
+        let mut seen = std::collections::BTreeSet::new();
+        for d in datums {
+            // A distinctive governance predicate, on any entity.
+            let refused = GOVERNANCE_PREDICATES.contains(&local(d.attribute)?.as_str())
+                // An entity being typed with a governance class ...
+                || (Some(d.attribute) == rdf_type && governance_class(&d.value)?)
+                // ... or already typed with one: amending it is governance too.
+                || (seen.insert(d.entity)
+                    && self.entity_facts(d.entity)?.iter().try_fold(false, |hit, f| {
+                        Ok::<_, crate::error::Error>(
+                            hit || (Some(f.attribute) == rdf_type && governance_class(&f.value)?),
+                        )
+                    })?);
+            if refused {
+                return self.governance_ns().map(Some);
+            }
+        }
+        Ok(None)
+    }
+
+    /// The code-entity IRI base (`[quipu].code_base`); empty when unset.
+    pub fn code_base(&self) -> &str {
+        &self.code_base
+    }
+
+    /// Set the code-entity IRI base. Called once at startup from config.
+    pub fn set_code_base(&mut self, code_base: impl Into<String>) {
+        self.code_base = code_base.into();
     }
 
     /// The vocabulary term map new terms are written through.

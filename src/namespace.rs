@@ -14,6 +14,27 @@ pub const DEFAULT_BASE_NS: &str = "http://aegis.gastown.local/ontology/";
 
 // ── W3C standard namespaces ────────────────────────────────────
 
+/// Refuse a write that would mint names without a base namespace.
+///
+/// Quipu has no default namespace: a store names its own individuals, and a
+/// guessed default would silently collide between stores and fork identity on
+/// a later change. Set `[quipu] base_ns` (or pass `--base-ns`).
+///
+/// # Errors
+///
+/// When `base_ns` is empty or is not an absolute IRI ending in `/` or `#`.
+pub fn require_base_ns(base_ns: &str) -> crate::error::Result<()> {
+    let absolute = base_ns.contains("://") || base_ns.starts_with("urn:");
+    if base_ns.is_empty() || !absolute || !(base_ns.ends_with('/') || base_ns.ends_with('#')) {
+        return Err(crate::error::Error::InvalidValue(format!(
+            "no usable base namespace ({base_ns:?}): this write mints names, and Quipu has \
+             no default namespace. Set [quipu] base_ns (or pass --base-ns) to an absolute \
+             IRI ending in '/' or '#'."
+        )));
+    }
+    Ok(())
+}
+
 pub const RDF: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 pub const RDFS: &str = "http://www.w3.org/2000/01/rdf-schema#";
 pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
@@ -27,50 +48,14 @@ pub const SKOS: &str = "http://www.w3.org/2004/02/skos/core#";
 /// a `quechua:` type (aegis-kpy8ec); instance IRIs stay under `base_ns`.
 pub const QUECHUA: &str = "https://scbrown.github.io/quechua/ns#";
 
-// ── Bobbin namespace ──────────────────────────────────────────
+// ── Code vocabulary ───────────────────────────────────────────
 //
-// `bobbin:` ≡ `aegis:` — decided 2026-08-21 (bobbin×quipu roadmap). The live
-// ingest lane (`shapes/code-entities.ttl`, `scripts/ingest-repos.py`, ~15k
-// live entities) has always bound `bobbin:` to the aegis base, and the
-// `https://bobbin.dev/ontology#` spelling this constant used to carry was
-// referenced by nothing outside `reconcile` — two spellings intern as two
-// different terms that never join, the exact failure the `quipu:` http/https
-// note below warns about. Entity IRIs live under `CODE_BASE`, vocabulary
-// under `BOBBIN`/`DEFAULT_BASE_NS`.
-
-pub const BOBBIN: &str = DEFAULT_BASE_NS;
-
-/// Base namespace for code/document ENTITY IRIs (as opposed to vocabulary).
-/// Matches `scripts/ingest-repos.py`'s `BASE`: path segments are
-/// percent-encoded with `/` escaped, so a relative path is one opaque
-/// segment — `http://aegis.gastown.local/code/{repo}/{src%2Flib.rs}`.
-///
-/// ⚠️ **SUPERSEDED IN PRACTICE — this scheme has ZERO live instances, and
-/// saying so here is the whole point of this paragraph** (aegis-6noan,
-/// measured 2026-08-23 across ROOT and both named graphs):
-///
-/// | population | count |
-/// |---|---|
-/// | any subject under `CODE_BASE` | **0** |
-/// | `CodeSymbol` under `{DEFAULT_BASE_NS}code/…::{name}` | **10,425** |
-///
-/// The live producer of every code entity is **yupana** (`yupana-src/src/export.rs`),
-/// which mints `{DEFAULT_BASE_NS}code/{repo}/{path}::{scope}::{name}` — under the
-/// ONTOLOGY base, `::`-separated, with a hierarchical scope chain and no line
-/// number. Neither difference is cosmetic: the scope chain exists because
-/// without it 42 same-kind symbols silently merged and unioned their call edges
-/// (aegis-1q14).
-///
-/// This constant stays because `reconcile` still parses against it — but a
-/// declared-and-unproduced scheme is not a neutral leftover, it is an active
-/// trap. bobbin read this constant and `ingest-repos.py`, implemented them
-/// faithfully, and would have forked the code graph into two disjoint
-/// populations of the same referents had the push shipped. It was caught by
-/// hand, twice, because nothing about a declaration says whether anything
-/// produces it. If you are about to build against `CODE_BASE`, measure the
-/// graph first — and if you are the one who retires it, retire
-/// `ingest-repos.py`'s `BASE` in the same change.
-pub const CODE_BASE: &str = "http://aegis.gastown.local/code/";
+// Code-entity vocabulary (`imports`, `name`, `language`, `definedIn`,
+// `filePath`) is read under the store's `base_ns`, and code-entity IRIs under
+// its `[quipu].code_base` (gju5 S3c). Neither is compiled in. The live code
+// producer mints `{base_ns}code/{repo}/{path}::{scope}::{name}`; a
+// `code_base` that names a different scheme reconciles nothing, so measure
+// the graph before choosing one.
 
 // ── Quipu namespace ───────────────────────────────────────────
 // Quipu's own ontology terms (graph-analysis qualifiers it mints itself, as
@@ -191,20 +176,6 @@ pub const RDF_PROPERTY: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#Prope
 /// `rdfs:Class` — the class of classes; rdfs10's premise.
 pub const RDFS_CLASS: &str = "http://www.w3.org/2000/01/rdf-schema#Class";
 
-// ── Bobbin property IRIs ──────────────────────────────────────
-// Under the aegis base, matching what the live lane emits.
-
-/// `bobbin:imports` — unresolved import edge (target may be literal or ref).
-pub const BOBBIN_IMPORTS: &str = "http://aegis.gastown.local/ontology/imports";
-/// `bobbin:name` — symbol / entity name.
-pub const BOBBIN_NAME: &str = "http://aegis.gastown.local/ontology/name";
-/// `bobbin:language` — programming language of a `CodeModule`.
-pub const BOBBIN_LANGUAGE: &str = "http://aegis.gastown.local/ontology/language";
-/// `bobbin:definedIn` — links a `CodeSymbol` to its parent `CodeModule`.
-pub const BOBBIN_DEFINED_IN: &str = "http://aegis.gastown.local/ontology/definedIn";
-/// `bobbin:filePath` — file path of a `CodeModule`.
-pub const BOBBIN_FILE_PATH: &str = "http://aegis.gastown.local/ontology/filePath";
-
 // ── XSD datatype IRIs ──────────────────────────────────────────
 
 pub const XSD_INTEGER: &str = "http://www.w3.org/2001/XMLSchema#integer";
@@ -266,12 +237,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bobbin_vocabulary_is_the_aegis_base() {
-        // Two spellings would intern as two different terms; the live lane's
-        // binding is the one true namespace.
-        assert_eq!(BOBBIN, DEFAULT_BASE_NS);
-        assert!(BOBBIN_IMPORTS.starts_with(DEFAULT_BASE_NS));
-        assert!(CODE_BASE.starts_with("http://aegis.gastown.local/"));
-        assert_ne!(CODE_BASE, DEFAULT_BASE_NS);
+    fn a_base_namespace_is_required_and_must_be_an_absolute_iri_prefix() {
+        for ok in [
+            "http://example.org/kb/",
+            "https://example.org/v#",
+            "urn:example:kb/",
+        ] {
+            assert!(require_base_ns(ok).is_ok(), "{ok}");
+        }
+        for bad in ["", "kb/", "http://example.org/kb", "example.org/"] {
+            let err = require_base_ns(bad).unwrap_err().to_string();
+            assert!(err.contains("base_ns"), "{bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_fresh_store_has_no_namespace_and_refuses_to_mint_names() {
+        let mut store = crate::Store::open_in_memory().unwrap();
+        assert_eq!(store.base_ns(), "", "no implicit default namespace");
+        let ep: crate::Episode = serde_json::from_str(
+            r#"{"name": "ep", "nodes": [{"name": "n1", "type": "Thing"}], "edges": []}"#,
+        )
+        .unwrap();
+        let base = store.base_ns().to_string();
+        let err = crate::ingest_episode(&mut store, &ep, "2026-01-01T00:00:00Z", &base)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no usable base namespace"), "{err}");
+        // Naming one makes the same write succeed.
+        crate::ingest_episode(
+            &mut store,
+            &ep,
+            "2026-01-01T00:00:00Z",
+            "http://example.org/kb/",
+        )
+        .unwrap();
     }
 }

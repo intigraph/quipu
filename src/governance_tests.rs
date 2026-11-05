@@ -780,7 +780,7 @@ fn the_linkage_catalog_lands_through_the_write_path_with_placement_on() {
     // placement rules on the REAL write path, or the catalog documents a
     // policy no store would accept.
     use crate::store::Store;
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     crate::ingest_rdf(
         &mut store,
@@ -1207,7 +1207,7 @@ fn materialising_the_declarations_types_the_shipped_catalog_correctly() {
     const TS: &str = "2026-01-01T00:00:00Z";
     const CATALOG: &str = include_str!("../shapes/policies/treesitter.ttl");
 
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::ingest_rdf(
         &mut store,
         CATALOG.as_bytes(),

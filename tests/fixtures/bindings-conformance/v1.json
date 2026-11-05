@@ -1,9 +1,10 @@
 {
   "corpus": "quipu-bindings-conformance/v1",
+  "base_ns": "http://example.org/kb/",
   "about": "One fixture corpus for every local binding (native Rust, WASM, Python). Each case runs on a fresh memory store. Matching rules: an object pattern matches when each of its keys matches (extra actual keys are ignored); an array pattern matches element-wise with equal length; scalars compare exactly, including integer lexemes; \"$positive_int\" matches any integer > 0; {\"$contains\": [p...]} matches an array holding an element for each p; {\"$len\": n} matches an array of length n. A step's \"capture\" maps a name to a JSON pointer in its result; a later input string \"${name}\" is replaced by that captured value.",
   "shapes": {
     "record": "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:RecordShape> a sh:NodeShape; sh:targetClass <urn:Record>; sh:property [sh:path <urn:title>; sh:minCount 1] .",
-    "note": "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:NoteShape> a sh:NodeShape; sh:targetClass <http://aegis.gastown.local/ontology/Note> ."
+    "note": "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:NoteShape> a sh:NodeShape; sh:targetClass <http://example.org/kb/Note> ."
   },
   "cases": [
     {
@@ -362,7 +363,7 @@
         {
           "op": "quipu_query",
           "input": {
-            "query": "SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/Note> }"
+            "query": "SELECT ?s WHERE { ?s a <http://example.org/kb/Note> }"
           },
           "expect": {
             "ok": {
