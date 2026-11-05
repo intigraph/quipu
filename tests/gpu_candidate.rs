@@ -70,6 +70,30 @@ fn discovery_leaf() {
 #[test]
 #[ignore = "requires an eligible NVIDIA GPU, an existing verified matched bundle and explicitly supplied local model"]
 fn matched_gpu_loader_creates_a_strict_cuda_session() {
+    // Cargo injects loader hints into test processes. The actual proof must
+    // start a fresh process without them, before the ELF loader runs.
+    if std::env::var_os("QUIPU_GPU_NATIVE_CHILD").is_none() {
+        let result = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--ignored",
+                "--exact",
+                "matched_gpu_loader_creates_a_strict_cuda_session",
+                "--nocapture",
+            ])
+            .env("QUIPU_GPU_NATIVE_CHILD", "1")
+            .env_remove("LD_LIBRARY_PATH")
+            .env_remove("ORT_DYLIB_PATH")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        print!("{}", String::from_utf8_lossy(&result.stdout));
+        return;
+    }
     let model = std::env::var_os("QUIPU_GPU_TEST_MODEL").expect("explicit local model");
     assert!(
         std::env::var_os("ORT_DYLIB_PATH").is_none(),
