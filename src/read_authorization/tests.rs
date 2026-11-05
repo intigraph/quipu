@@ -590,3 +590,141 @@ fn controlled_mutants_each_turn_their_paired_negative_red() {
         assert!(!disclosed(), "{mutant:?}: the switch must clear after use");
     }
 }
+
+/// aegis-44r G3: two real stores that differ ONLY in denied material, across
+/// more surfaces than one hidden fact: the denied graph's label, store-wide
+/// shape names, and the NUMBER of earlier writes (so transaction ids, term ids
+/// and per-store counts of the allowed data differ). Every surface a scoped
+/// view exposes (query bytes and media type, export, metadata) and every
+/// refusal body must be identical. Search is not a surface of `ReadView`.
+fn rich(hidden: &str, extra_writes: usize) -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    let b = store.graph_create(B).unwrap();
+    for n in 0..=extra_writes {
+        let text = format!("<urn:hidden:{hidden}:{n}> <urn:predicate:hidden> \"{hidden} {n}\" .\n");
+        crate::rdf::ingest_assigned_rdf(
+            &mut store,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-01-01T00:00:00Z",
+            Some(&format!("actor-{hidden}")),
+            Some(&format!("source-{hidden}-{n}")),
+            b,
+        )
+        .unwrap();
+    }
+    let kind = if extra_writes == 0 {
+        "operational"
+    } else {
+        "archive"
+    };
+    let label = crate::store::labels::GraphLabel {
+        kind: Some(crate::lattice_kind::DataKind::parse(kind).unwrap()),
+        ..Default::default()
+    };
+    store
+        .set_graph_label(B, &label, "2026-01-01T00:00:00Z", Some(hidden))
+        .unwrap();
+    store
+        .graph_create(&format!("urn:hidden:graph:{hidden}"))
+        .unwrap();
+    #[cfg(feature = "shacl")]
+    store
+        .load_shapes(
+            &format!("hidden-shapes-{hidden}"),
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:shape:x> a sh:NodeShape .\n",
+            "2026-01-01T00:00:00Z",
+        )
+        .unwrap();
+    for (graph, text) in [
+        (
+            A,
+            "<urn:e> <urn:p> <urn:value> .\n<urn:value> <urn:p> <urn:end> .\n",
+        ),
+        (C, "<urn:context> <urn:p> \"context\" .\n"),
+    ] {
+        let g = store.graph_create(graph).unwrap();
+        crate::rdf::ingest_assigned_rdf(
+            &mut store,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::NTriples,
+            None,
+            "2026-01-01T00:00:00Z",
+            None,
+            None,
+            g,
+        )
+        .unwrap();
+    }
+    store
+}
+
+#[test]
+fn denied_labels_shapes_and_write_history_change_no_public_output() {
+    let policy = policy();
+    let left = rich("one", 0);
+    let right = rich("two", 5);
+    let (a, b) = (
+        view(&policy, &left, P, ReadOperation::Query),
+        view(&policy, &right, P, ReadOperation::Query),
+    );
+    for model in [false, true] {
+        for query in [
+            "SELECT ?s ?p ?o WHERE { ?s ?p ?o } ORDER BY ?s ?p ?o",
+            "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }",
+            "SELECT ?g (COUNT(*) AS ?n) WHERE { GRAPH ?g { ?s ?p ?o } } GROUP BY ?g ORDER BY ?g",
+            "SELECT DISTINCT ?p WHERE { ?s ?p ?o } ORDER BY ?p",
+            "SELECT (STR(?o) AS ?v) WHERE { ?s ?p ?o FILTER(isLiteral(?o)) } ORDER BY ?v",
+            "ASK { ?s <urn:predicate:hidden> ?o }",
+        ] {
+            let first = a.query_response(query, model, 2).unwrap();
+            let second = b.query_response(query, model, 2).unwrap();
+            assert_eq!(first, second, "model={model} {query}");
+        }
+    }
+    let hidden_absent = a
+        .query("ASK { ?s <urn:predicate:hidden> ?o }", false, 2)
+        .unwrap();
+    assert!(String::from_utf8(hidden_absent).unwrap().contains("false"));
+    // Refusal bodies: a denied graph, a graph that exists only in the LEFT
+    // store, one only in the RIGHT store, and one in neither all read the same.
+    for graph in [
+        B,
+        "urn:hidden:graph:one",
+        "urn:hidden:graph:two",
+        "urn:missing",
+    ] {
+        for query in [
+            format!("ASK {{ GRAPH <{graph}> {{ ?s ?p ?o }} }}"),
+            format!("ASK FROM <{graph}> {{ ?s ?p ?o }}"),
+        ] {
+            let first = a.query(&query, false, 2).unwrap_err().to_string();
+            let second = b.query(&query, false, 2).unwrap_err().to_string();
+            assert_eq!(first, second, "{query}");
+            assert_eq!(first, denied().to_string(), "{query}");
+        }
+        let selected = [graph.to_owned()].into_iter().collect();
+        for store in [&left, &right] {
+            let err = policy
+                .snapshot()
+                .unwrap()
+                .authorize(&identity(P), ReadOperation::Query, Some(&selected), 2)
+                .err()
+                .unwrap()
+                .to_string();
+            assert_eq!(err, denied().to_string(), "{graph}");
+            let _ = store;
+        }
+    }
+    let (ea, eb) = (
+        view(&policy, &left, P, ReadOperation::Export),
+        view(&policy, &right, P, ReadOperation::Export),
+    );
+    assert_eq!(ea.export(2).unwrap(), eb.export(2).unwrap());
+    let (ma, mb) = (
+        view(&policy, &left, P, ReadOperation::Metadata),
+        view(&policy, &right, P, ReadOperation::Metadata),
+    );
+    assert_eq!(ma.metadata(2).unwrap(), mb.metadata(2).unwrap());
+}
