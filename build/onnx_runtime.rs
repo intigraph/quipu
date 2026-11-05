@@ -1,5 +1,5 @@
 //! Build-time, checksum-pinned runtime acquisition. Never executed at runtime.
-use runtime_sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256};
 use std::{
     env, fs,
     io::{Read, Write},
@@ -34,7 +34,7 @@ pub fn bundle() {
             .read_to_end(&mut archive)
             .expect("read archive cache");
     } else {
-        runtime_ureq::get(dist.url)
+        ureq::get(dist.url)
             .timeout(std::time::Duration::from_secs(180))
             .call()
             .expect("fetch pinned ONNX Runtime over HTTPS")
@@ -79,7 +79,7 @@ pub fn bundle() {
             files[index] = Some(bytes);
         }
     } else {
-        let mut tar = runtime_tar::Archive::new(runtime_flate2::read::GzDecoder::new(&archive[..]));
+        let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(&archive[..]));
         for entry in tar.entries().expect("runtime tar entries") {
             let mut entry = entry.expect("runtime tar entry");
             let name = entry
@@ -118,9 +118,9 @@ pub fn bundle() {
         dist.core_sha256,
         "runtime core checksum mismatch"
     );
-    let mut compressed = runtime_flate2::write::GzEncoder::new(
+    let mut compressed = flate2::write::GzEncoder::new(
         fs::File::create(out.join("onnxruntime.gz")).expect("runtime output"),
-        runtime_flate2::Compression::default(),
+        flate2::Compression::default(),
     );
     compressed.write_all(&core).expect("compress runtime");
     compressed.finish().expect("finish compressed runtime");
