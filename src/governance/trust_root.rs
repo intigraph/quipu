@@ -66,11 +66,11 @@ use rusqlite::{OptionalExtension, params};
 use sha2::{Digest, Sha256};
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
-use super::verifier_registry::{AGENT_TIER, HUMAN_TIER, TRUST_TIER};
+use super::verifier_registry::{AGENT_TIER, HUMAN_TIER, QUECHUA_NS, TRUST_TIER};
 
 /// The policy a human key must attest to amend the registry.
 pub const TRUST_ROOT_POLICY: &str = "urn:quipu:policy:trust-root";
@@ -86,8 +86,12 @@ pub const REVOKED: &str = "revoked";
 /// make every human verdict a registry amendment.
 const UNSEALED: [&str; 1] = ["http://aegis.gastown.local/ontology/signCount"];
 
-fn ns(name: &str) -> String {
-    format!("{DEFAULT_BASE_NS}{name}")
+/// A registry term for READING: under the store's governance namespace, or,
+/// on a store with none, the public Quechua twin alone. Reading fewer
+/// namespaces can only find fewer registrations, amenders and amendments,
+/// never more, so the gate stays closed. Writes ([`bootstrap`]) refuse instead.
+fn ns(store: &Store, name: &str) -> String {
+    format!("{}{name}", store.governance_ns().unwrap_or(QUECHUA_NS))
 }
 
 /// The human-tier registry before a write: each registration's digest, and
@@ -148,10 +152,11 @@ fn strings(store: &Store, entity: &str, predicate: &str) -> Result<Vec<String>> 
         return Ok(Vec::new());
     };
     let mut predicates = vec![predicate.to_string()];
+    let base = store.governance_ns().ok();
     if let Some(name @ ("verifier" | "publicKey" | "attests")) =
-        predicate.strip_prefix(DEFAULT_BASE_NS)
+        base.and_then(|b| predicate.strip_prefix(b))
     {
-        predicates.push(format!("https://scbrown.github.io/quechua/ns#{name}"));
+        predicates.push(format!("{QUECHUA_NS}{name}"));
     }
     let mut attrs = Vec::new();
     for p in predicates {
@@ -187,7 +192,7 @@ fn is_registration(store: &Store, entity: &str) -> Result<bool> {
         return Ok(false);
     };
     let mut classes = Vec::new();
-    for namespace in [DEFAULT_BASE_NS, "https://scbrown.github.io/quechua/ns#"] {
+    for namespace in store.governance_ns().ok().into_iter().chain([QUECHUA_NS]) {
         if let Some(id) = store.lookup(&format!("{namespace}VerifierRegistration"))? {
             classes.push(id);
         }
@@ -207,16 +212,16 @@ pub(crate) fn snapshot(store: &Store) -> Result<Snapshot> {
     let mut amenders = Vec::new();
     for iri in human_registry(store)?.keys() {
         if !is_registration(store, iri)?
-            || !strings(store, iri, &ns("attests"))?
+            || !strings(store, iri, &ns(store, "attests"))?
                 .iter()
                 .any(|p| p == TRUST_ROOT_POLICY)
         {
             continue;
         }
-        let Some(verifier) = sole(strings(store, iri, &ns("verifier"))?) else {
+        let Some(verifier) = sole(strings(store, iri, &ns(store, "verifier"))?) else {
             continue;
         };
-        for key in strings(store, iri, &ns("publicKey"))? {
+        for key in strings(store, iri, &ns(store, "publicKey"))? {
             amenders.push((verifier.clone(), key));
         }
     }
@@ -230,8 +235,8 @@ pub(crate) fn snapshot(store: &Store) -> Result<Snapshot> {
 pub fn human_keys(store: &Store) -> Result<Vec<(String, String, String)>> {
     let mut out = Vec::new();
     for iri in human_registry(store)?.keys() {
-        let verifier = sole(strings(store, iri, &ns("verifier"))?).unwrap_or_default();
-        for key in strings(store, iri, &ns("publicKey"))? {
+        let verifier = sole(strings(store, iri, &ns(store, "verifier"))?).unwrap_or_default();
+        for key in strings(store, iri, &ns(store, "publicKey"))? {
             out.push((iri.clone(), verifier.clone(), key));
         }
     }
@@ -312,6 +317,7 @@ pub fn digest_after(store: &Store, registration: &str, datums: &[Datum]) -> Resu
     // registration is digested only where the operator enabled the schemes.
     scratch.governance_config_mut().hardware_verdict_schemes =
         store.governance_config().hardware_verdict_schemes;
+    scratch.set_base_ns(store.base_ns());
     let mut staged = Vec::new();
     for (s, p, o) in &triples {
         let value = match o {
@@ -458,11 +464,11 @@ struct Amendment {
 fn staged_amendments(store: &Store, datums: &[Datum]) -> Result<Vec<Amendment>> {
     let (Some(t), Some(c)) = (
         store.lookup(RDF_TYPE)?,
-        store.lookup(&ns("RegistryAmendment"))?,
+        store.lookup(&ns(store, "RegistryAmendment"))?,
     ) else {
         return Ok(Vec::new());
     };
-    let Some(amends_attr) = store.lookup(&ns("amends"))? else {
+    let Some(amends_attr) = store.lookup(&ns(store, "amends"))? else {
         return Ok(Vec::new());
     };
     let mut out = Vec::new();
@@ -488,10 +494,10 @@ fn staged_amendments(store: &Store, datums: &[Datum]) -> Result<Vec<Amendment>> 
             _ => continue,
         };
         let (Some(digest), Some(signer), Some(nonce), Some(signature)) = (
-            sole(strings(store, &iri, &ns("amendedDigest"))?),
-            sole(strings(store, &iri, &ns("amendmentSigner"))?),
-            sole(strings(store, &iri, &ns("amendmentNonce"))?),
-            sole(strings(store, &iri, &ns("amendmentSignature"))?),
+            sole(strings(store, &iri, &ns(store, "amendedDigest"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentSigner"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentNonce"))?),
+            sole(strings(store, &iri, &ns(store, "amendmentSignature"))?),
         ) else {
             continue;
         };
@@ -544,6 +550,9 @@ pub fn bootstrap(
     pop_signature: &str,
     timestamp: &str,
 ) -> Result<Enrolled> {
+    // The registration is WRITTEN under the governance namespace, so a store
+    // with none refuses rather than enrol under the read-only fallback.
+    store.governance_ns()?;
     if ever_bootstrapped(store)? {
         return Err(refuse(
             "a human key has already been enrolled in this store; a further device is an \
@@ -561,8 +570,8 @@ pub fn bootstrap(
         ));
     }
     let digest = hex::encode(Sha256::digest(public_key.as_bytes()));
-    let registration = ns(&format!("human_registration_{}", &digest[..16]));
-    let record = ns(&format!("trust_root_bootstrap_{}", &digest[..16]));
+    let registration = ns(store, &format!("human_registration_{}", &digest[..16]));
+    let record = ns(store, &format!("trust_root_bootstrap_{}", &digest[..16]));
     let mut policies = vec![TRUST_ROOT_POLICY.to_string()];
     policies.extend(attests.iter().filter(|p| *p != TRUST_ROOT_POLICY).cloned());
     let datum = |store: &Store, e: &str, p: &str, v: Value| -> Result<Datum> {
@@ -580,18 +589,18 @@ pub fn bootstrap(
             store,
             &registration,
             RDF_TYPE,
-            Value::Ref(store.intern(&ns("VerifierRegistration"))?),
+            Value::Ref(store.intern(&ns(store, "VerifierRegistration"))?),
         )?,
         datum(
             store,
             &registration,
-            &ns("verifier"),
+            &ns(store, "verifier"),
             Value::Str(verifier.into()),
         )?,
         datum(
             store,
             &registration,
-            &ns("publicKey"),
+            &ns(store, "publicKey"),
             Value::Str(public_key.into()),
         )?,
         datum(
@@ -604,18 +613,18 @@ pub fn bootstrap(
             store,
             &record,
             RDF_TYPE,
-            Value::Ref(store.intern(&ns("TrustRootBootstrap"))?),
+            Value::Ref(store.intern(&ns(store, "TrustRootBootstrap"))?),
         )?,
         datum(
             store,
             &record,
-            &ns("enrolled"),
+            &ns(store, "enrolled"),
             Value::Ref(store.intern(&registration)?),
         )?,
         datum(
             store,
             &record,
-            &ns("keyFingerprint"),
+            &ns(store, "keyFingerprint"),
             Value::Str(fingerprint.clone()),
         )?,
     ];
@@ -623,7 +632,7 @@ pub fn bootstrap(
         datums.push(datum(
             store,
             &registration,
-            &ns("attests"),
+            &ns(store, "attests"),
             Value::Str(p.clone()),
         )?);
     }

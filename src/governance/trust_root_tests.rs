@@ -4,7 +4,14 @@
 //! signed amendments. There is no bypass to reach for.
 
 use super::*;
+
+/// Legacy-namespace term, as the fixtures write them (shadows the module's
+/// store-scoped `ns`).
+fn ns(name: &str) -> String {
+    format!("{}{name}", crate::namespace::DEFAULT_BASE_NS)
+}
 use crate::governance::verifier_registry::{Scope, Witness, registered_keys};
+use crate::namespace::DEFAULT_BASE_NS;
 
 const TS: &str = "2026-01-01T00:00:00Z";
 const POLICY: &str = "http://ex/policy/wire-funds";
@@ -147,7 +154,7 @@ fn refused(r: crate::error::Result<i64>) -> String {
 #[test]
 fn a_forged_human_registration_is_refused() {
     // The baseline: this landed at tx 1 before the gate.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mallory = keypair();
     let datums = human_registration(&store, "http://ex/reg/forged", "stiwi", &pk(&mallory));
     let m = refused(store.transact(&datums, TS, Some("mallory"), Some("episode")));
@@ -157,7 +164,7 @@ fn a_forged_human_registration_is_refused() {
 
 #[test]
 fn an_agent_registration_still_lands_and_cannot_verify_a_human_decision() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mallory = keypair();
     let mut datums = human_registration(&store, "http://ex/reg/agent", "stiwi", &pk(&mallory));
     datums.pop(); // no trustTier: an ordinary agent-tier registration
@@ -177,7 +184,7 @@ fn an_agent_registration_still_lands_and_cannot_verify_a_human_decision() {
 
 #[test]
 fn bootstrap_enrols_once_with_fingerprint_and_never_again() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     assert_eq!(decision_keys(&store), vec![pk(&stiwi)]);
@@ -210,7 +217,7 @@ fn bootstrap_enrols_once_with_fingerprint_and_never_again() {
 fn bootstrap_stays_closed_after_the_human_key_is_revoked() {
     // EVER existed, from the full history: revoking every human key must not
     // reopen the bootstrap.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     let revoke = vec![d(
@@ -232,7 +239,7 @@ fn bootstrap_stays_closed_after_the_human_key_is_revoked() {
 
 #[test]
 fn bootstrap_requires_proof_of_possession() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let wrong = crate::signing::sign_hex(
         &keypair(),
@@ -253,7 +260,7 @@ fn bootstrap_requires_proof_of_possession() {
 
 #[test]
 fn a_second_device_is_an_amendment_signed_by_the_first() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let yubikey = keypair();
@@ -272,7 +279,7 @@ fn a_replayed_amendment_nonce_is_refused() {
     // The real replay: revoke a device, then re-submit its captured enrolment
     // amendment unchanged. The digest matches and the signature is genuine;
     // only the spent nonce stops it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let old = keypair();
@@ -312,7 +319,7 @@ fn a_replayed_amendment_nonce_is_refused() {
 
 #[test]
 fn unsigned_edits_and_revocations_are_refused_signed_ones_accepted() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     let mallory = keypair();
@@ -348,7 +355,7 @@ fn unsigned_edits_and_revocations_are_refused_signed_ones_accepted() {
 
 #[test]
 fn promoting_an_agent_registration_by_adding_the_marker_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mallory = keypair();
     let mut datums = human_registration(&store, "http://ex/reg/agent", "stiwi", &pk(&mallory));
     datums.pop();
@@ -391,7 +398,7 @@ fn promoting_an_agent_registration_by_adding_the_marker_is_refused() {
 
 #[test]
 fn an_agent_tier_key_cannot_sign_an_amendment() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     // mallory holds an agent-tier registration that even attests trust-root.
@@ -415,7 +422,7 @@ fn an_agent_tier_key_cannot_sign_an_amendment() {
 
 #[test]
 fn a_new_key_cannot_sign_its_own_enrolment() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let mallory = keypair();
@@ -434,7 +441,7 @@ fn a_new_key_cannot_sign_its_own_enrolment() {
 
 #[test]
 fn an_amendment_naming_the_wrong_digest_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let reg = human_registration(&store, "http://ex/reg/x", "stiwi", &pk(&keypair()));
@@ -451,7 +458,7 @@ fn an_amendment_naming_the_wrong_digest_is_refused() {
 
 #[test]
 fn a_signature_counter_update_is_not_an_amendment() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     let count = vec![d(
@@ -468,7 +475,7 @@ fn a_signature_counter_update_is_not_an_amendment() {
 
 #[test]
 fn the_gate_runs_while_verdicts_are_being_recorded() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.recording_verdicts = true;
     let datums = human_registration(&store, "http://ex/reg/forged", "stiwi", &pk(&keypair()));
     refused(store.transact(&datums, TS, Some("quipu"), Some("verdict")));
@@ -488,7 +495,7 @@ fn the_fingerprint_matches_ssh_keygen() {
 #[test]
 fn written_trust_root_records_conform_to_the_governance_shapes() {
     const SHAPES: &str = include_str!("../../shapes/governance.ttl");
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let reg = human_registration(&store, "http://ex/reg/yubikey", "stiwi", &pk(&keypair()));
@@ -508,7 +515,7 @@ fn written_trust_root_records_conform_to_the_governance_shapes() {
 fn the_recorded_digest_must_match_what_was_signed() {
     // A genuine signature over the real post-write digest, but the amendment
     // RECORDS a different digest: refused, so the record never lies.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let reg = "http://ex/reg/x";
@@ -554,7 +561,7 @@ fn the_recorded_digest_must_match_what_was_signed() {
 fn the_bootstrap_path_cannot_add_to_a_populated_registry() {
     // Defence in depth under bootstrap()'s own history check: the gate admits a
     // bootstrap write only into an EMPTY human registry.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let reg = "http://ex/reg/second";
@@ -568,7 +575,7 @@ fn the_bootstrap_path_stays_closed_once_the_registry_is_empty_again() {
     // Every human key revoked: the registry is EMPTY again, so the gate's
     // empty-registry rule alone would admit a new "first" key. The history
     // check inside the bootstrap write refuses it (wu-rev-350 N1).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     let revoke = vec![d(
@@ -591,7 +598,7 @@ fn human_registry_reads_legacy_quechua_and_mixed_terms() {
     let q = "https://scbrown.github.io/quechua/ns#";
     for public_type in [false, true] {
         for public_fields in [false, true] {
-            let mut store = Store::open_in_memory().unwrap();
+            let mut store = Store::open_in_memory_test_ns().unwrap();
             let kp = keypair();
             let enrolled = enrol(&mut store, &kp);
             let iri = &enrolled.registration;
@@ -691,7 +698,7 @@ fn governed_keys(store: &Store, verifier: &str, attests: &str) -> Vec<String> {
 fn self_enrolling_an_agent_tier_registration_is_refused() {
     // With no trust root at all, and with one: an unsigned agent-tier marker
     // never lands.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let agent = keypair();
     let reg = "http://ex/reg/self-enrolled";
     let datums = agent_registration(&store, reg, "agent-x", &pk(&agent), "has-test");
@@ -705,7 +712,7 @@ fn self_enrolling_an_agent_tier_registration_is_refused() {
 
 #[test]
 fn a_root_signed_agent_registration_is_governed_and_its_edits_are_gated() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let agent = keypair();
@@ -746,7 +753,7 @@ fn a_root_signed_agent_registration_is_governed_and_its_edits_are_gated() {
 
 #[test]
 fn an_agent_tier_key_cannot_sign_amendments_even_for_the_trust_root_policy() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let agent = keypair();
@@ -770,7 +777,7 @@ fn an_agent_tier_key_cannot_sign_amendments_even_for_the_trust_root_policy() {
 
 #[test]
 fn chain_of_names_the_bootstrap_or_the_signing_amendment() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     let e = enrol(&mut store, &stiwi);
     match chain_of(&store, &e.registration).unwrap() {
@@ -791,7 +798,7 @@ fn the_console_endorsement_migrates_a_legacy_registration() {
     // The documented migration: a registration written before aegis-c97o is
     // listed as unendorsed, the root signs the challenge, and the endorsement
     // lands through the gate. A forged signature or a wrong signer does not.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let stiwi = keypair();
     enrol(&mut store, &stiwi);
     let reg = "http://ex/reg/legacy-yupana";

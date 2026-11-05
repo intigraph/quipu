@@ -116,3 +116,48 @@ retaining a previous healthy snapshot.
 
 This reader supplies capture consumption, not the scheduled RCA programme,
 repair-seed creation, dashboard installation, or production acceptance proof.
+
+## Counters-only collection
+
+For aggregate accounting without query evidence, set
+`QUIPU_SEARCH_COUNTERS_ONLY_ENABLED=true` and
+`QUIPU_SEARCH_COUNTERS_ONLY_DIR` to an existing absolute, private (`0700`)
+directory owned by the process user. Unix processes of that same user share
+`counts.sqlite` (`0600`). HTTP, native MCP, local CLI and embedded tool calls
+update the same bounded fixed-label counts. Low-level store/evaluator calls
+remain outside the accounting boundary. Separate users and hosts need their own
+admitted collection paths; an absent surface is unknown coverage.
+
+This mode suppresses detailed journals even if `QUIPU_SEARCH_JOURNAL_DIR` is
+also set, or the aggregate writer fails. Only the fixed metric labels already
+used by semantic accounting, integer counts and capture timestamps reach the
+database. No query text, query fingerprints, event IDs or caller declarations
+are stored. An invalid flag value refuses aggregate capture and suppresses
+journaling too. Unset or `false` restores the existing behavior; changing mode
+requires restarting each participating process. Set the journal directory empty
+when disabling if detailed capture must remain off.
+
+Updates use a separate SQLite database and a five-millisecond lock deadline.
+One terminal event performs one transaction; uncertain writes are never retried.
+Failures remain visible in the static process diagnostic and, for scraped
+processes, `quipu_search_counters_only_capture_total{outcome="error"}`. They do
+not fail the query or fall back to a text journal. Read-only, malformed,
+unowned, broad-permission or unsupported state refuses capture. State is not
+silently reset. This synchronous durability has a cost: qualify latency and
+resource usage before enabling it.
+
+A separately reviewed collector can export the aggregate snapshot without
+replaying any events. Export into the distinct
+`quipu_search_aggregate_requests_total`,
+`quipu_search_aggregate_zero_results_total` and
+`quipu_search_aggregate_miss_reasons_total` families. Never add these to live
+process counters for the same calls. Repeated exports do not increment counts.
+Per-surface last-capture timestamps describe observed calls, not continuous
+producer health. Independently verify collector/scrape freshness, expected
+surfaces and process capture errors. Idle and missing callers cannot be told
+apart from a cumulative counter alone.
+
+Disabling collection retains aggregate state. Re-enabling resumes the retained
+counts; deleting or replacing the state would reset counters and requires a
+separate deliberate disposition. None of this enables daily RCA, creates repair
+seeds, installs a collector, or provides production coverage by itself.

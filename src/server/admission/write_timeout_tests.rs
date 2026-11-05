@@ -69,9 +69,11 @@ async fn expired_write_admission_never_invokes_handler() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn expired_writer_lock_never_invokes_tool() {
-    let shared = Arc::new(super::super::StoreHandle::writer_only(
-        quipu::Store::open_in_memory().unwrap(),
-    ));
+    let shared = Arc::new(super::super::StoreHandle::writer_only({
+        let mut s = quipu::Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    }));
     let (release, holder) = hold_writer(shared.clone());
     let admission = Box::leak(Box::new(tokio::sync::Semaphore::new(1)));
     let ran = Arc::new(AtomicBool::new(false));
@@ -104,9 +106,11 @@ async fn expired_writer_lock_never_invokes_tool() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn actual_write_handler_refuses_before_creating_a_graph() {
-    let shared = Arc::new(super::super::StoreHandle::writer_only(
-        quipu::Store::open_in_memory().unwrap(),
-    ));
+    let shared = Arc::new(super::super::StoreHandle::writer_only({
+        let mut s = quipu::Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    }));
     let (release, holder) = hold_writer(shared.clone());
     let other = shared.clone();
     let waiter = tokio::spawn(TEST_REQUEST_BUDGET_MS.scope(
@@ -159,7 +163,11 @@ impl quipu::EmbeddingProvider for BudgetProvider {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn episode_handler_refuses_expired_batch_then_commits_large_control() {
-    let mut store = quipu::Store::open_in_memory().unwrap();
+    let mut store = {
+        let mut s = quipu::Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    };
     store.resolution_config_mut().enabled = true;
     store.embedding_config_mut().auto_embed = false;
     store.set_embedding_provider(Arc::new(BudgetProvider { expire: true }));
@@ -223,7 +231,11 @@ async fn expired_read_retains_query_timeout_response() {
         Some(quipu::time::Deadline::after_millis(0)),
         std::time::Instant::now(),
         || {
-            let store = quipu::Store::open_in_memory()?;
+            let store = {
+                let mut s = quipu::Store::open_in_memory()?;
+                s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+                s
+            };
             let _result = quipu::sparql_query(&store, "SELECT ?s ?p ?o WHERE { ?s ?p ?o }")?;
             Ok(())
         },

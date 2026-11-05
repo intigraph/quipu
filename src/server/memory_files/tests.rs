@@ -28,7 +28,11 @@ fn fixture() -> (Router, crate::SharedStore) {
             .unwrap()
             .with_named(registry),
     );
-    let store = quipu::Store::open_in_memory().unwrap();
+    let store = {
+        let mut s = quipu::Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    };
     store.graph_create("urn:example:memory").unwrap();
     let state = Arc::new(crate::StoreHandle::writer_only(store));
     let config = quipu::config::MemoryFilesConfig {

@@ -5,7 +5,6 @@ use super::invalid;
 use crate::{
     Store,
     error::Result,
-    namespace::DEFAULT_BASE_NS,
     sparql::{self, QueryResult},
     types::Value,
 };
@@ -13,8 +12,9 @@ use crate::{
 pub(super) type Catalogue = BTreeMap<String, std::result::Result<serde_json::Value, String>>;
 
 pub(super) fn load(store: &Store) -> Result<Catalogue> {
+    let ns = store.governance_ns()?;
     let query = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?p ?selector ?predicate ?tier ?language ?query ?pattern ?match_type ?gate WHERE {{ \
+        "PREFIX a: <{ns}> SELECT ?p ?selector ?predicate ?tier ?language ?query ?pattern ?match_type ?gate WHERE {{ \
         ?p a a:Policy ; a:boundary \"action\" . \
         OPTIONAL {{ ?p a:selector ?selector . OPTIONAL {{ ?selector a:tier ?tier }} \
           OPTIONAL {{ ?selector a:language ?language }} OPTIONAL {{ ?selector a:evidenceSource ?query }} }} \
@@ -87,9 +87,11 @@ fn decode(
 #[cfg(all(test, feature = "shacl"))]
 mod tests {
     use super::*;
+    use crate::namespace::DEFAULT_BASE_NS;
     #[test]
     fn catalogue_loads_canonical_rules_and_refuses_ambiguous_fields() {
-        let mut store = Store::open_in_memory().unwrap();
+        // The shipped policy pack is written under the legacy namespace.
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         crate::ingest_rdf(
             &mut store,
             &include_bytes!("../../../shapes/policies/treesitter.ttl")[..],

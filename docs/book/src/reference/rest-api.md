@@ -194,7 +194,7 @@ an active server bearer. For a named credential, the administrator registers its
 verifier and activates the validated registry before supplying the plaintext to
 the client. Installing an arbitrary token on a client cannot grant access.
 
-Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+Shantytown and Tambo use `~/.config/quipu/token` as the default credential
 file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
 overrides this default. Files are read at request time. This is a client
 convention; the server neither reads your home directory nor distributes secrets.
@@ -202,8 +202,8 @@ convention; the server neither reads your home directory nor distributes secrets
 ```sh
 install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
 st ops doctor quipu --no-latest
-# Or, on a CABOODLE host:
-caboodle doctor
+# Or, on a Tambo host:
+tambo doctor
 ```
 
 Keep an existing explicit file override until provisioning and rotation move
@@ -2627,7 +2627,7 @@ in `transact` — appends a `write.refused` event *after* the refused write's
 savepoint has rolled back, so the event survives the rollback that the refusal
 caused. A failure to record never masks the refusal error itself.
 
-Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+Payload: `{gate, graph, actor, source, reason, reason_code, shape, client, refused_datums}` where `gate`
 is one of `shacl | policy | authority | owl | placement`, `graph` is the
 destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
 constraint name; truncated), and `refused_datums` counts what was refused.
@@ -2640,7 +2640,9 @@ whole speculation rolls back by design, so a hypothetical write's refusal is
 not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
-`quipu events refusals`.
+`quipu events refusals`. The additive `reason_code`, `shape` and `client` fields
+provide bounded classifications and structured attribution. See [write refusal
+accounting](write-refusals.md) for counters, `/stats` and reset semantics.
 
 ### Admitted debt events (`shacl.debt_admitted`)
 

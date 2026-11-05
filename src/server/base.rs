@@ -91,9 +91,24 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
-    store.set_vocabulary(config.vocabulary);
-    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
-        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    store.set_code_base(config.code_base.clone());
+    if let Some(path) = &config.vocabulary_map {
+        // A configured map that cannot be read must stop startup: writing the
+        // unmapped IRIs instead would be a silent change of vocabulary.
+        let map = quipu::term_vocabulary::VocabularyMap::load(path).unwrap_or_else(|e| {
+            eprintln!("error loading vocabulary map: {e}");
+            std::process::exit(1);
+        });
+        eprintln!(
+            "vocabulary map {} loaded: {} term(s) written under their mapped IRIs",
+            path.display(),
+            map.len()
+        );
+        store.set_vocabulary(map);
+    }
+    match quipu::namespace::require_base_ns(&config.base_ns) {
+        Ok(()) => eprintln!("minting IRIs under configured base_ns: {}", config.base_ns),
+        Err(e) => eprintln!("warning: writes that mint names will be refused: {e}"),
     }
     store.resolution_config_mut().clone_from(&config.resolution);
     if config.resolution.enabled {
@@ -385,6 +400,7 @@ pub(crate) async fn stats(
         drop(reader);
         let mut value = (*value).clone();
         value["store_id"] = json!(store_id);
+        value["write_refusals"] = quipu::metrics::metrics().write_refusal_stats();
         // The counts describe this transaction; `counts_stale` is true only when
         // a concurrent recompute was running and an older aggregate was returned.
         value["counts_as_of_tx"] = json!(counts_tx);

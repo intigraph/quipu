@@ -3,7 +3,6 @@ use super::invalid;
 use crate::{
     Store,
     error::Result,
-    namespace::DEFAULT_BASE_NS,
     sparql::{self, QueryResult},
     types::Value,
 };
@@ -18,8 +17,9 @@ pub(super) struct Policy {
 }
 
 pub(super) fn load(store: &Store, include_structural: bool) -> Result<Vec<Policy>> {
+    let ns = store.governance_ns()?;
     let query = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
+        "PREFIX a: <{ns}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \
          SELECT ?p ?path ?label ?effect ?selector ?predicate WHERE {{ \
          ?p a a:Policy ; a:boundary \"action\" . OPTIONAL {{ ?p a:appliesTo ?path }} \
          OPTIONAL {{ ?p rdfs:label ?label }} OPTIONAL {{ ?p a:effect ?effect }} \

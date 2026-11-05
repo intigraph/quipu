@@ -1,0 +1,51 @@
+{
+  "schema": "cooperative-heavy-read-private-qualification/v1",
+  "source_revision": "703e2ce83fd42992ded8214ff62320b84204b0d4",
+  "build_profile": "release/full",
+  "git_dirty": false,
+  "scope": "One retained private copy; three actual owner-row variants; no production requests or external providers",
+  "ordinary_readers": 4,
+  "enabled_class_permits": 1,
+  "request_and_query_deadline_ms": 10000,
+  "cpu_quota_cores": 2,
+  "memory_max_bytes": 8589934592,
+  "tasks_max": 256,
+  "runtime_max_seconds": 600,
+  "data_query_attempts": 46,
+  "elapsed_seconds": 140.374562,
+  "interleaved_rounds_per_arm": 3,
+  "cheap_concurrent": {
+    "n_per_arm": 3,
+    "empty_seconds": [2.812776, 6.458252, 6.548958],
+    "enabled_seconds": [0.166807, 0.389026, 0.377656],
+    "empty_http_408": 0,
+    "enabled_http_408": 0,
+    "all_truth_counts": 1,
+    "nearest_rank_p95_ratio": 16.834244,
+    "predeclared_required_ratio": 5
+  },
+  "cheap_isolated": {
+    "n_per_arm": 5,
+    "empty_seconds": [1.798843, 0.055508, 0.056909, 0.059769, 0.051753],
+    "enabled_seconds": [0.353897, 0.077903, 0.076778, 0.086590, 0.070272],
+    "all_http_200_and_truth_count_one": true,
+    "cold_samples_included": true
+  },
+  "owner_requests": {
+    "isolated_successes": 6,
+    "concurrent_successes": 24,
+    "all_nonempty_rowsets_equal_to_isolated_and_across_arms": true,
+    "concurrent_n_per_arm": 12,
+    "empty_median_seconds": 6.407822,
+    "enabled_median_seconds": 3.127899,
+    "empty_nearest_rank_p95_seconds": 8.143384,
+    "enabled_nearest_rank_p95_seconds": 5.326832
+  },
+  "active_load_controls": {"empty": [4, 4, 4], "enabled": [1, 1, 1]},
+  "resource_peak_window": "Aggregate restore and all query phases; not a query heap measurement",
+  "aggregate_memory_peak_bytes": 8589934592,
+  "service_exit": 0,
+  "owned_servers_reaped": 6,
+  "owned_disposable_database_removed": true,
+  "production_acceptance": "Not established; installation and activation require separate authority"
+}
