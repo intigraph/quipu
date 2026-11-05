@@ -221,6 +221,7 @@ pub(crate) fn begin(
 /// Called immediately after creating a transaction, inside its savepoint.
 /// The evidence therefore commits or rolls back with the exact transaction.
 pub(crate) fn record(conn: &Connection, tx_id: i64) -> crate::Result<()> {
+    crate::write_provenance::record(conn, tx_id)?;
     IDENTITY.with(|slot| {
         if let Some(identity) = slot.borrow().as_ref() {
             // A signed write mutates only once its nonce is spent and its
@@ -251,7 +252,7 @@ impl crate::Store {
     pub fn transaction_auth(&self, tx_id: i64) -> crate::Result<Option<Identity>> {
         // Read-only opens of older stores do not perform schema migrations.
         let exists: bool = self.conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='transaction_auth')",
+            "SELECT EXISTS(SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='transaction_auth')",
             [], |row| row.get(0),
         )?;
         if !exists {
@@ -260,7 +261,7 @@ impl crate::Store {
         Ok(self
             .conn
             .query_row(
-                "SELECT principal, credential_id, auth_class FROM transaction_auth WHERE tx=?1",
+                "SELECT principal, credential_id, auth_class FROM main.transaction_auth WHERE tx=?1",
                 [tx_id],
                 |row| {
                     Ok(Identity {

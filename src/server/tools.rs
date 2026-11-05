@@ -366,10 +366,8 @@ pub(crate) async fn ontology(
     matched: Option<axum::extract::MatchedPath>,
     axum::Json(i): axum::Json<JsonValue>,
 ) -> Result<axum::Json<JsonValue>, AppError> {
-    if i.get("action").and_then(JsonValue::as_str) == Some("materialize") {
-        return super::owl_materialize::materialize(s, i).await;
-    }
-    ontology_locked(State(s), headers, matched, axum::Json(i)).await
+    // Scheduled materialize and deferred loads run off the writer lock.
+    super::owl_materialize::dispatch(s, headers, matched, i).await
 }
 
 #[cfg(feature = "owl")]
