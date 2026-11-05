@@ -472,6 +472,7 @@ impl AppError {
 
     /// The underlying error's message, for a response that must report a
     /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
+    #[cfg(feature = "owl")]
     pub(crate) fn message(&self) -> String {
         self.0.to_string()
     }
