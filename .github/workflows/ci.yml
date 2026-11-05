@@ -668,6 +668,10 @@ jobs:
         run: cargo build --locked --features full --bin quipu-server
       - name: Run mixed load ratchet
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           DB="$(mktemp --suffix=.db)"
           target/debug/quipu-server --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
@@ -740,6 +744,10 @@ jobs:
             --db /dev/shm/query-perf.db --quipu target/release/quipu
       - name: Run the query performance gate
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT

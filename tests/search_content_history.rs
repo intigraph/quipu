@@ -7,6 +7,7 @@ use serde_json::json;
 #[test]
 fn retracted_description_stops_exempting_a_heading_at_the_upper_bound() {
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
     let turtle = format!(
         "@prefix ex: <http://example.org/> .
          @prefix model: <{}> .

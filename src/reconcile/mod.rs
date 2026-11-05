@@ -11,7 +11,6 @@
 mod tests;
 
 use crate::error::Result;
-use crate::namespace::{self, BOBBIN_IMPORTS, BOBBIN_LANGUAGE, BOBBIN_NAME};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
 
@@ -206,12 +205,30 @@ pub struct ReconcileReport {
 /// provided resolvers, and atomically updates resolved edges.
 ///
 /// Idempotent: already-resolved edges (`Value::Ref`) are skipped.
+///
+/// The code vocabulary (`imports`, `name`, `language`, `definedIn`) is read
+/// under the store's `base_ns`, and code entities are those under its
+/// `[quipu].code_base`.
+///
+/// # Errors
+///
+/// When either namespace is not usable: with none, the pass would match
+/// nothing and report a clean store it never looked at.
 pub fn reconcile(
     store: &mut Store,
     resolvers: &[Box<dyn ImportResolver>],
     timestamp: &str,
 ) -> Result<ReconcileReport> {
-    let Some(imports_id) = store.lookup(BOBBIN_IMPORTS)? else {
+    crate::namespace::require_base_ns(store.base_ns())?;
+    crate::namespace::require_base_ns(store.code_base()).map_err(|_| {
+        crate::error::Error::InvalidValue(format!(
+            "reconcile needs [quipu] code_base, the base of code-entity IRIs; {:?} is not \
+             an absolute IRI ending in '/' or '#'",
+            store.code_base()
+        ))
+    })?;
+    let ns = store.base_ns().to_string();
+    let Some(imports_id) = store.lookup(&format!("{ns}imports"))? else {
         return Ok(ReconcileReport {
             resolved: 0,
             dangling: 0,
@@ -220,7 +237,7 @@ pub fn reconcile(
         });
     };
 
-    let Some(name_id) = store.lookup(BOBBIN_NAME)? else {
+    let Some(name_id) = store.lookup(&format!("{ns}name"))? else {
         return Ok(ReconcileReport {
             resolved: 0,
             dangling: 0,
@@ -265,7 +282,7 @@ pub fn reconcile(
         let from_iri = store.resolve(fact.entity)?;
 
         // Determine language from the source entity's module context.
-        let language = determine_language(store, &all_facts, fact.entity)?;
+        let language = determine_language(store, &ns, &all_facts, fact.entity)?;
 
         // Find the matching resolver, or fall back to direct name match.
         let candidates: Vec<ImportCandidate> = match &language {
@@ -355,6 +372,8 @@ pub fn reconcile(
 struct NameIndex {
     /// Maps lowercase name to list of (`entity_id`, `entity_iri`).
     entries: std::collections::HashMap<String, Vec<(i64, String)>>,
+    /// The store's code-entity IRI base; every indexed IRI starts with it.
+    code_base: String,
 }
 
 fn build_name_index(
@@ -370,9 +389,9 @@ fn build_name_index(
             && let Value::Str(ref name) = fact.value
         {
             let iri = store.resolve(fact.entity)?;
-            // Only index entities with Bobbin code IRIs — the live lane mints
-            // them under the aegis code base, not the vocabulary namespace.
-            if iri.starts_with(namespace::CODE_BASE) {
+            // Only index code entities: those under the store's code base,
+            // not its vocabulary namespace.
+            if iri.starts_with(store.code_base()) {
                 entries
                     .entry(name.to_lowercase())
                     .or_default()
@@ -381,7 +400,10 @@ fn build_name_index(
         }
     }
 
-    Ok(NameIndex { entries })
+    Ok(NameIndex {
+        entries,
+        code_base: store.code_base().to_string(),
+    })
 }
 
 /// Find entity IRIs matching any of the given candidates.
@@ -399,7 +421,7 @@ fn find_matches(
                 for (_id, iri) in entries {
                     // If there's a module hint, verify the IRI contains it.
                     if let Some(hint) = &candidate.module_hint
-                        && !iri_contains_path(iri, hint)
+                        && !iri_contains_path(iri, &name_index.code_base, hint)
                     {
                         continue;
                     }
@@ -412,7 +434,8 @@ fn find_matches(
             // Module-only match: search for CodeModule IRIs containing the hint.
             for entries in name_index.entries.values() {
                 for (_id, iri) in entries {
-                    if iri_contains_path(iri, hint) && !results.contains(iri) {
+                    if iri_contains_path(iri, &name_index.code_base, hint) && !results.contains(iri)
+                    {
                         results.push(iri.clone());
                     }
                 }
@@ -424,12 +447,12 @@ fn find_matches(
 }
 
 /// Check whether an entity IRI contains the given path fragment.
-fn iri_contains_path(iri: &str, path_hint: &str) -> bool {
+fn iri_contains_path(iri: &str, code_base: &str, path_hint: &str) -> bool {
     // Strip the entity base and check if the remaining path contains the
     // hint. Live IRIs percent-encode path segments (`/` becomes `%2F`), so
     // decode before comparing; `::` normalization covers module hints
     // written as Rust paths.
-    let Some(rest) = iri.strip_prefix(namespace::CODE_BASE) else {
+    let Some(rest) = iri.strip_prefix(code_base) else {
         return false;
     };
     let decoded = rest.replace("%2F", "/").replace("%2f", "/");
@@ -442,11 +465,12 @@ fn iri_contains_path(iri: &str, path_hint: &str) -> bool {
 /// to its parent `CodeModule` via `bobbin:definedIn`.
 fn determine_language(
     store: &Store,
+    ns: &str,
     facts: &[crate::types::Fact],
     entity_id: i64,
 ) -> Result<Option<String>> {
-    let defined_in_id = store.lookup(namespace::BOBBIN_DEFINED_IN)?;
-    let language_id = store.lookup(BOBBIN_LANGUAGE)?;
+    let defined_in_id = store.lookup(&format!("{ns}definedIn"))?;
+    let language_id = store.lookup(&format!("{ns}language"))?;
 
     // First try: entity itself has a language property (it's a CodeModule).
     if let Some(lang_id) = language_id {

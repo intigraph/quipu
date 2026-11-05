@@ -231,6 +231,8 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
+    /// Code-entity IRI base, from `[quipu].code_base` (empty when unset).
+    pub(crate) code_base: String,
     /// Vocabulary term map, loaded from `[quipu].vocabulary_map` at startup.
     /// Empty by default (every term under `base_ns`).
     pub(crate) vocabulary: std::sync::Arc<crate::term_vocabulary::VocabularyMap>,

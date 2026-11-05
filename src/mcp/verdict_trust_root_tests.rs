@@ -105,7 +105,7 @@ fn self_enrollment_never_yields_trust() {
     // An agent writes its own registration with one unsigned write. The
     // store has a trust root, so the write lands (it is ungoverned) but the
     // verdict it signs is never trusted, and the answer says why.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::governance::trust_root::test_support::ensure_root(&mut store);
     let agent = keypair();
     let reg = "http://ex/reg/self-enrolled";
@@ -158,7 +158,7 @@ fn self_enrollment_never_yields_trust() {
 
 #[test]
 fn a_key_added_to_an_endorsed_registration_without_the_root_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let legit = keypair();
     let reg = "http://ex/reg/yupana";
     let datums = registration(
@@ -186,7 +186,7 @@ fn a_key_added_to_an_endorsed_registration_without_the_root_is_refused() {
 
 #[test]
 fn a_root_signed_registration_is_trusted_and_says_why() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let kp = keypair();
     let reg = "http://ex/reg/yupana";
     let mut datums = registration(
@@ -222,7 +222,7 @@ fn a_root_signed_registration_is_trusted_and_says_why() {
 
 #[test]
 fn revocation_by_the_root_ends_trust_for_new_verdicts_only() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let kp = keypair();
     let reg = "http://ex/reg/yupana";
     let datums = registration(
@@ -272,7 +272,7 @@ fn a_verdict_sealed_before_endorsement_stays_untrusted_after_migration() {
     // recorded while its registration had no trust-root chain is evaluated
     // against the registry as it stood then, so re-signing the registration
     // later does not make it trusted. Its signature still reports valid.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let kp = keypair();
     let reg = "http://ex/reg/legacy";
     let datums = registration(

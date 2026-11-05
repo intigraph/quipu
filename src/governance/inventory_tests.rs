@@ -1,6 +1,7 @@
 //! Dispatch-inventory tests. Size-exempt (`*_tests.rs`).
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::namespace::RDF_TYPE;
 use crate::store::Datum;
 use crate::types::Op;
@@ -56,7 +57,7 @@ fn incompletenesses(report: &Report) -> Vec<&crate::governance::audit::Discrepan
 fn an_empty_inventory_is_not_a_clean_bill_of_health() {
     // The single most misleading thing this module could do is pass by having
     // nothing to check.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let report = check(&store).unwrap();
     assert!(
         report.conforms(),
@@ -74,7 +75,7 @@ fn an_empty_inventory_is_not_a_clean_bill_of_health() {
 #[test]
 fn an_executable_class_that_traverses_nothing_and_says_nothing_is_a_violation() {
     // I7: an unknown hole in the dispatch graph.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(&mut store, "Task", &[("executable", "true")]);
     let report = check(&store).unwrap();
     assert!(
@@ -90,7 +91,7 @@ fn an_executable_class_that_traverses_nothing_and_says_nothing_is_a_violation() 
 fn an_acknowledged_bypass_surface_is_reported_but_is_not_a_violation() {
     // The distinction that is the whole point of writing the list down: an
     // operator cannot tell a decision from an oversight without it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "ci-pipeline",
@@ -120,7 +121,7 @@ fn an_acknowledged_bypass_surface_is_reported_but_is_not_a_violation() {
 fn an_acknowledged_surface_with_no_alternative_says_so() {
     // "Unhandled, and nobody has said where it is handled instead" is a
     // different state from "handled elsewhere", and the report must not blur it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "hostile-agent",
@@ -143,7 +144,7 @@ fn an_acknowledged_surface_with_no_alternative_says_so() {
 fn the_control_a_governed_executable_class_produces_nothing() {
     // Without this, every test above could be passing because the checker flags
     // every class it sees.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Edit",
@@ -157,7 +158,7 @@ fn the_control_a_governed_executable_class_produces_nothing() {
 #[test]
 fn a_read_only_class_needs_no_enforcement_point() {
     // Demanding one would bury the real gaps under the ordinary case.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(&mut store, "Read", &[("executable", "false")]);
     let report = check(&store).unwrap();
     assert!(report.conforms(), "{:#?}", report.discrepancies);
@@ -167,7 +168,7 @@ fn a_read_only_class_needs_no_enforcement_point() {
 #[test]
 fn an_undeclared_executable_flag_is_undecidable_not_assumed_safe() {
     // Guessing either way is wrong in a direction that matters.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(&mut store, "Mystery", &[]);
     let report = check(&store).unwrap();
     assert!(report.conforms());
@@ -184,7 +185,7 @@ fn an_undeclared_executable_flag_is_undecidable_not_assumed_safe() {
 fn a_class_with_two_points_keeps_both() {
     // A tool call can pass a pre-action gate and a post-action auditor both, and
     // recording whichever row bound last would silently halve the coverage set.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Edit",
@@ -210,7 +211,7 @@ fn a_class_with_two_points_keeps_both() {
 fn a_constraint_placed_where_nothing_traverses_can_never_fire() {
     // The cross-check the other direction: governance in the catalog, inert in
     // the deployment — the failure hardest to see from either side alone.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Edit",
@@ -239,7 +240,7 @@ fn a_constraint_placed_where_nothing_traverses_can_never_fire() {
 
 #[test]
 fn the_control_a_constraint_placed_where_something_traverses_is_fine() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Edit",
@@ -265,7 +266,7 @@ fn the_shipped_inventory_conforms_to_its_own_check() {
     // The seed file is a claim about this deployment. Shipping one the checker
     // rejects would mean the first thing any operator sees is a red report about
     // our own data.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = std::fs::read_to_string("shapes/dispatch-inventory.ttl")
         .expect("the shipped inventory is part of the repo");
     crate::ingest_rdf(
@@ -293,7 +294,7 @@ fn the_shipped_inventory_conforms_to_its_own_check() {
 fn an_importing_class_is_reported_even_when_it_is_governed() {
     // The risk is different in kind. `governedAt` says the class's own ACTIONS
     // traverse a point; it says nothing about what the class RETURNED.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Task",
@@ -318,7 +319,7 @@ fn an_importing_class_is_reported_even_when_it_is_governed() {
 #[test]
 fn an_undocumented_import_channel_is_a_violation() {
     // An import channel nobody can describe is one nobody can weigh.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "mystery-import",
@@ -336,7 +337,7 @@ fn an_undocumented_import_channel_is_a_violation() {
 
 #[test]
 fn the_control_a_non_importing_class_gets_no_trust_finding() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(
         &mut store,
         "Edit",
@@ -351,7 +352,7 @@ fn an_undeclared_import_flag_is_not_read_as_importing() {
     // Absent is not false and it is not true either — but a class that says
     // nothing about importing has made no claim to check, and inventing one
     // would flag every entry in the file.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     tool_class(&mut store, "Read", &[("executable", "false")]);
     let report = check(&store).unwrap();
     assert!(report.is_complete(), "{:#?}", report.discrepancies);
@@ -362,7 +363,7 @@ fn the_shipped_inventory_declares_its_import_channels() {
     // The stack really does have them — a sub-agent's response, an MCP server's
     // output, retrieved documents — and a seed file that omitted them would be
     // claiming a closed perimeter this deployment does not have.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let turtle = std::fs::read_to_string("shapes/dispatch-inventory.ttl").unwrap();
     crate::ingest_rdf(
         &mut store,

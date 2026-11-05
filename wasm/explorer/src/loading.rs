@@ -62,6 +62,7 @@ pub(super) fn load(
     request.actor = None;
     progress.step("open_store");
     let mut store = quipu::Store::open_in_memory().map_err(err_js)?;
+    store.set_base_ns(super::EXPLORER_NS.to_string());
     #[cfg(feature = "shacl")]
     {
         // This explorer writes, so a linked validator must also enforce

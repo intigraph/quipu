@@ -51,7 +51,7 @@
 //! next unverifiable transition.
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, PROV};
+use crate::namespace::PROV;
 use crate::store::{Datum, Store};
 use crate::types::Value;
 
@@ -282,7 +282,10 @@ fn last_segment(value: &str, sep: char) -> &str {
 /// one transaction verify together, and a write that strips the signature
 /// from an existing event fails.
 pub fn verify_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
-    let events = super::placement::touched_of_type(store, datums, graph, "TransitionEvent")?;
+    let Some(ns) = store.governance_ns_for_write(datums)? else {
+        return Ok(());
+    };
+    let events = super::placement::touched_of_type(store, ns, datums, graph, "TransitionEvent")?;
     for iri in &events {
         let transition = read_transition(store, iri, graph)?;
         let keys = |agent: &str| registered_keys(store, agent);
@@ -297,19 +300,20 @@ pub fn verify_write(store: &Store, datums: &[Datum], graph: i64) -> Result<()> {
 /// write's graph or ROOT — the same visibility `touched_of_type` used to find
 /// it.
 fn read_transition(store: &Store, iri: &str, graph: i64) -> Result<Transition> {
+    let ns = store.governance_ns()?;
     let Some(entity) = store.lookup(iri)? else {
         return Ok(Transition::default());
     };
     let attrs: Vec<(String, i64)> = [
-        format!("{DEFAULT_BASE_NS}inRun"),
-        format!("{DEFAULT_BASE_NS}atStep"),
-        format!("{DEFAULT_BASE_NS}fromState"),
-        format!("{DEFAULT_BASE_NS}toState"),
+        format!("{ns}inRun"),
+        format!("{ns}atStep"),
+        format!("{ns}fromState"),
+        format!("{ns}toState"),
         format!("{PROV}endedAtTime"),
-        format!("{DEFAULT_BASE_NS}performedBy"),
-        format!("{DEFAULT_BASE_NS}signature"),
-        format!("{DEFAULT_BASE_NS}transitionVersion"),
-        format!("{DEFAULT_BASE_NS}fromRevision"),
+        format!("{ns}performedBy"),
+        format!("{ns}signature"),
+        format!("{ns}transitionVersion"),
+        format!("{ns}fromRevision"),
     ]
     .into_iter()
     .filter_map(|name| match store.lookup(&name) {

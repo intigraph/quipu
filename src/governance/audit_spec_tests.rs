@@ -1,6 +1,7 @@
 //! Σ-loading tests. Size-exempt (`*_tests.rs`).
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::namespace::RDF_TYPE;
 use crate::store::Datum;
 use crate::types::Op;
@@ -39,7 +40,7 @@ fn policy(store: &mut Store, iri: &str, fields: &[(&str, &str)]) {
 
 #[test]
 fn a_policy_is_keyed_by_its_label() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(
         &mut store,
         "http://ex/policy/p1",
@@ -64,7 +65,7 @@ fn an_unlabelled_policy_falls_back_to_its_local_name() {
     // The trace cites whatever hank named the rule, and hank's projection falls
     // back the same way. A checker that dropped unlabelled policies would report
     // them as never exercised no matter what the trace said.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(
         &mut store,
         "http://ex/policy/lonely",
@@ -79,7 +80,7 @@ fn a_transition_boundary_policy_is_not_in_scope() {
     // It governs a state change rather than a dispatched action, so no trace
     // record could have traversed an enforcement point for it — and reporting
     // it as never exercised would be reporting an absence that is correct.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(
         &mut store,
         "http://ex/policy/t",
@@ -92,7 +93,7 @@ fn a_transition_boundary_policy_is_not_in_scope() {
 fn a_policy_appears_once_however_many_optionals_bind() {
     // The OPTIONAL cross-product would otherwise turn one policy into several
     // constraints, and the vacuity count would be wrong by a multiple.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(
         &mut store,
         "http://ex/policy/p",
@@ -110,6 +111,6 @@ fn a_policy_appears_once_however_many_optionals_bind() {
 
 #[test]
 fn an_empty_store_yields_an_empty_spec_not_an_error() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     assert!(load(&store).unwrap().is_empty());
 }

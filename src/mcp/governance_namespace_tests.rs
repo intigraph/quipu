@@ -22,7 +22,7 @@ fn ingest(store: &mut Store, turtle: &str) {
 /// foreign-namespace registration that must never count. The registry matches
 /// the registration class exactly (no subclass inference), as on main.
 fn registry(mode: &str) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let namespaces = match mode {
         "old" => vec![(LEGACY, LEGACY, LEGACY)],
         "new" => vec![(PUBLIC, PUBLIC, PUBLIC)],
@@ -108,7 +108,7 @@ fn public_key_dual_namespace_reader_counts_each_key_once() {
 fn policy_scalar_dual_namespace_reader_preserves_text_and_refuses_conflicts() {
     for property in ["claim", "evidenceProbe"] {
         for namespaces in [vec![LEGACY], vec![PUBLIC], vec![LEGACY, PUBLIC]] {
-            let mut store = Store::open_in_memory().unwrap();
+            let mut store = Store::open_in_memory_test_ns().unwrap();
             for ns in &namespaces {
                 ingest(
                     &mut store,
