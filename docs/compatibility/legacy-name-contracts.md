@@ -21,6 +21,6 @@ an explicit compatibility explanation, including the historical paths below.
 | `tests/fixtures/shapes/camayoc-core-731272ea.ttl` | Immutable upstream shape snapshot; its comments remain byte-identical to the pinned source. |
 | `tests/fixtures/shapes/camayoc-core-g51c-candidate.ttl` | Pinned candidate shape snapshot; refresh through its owning fixture workflow rather than rewriting provenance. |
 
-The release workflow has one former-name comment still awaiting the separate
-workflow-authorized cleanup. It is not an allowed compatibility contract, and
-the repository cleanup remains incomplete until that comment is updated.
+The release workflow's former-name comment is removed by a separate workflow
+commit. Full native CI and a public default-branch scan remain required for
+acceptance.
