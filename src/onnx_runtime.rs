@@ -1,4 +1,4 @@
-//! One pre-session runtime bootstrap. No runtime network access.
+//! One pre-session bootstrap with explicit checksum-pinned GPU acquisition.
 mod gpu;
 pub use gpu::{acquire_gpu_candidate, gpu_candidate, provision_gpu_candidate};
 
