@@ -28,6 +28,7 @@ name: Conformance
 # release version bumps whose generated PRs otherwise never run this workflow.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - 'src/**'
@@ -65,7 +66,7 @@ permissions:
 jobs:
   published-matches-ledger:
     name: Published results match the ledgers
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     runs-on: ubuntu-latest
     steps:
       # fetch-depth: 0 is REQUIRED, not tidiness — the sibling provenance job
@@ -109,7 +110,7 @@ jobs:
   # and the stamps.
   ledger-provenance:
     name: Ledgers were derived from the code they ship with
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'pull_request' || github.event_name == 'push') }}
     runs-on: ubuntu-latest
     outputs:
       stale: ${{ steps.provenance.outputs.stale }}
@@ -145,7 +146,7 @@ jobs:
     name: Re-derive conformance from the pinned W3C suite
     needs: ledger-provenance
     if: >-
-      ${{ !cancelled() && (
+      ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (
         github.event_name == 'release' ||
         github.event_name == 'schedule' ||
         github.event_name == 'workflow_dispatch' ||

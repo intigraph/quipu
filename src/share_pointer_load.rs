@@ -83,7 +83,7 @@ impl LazyPacks {
     /// Fetch (or reuse), verify and atomically compose one graph on first use.
     ///
     /// `trust` MUST check whether the pointing repository may load this pointer
-    /// under the host's current policy (native hosts use caboodle packs trust).
+    /// under the host's current policy (native hosts use tambo packs trust).
     /// It runs before cache reads or network access, including on repeat use.
     /// `fetch` must bound its response before buffering (see `share_transport`'s
     /// download limit); this function also rejects oversized supplied buffers.

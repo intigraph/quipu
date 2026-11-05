@@ -28,7 +28,7 @@ fn named() -> crate::crew_credentials::CrewPrincipal {
 
 #[test]
 fn exact_text_and_owner_readback_are_not_a_summary() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let request = input();
     assert!(read(&store, 0, &request.owner).unwrap().is_none());
     let receipt = commit(&mut store, 0, &request, Authority::Named(&named()), TS).unwrap();
@@ -43,7 +43,7 @@ fn exact_text_and_owner_readback_are_not_a_summary() {
 
 #[test]
 fn lost_response_replay_precedes_now_stale_snapshot_and_file_heads() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let request = input();
     assert!(
         receipt(&store, 0, &request, Authority::Local)
@@ -76,7 +76,7 @@ fn lost_response_replay_precedes_now_stale_snapshot_and_file_heads() {
 
 #[test]
 fn unchanged_bytes_with_new_stale_intent_still_conflict() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut request = input();
     commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
     request.idempotency_key = "not-a-replay".into();
@@ -85,7 +85,7 @@ fn unchanged_bytes_with_new_stale_intent_still_conflict() {
 
 #[test]
 fn unproven_or_wrong_named_writer_cannot_commit_any_facts() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let request = input();
     assert!(commit(&mut store, 0, &request, Authority::Unproven, TS).is_err());
     let mut wrong = named();
@@ -97,7 +97,7 @@ fn unproven_or_wrong_named_writer_cannot_commit_any_facts() {
 
 #[test]
 fn explicit_tombstone_restore_keeps_old_version_recoverable() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut request = input();
     let first = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
     request.expected_snapshot = Some(first.snapshot.clone());
@@ -118,7 +118,7 @@ fn explicit_tombstone_restore_keeps_old_version_recoverable() {
 
 #[test]
 fn unsafe_path_oversize_and_missing_parent_refuse_without_head_change() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     for path in ["../x", "/x", "a//x", "a\\x", "./x"] {
         let mut request = input();
         request.path = path.into();
@@ -146,6 +146,7 @@ fn two_independent_connections_same_base_have_one_winner() {
             let path = path.clone();
             std::thread::spawn(move || {
                 let mut store = Store::open(path.to_str().unwrap()).unwrap();
+                store.set_base_ns(crate::namespace::DEFAULT_BASE_NS.to_string());
                 let mut request = input();
                 request.idempotency_key = format!("writer-{n}");
                 // Different files still contend on the complete owner snapshot.
@@ -174,7 +175,7 @@ fn two_independent_connections_same_base_have_one_winner() {
 
 #[test]
 fn graph_scope_and_mutated_readback_are_checked() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let graph = store.graph_create("urn:example:memory").unwrap();
     let request = input();
     let receipt = commit(&mut store, graph, &request, Authority::Local, TS).unwrap();
@@ -188,7 +189,7 @@ fn graph_scope_and_mutated_readback_are_checked() {
 #[cfg(feature = "shacl")]
 #[test]
 fn governed_refusal_retains_event_and_leaves_no_memory_head() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let shape = format!(
         r#"
         @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -214,7 +215,7 @@ fn governed_refusal_retains_event_and_leaves_no_memory_head() {
 
 #[test]
 fn credential_evidence_is_distinct_from_the_declared_actor() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let principal = named();
     let identity = crate::transaction_auth::Identity {
         principal: principal.iri.clone(),
@@ -231,7 +232,7 @@ fn credential_evidence_is_distinct_from_the_declared_actor() {
 
 #[test]
 fn public_repository_selector_excludes_memory_even_on_public_subjects() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     commit(&mut store, 0, &input(), Authority::Local, TS).unwrap();
     let public = "https://quipu.dev/knowledge/PublicFixture";
     let facts = [
@@ -294,7 +295,7 @@ fn omitted_nullable_intent_fields_are_not_an_implicit_delete_or_parent() {
 
 #[test]
 fn generic_write_cannot_bypass_memory_protocol_with_a_forged_source() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let request = input();
     let accepted = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
     let owner = owner_id(&request.owner).unwrap();
@@ -334,7 +335,7 @@ fn generic_write_cannot_bypass_memory_protocol_with_a_forged_source() {
 
 #[test]
 fn generic_set_retract_duplicate_claim_and_forged_source_cannot_mutate_records() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let request = input();
     let accepted = commit(&mut store, 0, &request, Authority::Local, TS).unwrap();
     let owner = store
@@ -409,7 +410,7 @@ fn generic_set_retract_duplicate_claim_and_forged_source_cannot_mutate_records()
 
 #[test]
 fn protocol_scope_restores_on_panic_and_cannot_authorize_another_graph() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let row = datum(
         &store,
         "urn:quipu:memory:owner:fixture",

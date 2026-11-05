@@ -48,7 +48,7 @@ change — an out-of-date honesty record is worse than none.
   design (GS2 keeps the verdict, deliberately not the attempt), so
   replay for denials verifies the rules-in-force instead. Full denial
   re-derivation would require the trace to carry the attempted delta —
-  which hank-style traces do, and the store deliberately does not.
+  which pre-rename Yupana traces do, and the store deliberately does not.
 
   **Superseded 2026-09-26 (aegis-xfuch4), kept here as it was written.**
   The store now keeps the attempt — outside the governed graph, in the
@@ -102,7 +102,7 @@ disagree only on coverage semantics — the RQ3 finding.
   no counterpart in quipu; those asymmetries are reported, not scored.
 - Census is synthetic by construction — that is what makes it an
   oracle. External validity is bounded, not eliminated, by the
-  Census-in-the-wild replay (`wild/README.md`): a genuine hank
+  Census-in-the-wild replay (`wild/README.md`): a genuine pre-rename Yupana
   pre-edit trace through the same audit, which surfaced a real
   enforcement gap (a config-file rule outside the authored Σ) — T ⊭ Σ
   with a remediation, unstaged.

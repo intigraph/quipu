@@ -1,6 +1,7 @@
 //! Escalation-router tests. Size-exempt (`*tests.rs`).
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 
 const TS: &str = "2026-01-01T00:00:00Z";
 const NOW: i64 = 1_700_000_000;
@@ -8,7 +9,7 @@ const POLICY: &str = "http://ex/P1";
 const TARGET: &str = "http://ex/d1";
 
 fn store_with_request(window: i64) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let datums = mint_request(&store, POLICY, TARGET, None, window, NOW, TS).unwrap();
     store.transact(&datums, TS, None, None).unwrap();
     store
@@ -104,7 +105,7 @@ fn decide(store: &mut Store, outcome: &str, by: &str, hash: &str, policy: &str) 
 
 #[test]
 fn no_request_means_nothing_has_escalated_yet() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     assert_eq!(resolve(&store, POLICY, TARGET, NOW).unwrap(), None);
 }
 
@@ -124,7 +125,7 @@ fn an_open_request_is_pending_and_names_what_would_resolve_it() {
     );
     assert!(!ruling.permits());
 
-    let why = ruling.reason(POLICY, TARGET);
+    let why = ruling.reason(DEFAULT_BASE_NS, POLICY, TARGET);
     assert!(
         why.contains("aegis:GateApproval"),
         "names the remedy: {why}"
@@ -180,7 +181,7 @@ fn a_rejection_is_an_answer_distinct_from_pending() {
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
     assert!(matches!(ruling, Ruling::Rejected { .. }));
     assert!(!ruling.permits());
-    let why = ruling.reason(POLICY, TARGET);
+    let why = ruling.reason(DEFAULT_BASE_NS, POLICY, TARGET);
     assert!(why.contains("stiwi"), "names who refused: {why}");
 }
 
@@ -205,7 +206,7 @@ fn an_unserviced_request_expires_into_a_denial() {
     let ruling = resolve(&store, POLICY, TARGET, NOW + 601).unwrap().unwrap();
     assert_eq!(ruling, Ruling::Expired);
     assert!(!ruling.permits());
-    let why = ruling.reason(POLICY, TARGET);
+    let why = ruling.reason(DEFAULT_BASE_NS, POLICY, TARGET);
     assert!(
         why.contains("default-deny") && why.contains("not a timeout to retry through"),
         "the reason must not read as a transient failure: {why}"
@@ -513,7 +514,7 @@ fn a_refused_write_opens_a_request_that_survives_its_own_rollback() {
     // THE case. The refusal rolls the savepoint back, and a request written in
     // place would go with it — leaving an operator a refusal with nothing to act
     // on, which is the state the router exists to end.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_escalating(&mut store, "http://ex/PE", 600);
 
@@ -531,7 +532,7 @@ fn a_refused_write_opens_a_request_that_survives_its_own_rollback() {
 fn an_approval_lets_the_next_attempt_through() {
     // The channel `require-approval` never had. Before the router this effect
     // was a permanent refusal: no record said what would un-refuse it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_escalating(&mut store, "http://ex/PE", 600);
 
@@ -557,7 +558,7 @@ fn a_zero_window_expires_immediately_rather_than_inventing_a_bound() {
     // definition time, so reaching here without one means that check was off.
     // Treating it as already expired refuses; inventing a default would be
     // inventing the bound I4 requires be declared.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_escalating(&mut store, "http://ex/PE", 0);
 
@@ -667,7 +668,7 @@ fn minting_attaches_the_nearest_decided_request_with_its_score_on_record() {
     // THE case: a near prior with a signed ruling becomes precedent; a far one
     // does not; and the link carries score + method, so the nearness claim is
     // an experiment a reader can re-run, not an assertion.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     mint_for(&mut store, "http://ex/beta-1");
     decide(
@@ -718,7 +719,7 @@ fn a_request_is_not_its_own_precedent() {
     // shares the new mint's evidence hash, and citing it would tell the
     // operator "you already ruled on exactly this" about the very ruling
     // that made the re-mint necessary.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     decide(
         &mut store,
@@ -741,7 +742,7 @@ fn an_unsigned_decision_does_not_make_a_prior_precedent() {
     // The signed-decider rule, REUSED not restated (decision_verifies): a
     // ruling forgeable by any writer is no ruling for resolve, and no
     // precedent here — otherwise mallory curates what the operator sees.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     write_decision(
         &mut store,
@@ -763,7 +764,7 @@ fn without_a_similarity_method_minting_is_clean_and_attaches_nothing() {
     // The degraded state: no embedding provider means no method, and the
     // advisory is ABSENT — not an error, and not a cheaper heuristic quietly
     // scoring under a label it cannot honour.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     decide(
         &mut store,
@@ -789,7 +790,7 @@ fn a_failing_provider_cannot_block_minting() {
     // Minting is load-bearing; precedent is advice. An advisory path that can
     // veto the mint has the authority relation backwards, so a provider that
     // errors degrades to no precedent — the request still lands.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     decide(
         &mut store,
@@ -818,7 +819,7 @@ fn precedent_is_capped_at_the_nearest_three() {
     // Three shows a pattern; an uncapped list buries the nearest ruling
     // under its own tail. The far prior both exceeds nothing and proves the
     // cap keeps the NEAREST three, not the first three found.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     for (i, target) in [
         "http://ex/alpha-a",
         "http://ex/alpha-b",
@@ -850,7 +851,7 @@ fn precedent_is_capped_at_the_nearest_three() {
 fn an_undecided_prior_request_is_not_precedent() {
     // An open question is not precedent for anything: the prior request
     // exists, is near, and has NO ruling — nothing attaches.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     mint_for(&mut store, "http://ex/alpha-1");
     store.set_embedding_provider(Arc::new(CountEmbedder));
     mint_for(&mut store, "http://ex/alpha-2");
@@ -877,9 +878,9 @@ fn a_rejection_carries_the_reject_to_policy_offer() {
         POLICY,
     );
     let ruling = resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap();
-    let why = ruling.reason(POLICY, TARGET);
+    let why = ruling.reason(DEFAULT_BASE_NS, POLICY, TARGET);
     assert!(
-        why.contains(&request_iri(POLICY, TARGET)),
+        why.contains(&request_iri(DEFAULT_BASE_NS, POLICY, TARGET)),
         "the offer must name the exemplar-candidate record by IRI: {why}"
     );
     assert!(
@@ -903,7 +904,7 @@ fn only_a_rejection_makes_the_offer() {
         resolve(&store, POLICY, TARGET, NOW).unwrap().unwrap(),
         resolve(&store, POLICY, TARGET, NOW + 601).unwrap().unwrap(),
     ] {
-        let why = ruling.reason(POLICY, TARGET);
+        let why = ruling.reason(DEFAULT_BASE_NS, POLICY, TARGET);
         assert!(
             !why.contains("policy draft"),
             "{ruling:?} must not carry the offer: {why}"
@@ -918,7 +919,7 @@ fn the_cited_request_iri_is_the_minted_one() {
     // would cite a record that does not exist — checked here by minting and
     // resolving the derived IRI against what actually landed.
     let store = store_with_request(600);
-    let iri = request_iri(POLICY, TARGET);
+    let iri = request_iri(DEFAULT_BASE_NS, POLICY, TARGET);
     let q = format!("ASK {{ <{iri}> ?p ?o }}");
     assert!(
         matches!(

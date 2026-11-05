@@ -65,9 +65,9 @@ def client_token():
         except FileNotFoundError:
             return None
         except (OSError, UnicodeError):
-            sys.exit("build-replay-corpus: credential unreadable; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor.")
+            sys.exit("build-replay-corpus: credential unreadable; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run tambo doctor.")
     if value and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", value):
-        sys.exit("build-replay-corpus: credential invalid; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor.")
+        sys.exit("build-replay-corpus: credential invalid; checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run tambo doctor.")
     return value or None
 
 
@@ -85,7 +85,7 @@ def query(endpoint, sparql, token=None):
     except urllib.error.HTTPError as error:
         if error.code == 401:
             error.close()
-            sys.exit("build-replay-corpus: credential rejected (HTTP 401); checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run caboodle doctor. No retry was attempted.")
+            sys.exit("build-replay-corpus: credential rejected (HTTP 401); checked QUIPU_AUTH_TOKEN > QUIPU_AUTH_TOKEN_FILE > ~/.config/quipu/token. Install the issued token; run tambo doctor. No retry was attempted.")
         raise
 
 NAMESPACE = ONT

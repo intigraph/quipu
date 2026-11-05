@@ -91,7 +91,7 @@ fn verdict(signature: &str) -> serde_json::Value {
 }
 
 fn setup() -> (Store, SkKey, String) {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().hardware_verdict_schemes = true;
     let key = SkKey::new();
     let sig = key.sign("quipu-verdict", MESSAGE, 0x05, 3);

@@ -36,7 +36,9 @@ permissions:
 # release from the newer HEAD, and the shipped 0.16.4 section omits #878.
 concurrency:
   group: "release-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
-  cancel-in-progress: true
+  # Superseded PR runs cancel; push-to-main and dispatch runs never do, so each
+  # main commit gets a complete verdict the CD can admit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci-correctness:
@@ -532,7 +534,7 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-22.04-arm
           # macOS had NO release asset at all until aegis-oifbu9, and a missing
-          # checksummed asset for the host triple ABORTED the whole caboodle
+          # checksummed asset for the host triple ABORTED the whole stack
           # install run, not just the quipu step. macOS has no glibc-style floor
           # tied to the build image: rustc stamps its own minimum OS version
           # (11.0 on arm64, 10.12 on x86_64) whatever image links the binary, so

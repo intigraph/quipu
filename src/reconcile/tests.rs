@@ -1,16 +1,30 @@
 use super::*;
-use crate::namespace::{
-    BOBBIN, BOBBIN_DEFINED_IN, BOBBIN_FILE_PATH, BOBBIN_IMPORTS, BOBBIN_LANGUAGE, BOBBIN_NAME,
-    CODE_BASE,
-};
 use crate::store::Store;
+
+/// The store's vocabulary namespace and code-entity base. Deliberately not
+/// the legacy values: nothing about reconciliation is compiled in (gju5 S3c).
+const BOBBIN: &str = "http://example.org/kb/";
+const CODE_BASE: &str = "http://example.org/code/";
+const BOBBIN_IMPORTS: &str = "http://example.org/kb/imports";
+const BOBBIN_NAME: &str = "http://example.org/kb/name";
+const BOBBIN_LANGUAGE: &str = "http://example.org/kb/language";
+const BOBBIN_DEFINED_IN: &str = "http://example.org/kb/definedIn";
+const BOBBIN_FILE_PATH: &str = "http://example.org/kb/filePath";
+
+/// An empty store configured with [`BOBBIN`] and [`CODE_BASE`].
+fn code_store() -> Store {
+    let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(BOBBIN);
+    store.set_code_base(CODE_BASE);
+    store
+}
 use crate::types::{Op, Value};
 
 /// Seed a store with two repos of code entities and some unresolved imports.
 /// Entity IRIs use the LIVE lane shape: `CODE_BASE` + repo + one
 /// percent-encoded path segment (+ `name-L{line}` for symbols).
 fn seeded_store() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = code_store();
     let ts = "2026-04-04T00:00:00Z";
 
     // --- Repo A: a Rust project ---
@@ -225,7 +239,7 @@ fn resolves_single_match() {
 
 #[test]
 fn dangling_when_target_not_indexed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = code_store();
     let ts = "2026-04-04T00:00:00Z";
 
     // Create a symbol with an import that can't be resolved.
@@ -301,7 +315,7 @@ fn dangling_when_target_not_indexed() {
 
 #[test]
 fn ambiguous_when_multiple_matches() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = code_store();
     let ts = "2026-04-04T00:00:00Z";
 
     let name_attr = store.intern(BOBBIN_NAME).unwrap();
@@ -456,7 +470,7 @@ fn idempotent_rerun() {
 
 #[test]
 fn empty_store_returns_empty_report() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = code_store();
     let resolvers = default_resolvers();
     let report = reconcile(&mut store, &resolvers, "2026-04-04T00:00:00Z").unwrap();
 
@@ -509,10 +523,39 @@ fn go_resolver_handles_full_path() {
 #[test]
 fn iri_path_matching() {
     let iri = &format!("{CODE_BASE}repo-a/src%2Futils.rs/helper_fn-L10");
-    assert!(iri_contains_path(iri, "utils"));
-    assert!(iri_contains_path(iri, "src/utils"));
-    assert!(!iri_contains_path(iri, "nonexistent"));
+    assert!(iri_contains_path(iri, CODE_BASE, "utils"));
+    assert!(iri_contains_path(iri, CODE_BASE, "src/utils"));
+    assert!(!iri_contains_path(iri, CODE_BASE, "nonexistent"));
 
     // Non-bobbin IRIs don't match.
-    assert!(!iri_contains_path("http://example.com/foo", "foo"));
+    assert!(!iri_contains_path(
+        "http://example.com/foo",
+        CODE_BASE,
+        "foo"
+    ));
+}
+
+#[test]
+fn reconcile_refuses_without_a_code_base_or_base_namespace() {
+    // With either unset the pass would index nothing and report a clean store
+    // it never looked at.
+    let mut no_code = Store::open_in_memory().unwrap();
+    no_code.set_base_ns(BOBBIN);
+    let err = reconcile(&mut no_code, &default_resolvers(), "2026-04-04T00:00:00Z")
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("code_base"), "{err}");
+    let mut no_ns = Store::open_in_memory().unwrap();
+    no_ns.set_code_base(CODE_BASE);
+    assert!(reconcile(&mut no_ns, &default_resolvers(), "2026-04-04T00:00:00Z").is_err());
+}
+
+#[test]
+fn entities_outside_the_configured_code_base_are_not_reconciled() {
+    // The seeded entities sit under CODE_BASE; a store configured with a
+    // different code base must not treat them as its code.
+    let mut store = seeded_store();
+    store.set_code_base("http://elsewhere.example/code/");
+    let report = reconcile(&mut store, &default_resolvers(), "2026-04-04T00:00:00Z").unwrap();
+    assert_eq!(report.resolved, 0, "{report:?}");
 }

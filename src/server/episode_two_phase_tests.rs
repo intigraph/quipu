@@ -40,7 +40,11 @@ async fn episode_resolution_does_not_hold_the_writer() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("episode.db");
     let path = db.to_str().unwrap();
-    let mut store = quipu::Store::open(path).unwrap();
+    let mut store = {
+        let mut s = quipu::Store::open(path).unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    };
     store.resolution_config_mut().enabled = true;
     store.embedding_config_mut().auto_embed = false;
     let seed = quipu::Datum {

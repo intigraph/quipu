@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Datum, Store};
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::types::{Op, Value};
 use crate::verdict_schemes::{Scheme, webauthn};
 
@@ -28,11 +28,13 @@ pub const GRAPH: &str = "urn:quipu:decision-deck";
 /// Bounded explicit-graph audit query. The projection is protected against
 /// generic writers, but query text and a returned row are not cryptographic
 /// verification. Re-verify the exact protected receipt before trusting it.
-pub fn audit_query() -> super::queries::StoredQuery {
+///
+/// `ns` is the store's governance namespace, which names the receipt terms.
+pub fn audit_query(ns: &str) -> super::queries::StoredQuery {
     super::queries::StoredQuery {
         name: "decision_deck_audit_v1".into(),
         description: "Admitted Decision Deck receipts; re-verify each exact nonce using the native receipt API".into(),
-        template: format!("PREFIX a: <{DEFAULT_BASE_NS}> SELECT ?decision ?outcome ?actor ?digest ?credential ?time ?scheme ?admission ?receipt FROM <{GRAPH}> WHERE {{ {{ ?decision a a:GateApproval }} UNION {{ ?decision a a:Decision }} ?decision a:outcome ?outcome ; a:by ?actor ; a:evidenceHash ?digest ; a:deckCredential ?credential ; a:deckRecordedAt ?time ; a:deckScheme ?scheme ; a:deckAdmission ?admission ; a:deckReceipt ?receipt . }} ORDER BY ?decision LIMIT 200"),
+        template: format!("PREFIX a: <{ns}> SELECT ?decision ?outcome ?actor ?digest ?credential ?time ?scheme ?admission ?receipt FROM <{GRAPH}> WHERE {{ {{ ?decision a a:GateApproval }} UNION {{ ?decision a a:Decision }} ?decision a:outcome ?outcome ; a:by ?actor ; a:evidenceHash ?digest ; a:deckCredential ?credential ; a:deckRecordedAt ?time ; a:deckScheme ?scheme ; a:deckAdmission ?admission ; a:deckReceipt ?receipt . }} ORDER BY ?decision LIMIT 200"),
         dataset: None,
         params: Vec::new(),
     }
@@ -212,9 +214,10 @@ fn now() -> Result<i64> {
 }
 
 fn datum(store: &Store, id: &str, field: &str, value: Value, ts: &str) -> Result<Datum> {
+    let ns = store.governance_ns()?;
     Ok(Datum {
         entity: store.intern(id)?,
-        attribute: store.intern(&format!("{DEFAULT_BASE_NS}{field}"))?,
+        attribute: store.intern(&format!("{ns}{field}"))?,
         value,
         valid_from: ts.into(),
         valid_to: None,
@@ -223,10 +226,11 @@ fn datum(store: &Store, id: &str, field: &str, value: Value, ts: &str) -> Result
 }
 
 fn typed(store: &Store, id: &str, class: &str, ts: &str) -> Result<Datum> {
+    let ns = store.governance_ns()?;
     Ok(Datum {
         entity: store.intern(id)?,
         attribute: store.intern(RDF_TYPE)?,
-        value: Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}{class}"))?),
+        value: Value::Ref(store.intern(&format!("{ns}{class}"))?),
         valid_from: ts.into(),
         valid_to: None,
         op: Op::Assert,

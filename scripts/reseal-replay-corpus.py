@@ -144,7 +144,7 @@ def oracle_hits(doc: dict, words: list[str]) -> list[str]:
 # A wordlist an outsider could plausibly assemble: project names visible on the
 # public remote, plus ordinary English words. It is deliberately SMALL — the
 # finding is that a trivial list works, so a large one would understate it.
-WORDS = """quipu bobbin hank yupana shantytown shanty skein beads gastown aegis
+WORDS = """quipu bobbin yupana yupana shantytown shanty skein beads gastown aegis
 reactor tapestry mayor prometheus grafana loki ntfy traefik forgejo librechat
 pushgateway alertmanager automation dolt Dolt Quipu desire-path""".split()
 
@@ -223,7 +223,7 @@ def selftest() -> int:
             (LEAK_SALT + LEAK_NS + w).encode()).hexdigest()[:10]
     leaky["alias_pairs"] = [
         {"class": "semantic", "left": lab("quipu"), "right": lab("bobbin")},
-        {"class": "id-form", "left": lab("hank"), "right": lab("skein")},
+        {"class": "id-form", "left": lab("yupana"), "right": lab("skein")},
     ]
     leaky["comment_doublings"] = [
         {"subject": lab("reactor"), "values": ["a", "b"]},

@@ -45,12 +45,12 @@
 //! exercised with the key of another.
 
 use crate::error::Result;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::store::Store;
 use crate::types::Value;
 
 /// The public Quechua namespace the aegis vocabulary is renamed into (aegis-9dpcta).
-const QUECHUA_NS: &str = "https://scbrown.github.io/quechua/ns#";
+pub(super) const QUECHUA_NS: &str = "https://scbrown.github.io/quechua/ns#";
 
 /// The instant a signature was recorded, as the store observed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,10 +279,13 @@ fn select_rows(
     // legacy aegis namespace and its public Quechua twin, independently, so a
     // registration written in either vocabulary (or a mix of the two, during
     // the rename) answers the same. Term ids come from the store, so they are
-    // inlined; nothing caller-supplied is.
+    // inlined; nothing caller-supplied is. The legacy side is the store's own
+    // governance namespace; a store with none reads the Quechua twin alone,
+    // which can only find fewer keys, never more.
+    let base = store.governance_ns().ok();
     let lookup = |name: &str| -> Result<Vec<i64>> {
         let mut ids = Vec::new();
-        for ns in [DEFAULT_BASE_NS, QUECHUA_NS] {
+        for ns in base.into_iter().chain([QUECHUA_NS]) {
             if let Some(id) = store.lookup(&format!("{ns}{name}"))? {
                 ids.push(id);
             }
@@ -317,9 +320,9 @@ fn select_rows(
     };
     // signatureScheme has no published Quechua twin yet (it postdates the term
     // map), so it is read in the legacy namespace only. No twin is invented.
-    let scheme_attrs = if with_key {
+    let scheme_attrs = if let (true, Some(base)) = (with_key, base) {
         store
-            .lookup(&format!("{DEFAULT_BASE_NS}signatureScheme"))?
+            .lookup(&format!("{base}signatureScheme"))?
             .map(|id| vec![id])
     } else {
         None
