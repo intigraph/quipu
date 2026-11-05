@@ -17,7 +17,7 @@
 <!-- badges:end -->
 <p align="center"><strong><a href="https://intigraph.github.io/quipu/">Read the book →</a></strong></p>
 
-**Quipu is a governed, bitemporal knowledge store for AI coding agents and the
+**Quipu is a governed, bitemporal knowledge store for AI agents and the
 people who run them.** Use it from the command line, REST, MCP or a Rust application.
 
 ## Why you would want it
