@@ -130,3 +130,6 @@ wasm/explorer/pkg-node/
 # The Python bindings build into CARGO_TARGET_DIR or their own target.
 /bindings/python/target/
 /bindings/python/dist/
+
+# Legacy local tracker state stays private.
+/.beads/
