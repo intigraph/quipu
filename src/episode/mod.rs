@@ -9,7 +9,7 @@
 
 use serde::Deserialize;
 
-#[cfg(feature = "shacl")]
+#[cfg(all(test, feature = "shacl"))]
 use crate::error::Error;
 use crate::error::Result;
 use crate::resolution::{self, Contention, EntityCandidate};
@@ -26,6 +26,8 @@ use edge_predicate::resolve_edge_predicate;
 mod node_type;
 use node_type::validate_node_type;
 pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
+#[cfg(feature = "shacl")]
+mod refusals;
 mod validation;
 mod write;
 
@@ -305,50 +307,9 @@ pub fn ingest_episode_outcome(
     // validate_on_write was toggled on since the last ingest).
     #[cfg(feature = "shacl")]
     {
-        // A SHACL rejection here is a gate refusal: record it on the audit
-        // spine as a `write.refused` event (camayoc-0d3) — gate/graph/reason
-        // metadata only, never the refused content. Safe to write directly:
-        // these gates run before any transaction, so no savepoint is open to
-        // roll the event back. Only `ValidationFailed` is a refusal; any other
-        // error (e.g. malformed shapes) is an operational failure, not a gate
-        // verdict.
-        let record_shacl_refusal = |store: &Store, e: &Error| {
-            if let Error::ValidationFailed {
-                violations,
-                messages,
-            } = e
-            {
-                let reason = format!(
-                    "SHACL validation failed: {violations} violation(s): {}",
-                    messages
-                        .iter()
-                        .take(3)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                );
-                let refusal = crate::store::events::PendingRefusal {
-                    gate: "shacl",
-                    reason,
-                    refused_datums: episode.nodes.len() + episode.edges.len(),
-                };
-                store.record_refusal(
-                    &refusal,
-                    episode
-                        .graph
-                        .as_deref()
-                        .filter(|g| !g.trim().is_empty())
-                        .unwrap_or(crate::schema::ROOT_GRAPH_IRI),
-                    episode.source.as_deref(),
-                    Some(&format!("episode:{}", episode.name)),
-                    timestamp,
-                );
-            }
-        };
         // Shapes carried inline on the episode (existing behaviour).
         if let Some(shapes) = &episode.shapes {
-            shacl_validate_or_reject(store, shapes, &turtle)
-                .inspect_err(|e| record_shacl_refusal(store, e))?;
+            refusals::validate_or_refuse(store, episode, shapes, &turtle, timestamp)?;
         }
         // Persistently-loaded shapes, when write-validation is enabled (hq-c6s).
         // Without this, stored shapes only gate the `knot` path and episode
@@ -363,8 +324,7 @@ pub fn ingest_episode_outcome(
             && let Some(stored) = store.get_combined_shapes()?
         {
             let split = shacl::split_shapes_by_policy(&stored);
-            shacl_validate_or_reject(store, &split.reject, &turtle)
-                .inspect_err(|e| record_shacl_refusal(store, e))?;
+            refusals::validate_or_refuse(store, episode, &split.reject, &turtle, timestamp)?;
             if split.has_emit {
                 let feedback =
                     crate::shacl_context::validate_with_store_context(store, &split.emit, &turtle)?;
@@ -508,39 +468,6 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     hash
-}
-
-/// Validate `data_turtle` against `shapes_turtle`, returning a `ValidationFailed`
-/// error that lists the violations when it does not conform (hq-c6s). Shared by
-/// the inline-shapes and persistent-shapes gates in `ingest_episode`.
-///
-/// Validated WITH THE STORE AS CONTEXT (aegis-fp17f): an episode references
-/// entities it does not re-describe — that is what an edge to an existing node
-/// is — so a payload-only `sh:class` check refuses correct writes for the
-/// accident of what travelled with them. See `shacl_context`.
-#[cfg(feature = "shacl")]
-fn shacl_validate_or_reject(store: &Store, shapes_turtle: &str, data_turtle: &str) -> Result<()> {
-    let feedback =
-        crate::shacl_context::validate_with_store_context(store, shapes_turtle, data_turtle)?;
-    if feedback.conforms {
-        return Ok(());
-    }
-    let messages: Vec<String> = feedback
-        .results
-        .iter()
-        .map(|r| {
-            format!(
-                "{}: {} ({})",
-                r.severity,
-                r.message.as_deref().unwrap_or("no message"),
-                r.focus_node
-            )
-        })
-        .collect();
-    Err(Error::ValidationFailed {
-        violations: feedback.violations,
-        messages,
-    })
 }
 
 /// Ingest multiple episodes in sequence, each as its own transaction.
