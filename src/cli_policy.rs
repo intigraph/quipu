@@ -52,6 +52,7 @@ fn cmd_draft(args: &[String]) {
         point: flag_value(args, "--point").map(str::to_string),
         layer: flag_value(args, "--layer").map(str::to_string),
         authority: flag_value(args, "--authority").map(str::to_string),
+        base_ns: crate::cli_open::config().base_ns.clone(),
     };
     let turtle = match draft_turtle(&intent) {
         Ok(t) => t,
@@ -96,7 +97,7 @@ fn cmd_backtest(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     };
-    let candidate = match Candidate::from_turtle(&turtle) {
+    let candidate = match Candidate::from_turtle(&turtle, &crate::cli_open::config().base_ns) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {e}");

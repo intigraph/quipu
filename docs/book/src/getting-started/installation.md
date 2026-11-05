@@ -295,6 +295,8 @@ tambo apply
 tambo verify
 ```
 
+The former product name remains in persisted filenames for compatibility;
+Tambo continues to read these existing plans and state directories.
 Select the knowledge-graph (`kg`) profile in the guided interview. For an
 unattended plan, first provide a completed `caboodle-intent.toml`, then run
 `tambo plan --profile kg`; `plan` refuses a fresh directory without that intent.
@@ -311,7 +313,7 @@ Tambo-created store only after backing it up and checking its exact path.
 Do not delete `.caboodle/` if you intend to keep managing other installed tools.
 
 The repository also contains `scripts/install-stack.sh`. Its current executable
-contract invokes `caboodle plan/apply/verify` and can load explicitly supplied
+contract invokes `tambo plan/apply/verify` and can load explicitly supplied
 pendants. Inspect `--help` and `--dry-run` before use; it is not an alias for
 arbitrary Tambo subcommands. Its `--yes` path applies the whole selected plan
 and can write the selected database. No separate uninstall command exists in

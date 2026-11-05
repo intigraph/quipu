@@ -23,7 +23,11 @@ impl EmbeddingProvider for Slow {
     }
 }
 fn store() -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let store = {
+        let mut s = Store::open_in_memory().unwrap();
+        s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
+        s
+    };
     let shapes = format!(
         "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:document-shape> a sh:NodeShape ; sh:targetClass <{}Document> .",
         store.base_ns()

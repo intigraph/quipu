@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 ///
 /// A repository that only points at knowledge ships a share with no facts and one
 /// or more pointers. Pointers are declarations, never loads: composition reports
-/// them, and following one is the consumer's trust decision (caboodle `packs trust`).
+/// them, and following one is the consumer's trust decision (tambo `packs trust`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SharePointer {
     /// The named graph the pointer is about.

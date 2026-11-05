@@ -42,6 +42,7 @@ impl Explorer {
             return Err(JsValue::from_str("snapshot report belongs to another pack"));
         }
         let mut store = quipu::Store::open_from_bytes(snapshot).map_err(err_js)?;
+        store.set_base_ns(super::EXPLORER_NS.to_string());
         #[cfg(feature = "shacl")]
         {
             store.shacl_config_mut().validate_on_write = true;

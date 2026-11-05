@@ -6,7 +6,7 @@ use crate::types::Op;
 const TS: &str = "2026-08-06T00:00:00Z";
 
 fn store_with_graphs(iris: &[&str]) -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     for iri in iris {
         store.overlay_create(iri, 0).unwrap();
     }
@@ -156,7 +156,7 @@ fn datasets_overlap_and_membership_implies_nothing_about_others() {
 fn creating_a_dataset_does_not_touch_the_branch_tree() {
     // Datasets and the branch tree are different relations over the same node
     // set. The overlay's bind-once parent must be exactly what it was.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.overlay_create("urn:g:ov", 0).unwrap();
     let g = store.lookup("urn:g:ov").unwrap().unwrap();
     let before: Option<i64> = store
@@ -214,7 +214,7 @@ fn a_dataset_is_mirrored_into_the_meta_graph() {
 
 #[test]
 fn an_empty_dataset_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let err = store
         .dataset_create("urn:ds:empty", &[], TS, None)
         .expect_err("an empty dataset names nothing");
@@ -332,7 +332,7 @@ fn the_tool_creates_lists_shows_and_removes() {
 fn an_unknown_action_errors_rather_than_silently_listing() {
     // The recorded `tool_shapes` silent-fall-through lesson: a typo'd action
     // that quietly lists is indistinguishable from one that did what you asked.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let err = crate::tool_datasets(&mut store, &serde_json::json!({"action": "creat"}))
         .expect_err("a typo must not fall through to list");
     assert!(err.to_string().contains("unknown datasets action"));
@@ -360,7 +360,7 @@ fn a_root_plus_board_dataset_as_the_query_graph_reads_both() {
     use crate::{tool_episode, tool_query};
     use serde_json::json;
     const BOARD: &str = "urn:g:board-acceptance";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     for (name, graph) in [("root-item", None), ("board-item", Some(BOARD))] {
         let mut ep = json!({"name": name, "episode_body": "x", "source": "t",
                              "nodes": [{"name": name, "type": "Thing"}]});

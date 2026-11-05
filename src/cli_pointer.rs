@@ -50,23 +50,12 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
             };
             // Repository identity comes from the receiver's command, never from a
             // downloaded manifest. A missing policy tool fails closed.
-            let result = std::process::Command::new("caboodle")
-                .args([
-                    "packs",
-                    "trust",
-                    "check",
-                    remote,
-                    sha256.strip_prefix("sha256:").unwrap_or(sha256),
-                    "--pack",
-                    &pointer.graph,
-                ])
+            let result = trust_command(remote, sha256, &pointer.graph)
                 .output()
-                .map_err(|e| {
-                    quipu::Error::InvalidValue(format!("caboodle trust unavailable: {e}"))
-                })?;
+                .map_err(|e| quipu::Error::InvalidValue(format!("tambo trust unavailable: {e}")))?;
             if !result.status.success() {
                 return Err(quipu::Error::InvalidValue(format!(
-                    "caboodle trust refused ({}): {}",
+                    "tambo trust refused ({}): {}",
                     result.status,
                     String::from_utf8_lossy(&result.stderr).trim()
                 )));
@@ -77,6 +66,38 @@ fn run(args: &[String], db_path: &str) -> quipu::Result<quipu::share_compose::Co
         &chrono_now(),
         flag_value(args, "--actor"),
     )
+}
+
+fn trust_command(remote: &str, sha256: &str, graph: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("tambo");
+    command.args([
+        "packs",
+        "trust",
+        "check",
+        remote,
+        sha256.strip_prefix("sha256:").unwrap_or(sha256),
+        "--pack",
+        graph,
+    ]);
+    command
+}
+
+#[test]
+fn pointer_trust_uses_the_current_installer_command() {
+    let command = trust_command("https://example.org/repo.git", "sha256:abcd", "urn:pack");
+    assert_eq!(command.get_program(), "tambo");
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        [
+            "packs",
+            "trust",
+            "check",
+            "https://example.org/repo.git",
+            "abcd",
+            "--pack",
+            "urn:pack",
+        ]
+    );
 }
 
 fn fetch(url: &str) -> quipu::Result<Vec<u8>> {

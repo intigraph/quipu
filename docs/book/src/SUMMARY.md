@@ -100,6 +100,7 @@
 
 # Operations
 
+- [Write refusal accounting](reference/write-refusals.md)
 - [Search outcome accounting](reference/search-outcomes.md)
 - [CI/CD and Releases](architecture/ci-cd.md)
 - [Contributing](reference/contributing.md)

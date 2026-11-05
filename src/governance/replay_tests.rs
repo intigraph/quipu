@@ -78,7 +78,7 @@ fn only(report: &ReplayReport) -> &RuleStats {
 #[test]
 fn a_rule_that_never_fired_is_not_promotable() {
     // Promoting it would be enabling a rule nothing has tested.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [rec("a.rs", "allow", "c", "satisfied", "no-action")];
     let report = replay(&store, &trace, 0).unwrap();
@@ -91,7 +91,7 @@ fn a_rule_that_never_fired_is_not_promotable() {
 fn a_rule_that_only_ever_fails_is_not_promotable() {
     // A check that always fails is universal or broken, and the record cannot
     // tell which.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "notify", "c", "unsatisfied", "warned"),
@@ -107,7 +107,7 @@ fn a_rule_that_only_ever_fails_is_not_promotable() {
 fn a_two_sided_live_rule_has_no_gate_objecting() {
     // The GREEN case. Without it every test here could be passing because the
     // harness rejects everything.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "notify", "c", "unsatisfied", "warned"),
@@ -122,7 +122,7 @@ fn a_two_sided_live_rule_has_no_gate_objecting() {
 #[test]
 fn new_blocks_counts_what_enforce_would_add_not_what_already_happened() {
     // The number an operator is actually deciding about.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "notify", "c", "unsatisfied", "warned"),
@@ -140,7 +140,7 @@ fn new_blocks_counts_what_enforce_would_add_not_what_already_happened() {
 fn a_soft_constraint_would_never_block_however_its_effect_reads() {
     // A soft constraint that blocks is a hard one with a misleading name, so
     // replay must not promise blocks the runtime would refuse to make.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "soft", "deny");
     let trace = [rec("a.rs", "notify", "c", "unsatisfied", "warned")];
     let stats = replay(&store, &trace, 0).unwrap().rules.remove(0);
@@ -150,7 +150,7 @@ fn a_soft_constraint_would_never_block_however_its_effect_reads() {
 
 #[test]
 fn an_advisory_effect_would_not_start_blocking() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "warn");
     let trace = [rec("a.rs", "notify", "c", "unsatisfied", "warned")];
     assert_eq!(replay(&store, &trace, 0).unwrap().rules[0].would_block, 0);
@@ -161,7 +161,7 @@ fn a_rule_nobody_has_ever_got_past_is_flagged() {
     // An outage with a reason attached. Live and two-sided, so the earlier gates
     // are satisfied and recoverability is the one doing the work — otherwise
     // this test would be passing on the wrong blocker.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("b.rs", "allow", "c", "satisfied", "no-action"),
@@ -179,7 +179,7 @@ fn a_rule_nobody_has_ever_got_past_is_flagged() {
 
 #[test]
 fn a_refusal_that_was_later_escaped_is_recoverable() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "deny", "c", "unsatisfied", "blocked"),
@@ -197,7 +197,7 @@ fn a_clean_record_before_the_refusal_does_not_count_as_escaping_it() {
     // Order matters. A target cleared BEFORE its refusal proves nothing about
     // whether anyone got past the rule, and counting it would turn every rule
     // that ever allowed anything into a recoverable one.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         clean("a.rs"),
@@ -213,7 +213,7 @@ fn a_clean_record_before_the_refusal_does_not_count_as_escaping_it() {
 fn an_unknown_outcome_counts_as_neither_side() {
     // A constraint that could not be evaluated has told you nothing, and folding
     // it into either column is how an unevaluated check reads as a passing one.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "allow", "c", "unknown", "no-action"),
@@ -228,7 +228,7 @@ fn an_unknown_outcome_counts_as_neither_side() {
 
 #[test]
 fn a_rule_outside_the_spec_has_nothing_to_be_promoted_to() {
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let trace = [
         rec("a.rs", "notify", "local", "unsatisfied", "warned"),
         rec("b.rs", "allow", "local", "satisfied", "no-action"),
@@ -242,7 +242,7 @@ fn a_rule_outside_the_spec_has_nothing_to_be_promoted_to() {
 fn the_summary_carries_its_own_limits() {
     // A promotion number read without them is read as a safety claim, so the
     // caveat travels with the number rather than sitting in a footnote.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     let summary = replay(&store, &[], 0).unwrap().summary();
     assert!(summary.contains("only traffic that happened"), "{summary}");
     assert!(summary.contains("never false positives"), "{summary}");
@@ -253,7 +253,7 @@ fn the_summary_carries_its_own_limits() {
 fn replay_jsonl_reads_the_spec_from_the_store() {
     // The liveness half: everything above builds records in memory, and this is
     // what proves the entry point parses a real spool and loads a real Σ.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "no-ticket", "hard", "deny");
     let jsonl = concat!(
         r#"{"kind":"guard","mode":"advise","result":"notify","path":"a.rs","constraints":[{"id":"no-ticket","outcome":"unsatisfied","response":"warned"}]}"#,
@@ -319,7 +319,7 @@ fn reclass(store: &mut Store, label: &str, old_class: &str, new_class: &str, at:
 fn no_as_of_is_behaviour_identical_to_today() {
     // #72 acceptance 2. Live Σ stays the default, and the drift column is empty
     // — "not asked", never "nothing moved".
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [
         rec("a.rs", "notify", "c", "unsatisfied", "warned"),
@@ -341,7 +341,7 @@ fn a_reclass_after_the_window_is_drift_not_a_trace_violation() {
     // The trace ran while `c` was HARD. Afterwards the spec re-classed it to
     // SOFT. Judged against live Σ the trace looks wrong; judged against Σ as of
     // its own window it was right, and the re-class is spec movement.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     reclass(&mut store, "c", "hard", "soft", "2026-06-01T00:00:00Z");
 
@@ -389,7 +389,7 @@ fn a_reclass_after_the_window_is_drift_not_a_trace_violation() {
 fn an_unmoved_spec_reports_no_drift_even_when_asked() {
     // The control. Without this, the drift test could pass because `as_of`
     // reports drift for everything rather than because it detected a re-class.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let trace = [rec("a.rs", "allow", "c", "satisfied", "no-action")];
     let report = replay_as_of(
@@ -414,7 +414,7 @@ fn a_policy_added_after_the_window_was_not_in_scope_then() {
     // A policy that did not exist at trace time could not have been evaluated
     // then. Fidelity must say so rather than counting the trace as having
     // missed a rule that had not been written yet.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy_at(&mut store, "new", "hard", "deny", "2026-06-01T00:00:00Z");
 
     let trace = [rec("a.rs", "allow", "new", "satisfied", "no-action")];
@@ -450,7 +450,7 @@ fn as_of_tx_now_reconstructs_a_retracted_policy_too() {
     // Kept rather than deleted, and kept asserting BOTH axes: the limit is the
     // reason this test exists, and a future change that silently reintroduced
     // it would otherwise have nothing watching.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     policy(&mut store, "c", "hard", "deny");
     let tx = store.latest_tx_id().unwrap();
     reclass(&mut store, "c", "hard", "soft", "2026-06-01T00:00:00Z");

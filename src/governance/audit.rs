@@ -21,7 +21,7 @@
 //!
 //! ## Deterministic, and never an LLM call
 //!
-//! [SARC] §5.1's design rule, and the same `O(ℓ_tool)` budget discipline hank
+//! [SARC] §5.1's design rule, and the same `O(ℓ_tool)` budget discipline yupana
 //! applies to its own guard. Every pass here is a comparison between two
 //! declared values. A checker that asked a model whether a trace looked
 //! compliant would be unable to state what it checked, which is the one thing an

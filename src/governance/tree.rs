@@ -6,7 +6,7 @@
 //! dispatch node and never summarised away.
 //!
 //! The trace this stack emits is a **sequence**. What it now carries per record
-//! is the principal chain (`crate::governance::authority`, `hank/src/
+//! is the principal chain (`crate::governance::authority`, `yupana/src/
 //! attribution.rs`), and a chain is a path from the root — so the tree is
 //! *reconstructible*. This module does that reconstruction, and is explicit
 //! about the two places where reconstruction is weaker than structure.

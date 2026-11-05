@@ -96,7 +96,7 @@ fn has_any_fact(store: &Store, subject: &str) -> bool {
 
 #[test]
 fn deny_blocks_noncompliant_write() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 
@@ -130,7 +130,7 @@ fn deny_blocks_noncompliant_write() {
 
 #[test]
 fn require_approval_blocks_fail_closed() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     // A require-approval policy must not pass silently — the write is
     // refused because this seam cannot grant the approval.
@@ -158,7 +158,7 @@ fn require_approval_blocks_fail_closed() {
 
 #[test]
 fn advisory_effects_do_not_block() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     // A `warn` policy is advisory — a non-compliant write still lands.
     define_policy_with_effect(&mut store, "http://ex/PW", DOC_TYPE, REQUIRE_LABEL, "warn");
@@ -177,7 +177,7 @@ fn advisory_effects_do_not_block() {
 
 #[test]
 fn retracting_a_required_fact_is_denied() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 
@@ -212,7 +212,7 @@ fn retracting_a_required_fact_is_denied() {
 
 #[test]
 fn unrelated_edit_of_a_compliant_entity_passes() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 
@@ -237,7 +237,7 @@ fn unrelated_edit_of_a_compliant_entity_passes() {
 
 #[test]
 fn enforcement_off_is_a_noop() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = false;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 
@@ -256,7 +256,7 @@ fn enforcement_off_is_a_noop() {
 
 #[test]
 fn ungoverned_type_is_not_checked() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 
@@ -275,7 +275,7 @@ fn ungoverned_type_is_not_checked() {
 
 #[test]
 fn registry_invalidated_when_a_policy_is_added() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
 
     // First enforced write builds an (empty) registry and caches it.
@@ -311,7 +311,7 @@ fn a_refusal_under_an_exemplar_carrying_policy_cites_the_exemplar() {
     // the refused party reads why the rule exists rather than only that it
     // fired. The citation rides the compiled registry — no per-denial lookup.
     let exemplar = "http://ex/verdict_the_motivating_edit";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
     let link = vec![assert_datum(
@@ -342,7 +342,7 @@ fn a_refusal_under_a_hand_authored_policy_cites_nothing() {
     // The paired green case: no exemplar, no citation — an empty suffix, never
     // a placeholder. Citing an absent motivating case would be forged
     // provenance in the message channel.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
     let bad = vec![assert_datum(
@@ -366,7 +366,7 @@ fn adding_an_exemplar_invalidates_the_cached_registry() {
     // rebuilds the cache: aegis:exemplar is in the is_governance_write list,
     // and this is the observable consequence.
     let exemplar = "http://ex/verdict_late_link";
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1", DOC_TYPE, REQUIRE_LABEL);
 

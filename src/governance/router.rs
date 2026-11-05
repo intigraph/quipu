@@ -59,7 +59,7 @@
 //! dashboard anti-pattern with extra steps.
 
 use crate::error::Result;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
@@ -101,7 +101,9 @@ impl Ruling {
 
     /// The operator-facing reason, naming what would resolve it.
     #[must_use]
-    pub fn reason(&self, policy: &str, target: &str) -> String {
+    ///
+    /// `ns` is the store's governance namespace, which names the request.
+    pub fn reason(&self, ns: &str, policy: &str, target: &str) -> String {
         match self {
             Ruling::Approved { by } => format!("approved by {by}"),
             Ruling::Rejected { by, outcome } => {
@@ -122,7 +124,7 @@ impl Ruling {
                      --exemplar {request} ...` — then backtest the draft over \
                      recorded history (`quipu policy backtest`) before creating \
                      it. The draft is born advisory (effect \"warn\").",
-                    request = request_iri(policy, target),
+                    request = request_iri(ns, policy, target),
                 )
             }
             Ruling::Pending { expires_at } => format!(
@@ -184,9 +186,10 @@ pub(crate) fn resolve_at(
     now: i64,
     at: &TemporalContext,
 ) -> Result<Option<Ruling>> {
+    let ns = store.governance_ns()?;
     let hash = evidence_hash(policy_iri, target_iri);
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          SELECT ?expires WHERE {{ \
             ?r a a:DecisionRequest ; a:forPolicy \"{policy}\" ; \
                a:forTarget \"{target}\" ; a:expiresAt ?expires . \
@@ -208,7 +211,7 @@ pub(crate) fn resolve_at(
     // ordinary writable facts, so without the signature check the refused
     // agent could approve its own request.
     let dq = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          SELECT ?d ?outcome ?by ?sig WHERE {{ \
             {GATE_RULING_CLASSES} \
             ?d a:evidenceHash \"{hash}\" ; a:outcome ?outcome ; a:by ?by . \
@@ -285,10 +288,11 @@ pub fn mint_request(
     now: i64,
     timestamp: &str,
 ) -> Result<Vec<Datum>> {
+    let ns = store.governance_ns()?;
     let hash = evidence_hash(policy_iri, target_iri);
     // Deterministic IRI from the evidence, so a retry that is still refused
     // updates the same request rather than accumulating one per attempt.
-    let subject = store.intern(&request_iri(policy_iri, target_iri))?;
+    let subject = store.intern(&request_iri(ns, policy_iri, target_iri))?;
     let assert = |attribute: i64, value: Value| Datum {
         entity: subject,
         attribute,
@@ -299,7 +303,7 @@ pub fn mint_request(
     };
     let mut datums = vec![assert(
         store.intern(RDF_TYPE)?,
-        Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}DecisionRequest"))?),
+        Value::Ref(store.intern(&format!("{ns}DecisionRequest"))?),
     )];
     for (field, value) in [
         ("forPolicy", Value::Str(policy_iri.to_string())),
@@ -307,14 +311,11 @@ pub fn mint_request(
         ("evidenceHash", Value::Str(hash)),
         ("expiresAt", Value::Int(now.saturating_add(window_secs))),
     ] {
-        datums.push(assert(
-            store.intern(&format!("{DEFAULT_BASE_NS}{field}"))?,
-            value,
-        ));
+        datums.push(assert(store.intern(&format!("{ns}{field}"))?, value));
     }
     if let Some(group) = group_iri {
         datums.push(assert(
-            store.intern(&format!("{DEFAULT_BASE_NS}routedTo"))?,
+            store.intern(&format!("{ns}routedTo"))?,
             Value::Ref(store.intern(group)?),
         ));
     }
@@ -362,13 +363,10 @@ pub(crate) fn decision_verifies(
     by: &str,
     signature: &str,
 ) -> Result<bool> {
+    let ns = store.governance_ns()?;
     use super::verifier_registry::{Scope, Witness, registered_keys};
-    let Some(witness) = Witness::of_fact(
-        store,
-        decision_iri,
-        &format!("{DEFAULT_BASE_NS}signature"),
-        signature,
-    )?
+    let Some(witness) =
+        Witness::of_fact(store, decision_iri, &format!("{ns}signature"), signature)?
     else {
         return Ok(false);
     };
@@ -392,12 +390,9 @@ pub(crate) fn decision_verifies(
 /// nobody takes. One function shared with [`mint_request`], so the cited IRI
 /// and the minted one cannot drift apart.
 #[must_use]
-pub fn request_iri(policy_iri: &str, target_iri: &str) -> String {
+pub fn request_iri(ns: &str, policy_iri: &str, target_iri: &str) -> String {
     let hash = evidence_hash(policy_iri, target_iri);
-    format!(
-        "{DEFAULT_BASE_NS}decision_request_{}",
-        &hash[7..hash.len().min(39)]
-    )
+    format!("{ns}decision_request_{}", &hash[7..hash.len().min(39)])
 }
 
 /// The evidence a decision binds to: `sha256:<hex>` over `policy|target`.
