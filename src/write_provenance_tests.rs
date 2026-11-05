@@ -96,3 +96,72 @@ fn a_verified_identity_supplies_agent_and_session_only() {
     let full = class([Some("a"), Some("cron"), Some("h"), None, None]);
     assert_eq!(full.with_verified_identity(), full);
 }
+
+#[test]
+fn committed_declarations_are_atomic_bounded_and_not_authentication() {
+    let mut store = crate::Store::open_in_memory().unwrap();
+    let p = Arc::new(class([
+        Some("actor"),
+        Some("service"),
+        Some("host-a"),
+        None,
+        None,
+    ]));
+    let tx = scoped(Some(p), || {
+        store.transact(&[], "2026-01-01T00:00:00Z", Some("different"), None)
+    })
+    .unwrap();
+    assert_eq!(
+        store.transaction_declarations(tx).unwrap().unwrap()["host"],
+        "host-a"
+    );
+    assert!(store.transaction_auth(tx).unwrap().is_none());
+    let plain = store
+        .transact(&[], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    assert!(store.transaction_declarations(plain).unwrap().is_none());
+    store
+        .conn
+        .execute_batch("SAVEPOINT declared_rollback")
+        .unwrap();
+    let tx = scoped(
+        Some(Arc::new(class([None, None, Some("host-b"), None, None]))),
+        || store.transact(&[], "2026-01-01T00:00:00Z", None, None),
+    )
+    .unwrap();
+    assert!(store.transaction_declarations(tx).unwrap().is_some());
+    store
+        .conn
+        .execute_batch("ROLLBACK TO declared_rollback; RELEASE declared_rollback")
+        .unwrap();
+    assert!(store.transaction_declarations(tx).unwrap().is_none());
+    let oversized = "x".repeat(1025);
+    assert!(
+        !class([None, None, Some(&oversized), None, None])
+            .declarations
+            .contains_key("host")
+    );
+}
+
+#[test]
+fn verified_credit_preserves_declarations_without_inventing_header_identity() {
+    let p = class([None, Some("codex"), Some("declared-host"), None, Some("m")]);
+    let credited = p.with_verified_identity();
+    assert_eq!(credited.declarations, p.declarations);
+    assert!(!credited.declarations.contains_key("agent"));
+    assert!(!credited.declarations.contains_key("session"));
+    assert_eq!(credited.declarations["host"], "declared-host");
+}
+
+#[test]
+fn old_store_without_declaration_table_reports_unknown() {
+    let mut store = crate::Store::open_in_memory().unwrap();
+    let tx = store
+        .transact(&[], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    store
+        .conn
+        .execute_batch("DROP TABLE transaction_declarations")
+        .unwrap();
+    assert!(store.transaction_declarations(tx).unwrap().is_none());
+}
