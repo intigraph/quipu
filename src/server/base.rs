@@ -226,6 +226,8 @@ pub(crate) async fn version() -> impl IntoResponse {
             "quipu-acquisition/v1",
             "quipu-acquisition/composed-v1",
             quipu::acquisition::eligibility::CONTRACT,
+            quipu::acquisition::history::CONTRACT,
+            quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
         "features": compiled_features(),
     }))
@@ -468,6 +470,13 @@ impl AppError {
     pub(crate) fn with_usage(mut self, usage: quipu::request_usage::RequestUsage) -> Self {
         self.1 = Some(usage);
         self
+    }
+
+    /// The underlying error's message, for a response that must report a
+    /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
+    #[cfg(feature = "owl")]
+    pub(crate) fn message(&self) -> String {
+        self.0.to_string()
     }
 }
 

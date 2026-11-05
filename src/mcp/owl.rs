@@ -66,6 +66,22 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
             )
         }
         "load" => {
+            // aegis-fej9 (gju5 Q1). `inline` (the default, unchanged) derives
+            // under the caller's store lock. `deferred` persists the ontology
+            // and derives nothing here: the server then runs the off-lock,
+            // batched scheduled materialisation, and a library caller runs
+            // `action: materialize` when it chooses. Checked before anything
+            // is parsed or persisted, so a misspelled mode writes nothing.
+            let deferred = match input.get("materialize") {
+                None => false,
+                Some(JsonValue::String(mode)) if mode == "inline" => false,
+                Some(JsonValue::String(mode)) if mode == "deferred" => true,
+                Some(other) => {
+                    return Err(Error::InvalidValue(format!(
+                        "unknown materialize mode {other}; use \"inline\" or \"deferred\""
+                    )));
+                }
+            };
             let name = input
                 .get("name")
                 .and_then(|v| v.as_str())
@@ -89,6 +105,16 @@ pub fn tool_load_ontology(store: &mut Store, input: &JsonValue) -> Result<JsonVa
             // The write gate caches the combined ontology; a newly loaded axiom
             // must bite on the NEXT write, not after a restart (aegis-bmqup).
             store.invalidate_owl_cache();
+
+            if deferred {
+                return Ok(serde_json::json!({
+                    "action": "load",
+                    "name": name,
+                    "axioms": summary,
+                    "materialize": "deferred",
+                    "materialized": null,
+                }));
+            }
 
             // Materialize entailments.
             let report = ontology.materialize(store, timestamp)?;
