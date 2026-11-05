@@ -210,6 +210,9 @@ pub fn metrics() -> &'static Metrics {
     M.get_or_init(Metrics::default)
 }
 
+#[cfg(unix)]
+pub(crate) use search::counter_delta as search_counter_delta;
+
 impl Metrics {
     /// Count one canonical terminal search event, without query/identity labels.
     pub fn observe_search(&self, event: &crate::search_outcome::observation::Event) {
@@ -413,6 +416,7 @@ impl Metrics {
         let mut out = String::new();
         self.search_outcomes.render(&mut out);
         crate::search_outcome::render_capture_health(&mut out);
+        crate::search_outcome::render_counter_health(&mut out);
         self.attestation.render(&mut out);
         self.writes.render(&mut out);
         self.refusals.render(&mut out);
