@@ -19,7 +19,7 @@ fn fact(s: &Store, entity: &str, attribute: &str, value: Value, ts: &str, op: Op
 
 fn enabled() -> Store {
     let mut s = Store::open_in_memory().unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.initialize_lexical_index().unwrap();
     s
 }
@@ -27,7 +27,7 @@ fn enabled() -> Store {
 #[test]
 fn legacy_root_index_upgrade_preserves_documents_and_requires_bounded_completion() {
     let mut s = Store::open_in_memory().unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     // Byte-frozen schema from the stage .2 implementation, before graph scope.
     s.conn
         .execute_batch(include_str!("legacy_root_schema.sql"))
@@ -124,7 +124,7 @@ fn disabled_is_explicit_and_read_never_creates_or_backfills() {
             .contains("disabled")
     );
     assert!(s.lexical_progress().unwrap().is_none());
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     assert!(
         s.keyword_search("word", 10, None, None)
             .unwrap_err()
@@ -279,7 +279,7 @@ fn bounded_backfill_is_resumable_and_concurrent_new_writes_are_not_lost() {
         );
         s.transact(&[row], T1, None, None).unwrap();
     }
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     let first = s.backfill_lexical_batch(2).unwrap();
     assert!(!first.complete);
     assert!(first.cursor <= 2);
@@ -303,7 +303,7 @@ fn bounded_backfill_is_resumable_and_concurrent_new_writes_are_not_lost() {
     other.transact(&[row], T1, None, None).unwrap();
     drop(s);
     let mut s = Store::open(db.to_str().unwrap()).unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     assert_eq!(s.lexical_progress().unwrap().unwrap().cursor, first.cursor);
     while !s.backfill_lexical_batch(2).unwrap().complete {}
     assert_eq!(hits(&s, "sharedneedle", None).len(), 8);

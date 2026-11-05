@@ -138,8 +138,11 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
 }
 
 pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
-    store.search_config_mut().clone_from(config);
-    if config.keyword {
+    let keyword = store.adopt_search_config(config).unwrap_or_else(|e| {
+        eprintln!("error resolving search configuration: {e}");
+        std::process::exit(1);
+    });
+    if keyword {
         store.initialize_lexical_index().unwrap_or_else(|e| {
             eprintln!("error initializing keyword index: {e}");
             std::process::exit(1);

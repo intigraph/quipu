@@ -250,6 +250,68 @@ impl Store {
         &self.search_config
     }
 
+    /// Keyword search for this store when `[quipu.search] keyword` is unset
+    /// (aegis-sdfo): ON when there is nothing to backfill (no transactions) or
+    /// the keyword index already exists, OFF for a populated store without one.
+    /// Turning it on there would add FTS triggers to every write at startup, a
+    /// production write-path change nobody asked for.
+    pub fn keyword_default(&self) -> crate::Result<bool> {
+        if self.lexical_progress()?.is_some() {
+            return Ok(true);
+        }
+        let any_tx: bool =
+            self.conn
+                .query_row("SELECT EXISTS(SELECT 1 FROM transactions)", [], |r| {
+                    r.get(0)
+                })?;
+        Ok(!any_tx)
+    }
+
+    /// Which search modes work on THIS binary and store, why not, and the fix
+    /// for each (aegis-sdfo). `quipu doctor search` prints it.
+    pub fn search_capabilities(&self) -> crate::Result<serde_json::Value> {
+        let keyword_on = self.search_config.keyword_enabled();
+        let index = self.lexical_progress()?;
+        let keyword = match (keyword_on, &index) {
+            (true, Some(p)) if p.complete => serde_json::json!({"works": true}),
+            (true, Some(_)) => serde_json::json!({"works": true,
+                "note": "index is live for new writes; older facts need a bounded backfill",
+                "fix": "quipu search-index backfill"}),
+            (true, None) => serde_json::json!({"works": false,
+                "reason": "keyword is enabled but its index is not initialized in this process",
+                "fix": "open the store through quipu or quipu-server, which initialize it"}),
+            (false, _) => serde_json::json!({"works": false,
+                "reason": "keyword search is off ([quipu.search] keyword = false, or a populated store without an index)",
+                "fix": "set [quipu.search] keyword = true, then quipu search-index backfill"}),
+        };
+        let onnx = cfg!(feature = "onnx");
+        let semantic = if self.has_embedding_provider() {
+            serde_json::json!({"works": true})
+        } else if !onnx {
+            serde_json::json!({"works": false,
+                "reason": "this binary was built without the onnx feature",
+                "fix": "install a release binary or build with --features full"})
+        } else {
+            serde_json::json!({"works": false,
+                "reason": "no embedding model is configured",
+                "fix": "set [quipu.embedding] model_path and tokenizer_path"})
+        };
+        Ok(serde_json::json!({"keyword": keyword, "semantic": semantic,
+            "default_mode": self.search_config.mode}))
+    }
+
+    /// Adopt `config` as this store's search config, resolving an unset
+    /// `keyword` with [`Self::keyword_default`]. Returns whether keyword search
+    /// ended up enabled. Index creation stays with the caller, which knows
+    /// whether this process may write (a replica may not).
+    pub fn adopt_search_config(&mut self, config: &SearchConfig) -> crate::Result<bool> {
+        self.search_config.clone_from(config);
+        if self.search_config.keyword.is_none() {
+            self.search_config.keyword = Some(self.keyword_default()?);
+        }
+        Ok(self.search_config.keyword_enabled())
+    }
+
     /// Get a mutable reference to the graph-label floor config (quipu #68).
     pub fn labels_config_mut(&mut self) -> &mut crate::config::LabelsConfig {
         &mut self.labels_config
@@ -381,3 +443,7 @@ impl Store {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "search_defaults_tests.rs"]
+mod search_defaults_tests;

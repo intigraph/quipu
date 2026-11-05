@@ -83,6 +83,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("search-index drop", "", 0, 0, "kind", ""),
     spec!("doctor", "", 0, 0, "", ""),
     spec!("doctor labels", "", 0, 0, "", ""),
+    spec!("doctor search", "", 0, 0, "", ""),
     spec!("pack", "[graph-iri]", 0, 1, "verify out space name version shapes queries repo repo-sha model-id model-version destination format", "with-vectors full allow-missing-embedding-recipe"),
     spec!("unpack", "<file.pendant.db>", 1, 1, "into expect-repo head-sha", ""),
     spec!("restore", "<full-pack|text-pack-dir>", 1, 1, "", "force"),

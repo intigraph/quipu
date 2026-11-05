@@ -23,7 +23,7 @@ async fn keyword_http_uses_wal_reader_without_embedding_or_writer_lock() {
     let db = dir.path().join("corpus.db");
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.search_config_mut().anchored = true;
     store.search_config_mut().hybrid = true;
     store.search_config_mut().mode = "keyword".into();
@@ -206,7 +206,7 @@ async fn search_query_http_is_read_only_and_keyword_default_never_embeds() {
     let db = dir.path().join("corpus.db");
     let path = db.to_str().unwrap();
     let mut store = Store::open(path).unwrap();
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.initialize_lexical_index().unwrap();
     let calls = Arc::new(AtomicUsize::new(0));
     // Count query-time provider calls, not the independent fixture write hook.

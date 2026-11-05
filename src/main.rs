@@ -436,7 +436,7 @@ COMMANDS:
     qp stats [--db <path>]
     qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
     qp search-index status|backfill|drop [--batch-size 500] [--db <path>]
-    qp doctor labels [--db <path>]
+    qp doctor labels|search [--db <path>]
     qp pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     qp pack --full --format text --destination internal --out <dir> [--db <path>]
                                                                      LOSSLESS whole-store pack as TEXT: a git-friendly

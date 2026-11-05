@@ -5,7 +5,7 @@ pub(super) const AT: &str = "2026-01-01T00:00:00Z";
 
 pub(super) fn fixture() -> Store {
     let mut s = Store::open_in_memory().unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.search_config_mut().named_graphs = true;
     s.initialize_lexical_index().unwrap();
     for (graph, name, entity) in [
@@ -395,7 +395,7 @@ fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
 #[test]
 fn keyword_graph_scope_still_refuses_an_incomplete_index() {
     let mut s = Store::open_in_memory().unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.search_config_mut().named_graphs = false;
     let id = s.graph_create("urn:graph:a").unwrap();
     crate::rdf::ingest_rdf_to_graph(

@@ -174,7 +174,7 @@ impl Context<'_> {
         self.candidates(&pattern, seed)
     }
     fn text(&self, atom: &str, seed: Option<&HashSet<String>>) -> Result<HashSet<String>> {
-        if !self.store.search_config().keyword
+        if !self.store.search_config().keyword_enabled()
             || !self.store.lexical_progress()?.is_some_and(|p| p.complete)
         {
             return Err(invalid(

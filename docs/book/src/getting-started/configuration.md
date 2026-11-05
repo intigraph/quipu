@@ -83,9 +83,9 @@ stops being read.
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
-| `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
+| `search.keyword` | unset | SQLite FTS5 keyword search. Unset resolves at open: on for a store with no transactions or an existing index, off for a populated store without one. `true`/`false` always win. Activation installs schema/triggers without a bulk startup migration; existing facts require explicit bounded backfill and reads refuse until complete. |
 | `search.hybrid` | `false` | Enable lexical/vector fusion after offline evaluation; no startup backfill. |
-| `search.mode` | `"semantic"` | Default mode for requests omitting it: semantic, keyword or hybrid. |
+| `search.mode` | `"semantic"` | Default mode for requests omitting it: semantic, keyword or hybrid. A semantic default with no embedding model answers with keyword and a `mode_fallback` note when keyword is enabled. |
 | `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
 | `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
 | `search.rrf_k` | `60.0` | Positive RRF denominator offset. |

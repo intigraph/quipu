@@ -4,7 +4,7 @@ use serde_json::Value;
 
 fn store() -> Store {
     let mut s = Store::open_in_memory().unwrap();
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.initialize_lexical_index().unwrap();
     crate::rdf::ingest_rdf(
         &mut s,
@@ -99,14 +99,14 @@ fn seeds_bind_before_aggregate_and_limit_even_with_comment_braces() {
 #[test]
 fn disabled_index_and_failed_semantic_never_fall_back() {
     let mut s = store();
-    s.search_config_mut().keyword = false;
+    s.search_config_mut().keyword = Some(false);
     assert!(
         tool_search_query(&s, &input())
             .unwrap_err()
             .to_string()
             .contains("disabled")
     );
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     let mut q = input();
     q["mode"] = "hybrid".into();
     assert!(

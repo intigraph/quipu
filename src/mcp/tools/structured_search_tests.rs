@@ -18,7 +18,7 @@ fn put(store: &mut Store, entity: &str, predicate: &str, value: Value) {
 fn fixture() -> Store {
     let mut store = Store::open_in_memory().unwrap();
     store.search_config_mut().structured = true;
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.initialize_lexical_index().unwrap();
     store
         .load_shapes("prefix", "@prefix ex: <https://example.org/> .", AT)

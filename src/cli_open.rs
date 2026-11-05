@@ -79,15 +79,18 @@ pub fn open_store(db_path: &str) -> Store {
     // Measured against a real multi-million-fact store: 30,000 ms regardless
     // of the configured value, from the current directory and from the store's
     // directory alike.
-    store.search_config_mut().clone_from(&config().search);
+    let keyword = store
+        .adopt_search_config(&config().search)
+        .unwrap_or_else(|e| {
+            eprintln!("error resolving search configuration: {e}");
+            std::process::exit(1);
+        });
     // `[quipu].base_ns` names the store's governance vocabulary as well as
     // the names it mints, so every command needs it, as the server sets it.
     // Unset stays unset: governance then refuses (`Store::governance_ns`).
     store.set_base_ns(config().base_ns.clone());
     store.set_code_base(config().code_base.clone());
-    if config().search.keyword
-        && let Err(e) = store.initialize_lexical_index()
-    {
+    if keyword && let Err(e) = store.initialize_lexical_index() {
         eprintln!("error initializing keyword index: {e}");
         std::process::exit(1);
     }

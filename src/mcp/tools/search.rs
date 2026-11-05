@@ -67,8 +67,10 @@ pub(super) fn semantic_response_in(
         (Some(emb), _) => emb,
         (None, Some(text)) => store.embed_query(text)?.ok_or_else(|| {
             Error::InvalidValue(
-                "no embedding provider configured; supply a pre-computed 'embedding' or \
-                     attach an EmbeddingProvider to the store"
+                "semantic search is unavailable: no embedding model is configured on this store. \
+                 Fix: set [quipu.embedding] model_path and tokenizer_path (needs a build with \
+                 the onnx feature), supply a pre-computed 'embedding', or search with \
+                 mode=keyword"
                     .into(),
             )
         })?,
@@ -208,7 +210,7 @@ pub(super) fn keyword_response_in(
     candidates: Option<&std::collections::HashSet<i64>>,
 ) -> Result<JsonValue> {
     let graph_scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
-    if !store.search_config().keyword {
+    if !store.search_config().keyword_enabled() {
         return Err(Error::InvalidValue(
             "keyword search is disabled ([quipu.search] keyword = false)".into(),
         ));

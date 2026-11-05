@@ -42,8 +42,10 @@ pub(crate) fn apply_search(
     store: &mut quipu::Store,
     config: &quipu::SearchConfig,
 ) -> quipu::Result<()> {
-    store.search_config_mut().clone_from(config);
-    if config.keyword && store.lexical_progress()?.is_none() {
+    // An unset `keyword` resolves from the replica's own index (aegis-sdfo):
+    // a replica never initializes one, so unset-and-absent simply stays off.
+    store.adopt_search_config(config)?;
+    if config.keyword == Some(true) && store.lexical_progress()?.is_none() {
         return Err(quipu::Error::InvalidValue(
             "replica keyword index is absent; initialize it on the primary".into(),
         ));

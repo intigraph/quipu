@@ -149,9 +149,13 @@ pub struct SearchConfig {
     /// default until its evaluation gate passes; an anchored request on a
     /// server with this off is refused, never silently answered unanchored.
     pub anchored: bool,
-    /// SQLite FTS5 keyword search. Default off; activation creates only empty
-    /// schema/triggers. Historical rows require explicit bounded backfill.
-    pub keyword: bool,
+    /// SQLite FTS5 keyword search. Activation creates only empty
+    /// schema/triggers; historical rows require explicit bounded backfill.
+    /// Unset (`None`) resolves when a store opens (aegis-sdfo): ON when the
+    /// store has nothing to backfill or its index already exists, OFF for a
+    /// populated store without one, whose every write would otherwise gain FTS
+    /// triggers at startup. See [`crate::Store::keyword_default`].
+    pub keyword: Option<bool>,
     /// Explicit structured candidate filters. SQLite-only, default off.
     pub structured: bool,
     /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
@@ -187,7 +191,7 @@ impl Default for SearchConfig {
             episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
-            keyword: false,
+            keyword: None,
             structured: false,
             hybrid: false,
             mode: "semantic".into(),
@@ -202,6 +206,14 @@ impl Default for SearchConfig {
 }
 
 impl SearchConfig {
+    /// Keyword search as configured or as resolved at store open. An
+    /// unresolved `None` reads as off: a store never gains FTS behaviour
+    /// without either an explicit setting or the open-time resolution.
+    #[must_use]
+    pub fn keyword_enabled(&self) -> bool {
+        self.keyword == Some(true)
+    }
+
     /// Resolve a caller-supplied limit: fall back to `default_limit` when
     /// absent, clamp to `max_limit`, and never return 0.
     pub fn clamp_limit(&self, requested: Option<u64>) -> usize {

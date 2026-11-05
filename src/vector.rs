@@ -176,7 +176,7 @@ impl KnowledgeVectorStore for Store {
         limit: usize,
         valid_at: Option<&str>,
     ) -> Result<Vec<VectorMatch>> {
-        if self.search_config().keyword {
+        if self.search_config().keyword_enabled() {
             self.keyword_search(query, limit, valid_at, None)
         } else {
             Ok(vec![])
@@ -184,7 +184,7 @@ impl KnowledgeVectorStore for Store {
     }
 
     fn ensure_fts_index(&self) -> Result<()> {
-        if self.search_config().keyword {
+        if self.search_config().keyword_enabled() {
             self.initialize_lexical_index()?;
         }
         Ok(())

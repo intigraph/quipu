@@ -45,6 +45,17 @@ pub(super) fn fusion_with_candidates(
     if !matches!(mode, "semantic" | "keyword" | "hybrid") {
         return Err(invalid("mode must be semantic, keyword, or hybrid"));
     }
+    // aegis-sdfo: a caller that named no mode and supplied no embedding asked
+    // to SEARCH, not specifically for vectors. When the default is semantic
+    // and this store has no embedding provider, answer with keyword search and
+    // say why, rather than refusing every out-of-the-box request. An explicit
+    // `mode: "semantic"` still refuses, with the fix in the message.
+    let fallback = input.get("mode").is_none()
+        && input.get("embedding").is_none()
+        && mode == "semantic"
+        && !store.has_embedding_provider()
+        && config.keyword_enabled();
+    let mode = if fallback { "keyword" } else { mode };
     let alpha = number(input, "alpha", config.alpha)?;
     if !(0.0..=1.0).contains(&alpha) {
         return Err(invalid("alpha must be finite and in [0,1]"));
@@ -85,6 +96,14 @@ pub(super) fn fusion_with_candidates(
             super::search_anchor_mix::anchor_text_candidates(store, input, neighbours, false)?;
         if explain {
             explain_pure(&mut response, input, false);
+        }
+        if fallback {
+            response["mode_fallback"] = json!({
+                "mode": "keyword",
+                "requested": "semantic",
+                "reason": "no embedding model is configured on this store",
+                "fix": "configure [quipu.embedding] model_path and tokenizer_path, or pass mode=keyword to silence this note",
+            });
         }
         return Ok(response);
     }

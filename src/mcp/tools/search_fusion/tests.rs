@@ -95,7 +95,7 @@ fn pure_endpoints_are_exact_and_explain_has_real_lexical_fields() {
     use crate::vector::KnowledgeVectorStore;
     let mut store = Store::open_in_memory().unwrap();
     store.search_config_mut().hybrid = true;
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.initialize_lexical_index().unwrap();
     let turtle =
         r#"<https://example.org/a> <http://www.w3.org/2000/01/rdf-schema#label> "Memory Beads" ."#;
@@ -149,7 +149,7 @@ fn pure_endpoints_are_exact_and_explain_has_real_lexical_fields() {
         explained["results"][0]["snippet"],
         "<mark>Memory</mark> Beads"
     );
-    store.search_config_mut().keyword = false;
+    store.search_config_mut().keyword = Some(false);
     // alpha1 has no keyword/index dependency.
     let mut h = s.clone();
     h["mode"] = json!("hybrid");
@@ -207,7 +207,7 @@ fn historical_hybrid_filters_both_branches_and_retains_old_lexical_text() {
     use crate::vector::KnowledgeVectorStore;
     let mut store = Store::open_in_memory().unwrap();
     store.search_config_mut().hybrid = true;
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.search_config_mut().named_graphs = true;
     store.initialize_lexical_index().unwrap();
     let graph = store.graph_create("urn:test:hybrid:history").unwrap();
@@ -272,7 +272,7 @@ fn intermediate_hybrid_enforces_pool_ceiling_without_changing_pure_limits() {
     use crate::vector::KnowledgeVectorStore;
     let mut store = Store::open_in_memory().unwrap();
     store.search_config_mut().hybrid = true;
-    store.search_config_mut().keyword = true;
+    store.search_config_mut().keyword = Some(true);
     store.search_config_mut().max_limit = 5000;
     store.initialize_lexical_index().unwrap();
     crate::rdf::ingest_rdf(

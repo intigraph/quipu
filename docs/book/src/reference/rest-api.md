@@ -1384,9 +1384,18 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
-activation installs an empty FTS5 index and same-transaction fact triggers; it
-never backfills during startup or a read. Writes, source replacement, closure,
+`[quipu.search] keyword` set to `true` or `false` always wins. Left unset, it
+resolves when a store opens: on for a store with no transactions yet or whose
+keyword index already exists, off for a populated store without one (enabling
+it there adds triggers to every write, so that stays an explicit choice).
+Activation installs an empty FTS5 index and same-transaction fact triggers; it
+never backfills during startup or a read.
+
+A `/search` request with no `mode` and no `embedding`, on a store whose default
+mode is semantic but which has no embedding model, answers with keyword results
+plus a `mode_fallback` object naming the reason and the fix. An explicit
+`"mode": "semantic"` without a model is refused with the same fix. `quipu doctor
+search` reports which modes work on the current binary and store. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
 assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`
 checks their original valid-time intervals, with an exclusive `valid_to`

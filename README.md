@@ -145,7 +145,9 @@ Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tool
 
 - The CLI runs locally; `quipu-server` supplies the network API and explorer.
 - Keep your database and credentials private. A demo fixture is not a deployment profile.
-- Semantic search needs a configured model and index; storing a graph alone does not provide either.
+- Keyword search works out of the box on a new store: `quipu search <words>`, or `/search` with no mode.
+  Semantic search additionally needs an embedding model (`[quipu.embedding] model_path`); until one is configured,
+  a `/search` without a mode answers with keyword results and says why. `quipu doctor search` shows which modes work.
 - [Configuration](https://intigraph.github.io/quipu/getting-started/configuration.html) covers storage and server settings.
 
 ## What's next

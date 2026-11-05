@@ -244,7 +244,7 @@ fn hub_edges_are_bounded_and_outer_ring_queries_only_aliases() {
 #[test]
 fn anchor_neighbours_are_admitted_below_the_global_pool_for_each_text_mode() {
     let mut s = store(true);
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.search_config_mut().hybrid = true;
     s.initialize_lexical_index().unwrap();
     while !s.backfill_lexical_batch(1000).unwrap().complete {}
@@ -326,7 +326,7 @@ fn neighbourhood_candidates_retain_type_and_historical_text_scope() {
     let mut s = Store::open_in_memory().unwrap();
     s.search_config_mut().anchored = true;
     s.search_config_mut().hybrid = true;
-    s.search_config_mut().keyword = true;
+    s.search_config_mut().keyword = Some(true);
     s.initialize_lexical_index().unwrap();
     let old = r#"@prefix ex: <http://example.org/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
       ex:root ex:p ex:public, ex:secret . ex:public a ex:Public ; rdfs:label "old record" .

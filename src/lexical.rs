@@ -406,7 +406,7 @@ impl Store {
         allowed: Option<&std::collections::HashSet<String>>,
         graphs: &[i64],
     ) -> Result<Vec<LexicalMatch>> {
-        if !self.search_config().keyword {
+        if !self.search_config().keyword_enabled() {
             return Err(Error::InvalidValue(
                 "keyword search is disabled ([quipu.search] keyword = false)".into(),
             ));

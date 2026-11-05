@@ -377,8 +377,23 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
 /// caller can gate on it without parsing the text.
 pub fn cmd_doctor(args: &[String], db_path: &str) {
     let sub = args.get(2).map_or("labels", String::as_str);
+    if sub == "search" {
+        // aegis-sdfo: which search modes work here, and the fix for each.
+        let store = crate::cli_open::open_store(db_path);
+        match store.search_capabilities() {
+            Ok(report) => println!(
+                "{}",
+                serde_json::to_string_pretty(&report).unwrap_or_default()
+            ),
+            Err(e) => {
+                eprintln!("doctor error: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if sub != "labels" {
-        eprintln!("usage: quipu doctor labels [--db <path>]");
+        eprintln!("usage: quipu doctor labels|search [--db <path>]");
         std::process::exit(1);
     }
 
