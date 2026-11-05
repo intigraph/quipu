@@ -32,9 +32,11 @@ The default private cache is under `XDG_CACHE_HOME/quipu/gpu-runtime`, or
 cache root, with the version directory below it.
 
 The selected GPU bundle is privately staged before loading. The Linux loader
-preloads checksum-verified CUDA and cuDNN dependencies by absolute path and
+preloads only checksum-verified CUDA-provider userspace dependencies by absolute path and
 retains their handles for the process lifetime. This avoids assuming that
 changing `LD_LIBRARY_PATH` after process startup changes loader search behavior.
+ORT loads its own providers after core initialization. Matched cuDNN components
+use their verified sibling files through the pinned libraries’ `$ORIGIN` runpath.
 The TensorRT provider is retained but never preloaded: TensorRT is not part of
 the automatic CUDA contract. ORT initialization still occurs only once, after
 selection. Successful library loading alone is not evidence of a CUDA session.

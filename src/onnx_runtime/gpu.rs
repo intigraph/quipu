@@ -601,14 +601,22 @@ pub(super) fn prepare_selected(core: &Path) -> crate::Result<PathBuf> {
 fn load_dependencies(lib: &Path) -> crate::Result<()> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
-    // cuDNN uses dlopen for components; preload all matched components by their
-    // absolute paths so late bare-soname lookups resolve without mutating the
-    // process environment or relying on a post-start LD_LIBRARY_PATH change.
-    let mut pending: Vec<String> = approved()
-        .files
-        .into_keys()
-        .filter(|n| n != CORE && n != "libonnxruntime_providers_tensorrt.so")
-        .collect();
+    // Preload only CUDA-provider DT_NEEDED userspace dependencies. The pinned
+    // cuDNN components carry $ORIGIN RUNPATH and remain adjacent. Let ORT load
+    // its providers after core initialization; loading them before their host
+    // is initialized is outside their contract. No post-start LD path mutation.
+    let mut pending: Vec<String> = [
+        "libcublasLt.so.12",
+        "libcublas.so.12",
+        "libcudart.so.12",
+        "libcudnn.so.9",
+        "libcurand.so.10",
+        "libnvJitLink.so.12",
+        "libcufft.so.11",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
     let mut handles = Vec::new();
     while !pending.is_empty() {
         let before = pending.len();

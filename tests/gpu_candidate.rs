@@ -87,7 +87,8 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
             .unwrap();
         assert!(
             result.status.success(),
-            "{}\n{}",
+            "child status {}\n{}\n{}",
+            result.status,
             String::from_utf8_lossy(&result.stdout),
             String::from_utf8_lossy(&result.stderr)
         );
@@ -103,6 +104,7 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
         std::env::var_os("LD_LIBRARY_PATH").is_none(),
         "prove absolute dependency preload without startup loader hints"
     );
+    eprintln!("native stage: discovery");
     let candidate = if std::env::var_os("QUIPU_GPU_TEST_ACQUIRE").is_some() {
         quipu::onnx_runtime::acquire_gpu_candidate()
             .unwrap()
@@ -113,7 +115,9 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
             .expect("existing verified GPU candidate")
     };
     assert!(quipu::onnx_runtime::current().is_none());
+    eprintln!("native stage: initialize selected");
     let loaded = quipu::onnx_runtime::initialize(Some(&candidate)).unwrap();
+    eprintln!("native stage: runtime initialized");
     assert!(loaded.available);
     assert_eq!(loaded.linkage, "dynamic-selected");
     // A repeated request for the original candidate resolves to the same
@@ -124,6 +128,7 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
             .path,
         loaded.path
     );
+    eprintln!("native stage: strict CUDA session");
     let session = ort::session::Session::builder()
         .unwrap()
         .with_execution_providers([ort::ep::CUDA::default()
