@@ -494,7 +494,7 @@ pub fn tool_query_with_federation(
     federation: Option<std::sync::Arc<crate::config::FederationConfig>>,
 ) -> Result<JsonValue> {
     crate::search_outcome::observation::run(crate::search_outcome::Operation::Query, input, || {
-        query_with_federation(store, input, federation)
+        sparql::profile::run(input, || query_with_federation(store, input, federation))
     })
 }
 

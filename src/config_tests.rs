@@ -479,3 +479,18 @@ fn episode_request_timeout_ms_parses_and_defaults_to_disabled() {
     let bare: ConfigFile = toml::from_str("[quipu]\nstore_path = \"/d\"\n").unwrap();
     assert_eq!(bare.quipu.search.episode_request_timeout_ms, 0);
 }
+
+#[test]
+fn keyword_intent_distinguishes_omission_from_true_and_false() {
+    let omitted: SearchConfig = toml::from_str("").unwrap();
+    assert!(!omitted.keyword_explicit);
+    assert!(omitted.keyword_for_store(true, false));
+    assert!(!omitted.keyword_for_store(false, false));
+    assert!(omitted.keyword_for_store(false, true));
+    for enabled in [true, false] {
+        let explicit: SearchConfig = toml::from_str(&format!("keyword = {enabled}")).unwrap();
+        assert!(explicit.keyword_explicit);
+        assert_eq!(explicit.keyword_for_store(false, false), enabled);
+        assert_eq!(explicit.keyword_for_store(true, true), enabled);
+    }
+}

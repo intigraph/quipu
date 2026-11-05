@@ -16,6 +16,11 @@ pub(super) fn dispatch_search_fusion(store: &Store, input: &JsonValue) -> Result
     if !input.is_object() {
         return Err(invalid("search input must be an object"));
     }
+    if input.get("query").is_none() && input.get("embedding").is_none() {
+        return Err(invalid(
+            "missing 'embedding' array or 'query' text parameter",
+        ));
+    }
     if let Some(req) = super::search_anchor::AnchorRequest::parse(input)? {
         return super::search_anchor_mix::anchor_mix_response(store, input, &req);
     }
@@ -35,6 +40,12 @@ pub(super) fn fusion_with_candidates(
     // an operator previously selected hybrid as the server default.
     let configured_mode = if config.mode == "hybrid" && !config.hybrid {
         "semantic"
+    } else if config.mode == "auto" {
+        if store.has_embedding_provider() || input.get("embedding").is_some() {
+            "semantic"
+        } else {
+            "keyword"
+        }
     } else {
         config.mode.as_str()
     };
@@ -85,6 +96,10 @@ pub(super) fn fusion_with_candidates(
             super::search_anchor_mix::anchor_text_candidates(store, input, neighbours, false)?;
         if explain {
             explain_pure(&mut response, input, false);
+        }
+        if config.mode == "auto" && input.get("mode").is_none() {
+            response["search_mode"] = json!("keyword");
+            response["mode_reason"] = json!("no_embedding_provider");
         }
         return Ok(response);
     }
