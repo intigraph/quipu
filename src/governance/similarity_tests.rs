@@ -34,7 +34,7 @@ impl EmbeddingProvider for MisCounting {
 #[test]
 fn no_provider_means_no_method_not_an_error() {
     // The degraded state the advisory features build on: absent, not broken.
-    let store = Store::open_in_memory().unwrap();
+    let store = Store::open_in_memory_test_ns().unwrap();
     assert!(EmbeddingCosine::from_store(&store).is_none());
 }
 
@@ -42,7 +42,7 @@ fn no_provider_means_no_method_not_an_error() {
 fn the_identity_names_the_configured_model() {
     // The falsifiability contract: the identity must say which model made the
     // score, from the same source `quipu pack` stamps into its manifest.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.embedding_config_mut().model_path =
         Some("models/all-MiniLM-L6-v2/onnx/model.onnx".into());
     store.set_embedding_provider(Arc::new(FixedVec(vec![1.0, 0.0])));
@@ -55,7 +55,7 @@ fn an_unconfigured_model_is_named_as_unnamed_rather_than_guessed() {
     // A provider attached without a model_path (tests, delegates) gets an
     // identity that SAYS the model is unidentified — an honest "unnamed" is
     // checkable, a plausible invented name is not.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(FixedVec(vec![1.0, 0.0, 0.0])));
     let method = EmbeddingCosine::from_store(&store).unwrap();
     let id = method.identity();
@@ -70,7 +70,7 @@ fn a_zero_vector_scores_zero_not_nan() {
     // The degenerate no-signal case must be the no-signal ANSWER: 0.0 filters
     // out of every advisory path, while NaN would poison sort order and land
     // an unreadable number on record.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(FixedVec(vec![0.0, 0.0])));
     let method = EmbeddingCosine::from_store(&store).unwrap();
     let score = method.score("a", "b").unwrap();
@@ -84,7 +84,7 @@ fn a_zero_vector_scores_zero_not_nan() {
 fn a_miscounting_provider_is_refused_rather_than_misaligned() {
     // One vector for two texts: zip-truncating would silently pair scores
     // with the wrong subjects, which is worse than no scores at all.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.set_embedding_provider(Arc::new(MisCounting));
     let method = EmbeddingCosine::from_store(&store).unwrap();
     let err = method.score("a", "b");

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# install-stack.sh — install caboodle, drive the two-phase stack install,
+# install-stack.sh — install tambo, drive the two-phase stack install,
 # and load knowledge packs into the target store.
 #
-# Two-phase on purpose: `caboodle plan` writes a reviewable plan file and
+# Two-phase on purpose: `tambo plan` writes a reviewable plan file and
 # NOTHING installs until that plan has been reviewed (or --yes given
-# explicitly). That is caboodle's own doctrine — nothing converges on
+# explicitly). That is tambo's own doctrine — nothing converges on
 # conversation strength alone — and this wrapper preserves it rather than
 # papering over it.
 #
@@ -12,15 +12,15 @@
 #   scripts/install-stack.sh [--profile kg] [--yes] [--dry-run]
 #                            [--pendant PATH]... [--db PATH] [--plan PATH]
 #
-#   --profile P   caboodle profile to plan (default: kg)
+#   --profile P   tambo profile to plan (default: kg)
 #   --yes         proceed past the plan to apply + verify + pendant load
 #   --pendant PATH  a .pendant.db knowledge pack to verify and unpack
 #                 into the target store (repeatable). --qpack PATH is a
 #                 deprecated alias kept for one release.
 #   --db PATH     target quipu store for --pendant (default: quipu's own
 #                 default store path)
-#   --plan PATH   where caboodle writes/reads the plan
-#                 (default: caboodle-plan.toml)
+#   --plan PATH   where tambo writes/reads the plan
+#                 (default: caboodle-plan.toml; retained plan-file compatibility)
 #   --dry-run     print every command that would run; execute nothing
 #
 # Syntax stays POSIX-parseable (sh -n clean): no arrays — the repeatable
@@ -29,6 +29,7 @@
 set -euo pipefail
 
 PROFILE="kg"
+# Compatibility: retain the former plan filename so existing reviewed plans resume.
 PLAN="caboodle-plan.toml"
 DB=""
 YES=0
@@ -69,35 +70,35 @@ run() {
     fi
 }
 
-# ---------------------------------------------------------------- caboodle
+# ---------------------------------------------------------------- tambo
 
-if command -v caboodle >/dev/null 2>&1; then
-    echo "install-stack: caboodle already installed: $(caboodle --version 2>/dev/null || echo '(version unreadable)')"
+if command -v tambo >/dev/null 2>&1; then
+    echo "install-stack: tambo already installed: $(tambo --version 2>/dev/null || echo '(version unreadable)')"
 else
-    echo "install-stack: caboodle not found; installing"
-    run cargo install --git https://github.com/scbrown/caboodle --locked
+    echo "install-stack: tambo not found; installing"
+    run cargo install --git https://github.com/intigraph/tambo --locked
     # Read the version back — a zero exit from cargo is not proof the
     # binary is on PATH and runnable (stack culture: verify by read-back,
     # never trust the installer's exit code alone).
     if [ "$DRY_RUN" -eq 0 ]; then
-        if ! command -v caboodle >/dev/null 2>&1; then
-            echo "install-stack: cargo install exited 0 but 'caboodle' is not on PATH" >&2
+        if ! command -v tambo >/dev/null 2>&1; then
+            echo "install-stack: cargo install exited 0 but 'tambo' is not on PATH" >&2
             echo "install-stack: is ~/.cargo/bin on PATH?" >&2
             exit 1
         fi
-        VERSION="$(caboodle --version)" || {
-            echo "install-stack: installed caboodle failed to report its version" >&2
+        VERSION="$(tambo --version)" || {
+            echo "install-stack: installed tambo failed to report its version" >&2
             exit 1
         }
         echo "install-stack: installed $VERSION"
     else
-        printf '+ %s\n' "caboodle --version   # read-back check"
+        printf '+ %s\n' "tambo --version   # read-back check"
     fi
 fi
 
 # ------------------------------------------------------- plan (phase one)
 
-run caboodle plan --profile "$PROFILE" --output "$PLAN"
+run tambo plan --profile "$PROFILE" --output "$PLAN"
 
 if [ "$YES" -eq 0 ]; then
     echo ""
@@ -118,8 +119,8 @@ fi
 
 # ------------------------------------------- apply + verify (phase two)
 
-run caboodle apply --plan "$PLAN"
-run caboodle verify --plan "$PLAN"
+run tambo apply --plan "$PLAN"
+run tambo verify --plan "$PLAN"
 
 # ------------------------------------------------------------ pendant load
 

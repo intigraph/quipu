@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Legacy-namespace term, as the fixtures write them (shadows the module's
+/// store-scoped `ns`).
+fn ns(name: &str) -> String {
+    format!("{}{name}", crate::namespace::DEFAULT_BASE_NS)
+}
+
 const TS: &str = "2026-01-01T00:00:00Z";
 const NOW: i64 = 1_767_225_600; // 2026-01-01T00:00:00Z
 const POLICY: &str = "http://ex/policy/wire-funds";
@@ -40,7 +46,7 @@ fn register(store: &mut Store, verifier: &str, key_hex: &str) {
 
 /// A decision with a question, two options (one as a blank node list item) and scope.
 fn seeded() -> (Store, ring::signature::Ed25519KeyPair) {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     put(
         &mut store,
         D,
@@ -233,7 +239,7 @@ fn an_unregistered_or_unauthorized_key_fails() {
 #[test]
 fn the_digest_ignores_blank_node_labels_and_fact_order() {
     let build = |label: &str, reverse: bool| {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         let facts: Vec<(&str, Value)> = vec![
             ("question", Value::Str("q".into())),
             ("option", Value::Str("approve".into())),
@@ -254,7 +260,7 @@ fn the_digest_ignores_blank_node_labels_and_fact_order() {
     };
     assert_eq!(build("_:a", false), build("_:zzz", true));
     assert_ne!(build("_:a", false), {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         put(&mut store, D, &ns("question"), Value::Str("q2".into()));
         decision_digest(&store, D).unwrap()
     });

@@ -41,8 +41,8 @@ fn auth_refusal_client_and_method_labels_are_bounded_without_losing_counts() {
 fn client_label_precedence_and_normalisation() {
     // Explicit header wins over User-Agent.
     assert_eq!(
-        normalize_client(Some("hank-policy-hook"), Some("curl/8.5.0")),
-        "hank-policy-hook"
+        normalize_client(Some("yupana-policy-hook"), Some("curl/8.5.0")),
+        "yupana-policy-hook"
     );
     // Version suffixes collapse — otherwise every release mints a label.
     assert_eq!(normalize_client(None, Some("curl/8.5.0")), "curl");
@@ -228,22 +228,22 @@ fn store_time_separates_waiting_from_burning() {
 #[test]
 fn client_time_attribution_sums_and_start_time_is_absent_until_recorded() {
     let m = Metrics::default();
-    m.observe_client("hank", "aegis-3aybc", "/query", 2.0);
-    m.observe_client("hank", "aegis-3aybc", "/query", 3.0);
+    m.observe_client("yupana", "aegis-3aybc", "/query", 2.0);
+    m.observe_client("yupana", "aegis-3aybc", "/query", 3.0);
     m.observe_client("bobbin", "unattributed", "/query", 1.0);
     let text = m.render(0, 0, 0, None);
     assert!(
             text.contains(
-                "quipu_http_client_requests_total{client=\"hank\",task=\"aegis-3aybc\",endpoint=\"/query\"} 2"
+                "quipu_http_client_requests_total{client=\"yupana\",task=\"aegis-3aybc\",endpoint=\"/query\"} 2"
             )
         );
     assert!(text.contains(
-            "quipu_http_client_request_seconds_total{client=\"hank\",task=\"aegis-3aybc\",endpoint=\"/query\"} 5"
+            "quipu_http_client_request_seconds_total{client=\"yupana\",task=\"aegis-3aybc\",endpoint=\"/query\"} 5"
         ));
     assert!(text.contains(
             "quipu_http_client_request_seconds_total{client=\"bobbin\",task=\"unattributed\",endpoint=\"/query\"} 1"
         ));
-    // 5 of 6 seconds are hank's — the ratio this whole change exists to make
+    // 5 of 6 seconds are yupana's — the ratio this whole change exists to make
     // computable (aegis-ma1hy: 65.6% of /query load was unattributable).
 }
 

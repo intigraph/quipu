@@ -519,11 +519,12 @@ impl Store {
     /// inspects asserted `aegis:signatureScheme` datums, so every write that
     /// does not mention that predicate is unaffected.
     pub(crate) fn refuse_disabled_signature_schemes(&self, datums: &[Datum]) -> Result<()> {
-        let Some(attr) = self.lookup(&format!(
-            "{}signatureScheme",
-            crate::namespace::DEFAULT_BASE_NS
-        ))?
-        else {
+        // A store with no governance namespace refuses a write that names
+        // `signatureScheme` in any namespace instead of letting it past.
+        let Some(ns) = self.governance_ns_for_write(datums)? else {
+            return Ok(());
+        };
+        let Some(attr) = self.lookup(&format!("{ns}signatureScheme"))? else {
             return Ok(());
         };
         for datum in datums

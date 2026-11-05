@@ -10,18 +10,30 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     error::{Error, Result},
-    namespace::{DEFAULT_BASE_NS, RDF_TYPE},
+    namespace::RDF_TYPE,
     store::{Datum, Store},
     types::Value,
 };
 
-type Node = BTreeMap<String, Vec<Value>>;
+/// One entity's current facts, keyed by predicate IRI, with the governance
+/// namespace its workflow terms are read under.
+#[derive(Debug, PartialEq)]
+struct Node {
+    ns: String,
+    facts: BTreeMap<String, Vec<Value>>,
+}
+
+impl Node {
+    fn get(&self, predicate: &str) -> Option<&Vec<Value>> {
+        self.facts.get(predicate)
+    }
+}
 
 /// The pre-write workflow entities relevant to this transaction.
 pub(crate) struct Before(BTreeMap<i64, Node>);
 
-fn name(local: &str) -> String {
-    format!("{DEFAULT_BASE_NS}{local}")
+fn name(ns: &str, local: &str) -> String {
+    format!("{ns}{local}")
 }
 
 fn denied(message: impl Into<String>) -> Error {
@@ -38,9 +50,13 @@ fn read(store: &Store, entity: i64, graph: i64) -> Result<Node> {
             Ok((r.get::<_, i64>(0)?, r.get::<_, Vec<u8>>(1)?))
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    let mut node = Node::new();
+    let mut node = Node {
+        ns: store.governance_ns()?.to_string(),
+        facts: BTreeMap::new(),
+    };
     for (attr, bytes) in rows {
-        node.entry(store.resolve(attr)?)
+        node.facts
+            .entry(store.resolve(attr)?)
             .or_default()
             .push(Value::from_bytes(&bytes)?);
     }
@@ -48,13 +64,13 @@ fn read(store: &Store, entity: i64, graph: i64) -> Result<Node> {
 }
 
 fn values<'a>(node: &'a Node, local: &str) -> &'a [Value] {
-    node.get(&name(local)).map_or(&[], Vec::as_slice)
+    node.get(&name(&node.ns, local)).map_or(&[], Vec::as_slice)
 }
 
 fn typed(store: &Store, node: &Node, class: &str) -> bool {
     node.get(RDF_TYPE).is_some_and(|vs| {
         vs.iter().any(|v| {
-            matches!(v, Value::Ref(id) if store.resolve(*id).is_ok_and(|iri| iri == name(class)))
+            matches!(v, Value::Ref(id) if store.resolve(*id).is_ok_and(|iri| iri == name(&node.ns, class)))
         })
     })
 }
@@ -118,6 +134,7 @@ fn linked_runs(node: &Node) -> impl Iterator<Item = i64> + '_ {
 
 /// Snapshot before staging; no production scans or persistent state cache.
 pub(crate) fn capture(store: &Store, datums: &[Datum], graph: i64) -> Result<Before> {
+    let ns = store.governance_ns()?;
     let mut ids = BTreeSet::new();
     let relevant = [
         "currentRevision",
@@ -140,11 +157,11 @@ pub(crate) fn capture(store: &Store, datums: &[Datum], graph: i64) -> Result<Bef
         let is_type = attr == RDF_TYPE
             && matches!(&d.value, Value::Ref(id) if store.resolve(*id).is_ok_and(|v|
                 ["Workflow", "WorkflowDefinition", "WorkflowRun", "WorkflowStep", "TransitionEvent"]
-                .iter().any(|kind| v == name(kind))));
-        if is_type || relevant.iter().any(|a| attr == name(a)) {
+                .iter().any(|kind| v == name(ns, kind))));
+        if is_type || relevant.iter().any(|a| attr == name(ns, a)) {
             ids.insert(d.entity);
         }
-        if attr == name("inRun")
+        if attr == name(ns, "inRun")
             && let Value::Ref(id) = d.value
         {
             ids.insert(id);
@@ -159,7 +176,7 @@ pub(crate) fn capture(store: &Store, datums: &[Datum], graph: i64) -> Result<Bef
         "WorkflowStep",
         "TransitionEvent",
     ] {
-        for iri in super::placement::touched_of_type(store, datums, graph, class)? {
+        for iri in super::placement::touched_of_type(store, ns, datums, graph, class)? {
             if let Some(id) = store.lookup(&iri)? {
                 ids.insert(id);
             }
