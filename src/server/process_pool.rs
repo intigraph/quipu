@@ -13,7 +13,6 @@ use quipu::{
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use std::{
-    borrow::Cow,
     io::Read,
     process::{Child, Command, Stdio},
     sync::{
@@ -126,22 +125,8 @@ pub(crate) struct ProcessPool {
     routing: Option<Arc<Routing>>,
     internal_worker: bool,
 }
-impl ProcessPool {
-    /// A validated internal reader serves reads, never primary replication transport.
-    /// Keep replica/read-only identity and every other auth setting unchanged.
-    pub(crate) fn auth_config<'a>(
-        &self,
-        config: &'a quipu::config::ServerConfig,
-    ) -> Cow<'a, quipu::config::ServerConfig> {
-        if self.internal_worker && config.replication_credentials_file.is_some() {
-            let mut worker = config.clone();
-            worker.replication_credentials_file = None;
-            Cow::Owned(worker)
-        } else {
-            Cow::Borrowed(config)
-        }
-    }
-}
+#[path = "process_pool_auth.rs"]
+mod auth_config;
 
 impl Drop for ProcessPool {
     fn drop(&mut self) {

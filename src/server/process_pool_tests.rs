@@ -1,4 +1,5 @@
 use super::*;
+use std::borrow::Cow;
 #[test]
 fn process_routing_never_sends_writes_or_streams_to_readers() {
     for path in quipu::http_auth::WRITE_ENDPOINTS {
