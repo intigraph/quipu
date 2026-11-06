@@ -95,3 +95,37 @@ fn malformed_cycles_orphans_and_budget_overflow_refuse() {
         .is_err()
     );
 }
+
+#[test]
+fn lowering_and_noop_planning_refuse_unidentified_blank_elements() {
+    // Parsing trims whitespace: checking the raw prefix alone would fail open.
+    for element in ["_:nested", "  _:nested  "] {
+        let value = Some(vec![element.to_owned()]);
+        assert!(lower(&slot(), &value).is_err());
+        assert!(
+            plan(
+                &slot(),
+                &value,
+                &value,
+                &value,
+                Mode::Whole,
+                None,
+                "2026-01-01",
+                "2026-01-02",
+                "2026-01-03",
+            )
+            .is_err()
+        );
+    }
+    // A literal spelling a blank-node label has ordinary literal identity.
+    let literal = seq(&["_:nested"]);
+    let graph = lower(&slot(), &literal).unwrap();
+    let slots = BTreeMap::from([(slot(), Mode::Whole)]);
+    assert_eq!(
+        read(&graph, &slots).unwrap()[&slot()]
+            .as_ref()
+            .unwrap()
+            .elements,
+        literal.unwrap()
+    );
+}

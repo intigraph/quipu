@@ -259,7 +259,14 @@ pub(crate) fn lower(slot: &Slot, value: &Option<Vec<String>>) -> Result<Graph> {
         return Err(invalid("invalid list slot"));
     }
     for (i, value) in elements.iter().enumerate() {
-        crate::fork_merge_decisions::parse_term(value)?;
+        if matches!(
+            crate::fork_merge_decisions::parse_term(value)?,
+            oxrdf::Term::BlankNode(_)
+        ) {
+            return Err(invalid(
+                "blank element requires explicit nested-value identity",
+            ));
+        }
         let rest = if i + 1 == elements.len() {
             nil.clone()
         } else {
