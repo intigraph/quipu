@@ -2,6 +2,7 @@
 import unittest
 
 from oracle import evaluate
+from list_cases import CASES
 
 
 class OracleTests(unittest.TestCase):
@@ -49,6 +50,28 @@ class OracleTests(unittest.TestCase):
         for observation in [{}, {"current": []}, {"history": []}]:
             with self.assertRaises(ValueError):
                 evaluate(self.fixture(), observation)
+
+    def test_c6_explicit_oracles_and_wrong_reports_are_discriminated(self):
+        self.assertEqual([case["case"] for case in CASES], [f"C6{x}" for x in "abcde"])
+        for fixture in CASES:
+            observation = {"current": fixture["expected_current"], "history": [],
+                           "report": dict(fixture["expected_report"])}
+            self.assertTrue(evaluate(fixture, observation)["correct"])
+            observation["report"]["held"] = 1 - fixture["expected_report"]["held"]
+            result = evaluate(fixture, observation)
+            self.assertFalse(result["correct"])
+            self.assertEqual(result["current_facts_lost"], 0)
+            self.assertIn("held", result["report_mismatches"])
+
+    def test_report_required_fields_cannot_disappear_into_an_empty_success(self):
+        fixture = CASES[2]  # agreeing sequences still need the convergent flag
+        observation = {"current": fixture["expected_current"], "history": [], "report": {}}
+        result = evaluate(fixture, observation)
+        self.assertFalse(result["correct"])
+        self.assertFalse(result["report_mismatches"]["kind"]["present"])
+        del observation["report"]
+        with self.assertRaises(ValueError):
+            evaluate(fixture, observation)
 
 
 if __name__ == "__main__":

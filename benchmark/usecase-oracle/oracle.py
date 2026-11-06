@@ -37,13 +37,26 @@ def evaluate(fixture: dict, observation: dict) -> dict:
     extra_current = sorted(current - expected_current)
     missing_history = sorted(expected_history - history)
     extra_history = sorted(history - expected_history)
+    report_mismatches = {}
+    if "expected_report" in fixture:
+        expected_report = fixture["expected_report"]
+        actual_report = observation.get("report")
+        if not isinstance(expected_report, dict) or not isinstance(actual_report, dict):
+            raise ValueError("expected_report and observed report must be objects")
+        for key, expected in expected_report.items():
+            if key not in actual_report or actual_report[key] != expected:
+                report_mismatches[key] = {"expected": expected,
+                                          "observed": actual_report.get(key),
+                                          "present": key in actual_report}
     return {
         "case": fixture["case"],
-        "correct": not (missing_current or extra_current or missing_history or extra_history),
+        "correct": not (missing_current or extra_current or missing_history
+                        or extra_history or report_mismatches),
         "current_facts_lost": len(missing_current),
         "history_records_missing": len(missing_history),
         "missing_current": [json.loads(v) for v in missing_current],
         "unexpected_current": [json.loads(v) for v in extra_current],
         "missing_history": [json.loads(v) for v in missing_history],
         "unexpected_history": [json.loads(v) for v in extra_history],
+        "report_mismatches": report_mismatches,
     }

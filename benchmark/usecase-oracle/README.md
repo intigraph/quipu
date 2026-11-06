@@ -10,6 +10,16 @@ remain structured sequences, including repeated elements.
 incoming value can be correctly absent from current state while its receipt
 must remain in history. Extra current facts and history records also fail.
 An omitted observation view is invalid input, never a successful empty result.
+When a fixture declares `expected_report`, every named report field is checked
+as well. A graph matching the expected facts does not excuse a missing
+convergent flag or a wrong held count. Adapters project native reports into the
+fixture's canonical terms; this module does not claim those are native wire
+enum names.
+
+`list_cases.py` states C6a–C6e outcomes explicitly from the design. These are
+pendant projections with no store history: held list conflicts retain base.
+The fixtures do not run the merge or manufacture observations. Their positive
+and defeated controls validate the judge, not any operator implementation.
 
 Run the judge's independent positive and defeated controls with:
 
