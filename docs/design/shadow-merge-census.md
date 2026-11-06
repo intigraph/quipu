@@ -36,9 +36,33 @@ text. Physical source claims may duplicate one logical replacement; physical
 pair counts explicitly do not claim logical-slot deduplication. Graph IDs do
 not establish ontology membership. Multiple ontologies may share one graph.
 
+When the retained snapshot contains the current local `transaction_auth`
+table, each candidate pair separately reports `same_recorded_principal`,
+`different_recorded_principals` or `unknown`. The declared-actor candidate
+filter and its counts stay separate. Different actor strings can share one
+credential principal; neither equality nor difference proves which individual
+agent wrote. Missing legacy authentication tables and missing/blank evidence
+remain explicitly unknown. A present table without the expected columns and
+unique transaction primary key refuses the result rather than multiplying
+pairs. Joins use that primary key and remain inside the same bounded read
+transaction. Raw principal and authentication-class strings never leave the
+analyser. This describes recorded local provenance, not cryptographic signature
+re-verification, current credential validity or a grant of writer authority.
+Same-declared-actor pairs remain outside this retrospective candidate cohort,
+even if their recorded principals differ; this is not a complete identity census.
+
+Sizing output includes fixed time-gap buckets and a hot-slot histogram of
+distinct replacement transactions per physical graph/entity/predicate slot.
+Multiple old/new claims in one replacement can produce a pair cross-product;
+that inflates physical pair counts but does not inflate this histogram. Neither
+entity IDs nor timestamps are exported. Per-group distinct slot/transaction
+counts reconcile to the overall count. These are retained-window physical
+sizing observations, not an entity lookup, ontology assignment or proof that a
+slot should become a fluent.
+
 This is **not** a second implementation of `merge3` and does not provide its
 three-way classification. Read bases, shape/cardinality snapshots, class and
-ontology mapping, authenticated actors and LWW-loss evidence remain unknown.
+ontology mapping, individual agent attribution and LWW-loss evidence remain unknown.
 The live shadow stage must call the existing merge core against a declared
 base, preserve normal write behavior, and bind its classification to the actual
 shape/source version. It still needs reviewed source, normal qualification,

@@ -20,20 +20,58 @@ class Unknown(Exception):
 
 # Both indexes are shipped by Quipu. Refuse rather than silently full-scan an
 # old schema. Match an actual closure transaction, not merely nearby writes.
-PAIRS = """
+PAIR_TEMPLATE = """
 SELECT old.g, old.e, old.a, old.tx, new.tx,
        prior.timestamp, current.timestamp, prior.actor, current.actor,
-       old.valid_from, old.valid_to, new.valid_from, new.valid_to
+       old.valid_from, old.valid_to, new.valid_from, new.valid_to{auth_columns}
 FROM facts AS old INDEXED BY idx_retracted_tx
 JOIN facts AS new INDEXED BY idx_tx ON new.tx=old.retracted_tx
   AND new.g=old.g AND new.e=old.e AND new.a=old.a
 JOIN transactions AS prior ON prior.id=old.tx
 JOIN transactions AS current ON current.id=new.tx
+{auth_joins}
 WHERE old.retracted_tx>? AND old.retracted_tx<=?
   AND old.tx<new.tx AND old.op=1 AND new.op=1 AND old.v!=new.v
   AND old.valid_to IS NOT NULL
 LIMIT ?
 """
+PAIRS = PAIR_TEMPLATE.format(auth_columns=", NULL, NULL, NULL, NULL", auth_joins="")
+
+
+def pair_query(connection):
+    """Optional local evidence; never infer an authenticated principal from actor."""
+    columns = connection.execute('PRAGMA main.table_info("transaction_auth")').fetchall()
+    if not columns:
+        return PAIRS, "not_recorded"
+    names = {column[1] for column in columns}
+    primary = [column[1] for column in columns if column[5]]
+    if not {"tx", "principal", "auth_class"} <= names or primary != ["tx"]:
+        raise Unknown("local-auth-schema-unproved")
+    return PAIR_TEMPLATE.format(
+        auth_columns=", pa.principal, pa.auth_class, ca.principal, ca.auth_class",
+        auth_joins=("LEFT JOIN transaction_auth AS pa ON pa.tx=prior.id\n"
+                    "LEFT JOIN transaction_auth AS ca ON ca.tx=current.id"),
+    ), "local_transaction_rows"
+
+
+def principal_evidence(old_principal, old_class, new_principal, new_class):
+    """Describe retained local metadata, not signature or present-day authority."""
+    if not all(isinstance(v, str) and v.strip()
+               for v in (old_principal, old_class, new_principal, new_class)):
+        return "unknown"
+    return "same_recorded_principal" if old_principal == new_principal else "different_recorded_principals"
+
+
+def gap_bucket(gap):
+    """Fixed aggregate buckets; no transaction timestamp is exported."""
+    lower = 0
+    if gap == 0:
+        return "0"
+    for upper in (1, 10, 60, 300, 3600):
+        if gap <= upper:
+            return f"({lower},{upper}]"
+        lower = upper
+    raise Unknown("candidate-gap-out-of-bounds")
 
 
 def timestamp(value):
@@ -67,14 +105,19 @@ def census(database, after_tx, through_tx, max_pairs=5000, gap_seconds=300, seco
         head = connection.execute("SELECT MAX(id) FROM transactions").fetchone()[0]
         if not store or not epoch or head is None or through_tx > head:
             raise Unknown("snapshot-identity-or-head-unproved")
-        rows = connection.execute(PAIRS, (after_tx, through_tx, max_pairs + 1)).fetchall()
+        query, auth_coverage = pair_query(connection)
+        rows = connection.execute(query, (after_tx, through_tx, max_pairs + 1)).fetchall()
         if len(rows) > max_pairs:
             raise Unknown("pair-budget-exhausted")
         counts = Counter()
         groups = Counter()
+        identity_counts = Counter()
+        group_identity = Counter()
+        gaps = Counter()
         slots = set()
         for (graph, entity, predicate, old_tx, new_tx, before, after, old_actor, new_actor,
-             old_from, old_to, new_from, new_to) in rows:
+             old_from, old_to, new_from, new_to,
+             old_principal, old_class, new_principal, new_class) in rows:
             if time.monotonic() >= deadline:
                 raise Unknown("analysis-deadline-exhausted")
             counts["physical_claim_pairs"] += 1
@@ -106,6 +149,16 @@ def census(database, after_tx, through_tx, max_pairs=5000, gap_seconds=300, seco
                 counts["different_declared_actor_candidates"] += 1
                 groups[(graph, predicate)] += 1
                 slots.add((graph, entity, predicate, new_tx))
+                evidence = principal_evidence(old_principal, old_class, new_principal, new_class)
+                identity_counts[evidence] += 1
+                group_identity[(graph, predicate, evidence)] += 1
+                gaps[gap_bucket(gap)] += 1
+        # Deduplicate physical claim cross-products only for this sizing view.
+        # It remains a physical slot/transaction cohort, not logical LWW proof.
+        slot_transactions = Counter((graph, entity, predicate)
+                                    for graph, entity, predicate, _tx in slots)
+        hot_slots = Counter(slot_transactions.values())
+        group_slots = Counter((graph, predicate) for graph, _entity, predicate, _tx in slots)
         return {
             "schema": "quipu-retrospective-claim-census/v1",
             "status": "observed_bounded_claim_pairs",
@@ -114,13 +167,26 @@ def census(database, after_tx, through_tx, max_pairs=5000, gap_seconds=300, seco
             "gap_seconds": gap_seconds, "max_pairs": max_pairs,
             "counts": dict(sorted(counts.items())),
             "distinct_candidate_slot_transactions": len(slots),
+            "candidate_identity_evidence": dict(sorted(identity_counts.items())),
+            "candidate_gap_histogram_seconds": dict(sorted(gaps.items())),
+            "distinct_candidate_physical_slots": len(slot_transactions),
+            "physical_hot_slot_histogram": [
+                {"candidate_replacement_transactions": frequency, "slots": count}
+                for frequency, count in sorted(hot_slots.items())],
             "groups": [{"graph_id": graph, "predicate_id": predicate,
-                        "physical_claim_pair_candidates": count}
+                        "physical_claim_pair_candidates": count,
+                        "distinct_candidate_slot_transactions": group_slots[(graph, predicate)],
+                        "candidate_identity_evidence": {
+                            evidence: group_identity[(graph, predicate, evidence)]
+                            for evidence in sorted(identity_counts)
+                            if group_identity[(graph, predicate, evidence)]}}
                        for (graph, predicate), count in sorted(groups.items())],
             "coverage": {
                 "read_base": "unknown", "three_way_classification": "not_run",
                 "shape_cardinality": "unknown", "ontology_mapping": "unknown",
                 "actor_identity": "caller_declared_not_authenticated",
+                "local_auth_evidence": auth_coverage,
+                "principal_to_agent_attribution": "not_established",
                 "legacy_closures_without_retracted_tx": "not_observable",
                 "logical_slot_deduplication": "not_claimed",
                 "lost_update_or_lww_proof": "not_established",

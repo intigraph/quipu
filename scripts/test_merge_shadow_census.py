@@ -54,7 +54,67 @@ INSERT INTO facts VALUES(1,2,X'62',0,2,'2026-01-01T00:01:00Z',NULL,1,NULL);
         self.assertNotIn('PRIVATE_ACTOR', json.dumps(result))
         self.assertEqual(result['coverage']['shape_cardinality'], 'unknown')
         self.assertEqual(result['coverage']['three_way_classification'], 'not_run')
+        self.assertEqual(result['coverage']['local_auth_evidence'], 'not_recorded')
+        self.assertEqual(result['candidate_identity_evidence'], {'unknown': 1})
         self.assertEqual(CENSUS.census(self.path, 0, 2), result | {'after_tx_exclusive': 0})
+
+    def auth_table(self):
+        self.alter('CREATE TABLE transaction_auth(tx INTEGER PRIMARY KEY,principal TEXT,auth_class TEXT)')
+
+    def test_different_declared_actors_can_share_one_recorded_principal(self):
+        self.auth_table()
+        self.alter("INSERT INTO transaction_auth VALUES(1,'PRIVATE_SHARED','named_bearer');"
+                   "INSERT INTO transaction_auth VALUES(2,'PRIVATE_SHARED','named_bearer')")
+        before = self.path.read_bytes()
+        result = self.result()
+        self.assertEqual(result['counts']['different_declared_actor_candidates'], 1)
+        self.assertEqual(result['candidate_identity_evidence'], {'same_recorded_principal': 1})
+        self.assertEqual(result['groups'][0]['candidate_identity_evidence'],
+                         {'same_recorded_principal': 1})
+        self.assertEqual(result['coverage']['principal_to_agent_attribution'], 'not_established')
+        self.assertNotIn('PRIVATE_SHARED', json.dumps(result))
+        self.assertEqual(before, self.path.read_bytes())
+
+    def test_local_evidence_distinct_principals_and_missing_evidence_stay_separate(self):
+        self.auth_table()
+        self.alter("INSERT INTO transaction_auth VALUES(1,'PRIVATE_AUTH_A','named_bearer');"
+                   "INSERT INTO transaction_auth VALUES(2,'PRIVATE_AUTH_B','attested_session')")
+        result = self.result()
+        self.assertEqual(result['candidate_identity_evidence'], {'different_recorded_principals': 1})
+        self.assertEqual(result['coverage']['local_auth_evidence'], 'local_transaction_rows')
+        self.assertNotIn('PRIVATE_AUTH', json.dumps(result))
+        for change in ("DELETE FROM transaction_auth WHERE tx=2",
+                       "UPDATE transaction_auth SET principal=' ' WHERE tx=1",
+                       "UPDATE transaction_auth SET auth_class=NULL WHERE tx=1"):
+            with self.subTest(change=change):
+                self.alter("DELETE FROM transaction_auth;"
+                           "INSERT INTO transaction_auth VALUES(1,'PRIVATE_AUTH_A','named_bearer');"
+                           "INSERT INTO transaction_auth VALUES(2,'PRIVATE_AUTH_B','attested_session')")
+                self.alter(change)
+                self.assertEqual(self.result()['candidate_identity_evidence'], {'unknown': 1})
+
+    def test_present_but_ambiguous_local_auth_schema_refuses_instead_of_multiplying_pairs(self):
+        self.alter('CREATE TABLE transaction_auth(tx INTEGER,principal TEXT,auth_class TEXT);'
+                   "INSERT INTO transaction_auth VALUES(1,'A','named_bearer');"
+                   "INSERT INTO transaction_auth VALUES(1,'B','named_bearer')")
+        with self.assertRaises(CENSUS.Unknown):
+            self.result()
+
+    def test_multivalue_claim_cross_products_do_not_inflate_hot_slot_transactions(self):
+        self.alter("INSERT INTO transactions VALUES(3,'2026-01-01T00:02:00Z','PRIVATE_ACTOR_C');"
+                   "UPDATE facts SET valid_to='2026-01-01T00:02:00Z',retracted_tx=3 WHERE tx=2;"
+                   "INSERT INTO facts SELECT e,a,X'63',g,tx,valid_from,valid_to,op,retracted_tx "
+                   "FROM facts WHERE tx=2;"
+                   "INSERT INTO facts VALUES(1,2,X'64',0,3,'2026-01-01T00:02:00Z',NULL,1,NULL)")
+        result = CENSUS.census(self.path, 1, 3)
+        self.assertEqual(result['counts']['physical_claim_pairs'], 4)
+        self.assertEqual(result['distinct_candidate_slot_transactions'], 2)
+        self.assertEqual(result['distinct_candidate_physical_slots'], 1)
+        self.assertEqual(result['physical_hot_slot_histogram'],
+                         [{'candidate_replacement_transactions': 2, 'slots': 1}])
+        self.assertEqual(result['candidate_gap_histogram_seconds'], {'(10,60]': 4})
+        self.assertEqual(result['groups'][0]['distinct_candidate_slot_transactions'], 2)
+        self.assertNotIn('PRIVATE_ACTOR', json.dumps(result))
 
     def test_adjacent_different_actor_writes_without_closure_are_not_overwrites(self):
         self.alter('UPDATE facts SET retracted_tx=NULL WHERE tx=1')
