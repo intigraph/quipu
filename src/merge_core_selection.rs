@@ -17,7 +17,11 @@ pub(crate) enum Mode {
     PartialSlot,
 }
 
-impl Default for Mode {fn default()->Self {Self::Atomic}}
+impl Default for Mode {
+    fn default() -> Self {
+        Self::Atomic
+    }
+}
 
 /// Select a closed set of slots without splitting any supplied merge unit.
 ///

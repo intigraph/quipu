@@ -72,13 +72,13 @@ impl Change {
 /// `continue` for a convergent slot).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(bound(deserialize = "V: Ord + serde::Deserialize<'de>"))]
-#[serde(tag="choose", content="values", rename_all="lowercase")]
+#[serde(tag = "choose", content = "values", rename_all = "lowercase")]
 pub(crate) enum Decision<V> {
     Ours,
     Theirs,
     Base,
     Both,
-    #[serde(rename="value")]
+    #[serde(rename = "value")]
     Values(BTreeSet<V>),
     // Explicit convergent decisions arrive with the decisions schema slice.
     #[cfg_attr(not(test), allow(dead_code))]

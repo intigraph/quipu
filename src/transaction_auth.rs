@@ -182,7 +182,7 @@ thread_local! {
 
 /// Owned evidence from the authentication adapter, never from request JSON.
 pub(crate) fn current_identity() -> Option<Identity> {
-    IDENTITY.with(|slot|slot.borrow().clone())
+    IDENTITY.with(|slot| slot.borrow().clone())
 }
 
 /// Run synchronous work with owned authentication evidence. Nested scopes,

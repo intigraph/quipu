@@ -199,11 +199,28 @@ pub struct SharePair {
 }
 
 impl SharePair {
-    pub(crate) fn session(self,store:&Store,profile:crate::merge_session::Profile)->Result<(crate::merge_session::Request,String)> {
-        Ok((crate::merge_session::Request {store_id:store.store_id()?,root_tx:store.latest_tx_id()?,path:crate::merge_session::Path::Share,
-            input_id:self.incoming.manifest.share_id,base_id:self.base.manifest.share_id,
-            base:crate::merge_session::render(&self.base.graph),ours:crate::merge_session::render(&root_graph(store)?.0),
-            theirs:crate::merge_session::render(&self.incoming.graph),shapes:self.incoming.shapes,profile,parent:None,active_slots:None},self.incoming.manifest.created_at))
+    pub(crate) fn session(
+        self,
+        store: &Store,
+        profile: crate::merge_session::Profile,
+    ) -> Result<(crate::merge_session::Request, String)> {
+        Ok((
+            crate::merge_session::Request {
+                store_id: store.store_id()?,
+                root_tx: store.latest_tx_id()?,
+                path: crate::merge_session::Path::Share,
+                input_id: self.incoming.manifest.share_id,
+                base_id: self.base.manifest.share_id,
+                base: crate::merge_session::render(&self.base.graph),
+                ours: crate::merge_session::render(&root_graph(store)?.0),
+                theirs: crate::merge_session::render(&self.incoming.graph),
+                shapes: self.incoming.shapes,
+                profile,
+                parent: None,
+                active_slots: None,
+            },
+            self.incoming.manifest.created_at,
+        ))
     }
     /// Read `incoming_dir` and locate its base beside it.
     ///

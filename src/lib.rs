@@ -15,6 +15,7 @@ pub mod changeset;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
 pub mod compact;
+pub mod competency;
 pub mod config;
 mod config_load;
 pub mod context;
@@ -49,16 +50,16 @@ pub mod memory_files;
 pub mod merge3;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_adapters;
-#[cfg(not(target_arch = "wasm32"))]
-mod merge_profile;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod merge_ingress;
 /// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
 mod merge_core;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod merge_ingress;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_lists;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_pending;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_profile;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
 #[cfg(not(target_arch = "wasm32"))]
