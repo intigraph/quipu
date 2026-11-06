@@ -5,6 +5,7 @@ from oracle import evaluate
 from list_cases import CASES
 from temporal_cases import CASES as TEMPORAL_CASES
 from temporal_cases import TT
+from replay_cases import CASES as REPLAY_CASES
 
 
 class OracleTests(unittest.TestCase):
@@ -137,6 +138,33 @@ class OracleTests(unittest.TestCase):
         self.assertFalse(evaluate(fixture, observation)["correct"])
         observation = self.observation(fixture)
         observation["transactions"][0]["assert"].append(dict(observation["history"][0]))
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+
+    def test_replay_fixtures_reject_duplicate_writes_and_lost_first_receipt(self):
+        for fixture in REPLAY_CASES:
+            self.assertTrue(evaluate(fixture, self.observation(fixture))["correct"])
+        fixture = REPLAY_CASES[0]
+        observation = self.observation(fixture)
+        observation["report"]["transaction_count_after"] = 3
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        observation = self.observation(fixture)
+        observation["report"]["tx_ids"] = ["new-receive", "new-decide"]
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        for fixture in REPLAY_CASES[:3]:
+            observation = self.observation(fixture)
+            observation["transactions"].append({"role": "receive", "close": [], "assert": []})
+            self.assertFalse(evaluate(fixture, observation)["correct"])
+
+    def test_different_clean_merges_cannot_share_identity_or_cross_contaminate_logs(self):
+        fixture = REPLAY_CASES[3]
+        observation = self.observation(fixture)
+        observation["report"]["merge_ids"][1] = "merge-a"
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        observation = self.observation(fixture)
+        observation["report"]["filtered_tx_ids"]["merge-a"].append("receive-b")
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        observation = self.observation(fixture)
+        observation["report"]["second_already_applied"] = True
         self.assertFalse(evaluate(fixture, observation)["correct"])
 
     def test_delete_replace_receipt_does_not_become_a_live_claim(self):

@@ -35,6 +35,14 @@ receipt transaction, or an extra transaction fails even when final facts and
 history happen to match. Empty transactions are not invented. These are
 normalized adapter observations, not commands to the system under test.
 
+`replay_cases.py` states C8a–C8d after a second action. It requires the first
+decision's transaction IDs on replay, unchanged transaction counts for no-op
+or stale attempts, and separate identities and filtered logs for distinct
+clean merges. Its fixture-local ID tokens describe identity relationships;
+future adapters must map actual IDs consistently, never replace observed
+relationships with the expected ones. No native status or ID encoding is
+asserted here.
+
 Run the judge's independent positive and defeated controls with:
 
 ```sh
