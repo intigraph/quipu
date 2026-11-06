@@ -491,6 +491,7 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `action` | string: `load`, `materialize`, `retract_materialization`, `list`, `remove` | no | Action to perform (default: list) |
+| `actor` | string | no | Declared actor for retract_materialization; not authentication |
 | `after_tx` | integer | no | Exclusive lower materialization transaction watermark |
 | `apply` | boolean | no | Apply one bounded cleanup batch; default previews without writes |
 | `expect` | string | no | Exact token from the latest cleanup preview, required with apply |
