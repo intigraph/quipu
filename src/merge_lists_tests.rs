@@ -111,7 +111,7 @@ fn lowering_and_noop_planning_refuse_unidentified_blank_elements() {
                 &value,
                 Mode::Whole,
                 None,
-                Clocks {
+                &Clocks {
                     ours: "2026-01-01",
                     incoming: "2026-01-02",
                     decision: "2026-01-03"

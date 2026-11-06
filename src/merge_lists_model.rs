@@ -71,7 +71,7 @@ pub(crate) fn plan(
     theirs: &Option<Vec<String>>,
     mode: Mode,
     decision: Option<&crate::merge_core::Decision<Vec<String>>>,
-    clocks: Clocks<'_>,
+    clocks: &Clocks<'_>,
 ) -> Result<crate::merge_core::SlotPlan<Vec<String>>> {
     use crate::merge_core::{Card, Decision, SlotInput, plan_slot};
     let values = |v: &Option<Vec<String>>| v.iter().cloned().collect();
