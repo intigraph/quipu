@@ -1,4 +1,4 @@
-//! Retention must respect config read_only, not just replica CLI mode.
+//! Retention must respect config `read_only`, not just replica CLI mode.
 #![cfg(all(feature = "shacl", feature = "onnx", feature = "server"))]
 
 use std::io::{Read, Write};
