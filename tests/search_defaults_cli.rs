@@ -94,11 +94,25 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("old.db");
     let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    // New library stores now index by default. Model an actual pre-index
+    // store explicitly; otherwise this fixture tests a fresh indexed store.
+    store.search_config_mut().keyword = false;
     quipu::ingest_rdf(&mut store,
         r#"<https://example.org/legacy> <http://www.w3.org/2000/01/rdf-schema#label> "Clockwork" ."#.as_bytes(),
         oxrdfio::RdfFormat::Turtle, None, "2026-01-01T00:00:00Z", None, None,
     ).unwrap();
     drop(store);
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        let installed: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name LIKE 'lexical_%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(installed, 0, "legacy fixture must start without an index");
+    }
     let out = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
     assert!(!out.status.success());
     let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "old.db"]));
