@@ -16,6 +16,8 @@ pub mod impact;
 pub mod knot;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod merge_decisions;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod merge_s4_tests;
 pub mod named_query;
 #[cfg(feature = "owl")]
 pub mod owl;
