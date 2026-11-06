@@ -15,6 +15,7 @@ pub mod changeset;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
 pub mod compact;
+pub mod competency;
 pub mod config;
 mod config_load;
 pub mod context;
@@ -75,6 +76,11 @@ pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
+/// Portable logical full-store replication values.
+pub mod store_replica;
+/// Opt-in logical store replication; opening a store never enables its journal.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;

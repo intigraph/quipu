@@ -1,0 +1,25 @@
+Script started on 2026-11-04 12:28:55-05:00 [COMMAND="bash /tmp/arnold-share-core-demo.sh" <not executed on terminal>]
+Candidate source b067b99075167731a3ff88cb82108cc587e0a964; isolated library fixtures
+$ library-test --exact share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time
+
+running 1 test
+test share_merge_decisions::tests::decided_share_records_receipt_then_live_winner_at_decision_time ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3489 filtered out; finished in 0.07s
+
+$ library-test --exact share_merge_decisions::tests::decide_gate_failure_rolls_back_the_received_step_and_clean_changes
+
+running 1 test
+test share_merge_decisions::tests::decide_gate_failure_rolls_back_the_received_step_and_clean_changes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3489 filtered out; finished in 0.06s
+
+$ library-test --exact share_merge::core::tests::reservation_excludes_an_independent_writer_and_releases_after_failure
+
+running 1 test
+test share_merge::core::tests::reservation_excludes_an_independent_writer_and_releases_after_failure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3489 filtered out; finished in 0.28s
+
+
+Script done on 2026-11-04 12:28:56-05:00 [COMMAND_EXIT_CODE="0"]

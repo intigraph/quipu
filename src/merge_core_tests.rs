@@ -379,3 +379,16 @@ fn decision_override_demo() {
     assert!(oversized.is_err());
     assert!(keep.receive.is_empty() && keep.decide.is_empty());
 }
+
+#[test]
+fn an_incoming_close_equal_to_root_start_must_preserve_root_history() {
+    for incoming in [TO, "2026-01-01T19:00:00-05:00"] {
+        for card in [Card::ONE, Card::Many(None)] {
+            let mut s = slot(&["a"], &[("a", TO)], &[], card);
+            s.theirs_closed = rows(&[("a", incoming)]);
+            let p = plan(&s, None);
+            println!("equal-instant close {incoming}, {card:?}: {:?}", p.receive);
+            assert_eq!(p.receive, vec![close("a", TD)]);
+        }
+    }
+}
