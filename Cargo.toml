@@ -215,6 +215,8 @@ ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
 tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
+## Diagnostic planner projection for benchmark examples; no store or writer access.
+merge-benchmark = []
 default = ["shacl"]
 # Source-only HA profile: not in default/full, no server/config/packaging caller.
 ha-read-profile = ["rustix/time"]
