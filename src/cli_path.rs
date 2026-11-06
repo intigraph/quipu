@@ -24,11 +24,16 @@ const USAGE: &str = "usage: quipu path <cone|backtest|draft> <trajectory-IRI> [o
 
 /// Dispatch `quipu path <sub>`.
 pub fn cmd_path(args: &[String], db_path: &str, base_ns: &str) {
+    if let Err(e) = quipu::namespace::require_base_ns(base_ns) {
+        eprintln!("error: {e}");
+        std::process::exit(2);
+    }
     let sub = args.get(2).map_or("", String::as_str);
     let Some(trajectory) = args.get(3).filter(|a| !a.starts_with("--")) else {
         die(USAGE);
     };
-    let vocab = PathVocab::with_vocabulary(base_ns, crate::cli_open::config().vocabulary);
+    let map = crate::cli_open::vocabulary_map();
+    let vocab = PathVocab::with_vocabulary(base_ns, &map);
     let rest = &args[4..];
     let json = rest.iter().any(|a| a == "--json");
 
@@ -117,6 +122,7 @@ pub fn cmd_path(args: &[String], db_path: &str, base_ns: &str) {
                 human_omissions: omissions.into_iter().zip(rulings).collect(),
                 dead_ends: flag_values(rest, "--dead-end"),
                 base_ns: base_ns.to_string(),
+                vocabulary: map.clone(),
             };
             match draft(&report, &draft_opts) {
                 Ok(ttl) => print!("{ttl}"),

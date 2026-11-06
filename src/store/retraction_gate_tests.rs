@@ -55,7 +55,7 @@ fn name(store: &mut Store, op: Op) -> Datum {
 
 /// carol: a Person with a name and a nick, all under `source`.
 fn store_with(shapes: &str, source: &str) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let nick = datum(&mut store, CAROL, NICK, Value::Str("C".into()), Op::Assert);
     let seed = [person_type(&mut store), name(&mut store, Op::Assert), nick];
     store.transact(&seed, TS, None, Some(source)).unwrap();
@@ -164,7 +164,7 @@ fn retract_through_the_python_binding_engine_is_refused() {
 
 /// carol's type comes from `seed`; episode `e1` contributed her name.
 fn episode_store(shapes: &str) -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let t = person_type(&mut store);
     store.transact(&[t], TS, None, Some("seed")).unwrap();
     let n = name(&mut store, Op::Assert);
@@ -298,7 +298,7 @@ fn fork_promote_that_only_removes_a_required_value_is_refused() {
 /// turn every retraction touching one into a parse error.
 #[test]
 fn retraction_touching_a_blank_node_is_judged_not_a_parse_error() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let carol = store.intern(CAROL).unwrap();
     let nick = datum(&mut store, "_:b1", NICK, Value::Str("x".into()), Op::Assert);
     let edge = datum(&mut store, "_:b1", NAME, Value::Ref(carol), Op::Assert);
@@ -373,7 +373,7 @@ fn episode_snapshot_that_drops_a_required_value_is_refused() {
          <urn:t:PathShape> a sh:NodeShape ; sh:targetClass <{ns}ExecutionPath> ;\n    \
          sh:property [ sh:path <{ns}owner> ; sh:minCount 1 ] .\n"
     );
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.load_shapes("paths", &shapes, TS).unwrap();
     store.shacl_config_mut().validate_on_write = true;
     crate::tool_episode(&mut store, &episode_v(Some("x"))).unwrap();
@@ -412,7 +412,7 @@ fn knot_snapshot(store: &mut Store, body: &str) -> crate::Result<serde_json::Val
 
 #[test]
 fn knot_snapshot_that_drops_a_required_value_is_refused() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.load_shapes("people", REJECT, TS).unwrap();
     store.shacl_config_mut().validate_on_write = true;
     knot_snapshot(&mut store, "ex:carol a ex:Person ; ex:name \"Carol\" .").unwrap();
@@ -441,7 +441,7 @@ ex:PersonShape a sh:NodeShape ; sh:targetClass ex:Person ;
 ex:CellShape a sh:NodeShape ; sh:targetClass ex:Cell ;
     sh:property [ sh:path ex:index ; sh:minCount 1 ; sh:maxCount 1 ] .
 "#;
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.load_shapes("cells", shapes, TS).unwrap();
     store.shacl_config_mut().validate_on_write = true;
     let version = |cell: &str, age: i64| {

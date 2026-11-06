@@ -11,6 +11,7 @@ const DOC_TYPE: &str = "http://ex/Doc";
 
 fn intent() -> DraftIntent {
     DraftIntent {
+        base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
         name: "no-unlabeled-docs".into(),
         label: "never land a Doc without a label again".into(),
         exemplar: EXEMPLAR.into(),
@@ -25,7 +26,7 @@ fn intent() -> DraftIntent {
 
 /// Ingest the emitted Turtle into a store with the placement check ON.
 fn ingest_with_placement(turtle: &str) -> crate::error::Result<Store> {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     crate::ingest_rdf(
         &mut store,

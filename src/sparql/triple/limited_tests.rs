@@ -250,7 +250,7 @@ fn limited_scope_refuses_unsafe_shapes_and_restores_after_failure() {
             panic!("Slice")
         };
         assert_eq!(
-            limited_scan::eligible(&inner, &context, &Bindings::new()),
+            limited_scan::eligible(&inner, &context, &Bindings::default()),
             accepted
         );
         let historical = TemporalContext {
@@ -260,7 +260,7 @@ fn limited_scope_refuses_unsafe_shapes_and_restores_after_failure() {
         assert!(!limited_scan::eligible(
             &inner,
             &historical,
-            &Bindings::new()
+            &Bindings::default()
         ));
     }
     assert!(!limited_scan::active());

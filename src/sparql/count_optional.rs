@@ -257,7 +257,7 @@ fn whole(
     let mut table: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
     let mut rows = 0usize;
     let mut admitted = true;
-    super::count_stream::visit(store, right, ctx, &Bindings::new(), &mut |row| {
+    super::count_stream::visit(store, right, ctx, &Bindings::default(), &mut |row| {
         rows += 1;
         match (row.remove(subject.as_str()), row.remove(object.as_str())) {
             (Some(Value::Ref(id)), Some(value)) if rows <= PROBE_ROWS => {

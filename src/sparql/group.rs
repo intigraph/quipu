@@ -68,7 +68,7 @@ pub(super) fn evaluate(
         .collect();
     let mut result_rows = Vec::new();
     for (key, group_rows) in partition(rows, &keys) {
-        let mut result_row = Bindings::new();
+        let mut result_row = Bindings::default();
         for (var, value) in keys.iter().zip(key) {
             if let Some(value) = value {
                 result_row.insert(var.clone(), value);

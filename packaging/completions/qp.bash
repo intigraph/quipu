@@ -40,6 +40,9 @@ _qp() {
             qp,cord)
                 cmd="qp__subcmd__cord"
                 ;;
+            qp,databook)
+                cmd="qp__subcmd__databook"
+                ;;
             qp,db)
                 cmd="qp__subcmd__db"
                 ;;
@@ -123,6 +126,9 @@ _qp() {
                 ;;
             qp,migrate-vectors)
                 cmd="qp__subcmd__migrate__subcmd__vectors"
+                ;;
+            qp,model)
+                cmd="qp__subcmd__model"
                 ;;
             qp,namespaces)
                 cmd="qp__subcmd__namespaces"
@@ -280,6 +286,12 @@ _qp() {
             qp__subcmd__audit__subcmd__quarantine,purge)
                 cmd="qp__subcmd__audit__subcmd__quarantine__subcmd__purge"
                 ;;
+            qp__subcmd__databook,export)
+                cmd="qp__subcmd__databook__subcmd__export"
+                ;;
+            qp__subcmd__databook,import)
+                cmd="qp__subcmd__databook__subcmd__import"
+                ;;
             qp__subcmd__db,attach)
                 cmd="qp__subcmd__db__subcmd__attach"
                 ;;
@@ -309,6 +321,9 @@ _qp() {
                 ;;
             qp__subcmd__doctor,labels)
                 cmd="qp__subcmd__doctor__subcmd__labels"
+                ;;
+            qp__subcmd__doctor,search)
+                cmd="qp__subcmd__doctor__subcmd__search"
                 ;;
             qp__subcmd__entity__subcmd__ref,mint)
                 cmd="qp__subcmd__entity__subcmd__ref__subcmd__mint"
@@ -427,6 +442,12 @@ _qp() {
             qp__subcmd__merge,show)
                 cmd="qp__subcmd__merge__subcmd__show"
                 ;;
+            qp__subcmd__model,backfill)
+                cmd="qp__subcmd__model__subcmd__backfill"
+                ;;
+            qp__subcmd__model,install)
+                cmd="qp__subcmd__model__subcmd__install"
+                ;;
             qp__subcmd__namespaces,apply)
                 cmd="qp__subcmd__namespaces__subcmd__apply"
                 ;;
@@ -536,7 +557,7 @@ _qp() {
 
     case "${cmd}" in
         qp)
-            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export render stats prime search search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1285,6 +1306,108 @@ _qp() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        qp__subcmd__databook)
+            opts="-h --db --help export import"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__databook__subcmd__export)
+            opts="-h --db --graph --tx --valid-at --id --title --version --timestamp --out --with-shapes --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --graph)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --tx)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --valid-at)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --id)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --title)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --version)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timestamp)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --out)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__databook__subcmd__import)
+            opts="-h --db --graph --timestamp --actor --source --with-shapes --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --graph)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timestamp)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --actor)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --source)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         qp__subcmd__db)
             opts="-h --db --help respace attach migrate-inferred"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -1564,7 +1687,7 @@ _qp() {
             return 0
             ;;
         qp__subcmd__doctor)
-            opts="-h --db --help labels"
+            opts="-h --db --help labels search"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1582,6 +1705,24 @@ _qp() {
             return 0
             ;;
         qp__subcmd__doctor__subcmd__labels)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__doctor__subcmd__search)
             opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -3121,6 +3262,68 @@ _qp() {
                     return 0
                     ;;
                 --to)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__model)
+            opts="-h --db --help install backfill"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__model__subcmd__backfill)
+            opts="-h --db --batch-size --after --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --batch-size)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --after)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        qp__subcmd__model__subcmd__install)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

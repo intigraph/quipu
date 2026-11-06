@@ -1,6 +1,6 @@
 //! Replay — what a recorded window says about promoting a rule.
 //!
-//! The advise→enforce promotion ladder (`hank/docs/work-scoped-governance.md`
+//! The advise→enforce promotion ladder (`yupana/docs/work-scoped-governance.md`
 //! §Evals) asks a question no static analysis can answer: *if this rule started
 //! blocking, what would it have stopped?* SARC's operating point θ has the same
 //! shape — a declared false-positive tolerance is a number, and only measurement

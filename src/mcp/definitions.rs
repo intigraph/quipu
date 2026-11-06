@@ -38,6 +38,7 @@ pub fn tool_definitions() -> Vec<JsonValue> {
                 "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
                 "name": { "type": "string", "description": "Ontology name (required for load/remove)" },
                 "turtle": { "type": "string", "description": "OWL ontology in Turtle format (required for load)" },
+                "materialize": { "type": "string", "enum": ["inline", "deferred"], "description": "load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize." },
                 "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
             }
         }

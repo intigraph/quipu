@@ -81,7 +81,7 @@ Numbers taken 2026-08-02, not estimated.
 | Source | Volume | Shape |
 |---|---|---|
 | `alphax.ttl` (NeuralAmplifier) | 374 entities, 3 987 facts, 12 classes | Prerequisite DAG: 88 technologies, 329 `requiresTech` edges, 17 ranks |
-| Sibling repos (quipu, hank, NeuralAmplifier, thinker) | 6 160 entities, 30 668 facts | Path tree: 276 modules, 4 184 symbols, 132 documents, 1 568 sections |
+| Sibling repos (quipu, yupana, NeuralAmplifier, thinker) | 6 160 entities, 30 668 facts | Path tree: 276 modules, 4 184 symbols, 132 documents, 1 568 sections |
 | `shapes/` | 95 shapes, 76 target classes | **Nearly flat** — 14 `rdfs:subClassOf` edges total |
 | `examples/demo-graph/demo.ttl` | 38 entities, 169 facts, 8 classes | Small, cyclic, non-DAG |
 
@@ -350,7 +350,7 @@ shelved apart and translucent, since they self-identify via
 effects as signage; ed25519 verdicts as wax seals; pending schema proposals as
 translucent scaffolding, a wing under construction. `aegis:tier`
 {live, lsp, tree-sitter, committed, attested} maps onto binding quality —
-signed leather down to cheap paperback — which is Hank's tier discipline made
+signed leather down to cheap paperback — which is Yupana's tier discipline made
 visible across the room. It pairs exactly with `smac:ruleTier`
 {canonical, house-rule}: the whole stack tiers its facts by trust, so one
 channel serves every dataset.

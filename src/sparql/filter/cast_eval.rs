@@ -16,18 +16,32 @@ pub(super) fn cast(
     args: &[Expression],
     row: &Bindings,
 ) -> Option<Value> {
-    let cast = || {
-        crate::sparql::casts::cast(
-            store,
-            function,
-            eval_expr(store, args.first()?, row)?,
-            canonical_double,
-            format_decimal,
-        )
-    };
     if matches!(args, [Expression::Literal(_)]) {
-        eval_memo::constant(expr, cast)
+        eval_memo::constant(expr, || compute(store, function, args, row))
     } else {
-        cast()
+        compute(store, function, args, row)
     }
+}
+
+/// A cast of a literal, shared from the memo rather than copied out of it;
+/// `None` for any other cast (aegis-pu7).
+pub(super) fn shared(
+    store: &Store,
+    expr: &Expression,
+    function: &str,
+    args: &[Expression],
+    row: &Bindings,
+) -> Option<eval_memo::Shared> {
+    matches!(args, [Expression::Literal(_)])
+        .then(|| eval_memo::shared_constant(expr, || compute(store, function, args, row)))
+}
+
+fn compute(store: &Store, function: &str, args: &[Expression], row: &Bindings) -> Option<Value> {
+    crate::sparql::casts::cast(
+        store,
+        function,
+        eval_expr(store, args.first()?, row)?,
+        canonical_double,
+        format_decimal,
+    )
 }

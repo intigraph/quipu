@@ -1171,9 +1171,9 @@ Fields: `iri` (required), `expanded`.
 
 ### `quipu_entity_history`
 
-Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.
 
-Fields: `iri` (required).
+Fields: `iri` (required), `graph`, `source_store_id`, `expected_generation`, `since_tx`, `until_tx`, `max_entries`, `max_bytes`, `observation_only`.
 
 ### `quipu_transactions`
 

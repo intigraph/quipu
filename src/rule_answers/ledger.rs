@@ -105,6 +105,8 @@ pub(super) fn reference(facts: &[(String, Value)], predicate: &str) -> Result<i6
     }
 }
 
-pub(super) fn ns(local: &str) -> String {
-    format!("{}{local}", crate::namespace::DEFAULT_BASE_NS)
+/// A judgment term under the store's governance namespace. Refuses on a
+/// store with none: judgments are read under the namespace they were sealed in.
+pub(super) fn ns(store: &crate::Store, local: &str) -> crate::error::Result<String> {
+    Ok(format!("{}{local}", store.governance_ns()?))
 }

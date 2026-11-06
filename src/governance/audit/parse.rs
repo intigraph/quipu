@@ -1,9 +1,9 @@
-//! Reading T — hank's trace spool, as records the passes can check.
+//! Reading T — yupana's trace spool, as records the passes can check.
 //!
-//! The schema is hank's `crate::trace` plus the attribution fields of
+//! The schema is yupana's `crate::trace` plus the attribution fields of
 //! `crate::attribution`, and it is deliberately deserialised **permissively**:
 //! every field is optional, and an unknown field is ignored rather than fatal.
-//! A checker that refused to read a spool because hank had added a field would
+//! A checker that refused to read a spool because yupana had added a field would
 //! stop auditing at exactly the moment the two repos drifted, which is when an
 //! audit is worth most.
 //!

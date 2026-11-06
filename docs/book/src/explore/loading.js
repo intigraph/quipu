@@ -11,6 +11,18 @@ const messages = {
 const bytes = (n) => n < 1024 ? `${n} B` : n < 1048576
   ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 
+// Show the file being opened, without putting URL credentials or query
+// parameters in the label. File inputs keep their actual file name.
+function pendantName(url) {
+  try {
+    const parsed = new URL(url, location.href);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "Selected pendant";
+    const name = parsed.pathname.split("/").filter(Boolean).at(-1);
+    if (!name) return "Selected pendant";
+    try { return decodeURIComponent(name); } catch { return name; }
+  } catch { return "Selected pendant"; }
+}
+
 export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, status }) {
   const panel = $("#graph-loader");
   let busy = false, controlsReady = false, retry = null, pendant = null;
@@ -44,14 +56,15 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       $("#loading-bytes").textContent = `${bytes(received)} downloaded`;
     }
   }
-  async function run(read, source, kind = "selected") {
+  async function run(read, source, kind = "selected", name = source) {
     if (busy) return;
     busy = true;
     pendant = kind;
-    retry = () => run(read, source, kind);
+    retry = () => run(read, source, kind, name);
     $("main").hidden = true;
     $("#status").classList.remove("bad");
     $("#loading-title").textContent = "Opening your knowledge graph";
+    $("#loading-source").textContent = name;
     $("#loading-retry").hidden = true;
     for (const node of document.querySelectorAll("#url-load, #file-input, #validate-pack")) node.disabled = true;
     progress(0, 0);
@@ -111,7 +124,8 @@ export function createLoadExperience({ ensureEngine, loadPack, onEngineReady, st
       let offset = 0;
       for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength; }
       return data.buffer;
-    }, source, defaultPack ? "repository" : "selected"),
+    }, source, defaultPack ? "repository" : "selected",
+      defaultPack ? "repository.pendant.tar.gz" : pendantName(url)),
     loadFile: (file) => run(async (report) => {
       const data = await file.arrayBuffer();
       report(data.byteLength, file.size);

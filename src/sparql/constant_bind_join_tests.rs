@@ -70,7 +70,7 @@ fn bag(rows: &[Bindings]) -> Vec<String> {
 fn bind(store: &Store, sparql: &str) -> Option<(Vec<String>, Vec<String>, Vec<String>)> {
     let (left, right) = join_operands(sparql);
     let ctx = TemporalContext::default();
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let (left_rows, left_vars) = eval_pattern_seeded(store, &left, &ctx, &seed).unwrap();
     let (bound, header) =
         try_subject_bind_join(store, &right, &ctx, &seed, &left_rows, &left_vars).unwrap()?;

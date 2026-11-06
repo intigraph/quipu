@@ -49,6 +49,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // is the entire gap 9f899e exists to close.
     ("facts", Disposition::Content),
     ("transactions", Disposition::Content),
+    // Untrusted caller declarations are historical content, like actor/source.
+    // Retaining them does not authenticate a transaction: the receiver's local
+    // credential evidence in `transaction_auth` is explicitly excluded below.
+    ("transaction_declarations", Disposition::Content),
     ("terms", Disposition::Content),
     ("graphs", Disposition::Content),
     ("shapes", Disposition::Content),
@@ -146,6 +150,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // key and manifest. Copying it would admit a different reconstruction as
     // that receiver without independently establishing its trust contract.
     ("replica_bootstrap_admission", Disposition::Excluded),
+    // Source-local logical replication generation and delivery journal. A
+    // reconstruction has its own epoch and must explicitly initialize a new
+    // journal; inheriting these would claim continuity with another source.
+    ("store_replication_state", Disposition::Excluded),
+    ("store_replication_changes", Disposition::Excluded),
     // The digests of the transactions that cursor applied, kept to tell an
     // exact redelivery from a changed one. They belong to the same cursor and
     // mean nothing without it: excluded with it.
@@ -167,6 +176,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // that cursor's lineage, which makes it ready to serve reads (aegis-tnh).
     // A copy has not bootstrapped anything: excluded with the cursor.
     ("follow_caught_up", Disposition::Excluded),
+    // The HA profile's complete-cut pin and halt state qualify THIS replica's
+    // cursor. A reconstructed copy has not completed that bootstrap: never
+    // carry the marker as authority to serve eligible reads on the copy.
+    ("ha_read_cut", Disposition::Excluded),
     // Spent SEALED-DECISION nonces (aegis-kzt0ql.9.3). Same replay reasoning as
     // attestation_nonces: carried, a legitimate re-attestation on the copy is
     // refused; omitted silently, a spent one is accepted again.

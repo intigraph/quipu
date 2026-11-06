@@ -50,12 +50,14 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('validate', 'validate', [CompletionResultType]::ParameterValue, 'Validate a data file against a shapes file without writing')
             [CompletionResult]::new('repl', 'repl', [CompletionResultType]::ParameterValue, 'Open an interactive SPARQL prompt')
             [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query')
+            [CompletionResult]::new('databook', 'databook', [CompletionResultType]::ParameterValue, 'Export a graph as a DataBook, or import a DataBook''s graph data')
             [CompletionResult]::new('render', 'render', [CompletionResultType]::ParameterValue, 'Render graph data into files in an owned directory')
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show store statistics')
             [CompletionResult]::new('prime', 'prime', [CompletionResultType]::ParameterValue, 'Print the agent primer and a bounded, read-only summary of the store')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search entities by keyword, vector or hybrid ranking')
+            [CompletionResult]::new('model', 'model', [CompletionResultType]::ParameterValue, 'Manage the pinned default embedding model')
             [CompletionResult]::new('search-index', 'search-index', [CompletionResultType]::ParameterValue, 'Report, backfill or drop the search indexes')
-            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift or search backend readiness')
             [CompletionResult]::new('pack', 'pack', [CompletionResultType]::ParameterValue, 'Export a graph, or the whole store, as a pack; or verify a pack')
             [CompletionResult]::new('unpack', 'unpack', [CompletionResultType]::ParameterValue, 'Merge a published pack into a local graph')
             [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Replace the store with a full pack, binary or text')
@@ -418,6 +420,40 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;databook' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('export', 'export', [CompletionResultType]::ParameterValue, 'Write one graph, current or as of a past point, as a DataBook')
+            [CompletionResult]::new('import', 'import', [CompletionResultType]::ParameterValue, 'Load a DataBook''s graph blocks in one write; never runs its queries')
+            break
+        }
+        'quipu;databook;export' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--tx', '--tx', [CompletionResultType]::ParameterName, 'Historical transaction to read')
+            [CompletionResult]::new('--valid-at', '--valid-at', [CompletionResultType]::ParameterName, 'Valid-time instant to query')
+            [CompletionResult]::new('--id', '--id', [CompletionResultType]::ParameterName, 'DataBook IRI written to its frontmatter')
+            [CompletionResult]::new('--title', '--title', [CompletionResultType]::ParameterName, 'DataBook title written to its frontmatter')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'DataBook version, 1.0.0 when omitted')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Creation time recorded in the DataBook''s provenance')
+            [CompletionResult]::new('--out', '--out', [CompletionResultType]::ParameterName, 'Output file')
+            [CompletionResult]::new('--with-shapes', '--with-shapes', [CompletionResultType]::ParameterName, 'Also export the loaded SHACL shapes')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;databook;import' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--graph', '--graph', [CompletionResultType]::ParameterName, 'Explicit graph IRI for this operation')
+            [CompletionResult]::new('--timestamp', '--timestamp', [CompletionResultType]::ParameterName, 'Valid-time timestamp for the operation')
+            [CompletionResult]::new('--actor', '--actor', [CompletionResultType]::ParameterName, 'Actor recorded in operation provenance')
+            [CompletionResult]::new('--source', '--source', [CompletionResultType]::ParameterName, 'Source identifier recorded in provenance')
+            [CompletionResult]::new('--with-shapes', '--with-shapes', [CompletionResultType]::ParameterName, 'Also load the DataBook''s SHACL shape blocks')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;render' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--dest', '--dest', [CompletionResultType]::ParameterName, 'Render output destination')
@@ -475,6 +511,28 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;model' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Download and verify the default embedding model and tokenizer')
+            [CompletionResult]::new('backfill', 'backfill', [CompletionResultType]::ParameterValue, 'Embed one bounded batch of existing ROOT subjects')
+            break
+        }
+        'quipu;model;install' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;model;backfill' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'Number of entries per indexing batch')
+            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'Resume after this cursor')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;search-index' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
@@ -513,9 +571,16 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('labels', 'labels', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Report search backend readiness and remedies')
             break
         }
         'quipu;doctor;labels' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;doctor;search' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
