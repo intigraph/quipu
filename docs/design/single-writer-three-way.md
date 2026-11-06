@@ -150,3 +150,31 @@ caller evidence, not an attestation that the reservation is held. A new source
 test changes all five original snapshot fields after legacy preparation and
 requires the captured identity and both tx cuts to remain unchanged; it awaits
 the queued Cargo qualification.
+
+## Bounded physical slot reader (source only)
+
+`Store::bounded_slot_facts_at` is the next reader seam, with no production
+caller. It requires both captured transaction and canonical whole-second UTC
+valid-time cuts. The graph/entity/predicate prefix of `idx_geav` bounds the
+physical relation before any history filtering. At most `max_claims + 1`
+physical rows are inspected; exceeding the cap refuses the entire read,
+including when excess rows are future, duplicate or invisible. Encoded value
+and interval bytes are counted before owned allocation/decoding. Caps are
+limited to 4096 claims and 4 MiB; they are not a time or reservation guarantee.
+
+A retraction recorded after the pinned transaction restores the assertion's
+original open end, as in the SPARQL temporal visibility rule. An originally
+finite interval keeps its bound. An empty received interval is never live
+at or after its transaction. Other timestamp spellings, including fractional
+precision, explicitly refuse in this source slice; no precision is discarded
+to make an input fit. A general timestamp contract remains an integration gate.
+Returned facts represent distinct RDF values, not all provenance claims.
+
+Five new Store controls cover later-close/base reconstruction and Td/Tz,
+original finite and empty intervals, graph/slot isolation, physical-row and
+byte overflow, and explicit cuts/unsupported precision. They are uncompiled
+and unrun. This does not change `facts_as_of_in_graph` or wire the prepared
+cuts to a writer. Store/epoch/history/hash authentication, whole-batch budgets,
+incoming lowering and common pending receipt persistence remain open. The
+previous 13 pure `write_base` controls passed their separately admitted slot;
+that result does not qualify this reader.
