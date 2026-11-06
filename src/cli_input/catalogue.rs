@@ -31,6 +31,8 @@ pub(super) fn is_group(spec: &Spec) -> bool {
 
 #[rustfmt::skip]
 pub(super) static SPECS: &[Spec] = &[
+    spec!("competency", "", GROUP, 0, "", ""),
+    spec!("competency lint", "<pendant>", 1, 1, "", ""),
     spec!("store", "", GROUP, 0, "", ""),
     spec!("store status", "", 0, 0, "", ""),
     spec!("store adopt", "", 0, 0, "", ""),
