@@ -128,6 +128,26 @@ fn matched_gpu_loader_creates_a_strict_cuda_session() {
             .path,
         loaded.path
     );
+    // Exercise the real consumer, not just another explicit bootstrap call.
+    // Its initialize(None) must retain the selected core before Session::builder.
+    let tokenizer = std::env::var_os("QUIPU_GPU_TEST_TOKENIZER")
+        .expect("explicit local tokenizer for actual-provider regression");
+    let provider = quipu::OnnxEmbeddingProvider::load(
+        std::path::Path::new(&model),
+        std::path::Path::new(&tokenizer),
+        384,
+        128,
+    )
+    .expect("actual provider must preserve the selected runtime");
+    drop(provider);
+    assert_eq!(quipu::onnx_runtime::current().unwrap().path, loaded.path);
+    assert!(
+        quipu::onnx_runtime::initialize(Some(&candidate.with_file_name("conflicting-core.so")))
+            .unwrap_err()
+            .to_string()
+            .contains("different core"),
+        "an explicit conflicting selection must still refuse"
+    );
     eprintln!("native stage: strict CUDA session");
     let session = ort::session::Session::builder()
         .unwrap()

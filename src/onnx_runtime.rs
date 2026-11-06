@@ -35,9 +35,22 @@ pub fn current() -> Option<RuntimeInfo> {
 
 /// Call AFTER device selection and BEFORE any other ORT API.
 /// Explicit `ORT_DYLIB_PATH` wins, then the caller's verified device core, then
-/// the compiled CPU bundle. A failed explicit selection never falls back.
+/// an already initialized core, then the compiled CPU bundle. A failed explicit
+/// selection never falls back.
 pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
+    let _guard = INITIALIZE
+        .lock()
+        .map_err(|_| crate::Error::Store("runtime initialization lock failed".into()))?;
     let override_path = std::env::var_os("ORT_DYLIB_PATH");
+    // An unspecified request from a consumer uses the already selected core.
+    // Resolve neither a CPU fallback nor cache bytes after device selection.
+    // Explicit overrides and selected paths still go through conflict checks.
+    if override_path.is_none()
+        && selected.is_none()
+        && let Some(state) = RUNTIME.get()
+    {
+        return Ok(state.info.clone());
+    }
     let explicit = override_path.is_some();
     let (path, linkage) = if let Some(path) = override_path {
         if path.is_empty() {
@@ -56,9 +69,6 @@ pub fn initialize(selected: Option<&Path>) -> crate::Result<RuntimeInfo> {
             default_core()
         }
     };
-    let _guard = INITIALIZE
-        .lock()
-        .map_err(|_| crate::Error::Store("runtime initialization lock failed".into()))?;
     if let Some(state) = RUNTIME.get() {
         return if state.info.path == path || state.requested == path {
             Ok(state.info.clone())
