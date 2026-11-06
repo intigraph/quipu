@@ -123,12 +123,17 @@ mod tests {
     fn ejzx_signing_defaults_are_absolute_user_data_paths() {
         use std::ffi::OsStr;
         assert_eq!(
-            key_path(None, Some(OsStr::new("/data")), Some(OsStr::new("/home/a"))).unwrap(),
+            key_path(
+                None,
+                Some(OsStr::new("/data")),
+                Some(OsStr::new("/home/user"))
+            )
+            .unwrap(),
             Path::new("/data/quipu/verifier.pk8")
         );
         assert_eq!(
-            key_path(None, None, Some(OsStr::new("/home/a"))).unwrap(),
-            Path::new("/home/a/.local/share/quipu/verifier.pk8")
+            key_path(None, None, Some(OsStr::new("/home/user"))).unwrap(),
+            Path::new("/home/user/.local/share/quipu/verifier.pk8")
         );
         assert_eq!(
             key_path(Some(OsStr::new("explicit.pk8")), None, None).unwrap(),
@@ -137,7 +142,7 @@ mod tests {
         assert!(key_path(None, None, None).is_err());
         assert!(key_path(None, Some(OsStr::new("relative")), None).is_err());
         assert!(key_path(None, None, Some(OsStr::new("relative"))).is_err());
-        assert!(key_path(Some(OsStr::new("")), None, Some(OsStr::new("/home/a"))).is_err());
+        assert!(key_path(Some(OsStr::new("")), None, Some(OsStr::new("/home/user"))).is_err());
     }
 
     #[test]
