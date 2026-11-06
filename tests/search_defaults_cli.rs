@@ -113,8 +113,27 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
             .unwrap();
         assert_eq!(installed, 0, "legacy fixture must start without an index");
     }
-    let out = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
+    // The default unindexed path now provides bounded lexical evidence;
+    // explicit keyword mode still requires opt-in and a completed index.
+    let fallback = success(&run(dir.path(), &["search", "Clockwork", "--db", "old.db"]));
+    assert_eq!(fallback["count"], 1);
+    assert_eq!(fallback["ranking"], "lexical");
+    assert_eq!(
+        fallback["retrieval"]["contract"],
+        "quipu-lexical-results/v1"
+    );
+    assert_eq!(fallback["retrieval"]["status"], "degraded");
+    assert_eq!(
+        fallback["results"][0]["entity"],
+        "https://example.org/legacy"
+    );
+    assert!(fallback["results"][0].get("similarity").is_none());
+    let out = run(
+        dir.path(),
+        &["search", "Clockwork", "--mode", "keyword", "--db", "old.db"],
+    );
     assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("disabled"));
     let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "old.db"]));
     assert_eq!(doctor["keyword_ready"], false);
     let conn = rusqlite::Connection::open(&db).unwrap();
@@ -135,7 +154,10 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
         "[quipu.search]\nkeyword = true\n",
     )
     .unwrap();
-    let opted_in = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
+    let opted_in = run(
+        dir.path(),
+        &["search", "Clockwork", "--mode", "keyword", "--db", "old.db"],
+    );
     assert!(!opted_in.status.success());
     assert!(String::from_utf8_lossy(&opted_in.stderr).contains("backfill"));
     let after: i64 = conn
