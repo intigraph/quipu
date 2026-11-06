@@ -27,7 +27,34 @@ _quipu() {
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:quipu-command-$line[1]:"
         case $line[1] in
-            (store)
+            (competency)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_quipu__subcmd__competency_commands" \
+"*::: :->competency" \
+&& ret=0
+
+    case $state in
+    (competency)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:quipu-competency-command-$line[1]:"
+        case $line[1] in
+            (lint)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-pendant:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(store)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -570,6 +597,41 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-query:_default' \
 && ret=0
 ;;
+(model)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_quipu__subcmd__model_commands" \
+"*::: :->model" \
+&& ret=0
+
+    case $state in
+    (model)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:quipu-model-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(backfill)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--batch-size=[Number of entries per indexing batch]:VALUE:_default' \
+'*--after=[Resume after this cursor]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (search-index)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -632,6 +694,13 @@ _arguments "${_arguments_options[@]}" : \
         curcontext="${curcontext%:*:*}:quipu-doctor-command-$line[1]:"
         case $line[1] in
             (labels)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(search)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -2131,6 +2200,7 @@ esac
 (( $+functions[_quipu_commands] )) ||
 _quipu_commands() {
     local commands; commands=(
+'competency:Inspect pendant competency contracts without opening a store' \
 'store:Inspect native ownership, or explicitly adopt or restore a disk store' \
 'version:Print the version and source commit' \
 'install-alias:Add the qp alias beside the quipu binary' \
@@ -2162,8 +2232,9 @@ _quipu_commands() {
 'stats:Show store statistics' \
 'prime:Print the agent primer and a bounded, read-only summary of the store' \
 'search:Search entities by keyword, vector or hybrid ranking' \
+'model:Manage the pinned default embedding model' \
 'search-index:Report, backfill or drop the search indexes' \
-'doctor:Report graph-label drift and recommended floors' \
+'doctor:Report graph-label drift or search backend readiness' \
 'pack:Export a graph, or the whole store, as a pack; or verify a pack' \
 'unpack:Merge a published pack into a local graph' \
 'restore:Replace the store with a full pack, binary or text' \
@@ -2352,6 +2423,18 @@ _quipu__subcmd__changes_commands() {
     local commands; commands=()
     _describe -t commands 'quipu changes commands' commands "$@"
 }
+(( $+functions[_quipu__subcmd__competency_commands] )) ||
+_quipu__subcmd__competency_commands() {
+    local commands; commands=(
+'lint:Validate competency.toml schema and query/command syntax offline; execute nothing' \
+    )
+    _describe -t commands 'quipu competency commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__competency__subcmd__lint_commands] )) ||
+_quipu__subcmd__competency__subcmd__lint_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu competency lint commands' commands "$@"
+}
 (( $+functions[_quipu__subcmd__compose_commands] )) ||
 _quipu__subcmd__compose_commands() {
     local commands; commands=()
@@ -2460,6 +2543,7 @@ _quipu__subcmd__diff-textconv_commands() {
 _quipu__subcmd__doctor_commands() {
     local commands; commands=(
 'labels:Report graph-label drift and recommended floors' \
+'search:Report search backend readiness and remedies' \
     )
     _describe -t commands 'quipu doctor commands' commands "$@"
 }
@@ -2467,6 +2551,11 @@ _quipu__subcmd__doctor_commands() {
 _quipu__subcmd__doctor__subcmd__labels_commands() {
     local commands; commands=()
     _describe -t commands 'quipu doctor labels commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__doctor__subcmd__search_commands] )) ||
+_quipu__subcmd__doctor__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu doctor search commands' commands "$@"
 }
 (( $+functions[_quipu__subcmd__entity-ref_commands] )) ||
 _quipu__subcmd__entity-ref_commands() {
@@ -2828,6 +2917,24 @@ _quipu__subcmd__merge-driver_commands() {
 _quipu__subcmd__migrate-vectors_commands() {
     local commands; commands=()
     _describe -t commands 'quipu migrate-vectors commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__model_commands] )) ||
+_quipu__subcmd__model_commands() {
+    local commands; commands=(
+'install:Download and verify the default embedding model and tokenizer' \
+'backfill:Embed one bounded batch of existing ROOT subjects' \
+    )
+    _describe -t commands 'quipu model commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__model__subcmd__backfill_commands] )) ||
+_quipu__subcmd__model__subcmd__backfill_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu model backfill commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__model__subcmd__install_commands] )) ||
+_quipu__subcmd__model__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu model install commands' commands "$@"
 }
 (( $+functions[_quipu__subcmd__namespaces_commands] )) ||
 _quipu__subcmd__namespaces_commands() {

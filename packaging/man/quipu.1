@@ -18,6 +18,9 @@ Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .SH SUBCOMMANDS
 .TP
+quipu\-competency(1)
+Inspect pendant competency contracts without opening a store
+.TP
 quipu\-store(1)
 Inspect native ownership, or explicitly adopt or restore a disk store
 .TP
@@ -111,11 +114,14 @@ Print the agent primer and a bounded, read\-only summary of the store
 quipu\-search(1)
 Search entities by keyword, vector or hybrid ranking
 .TP
+quipu\-model(1)
+Manage the pinned default embedding model
+.TP
 quipu\-search\-index(1)
 Report, backfill or drop the search indexes
 .TP
 quipu\-doctor(1)
-Report graph\-label drift and recommended floors
+Report graph\-label drift or search backend readiness
 .TP
 quipu\-pack(1)
 Export a graph, or the whole store, as a pack; or verify a pack

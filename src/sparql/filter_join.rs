@@ -113,6 +113,7 @@ pub(super) fn try_eval(
     };
     let (driving, _) = super::pattern::eval_pattern_seeded(store, right, &unbounded, seed)?;
     if driving.len() > super::bind_join::SUBJECT_BIND_MAX_ROWS {
+        super::profile::choice("filter_join_driver_limit", driving.len(), None);
         return Ok(None);
     }
     let dense = driving.len() > super::sparse_bgp::SMALL
@@ -127,8 +128,10 @@ pub(super) fn try_eval(
     #[cfg(test)]
     let dense = dense && !tests::v1_disabled();
     if dense && let Some(rows) = dense_rows(store, left, right, &unbounded, &driving)? {
+        super::profile::choice("filter_join_dense", driving.len(), Some(rows.len()));
         return Ok(Some((rows, vars)));
     }
+    super::profile::choice("filter_join_seeded_driver", driving.len(), None);
     let mut rows = Vec::new();
     for (i, bound) in driving.iter().enumerate() {
         check_eval_budget(ctx, i, rows.len())?;
@@ -137,6 +140,7 @@ pub(super) fn try_eval(
         rows.append(&mut selected);
         check_eval_budget(ctx, i, rows.len())?;
     }
+    super::profile::choice("filter_join_seeded_output", driving.len(), Some(rows.len()));
     Ok(Some((rows, vars)))
 }
 

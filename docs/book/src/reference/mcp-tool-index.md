@@ -165,11 +165,19 @@ Dereference an exact IRI as JSON-LD. IRIs are encoded as query values, including
 
 ## `quipu_entity_history`
 
-Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
+| `expected_generation` | string | no |  |
+| `graph` | string | no |  |
 | `iri` | string | yes |  |
+| `max_bytes` | integer | no |  |
+| `max_entries` | integer | no |  |
+| `observation_only` | boolean | no |  |
+| `since_tx` | integer | no |  |
+| `source_store_id` | string | no |  |
+| `until_tx` | integer | no |  |
 
 ## `quipu_entity_ref`
 
@@ -482,9 +490,14 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `action` | string: `load`, `list`, `remove` | no | Action to perform (default: list) |
+| `action` | string: `load`, `materialize`, `retract_materialization`, `list`, `remove` | no | Action to perform (default: list) |
+| `actor` | string | no | Declared actor for retract_materialization; not authentication |
+| `after_tx` | integer | no | Exclusive lower materialization transaction watermark |
+| `apply` | boolean | no | Apply one bounded cleanup batch; default previews without writes |
+| `expect` | string | no | Exact token from the latest cleanup preview, required with apply |
 | `materialize` | string: `inline`, `deferred` | no | load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize. |
-| `name` | string | no | Ontology name (required for load/remove) |
+| `name` | string | no | Ontology name (required for load/remove/retract_materialization) |
+| `through_tx` | integer | no | Inclusive upper materialization transaction watermark |
 | `timestamp` | string | no | ISO-8601 timestamp |
 | `turtle` | string | no | OWL ontology in Turtle format (required for load) |
 
@@ -657,6 +670,7 @@ Execute a SPARQL SELECT query against the knowledge graph (supports time-travel 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entailment` | string | no | Entailment regime; currently rdfs. |
+| `execution_profile` | boolean | no | Opt in to bounded actual local execution-path counts and inclusive timings; bespoke JSON only, not a static plan or SQL EXPLAIN. |
 | `fork` | string | no | Named fork to query. |
 | `graph` | string | no | Named graph to query. |
 | `include_kinds` | array | no | Graph kinds included in the query dataset. |
@@ -777,7 +791,7 @@ Read explicit positive/negative support as supported/refuted/both/neither, plus 
 
 ## `quipu_search`
 
-Semantic vector search (default), opt-in SQLite FTS5 keyword search, or configurable lexical/vector hybrid fusion. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider. Ranked REST results are diagnostic candidates; native MCP renders admitted context only. Agent context uses context_results when insufficient_context is false under quipu-context/v1.
+Search defaults to semantic when an embedding provider or query embedding is available, otherwise SQLite FTS5 keyword search. Explicit modes override automatic selection. Configurable lexical/vector hybrid fusion is opt-in. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider. Ranked REST results are diagnostic candidates; native MCP renders admitted context only. Agent context uses context_results when insufficient_context is false under quipu-context/v1.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -799,7 +813,7 @@ Semantic vector search (default), opt-in SQLite FTS5 keyword search, or configur
 | `infer_types` | boolean | no | Keyword mode only: type scope includes subclass inference when true; defaults false (asserted full-IRI types only). Type tokens are always asserted; response marks both choices. |
 | `limit` | integer | no | Maximum results (default: 10) |
 | `max_hops` | integer | no | Anchor neighbourhood radius (default 3, server cap 4). |
-| `mode` | string: `semantic`, `keyword`, `hybrid` | no | Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true. |
+| `mode` | string: `semantic`, `keyword`, `hybrid` | no | Omitted mode follows server configuration (auto by default). Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true. |
 | `query` | string | no | Natural language search query (auto-embedded when EmbeddingProvider is attached) |
 | `ranking` | string: `content`, `semantic` | no | Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order. |
 | `rrf_k` | number | no | Positive RRF constant; server default 60. |
