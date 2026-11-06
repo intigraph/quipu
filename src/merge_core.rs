@@ -20,9 +20,6 @@
 //! pendant merge move onto it in later slices. The caller supplies the slot's
 //! cardinality, so tests can state it as a fixture does, without shapes.
 
-// Slice S1 has no caller yet; fork promote adopts it in S2, which removes this.
-#![cfg_attr(not(test), allow(dead_code))]
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
@@ -77,6 +74,8 @@ pub(crate) enum Decision<V> {
     Base,
     Both,
     Values(BTreeSet<V>),
+    // Explicit convergent decisions arrive with the decisions schema slice.
+    #[cfg_attr(not(test), allow(dead_code))]
     Continue,
     Defer,
 }
@@ -152,11 +151,11 @@ fn not_before(a: &str, b: &str) -> bool {
 }
 
 /// The time at which an incoming close ends a ROOT row (spec §3.1 clamp). An
-/// incoming close earlier than the row's own start would reverse it, so the
-/// row closes at `td` instead; a close later than `td` is applied as is.
+/// incoming close at or before the row's own start would erase or reverse its
+/// history, so it closes at `td` instead; a later close is applied as is.
 fn clamp_close(incoming: Option<&String>, row_from: &str, td: &str) -> String {
     match incoming {
-        Some(at) if not_before(at, row_from) => at.clone(),
+        Some(at) if not_before(at, row_from) && !not_before(row_from, at) => at.clone(),
         _ => td.to_string(),
     }
 }
