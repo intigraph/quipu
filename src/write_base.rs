@@ -4,7 +4,9 @@
 //! validates no slice hash and grants no write authority. The admission writer
 //! must supply authentic coordinates and subsequently verify the touched slice.
 
-use crate::resolver_contract::SourceBinding;
+use std::collections::BTreeSet;
+
+use crate::resolver_contract::{Slot, SourceBinding};
 use crate::{Error, Result};
 
 /// Explicit graph policy; omission never silently chooses compatibility mode.
@@ -85,6 +87,52 @@ pub fn resolve_write_base<'a>(
         legacy_unbased: false,
         source: Some(source),
     })
+}
+
+/// Resolve a base only for an explicitly bounded set of request slots.
+///
+/// The request adapter must canonicalize terms before calling this function.
+/// This checks exact scope equality, not RDF syntax, slice hashes, authorization,
+/// history completeness or reservation ownership. Empty scope is a no-op scope.
+/// A legacy request still supplies its touched slots; it never implies a scan.
+pub fn prepare_scoped_write_base<'a>(
+    declared: Option<&'a SourceBinding>,
+    current: &WriterSnapshot,
+    legacy: LegacyBasePolicy,
+    touched: &[Slot],
+    max_slots: usize,
+) -> Result<ResolvedWriteBase<'a>> {
+    if max_slots == 0 || touched.len() > max_slots {
+        return Err(Error::InvalidValue(
+            "write base: invalid or exceeded slot budget".into(),
+        ));
+    }
+    let keys = |slots: &[Slot]| -> Result<BTreeSet<(String, String)>> {
+        let mut keys = BTreeSet::new();
+        for slot in slots {
+            if slot.subject.is_empty()
+                || slot.predicate.is_empty()
+                || !keys.insert((slot.subject.clone(), slot.predicate.clone()))
+            {
+                return Err(Error::InvalidValue(
+                    "write base: empty or duplicate slot".into(),
+                ));
+            }
+        }
+        Ok(keys)
+    };
+    let requested = keys(touched)?;
+    if let Some(source) = declared {
+        let scope = source.scope.as_deref().ok_or_else(|| {
+            Error::InvalidValue("write base: explicit touched scope required".into())
+        })?;
+        if scope.len() > max_slots || keys(scope)? != requested {
+            return Err(Error::InvalidValue(
+                "write base: declared/request scope mismatch".into(),
+            ));
+        }
+    }
+    resolve_write_base(declared, current, legacy)
 }
 
 #[cfg(test)]

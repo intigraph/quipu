@@ -103,3 +103,110 @@ fn malformed_capture_refuses_even_an_unbased_legacy_write() {
         assert!(resolve_write_base(None, &now, LegacyBasePolicy::UseCurrentAndFlag).is_err());
     }
 }
+
+fn slot(name: &str) -> crate::resolver_contract::Slot {
+    crate::resolver_contract::Slot {
+        subject: format!("<http://example.test/{name}>"),
+        predicate: "<http://example.test/p>".into(),
+    }
+}
+
+#[test]
+fn scoped_preparation_requires_exact_slots_without_order_dependence() {
+    let mut source = declared();
+    source.scope = Some(vec![slot("a"), slot("b")]);
+    let prepared = prepare_scoped_write_base(
+        Some(&source),
+        &current(),
+        LegacyBasePolicy::RequireDeclared,
+        &[slot("b"), slot("a")],
+        2,
+    )
+    .unwrap();
+    assert_eq!(prepared.base_tx, 6);
+    for touched in [vec![], vec![slot("a")], vec![slot("a"), slot("c")]] {
+        assert!(
+            prepare_scoped_write_base(
+                Some(&source),
+                &current(),
+                LegacyBasePolicy::RequireDeclared,
+                &touched,
+                2
+            )
+            .is_err()
+        );
+    }
+    source.scope = None;
+    assert!(
+        prepare_scoped_write_base(
+            Some(&source),
+            &current(),
+            LegacyBasePolicy::RequireDeclared,
+            &[],
+            2
+        )
+        .is_err()
+    );
+    source.scope = Some(vec![]);
+    assert!(
+        prepare_scoped_write_base(
+            Some(&source),
+            &current(),
+            LegacyBasePolicy::RequireDeclared,
+            &[],
+            2
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn scoped_preparation_bounds_legacy_and_rejects_duplicate_slots() {
+    for touched in [
+        vec![slot("a"), slot("a")],
+        vec![slot("a"), slot("b"), slot("c")],
+    ] {
+        assert!(
+            prepare_scoped_write_base(
+                None,
+                &current(),
+                LegacyBasePolicy::UseCurrentAndFlag,
+                &touched,
+                2
+            )
+            .is_err()
+        );
+    }
+    let mut source = declared();
+    source.scope = Some(vec![slot("a"), slot("a")]);
+    assert!(
+        prepare_scoped_write_base(
+            Some(&source),
+            &current(),
+            LegacyBasePolicy::RequireDeclared,
+            &[slot("a")],
+            2
+        )
+        .is_err()
+    );
+    assert!(
+        prepare_scoped_write_base(
+            None,
+            &current(),
+            LegacyBasePolicy::UseCurrentAndFlag,
+            &[],
+            0
+        )
+        .is_err()
+    );
+    let prepared = prepare_scoped_write_base(
+        None,
+        &current(),
+        LegacyBasePolicy::UseCurrentAndFlag,
+        &[slot("a")],
+        1,
+    )
+    .unwrap();
+    assert!(prepared.legacy_unbased);
+    assert_eq!(prepared.base_tx, 10);
+}

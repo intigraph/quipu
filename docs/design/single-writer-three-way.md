@@ -92,3 +92,27 @@ Store integration must additionally demonstrate:
 Compilation, focused tests, reference/source witnesses and performance checks
 remain required. This source slice claims none of those results and activates
 no endpoint, graph policy, writer or database migration.
+
+
+## Explicit slot preparation and future closes
+
+`prepare_scoped_write_base` adds an explicit request slot budget and exact
+set equality between touched slots and declared scope. It refuses whole-graph
+scope, duplicate/empty slot keys, zero budgets and over-budget requests. An
+explicit empty scope stays empty. Legacy compatibility also requires explicit
+bounded touched slots. Terms must already be canonicalized by the adapter;
+this helper grants no syntax, hash, history or write authority. No production
+caller is wired. The two added scope tests are source-only and unrun.
+
+C7b in `merge-behaviour.md` separates transaction state from valid-time reads.
+A future close at `Tz` must remain visible at `Td < Tz` and disappear exactly
+at `Tz`, retaining `[T0,Tz)` and one receive close at `Tz`. Neither the base
+transaction number nor admission time may replace that authored close time.
+Touched-slot base reconstruction therefore needs both its transaction cutoff
+and an explicit valid-time coordinate; it must not use wall-clock CUR to judge
+the fixed-date case. A current-value cache alone cannot represent the scheduled
+close. Future integration tests must observe both actual as-of reads, the
+history interval and receive transaction independently. Correct history plus
+an invented current projection is insufficient. Early close at Td, visibility
+at Tz, missing as-of reads and changed authored times must defeat qualification.
+This source slice adds no database reader or temporal mutation.
