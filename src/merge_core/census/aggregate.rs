@@ -6,7 +6,10 @@ use std::sync::{Mutex, TryLockError};
 
 use serde::Serialize;
 
-use super::{BaseEvidence, BoundEvidence, Change, MAX_SLOTS, SlotReport};
+use super::{
+    BaseEvidence, BoundEvidence, Change, MAX_SLOTS, ObservationInput, SlotKey, SlotReport,
+    observe_batch,
+};
 
 const MAX_BUCKETS: usize = 256;
 
@@ -88,6 +91,22 @@ pub(crate) enum RecordOutcome {
     DroppedCapacity,
 }
 
+/// Explicit opt-in for source observation. Default construction does no work.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ShadowMode {
+    #[default]
+    Disabled,
+    Observe,
+}
+
+/// Observation outcomes never replace the normal writer's result.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ObservationOutcome {
+    Disabled,
+    PlanningRefused,
+    Recorded(RecordOutcome),
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct Snapshot {
     pub accepted_batches: u64,
@@ -96,6 +115,8 @@ pub(crate) struct Snapshot {
     pub dropped_poisoned_batches: u64,
     pub dropped_input_batches: u64,
     pub dropped_capacity_batches: u64,
+    pub disabled_batches: u64,
+    pub planning_refused_batches: u64,
     pub counts_saturated: bool,
     /// Health counters are independently sampled, not an atomic delivery ledger.
     pub health_counters_are_independent: bool,
@@ -115,6 +136,8 @@ pub(crate) struct AggregateSink {
     poisoned: AtomicU64,
     input: AtomicU64,
     capacity: AtomicU64,
+    disabled: AtomicU64,
+    planning_refused: AtomicU64,
 }
 
 fn increment(counter: &AtomicU64) {
@@ -130,6 +153,31 @@ fn increment(counter: &AtomicU64) {
 }
 
 impl AggregateSink {
+    /// Source-only bridge: no writer, I/O, persistence or activation policy.
+    /// Disabled mode skips even input planning. Planning errors become an
+    /// explicit health count; no error strings or private values are retained.
+    /// Input must already be captured within the admitted writer read budget.
+    /// This is bounded planning plus a nonwaiting mutex, not a real-time bound.
+    pub(crate) fn try_observe(
+        &self,
+        mode: ShadowMode,
+        binding: ProducerBinding,
+        slots: &BTreeMap<SlotKey, ObservationInput<'_>>,
+        td: &str,
+    ) -> ObservationOutcome {
+        if mode == ShadowMode::Disabled {
+            increment(&self.disabled);
+            return ObservationOutcome::Disabled;
+        }
+        match observe_batch(slots, td) {
+            Ok(reports) => ObservationOutcome::Recorded(self.try_record(binding, &reports)),
+            Err(_) => {
+                increment(&self.planning_refused);
+                ObservationOutcome::PlanningRefused
+            }
+        }
+    }
+
     /// Never waits for the mutex. A dropped batch leaves every bucket unchanged.
     /// This is in-memory observation only, never a durable receipt or writer gate.
     pub(crate) fn try_record(
@@ -187,8 +235,15 @@ impl AggregateSink {
             Err(TryLockError::WouldBlock) => return SnapshotRead::Busy,
             Err(TryLockError::Poisoned(_)) => return SnapshotRead::Poisoned,
         };
-        let health = [&self.busy, &self.poisoned, &self.input, &self.capacity]
-            .map(|counter| counter.load(Ordering::Relaxed));
+        let health = [
+            &self.busy,
+            &self.poisoned,
+            &self.input,
+            &self.capacity,
+            &self.disabled,
+            &self.planning_refused,
+        ]
+        .map(|counter| counter.load(Ordering::Relaxed));
         let counts_saturated = health.contains(&u64::MAX)
             || state.accepted_batches == u64::MAX
             || state.accepted_slot_observations == u64::MAX
@@ -200,6 +255,8 @@ impl AggregateSink {
             dropped_poisoned_batches: health[1],
             dropped_input_batches: health[2],
             dropped_capacity_batches: health[3],
+            disabled_batches: health[4],
+            planning_refused_batches: health[5],
             counts_saturated,
             health_counters_are_independent: true,
             buckets: state.buckets.iter().map(|(k, v)| (k.clone(), *v)).collect(),

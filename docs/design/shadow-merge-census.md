@@ -129,3 +129,23 @@ complete capture, atomic health reconciliation, process-restart retention or
 writer behavior. The producer must still bind real authority/base/profile inputs,
 account for native planning refusal, and connect the source to a separately
 admitted durable consumer. New aggregation tests await a Cargo START.
+
+
+## Default-off observation bridge (source only, unqualified)
+
+`AggregateSink::try_observe` connects the existing bounded native observer to
+the existing aggregate sink without calling a writer. `ShadowMode` defaults to
+`Disabled`; that path skips planning and increments a disabled-batch health
+counter. Explicit `Observe` counts whole-batch planning refusal separately from
+sink input, capacity, contention and poison drops. Planning errors are discarded
+after counting; private term bytes and diagnostics are never placed in health
+output. All counters use the same saturating path and independent-sampling caveat.
+Native unknown inputs remain unknown observations, not successful classifications.
+
+The bridge returns observation outcomes rather than a writer `Result`. A future
+caller must preserve the original writer success/refusal and must not propagate
+observer outcomes into admission. No configuration, writer invocation, sink
+export or live-store read is installed by this change. Bounded input planning
+and a nonwaiting mutex do not prove a wall-clock or writer-latency budget;
+producer capture cost and worst-case qualification remain open. The two new
+bridge tests are unrun pending a separate Cargo START.
