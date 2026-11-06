@@ -855,3 +855,66 @@ fn future_import_review_columns_are_text_and_unknown_columns_still_refuse() {
     };
     assert!(error.contains("import_reviews.future_term_id"), "{error}");
 }
+
+#[test]
+fn lexical_index_is_rebuilt_with_respaced_graph_ids() {
+    let scratch = Scratch::new("lexical");
+    let src = scratch.path("src.db");
+    let dst = scratch.path("dst.db");
+    seed_store(&src);
+    let store = Store::open(&src.to_string_lossy()).unwrap();
+    store.initialize_lexical_index().unwrap();
+    while !store.backfill_lexical_batch(100).unwrap().complete {}
+    let before: i64 = store
+        .conn
+        .query_row("SELECT count(*) FROM lexical_fts", [], |r| r.get(0))
+        .unwrap();
+    assert!(before > 0);
+    drop(store);
+    respace_file(&src, &dst, 7).unwrap();
+    let store = Store::open(&dst.to_string_lossy()).unwrap();
+    assert!(store.lexical_progress().unwrap().unwrap().complete);
+    let after: i64 = store
+        .conn
+        .query_row("SELECT count(*) FROM lexical_fts", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(before, after);
+    let mismatches: i64 = store.conn.query_row("SELECT count(*) FROM lexical_fts l JOIN facts f ON f.rowid=l.rowid WHERE l.graph_id != f.g", [], |r| r.get(0)).unwrap();
+    assert_eq!(mismatches, 0);
+    let named: i64 = store
+        .conn
+        .query_row(
+            "SELECT count(*) FROM lexical_fts WHERE graph_id>=?1",
+            [7 * SPACE_SIZE],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(named > 0);
+    let searchable: i64 = store
+        .conn
+        .query_row(
+            "SELECT count(*) FROM lexical_fts WHERE lexical_fts MATCH 'Carol'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(searchable > 0);
+    let integrity: String = store
+        .conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+    store
+        .conn
+        .execute_batch("ALTER TABLE lexical_progress ADD COLUMN unknown_term_id INTEGER")
+        .unwrap();
+    drop(store);
+    let rejected = scratch.path("rejected.db");
+    assert!(
+        respace_file(&dst, &rejected, 8)
+            .unwrap_err()
+            .to_string()
+            .contains("unknown_term_id")
+    );
+    assert!(!rejected.exists());
+}

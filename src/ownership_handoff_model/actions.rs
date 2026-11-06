@@ -7,6 +7,8 @@ use super::*;
 pub enum Action {
     /// Reserve one exact destination and successor without fencing source writes.
     Prepare(Request),
+    /// Close a reserved attempt while the source journal is still ACTIVE.
+    Abandon(Abandonment),
     /// Persist the irreversible source-local barrier.
     Barrier(Request),
     /// Persist the data retirement/cut/outbox while the journal remains RETIRING.

@@ -46,12 +46,15 @@ pub fn eval_bgp(
         return Ok((vec![seed.clone()], vec![]));
     }
     if let Some(result) = super::sparse_bgp::try_eval(store, patterns, ctx, seed)? {
+        super::profile::choice("bgp_sparse_bgp", 1, Some(result.0.len()));
         return Ok(result);
     }
     if let Some(result) = super::batch_star::try_eval(store, patterns, ctx, seed)? {
+        super::profile::choice("bgp_batch_star", 1, Some(result.0.len()));
         return Ok(result);
     }
     if let Some(result) = super::sql_star::try_eval(store, patterns, ctx, seed)? {
+        super::profile::choice("bgp_sql_star", 1, Some(result.0.len()));
         return Ok(result);
     }
 
@@ -68,7 +71,9 @@ pub fn eval_bgp(
         && !needs_type_entailment
         && crate::store::read_model::read_model_applicable(store, ctx)
     {
-        return super::join::eval_bgp_hash_join(store, patterns, ctx, seed);
+        let result = super::join::eval_bgp_hash_join(store, patterns, ctx, seed)?;
+        super::profile::choice("bgp_read_model_hash", 1, Some(result.0.len()));
+        return Ok(result);
     }
 
     let mut result_rows: Vec<Bindings> = vec![seed.clone()];
@@ -125,6 +130,7 @@ pub fn eval_bgp(
         }
     }
 
+    super::profile::choice("bgp_nested", 1, Some(result_rows.len()));
     Ok((result_rows, all_vars))
 }
 

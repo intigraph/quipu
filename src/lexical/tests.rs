@@ -117,6 +117,7 @@ fn hits(s: &Store, q: &str, at: Option<&str>) -> Vec<VectorMatch> {
 #[test]
 fn disabled_is_explicit_and_read_never_creates_or_backfills() {
     let mut s = Store::open_in_memory().unwrap();
+    s.search_config_mut().keyword = false;
     assert!(
         s.keyword_search("word", 10, None, None)
             .unwrap_err()

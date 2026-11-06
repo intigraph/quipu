@@ -616,6 +616,32 @@ qp search <query>
 
 - `--all-graphs`: Search all permitted graphs explicitly.
 
+## `qp model`
+
+Manage the pinned default embedding model.
+
+Subcommands: `model install`, `model backfill`.
+
+### `qp model install`
+
+Download and verify the default embedding model and tokenizer.
+
+```text
+qp model install
+```
+
+### `qp model backfill`
+
+Embed one bounded batch of existing ROOT subjects.
+
+```text
+qp model backfill
+```
+
+- `--batch-size <VALUE>`: Number of entries per indexing batch.
+
+- `--after <VALUE>`: Resume after this cursor.
+
 ## `qp search-index`
 
 Report, backfill or drop the search indexes.
@@ -662,7 +688,7 @@ qp search-index drop
 
 ## `qp doctor`
 
-Report graph-label drift and recommended floors.
+Report graph-label drift or search backend readiness.
 
 ```text
 qp doctor
@@ -674,6 +700,14 @@ Report graph-label drift and recommended floors.
 
 ```text
 qp doctor labels
+```
+
+### `qp doctor search`
+
+Report search backend readiness and remedies.
+
+```text
+qp doctor search
 ```
 
 ## `qp pack`

@@ -1,0 +1,2 @@
+# Terminal recording retains CRLF and byte offsets required by scriptreplay.
+output.log -text whitespace=cr-at-eol

@@ -58,8 +58,9 @@ complete -c qp -n "__fish_qp_needs_command" -f -a "render" -d 'Render graph data
 complete -c qp -n "__fish_qp_needs_command" -f -a "stats" -d 'Show store statistics'
 complete -c qp -n "__fish_qp_needs_command" -f -a "prime" -d 'Print the agent primer and a bounded, read-only summary of the store'
 complete -c qp -n "__fish_qp_needs_command" -f -a "search" -d 'Search entities by keyword, vector or hybrid ranking'
+complete -c qp -n "__fish_qp_needs_command" -f -a "model" -d 'Manage the pinned default embedding model'
 complete -c qp -n "__fish_qp_needs_command" -f -a "search-index" -d 'Report, backfill or drop the search indexes'
-complete -c qp -n "__fish_qp_needs_command" -f -a "doctor" -d 'Report graph-label drift and recommended floors'
+complete -c qp -n "__fish_qp_needs_command" -f -a "doctor" -d 'Report graph-label drift or search backend readiness'
 complete -c qp -n "__fish_qp_needs_command" -f -a "pack" -d 'Export a graph, or the whole store, as a pack; or verify a pack'
 complete -c qp -n "__fish_qp_needs_command" -f -a "unpack" -d 'Merge a published pack into a local graph'
 complete -c qp -n "__fish_qp_needs_command" -f -a "restore" -d 'Replace the store with a full pack, binary or text'
@@ -327,6 +328,16 @@ complete -c qp -n "__fish_qp_using_subcommand search" -l graphs -d 'Explicit gra
 complete -c qp -n "__fish_qp_using_subcommand search" -l explain -d 'Include search ranking explanations'
 complete -c qp -n "__fish_qp_using_subcommand search" -l all-graphs -d 'Search all permitted graphs explicitly'
 complete -c qp -n "__fish_qp_using_subcommand search" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand model; and not __fish_seen_subcommand_from install backfill" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand model; and not __fish_seen_subcommand_from install backfill" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand model; and not __fish_seen_subcommand_from install backfill" -f -a "install" -d 'Download and verify the default embedding model and tokenizer'
+complete -c qp -n "__fish_qp_using_subcommand model; and not __fish_seen_subcommand_from install backfill" -f -a "backfill" -d 'Embed one bounded batch of existing ROOT subjects'
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from install" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from install" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from backfill" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from backfill" -l batch-size -d 'Number of entries per indexing batch' -r
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from backfill" -l after -d 'Resume after this cursor' -r
+complete -c qp -n "__fish_qp_using_subcommand model; and __fish_seen_subcommand_from backfill" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand search-index; and not __fish_seen_subcommand_from status backfill drop" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand search-index; and not __fish_seen_subcommand_from status backfill drop" -l kind -d 'Index or graph kind to select' -r
 complete -c qp -n "__fish_qp_using_subcommand search-index; and not __fish_seen_subcommand_from status backfill drop" -l batch-size -d 'Number of entries per indexing batch' -r
@@ -344,11 +355,14 @@ complete -c qp -n "__fish_qp_using_subcommand search-index; and __fish_seen_subc
 complete -c qp -n "__fish_qp_using_subcommand search-index; and __fish_seen_subcommand_from drop" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand search-index; and __fish_seen_subcommand_from drop" -l kind -d 'Index or graph kind to select' -r
 complete -c qp -n "__fish_qp_using_subcommand search-index; and __fish_seen_subcommand_from drop" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
-complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels" -s h -l help -d 'Print help'
-complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels" -f -a "labels" -d 'Report graph-label drift and recommended floors'
+complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels search" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels search" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels search" -f -a "labels" -d 'Report graph-label drift and recommended floors'
+complete -c qp -n "__fish_qp_using_subcommand doctor; and not __fish_seen_subcommand_from labels search" -f -a "search" -d 'Report search backend readiness and remedies'
 complete -c qp -n "__fish_qp_using_subcommand doctor; and __fish_seen_subcommand_from labels" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand doctor; and __fish_seen_subcommand_from labels" -s h -l help -d 'Print help'
+complete -c qp -n "__fish_qp_using_subcommand doctor; and __fish_seen_subcommand_from search" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c qp -n "__fish_qp_using_subcommand doctor; and __fish_seen_subcommand_from search" -s h -l help -d 'Print help'
 complete -c qp -n "__fish_qp_using_subcommand pack" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c qp -n "__fish_qp_using_subcommand pack" -l verify -d 'Pack file to verify without creating a new pack' -r
 complete -c qp -n "__fish_qp_using_subcommand pack" -l out -d 'Output file' -r
