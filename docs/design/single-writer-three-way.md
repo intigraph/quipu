@@ -2,7 +2,9 @@
 
 Status: source preparation. No server write path uses this proposal. The
 `write_base` module only binds coordinates; it neither validates a slice digest
-nor acquires a writer reservation. Its tests are pending qualification.
+nor acquires a writer reservation. Separate scoped runs passed 13 coordinate
+controls, five physical-reader controls, and two prepared-batch controls.
+Full publication gates and integration acceptance remain open.
 
 ## Current behavior and the missing boundary
 
@@ -118,7 +120,7 @@ at Tz, missing as-of reads and changed authored times must defeat qualification.
 This source slice adds no database reader or temporal mutation.
 
 
-## Prepared read cuts (source checkpoint, unqualified)
+## Prepared read cuts (historical source checkpoint)
 
 `prepare_slot_reads` copies the explicitly bounded touched scope and fixes two
 Store `AsOf` coordinates: declared base tx and captured reserved head tx, at
@@ -151,7 +153,7 @@ test changes all five original snapshot fields after legacy preparation and
 requires the captured identity and both tx cuts to remain unchanged; it awaits
 the queued Cargo qualification.
 
-## Bounded physical slot reader (source only)
+## Bounded physical slot reader (source-stage)
 
 `Store::bounded_slot_facts_at` is the next reader seam, with no production
 caller. It requires both captured transaction and canonical whole-second UTC
@@ -170,16 +172,16 @@ precision, explicitly refuse in this source slice; no precision is discarded
 to make an input fit. A general timestamp contract remains an integration gate.
 Returned facts represent distinct RDF values, not all provenance claims.
 
-Five new Store controls cover later-close/base reconstruction and Td/Tz,
+Five Store controls cover later-close/base reconstruction and Td/Tz,
 original finite and empty intervals, graph/slot isolation, physical-row and
-byte overflow, and explicit cuts/unsupported precision. They are uncompiled
-and unrun. This does not change `facts_as_of_in_graph` or wire the prepared
+byte overflow, and explicit cuts/unsupported precision. These passed in the
+scoped run at `82e48796`. This does not change `facts_as_of_in_graph` or wire the prepared
 cuts to a writer. Store/epoch/history/hash authentication, whole-batch budgets,
 incoming lowering and common pending receipt persistence remain open. The
 previous 13 pure `write_base` controls passed their separately admitted slot;
 that result does not qualify this reader.
 
-## Prepared batch bridge (source only, unqualified)
+## Prepared batch bridge (source-stage)
 
 `Store::read_prepared_slot_batch` connects immutable prepared cuts to the
 indexed physical reader. Store identity, log epoch and captured head must match
@@ -202,7 +204,9 @@ head is not a claim that another writer was excluded. This source slice admits
 canonical stable named subjects only; blank-node scope and generalized timestamp
 precision remain open, together with incoming lowering and pending persistence.
 
-Two new source controls bind base/current views and their shared physical
+Two source controls bind base/current views and their shared physical
 budgets, including explicit empty scope, and refuse foreign store/graph or moved
-head/epoch. They are uncompiled and unrun. The earlier five single-slot reader
-controls passed separately on 82e48796; that does not qualify this batch bridge.
+head/epoch. Both passed in the scoped run at `6be9e447`, with a clean HOME guard.
+The [retained transcript and limits](../demos/scoped-slot-reader/README.md)
+describe that synthetic source target. This does not prove writer admission,
+reservation exclusion, slice hash verification or installed behavior.
