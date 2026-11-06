@@ -371,7 +371,7 @@ async fn main() {
         eprintln!("cannot start read process pool: {error}");
         std::process::exit(1)
     });
-    let auth_policy = auth::bearer_policy(&config.server);
+    let auth_policy = auth::bearer_policy(&workers.auth_config(&config.server));
     let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required || config.server.scoped_reads.is_some();
     let scoped_profile = config.server.scoped_reads.clone().map(|profile| {
