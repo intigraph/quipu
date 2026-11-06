@@ -119,9 +119,14 @@ pub(crate) struct AggregateSink {
 
 fn increment(counter: &AtomicU64) {
     // Lock-free saturation: a wrapped zero must never look like no drops.
-    let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-        Some(value.saturating_add(1))
-    });
+    let mut value = counter.load(Ordering::Relaxed);
+    loop {
+        let next = value.saturating_add(1);
+        match counter.compare_exchange_weak(value, next, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return,
+            Err(actual) => value = actual,
+        }
+    }
 }
 
 impl AggregateSink {

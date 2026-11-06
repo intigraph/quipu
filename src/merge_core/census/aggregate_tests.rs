@@ -9,6 +9,25 @@ fn binding(profile: Option<[u8; 32]>) -> ProducerBinding {
     }
 }
 
+#[test]
+fn drop_counter_saturates_under_parallel_updates() {
+    let counter = Arc::new(AtomicU64::new(u64::MAX - 3));
+    let workers: Vec<_> = (0..4)
+        .map(|_| {
+            let counter = Arc::clone(&counter);
+            std::thread::spawn(move || {
+                for _ in 0..128 {
+                    increment(&counter);
+                }
+            })
+        })
+        .collect();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    assert_eq!(counter.load(Ordering::Relaxed), u64::MAX);
+}
+
 fn report(predicate: i64) -> SlotReport {
     SlotReport {
         graph_id: 7,
