@@ -237,14 +237,14 @@ mod pendant_tests {
     #[test]
     fn pendant_planning_is_pure_and_path_checked() {
         let mut file = json!({"schema":SCHEMA, "authored_at":"", "choices":[],
-            "request":{"store_id":"git", "root_tx":0, "path":"Pendant",
+            "request":{"store_id":"git", "root_tx":0, "path":Path::Pendant,
             "input_id":"theirs", "base_id":"base", "base":"", "ours":"", "theirs":"",
             "shapes":"", "profile":Profile::default(), "parent":null, "active_slots":null}});
         let planned = plan_pendant(&file).unwrap();
         assert_eq!(planned["prospective"], "");
-        file["request"]["path"] = json!("Share");
+        file["request"]["path"] = json!(Path::Share);
         assert!(plan_pendant(&file).is_err());
-        file["request"]["path"] = json!("Pendant");
+        file["request"]["path"] = json!(Path::Pendant);
         file["unexpected"] = json!(true);
         assert!(plan_pendant(&file).is_err());
     }
