@@ -16,6 +16,10 @@ const DATA: &[&str] = &[
     "shapes",
     "ontologies",
     "schema_terms",
+    // Version-pinned mapping definitions/history are replicated content;
+    // local enrollment and write authority remain in LOCAL.
+    "shape_mapping_pins",
+    "shape_mapping_state",
     "queries",
     "query_params",
     "datasets",
