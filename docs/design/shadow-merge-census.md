@@ -195,3 +195,32 @@ no-op with attestation settlement, two commits coalescing into one wake, and
 process loss between commit and observation delivery. Each must preserve the
 writer's original return/authority behavior and show explicit census coverage
 or unknownness. This design adds no hook, transaction, endpoint or activation.
+
+## Consuming staged capture (source only, unqualified)
+
+`AggregateSink::try_stage` now owns the bounded value-free reports and their
+producer binding before mutation. Request data may then be dropped or changed;
+completion never re-reads it. Disabled mode still skips all planning. The
+staged object is not clonable and completion consumes it; there is no queue,
+commit hook or new SQL work. This module remains under the existing test-only
+census gate, with no production writer caller.
+
+The future adapter supplies a separate write outcome. A declared committed
+transaction must be positive, but is caller evidence rather than authenticated
+proof. No-data-change remains distinct. Rollback and unknown outcome discard
+the classifications and increment separate health counters. Dropping an
+unfinished stage accounts for in-process abandonment. A declared commit
+still reports sink contention, poison or capacity loss independently: its
+writer outcome cannot be changed by observation failure. Transaction IDs
+remain private join evidence outside aggregate keys and snapshots.
+
+These counters remain independently sampled classification/coverage evidence,
+not committed-write counts or a durable outcome ledger. In-process ownership
+does not give restart retention or exactly-once publication; process death
+before `Drop` remains unobserved. Real reservation/authentication, profile
+validation, store transaction evidence, durable delivery and crash recovery
+are still required before live integration. Four new controls for owned
+capture, rollback/unknown/abandonment, no-op versus commit/contention, and
+disabled/refused planning are source-only and unrun. The previous eight
+aggregate controls passed the earlier admitted combined slot; that result
+does not qualify this extension.

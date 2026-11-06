@@ -13,6 +13,8 @@ use super::{
 
 const MAX_BUCKETS: usize = 256;
 
+pub(crate) mod staged;
+
 /// Caller-supplied revision evidence, not authentication or profile validation.
 /// Missing profile evidence stays distinct from every known profile revision.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -117,6 +119,10 @@ pub(crate) struct Snapshot {
     pub dropped_capacity_batches: u64,
     pub disabled_batches: u64,
     pub planning_refused_batches: u64,
+    pub staged_batches: u64,
+    pub staged_rollback_batches: u64,
+    pub staged_unknown_batches: u64,
+    pub staged_abandoned_batches: u64,
     pub counts_saturated: bool,
     /// Health counters are independently sampled, not an atomic delivery ledger.
     pub health_counters_are_independent: bool,
@@ -138,6 +144,10 @@ pub(crate) struct AggregateSink {
     capacity: AtomicU64,
     disabled: AtomicU64,
     planning_refused: AtomicU64,
+    staged: AtomicU64,
+    staged_rollback: AtomicU64,
+    staged_unknown: AtomicU64,
+    staged_abandoned: AtomicU64,
 }
 
 fn increment(counter: &AtomicU64) {
@@ -242,6 +252,10 @@ impl AggregateSink {
             &self.capacity,
             &self.disabled,
             &self.planning_refused,
+            &self.staged,
+            &self.staged_rollback,
+            &self.staged_unknown,
+            &self.staged_abandoned,
         ]
         .map(|counter| counter.load(Ordering::Relaxed));
         let counts_saturated = health.contains(&u64::MAX)
@@ -257,6 +271,10 @@ impl AggregateSink {
             dropped_capacity_batches: health[3],
             disabled_batches: health[4],
             planning_refused_batches: health[5],
+            staged_batches: health[6],
+            staged_rollback_batches: health[7],
+            staged_unknown_batches: health[8],
+            staged_abandoned_batches: health[9],
             counts_saturated,
             health_counters_are_independent: true,
             buckets: state.buckets.iter().map(|(k, v)| (k.clone(), *v)).collect(),
