@@ -8,6 +8,18 @@ store paper ("A Governed Bitemporal Knowledge Graph Store"), and it was already
 occupied — hence this directory and its own recipe. Build with
 `just paper-merge` (tries tectonic, latexmk, then pdflatex).
 
+## Revision status: unified merge contract
+
+Section 3 now states the use-case contract for convergent reports and sequenced
+receive/decide receipts. This is a source revision, not a fresh benchmark result.
+The retained tables, PDF and historical scrub receipt predate this revision;
+none qualifies the unified core or the revised independent oracle. Pending
+karb.4 work includes share/replay, agent-branches, merge-load and Arm A/E/F reruns,
+recorded later-repair targets, three-path observation adapters, rebuilt PDF,
+fresh scrub and the renewed submission review. Do not submit the retained PDF
+as this revision. Judge-only controls in `benchmark/usecase-oracle` do not run
+the operator and do not replace those measurements.
+
 ## Where the numbers come from
 
 The separate [shipped-path load harness](../../benchmark/merge-load/README.md)

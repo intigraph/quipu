@@ -6,6 +6,7 @@ from list_cases import CASES
 from temporal_cases import CASES as TEMPORAL_CASES
 from temporal_cases import TT
 from replay_cases import CASES as REPLAY_CASES
+from asof_cases import CASE as ASOF_CASE
 
 
 class OracleTests(unittest.TestCase):
@@ -176,6 +177,27 @@ class OracleTests(unittest.TestCase):
         observation = self.observation(fixture)
         observation["report"]["second_already_applied"] = True
         self.assertFalse(evaluate(fixture, observation)["correct"])
+
+    def test_pinned_reads_cannot_be_replaced_by_matching_final_history(self):
+        import copy
+        fixture = ASOF_CASE
+        observation = self.observation(fixture)
+        observation["as_of"] = copy.deepcopy(fixture["expected_as_of"])
+        self.assertTrue(evaluate(fixture, observation)["correct"])
+        for index, wrong_values in [(0, ["b", "c"]), (0, ["c"]),
+                                    (1, ["b"]), (2, [])]:
+            mutant = copy.deepcopy(observation)
+            mutant["as_of"][index]["values"] = wrong_values
+            result = evaluate(fixture, mutant)
+            self.assertFalse(result["correct"])
+            self.assertFalse(result["as_of_matches"])
+            self.assertEqual(result["history_records_missing"], 0)
+            self.assertEqual(result["current_facts_lost"], 0)
+        observation["as_of"][0]["tx"] = "decide"
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        del observation["as_of"]
+        with self.assertRaises(ValueError):
+            evaluate(fixture, observation)
 
     def test_delete_replace_receipt_does_not_become_a_live_claim(self):
         fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C5a-ours")

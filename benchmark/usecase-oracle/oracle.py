@@ -65,10 +65,20 @@ def evaluate(fixture: dict, observation: dict) -> dict:
         if not isinstance(expected, list) or not isinstance(actual, list):
             raise ValueError("expected and observed transactions must be explicit lists")
         transactions_match = _canonical(expected) == _canonical(actual)
+    as_of_matches = True
+    if "expected_as_of" in fixture:
+        expected = fixture["expected_as_of"]
+        actual = observation.get("as_of")
+        if not isinstance(expected, list) or not isinstance(actual, list):
+            raise ValueError("expected and observed as_of must be explicit lists")
+        # These answers must come from independently executed pinned reads.
+        # Never derive them from the final history or the expected fixture.
+        as_of_matches = _canonical(expected) == _canonical(actual)
     return {
         "case": fixture["case"],
         "correct": not (missing_current or extra_current or missing_history
-                        or extra_history or report_mismatches or not transactions_match),
+                        or extra_history or report_mismatches or not transactions_match
+                        or not as_of_matches),
         "current_facts_lost": len(missing_current),
         "history_records_missing": len(missing_history),
         "missing_current": [json.loads(v) for v in missing_current],
@@ -77,4 +87,5 @@ def evaluate(fixture: dict, observation: dict) -> dict:
         "unexpected_history": [json.loads(v) for v in extra_history],
         "report_mismatches": report_mismatches,
         "transactions_match": transactions_match,
+        "as_of_matches": as_of_matches,
     }

@@ -1,57 +1,92 @@
-\section{The operator}
+\section{The operator and its use-case contract}
 \label{sec:operator}
 
-Let $\base$, $\ours$ and $\theirs$ be sets of canonical triples, and let $S$ be a
-SHACL shapes graph. A \emph{slot} is a pair $(s, p)$ of subject and predicate;
-we write $G[s,p] = \{\, o : (s,p,o) \in G \,\}$ for the values a graph carries in
-a slot. The slot is the unit of conflict because it is the unit
-\texttt{sh:maxCount} is declared over.
+Let $\base$, $\ours$ and $\theirs$ be sets of canonical triples. A
+\emph{slot} is a subject--predicate pair $(s,p)$, with values
+$G[s,p]=\{o:(s,p,o)\in G\}$. Shapes supply the implementation's cardinality
+bounds and declared list mode. They do not supply the correctness oracle:
+fixtures state intended slot cardinality, values, intervals and decisions
+independently. SHACL is a predictor under test and the unchanged write gate,
+not evidence that a decision is the intended one.
 
-\paragraph{Additions and removals.} Each side's change relative to the base is
-$A_x = G_x \setminus \base$ and $R_x = \base \setminus G_x$ for $x \in
-\{o, t\}$. These are exact: no heuristic decides whether a triple was
-``modified'' rather than removed and re-added, because at triple granularity
-there is no such distinction to make.
-
-\paragraph{Functional slots.} Let $\mathit{max}_S(s,p)$ be the maximum
-cardinality $S$ declares for $p$ on $s$, or $\infty$ where none is declared. A
-slot is \emph{contended} when
+\paragraph{Four change classes.}
+Relative to $\base[s,p]$, a slot is unchanged, changed on one side,
+\emph{convergent} ($\ours[s,p]=\theirs[s,p]\ne\base[s,p]$), or divergent.
+A one-side change follows the changed side. A convergent row is reported,
+including agreement on deletion, with default decision \texttt{continue}:
+ROOT already holds the result, so this writes nothing and holds no slot.
+An explicit \texttt{base} or value override is an ordinary decision.
+For a set-valued divergent slot the candidate is
 \[
-  \mathit{max}_S(s,p) = 1
-  \;\wedge\;
-  \ours[s,p] \neq \theirs[s,p]
-  \;\wedge\;
-  \ours[s,p] \neq \base[s,p]
-  \;\wedge\;
-  \theirs[s,p] \neq \base[s,p].
+G_m=(\ours\cup\theirs)\setminus(R_o\cup R_t),\qquad
+R_x=\base\setminus G_x.
 \]
-Both sides must have moved. If only one side changed a functional slot, the
-other side's value is still the base value, there is no disagreement, and the
-change applies --- a merge that stopped to ask about it would be charging a
-person for a decision nobody needs to make.
+The candidate conflicts if its size exceeds the declared bound; unbounded
+sets do not conflict by cardinality. Delete-versus-replace in a single-valued
+slot requires a decision. A list is compared by element sequence, preserving
+order and repeated elements, rather than by RDF cell labels. Its declared
+mode treats it as a whole value or performs sequence reconciliation;
+overlapping edits remain decisions. Set commutativity does not imply that
+path provenance, list resolution or decided history is commutative.
 
-\paragraph{The merge.} If any slot is contended, the operator returns
-\texttt{conflicts} and writes nothing; each contended slot is reported with its
-base, ours and theirs values, and the declared cardinality that made it a
-conflict. Otherwise the result is
-\[
-  G_m \;=\; \bigl( \ours \cup \theirs \bigr) \setminus \bigl( R_o \cup R_t \bigr),
-\]
-a retraction on either side being honoured against the other side's retained
-triples. The transaction records \emph{both} parent share identifiers, so the
-merge is itself provenance: the lineage of a merged graph is inspectable in the
-same way a merge commit's is.
+\paragraph{One value rule, three delivery paths.}
+Share reconnect, fork promotion and Git pendant merge use the same slot
+classification and decision contract. Their adapters provide the inputs and
+encode the output. Shares carry an incoming creation time; forks carry
+per-fact valid times and provenance. Pendants carry Git parents and produce a
+file, with no store valid-time rows or store transactions. A common value
+rule alone is insufficient evidence that all three adapters implement it.
 
-\paragraph{Two properties worth stating.} The operator never lands a value for a
-slot it flagged --- a conflicted merge writes nothing at all --- so it cannot
-score well by both refusing a decision and quietly resolving it. And because
-$G_m$ is defined by set operations over canonical triples, it is commutative in
-$\ours$ and $\theirs$ and independent of serialization.
+\paragraph{Sequenced store decisions.}
+For store paths a decided conflict commits up to two transactions under one
+writer reservation/savepoint, together or not at all. At decision time $T_d$,
+\texttt{receive} records each incoming value of the decided slot as a receipt
+with empty valid interval $[T_d,T_d)$. It is retained in history but visible at
+no valid time. The subsequent \texttt{decide} closes losing ROOT values at
+$T_d$ and asserts newly chosen live values from $T_d$. A received winner is
+asserted again as a live row; the receipt must not suppress that assertion.
+A choice of ours may require only the receipt transaction. Empty steps are
+omitted. Clean changes are received without inventing a decision step.
+Both steps pass the ordinary per-transaction gate, without exemption.
 
-\paragraph{Post-merge validation.} $G_m$ is validated against $S$. This is not
-belt-and-braces: it is the falsifiable form of the design claim. If conflict
-semantics really are derivable from cardinality, then a merge that consulted the
-shapes should not be able to produce a graph those same shapes reject. Any
-violation in $G_m$ is corruption the operator admitted without charging anyone
-for it, and \S\ref{sec:synthetic} reports that column for every strategy
-precisely so the claim can fail.
+A clean incoming change uses its authored time when it does not displace a
+later ROOT claim; a decided winner uses $T_d$, avoiding overlap with ROOT's
+history. Incoming closes earlier than a reclaimed ROOT row's start are clamped
+to $T_d$, never used to reverse or empty that ROOT interval. A future-authored
+close remains future-dated and must be judged with explicit valid-time reads.
+Every transaction carries the merge identity, role, actor and source. Reapplying
+the same decisions returns the original receipt identities without new writes;
+a changed reviewed ROOT state is stale, not a license to apply the old plan.
+
+\paragraph{Atomic and partial application.}
+Atomic mode, the default, writes nothing while a slot is held. Partial-slot
+and partial-entity modes apply their admitted clean/decided units and retain
+undecided units as pending decisions; held incoming values are not received.
+Coupled fields and list structures move as units. Reports distinguish applied
+and held slots, and include convergent rows even when no transaction is needed.
+A pendant's decisions file supplies the corresponding time-free report;
+byte reproduction is checked separately from value correctness.
+
+\paragraph{Independent scoring and the evidence boundary.}
+The use-case oracle compares explicit expected current facts, a multiset of
+historical interval records, ordered transaction traces, report fields and
+transaction/valid-time pinned answers with observations. It imports no merge
+operator and reads no shapes. For example, at a receive transaction pinned to
+$T_d$, a conflicting incoming receipt must not appear alongside ROOT's value;
+at the decide transaction, the selected value must appear. A final graph alone
+cannot establish either property. Missing observation views are unavailable
+evidence, not zero errors. Recorded later repairs supply an additional
+independent target for replay divergences; fixture expectations must not be
+inferred from a strategy's output.
+
+We report current facts missing from the expected result separately from
+missing historical records, with extra facts and records also counted as
+errors. An incoming loser correctly absent from current state is not a lost
+fact if its required receipt survives. Conversely, preserving every value
+somewhere in history does not establish a correct current state or interval.
+These replace an undifferentiated ``triples lost'' correctness claim.
+
+This section states the revised contract, not a completed evaluation of it.
+The retained tables describe earlier runs. The unified-core reruns, repaired
+replay targets, three-path adapters and full pinned-read coverage remain
+prerequisites to claiming this contract is met by the shipped operator.

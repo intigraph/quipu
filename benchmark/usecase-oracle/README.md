@@ -44,6 +44,13 @@ future adapters must map actual IDs consistently, never replace observed
 relationships with the expected ones. No native status or ID encoding is
 asserted here.
 
+`asof_cases.py` adds explicit C4-gate answers at both transaction and valid-time
+pins. A matching final graph, history and trace do not excuse an open receipt
+at the receive pin, a stale answer at the decide pin, or rewritten earlier ROOT
+history. Missing pinned answers are invalid input. Adapters must execute the
+named reads against the system under test and preserve their transaction-ID
+binding; reconstructing answers from expected history is not measurement.
+
 Run the judge's independent positive and defeated controls with:
 
 ```sh
