@@ -83,6 +83,8 @@ mod slot_read_batch;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };
+#[cfg(feature = "owl")]
+mod ontology_window;
 mod registry;
 pub mod registry_list;
 pub mod respace;
