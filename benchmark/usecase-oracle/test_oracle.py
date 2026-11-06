@@ -130,12 +130,23 @@ class OracleTests(unittest.TestCase):
         observation = self.observation(fixture)
         observation["history"][0]["to"] = TT
         self.assertFalse(evaluate(fixture, observation)["correct"])
+
         fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C3d")
         observation = self.observation(fixture)
         observation["history"].append(dict(observation["history"][0]))
         self.assertFalse(evaluate(fixture, observation)["correct"])
         observation = self.observation(fixture)
         observation["transactions"][0]["assert"].append(dict(observation["history"][0]))
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+
+    def test_delete_replace_receipt_does_not_become_a_live_claim(self):
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C5a-ours")
+        observation = self.observation(fixture)
+        observation["history"][-1]["to"] = None
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C5b-ours")
+        observation = self.observation(fixture)
+        observation["transactions"].append({"role": "receive", "close": [], "assert": []})
         self.assertFalse(evaluate(fixture, observation)["correct"])
 
 
