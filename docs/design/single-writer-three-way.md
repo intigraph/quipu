@@ -95,7 +95,6 @@ Compilation, focused tests, reference/source witnesses and performance checks
 remain required. This source slice claims none of those results and activates
 no endpoint, graph policy, writer or database migration.
 
-
 ## Explicit slot preparation and future closes
 
 `prepare_scoped_write_base` adds an explicit request slot budget and exact
@@ -119,7 +118,6 @@ an invented current projection is insufficient. Early close at Td, visibility
 at Tz, missing as-of reads and changed authored times must defeat qualification.
 This source slice adds no database reader or temporal mutation.
 
-
 ## Prepared read cuts (historical source checkpoint)
 
 `prepare_slot_reads` copies the explicitly bounded touched scope and fixes two
@@ -141,7 +139,6 @@ historical interval reconstruction. A future touched-slot reader must qualify
 this difference with a row closed after the base, an originally finite interval,
 a future authored close at Tz, and both Td and Tz as-of observations. No existing
 read semantics are changed in this source checkpoint.
-
 
 The prepared object also copies the validated `WriterSnapshot`: store identity,
 log epoch, graph, oldest-complete retention watermark and reserved head. This
