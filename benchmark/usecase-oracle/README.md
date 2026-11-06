@@ -1,5 +1,42 @@
 # Use-case oracle (source slice)
 
+## Native temporal adapter (source, awaiting qualification)
+
+`examples/merge_native_oracle` accepts the separate `native-c4-input.json`
+recipe on stdin and runs the actual fork-promote path in a private temporary
+store. Input is bounded to 64 KiB and rejects unknown fields, including oracle
+answers and external database paths. Share and pendant paths are not accepted
+by this first slice. No live database or endpoint is used.
+
+```sh
+cargo run --locked --example merge_native_oracle --features shacl \
+  < benchmark/usecase-oracle/native-c4-input.json > <private-capture.json>
+```
+
+This is a future qualification command, not a result from this revision.
+The capture contains actual ROOT physical rows, native transaction IDs and
+source tags, current queries and independently executed transaction/valid-time
+queries. `receive` and `decide` are bound from persisted native source tags,
+not an assumed `tx - 1`. Missing or ambiguous role pins refuse. History is read
+from the scratch database through a read-only SQLite connection; assertions,
+empty receipts and duplicate rows remain distinct. Closure attribution uses
+persisted `retracted_tx`, not a diff of final value sets. Scratch deletion is
+required before a capture is returned successfully.
+
+The `capture` object supplies `current`, `history`, `transactions`, `as_of` and
+`report` to `oracle.evaluate(asof_cases.CASE, capture)`. The enclosing native
+outcome must also be `promoted`; an error/refusal is not a passing observation.
+The input recipe does not load the expected fixture. Conflict report kind is
+normalized from the native conflict record, and the chosen label from the
+resolution bound to that record. Clean-slot classification is unavailable and
+is left absent, so it cannot silently satisfy an oracle requiring that report.
+
+Five Rust source controls cover the two C4 receipt pins and earlier valid time,
+an unknown pin, unknown input fields, an undecided conflict with no writes, and
+foreign/unknown receipt bindings.
+They are uncompiled and unrun. Share/pendant adapters, remaining cases, replay
+identity normalization and all benchmark/paper reruns remain open.
+
 The judge compares explicit fixture expectations with observed current facts and
 history records. It reads no shapes and imports no merge operator. History
 records include valid intervals and transaction roles, so preserving a triple

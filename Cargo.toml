@@ -96,6 +96,11 @@ path = "examples/agentbranches/main.rs"
 required-features = ["shacl"]
 
 [[example]]
+name = "merge_native_oracle"
+path = "examples/merge_native_oracle/main.rs"
+required-features = ["shacl"]
+
+[[example]]
 name = "merge_load"
 required-features = ["shacl"]
 
