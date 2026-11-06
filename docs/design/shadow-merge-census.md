@@ -149,3 +149,49 @@ export or live-store read is installed by this change. Bounded input planning
 and a nonwaiting mutex do not prove a wall-clock or writer-latency budget;
 producer capture cost and worst-case qualification remain open. The two new
 bridge tests are unrun pending a separate Cargo START.
+
+
+## Writer capture and commit evidence (design, not wired)
+
+The source adapter observes hypothetical merge decisions; its accepted-batch
+counter is not a committed-write counter. Live integration must retain that
+meaning. The current server source gives three concrete boundaries:
+
+- `StoreHandle::lock` settles signed attestation under the existing writer
+  lock; `metadata_lock` explicitly does not. Do not acquire the latter to avoid
+  nonce settlement, or settle a second time for census observation. Rejecting
+  authority must preserve existing write behavior and cannot create a census
+  classification that implies authorized application.
+- `StoreHandle::commit_wake_for` installs a `watch` notification carrying `()`.
+  It is a coalesced commit hint, not a per-write receipt, transaction identifier
+  or exactly-once census stream. Polling current state after that hint cannot
+  reconstruct the request's original base/profile inputs.
+- `AppError::message` documents failures after earlier committed steps. HTTP
+  status, successful planning and client delivery therefore cannot establish
+  commit or rollback. A disconnected client is not proof a write was unrun.
+
+The future producer captures bounded touched-slot inputs and immutable profile
+identity under the normal authenticated reservation, before mutation, and tags
+that work as a classification observation only. No new SQLite read or planner
+work may be smuggled into a commit hook. The producer must bind an eventual
+committed outcome to actual store transaction evidence, or report outcome
+unknown. Only that separate evidence permits claims about received or applied
+writes. Explicit rollback/refusal, no-op and unknown outcome must stay separate;
+do not count all observer `Accepted` results as overwrites. Numeric transaction
+identifiers remain private join evidence, outside aggregate labels.
+
+A bounded staged observation must be discarded or accounted for on rollback,
+with no partial publication advertised as complete. If classification occurs
+only after commit, the producer must have captured the immutable pre-write
+inputs first; re-reading current slots afterward is not an equivalent base.
+Overflow, busy sink, classification refusal and commit-evidence loss remain
+visible coverage gaps. The current in-memory bridge does not supply an atomic
+commit/outbox join, replay identity or process-restart retention. Do not add an
+unbounded queue or block the writer to hide those gaps.
+
+Future integration controls must include successful commit with lost client
+response, a refusal before a data transaction, rollback after classification,
+no-op with attestation settlement, two commits coalescing into one wake, and
+process loss between commit and observation delivery. Each must preserve the
+writer's original return/authority behavior and show explicit census coverage
+or unknownness. This design adds no hook, transaction, endpoint or activation.
