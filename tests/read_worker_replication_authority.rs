@@ -35,7 +35,7 @@ fn fixture(readers: usize) -> (tempfile::TempDir, SocketAddr, SocketAddr) {
     .unwrap();
     std::fs::create_dir(root.path().join(".bobbin")).unwrap();
     std::fs::write(root.path().join(".bobbin/config.toml"), format!(
-        "[quipu.server]\nauth_token={WRITER:?}\nreplication_credentials_file={:?}\nread_processes={readers}\nread_process_base_port={}\nmemory_budget_mib=256\n[quipu.events]\nretention_days=0\n[quipu.embedding]\nsuperseded_retention_days=0\n",
+        "[quipu.server]\nauth_token={WRITER:?}\nreplication_credentials_file={:?}\nread_pool_size=0\nread_processes={readers}\nread_process_base_port={}\nmemory_budget_mib=256\n[quipu.events]\nretention_days=0\n[quipu.embedding]\nsuperseded_retention_days=0\n",
         registry.to_str().unwrap(), worker_address.port(),
     )).unwrap();
     (root, address, worker_address)
@@ -139,10 +139,10 @@ fn refused_start(server: &mut Server, root: &Path) {
     while Instant::now() < until {
         if let Some(status) = server.child.try_wait().unwrap() {
             assert!(!status.success());
+            let log = std::fs::read_to_string(root.join("server.log")).unwrap();
             assert!(
-                std::fs::read_to_string(root.join("server.log"))
-                    .unwrap()
-                    .contains("replication credential authority unavailable")
+                log.contains("replication credential authority unavailable"),
+                "unexpected startup refusal: {log}"
             );
             return;
         }
