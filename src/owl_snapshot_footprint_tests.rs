@@ -6,7 +6,7 @@ const PREFIX: &str = "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . \
     @prefix owl: <http://www.w3.org/2002/07/owl#> .";
 
 fn store(axioms: &str) -> Store {
-    let mut source = Store::open_in_memory().unwrap();
+    let source = Store::open_in_memory().unwrap();
     source
         .load_ontology("test", &format!("{PREFIX} {axioms}"), TS)
         .unwrap();
@@ -22,8 +22,17 @@ fn fact(source: &mut Store, e: &str, a: &str, v: &str, graph: i64) {
         valid_to: None,
         op: Op::Assert,
     };
+    // The companion fixture represents an existing engine-derived premise.
+    // Use the materializer's normal provenance; external writes stay refused.
+    let derived = graph != crate::schema::ROOT_GRAPH;
     source
-        .transact_to_graph(&[datum], TS, None, None, graph)
+        .transact_to_graph(
+            &[datum],
+            TS,
+            derived.then_some("owl"),
+            derived.then_some("owl:materialize"),
+            graph,
+        )
         .unwrap();
 }
 
