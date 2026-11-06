@@ -140,7 +140,6 @@ pub fn prepare_scoped_write_base<'a>(
 /// Private fields prevent callers from changing scope or one time cut after
 /// preparation. This is read planning, not reservation ownership or a Store
 /// query. In particular, neither cut grants authentication or write authority.
-#[derive(Debug)]
 pub struct PreparedSlotReads<'a> {
     base: ResolvedWriteBase<'a>,
     touched: Vec<Slot>,
