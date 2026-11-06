@@ -3,6 +3,8 @@ import unittest
 
 from oracle import evaluate
 from list_cases import CASES
+from temporal_cases import CASES as TEMPORAL_CASES
+from temporal_cases import TT
 
 
 class OracleTests(unittest.TestCase):
@@ -93,6 +95,35 @@ class OracleTests(unittest.TestCase):
         result = evaluate(fixture, observation)
         self.assertFalse(result["correct"])
         self.assertEqual(result["history_records_missing"], 1)
+
+    def observation(self, fixture):
+        import copy
+        return copy.deepcopy({"current": fixture["expected_current"],
+                              "history": fixture["expected_history"],
+                              "report": fixture["expected_report"],
+                              "transactions": fixture["expected_transactions"]})
+
+    def test_temporal_fixtures_check_trace_order_and_receipt_presence(self):
+        for fixture in TEMPORAL_CASES:
+            self.assertTrue(evaluate(fixture, self.observation(fixture))["correct"])
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C4-theirs")
+        observation = self.observation(fixture)
+        observation["transactions"].reverse()
+        result = evaluate(fixture, observation)
+        self.assertFalse(result["correct"])
+        self.assertFalse(result["transactions_match"])
+        observation = self.observation(fixture)
+        del observation["transactions"][0]
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        del observation["transactions"]
+        with self.assertRaises(ValueError):
+            evaluate(fixture, observation)
+
+    def test_old_authored_time_cannot_replace_a_decision_time_live_winner(self):
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C4-theirs")
+        observation = self.observation(fixture)
+        observation["history"][-1]["from"] = TT
+        self.assertFalse(evaluate(fixture, observation)["correct"])
 
 
 if __name__ == "__main__":

@@ -58,10 +58,17 @@ def evaluate(fixture: dict, observation: dict) -> dict:
                 report_mismatches[key] = {"expected": expected,
                                           "observed": actual_report.get(key),
                                           "present": key in actual_report}
+    transactions_match = True
+    if "expected_transactions" in fixture:
+        expected = fixture["expected_transactions"]
+        actual = observation.get("transactions")
+        if not isinstance(expected, list) or not isinstance(actual, list):
+            raise ValueError("expected and observed transactions must be explicit lists")
+        transactions_match = _canonical(expected) == _canonical(actual)
     return {
         "case": fixture["case"],
         "correct": not (missing_current or extra_current or missing_history
-                        or extra_history or report_mismatches),
+                        or extra_history or report_mismatches or not transactions_match),
         "current_facts_lost": len(missing_current),
         "history_records_missing": len(missing_history),
         "missing_current": [json.loads(v) for v in missing_current],
@@ -69,4 +76,5 @@ def evaluate(fixture: dict, observation: dict) -> dict:
         "missing_history": [json.loads(v) for v in missing_history],
         "unexpected_history": [json.loads(v) for v in extra_history],
         "report_mismatches": report_mismatches,
+        "transactions_match": transactions_match,
     }
