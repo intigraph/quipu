@@ -11,6 +11,9 @@ const MAX_CELLS: usize = 4096;
 const MAX_DIFF: usize = 1_000_000;
 pub(crate) type Slot = (String, String);
 
+#[path = "merge_lists_admission.rs"]
+pub(crate) mod admission;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Mode {
