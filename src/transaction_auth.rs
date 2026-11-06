@@ -180,6 +180,11 @@ thread_local! {
     static IDENTITY: RefCell<Option<Identity>> = const { RefCell::new(None) };
 }
 
+/// Owned evidence from the authentication adapter, never from request JSON.
+pub(crate) fn current_identity() -> Option<Identity> {
+    IDENTITY.with(|slot|slot.borrow().clone())
+}
+
 /// Run synchronous work with owned authentication evidence. Nested scopes,
 /// errors, and unwinding restore the previous value before a worker is reused.
 /// Library/CLI callers that do not enter a scope remain unattributed.

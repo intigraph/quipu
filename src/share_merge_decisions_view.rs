@@ -17,15 +17,24 @@ const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConflictKind {
+    /// Both sides changed identically; continue writes nothing.
+    Convergent,
     /// Ours and theirs together hold more values than `sh:maxCount`.
+    #[serde(rename = "maxcount-exceeded", alias = "max_count_exceeded")]
     MaxCountExceeded,
     /// On a `sh:maxCount 1` slot one side deleted the value the other replaced.
+    #[serde(rename = "delete-replace", alias = "delete_replace")]
     DeleteReplace,
+    #[serde(rename = "list-divergent")]
+    ListDivergent,
 }
 
 /// The kind of `record`'s conflict, as `merge_graphs` decided it.
 #[must_use]
 pub fn kind(record: &DecisionRecord) -> ConflictKind {
+    if crate::merge_review::convergent(record) {
+        return ConflictKind::Convergent;
+    }
     let one_side_deleted = record.ours.is_empty() != record.theirs.is_empty();
     if record.max_count == 1 && !record.base.is_empty() && one_side_deleted {
         ConflictKind::DeleteReplace
@@ -42,6 +51,10 @@ pub fn rule(record: &DecisionRecord, labels: &BTreeMap<String, String>) -> Strin
         .cloned()
         .unwrap_or_else(|| record.predicate.clone());
     match kind(record) {
+        ConflictKind::ListDivergent => format!("incompatible element sequences for {predicate}"),
+        ConflictKind::Convergent => {
+            format!("both sides agree on {predicate}; continue preserves ROOT's claim")
+        }
         ConflictKind::DeleteReplace => format!(
             "sh:maxCount 1 on {predicate}: one side deleted the value the other side replaced"
         ),

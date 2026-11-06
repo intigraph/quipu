@@ -44,7 +44,10 @@ mod apply_plan;
 use apply_plan::plan_pair;
 
 /// Schema of the decisions file.
-pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v2";
+pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v3";
+pub const DECISIONS_SCHEMA_WHOLE: &str =
+    "https://github.com/scbrown/quipu/merge-decisions/v3-whole-root";
+pub const DECISIONS_SCHEMA_V2: &str = "https://github.com/scbrown/quipu/merge-decisions/v2";
 /// Legacy files retain their whole-ROOT staleness check.
 pub const DECISIONS_SCHEMA_V1: &str = "https://github.com/scbrown/quipu/merge-decisions/v1";
 
@@ -125,6 +128,8 @@ pub struct ShareOrigin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Side {
+    /// Keep an agreeing change without writing a receipt or decision.
+    Continue,
     Ours,
     Theirs,
     Base,
@@ -194,6 +199,12 @@ pub struct SharePair {
 }
 
 impl SharePair {
+    pub(crate) fn session(self,store:&Store,profile:crate::merge_session::Profile)->Result<(crate::merge_session::Request,String)> {
+        Ok((crate::merge_session::Request {store_id:store.store_id()?,root_tx:store.latest_tx_id()?,path:crate::merge_session::Path::Share,
+            input_id:self.incoming.manifest.share_id,base_id:self.base.manifest.share_id,
+            base:crate::merge_session::render(&self.base.graph),ours:crate::merge_session::render(&root_graph(store)?.0),
+            theirs:crate::merge_session::render(&self.incoming.graph),shapes:self.incoming.shapes,profile,parent:None,active_slots:None},self.incoming.manifest.created_at))
+    }
     /// Read `incoming_dir` and locate its base beside it.
     ///
     /// # Errors
@@ -283,7 +294,7 @@ pub fn emit_pair_scoped(store: &Store, pair: SharePair) -> Result<DecisionFile> 
 
 fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<DecisionFile> {
     let i = inputs(store, pair)?;
-    let (_, conflicts) = merge_graphs(
+    let (_, conflicts) = crate::merge_review::merge(
         &i.base.graph,
         &i.ours,
         &i.incoming.graph,
@@ -312,9 +323,11 @@ fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<De
             },
             kind: Some(kind(&record)),
             rule: Some(rule(&record, &labels)),
+            decision: crate::merge_review::convergent(&record).then_some(Decision::Choose {
+                choose: Side::Continue,
+            }),
             record,
             proposal: None,
-            decision: None,
             decided_by: None,
             decided_at: None,
         });
@@ -323,7 +336,7 @@ fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<De
         schema: if scoped {
             DECISIONS_SCHEMA
         } else {
-            DECISIONS_SCHEMA_V1
+            DECISIONS_SCHEMA_WHOLE
         }
         .into(),
         incoming_share: i.incoming.manifest.share_id,
@@ -345,6 +358,12 @@ pub fn propose(mut file: DecisionFile) -> DecisionFile {
 }
 
 fn proposal_for(row: &DecisionRow) -> Proposal {
+    if crate::merge_review::convergent(&row.record) {
+        return Proposal {
+            choose: Side::Continue,
+            evidence: vec!["both sides agree; preserve the current claim".into()],
+        };
+    }
     let r = &row.record;
     let mut evidence = Vec::new();
     if r.ours == r.base {
@@ -405,6 +424,26 @@ fn chosen(row: &DecisionRow) -> Result<Vec<String>> {
                 "row {} ({} {}) is undecided; nothing was written",
                 row.id, r.subject, r.predicate
             )));
+        }
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) if crate::merge_review::convergent(r) => r.ours.clone(),
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) => {
+            return Err(Error::InvalidValue(
+                "continue requires a convergent row".into(),
+            ));
+        }
+        Some(Decision::Choose { choose: Side::Ours }) if !crate::merge_review::convergent(r) => {
+            r.ours.clone()
+        }
+        Some(Decision::Choose {
+            choose: Side::Ours | Side::Theirs | Side::Both,
+        }) if crate::merge_review::convergent(r) => {
+            return Err(Error::InvalidValue(
+                "convergent rows take continue/base/value".into(),
+            ));
         }
         Some(Decision::Choose { choose: Side::Ours }) => r.ours.clone(),
         Some(Decision::Choose {

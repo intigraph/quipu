@@ -36,6 +36,10 @@ use crate::types::{Fact, Op, Value};
 pub use super::forks_merge::ForkResolutions;
 use super::{Datum, Store};
 
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "forks_sessions.rs"]
+mod sessions;
+
 /// IRI prefix fork graphs are minted under: `urn:quipu:fork:<name>`.
 pub const FORK_IRI_PREFIX: &str = "urn:quipu:fork:";
 

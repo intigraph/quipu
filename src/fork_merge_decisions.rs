@@ -35,7 +35,9 @@ use crate::store::forks::{ForkPromotion, ForkResolutions};
 use crate::types::Value;
 
 /// Schema of a fork decisions file.
-pub const FORK_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/fork-v1";
+pub const FORK_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/fork-v2";
+pub const FORK_DECISIONS_SCHEMA_V1: &str =
+    "https://github.com/scbrown/quipu/merge-decisions/fork-v1";
 
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
@@ -229,7 +231,7 @@ fn labels(
 /// # Errors
 /// An unknown or closed fork, an unusable base, or a store read error.
 pub fn emit(store: &Store, name: &str) -> Result<ForkDecisionFile> {
-    let (fork, conflicts) = store.fork_conflicts(name)?;
+    let (fork, conflicts) = store.fork_review_records(name)?;
     let labels = labels(store, &[crate::schema::ROOT_GRAPH, fork.g], &conflicts)?;
     let mut rows = Vec::with_capacity(conflicts.len());
     for (n, record) in conflicts.into_iter().enumerate() {
@@ -244,9 +246,11 @@ pub fn emit(store: &Store, name: &str) -> Result<ForkDecisionFile> {
             fork_slot_hash: slot_hash(store, fork.g, &record, &record.theirs)?,
             kind: Some(kind(&record)),
             rule: Some(rule(&record, &labels)),
+            decision: crate::merge_review::convergent(&record).then_some(Decision::Choose {
+                choose: Side::Continue,
+            }),
             record,
             proposal: None,
-            decision: None,
             decided_by: None,
             decided_at: None,
         });
@@ -270,6 +274,12 @@ pub fn propose(mut file: ForkDecisionFile) -> ForkDecisionFile {
 }
 
 fn proposal_for(row: &ForkDecisionRow) -> Proposal {
+    if crate::merge_review::convergent(&row.record) {
+        return Proposal {
+            choose: Side::Continue,
+            evidence: vec!["both sides agree; preserve ROOT".into()],
+        };
+    }
     let r = &row.record;
     let newest = |facts: &[LocalFact]| facts.iter().map(|f| f.tx).max();
     let (ours, theirs) = (newest(&row.provenance.ours), newest(&row.provenance.theirs));
@@ -371,6 +381,19 @@ pub(crate) fn decided_values(
                 record.subject, record.predicate
             )));
         }
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) if crate::merge_review::convergent(record) => record.ours.clone(),
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) => return Err(Error::InvalidValue("continue requires convergence".into())),
+        Some(Decision::Choose {
+            choose: Side::Ours | Side::Theirs | Side::Both,
+        }) if crate::merge_review::convergent(record) => {
+            return Err(Error::InvalidValue(
+                "convergence takes continue/base/value".into(),
+            ));
+        }
         Some(Decision::Choose { choose: Side::Ours }) => record.ours.clone(),
         Some(Decision::Choose {
             choose: Side::Theirs,
@@ -379,7 +402,13 @@ pub(crate) fn decided_values(
         Some(Decision::Choose { choose: Side::Both }) => union(&record.ours, &record.theirs),
         Some(Decision::Values { values }) => values.clone(),
     };
-    if values.len() > record.max_count {
+    if !matches!(
+        decision,
+        Some(Decision::Choose {
+            choose: Side::Continue
+        })
+    ) && values.len() > record.max_count
+    {
         return Err(Error::InvalidValue(format!(
             "row {id} decides {} values for {} {}, above sh:maxCount {}; nothing was written",
             values.len(),
@@ -421,7 +450,7 @@ pub fn apply(
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue("a reviewer is required".into()));
     }
-    if file.schema != FORK_DECISIONS_SCHEMA {
+    if file.schema != FORK_DECISIONS_SCHEMA && file.schema != FORK_DECISIONS_SCHEMA_V1 {
         return Err(Error::InvalidValue(format!(
             "not a fork merge-decisions file: schema {:?}",
             file.schema
@@ -467,7 +496,11 @@ pub fn apply(
             "stale decisions: {what} changed since they were emitted (quipu fork promote --emit-decisions); emit again and re-decide. Nothing was written"
         ))
     };
-    let (fork, conflicts) = store.fork_conflicts(name)?;
+    let (fork, conflicts) = if file.schema == FORK_DECISIONS_SCHEMA {
+        store.fork_review_records(name)?
+    } else {
+        store.fork_conflicts(name)?
+    };
     if fork.fork_tx != file.fork_tx {
         return Err(stale("the fork's base"));
     }
@@ -480,6 +513,9 @@ pub fn apply(
     }
     for row in &file.rows {
         let r = &row.record;
+        if file.schema == FORK_DECISIONS_SCHEMA && row.kind != Some(kind(r)) {
+            return Err(stale("a report kind"));
+        }
         if row.root_slot_hash != slot_hash(store, crate::schema::ROOT_GRAPH, r, &r.ours)? {
             return Err(stale(&format!("ROOT's side of row {}", row.id)));
         }
@@ -490,6 +526,19 @@ pub fn apply(
     let applied = applied_rows()?;
     let mut resolutions: ForkResolutions = ForkResolutions::new();
     for row in &applied {
+        let source_row = file
+            .rows
+            .iter()
+            .find(|r| r.id == row.id)
+            .expect("row from file");
+        if matches!(
+            source_row.decision.as_ref(),
+            Some(Decision::Choose {
+                choose: Side::Continue
+            })
+        ) {
+            continue;
+        }
         let record = &file
             .rows
             .iter()

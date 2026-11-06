@@ -246,6 +246,7 @@ fn git_fixture() -> ReconcileFile {
     use crate::git_merge_alias::AliasProposal;
     ReconcileFile::Git {
         decisions: GitDecisions {
+            kinds: Vec::new(),
             schema: GIT_DECISIONS_SCHEMA.into(),
             inputs: ["b".into(), "o".into(), "t".into()],
             conflicts: vec![DecisionRecord {

@@ -33,6 +33,7 @@ pub struct DecisionRecord {
     /// The slot's predicate IRI.
     pub predicate: String,
     /// The `sh:maxCount` bound the slot conflicted on.
+    #[serde(with = "review_bound")]
     pub max_count: usize,
     /// Values at the merge base.
     pub base: Vec<String>,
@@ -40,6 +41,22 @@ pub struct DecisionRecord {
     pub ours: Vec<String>,
     /// Values on the incoming side (the share, or the fork).
     pub theirs: Vec<String>,
+}
+
+// An unbounded convergent slot uses JSON null, not an imprecise/platform-sized
+// integer. Finite legacy conflict records keep their original wire form.
+mod review_bound {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub fn serialize<S: Serializer>(value: &usize, serializer: S) -> Result<S::Ok, S::Error> {
+        if *value == usize::MAX {
+            serializer.serialize_none()
+        } else {
+            serializer.serialize_some(value)
+        }
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<usize, D::Error> {
+        Ok(Option::<usize>::deserialize(deserializer)?.unwrap_or(usize::MAX))
+    }
 }
 
 /// A slot the merge held at base, with each side's value set.
