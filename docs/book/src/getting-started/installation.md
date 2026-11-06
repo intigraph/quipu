@@ -244,7 +244,9 @@ cargo install --list
 ```
 
 The runtime is downloaded and checksum-verified **during the Cargo build**,
-then compressed into the executables. Running Quipu never downloads a runtime.
+then compressed into the executables. Default CPU startup never downloads a
+runtime. The optional GPU acquisition API verifies pinned downloads when
+explicitly requested after device eligibility checks.
 The default bundle supports Linux GNU x86-64/arm64, macOS x86-64/arm64 and
 Windows x86-64. A model and tokenizer are still separate inputs.
 
