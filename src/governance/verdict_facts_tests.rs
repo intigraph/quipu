@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::error::Error;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::sparql::{self, QueryResult};
 
 const TS: &str = "2026-01-01T00:00:00Z";
@@ -11,7 +12,7 @@ const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 const REQUIRE_LABEL: &str = "ASK { $target <http://www.w3.org/2000/01/rdf-schema#label> ?l }";
 
 fn signed_store() -> Store {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     let dir = tempfile::tempdir().unwrap();
     let identity =
@@ -165,7 +166,7 @@ fn a_verdict_is_signed_and_bound_to_its_evidence() {
 fn an_unsigned_store_records_no_verdict_rather_than_an_unsigned_one() {
     // A bare "satisfied" in the record is forgeable by anyone who can write a
     // fact. The whole point of a verdict is that it is an attestation.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().enforce_on_write = true;
     define_policy(&mut store, "http://ex/P1");
     let good = vec![

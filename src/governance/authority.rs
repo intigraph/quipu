@@ -45,7 +45,6 @@
 use std::collections::BTreeSet;
 
 use crate::error::Result;
-use crate::namespace::DEFAULT_BASE_NS;
 use crate::sparql::{self, QueryResult};
 use crate::store::Store;
 use crate::types::Value;
@@ -166,8 +165,9 @@ pub fn intersect_chain(authorities: &[Authority]) -> Authority {
 /// matching principal with conflicting identity values fails closed; graph
 /// grants remain set-valued and chain authority still uses intersection.
 pub fn authority_of(store: &Store, principal: &str) -> Result<Authority> {
+    let ns = store.governance_ns()?;
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          PREFIX q: <https://scbrown.github.io/quechua/ns#> \
          SELECT DISTINCT ?id ?g WHERE {{ \
          {{ ?p a a:Principal }} UNION {{ ?p a q:Principal }} \

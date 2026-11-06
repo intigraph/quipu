@@ -10,7 +10,6 @@ use quipu::store::{Datum, Store};
 use quipu::types::{Op, Value};
 
 use oxrdfio::RdfFormat;
-use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -326,7 +325,7 @@ fn verify(store: &Store) -> quipu::Result<()> {
     Ok(())
 }
 
-fn count_from_row(row: Option<&HashMap<String, Value>>, var: &str) -> i64 {
+fn count_from_row(row: Option<&quipu::sparql::Bindings>, var: &str) -> i64 {
     row.and_then(|r| r.get(var))
         .and_then(|v| match v {
             Value::Int(n) => Some(*n),

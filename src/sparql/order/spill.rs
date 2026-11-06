@@ -402,7 +402,7 @@ mod tests {
             ..Default::default()
         };
         assert!(matches!(
-            sort(&store, vec![Bindings::new()], &[], &ctx),
+            sort(&store, vec![Bindings::default()], &[], &ctx),
             Err(Error::QueryTimeout { .. })
         ));
     }

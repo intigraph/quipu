@@ -77,6 +77,21 @@ The protected journal's file adapter now exists
 ([`ownership_journal.rs`](../../src/store/ownership_journal.rs)): one model
 `Journal` record with a sha256 trailer, an atomic fsynced replace, and a locked
 advance that admits only Active to Retiring, Retiring to Retired and Pending to
-Active. Anything unreadable is UNKNOWN. Nothing reads it at startup yet; the
-startup adapter, generation pin and per-lineage latch are later P1 slices. Do not enroll stores or claim
-at-most-one physical writer from this increment.
+Active. Anything unreadable is UNKNOWN.
+
+A handle's commit fence can now carry a generation pin
+([`ownership_fence.rs`](../../src/store/ownership_fence.rs)): the journal path
+and the exact authority tuple the handle was admitted under. Every entrypoint
+check and every outer commit re-reads the journal (a file read, never SQL on the
+committing connection) and refuses unless it is still ACTIVE at that tuple.
+RETIRING, RETIRED, PENDING, a different generation or epoch, and UNKNOWN all
+refuse, and the first refusal revokes the handle for good, so restoring older
+journal bytes cannot revive it. The handle keeps the role-specific reason, because
+a refused COMMIT itself surfaces only as SQLite's generic constraint error.
+
+No production path sets a pin: there is no enrollment API, no provisioned
+journal location and no fresh external startup admission, so enrolled startup
+still refuses before any journal is consulted. The pin is exercised by test
+fixtures only. The per-lineage shared/exclusive latch spanning the outer COMMIT,
+the narrow transition token and the startup adapter remain later P1 slices. Do
+not enroll stores or claim at-most-one physical writer from this increment.

@@ -99,16 +99,8 @@ impl Validator {
                     | IRComponent::LessThan(_)
                     | IRComponent::LessThanOrEquals(_) => {
                         plan.has_value_set_constraint = true;
-                        match shape.path() {
-                            None | Some(SHACLPath::Predicate { .. }) => {}
-                            Some(SHACLPath::Inverse { path }) => {
-                                if let SHACLPath::Predicate { pred } = path.as_ref() {
-                                    plan.incoming_predicates.insert(pred.as_str().to_owned());
-                                } else {
-                                    return Err(unsupported_path());
-                                }
-                            }
-                            _ => return Err(unsupported_path()),
+                        if let Some(path) = shape.path() {
+                            plan_value_set_path(path, &mut plan.incoming_predicates)?;
                         }
                     }
                     IRComponent::And(value) => pending.extend(value.shapes().iter().copied()),
@@ -134,8 +126,62 @@ impl Validator {
     }
 }
 
-fn unsupported_path() -> Error {
-    Error::CannotVerify(
-        "post-state value-set constraints require a predicate or inverse predicate path".into(),
-    )
+/// Record what a value-set constraint on `path` needs from the post-state
+/// context. A predicate path needs only the focus's own facts; an inverse
+/// predicate also needs the facts pointing at it; an alternative of those is
+/// the union of its members. Any other path cannot be checked incrementally.
+fn plan_value_set_path(path: &SHACLPath, incoming: &mut BTreeSet<String>) -> Result<()> {
+    match path {
+        SHACLPath::Predicate { .. } => Ok(()),
+        SHACLPath::Inverse { path: inner } => match inner.as_ref() {
+            SHACLPath::Predicate { pred } => {
+                incoming.insert(pred.as_str().to_owned());
+                Ok(())
+            }
+            _ => Err(unsupported_path(path)),
+        },
+        SHACLPath::Alternative { paths } => {
+            for member in paths {
+                match member {
+                    SHACLPath::Predicate { .. } | SHACLPath::Inverse { .. } => {
+                        plan_value_set_path(member, incoming)?;
+                    }
+                    _ => return Err(unsupported_path(path)),
+                }
+            }
+            Ok(())
+        }
+        _ => Err(unsupported_path(path)),
+    }
+}
+
+fn unsupported_path(path: &SHACLPath) -> Error {
+    Error::CannotVerify(format!(
+        "post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, \
+         sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an \
+         alternative of those as their path; {path} is not one"
+    ))
+}
+
+/// Refuse a shapes set whose value-set constraints the write path cannot check.
+///
+/// The cardinality plan is computed over every loaded shape, so one stored
+/// shape it cannot plan would make EVERY later write refuse, including writes
+/// that never touch that shape. Refusing at load keeps bad data from bricking
+/// the write path.
+///
+/// # Errors
+///
+/// When the set does not compile, or a value-set constraint has an unsupported path.
+pub fn refuse_unverifiable_write_paths(shapes_turtle: &str) -> Result<()> {
+    let validator = Validator::from_turtle(shapes_turtle)?;
+    match validator.cardinality_plan() {
+        Ok(_) => Ok(()),
+        Err(Error::CannotVerify(reason)) => Err(Error::InvalidValue(format!(
+            "shapes refused: {reason}. Loaded, this shape would make every write fail \
+             post-state verification, so it is refused instead. Use a predicate path \
+             (or split the constraint per predicate)."
+        ))),
+        Err(other) => Err(other),
+    }
 }

@@ -34,8 +34,15 @@ report.
 - **Change kinds per slot**: *unchanged*; *one-side* (exactly one side differs
   from base); *convergent* (both differ from base, identically); *divergent*
   (both differ from base, differently).
-- **Merge id**: the SHA-256 of the decisions file, or of the empty decision set
-  for a clean merge. It ties every transaction of one merge together.
+- **Merge id**: the SHA-256 of one canonical record of the merge's inputs: the
+  path, the incoming identity (share id, `fork name@fork_tx`, or the Git
+  `MERGE_HEAD` commit), the base identity (parent share id, the fork's
+  `fork_tx`, or the Git merge base), and the SHA-256 of the decisions file
+  (the empty decision set for a clean merge). It ties every transaction of
+  one merge together and names one merge of one input. Two different merges
+  never share an id, including two clean ones; the same input merged again
+  has the same id, which is what makes R7 work. ROOT's state is deliberately
+  not part of the id: staleness is checked separately (C8b).
 - **Fixture times** (UTC, fixed so assertions are exact):
 
   | Name | Value | Meaning |
@@ -71,10 +78,17 @@ apply them.
 - **R3 Sequenced decisions.** A decided conflict is written as up to two
   transactions in this order, all or nothing (§3.2):
   1. `receive`: the clean part of the merge, plus every incoming value of a
-     decided slot, recorded as received;
-  2. `decide`: the decisions. A losing incoming value is retracted so that its
-     interval is empty (`[Td, Td)`). A losing ours value is closed at `Td`.
-     A chosen value no side holds (`base`, `value`) is asserted from `Td`.
+     decided slot recorded as a **receipt**: an assertion with the empty
+     interval `[Td, Td)`. It stays in transaction history and is current at
+     no valid time, so a loser never holds valid time;
+  2. `decide`: the decisions. A losing ours value is closed at `Td`. Every
+     chosen value ROOT does not hold, a received winner included, is asserted
+     as a live row from `Td`.
+
+  (Ruling B, malcolm on aegis-karb.2, 2026-11-04. An earlier draft received
+  incoming values as open assertions and retracted the losers in `decide`.
+  The per-transaction write gate refuses that, and exempting the receive step
+  from the gate was rejected.)
   An empty step is not written. A clean merge with no decided slot is one
   `receive` transaction.
 - **R4 Cardinality from the shape.** `card: one` (maxCount 1) is decided as a
@@ -88,9 +102,8 @@ apply them.
   empty.
 - **R6 Interval sanity.** No row ever has `valid_to < valid_from`. After a
   merge, a `card: one` slot never holds two values whose intervals overlap, read
-  at the latest transaction. (Overlap may appear at a transaction-time pin
-  between `receive` and `decide`. That is the "received, undecided" audit state
-  and is expected.)
+  at the latest transaction, and at no transaction-time pin either: receipts
+  are never open (R3).
 - **R7 Idempotent.** Re-applying the same decisions writes nothing and reports
   `already-applied` with the original transaction ids.
 - **R8 Counts.** Every apply reports `applied N` (slots written) and `held M`
@@ -109,25 +122,29 @@ incoming side carries:
 | Pendant merge | none (the output is a file without valid time) | none | Git commit ids |
 
 **Where the incoming time applies.** Use `Tt` when nothing ROOT holds is
-displaced over `[Tt, Td)`. That covers a one-side change and a set-union
-addition. In a decided conflict an incoming value is received from `Td`
+displaced over `[Tt, Td)`, other than a base-identical value that this
+incoming change supersedes. That covers a one-side change (ours equals base,
+so theirs authored the only change, at `Tt`) and a set-union addition. In a decided conflict an incoming value is received from `Td`
 instead. Ours held the slot until the decision, so an earlier start would
 overlap it (R6). `Tt` is still recorded, in the decision row and the `receive`
 source.
 
 **Clamp (case C7).** A close taken from the incoming side is applied only if
 it falls inside the ROOT row it closes. If it is earlier than that row's
-`valid_from`, the row closes at `Td`. A merge never produces
-`valid_to < valid_from` (R6), and never empties a ROOT row (R5).
+`valid_from`, the row closes at `Td`. A close **later** than `Td` (a
+future-dated close on the incoming side) is applied as is: it reverses no
+interval and empties no row, and it is what the incoming side authored (case
+C7b). A merge never produces `valid_to < valid_from` (R6), and never empties
+a ROOT row (R5).
 
 ### 3.2 Atomicity and the write gate
 
-The `receive` and `decide` transactions commit under one writer reservation,
-together or not at all. Write-time SHACL and the deletion gate judge the state
-**after the last step**, so a `card: one` slot that briefly holds two values
-between the steps is not refused. *Open for karb.2:* the store
-currently gates each `transact` call separately. The core needs either a
-sequence-scoped gate or a single savepoint that spans both transaction ids.
+The `receive` and `decide` transactions commit under one writer reservation
+(one savepoint), together or not at all. Each step passes the ordinary
+per-transaction write gate unchanged: because receipts are never open, no step
+holds two open values on a `card: one` slot, and no gate exemption exists.
+Measured on main `af460814`: an empty-interval receipt passes a maxCount-1
+gate, and an open second value is still refused (fixture C4-gate).
 
 ### 3.3 Provenance on every merge transaction
 
@@ -232,22 +249,32 @@ Base `a@T0`, ours `b@To` (ROOT closed `a` at `To`), theirs `c@Tt`. Kind
 
 | Decision | CUR | VT `b` | VT `c` | VT other | TXS | Today |
 |---|---|---|---|---|---|---|
-| `ours` | `{b}` | `[To,-)` | `[Td,Td)` (received, rejected) | | `receive`: assert `c@Td`; `decide`: retract `c` closing at `Td` | **DIFF**: `c` never enters the graph |
-| `theirs` | `{c}` | `[To,Td)` | `[Td,-)` | | `receive`: assert `c@Td`; `decide`: retract `b@Td` | share: one tx at `Td`. **DIFF** fork: `c` keeps fork `valid_from` `Tt` while `b` closes at `Td`, so `b` and `c` overlap in `[Tt,Td)`. Measured 2026-11-04 on `dafe8bfe` with a throwaway test through `fork_promote_resolved`: ROOT rows `ours [To,Td)` and `theirs [Tt,-)` (`forks_merge.rs:198`, plus the retime skip for a value the fork never held) |
-| `base` | `{a}` | `[To,Td)` | `[Td,Td)` | `a: [T0,To), [Td,-)` | `receive`: assert `c@Td`; `decide`: retract `b@Td`, retract `c` closing at `Td`, assert `a@Td` | **DIFF**: one tx, no receipt |
+| `ours` | `{b}` | `[To,-)` | `[Td,Td)` (receipt) | | `receive`: receipt `c@Td`; no `decide` | **DIFF**: `c` never enters the graph |
+| `theirs` | `{c}` | `[To,Td)` | `[Td,Td)` (receipt), `[Td,-)` (live) | | `receive`: receipt `c@Td`; `decide`: retract `b@Td`, assert `c@Td` | share: one tx at `Td`. **DIFF** fork: `c` keeps fork `valid_from` `Tt` while `b` closes at `Td`, so `b` and `c` overlap in `[Tt,Td)`. Measured 2026-11-04 on `dafe8bfe` with a throwaway test through `fork_promote_resolved`: ROOT rows `ours [To,Td)` and `theirs [Tt,-)` (`forks_merge.rs:198`, plus the retime skip for a value the fork never held) |
+| `base` | `{a}` | `[To,Td)` | `[Td,Td)` (receipt) | `a: [T0,To), [Td,-)` | `receive`: receipt `c@Td`; `decide`: retract `b@Td`, assert `a@Td` | **DIFF**: one tx, no receipt |
 | `both` | refused: 2 values > maxCount 1; nothing written | | | | none | MATCH (refusal) |
-| `value d` | `{d}` | `[To,Td)` | `[Td,Td)` | `d:[Td,-)` | `receive`: assert `c@Td`; `decide`: retract `b@Td`, `c` at `Td`; assert `d@Td` | **DIFF**: one tx |
+| `value d` | `{d}` | `[To,Td)` | `[Td,Td)` (receipt) | `d:[Td,-)` | `receive`: receipt `c@Td`; `decide`: retract `b@Td`, assert `d@Td` | **DIFF**: one tx |
 | `defer` | atomic: nothing written, `held 1`. Partial modes: §6 | | | | none | MATCH (atomic) |
 
 For `card: many(n)` exceeded (C3e), the same table applies. `both` is offered
 only when `|ours ∪ theirs|` fits `n`. When it fits, `CUR = ours ∪ theirs` and
-the incoming additions are received from `Td`.
+the incoming additions are received as receipts and asserted live from `Td`.
+
+**C4-gate, the gate still binds.** Run C4 `theirs` with a gating
+`sh:maxCount 1` shape loaded. Expect the apply to succeed with the outcome
+above, and `AT(s, tx=receive, vt=Td) = {b}`: the receipt is in the `receive`
+transaction and current at no valid time. Sabotage control: the same receipt
+written WITHOUT its `valid_to` (an open second value) must be refused by the
+gate. Further checks for the receipt (malcolm's conditions): the winner's
+re-assert after a receipt is a live row (not deduplicated against the
+receipt); the changes feed, the replica applier and as-of readers treat an
+assertion with `valid_to = valid_from` as never current.
 
 ### C5. Delete vs replace
 
 | # | card | base | ours | theirs | Outcome | Today |
 |---|---|---|---|---|---|---|
-| C5a | one | `a` | `∅` (closed `To`) | `c@Tt` | conflict, kind `delete-replace`. `ours`: `CUR {}`, `c:[Td,Td)`. `theirs`: `CUR {c}`, `c:[Td,-)`. `base`: `CUR {a}`, `a:[T0,To),[Td,-)`, `c:[Td,Td)` | MATCH (detection); **DIFF** sequencing |
+| C5a | one | `a` | `∅` (closed `To`) | `c@Tt` | conflict, kind `delete-replace`. `ours`: `CUR {}`, receipt `c:[Td,Td)`. `theirs`: `CUR {c}`, `c: [Td,Td), [Td,-)`. `base`: `CUR {a}`, `a:[T0,To),[Td,-)`, receipt `c:[Td,Td)` | MATCH (detection); **DIFF** sequencing |
 | C5b | one | `a` | `c@To` | `∅` (closed `Tt`) | conflict, `delete-replace`. `ours`: `CUR {c}`, no `receive` (nothing incoming). `theirs`: `CUR {}`, `c:[To,Td)` (R5: closed at `Td`, not `Tt`) | MATCH (detection); **DIFF** sequencing |
 | C5c | many | `{a}` | `{}` | `{c}` | no conflict: `CUR {c}`, `c:[Tt,-)` | MATCH (value set) |
 
@@ -286,6 +313,13 @@ R1).
 *Alternative considered and rejected:* closing at `Tr`, which empties ROOT's
 row. That would erase ROOT's own later claim from valid time and break R5.
 
+**C7b, a future-dated incoming close.** Base `a@T0`, ours unchanged, and the
+fork closes `a` at `Tz = 2026-02-01T00:00:00Z`, later than `Td`. Expect:
+`VT(a) = [T0, Tz)`, `AT(s, vt=Td) = {a}`, `AT(s, vt=Tz) = {}`, and one
+`receive` transaction closing `a` at `Tz`. (Stated as valid-time reads, not
+`CUR`, because the fixture times are fixed dates and `CUR` reads the wall
+clock.)
+
 ### C8. Idempotence and staleness
 
 | # | Action | Expect |
@@ -293,6 +327,7 @@ row. That would erase ROOT's own later claim from valid time and break R5.
 | C8a | apply the same decisions twice | the second apply returns `already-applied` with the first apply's tx ids; transaction count unchanged |
 | C8b | ROOT changes a reviewed slot between emit and apply | refused as stale, nothing written (merge-reconcile.md §3.2) |
 | C8c | apply a clean merge twice (share) | the second apply writes nothing (the graph already equals the merged state) |
+| C8d | two different clean merges (two incoming shares, no decisions) | two different merge ids; filtering the log by either returns only its own transactions; the second is not reported `already-applied` |
 
 ## 6. Partial merge (Stiwi 2026-11-03, aegis-karb.1 comment 1)
 
@@ -400,13 +435,15 @@ the response row has `base [a]`, `ours [b]`, `theirs [c]`, and no transaction.
    at merge time (C1, C3).
 2. A convergent row with `continue` (C2), in the report, the decisions file and
    the pendant `decisions.json`.
-3. Sequenced `receive`/`decide` transactions with a received-and-rejected value
-   as `[Td, Td)` (C4, C5).
+3. Sequenced `receive`/`decide` transactions, with every incoming value of a
+   decided slot received as a receipt `[Td, Td)` (C4, C5).
 4. A fork that wins a decided conflict starts at `Td`, not at its fork
    `valid_from` (C4 `theirs`, measured overlap). Clamp closes (C7, aegis-0s2a).
 5. List slots: whole or sequence (C6).
 6. Partial modes and merge units (§6).
-7. A gate over the whole sequence (§3.2).
+7. Both steps in one savepoint under the unchanged write gate (§3.2), proven
+   by fixture C4-gate and its sabotage control.
+8. A merge id per merge of one input (§2), proven by fixture C8d.
 
 ## 9. Not in scope
 

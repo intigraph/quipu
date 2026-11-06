@@ -275,3 +275,26 @@ async fn replica_ready_answers_200_only_for_a_caught_up_expected_follower() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["reason"], "not a replica");
 }
+
+#[test]
+fn replica_keyword_intent_does_not_mutate_an_old_unindexed_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("old.db");
+    let primary = quipu::Store::open(path.to_str().unwrap()).unwrap();
+    primary.checkpoint_wal_truncate().unwrap();
+    drop(primary);
+    let before = std::fs::read(&path).unwrap();
+    let mut reader = quipu::Store::open_immutable(path.to_str().unwrap()).unwrap();
+    apply_search(&mut reader, &quipu::SearchConfig::default()).unwrap();
+    assert!(!reader.search_config().keyword);
+    assert!(reader.lexical_progress().unwrap().is_none());
+    let explicit = toml::from_str::<quipu::SearchConfig>("keyword = true").unwrap();
+    assert!(
+        apply_search(&mut reader, &explicit)
+            .unwrap_err()
+            .to_string()
+            .contains("primary")
+    );
+    drop(reader);
+    assert_eq!(std::fs::read(path).unwrap(), before);
+}

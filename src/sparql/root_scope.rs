@@ -41,7 +41,30 @@ pub(super) fn check(query: &Query) -> Result<()> {
 #[allow(clippy::match_wildcard_for_single_variants)]
 pub(crate) fn visit_scopes<'a>(
     query: &'a Query,
+    visit: impl FnMut(Scope<'a>) -> Result<()>,
+) -> Result<()> {
+    walk(query, visit, |_| Ok(()))
+}
+
+/// The HA profile has no qualified external index/model/function provider.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+pub(crate) fn refuse_custom_functions(query: &Query) -> Result<()> {
+    walk(
+        query,
+        |_| Ok(()),
+        |_| {
+            Err(Error::CannotVerify(
+                "HA read profile: external function/provider is unsupported".into(),
+            ))
+        },
+    )
+}
+
+#[allow(clippy::match_wildcard_for_single_variants)]
+fn walk<'a>(
+    query: &'a Query,
     mut visit: impl FnMut(Scope<'a>) -> Result<()>,
+    mut custom: impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
     let pattern = match query {
         Query::Select { pattern, .. }
@@ -95,7 +118,10 @@ pub(crate) fn visit_scopes<'a>(
                 } => {
                     pending.push(Node::Pattern(inner));
                     for (_, aggregate) in aggregates {
-                        if let AggregateExpression::FunctionCall { expr, .. } = aggregate {
+                        if let AggregateExpression::FunctionCall { name, expr, .. } = aggregate {
+                            if let spargebra::algebra::AggregateFunction::Custom(iri) = name {
+                                custom(iri.as_str())?;
+                            }
                             pending.push(Node::Expression(expr));
                         }
                     }
@@ -149,7 +175,13 @@ pub(crate) fn visit_scopes<'a>(
                         Node::Expression(no),
                     ]);
                 }
-                Expression::Coalesce(args) | Expression::FunctionCall(_, args) => {
+                Expression::FunctionCall(function, args) => {
+                    if let spargebra::algebra::Function::Custom(iri) = function {
+                        custom(iri.as_str())?;
+                    }
+                    pending.extend(args.iter().map(Node::Expression));
+                }
+                Expression::Coalesce(args) => {
                     pending.extend(args.iter().map(Node::Expression));
                 }
                 Expression::NamedNode(_)

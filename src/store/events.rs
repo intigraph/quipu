@@ -81,8 +81,30 @@ pub(crate) struct PendingRefusal {
     /// Terse machine-usable reason (policy id / constraint name in the gate's
     /// own error text).
     pub reason: String,
+    /// Bounded category, distinct from the gate's diagnostic prose.
+    pub reason_code: &'static str,
+    /// Structured source shape, when the gate supplies one.
+    pub shape: Option<String>,
     /// How many datums the refused write carried (metadata, not bodies).
     pub refused_datums: usize,
+}
+
+impl PendingRefusal {
+    pub(crate) fn from_error(gate: &'static str, error: &crate::Error, datums: usize) -> Self {
+        let reason_code = match error {
+            crate::Error::CannotVerify(_) => "cannot_verify",
+            crate::Error::Sqlite(_) | crate::Error::Store(_) => "operational_failure",
+            crate::Error::ConditionalWriteConflict => "conflict",
+            _ => gate,
+        };
+        Self {
+            gate,
+            reason: error.to_string(),
+            reason_code,
+            shape: None,
+            refused_datums: datums,
+        }
+    }
 }
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -377,11 +399,7 @@ impl Store {
         err: crate::error::Error,
         refused_datums: usize,
     ) -> crate::error::Error {
-        self.pending_refusal = Some(PendingRefusal {
-            gate,
-            reason: err.to_string(),
-            refused_datums,
-        });
+        self.pending_refusal = Some(PendingRefusal::from_error(gate, &err, refused_datums));
         err
     }
 
@@ -418,19 +436,40 @@ impl Store {
         // Watermark, like `emit_registry_event`: the refused write's own tx
         // row was rolled back, so the event carries the last COMMITTED tx.
         let tx = self.latest_tx_id().unwrap_or(0);
+        let client = crate::write_provenance::current().map_or_else(
+            || "unattributed".into(),
+            |p| crate::metrics::normalize_client(Some(&p.client), None),
+        );
         let payload = json!({
             "gate": refusal.gate,
+            "reason_code": refusal.reason_code,
+            "shape": refusal.shape,
+            "client": client,
             "graph": graph_iri,
             "actor": actor,
             "source": source,
             "reason": reason,
             "refused_datums": refusal.refused_datums,
         });
-        let _ = self.conn.execute(
-            "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \
+        let recorded = self
+            .conn
+            .execute(
+                "INSERT INTO events (type, ts, subject, group_id, tx_id, payload) \
              VALUES (?1, ?2, ?3, NULL, ?4, ?5)",
-            params![REFUSAL_EVENT, timestamp, graph_iri, tx, payload.to_string()],
-        );
+                params![REFUSAL_EVENT, timestamp, graph_iri, tx, payload.to_string()],
+            )
+            .is_ok();
+        // An enclosing speculative savepoint will discard its audit event.
+        // Never leave a process counter for a refusal that is still hypothetical.
+        if self.conn.is_autocommit() {
+            crate::metrics::metrics().observe_write_refusal(
+                refusal.reason_code,
+                refusal.shape.as_deref(),
+                graph_iri,
+                &client,
+                recorded,
+            );
+        }
     }
 
     /// Record a gate refusal from outside the store's own write path: the
@@ -448,6 +487,8 @@ impl Store {
         let refusal = PendingRefusal {
             gate,
             reason: reason.to_owned(),
+            reason_code: gate,
+            shape: None,
             refused_datums: 0,
         };
         self.record_refusal(

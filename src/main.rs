@@ -12,6 +12,7 @@
 //!   quipu episode <file.json> [--db <path>]  Ingest a structured episode
 //!   quipu repl [--db <path>]             Interactive SPARQL prompt
 //!   quipu export [--format ntriples|turtle] [--db <path>]  Export facts
+//!   quipu databook export|import ...     Graphs to and from DataBook documents
 //!   quipu status <share-dir> [--db <path>]  Report share divergence
 //!   quipu merge <share-dir> [--actor <id>] [--db <path>]  Reconnect a share
 //!   quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose]
@@ -49,6 +50,7 @@ mod cli_audit;
 mod cli_changes;
 mod cli_commands;
 mod cli_compose;
+mod cli_databook;
 mod cli_db;
 mod cli_deck;
 mod cli_demotions;
@@ -68,6 +70,7 @@ mod cli_knot;
 mod cli_mcp;
 mod cli_memory_files;
 mod cli_merge;
+mod cli_model;
 mod cli_namespaces;
 mod cli_open;
 mod cli_pack;
@@ -213,11 +216,13 @@ fn main() {
         "validate" => cli_validate::cmd_validate(&args),
         "repl" => cli_commands::cmd_repl(db_path),
         "export" => cli_export::cmd_export(&args, db_path),
+        "databook" => cli_databook::cmd_databook(&args, db_path),
         "namespaces" | "entity-ref" => cli_namespaces::run(&args, db_path),
         "memory" => cli_memory_files::command(&args),
         "prime" => cli_prime::cmd_prime(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
+        "model" => cli_model::run(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
@@ -425,13 +430,17 @@ COMMANDS:
     qp validate --shapes <shapes.ttl> --data <data.ttl> [--format text|json]
     qp repl [--db <path>]
     qp export [--graph <iri>] [--format ntriples|turtle] [--db <path>]
+    qp databook export [--graph <iri>] [--tx N] [--valid-at ISO] [--with-shapes] [--out <file>] [--db <path>]
+    qp databook import <file.databook.md> [--graph <iri>] [--with-shapes] [--actor <id>] [--db <path>]
     qp acquire scope --source-store-id <id> --graph <iri>... [--tx <n>] --max-vm-steps <n> --deadline-ms <n> [--db <path>]
     qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
-    qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
+    qp search <query> [--mode keyword|semantic|hybrid] [--limit N] [--valid-at ISO] [--db <path>]
+    qp model install
+    qp model backfill [--batch-size 32] [--after N] [--db <path>]
     qp search-index status|backfill|drop [--batch-size 500] [--db <path>]
-    qp doctor labels [--db <path>]
+    qp doctor labels|search [--db <path>]
     qp pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     qp pack --full --format text --destination internal --out <dir> [--db <path>]
                                                                      LOSSLESS whole-store pack as TEXT: a git-friendly

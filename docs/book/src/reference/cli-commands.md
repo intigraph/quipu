@@ -454,6 +454,56 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+## `qp databook`
+
+Export a graph as a DataBook, or import a DataBook's graph data.
+
+Subcommands: `databook export`, `databook import`.
+
+### `qp databook export`
+
+Write one graph, current or as of a past point, as a DataBook.
+
+```text
+qp databook export
+```
+
+- `--graph <VALUE>`: Explicit graph IRI for this operation.
+
+- `--tx <VALUE>`: Historical transaction to read.
+
+- `--valid-at <VALUE>`: Valid-time instant to query.
+
+- `--id <VALUE>`: DataBook IRI written to its frontmatter.
+
+- `--title <VALUE>`: DataBook title written to its frontmatter.
+
+- `--version <VALUE>`: DataBook version, 1.0.0 when omitted.
+
+- `--timestamp <VALUE>`: Creation time recorded in the DataBook's provenance.
+
+- `--out <VALUE>`: Output file.
+
+- `--with-shapes`: Also export the loaded SHACL shapes.
+
+### `qp databook import`
+
+Load a DataBook's graph blocks in one write; never runs its queries.
+
+```text
+qp databook import <file.databook.md>
+```
+
+- `--graph <VALUE>`: Explicit graph IRI for this operation.
+
+- `--timestamp <VALUE>`: Valid-time timestamp for the operation.
+
+- `--actor <VALUE>`: Actor recorded in operation provenance.
+
+- `--source <VALUE>`: Source identifier recorded in provenance.
+
+- `--with-shapes`: Also load the DataBook's SHACL shape blocks.
+
 ## `qp render`
 
 Render graph data into files in an owned directory.
@@ -552,6 +602,32 @@ qp search <query>
 
 - `--all-graphs`: Search all permitted graphs explicitly.
 
+## `qp model`
+
+Manage the pinned default embedding model.
+
+Subcommands: `model install`, `model backfill`.
+
+### `qp model install`
+
+Download and verify the default embedding model and tokenizer.
+
+```text
+qp model install
+```
+
+### `qp model backfill`
+
+Embed one bounded batch of existing ROOT subjects.
+
+```text
+qp model backfill
+```
+
+- `--batch-size <VALUE>`: Number of entries per indexing batch.
+
+- `--after <VALUE>`: Resume after this cursor.
+
 ## `qp search-index`
 
 Report, backfill or drop the search indexes.
@@ -598,7 +674,7 @@ qp search-index drop
 
 ## `qp doctor`
 
-Report graph-label drift and recommended floors.
+Report graph-label drift or search backend readiness.
 
 ```text
 qp doctor
@@ -610,6 +686,14 @@ Report graph-label drift and recommended floors.
 
 ```text
 qp doctor labels
+```
+
+### `qp doctor search`
+
+Report search backend readiness and remedies.
+
+```text
+qp doctor search
 ```
 
 ## `qp pack`

@@ -97,6 +97,8 @@ pub fn configure_provider(
     store: &mut crate::Store,
     config: &crate::EmbeddingConfig,
 ) -> Result<ProviderStatus> {
+    let resolved = crate::model_assets::resolve(config)?;
+    let config = &resolved;
     store.embedding_config_mut().clone_from(config);
     match (&config.model_path, &config.tokenizer_path) {
         (Some(model), Some(tokenizer)) => {

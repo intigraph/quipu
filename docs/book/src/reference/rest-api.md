@@ -194,7 +194,7 @@ an active server bearer. For a named credential, the administrator registers its
 verifier and activates the validated registry before supplying the plaintext to
 the client. Installing an arbitrary token on a client cannot grant access.
 
-Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+Shantytown and Tambo use `~/.config/quipu/token` as the default credential
 file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
 overrides this default. Files are read at request time. This is a client
 convention; the server neither reads your home directory nor distributes secrets.
@@ -202,8 +202,8 @@ convention; the server neither reads your home directory nor distributes secrets
 ```sh
 install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
 st ops doctor quipu --no-latest
-# Or, on a CABOODLE host:
-caboodle doctor
+# Or, on a Tambo host:
+tambo doctor
 ```
 
 Keep an existing explicit file override until provisioning and rotation move
@@ -1302,7 +1302,11 @@ Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
-omitted mode or `mode: "semantic"` preserves vector search.
+omitted mode follows `[quipu.search] mode`, which defaults to `"auto"`: semantic
+when an embedding provider or query embedding is present, keyword otherwise.
+Explicit `mode: "semantic"` always requires embeddings; it never falls back.
+Automatic keyword responses include `search_mode: "keyword"` and
+`mode_reason: "no_embedding_provider"`. Explicit configured modes remain authoritative.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
@@ -1349,7 +1353,7 @@ keyword index, request `mode: "hybrid"`, `alpha` in `[0,1]`,
 Alpha is the semantic contribution: `alpha: 1` returns the existing semantic
 response exactly, without accessing the lexical index; `alpha: 0` returns the
 keyword response exactly, without embedding. Omitted mode and parameters use
-the server search configuration; the default mode remains semantic.
+the server search configuration; the default mode is `auto`.
 
 Weighted fusion min-max normalizes each candidate list independently. A
 nonempty equal-score list normalizes to one; missing candidates contribute zero.
@@ -1384,8 +1388,12 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
-activation installs an empty FTS5 index and same-transaction fact triggers; it
+Keyword search is enabled automatically for new stores. Existing unindexed stores
+require explicit opt-in (`[quipu.search] keyword = true`); opening them with an
+omitted setting installs no keyword tables or triggers. Explicit `false` also
+disables automatic activation for new stores. Already initialized indexes remain
+enabled when the setting is omitted.
+Startup installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
 assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`
@@ -1924,7 +1932,9 @@ optional `timestamp`.
 
 ### `POST /entity_history`
 
-Return the full fact history (across transactions) for an entity. The body field is
+Without an explicit graph, return retained **ROOT-only** fact history for an entity.
+An empty ROOT result says nothing about that entity's named-graph history.
+The body field is
 **`iri`**, not `entity` — `{"entity": ...}` returns
 `{"error": "missing 'iri' parameter"}`.
 
@@ -1935,7 +1945,60 @@ curl -s localhost:3030/entity_history -X POST -H "Content-Type: application/json
 
 Returns `{"iri", "count", "history": [{"op", "predicate", "value", "tx",
 "valid_from", "valid_to"}, ...]}`. The `tx` is the handle for `/transactions` below —
-together they answer "which write path asserted this fact, and who owned it".
+together they answer "which write path asserted this fact, and who owned it" in
+that local file. A bare transaction ID is not a composed or cross-store pin.
+
+#### Qualified retained MAIN history
+
+First require `quipu-entity-history/main-v1` in `/version.read_contracts`.
+Supply `iri`, `graph`, and the expected `source_store_id` from trusted MAIN
+metadata. A graph is mandatory: wrong identities, missing registration,
+datasets, overlays, frozen graphs and ambiguous composed term aliases refuse;
+they never fall back to ROOT or reinterpret another provider's IDs.
+
+```json
+{
+  "iri": "https://example.org/item/one",
+  "graph": "https://example.org/project/board",
+  "source_store_id": "<expected-main-store-id>"
+}
+```
+
+The response contains `schema`, exact `iri` and `graph`, `history`, `count`,
+and `source_receipt`. Each history entry carries a `qualified_tx` with provider
+`main`, persistent source lineage, current generation and file-local transaction,
+plus transaction timestamp/actor/source, authenticated evidence and separate
+caller declarations. Values carry explicit types: integer lexical strings,
+IEEE float64 bits, hex bytes, full IRI references, strings, booleans, and
+language/datatype literals preserve their original representation.
+
+`source_receipt.complete` means every retained MAIN physical row in this exact
+subject/graph/range was returned. It does **not** mean continuous historical
+coverage. The receipt says `continuous_history: false` and
+`historical_policy_proof: false`, names excluded attachment aliases, and binds
+the current connection incarnation, graph/policy generation, source head and
+retained transaction-log floor. It never reads attached fact tables or claims
+their history. Current graph label floors still apply. The scope remains
+owner-only when scoped read authorization is enabled.
+
+Optional `since_tx` (exclusive) and `until_tx` (inclusive) require the previously
+observed `expected_generation`. Reopen/remount, policy, graph metadata or retained
+log-floor changes invalidate that generation. Unknown, old and future bounds
+refuse; no historical composition is inferred from a current MAIN transaction.
+For a subject too large for one response, bootstrap with `observation_only: true`.
+That metadata-only response has the distinct schema
+`quipu-entity-history/observation-v1`, generation, head and floor, and **no**
+history/count/completeness claim. It cannot include transaction bounds. Use its
+generation for explicit smaller ranges; the observation grants no history access.
+
+Defaults are 1000 entries and 1 MiB; `max_entries` and `max_bytes` may select
+positive caps up to 10000 entries and 4 MiB. Overflow, an expired request or the
+one-second SQLite read budget refuses the whole response, never partial success.
+History reads reject signed-write attestations before acquiring a non-settling
+canonical handle, so reading does not spend a write nonce. Neither retained
+declarations nor this receipt authenticate a physical host. This contract does
+not include comment-child entities automatically or certify that a reconstructed
+seed version is complete across archived providers.
 
 ### `GET /transactions`
 
@@ -1951,7 +2014,7 @@ There is no `offset`. Passing `limit` alone therefore returns the *oldest* N —
 38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
 recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
 
-Each entry is `{id, timestamp, actor, source, authenticated}`. `authenticated`
+Each entry is `{id, timestamp, actor, source, authenticated, declared}`. `authenticated`
 is null when local credential evidence is absent; otherwise it contains
 `principal`, `credential_id` (null for a shared bearer), and `auth_class`
 (`named_bearer` or `legacy_shared_bearer`). It is separate from declared fields. `source` identifies the write path:
@@ -1959,6 +2022,16 @@ is null when local credential evidence is absent; otherwise it contains
 `/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
 both optional on `/knot`. Supply them for source provenance; authenticated
 credential evidence does not reconstruct a missing source or historical actor.
+
+`declared` is the committed request's caller-declared `agent`, `harness`, `host`,
+`session` and `model` headers, with at most 1024 UTF-8 bytes per value. Missing,
+blank or oversized values are omitted. It is null for a transaction without
+retained declarations, including older stores. An empty object means the
+request context existed but supplied no accepted values. These declarations
+commit or roll back with the fact transaction; they are never authenticated
+host or session evidence. Verified agent/session credit does not invent missing
+header values. A transaction ID remains local to its store: this endpoint does
+not establish a composed-history cursor or repair named-graph entity history.
 
 ### `POST /embed_backfill`
 
@@ -2229,7 +2302,7 @@ through to `list`.
 ### `POST /ontology`
 
 Manage OWL ontologies: `{"action": "load"|"materialize"|"list"|"remove",
-"name", "turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered
+"name", "turtle", "timestamp", "materialize"}` (mirrors `quipu_load_ontology`). Registered
 even without the `owl` feature — a build without it answers with an explicit
 error naming the missing feature rather than a 404, so "not compiled in"
 and "no such route" stay distinguishable.
@@ -2279,6 +2352,31 @@ publication. Earlier committed batches can remain as partial historical
 entailments after an error or interruption, but no new freshness marker is
 published. Retry on the next scheduled run. Consumers must inspect freshness;
 the companion graph does not automatically hide historical entailments.
+
+**`load` with `"materialize": "deferred"`** persists the ontology under the
+writer lock, then runs this same off-lock materialisation in the same request.
+The default, `"inline"`, is unchanged: it derives while holding the writer, and
+every ordinary write waits for the whole derivation. A deferred load takes
+materialisation admission first, so a server without a read pool, or with a
+materialisation already running, refuses it **before** anything is persisted.
+An unknown mode is refused before the Turtle is parsed. If derivation fails
+after the ontology was persisted, the response is still the successful load,
+with `"materialization": {"complete": false, "error": ..., "retry":
+{"action": "materialize"}}`: the load committed and is not undone, and the
+retry is an ordinary `materialize`. On success, `materialized` carries the
+counts and `materialization` carries `complete`, `snapshot_tx`, `elapsed_ms` and
+`applied_proposals`. Like `materialize`, a deferred load derives over the
+**combined** ontology, not only the document just loaded.
+
+```bash
+curl -s localhost:3030/ontology -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $QUIPU_AUTH_TOKEN" \
+  -d '{"action": "load", "name": "bridge", "turtle": "...", "materialize": "deferred"}'
+# {"action":"load","name":"bridge","materialize":"deferred",
+#  "materialized":{"equivalent_property_inferences":42, ...},
+#  "materialization":{"complete":true,"snapshot_tx":1234,...}}
+```
 
 Input snapshots are limited to three million current facts, and derivation is
 limited to 200,000 new assertions and 64 passes. Exhausting a budget is an error,
@@ -2627,7 +2725,7 @@ in `transact` — appends a `write.refused` event *after* the refused write's
 savepoint has rolled back, so the event survives the rollback that the refusal
 caused. A failure to record never masks the refusal error itself.
 
-Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+Payload: `{gate, graph, actor, source, reason, reason_code, shape, client, refused_datums}` where `gate`
 is one of `shacl | policy | authority | owl | placement`, `graph` is the
 destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
 constraint name; truncated), and `refused_datums` counts what was refused.
@@ -2640,7 +2738,9 @@ whole speculation rolls back by design, so a hypothetical write's refusal is
 not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
-`quipu events refusals`.
+`quipu events refusals`. The additive `reason_code`, `shape` and `client` fields
+provide bounded classifications and structured attribution. See [write refusal
+accounting](write-refusals.md) for counters, `/stats` and reset semantics.
 
 ### Admitted debt events (`shacl.debt_admitted`)
 

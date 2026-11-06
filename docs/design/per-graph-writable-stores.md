@@ -4,8 +4,10 @@ Status: proposed design, not implementation or migration authority.
 
 Give each routed named graph its own SQLite file, writer owner and bounded read
 pool. Keep graph and entity IRIs unchanged. Compose reads across those owners
-without turning unrelated graph writes into a single global queue. Use Seeds as
-the first application pilot, after preserving its existing multi-graph atomicity.
+without turning unrelated graph writes into a single global queue. Pilot first
+with regenerable, single-graph ingest. Seeds follows after preserving its
+existing multi-graph atomicity. The [ingest pilot contract](per-graph-ingest-pilot.md)
+defines the producer and reader compatibility work that precedes its cutover.
 No database split, new process, ownership change or production experiment is
 part of this document.
 
@@ -325,6 +327,11 @@ writers and recover; do not reset ownership, recycle epochs or conceal a split.
 
 ## Phased plan and Seeds acceptance
 
+The first implementation slice is the single-graph ingest pilot. It must pass
+the local-owner and composed-reader gates below, but does not implement or
+pretend to provide participant commit. The Seeds application pilot remains
+behind that later protocol. Do not split a Seeds batch to fit the first slice.
+
 Every phase needs independent positive, negative and failure controls before
 its next source change. These are proposed implementation boundaries, not
 permission to create runtime stores or launch a migration.
@@ -339,7 +346,7 @@ permission to create runtime stores or launch a migration.
 | 5: delivery rehearsal | Storage/operator, Seeds and distribution/standby owners review exact pins, bundle restore, runtime limits and inverse | Private rehearsal at exact source/config pins; complete CI, one independent source/design review, restore and rollback receipts; explicit operator admission before any real graph moves |
 | 6: scoped rollout | Named graph owner executes approved packet and observes natural consumer behavior | Verify serving identities/epochs/cuts and one admitted smoke; monitor per-graph queues and cross-graph errors; keep installed acceptance open for deferred controls |
 
-The first tenant is a real Seeds project plus its ephemeral and provenance
+The Seeds tenant is a real project plus its ephemeral and provenance
 graphs, with a separate linked reference graph and a second unrelated hot graph.
 It is not a toy board with every operation reduced to one file.
 

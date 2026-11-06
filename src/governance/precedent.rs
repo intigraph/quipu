@@ -33,7 +33,7 @@
 use std::collections::BTreeMap;
 
 use crate::error::Result;
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::sparql::{self, QueryResult};
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value};
@@ -97,12 +97,13 @@ pub fn nearest_decided(
     target_iri: &str,
     method: &dyn TextSimilarity,
 ) -> Result<Vec<Precedent>> {
+    let ns = store.governance_ns()?;
     // The request being minted must not cite itself (a re-mint after expiry
     // has a decided prior under its OWN evidence hash).
     let own_hash = evidence_hash(policy_iri, target_iri);
 
     let q = format!(
-        "PREFIX a: <{DEFAULT_BASE_NS}> \
+        "PREFIX a: <{ns}> \
          SELECT ?r ?d ?rp ?rt ?h ?outcome ?by ?sig WHERE {{ \
             ?r a a:DecisionRequest ; a:forPolicy ?rp ; a:forTarget ?rt ; \
                a:evidenceHash ?h . \
@@ -194,6 +195,7 @@ fn datums_for(
     precedents: &[Precedent],
     timestamp: &str,
 ) -> Result<Vec<Datum>> {
+    let ns = store.governance_ns()?;
     let own_hash = evidence_hash(policy_iri, target_iri);
     let mut datums = Vec::new();
     for p in precedents {
@@ -205,7 +207,7 @@ fn datums_for(
         );
         let digest = ring::digest::digest(&ring::digest::SHA256, canonical.as_bytes());
         let hex = hex::encode(digest.as_ref());
-        let link = store.intern(&format!("{DEFAULT_BASE_NS}precedent_{}", &hex[..24]))?;
+        let link = store.intern(&format!("{ns}precedent_{}", &hex[..24]))?;
         let assert = |entity: i64, attribute: i64, value: Value| Datum {
             entity,
             attribute,
@@ -217,26 +219,26 @@ fn datums_for(
         datums.push(assert(
             link,
             store.intern(RDF_TYPE)?,
-            Value::Ref(store.intern(&format!("{DEFAULT_BASE_NS}PrecedentLink"))?),
+            Value::Ref(store.intern(&format!("{ns}PrecedentLink"))?),
         ));
         datums.push(assert(
             link,
-            store.intern(&format!("{DEFAULT_BASE_NS}precedentRequest"))?,
+            store.intern(&format!("{ns}precedentRequest"))?,
             Value::Ref(store.intern(&p.request_iri)?),
         ));
         datums.push(assert(
             link,
-            store.intern(&format!("{DEFAULT_BASE_NS}similarityScore"))?,
+            store.intern(&format!("{ns}similarityScore"))?,
             Value::Float(p.score),
         ));
         datums.push(assert(
             link,
-            store.intern(&format!("{DEFAULT_BASE_NS}similarityMethod"))?,
+            store.intern(&format!("{ns}similarityMethod"))?,
             Value::Str(p.method.clone()),
         ));
         datums.push(assert(
             subject,
-            store.intern(&format!("{DEFAULT_BASE_NS}precedent"))?,
+            store.intern(&format!("{ns}precedent"))?,
             Value::Ref(link),
         ));
     }

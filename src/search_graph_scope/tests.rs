@@ -349,7 +349,7 @@ fn deleting_named_facts_cannot_turn_their_vector_into_a_root_hit() {
 #[test]
 fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
     // aegis-rcz5ib.10: keyword scope reads the lexical index's own graph column,
-    // so it needs no named-only vectors; every other mode keeps the refusal.
+    // so it needs no named-only vectors; semantic and mixed modes keep the refusal.
     let mut s = fixture();
     s.search_config_mut().named_graphs = false;
     s.search_config_mut().hybrid = true;
@@ -378,11 +378,14 @@ fn keyword_graph_scope_needs_only_the_lexical_index_not_named_graphs() {
     for input in [
         json!({"mode":"semantic","embedding":[1.0,0.0],"graph":"urn:graph:a"}),
         json!({"mode":"hybrid","query":"shared","alpha":0.5,"graph":"urn:graph:a"}),
-        json!({"query":"shared","graph":"urn:graph:a"}),
     ] {
         let err = crate::tool_search(&s, &input).unwrap_err().to_string();
         assert!(err.contains("named_graphs = false"), "{input}: {err}");
     }
+    let automatic =
+        crate::tool_search(&s, &json!({"query":"shared","graph":"urn:graph:a"})).unwrap();
+    assert_eq!(automatic["count"], 1);
+    assert_eq!(automatic["mode_reason"], "no_embedding_provider");
     let root = crate::tool_search(
         &s,
         &json!({"mode":"keyword","query":"shared","graph":"urn:quipu:graph:root"}),

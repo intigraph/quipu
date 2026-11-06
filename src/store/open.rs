@@ -41,6 +41,17 @@ impl Store {
         Self::init(conn)
     }
 
+    /// An in-memory store with the legacy test namespace set explicitly.
+    ///
+    /// Tests that mint names through episode ingest relied on the store's old
+    /// implicit default namespace. A store now has none, so those tests name it.
+    #[cfg(test)]
+    pub(crate) fn open_in_memory_test_ns() -> Result<Self> {
+        let mut store = Self::open_in_memory()?;
+        store.set_base_ns(crate::namespace::DEFAULT_BASE_NS.to_string());
+        Ok(store)
+    }
+
     /// Open an existing store READ-ONLY, for a reader in a connection pool.
     ///
     /// WAL already permits N concurrent readers alongside one writer; before
@@ -259,7 +270,7 @@ impl Store {
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA wal_autocheckpoint=1000;",
         )?;
-        super::search_scope_policy::initialize_schema(&conn)?;
+        let created_fact_schema = super::search_scope_policy::initialize_schema(&conn)?;
         Self::ensure_store_identity(&conn)?;
         Self::ensure_log_epoch(&conn)?;
         conn.execute_batch(VECTORS_SQL)?;
@@ -339,6 +350,10 @@ impl Store {
         alias::build_term_alias(&conn, attachments)?;
 
         let mut store = Self::with_connection(conn);
+        store.created_fact_schema = created_fact_schema;
+        // A later direct-library vector write must not activate FTS on an old
+        // unindexed store merely because the global new-store default is on.
+        store.search_config.keyword = created_fact_schema || store.lexical_progress()?.is_some();
         store.attachments = attachments.to_vec();
         store.pack_manifests = pack_manifests;
         store.facts_source = facts_source;
@@ -551,6 +566,7 @@ impl Store {
             resolution_config: ResolutionConfig::default(),
             resolution_cache: Default::default(),
             search_config: SearchConfig::default(),
+            created_fact_schema: false,
             labels_config: crate::config::LabelsConfig::default(),
             import_policy_config: crate::config::ImportPolicyConfig::default(),
             shacl_config: ShaclConfig::default(),
@@ -574,8 +590,9 @@ impl Store {
             principal_chain: Vec::new(),
             recording_verdicts: false,
             trust_root_bootstrap: None,
-            base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
-            vocabulary: crate::term_vocabulary::Vocabulary::default(),
+            base_ns: String::new(),
+            code_base: String::new(),
+            vocabulary: std::sync::Arc::default(),
             namespace_settings: crate::entity_namespaces::Settings::default(),
             vector_delegate: None,
             local_vector_backend: None,

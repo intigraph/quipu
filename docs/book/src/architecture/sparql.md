@@ -17,7 +17,9 @@ is needed.
 
 1. **Parse**: SPARQL string -> AST via [spargebra](https://crates.io/crates/spargebra)
 2. **Evaluate**: Walk the AST, executing each graph pattern against SQLite
-3. **Return**: Variable bindings as `HashMap<String, Value>` rows
+3. **Return**: Variable bindings as `Bindings` rows: a `HashMap<String, Value>` keyed by
+   variable name, with quipu's own hasher (`BindingsHasher`). Build rows with
+   `Bindings::default()` or `Bindings::from_iter`; iteration order is unspecified.
 
 A query keeps its SQLite reads in one read transaction, including separate
 aggregate or UNION arms. A concurrent writer can commit, but later operators

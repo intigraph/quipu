@@ -70,7 +70,7 @@ fn compare(store: &Store, query: &str, ctx: &TemporalContext, applicable: bool) 
         panic!()
     };
     let (inner, variables, aggregates) = group(&pattern);
-    let seed = Bindings::new();
+    let seed = Bindings::default();
     let old = super::super::group::evaluate(
         store,
         super::super::pattern::eval_pattern_seeded(store, inner, ctx, &seed)
@@ -201,7 +201,7 @@ fn datasets_seeds_and_unsupported_forms_do_not_widen() {
     ] {
         compare(&store, q, &ctx, false);
     }
-    let mut seed = Bindings::new();
+    let mut seed = Bindings::default();
     seed.insert(
         "s".into(),
         Value::Ref(store.lookup("http://example.org/foreign").unwrap().unwrap()),
@@ -291,7 +291,15 @@ fn temporal_default_union_and_scope_restoration_controls() {
         ..TemporalContext::default()
     };
     assert!(
-        super::try_evaluate(&store, inner, variables, aggregates, &ctx, &Bindings::new()).is_err()
+        super::try_evaluate(
+            &store,
+            inner,
+            variables,
+            aggregates,
+            &ctx,
+            &Bindings::default()
+        )
+        .is_err()
     );
     assert!(
         !super::direct_refs(),
@@ -369,9 +377,16 @@ fn attached_graph_aliases_use_canonical_binding_and_dedup() {
         row_cap: Some(1),
         ..TemporalContext::default()
     };
-    let result = super::try_evaluate(&store, inner, variables, aggregates, &ctx, &Bindings::new())
-        .unwrap()
-        .unwrap();
+    let result = super::try_evaluate(
+        &store,
+        inner,
+        variables,
+        aggregates,
+        &ctx,
+        &Bindings::default(),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(result.0[0][aggregates[0].0.as_str()], Value::Int(3));
 }
 
@@ -572,7 +587,7 @@ fn optional_unknown_custom_filter_preserves_original_error_path() {
             variables,
             aggregates,
             &TemporalContext::default(),
-            &Bindings::new()
+            &Bindings::default()
         )
         .unwrap()
         .is_none()
@@ -792,10 +807,13 @@ fn star_scan_polls_the_deadline_across_small_subjects() {
     };
     let scans = || super::super::count_star::SCANS.with(std::cell::Cell::get);
     let (scans_before, passes_before) = (scans(), passes());
-    let result =
-        super::super::count_star::try_visit(&store, star, &expired, &Bindings::new(), &mut |_| {
-            Ok(())
-        });
+    let result = super::super::count_star::try_visit(
+        &store,
+        star,
+        &expired,
+        &Bindings::default(),
+        &mut |_| Ok(()),
+    );
     assert!(
         matches!(result, Err(crate::Error::QueryTimeout { .. })),
         "{result:?}"

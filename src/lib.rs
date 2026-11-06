@@ -19,6 +19,10 @@ pub mod config;
 mod config_load;
 pub mod context;
 pub mod crew_credentials;
+/// DataBook documents: parse and render (kurtcagle/databook 1.5.0).
+pub mod databook;
+/// Export a graph as a DataBook; import a DataBook's graph data.
+pub mod databook_store;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
@@ -64,6 +68,10 @@ mod merge_session;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_assets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_backfill;
 pub mod namespace;
 mod namespace_publication;
 mod numeric_value;
@@ -76,9 +84,16 @@ pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
 pub mod replicate_wire;
+/// Prospective resolver types and content-bound validation evidence; no admission authority.
+pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
+/// Portable logical full-store replication values.
+pub mod store_replica;
+/// Opt-in logical store replication; opening a store never enables its journal.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;
@@ -116,6 +131,9 @@ pub mod follow_http;
 pub mod follow_ready;
 /// Resolve a fork promotion that stopped on conflicts (aegis-k7l).
 pub mod fork_merge_decisions;
+/// Inactive SQLite-only HA read profile; no serving adapter is installed.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+pub mod ha_read;
 /// Experimental pure ownership-handoff model; no Store or runtime integration.
 pub mod ownership_handoff_model;
 mod rdf_graph_store;

@@ -1,5 +1,5 @@
 // Host transport for PointerExplorer. Call only when a consumer needs a graph.
-// authorize(pointer) is receiver policy (for example a Caboodle policy exported
+// authorize(pointer) is receiver policy (for example a Tambo policy exported
 // by a trusted host). A manifest never supplies this callback or its answer.
 const MAX_BYTES = 16 * 1024 * 1024;
 

@@ -78,7 +78,7 @@ fn composed_star_retains_canonical_identity_and_multiple_values() {
         graph: super::super::GraphScope::Named(vec![graph]),
         ..TemporalContext::default()
     };
-    let (rows, headers) = try_eval(&store, &patterns(), &ctx, &Bindings::new())
+    let (rows, headers) = try_eval(&store, &patterns(), &ctx, &Bindings::default())
         .unwrap()
         .unwrap();
     assert_eq!(headers, ["s", "value"]);
@@ -124,7 +124,7 @@ fn unsupported_scopes_keep_the_existing_evaluator() {
         },
     ] {
         assert!(
-            try_eval(&store, &patterns(), &other, &Bindings::new())
+            try_eval(&store, &patterns(), &other, &Bindings::default())
                 .unwrap()
                 .is_none()
         );
@@ -132,11 +132,11 @@ fn unsupported_scopes_keep_the_existing_evaluator() {
     let mut disconnected = patterns();
     disconnected[1].subject = Variable::new("other").unwrap().into();
     assert!(
-        try_eval(&store, &disconnected, &ctx, &Bindings::new())
+        try_eval(&store, &disconnected, &ctx, &Bindings::default())
             .unwrap()
             .is_none()
     );
-    let mut seed = Bindings::new();
+    let mut seed = Bindings::default();
     seed.insert("s".into(), Value::Ref(1));
     assert!(
         try_eval(&store, &patterns(), &ctx, &seed)
@@ -259,7 +259,7 @@ fn sql_relation_bound_never_returns_a_dense_prefix() {
         ..TemporalContext::default()
     };
     assert!(
-        try_eval(&store, &patterns(), &ctx, &Bindings::new())
+        try_eval(&store, &patterns(), &ctx, &Bindings::default())
             .unwrap()
             .is_none(),
         "50001st row must select the original planner"
@@ -295,7 +295,7 @@ fn malformed_unrelated_relation_retains_selective_lookup() {
         ..TemporalContext::default()
     };
     assert!(
-        try_eval(&store, &patterns(), &ctx, &Bindings::new())
+        try_eval(&store, &patterns(), &ctx, &Bindings::default())
             .unwrap()
             .is_none()
     );
@@ -385,7 +385,7 @@ fn complete_relation_matches_grouped_bag_with_duplicates_and_literal_aliases() {
             let grouped = super::super::triple::eval_triple_pattern_limited(
                 &store,
                 &pattern,
-                &Bindings::new(),
+                &Bindings::default(),
                 &ctx,
                 None,
             )
@@ -411,7 +411,7 @@ fn complete_relation_matches_grouped_bag_with_duplicates_and_literal_aliases() {
         ..TemporalContext::default()
     };
     assert!(
-        try_eval(&store, &patterns(), &ctx, &Bindings::new()).is_err(),
+        try_eval(&store, &patterns(), &ctx, &Bindings::default()).is_err(),
         "no deadline bypass"
     );
 }
@@ -437,7 +437,7 @@ fn complete_relation_keeps_missing_subject_dictionary_errors() {
         super::super::triple::eval_triple_pattern_limited(
             &store,
             &pattern,
-            &Bindings::new(),
+            &Bindings::default(),
             &ctx,
             None,
         )

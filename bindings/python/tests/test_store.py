@@ -113,12 +113,12 @@ def test_episode_respects_the_adopted_vocabulary(store):
     store.load_shapes(
         "note",
         "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:NoteShape> a sh:NodeShape; "
-        "sh:targetClass <http://aegis.gastown.local/ontology/Note> .",
+        "sh:targetClass <http://example.org/kb/Note> .",
     )
     with pytest.raises(quipu.QuipuError):
         store.episode("stray", nodes=[{"name": "stray", "type": "NotInTheVocabulary"}], source="test")
     store.episode("kept", nodes=[{"name": "kept", "type": "Note"}], source="test")
-    assert len(store.query("SELECT ?s WHERE { ?s a <http://aegis.gastown.local/ontology/Note> }")) == 1
+    assert len(store.query("SELECT ?s WHERE { ?s a <http://example.org/kb/Note> }")) == 1
 
 
 def test_file_store_persists_shapes_and_facts_across_reopen(tmp_path):

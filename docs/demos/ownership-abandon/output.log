@@ -1,0 +1,13 @@
+Script started on 2026-11-05 17:25:10-05:00 [COMMAND="bash docs/demos/ownership-abandon/run-demo.sh" <not executed on terminal>]
+model-tests --exact ownership_handoff_model::tests::abandoned_attempt_cannot_activate_its_stale_destination --nocapture
+
+running 1 test
+test ownership_handoff_model::tests::abandoned_attempt_cannot_activate_its_stale_destination ... {"head":{"phase":"RESERVED","request":{"destination":{"native":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"principal":"B"},"operation":"op-B-0","operator":"existing-operator","profile":"existing-profile-v1","source":{"epoch":"epoch-A","generation":0,"owner":{"native":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],"principal":"A"},"policy":"existing-policy-v1","predecessor":null,"store_id":"urn:example:lineage","unit":"FULL_STORE"},"successor_generation":1}},"source_writable":true,"stage":"reserved"}
+{"head":{"authority":{"epoch":"epoch-A","generation":0,"owner":{"native":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],"principal":"A"},"policy":"existing-policy-v1","predecessor":null,"store_id":"urn:example:lineage","unit":"FULL_STORE"},"phase":"ACTIVE"},"outcome":{"reason":"operator cancelled before barrier","request":{"destination":{"native":[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],"principal":"B"},"operation":"op-B-0","operator":"existing-operator","profile":"existing-profile-v1","source":{"epoch":"epoch-A","generation":0,"owner":{"native":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],"principal":"A"},"policy":"existing-policy-v1","predecessor":null,"store_id":"urn:example:lineage","unit":"FULL_STORE"},"successor_generation":1}},"stage":"abandoned"}
+{"destination_writable":false,"refused_steps":10,"source_writable":true,"stage":"stale_destination_retry"}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3661 filtered out; finished in 0.07s
+
+
+Script done on 2026-11-05 17:25:10-05:00 [COMMAND_EXIT_CODE="0"]

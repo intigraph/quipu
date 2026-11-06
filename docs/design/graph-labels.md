@@ -19,7 +19,7 @@
 anything *about* a graph: how current its contents are, how far they should be
 trusted, or what policy governs them. Every consumer has hand-rolled that
 missing layer differently — NeuralAmplifier with a SHACL-enforced per-fact
-`ruleTier` tag plus retrieval precedence enforced by Python call order, Hank
+`ruleTier` tag plus retrieval precedence enforced by Python call order, Yupana
 with a `tier`/`freshness` vocabulary that the graph it promotes into cannot
 carry, and the SARC conformance work with a trust boundary that is "declared
 and reported, not closed." This design makes the missing layer a store
@@ -34,8 +34,8 @@ Three modules already independently chose the same rule:
   refusal, never a fallback (`src/governance/authority.rs`).
 - SHACL branch composition — a branch may only *add* constraints, never remove
   ([named-graphs.md](named-graphs.md) §7.2).
-- Hank's confidence rule — "a policy is only as confident as its
-  least-confident leaf" (hank, governance plane).
+- Yupana's confidence rule — "a policy is only as confident as its
+  least-confident leaf" (yupana, governance plane).
 
 The invariant is **composition never widens** — deliberately *not* "everything
 is a meet," because the operator flips direction by axis: freshness and trust
@@ -56,11 +56,11 @@ by `Authority`, making the parallel structural instead of rhetorical.
 | `quipu:policyClass` | set of obligation tokens (`pii`, `no-export`, …) | powerset ⊆ | join |
 | `quipu:durability` | `backed` > `reproducible` > `soleRecord` | total | meet |
 
-- **Freshness** reuses Hank's exact strings. When a composed label must be
+- **Freshness** reuses Yupana's exact strings. When a composed label must be
   reported on a scale that only admits fresh/stale, `recomputing` collapses to
   `stale` — the conservative reading is the only one that cannot overstate,
-  the same mapping Hank records on its verdict path.
-- **Trust is not a hardcoded enum.** Hank's chain is
+  the same mapping Yupana records on its verdict path.
+- **Trust is not a hardcoded enum.** Yupana's chain is
   `live|lsp|tree-sitter|committed|attested`; NeuralAmplifier's is
   `canonical|house-rule|engine-observed|aspirational`. Quipu must learn
   neither vocabulary: trust values are IRIs, and the *ordering* is data —

@@ -69,6 +69,9 @@ fn the_shared_corpus_passes_natively() {
     for case in cases {
         let name = case["name"].as_str().unwrap();
         let mut engine = Engine::open_in_memory().unwrap();
+        engine
+            .set_base_ns(corpus["base_ns"].as_str().unwrap())
+            .unwrap();
         let mut vars: BTreeMap<String, Value> = corpus["shapes"]
             .as_object()
             .unwrap()

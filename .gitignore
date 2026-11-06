@@ -1,4 +1,7 @@
 # OS
+# Work-tracker state stays local and is never part of the public source tree.
+.beads/
+
 .DS_Store
 Thumbs.db
 
