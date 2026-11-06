@@ -13,6 +13,7 @@ use quipu::{
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use std::{
+    borrow::Cow,
     io::Read,
     process::{Child, Command, Stdio},
     sync::{
@@ -123,7 +124,25 @@ struct Routing {
 pub(crate) struct ProcessPool {
     children: Vec<Child>,
     routing: Option<Arc<Routing>>,
+    internal_worker: bool,
 }
+impl ProcessPool {
+    /// A validated internal reader serves reads, never primary replication transport.
+    /// Keep replica/read-only identity and every other auth setting unchanged.
+    pub(crate) fn auth_config<'a>(
+        &self,
+        config: &'a quipu::config::ServerConfig,
+    ) -> Cow<'a, quipu::config::ServerConfig> {
+        if self.internal_worker && config.replication_credentials_file.is_some() {
+            let mut worker = config.clone();
+            worker.replication_credentials_file = None;
+            Cow::Owned(worker)
+        } else {
+            Cow::Borrowed(config)
+        }
+    }
+}
+
 impl Drop for ProcessPool {
     fn drop(&mut self) {
         for child in &mut self.children {
@@ -137,6 +156,7 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
     let mut pool = ProcessPool {
         children: Vec::new(),
         routing: None,
+        internal_worker: false,
     };
     if config.server.read_processes == 0 {
         return Ok(pool);
@@ -151,6 +171,7 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
         if parent_identity(pid).as_deref() != Some(&expected) {
             return Err("worker parent is gone".into());
         }
+        pool.internal_worker = true;
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
