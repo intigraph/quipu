@@ -54,6 +54,10 @@ pub mod merge_reconcile;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_assets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_backfill;
 pub mod namespace;
 mod namespace_publication;
 mod numeric_value;
@@ -71,6 +75,11 @@ pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
+/// Portable logical full-store replication values.
+pub mod store_replica;
+/// Opt-in logical store replication; opening a store never enables its journal.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;

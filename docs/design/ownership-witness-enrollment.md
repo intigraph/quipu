@@ -174,10 +174,17 @@ onto `WitnessHead`:
 - `ACTIVE(g+1)` is the successor's `Active`.
 - An `ABANDONED` outcome returns the head to `Active(g)` for the same tuple.
 
-**Model change required before W1:** the accepted model (#939) has no abandon
-transition. P0 must add an `Abandon` action, `Reserved -> Active` at the same
-tuple, guarded by the source journal still being `ACTIVE(g)`, and re-run the
-state enumeration. Two active owners and a stale-B activation must remain
+**Model prerequisite before W1:** the experimental model has an `Abandon`
+action, `Reserved -> Active` at the same tuple, guarded by the source journal
+being `ACTIVE(g)` at the reserved tuple and no retained sealed retirement.
+It retains the exact request and bounded operator reason as an immutable
+`Abandonment` outcome. The next attempt requires a distinct operation ID;
+the model uses operation IDs rather than allocating storage keys `r<k>`.
+An old abandonment readback never rewinds a later reservation or owner, and
+abandonment itself never restarts a crashed source. This is an I/O-free
+specification: it provisions no witness and supplies no runtime transition
+or journal-rollback verification. Re-run the state enumeration before W1.
+Two active owners and a stale-B activation must remain
 unreachable. The model's rule that a request's destination is never its
 source stays unchanged: abandonment is not a self-handoff.
 

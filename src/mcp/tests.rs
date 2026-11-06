@@ -2862,6 +2862,16 @@ fn test_search_query_text_without_provider_is_explicitly_lexical() {
 }
 
 #[test]
+fn test_search_explicit_semantic_without_provider_errors() {
+    let store = Store::open_in_memory_test_ns().unwrap();
+
+    // No embedding provider → query-text search should fail with a clear message.
+    let input = serde_json::json!({ "query": "software engineer", "mode": "semantic" });
+    let err = tool_search(&store, &input).unwrap_err();
+    assert!(err.to_string().contains("no embedding provider"));
+}
+
+#[test]
 fn test_search_missing_both_params_errors() {
     let store = Store::open_in_memory_test_ns().unwrap();
 

@@ -28,6 +28,17 @@ pub(crate) fn run(
     {
         return semantic();
     }
+    // Main's automatic/explicit keyword backend owns indexed stores. Preserve
+    // its ranking, graph coverage and mode reason rather than bypassing it with
+    // the unindexed fallback. Explicit request modes still use their own gates.
+    let config = store.search_config();
+    if config.keyword
+        && (config.mode == "keyword"
+            || (config.mode == "auto" && store.embedding_provider().is_none()))
+        && input.get("sparql").is_none()
+    {
+        return keyword_lexical(store, input);
+    }
     let vectors = store.vector_store().vector_count()?;
     if store.embedding_provider().is_none() || vectors == 0 {
         return lexical(store, input, vectors);
@@ -92,6 +103,24 @@ pub(crate) fn run(
                 "embeddings":vectors,"lexical_status":"unknown","reason":error.to_string()});
         }
     }
+    Ok(response)
+}
+
+fn keyword_lexical(store: &Store, input: &Value) -> Result<Value> {
+    let ms = crate::time::request_deadline().map_or(1000, |d| d.remaining_millis().min(1000));
+    let _budget = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(ms)));
+    let mut response = super::search_fusion::dispatch_search_fusion(store, input)?;
+    for row in response["results"].as_array_mut().into_iter().flatten() {
+        row["evidence_mode"] = json!("lexical");
+    }
+    let scope = crate::search_graph_scope::GraphScope::parse_keyword(store, input)?;
+    response["search_scope"] = scope.coverage(store, input);
+    response["retrieval"] = json!({"contract":"quipu-lexical-results/v1",
+        "mode":"lexical","status":"degraded","reason":"literal_matching_not_semantic",
+        "embeddings":store.vector_store().vector_count()?,
+        "provider_configured":store.embedding_provider().is_some(),
+        "coverage_scope":"configured keyword index","budget_ms":ms,
+        "semantic_admission":"unavailable"});
     Ok(response)
 }
 

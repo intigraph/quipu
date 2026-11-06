@@ -1,8 +1,17 @@
 # Embeddings and Semantic Search
 
+Fresh CLI and server stores support keyword search without a model. The default
+`[quipu.search] mode = "auto"` selects keyword search until a provider is
+configured, then semantic search. A supplied query embedding also selects
+semantic search. Explicit modes never fall back. `quipu doctor search` reports
+provider readiness, keyword index completion, and remediation. Existing stores
+need explicit `[quipu.search] keyword = true` opt-in and bounded keyword backfill
+before keyword search can return results. Opening an existing unindexed store
+with the setting omitted creates no keyword tables or write triggers.
+
 Quipu answers two different kinds of question. **Lexical** retrieval (SPARQL,
 `CONTAINS`, exact match) needs nothing but the fact log. **Semantic** retrieval
-(`/context`, `quipu_hybrid_search`, `/search`) needs vectors, and vectors need
+(`/context`, `quipu_hybrid_search`, `/search` with `mode: "semantic"`) needs vectors, and vectors need
 an embedding provider you configure yourself. With a fresh unindexed local store,
 plain-text `quipu_search` and `quipu_hybrid_search` instead return bounded lexical
 matches. No Bobbin service or model download is required for that fallback.
@@ -22,7 +31,34 @@ an empty successful answer. The response's candidate ceiling is not a claim of
 complete corpus or embedding coverage.
 
 Automatic embedding is enabled by default when a provider is configured.
-No model is downloaded automatically. Without model and tokenizer paths,
+No model is downloaded automatically. To install the default explicitly:
+
+```bash
+quipu model install
+quipu doctor search --db graph.db
+quipu model backfill --batch-size 32 --db graph.db
+```
+
+The installer pins `sentence-transformers/all-MiniLM-L6-v2` at revision
+`1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, verifies the exact ONNX and tokenizer
+SHA-256 digests, and publishes the directory atomically. The files occupy about
+91 MB under `$XDG_DATA_HOME/quipu/models` (or `~/.local/share/quipu/models`;
+Windows also supports `LOCALAPPDATA`).
+An existing corrupt cache is refused and preserved. New CLI/server opens discover
+the installed default when both explicit model paths are unset; explicit paths
+remain authoritative. `auto_embed = false` disables automatic vector writes,
+including with a discovered model, while explicit semantic queries still work.
+The installer needs a build with `remote`; inference needs `onnx` and its runtime.
+A full build includes both features. Runtime distribution is separate from model
+installation.
+
+Backfill visits at most the requested number of ROOT subjects per call, with
+inference batches capped at 32. Resume using `--after` with `progress.next_cursor`
+until `progress.complete` is true. Existing vectors are preserved. Concurrent
+changes are skipped; restart from cursor zero to revisit skips and earlier new
+subjects. This command supports unattached SQLite stores. Named-only vectors use
+the separate graph backfill mechanism and retain the named-graph readiness gate.
+ Without model and tokenizer paths,
 lexical graph operations still work and the loader reports that semantic
 indexing is unavailable. Set `auto_embed = false` to disable automatic vector
 writes. This does not disable model initialization, explicit semantic queries,

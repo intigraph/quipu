@@ -951,6 +951,32 @@ quipu ontology list --db my.db
 quipu ontology remove my-domain --db my.db
 ```
 
+### `quipu model install` and `quipu model backfill`
+
+`quipu model install` explicitly downloads and verifies the pinned default ONNX
+model and tokenizer. It opens no graph and never runs during an ordinary search.
+See [embeddings](../concepts/embeddings.md) for the cache, hashes, feature
+requirements and default discovery contract.
+
+```bash
+quipu model install
+quipu model backfill --batch-size 32 --after 0 --db my.db
+```
+
+Backfill handles one bounded batch of missing vectors for ROOT subjects. Use the
+returned cursor with `--after` to continue; it preserves existing vectors and
+requires an unattached SQLite store and a loaded provider.
+
+### `quipu doctor search`
+
+Reports keyword index readiness and progress, embedding-provider readiness,
+and whether this binary includes ONNX support. The JSON output gives a remedy
+for each unavailable backend. No model is downloaded.
+
+```bash
+quipu doctor search --db my.db
+```
+
 ### `quipu doctor labels`
 
 Diagnose graph-label state: which graphs carry freshness/trust/policy labels

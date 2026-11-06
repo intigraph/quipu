@@ -162,3 +162,27 @@ fn ejzx_expired_deadline_is_an_error_not_a_false_empty_answer() {
     let _guard = crate::time::set_request_deadline(Some(crate::time::Deadline::after_millis(0)));
     assert!(super::super::search::tool_search(&store, &json!({"query":"OrchidLedger"})).is_err());
 }
+
+#[test]
+fn ejzx_integrated_auto_keyword_backend_retains_main_fields() {
+    let mut store = fixture();
+    store.search_config_mut().keyword = true;
+    store.search_config_mut().mode = "auto".into();
+    store.initialize_lexical_index().unwrap();
+    while !store.backfill_lexical_batch(100).unwrap().complete {}
+    let q = json!({"query":"OrchidLedger"});
+    let out = super::super::search::tool_search(&store, &q).unwrap();
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["ranking"], "keyword");
+    assert_eq!(out["mode_reason"], "no_embedding_provider");
+    assert_eq!(out["retrieval"]["mode"], "lexical");
+    assert_eq!(out["retrieval"]["status"], "degraded");
+    assert_eq!(out["results"][0]["evidence_mode"], "lexical");
+    assert!(out["results"][0].get("similarity").is_none());
+    assert!(out.get("context").is_none());
+    let explicit = super::super::search::tool_search(
+        &store,
+        &json!({"query":"OrchidLedger","mode":"semantic"}),
+    );
+    assert!(explicit.is_err());
+}
