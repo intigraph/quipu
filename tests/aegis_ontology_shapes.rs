@@ -534,3 +534,27 @@ fn bead_is_declared_a_deprecated_subclass_of_work_item() {
         SHAPES.contains("aegis:Bead rdfs:subClassOf aegis:WorkItem ;\n    owl:deprecated true .")
     );
 }
+
+#[test]
+fn disk_aggregate_summary_fields_are_signed_bounded_and_migration_safe() {
+    let fixture = disk_impact_fixture(
+        "\"cargo:build|repo:all|cwd:all\"",
+        "\"root:primary\"",
+        "\"-4096\"^^xsd:integer",
+        "\"2026-11-06T00:00:00Z\"^^xsd:dateTime",
+    );
+    let summary = format!(
+        "{fixture}\naegis:test-impact aegis:commandClass \"cargo:build\" ; aegis:aggregateState \"bounded-json-state\" ; aegis:runCount \"5\"^^xsd:integer ; aegis:maximumDeltaBytes \"1024\"^^xsd:integer ; aegis:p95DeltaBytes \"-4096\"^^xsd:integer ."
+    );
+    assert!(quipu::validate_shapes(SHAPES, &summary).unwrap().conforms);
+    for bad in [
+        summary.replace("\"5\"^^xsd:integer", "\"0\"^^xsd:integer"),
+        summary.replace("\"cargo:build\"", "\"cargo:build /private/operand\""),
+        summary.replace("bounded-json-state", &"x".repeat(32769)),
+        format!("{summary}\naegis:test-impact aegis:runCount \"6\"^^xsd:integer ."),
+    ] {
+        assert!(!quipu::validate_shapes(SHAPES, &bad).unwrap().conforms);
+    }
+    // Legacy fixtures remain valid; no raw-run migration is implied.
+    assert!(quipu::validate_shapes(SHAPES, &fixture).unwrap().conforms);
+}
