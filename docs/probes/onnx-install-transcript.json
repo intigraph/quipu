@@ -41,7 +41,7 @@
       {
         "command": "doctor",
         "exit": 0,
-        "stdout": "{\"configured_mode\":\"semantic\",\"keyword_index\":{\"complete\":true,\"cursor\":0,\"documents\":2,\"highwater\":0},\"keyword_ready\":true,\"keyword_remedy\":null,\"onnx_compiled\":true,\"onnx_runtime\":{\"available\":true,\"linkage\":\"bundled-dynamic-cpu\",\"path\":\"<fixture>/home/cache/quipu/runtime/1.23.2/13ab8084954fa4a47c777880180b90810d6020f021441395712b48a75b74c68b/libonnxruntime.so.1.23.2\",\"state\":\"initialized\"},\"semantic_provider_ready\":true,\"semantic_ready\":true,\"semantic_remedy\":null,\"vector_rows\":2}\n",
+        "stdout": "{\"configured_mode\":\"semantic\",\"keyword_index\":{\"complete\":true,\"cursor\":0,\"documents\":2,\"highwater\":0},\"keyword_ready\":true,\"keyword_remedy\":null,\"onnx_compiled\":true,\"onnx_runtime\":{\"available\":true,\"linkage\":\"bundled-dynamic-cpu\",\"path\":\"<fixture>/home/example/.cache/quipu/runtime/1.23.2/13ab8084954fa4a47c777880180b90810d6020f021441395712b48a75b74c68b/libonnxruntime.so.1.23.2\",\"state\":\"initialized\"},\"semantic_provider_ready\":true,\"semantic_ready\":true,\"semantic_remedy\":null,\"vector_rows\":2}\n",
         "stderr": "embedding provider ready (dim=384, auto_embed=true)\n"
       }
     ]
