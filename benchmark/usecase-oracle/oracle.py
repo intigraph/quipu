@@ -9,11 +9,14 @@ import json
 from typing import Any
 
 
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
 def _records(values: Any, name: str) -> set[str]:
     if not isinstance(values, list):
         raise ValueError(f"{name} must be an explicit list")
-    return {json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
-            for value in values}
+    return {_canonical(value) for value in values}
 
 
 def evaluate(fixture: dict, observation: dict) -> dict:
@@ -44,7 +47,7 @@ def evaluate(fixture: dict, observation: dict) -> dict:
         if not isinstance(expected_report, dict) or not isinstance(actual_report, dict):
             raise ValueError("expected_report and observed report must be objects")
         for key, expected in expected_report.items():
-            if key not in actual_report or actual_report[key] != expected:
+            if key not in actual_report or _canonical(actual_report[key]) != _canonical(expected):
                 report_mismatches[key] = {"expected": expected,
                                           "observed": actual_report.get(key),
                                           "present": key in actual_report}

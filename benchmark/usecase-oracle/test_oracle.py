@@ -73,6 +73,15 @@ class OracleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate(fixture, observation)
 
+    def test_report_counts_do_not_accept_booleans_or_float_coercion(self):
+        fixture = CASES[0]
+        for wrong in [False, 0.0]:
+            observation = {"current": fixture["expected_current"], "history": [],
+                           "report": {"kind": "one-side", "held": wrong}}
+            self.assertFalse(evaluate(fixture, observation)["correct"])
+        observation["report"]["held"] = 0
+        self.assertTrue(evaluate(fixture, observation)["correct"])
+
 
 if __name__ == "__main__":
     unittest.main()
