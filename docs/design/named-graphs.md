@@ -30,7 +30,7 @@
 **Status:** **Complete — the subset-export / federation foundation.** Named-graph
 support is what lets a consumer *partition* the store into first-class subgraphs
 and query a **selected subset** rather than the whole graph. It is the substrate
-under per-tenant overlays (see [group-isolation.md](group-isolation.md)), Hank's
+under per-tenant overlays (see [group-isolation.md](group-isolation.md)), Yupana's
 "branches as named graphs", per-source provenance scoping, and federation.
 
 ## 1. The three axes

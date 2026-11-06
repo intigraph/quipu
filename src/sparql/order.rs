@@ -268,7 +268,7 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         let rows = (0..70_000)
             .rev()
-            .map(|n| Bindings::from([("x".to_owned(), Value::Int(n))]))
+            .map(|n| Bindings::from_iter([("x".to_owned(), Value::Int(n))]))
             .collect();
         let expression = OrderExpression::Asc(spargebra::algebra::Expression::Variable(
             spargebra::term::Variable::new("x").unwrap(),
@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn many_entries_spill_natively_or_refuse_without_filesystem() {
         let store = Store::open_in_memory().unwrap();
-        let rows = vec![Bindings::new(); MAX_KEY_ENTRIES + 1];
+        let rows = vec![Bindings::default(); MAX_KEY_ENTRIES + 1];
         let expr = OrderExpression::Asc(spargebra::algebra::Expression::Variable(
             spargebra::term::Variable::new("missing").unwrap(),
         ));

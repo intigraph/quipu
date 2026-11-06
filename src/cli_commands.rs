@@ -17,11 +17,8 @@ pub fn cmd_episode(args: &[String], db_path: &str, config_base_ns: &str) {
     };
 
     // Namespace IRIs are minted in (quipu #28). Precedence: --base-ns flag >
-    // configured [quipu].base_ns > built-in aegis default. Before aegis-4h3x the
-    // fallback was DEFAULT_BASE_NS directly, so the CLI ignored config just like
-    // the REST/MCP paths did; the config value (which itself defaults to
-    // DEFAULT_BASE_NS) is now the fallback, so a non-aegis deployment's config is
-    // honoured while the flag still wins.
+    // configured [quipu].base_ns. There is no built-in default: with neither,
+    // the write that mints names is refused (`namespace::require_base_ns`).
     let base_ns = flag_value(args, "--base-ns").unwrap_or(config_base_ns);
 
     let json_str = if file_arg == "-" {
@@ -380,8 +377,45 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
 /// caller can gate on it without parsing the text.
 pub fn cmd_doctor(args: &[String], db_path: &str) {
     let sub = args.get(2).map_or("labels", String::as_str);
+    if sub == "search" {
+        use quipu::vector::KnowledgeVectorStore;
+        let store = crate::cli_open::open_store(db_path);
+        let progress = store.lexical_progress().unwrap_or_else(|error| {
+            eprintln!("doctor search: {error}");
+            std::process::exit(1);
+        });
+        let keyword_ready =
+            store.search_config().keyword && progress.as_ref().is_some_and(|p| p.complete);
+        let vector_rows = store.vector_count().unwrap_or_else(|error| {
+            eprintln!("doctor search vector status: {error}");
+            std::process::exit(1);
+        });
+        println!(
+            "{}",
+            serde_json::json!({
+                "configured_mode": store.search_config().mode,
+                "keyword_ready": keyword_ready,
+                "keyword_index": progress,
+                "keyword_remedy": if !store.search_config().keyword {
+                    Some("set [quipu.search] keyword = true")
+                } else if !keyword_ready {
+                    Some("run quipu search-index backfill --batch-size 500 repeatedly until complete")
+                } else { None },
+                "semantic_provider_ready": store.has_embedding_provider(),
+                "vector_rows": vector_rows,
+                "semantic_ready": store.has_embedding_provider() && vector_rows > 0,
+                "onnx_compiled": cfg!(feature = "onnx"),
+                "semantic_remedy": if !store.has_embedding_provider() {
+                    Some("run quipu model install in a full build, or configure [quipu.embedding] model_path and tokenizer_path")
+                } else if vector_rows == 0 {
+                    Some("ingest new data or run bounded quipu model backfill for existing ROOT subjects")
+                } else { None }
+            })
+        );
+        return;
+    }
     if sub != "labels" {
-        eprintln!("usage: quipu doctor labels [--db <path>]");
+        eprintln!("usage: quipu doctor labels|search [--db <path>]");
         std::process::exit(1);
     }
 

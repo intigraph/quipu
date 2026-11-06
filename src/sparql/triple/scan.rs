@@ -16,7 +16,7 @@ pub(in crate::sparql) fn eval_complete_relation(
     collect_triple_pattern(
         store,
         tp,
-        &Bindings::new(),
+        &Bindings::default(),
         ctx,
         Some(limit),
         ScanMode::CompleteRelation,
@@ -76,7 +76,7 @@ pub(in crate::sparql) fn subject_relation(
     collect_triple_pattern(
         store,
         tp,
-        &Bindings::new(),
+        &Bindings::default(),
         ctx,
         Some(limit),
         ScanMode::BoundedRelation(Some(ids), bytes),
@@ -135,7 +135,7 @@ pub(in crate::sparql) fn selected_relation(
     collect_triple_pattern(
         store,
         tp,
-        &Bindings::new(),
+        &Bindings::default(),
         ctx,
         Some(limit),
         ScanMode::BoundedRelation(None, bytes),

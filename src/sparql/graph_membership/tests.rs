@@ -23,7 +23,7 @@ fn shape() -> (TriplePattern, TemporalContext) {
     let GraphPattern::Filter { expr, inner } = *inner else {
         unreachable!()
     };
-    let narrows = string_pushdown::collect(&expr, &inner, &Bindings::new());
+    let narrows = string_pushdown::collect(&expr, &inner, &Bindings::default());
     let GraphPattern::Bgp { patterns } = *inner else {
         unreachable!()
     };
@@ -148,7 +148,7 @@ fn graph_membership_preserves_rows_and_removes_payload_column_reads() {
         &store,
         &ctx,
         &pattern,
-        &Bindings::new(),
+        &Bindings::default(),
         &[graph],
         &mut params,
     )
@@ -173,7 +173,7 @@ fn graph_membership_falls_back_for_unproved_index_history_and_scope() {
             &store,
             context,
             &pattern,
-            &Bindings::new(),
+            &Bindings::default(),
             graphs,
             &mut params,
         )
@@ -249,7 +249,7 @@ fn graph_membership_streamed_reads_keep_the_existing_plan() {
     let count = crate::sparql::triple::visit_triple_pattern(
         &store,
         &pattern,
-        &Bindings::new(),
+        &Bindings::default(),
         &ctx,
         &mut |row| {
             streamed.push(row);
@@ -266,7 +266,7 @@ fn graph_membership_streamed_reads_keep_the_existing_plan() {
     let retained = crate::sparql::triple::eval_triple_pattern_limited(
         &store,
         &pattern,
-        &Bindings::new(),
+        &Bindings::default(),
         &ctx,
         None,
     )
@@ -296,7 +296,7 @@ fn bound_subject_metadata_uses_same_rowid_cover_without_wide_fact_reads() {
     let GraphPattern::Bgp { patterns } = *inner else {
         unreachable!()
     };
-    let seed = Bindings::from([("s".to_owned(), crate::Value::Ref(subject))]);
+    let seed = Bindings::from_iter([("s".to_owned(), crate::Value::Ref(subject))]);
     let ctx = TemporalContext {
         graph: GraphScope::Named(vec![graph]),
         ..Default::default()
@@ -393,7 +393,7 @@ fn bound_metadata_declines_unknown_subject_history_and_unproved_scope() {
     index(&store);
     let (pattern, _) = shape();
     let id = store.lookup(&format!("{EX}one")).unwrap().unwrap();
-    let seed = Bindings::from([("s".to_owned(), crate::Value::Ref(id))]);
+    let seed = Bindings::from_iter([("s".to_owned(), crate::Value::Ref(id))]);
     let check = |ctx: TemporalContext, seed: &Bindings, graphs: &[i64]| {
         let mut params = Vec::new();
         assert!(
@@ -403,15 +403,15 @@ fn bound_metadata_declines_unknown_subject_history_and_unproved_scope() {
         );
         assert!(params.is_empty());
     };
-    check(TemporalContext::default(), &Bindings::new(), &[graph]);
+    check(TemporalContext::default(), &Bindings::default(), &[graph]);
     check(
         TemporalContext::default(),
-        &Bindings::from([("s".to_owned(), crate::Value::Ref(-1))]),
+        &Bindings::from_iter([("s".to_owned(), crate::Value::Ref(-1))]),
         &[graph],
     );
     check(
         TemporalContext::default(),
-        &Bindings::from([("s".to_owned(), crate::Value::Str("not an IRI".into()))]),
+        &Bindings::from_iter([("s".to_owned(), crate::Value::Str("not an IRI".into()))]),
         &[graph],
     );
     check(
@@ -445,7 +445,7 @@ fn bound_streamed_metadata_uses_same_membership_without_changing_rows() {
     let (pattern, mut ctx) = shape();
     ctx.graph = GraphScope::Named(vec![graph]);
     ctx.string_narrows = None;
-    let seed = Bindings::from([(
+    let seed = Bindings::from_iter([(
         "s".to_owned(),
         crate::Value::Ref(store.lookup(&format!("{EX}one")).unwrap().unwrap()),
     )]);
@@ -493,7 +493,7 @@ fn bound_object_membership_uses_covering_graph_index_without_payload_columns() {
         graph: GraphScope::Named(vec![graph]),
         ..TemporalContext::default()
     };
-    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
     let title = store.lookup(&format!("{EX}title")).unwrap().unwrap();
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(title)];
     let scope = predicate(&store, &ctx, &pattern, &seed, &[graph], &mut params)
@@ -524,7 +524,7 @@ fn retained_object_lookup_seeks_the_value_leading_index() {
         graph: GraphScope::Named(vec![graph]),
         ..TemporalContext::default()
     };
-    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
     let a = store.lookup(&format!("{EX}title")).unwrap().unwrap();
     let source = object_source(&store, &ctx, &pattern, &seed)
         .unwrap()
@@ -560,14 +560,14 @@ fn value_source_declines_unproved_shapes_and_index() {
         graph: GraphScope::Named(vec![graph]),
         ..Default::default()
     };
-    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
     assert!(
         object_source(&store, &ctx, &pattern, &seed)
             .unwrap()
             .is_some()
     );
     assert!(
-        object_source(&store, &ctx, &pattern, &Bindings::new())
+        object_source(&store, &ctx, &pattern, &Bindings::default())
             .unwrap()
             .is_none()
     );
@@ -647,7 +647,7 @@ fn streamed_bound_object_avoids_the_predicate_range_scan() {
         graph: GraphScope::Named(vec![graph]),
         ..Default::default()
     };
-    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
     let steps = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&steps);
     store
@@ -704,7 +704,7 @@ fn unknown_named_graph_does_not_scan_the_predicate_range() {
         graph: GraphScope::Named(vec![-1]),
         ..Default::default()
     };
-    let seed = Bindings::from([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".to_owned(), crate::Value::Str("SEEDS alpha".into()))]);
     let steps = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&steps);
     store
@@ -754,7 +754,7 @@ fn constant_subject_fields_use_the_same_covering_graph_membership() {
         &store,
         &ctx,
         &pattern,
-        &Bindings::new(),
+        &Bindings::default(),
         &[graph],
         &mut params,
     )
@@ -798,7 +798,7 @@ fn dense_historical_object_lookup_does_not_walk_payload_history() {
         graph: GraphScope::Named(vec![graph]),
         ..Default::default()
     };
-    let seed = Bindings::from([("text".into(), crate::Value::Str("SEEDS alpha".into()))]);
+    let seed = Bindings::from_iter([("text".into(), crate::Value::Str("SEEDS alpha".into()))]);
     let steps = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let seen = Arc::clone(&steps);
     store
@@ -867,7 +867,7 @@ fn unbound_predicate_presence_keeps_reads_on_covering_indexes() {
         &store,
         &ctx,
         &pattern,
-        &Bindings::new(),
+        &Bindings::default(),
         &[graph],
         &mut params,
     )

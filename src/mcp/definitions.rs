@@ -35,9 +35,15 @@ pub fn tool_definitions() -> Vec<JsonValue> {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": { "type": "string", "enum": ["load", "list", "remove"], "description": "Action to perform (default: list)" },
-                "name": { "type": "string", "description": "Ontology name (required for load/remove)" },
+                "action": { "type": "string", "enum": ["load", "materialize", "retract_materialization", "list", "remove"], "description": "Action to perform (default: list)" },
+                "name": { "type": "string", "description": "Ontology name (required for load/remove/retract_materialization)" },
                 "turtle": { "type": "string", "description": "OWL ontology in Turtle format (required for load)" },
+                "after_tx": { "type": "integer", "minimum": 0, "description": "Exclusive lower materialization transaction watermark" },
+                "through_tx": { "type": "integer", "minimum": 1, "description": "Inclusive upper materialization transaction watermark" },
+                "apply": { "type": "boolean", "default": false, "description": "Apply one bounded cleanup batch; default previews without writes" },
+                "expect": { "type": "string", "description": "Exact token from the latest cleanup preview, required with apply" },
+                "materialize": { "type": "string", "enum": ["inline", "deferred"], "description": "load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize." },
+                "actor": { "type": "string", "description": "Declared actor for retract_materialization; not authentication" },
                 "timestamp": { "type": "string", "description": "ISO-8601 timestamp" }
             }
         }

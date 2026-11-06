@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 fn store(threshold: f64) -> Store {
     let mut store = Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
     let shapes = format!(
         "@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:document-shape> a sh:NodeShape ; sh:targetClass <{}Document> .",
         store.base_ns()

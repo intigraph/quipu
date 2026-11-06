@@ -5,7 +5,7 @@ use crate::cli::flag_value;
 pub fn cmd_search(args: &[String], db: &str) {
     let Some(query) = args.get(2).filter(|q| !q.starts_with("--")) else {
         eprintln!(
-            "usage: quipu search <query> --mode keyword [--graph IRI | --graphs IRI,IRI | --all-graphs] [--limit N] [--valid-at ISO] [--db path]"
+            "usage: quipu search <query> [--mode keyword|semantic|hybrid] [--graph IRI | --graphs IRI,IRI | --all-graphs] [--limit N] [--valid-at ISO] [--db path]"
         );
         std::process::exit(1);
     };
@@ -26,8 +26,10 @@ pub fn cmd_search(args: &[String], db: &str) {
             std::process::exit(1);
         }
     }
-    let mut input =
-        serde_json::json!({"query":query,"mode":flag_value(args,"--mode").unwrap_or("keyword")});
+    let mut input = serde_json::json!({"query":query});
+    if let Some(mode) = flag_value(args, "--mode") {
+        input["mode"] = serde_json::json!(mode);
+    }
     if let Some(limit) = flag_value(args, "--limit") {
         input["limit"] = serde_json::json!(limit.parse::<u64>().unwrap_or_else(|_| {
             eprintln!("error: --limit must be an unsigned integer");

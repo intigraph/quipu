@@ -371,7 +371,7 @@ async fn main() {
         eprintln!("cannot start read process pool: {error}");
         std::process::exit(1)
     });
-    let auth_policy = auth::bearer_policy(&config.server);
+    let auth_policy = auth::bearer_policy(&workers.auth_config(&config.server));
     let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required || config.server.scoped_reads.is_some();
     let scoped_profile = config.server.scoped_reads.clone().map(|profile| {
@@ -588,7 +588,11 @@ async fn main() {
     } else if let Some(relay) = relay {
         relay::start(push_store_outer, relay);
     } else {
-        background::start(push_store_outer, config.events.retention_days);
+        background::start(
+            push_store_outer,
+            config.events.retention_days,
+            &config.embedding,
+        );
     }
 
     // Everything committed before this line is STARTUP in quipu_write_facts_total

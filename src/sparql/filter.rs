@@ -17,6 +17,7 @@ use super::Bindings;
 
 mod cast_eval;
 pub(super) mod eval_memo;
+mod operand;
 mod regex_cache;
 pub(super) use eval_memo::Scope as EvalMemo;
 pub(super) use regex_cache::build_regex;
@@ -188,16 +189,20 @@ fn eval_filter_two_valued(
 /// an indeterminate or ill-typed pair is an error (aegis-u93). Everything else
 /// falls back to term identity (`expr_eq`), which is what `sameTerm` uses.
 fn sparql_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> Option<bool> {
-    let (Some(a), Some(b)) = (eval_expr(store, left, row), eval_expr(store, right, row)) else {
+    let (Some(a), Some(b)) = (
+        operand::operand(store, left, row),
+        operand::operand(store, right, row),
+    ) else {
         return Some(false);
     };
+    let (a, b) = (&*a, &*b);
     if a == b {
         return Some(true);
     }
-    if let Some(order) = temporal_equality_order(&a, &b) {
+    if let Some(order) = temporal_equality_order(a, b) {
         return order.map(|o| o == std::cmp::Ordering::Equal);
     }
-    Some(crate::numeric_value::equal(&a, &b))
+    Some(crate::numeric_value::equal(a, b))
 }
 
 fn expr_eq(store: &Store, left: &Expression, right: &Expression, row: &Bindings) -> bool {

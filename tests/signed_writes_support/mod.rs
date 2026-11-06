@@ -42,7 +42,12 @@ pub fn spawn(root: &std::path::Path) -> Server {
     std::fs::create_dir_all(root.join(".bobbin")).unwrap();
     std::fs::write(
         root.join(".bobbin/config.toml"),
-        format!("[quipu.server]\nauth_token = '{BEARER}'\n"),
+        // The assertions name entities under the legacy namespace, and Quipu
+        // has no default one (gju5 S3a).
+        format!(
+            "[quipu]\nbase_ns = '{}'\n\n[quipu.server]\nauth_token = '{BEARER}'\n",
+            quipu::namespace::DEFAULT_BASE_NS
+        ),
     )
     .unwrap();
     let reservation = TcpListener::bind("127.0.0.1:0").unwrap();

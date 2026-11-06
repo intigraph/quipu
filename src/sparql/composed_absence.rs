@@ -99,7 +99,7 @@ pub(super) fn candidates(
         if !seen.insert(id) {
             continue;
         }
-        let mut seed = Bindings::new();
+        let mut seed = Bindings::default();
         seed.insert(subject.to_string(), Value::Ref(id));
         // Recheck EVERY original constraint and multiplicity: candidates are
         // a superset, never a replacement for the composed BGP.

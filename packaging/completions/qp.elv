@@ -21,6 +21,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+            cand competency 'Inspect pendant competency contracts without opening a store'
             cand store 'Inspect native ownership, or explicitly adopt or restore a disk store'
             cand version 'Print the version and source commit'
             cand install-alias 'Add the qp alias beside the quipu binary'
@@ -47,12 +48,14 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand validate 'Validate a data file against a shapes file without writing'
             cand repl 'Open an interactive SPARQL prompt'
             cand export 'Export RDF from ROOT, one graph, a provenance group or a CONSTRUCT query'
+            cand databook 'Export a graph as a DataBook, or import a DataBook''s graph data'
             cand render 'Render graph data into files in an owned directory'
             cand stats 'Show store statistics'
             cand prime 'Print the agent primer and a bounded, read-only summary of the store'
             cand search 'Search entities by keyword, vector or hybrid ranking'
+            cand model 'Manage the pinned default embedding model'
             cand search-index 'Report, backfill or drop the search indexes'
-            cand doctor 'Report graph-label drift and recommended floors'
+            cand doctor 'Report graph-label drift or search backend readiness'
             cand pack 'Export a graph, or the whole store, as a pack; or verify a pack'
             cand unpack 'Merge a published pack into a local graph'
             cand restore 'Replace the store with a full pack, binary or text'
@@ -88,6 +91,17 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand events 'Read store event records such as refusals'
             cand fork 'Create, list, diff, drop or promote named forks of ROOT'
             cand audit 'Check traces, namespaces, replays and quarantine against policy'
+        }
+        &'qp;competency'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand lint 'Validate competency.toml schema and query/command syntax offline; execute nothing'
+        }
+        &'qp;competency;lint'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;store'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -373,6 +387,37 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;databook'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand export 'Write one graph, current or as of a past point, as a DataBook'
+            cand import 'Load a DataBook''s graph blocks in one write; never runs its queries'
+        }
+        &'qp;databook;export'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'Explicit graph IRI for this operation'
+            cand --tx 'Historical transaction to read'
+            cand --valid-at 'Valid-time instant to query'
+            cand --id 'DataBook IRI written to its frontmatter'
+            cand --title 'DataBook title written to its frontmatter'
+            cand --version 'DataBook version, 1.0.0 when omitted'
+            cand --timestamp 'Creation time recorded in the DataBook''s provenance'
+            cand --out 'Output file'
+            cand --with-shapes 'Also export the loaded SHACL shapes'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;databook;import'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --graph 'Explicit graph IRI for this operation'
+            cand --timestamp 'Valid-time timestamp for the operation'
+            cand --actor 'Actor recorded in operation provenance'
+            cand --source 'Source identifier recorded in provenance'
+            cand --with-shapes 'Also load the DataBook''s SHACL shape blocks'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;render'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --dest 'Render output destination'
@@ -426,6 +471,25 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;model'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand install 'Download and verify the default embedding model and tokenizer'
+            cand backfill 'Embed one bounded batch of existing ROOT subjects'
+        }
+        &'qp;model;install'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;model;backfill'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --batch-size 'Number of entries per indexing batch'
+            cand --after 'Resume after this cursor'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;search-index'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --kind 'Index or graph kind to select'
@@ -460,8 +524,14 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand labels 'Report graph-label drift and recommended floors'
+            cand search 'Report search backend readiness and remedies'
         }
         &'qp;doctor;labels'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;doctor;search'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

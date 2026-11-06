@@ -65,6 +65,15 @@ deploy-server:
 test *args="":
     cargo test {{args}}
 
+# Explicit offline comparison against the frozen pre-change SQLite scan.
+vector-scan command:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{quote(command)}} in
+        benchmark) cargo test --release --lib vector::scoring::benchmark::paired_sqlite_vector_scan -- --ignored --nocapture ;;
+        *) echo 'Use: just vector-scan benchmark' >&2; exit 2 ;;
+    esac
+
 # Offline replay controls: restart, deduplication, corruption and private files.
 test-search-outcome-replay:
     python3 -B scripts/test_search_outcome_replay.py
@@ -217,7 +226,7 @@ datalinks graph="../NeuralAmplifier/datalinks/thinker/alphax.ttl":
 # Ingest the sibling repos as code + doc entities, then serve them.
 # Produces CodeModule / CodeSymbol / Document / Section against the
 # shapes/code-entities.ttl vocabulary, validated on load.
-ingest-repos +repos="../quipu ../hank ../NeuralAmplifier ../thinker":
+ingest-repos +repos="../quipu ../yupana ../NeuralAmplifier ../thinker":
     ./scripts/ingest-repos.py {{repos}} -o /tmp/quipu-code.ttl
     rm -f /tmp/quipu-code.db
     cargo run --bin quipu --features shacl -- knot /tmp/quipu-code.ttl --db /tmp/quipu-code.db

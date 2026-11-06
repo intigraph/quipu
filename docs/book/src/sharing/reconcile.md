@@ -96,6 +96,21 @@ again and re-decided; never edit its hashes.
 Applying the same decisions a second time reports `already-applied` with the
 original transaction and writes nothing, so a retried apply is safe.
 
+Share reconnect and fork promotion use the common temporal write core. A
+one-sided incoming share addition keeps the share manifest's `created_at` as
+its authored time. A one-sided removal closes at that same share time, clamped
+against the local row's start; losing local values in a decided conflict close
+at decision time instead. A decided conflict first records incoming values as
+receipts with the empty valid interval `[Td, Td)`, then closes losing local
+values and starts selected new values at decision time `Td`. Both ordered
+transactions commit atomically; a refused decision rolls the received step
+back too. A receipt is visible in transaction history, never at a valid time.
+The reported transaction is the final step, and counts describe the final
+live graph changes rather than counting receipts as additions.
+
+Plain share merges also carry a stable merge identity. Reapplying the same
+incoming/base pair reports `already-applied` and creates no new transaction.
+
 ## See also
 
 - [CLI: Sharing & Legacy Packs](../reference/cli-sharing.md): `quipu merge`,

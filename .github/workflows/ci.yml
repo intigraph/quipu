@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
   # A merge queue tests each entry on main plus every entry ahead of it, so the
   # combined state is green before it lands, without each PR rebasing in turn.
@@ -27,13 +28,16 @@ on:
 # (aegis-0zr). Keep this suffix identical to release.yml's.
 concurrency:
   group: "ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}${{ startsWith(github.event.head_commit.message, 'chore: release v') && format('-{0}', github.sha) || '' }}"
-  cancel-in-progress: true
+  # Superseded PR runs cancel; push-to-main and dispatch runs never do, so each
+  # main commit gets a complete verdict the CD can admit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   query-builders:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Typed SPARQL client builders
     runs-on: ubuntu-latest
     steps:
@@ -60,6 +64,7 @@ jobs:
       - run: cargo test --locked --no-default-features --lib bindings::tests
 
   fmt:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Format
     runs-on: ubuntu-latest
     steps:
@@ -70,6 +75,7 @@ jobs:
       - run: cargo fmt --check
 
   clippy:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Clippy (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
@@ -114,6 +120,7 @@ jobs:
       - run: cargo clippy ${{ matrix.flags }} --all-targets -- -D warnings -A missing-docs
 
   test:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Test (${{ matrix.name }})
     runs-on: ubuntu-latest
     env:
@@ -167,6 +174,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-test-sources-v2-${{ matrix.name }}-
       - run: cargo test ${{ matrix.flags }}
+      - name: Inactive SQLite HA profile and authorization controls
+        run: |
+          cargo test ${{ matrix.flags }} --features ha-read-profile --lib ha_read::
+          cargo test ${{ matrix.flags }} --features ha-read-profile --lib read_authorization::
       - name: Free completed test artifacts before OWL
         if: matrix.name == 'shacl'
         run: |
@@ -244,7 +255,7 @@ jobs:
 
   extended-features:
     name: Extended feature surfaces
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-latest
     env:
       # Serial feature builds need headroom for tests and cache compression.
@@ -349,6 +360,7 @@ jobs:
         run: df -h / "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
 
   build:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Build
     runs-on: ubuntu-latest
     steps:
@@ -377,7 +389,7 @@ jobs:
   # the worst possible place to find it.
   build-full:
     name: Build (full bundle)
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -404,7 +416,7 @@ jobs:
   # just dependency, matching the raw-cargo style of the other jobs.
   wasm:
     name: Wasm (browser harness)
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
@@ -480,7 +492,7 @@ jobs:
   # and merging them would hide which of the two went red.
   wasm-explorer:
     name: Wasm (browser bundle)
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     # Pinned: ubuntu-latest moved to 26.04, where Playwright 1.56 cannot
     # install Chromium. Unpin together with a Playwright bump.
     runs-on: ubuntu-24.04
@@ -502,6 +514,7 @@ jobs:
           node-bundle-dir: wasm/explorer/pkg-node
 
   check:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Pre-commit checks
     runs-on: ubuntu-latest
     steps:
@@ -511,6 +524,11 @@ jobs:
           python-version: "3.12"
       - run: pip install pre-commit PyYAML==6.0.3
       - run: python3 scripts/check-private-keys.py
+      # Quipu core names no stack vocabulary (namespace, hostname or term list);
+      # vocabularies are data a store loads. Self-test the scanner first so a
+      # broken scanner cannot pass by finding nothing.
+      - run: python3 scripts/check-stack-vocabulary.py --self-test
+      - run: python3 scripts/check-stack-vocabulary.py
       - run: pre-commit run --all-files
         env:
           SKIP: mdbook-build
@@ -626,7 +644,7 @@ jobs:
 
   load-test:
     name: Mixed load performance ratchet
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
@@ -650,6 +668,10 @@ jobs:
         run: cargo build --locked --features full --bin quipu-server
       - name: Run mixed load ratchet
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           DB="$(mktemp --suffix=.db)"
           target/debug/quipu-server --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
@@ -680,7 +702,7 @@ jobs:
   # control, so runner speed cancels out. Release build, as served.
   query-perf:
     name: String filter query performance gate
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     steps:
@@ -722,6 +744,10 @@ jobs:
             --db /dev/shm/query-perf.db --quipu target/release/quipu
       - name: Run the query performance gate
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT
@@ -750,7 +776,7 @@ jobs:
 
   lint-markdown:
     name: Markdown lint
-    if: ${{ !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -822,7 +848,7 @@ jobs:
 
   release-correctness:
     name: Release correctness
-    if: always()
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always()) }}
     needs: [clippy, test, build, check, shacl-write-path, generated-docs]
     runs-on: ubuntu-latest
     steps:
@@ -840,7 +866,7 @@ jobs:
 
   extended-correctness:
     name: Extended correctness
-    if: ${{ always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (always() && !contains(fromJSON('["push", "merge_group"]'), github.event_name)) }}
     needs: [extended-features, build-full, wasm, source-size, load-test, query-perf, lint-markdown]
     runs-on: ubuntu-latest
     steps:
@@ -857,6 +883,7 @@ jobs:
           echo "All extended surfaces passed."
 
   repository-pendant-source:
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Repository pendant source controls
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -183,7 +183,7 @@ mod tests {
     fn cancelled_transaction_preserves_signed_verdict_and_discards_advisories() {
         let control = PromotionControl::new(Duration::from_secs(30));
         control.cancel();
-        let mut store = crate::Store::open_in_memory().unwrap();
+        let mut store = crate::Store::open_in_memory_test_ns().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let signer =
             crate::signing::SigningIdentity::load(&dir.path().join("audit.pk8"), "quipu").unwrap();
@@ -259,7 +259,7 @@ mod tests {
     fn cancelled_publication_does_not_suppress_its_durable_audit_writer() {
         let control = PromotionControl::new(Duration::from_secs(30));
         control.cancel();
-        let mut store = crate::Store::open_in_memory().unwrap();
+        let mut store = crate::Store::open_in_memory_test_ns().unwrap();
         scoped(control, || {
             assert!(check().is_err());
             crate::write_kind::scoped(Some(crate::write_kind::WriteKind::Verdict), || {

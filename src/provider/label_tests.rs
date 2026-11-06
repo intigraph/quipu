@@ -313,7 +313,7 @@ impl GraphProvider for StampedProvider {
         self.name
     }
     fn query(&self, _sparql: &str) -> crate::error::Result<QueryResult> {
-        let mut row = crate::sparql::Bindings::new();
+        let mut row = crate::sparql::Bindings::default();
         row.insert(
             "s".into(),
             crate::types::Value::Str(format!("{}-row", self.name)),

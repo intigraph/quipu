@@ -5,6 +5,12 @@
 
 use super::*;
 
+/// Legacy-namespace term, as the test fixtures write them (shadows the
+/// module's store-scoped `ns`).
+fn ns(name: &str) -> String {
+    format!("{}{name}", crate::namespace::DEFAULT_BASE_NS)
+}
+
 /// The verifier name of the test trust root.
 pub(crate) const TEST_ROOT: &str = "test-root";
 

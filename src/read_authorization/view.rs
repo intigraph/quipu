@@ -28,16 +28,42 @@ pub struct ReadView {
     epoch: String,
     graph_ids: Vec<i64>,
     exports: BTreeMap<String, String>,
+    #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+    native_ha: bool,
 }
 
 impl AuthorizedRead {
     /// Check exact scope before reading source facts. One source transaction
     /// pins all selected graphs; hidden metadata/dictionaries are not copied.
     pub fn open(self, source: &Store, now: u64) -> Result<ReadView> {
+        self.open_with_snapshot(source, now, false, false)
+    }
+
+    // The HA profile pins cursor, eligibility and this copy in ONE caller-owned
+    // read transaction. Keep the ordinary API's transaction ownership unchanged.
+    #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+    pub(crate) fn open_in_snapshot(self, source: &Store, now: u64) -> Result<ReadView> {
+        if source.conn.is_autocommit() {
+            return Err(denied());
+        }
+        self.open_with_snapshot(source, now, true, true)
+    }
+
+    fn open_with_snapshot(
+        self,
+        source: &Store,
+        now: u64,
+        borrowed: bool,
+        native: bool,
+    ) -> Result<ReadView> {
         if now >= self.expiry || now < self.authorized_at || source.has_attachments() {
             return Err(denied());
         }
-        let read = source.conn.unchecked_transaction()?;
+        let read = if borrowed {
+            None
+        } else {
+            Some(source.conn.unchecked_transaction()?)
+        };
         let source_id = source.store_id()?;
         let epoch = source.log_epoch()?;
         let mut store = Store::open_in_memory()?;
@@ -56,6 +82,18 @@ impl AuthorizedRead {
             if source.is_dataset(graph)? || source.graph_class(g)?.as_deref() != Some("committed") {
                 return Err(denied());
             }
+            #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+            if native {
+                if self.operation != ReadOperation::Query {
+                    return Err(denied());
+                }
+                let destination = if root { 0 } else { store.graph_create(graph)? };
+                copy_native(source, &mut store, g, destination, &mut facts, &mut bytes)?;
+                graph_ids.push(destination);
+                continue;
+            }
+            #[cfg(not(all(feature = "ha-read-profile", target_os = "linux")))]
+            let _ = native;
             let (rows, value_bytes): (i64, i64) = source.conn.query_row(
                 "SELECT COUNT(*), COALESCE(SUM(length(v)), 0) FROM facts WHERE g=?1 AND op=1 AND valid_to IS NULL",
                 [g], |row| Ok((row.get(0)?, row.get(1)?)),
@@ -99,7 +137,9 @@ impl AuthorizedRead {
             graph_ids.push(destination);
             exports.insert(graph.clone(), canonical);
         }
-        read.commit()?;
+        if let Some(read) = read {
+            read.commit()?;
+        }
         Ok(ReadView {
             authorization: self,
             store,
@@ -107,6 +147,8 @@ impl AuthorizedRead {
             epoch,
             graph_ids,
             exports,
+            #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+            native_ha: native,
         })
     }
 }
@@ -164,6 +206,10 @@ impl ReadView {
         self.require(ReadOperation::Query, now)?;
         let parsed = crate::sparql_structure::parse_query(sparql::sparql_parser(), text)?
             .map_err(|_| denied())?;
+        #[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+        if self.native_ha {
+            sparql::root_scope::refuse_custom_functions(&parsed)?;
+        }
         let dataset = match &parsed {
             Query::Select { dataset, .. }
             | Query::Ask { dataset, .. }
@@ -224,4 +270,67 @@ impl ReadView {
             .map(|(graph, text)| (graph.clone(), text.lines().count()))
             .collect())
     }
+}
+
+// Query-only HA views retain native bytes and valid intervals. Reuse the SAME
+// lossless record encoder/converter as cut/tail; this is not another applier.
+// Export/metadata retain their existing RDF-only contract and ordinary path.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+fn copy_native(
+    source: &Store,
+    destination: &mut Store,
+    graph: i64,
+    target: i64,
+    facts: &mut usize,
+    bytes: &mut usize,
+) -> Result<()> {
+    let mut stmt = source.conn.prepare(
+        "SELECT f.e,f.a,CASE WHEN length(f.v)<=?2 THEN f.v ELSE NULL END,f.valid_from,f.valid_to,length(e.iri),length(a.iri) FROM facts f LEFT JOIN terms e ON e.id=f.e LEFT JOIN terms a ON a.id=f.a WHERE f.g=?1 AND f.op=1 AND f.retracted_tx IS NULL LIMIT 100001")?;
+    let mut rows = stmt.query(rusqlite::params![
+        graph,
+        i64::try_from(MAX_VIEW_BYTES).map_err(|_| denied())?
+    ])?;
+    let mut records = Vec::new();
+    while let Some(row) = rows.next()? {
+        *facts = facts.checked_add(1).ok_or_else(denied)?;
+        if *facts > MAX_VIEW_FACTS {
+            return Err(denied());
+        }
+        let value = row.get::<_, Option<Vec<u8>>>(2)?.ok_or_else(denied)?;
+        if row.get::<_, i64>(5)? > 8192 || row.get::<_, i64>(6)? > 8192 {
+            return Err(denied());
+        }
+        let decoded = crate::Value::from_bytes(&value)?;
+        if let crate::Value::Ref(id) = decoded {
+            let bounded: bool = source.conn.query_row(
+                "SELECT length(iri)<=8192 FROM terms WHERE id=?1",
+                [id],
+                |r| r.get(0),
+            )?;
+            if !bounded {
+                return Err(denied());
+            }
+        }
+        let e: i64 = row.get(0)?;
+        let a: i64 = row.get(1)?;
+        let record = serde_json::json!({"entity":source.resolve(e)?,"attribute":source.resolve(a)?,
+            "value":source.value_json(&decoded)?,"op":"assert",
+            "valid_from":row.get::<_,String>(3)?,"valid_to":row.get::<_,Option<String>>(4)?});
+        let encoded = serde_json::to_string(&record).map_err(|_| denied())?;
+        *bytes = bytes.checked_add(encoded.len()).ok_or_else(denied)?;
+        if *bytes > MAX_VIEW_BYTES {
+            return Err(denied());
+        }
+        records.push((encoded, record));
+    }
+    records.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let datums: Vec<_> = records
+        .iter()
+        .map(|(_, r)| {
+            crate::applier::record_to_datum(destination, r, "1970-01-01T00:00:00Z")?
+                .map_err(|_| denied())
+        })
+        .collect::<Result<_>>()?;
+    destination.transact_to_graph(&datums, "1970-01-01T00:00:00Z", None, None, target)?;
+    Ok(())
 }

@@ -80,7 +80,7 @@ pub(super) fn select(
         let Some(value) = crate::sparql::pattern_util::resolve_object_pattern(
             store,
             &constraint.object,
-            &crate::sparql::Bindings::new(),
+            &crate::sparql::Bindings::default(),
         )?
         else {
             continue;
