@@ -126,8 +126,7 @@ fn uncommitted_prepared_clock_drift_refuses_before_any_sequence_or_receipt() {
             decision,
             Some("fixture"),
         )
-        .err()
-        .expect("clock substitution must refuse");
+        .expect_err("clock substitution must refuse");
         assert!(
             error
                 .to_string()

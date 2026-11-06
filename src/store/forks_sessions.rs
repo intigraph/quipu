@@ -87,13 +87,14 @@ impl Store {
         let closed = self.fork_closes(fork.g, e, a)?;
         let mut out = std::collections::BTreeMap::new();
         for fact in self.root_facts_as_of(fork.fork_tx)? {
-            if fact.entity == e && fact.attribute == a {
-                if let Some(at) = closed.get(&fact.value.term_key()) {
-                    out.insert(
-                        crate::rdf::value_to_term(self, &fact.value)?.to_string(),
-                        at.clone(),
-                    );
-                }
+            if fact.entity == e
+                && fact.attribute == a
+                && let Some(at) = closed.get(&fact.value.term_key())
+            {
+                out.insert(
+                    crate::rdf::value_to_term(self, &fact.value)?.to_string(),
+                    at.clone(),
+                );
             }
         }
         Ok(out)

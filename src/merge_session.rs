@@ -144,7 +144,7 @@ fn scalar_graph(graph: &Graph, lists: &BTreeMap<Slot, Option<merge_lists::Value>
 }
 
 /// Prepare all modes with the same scalar/list/selection operators. `start`
-/// returns the real ROOT valid_from for a head/scalar claim, never a fake clock.
+/// returns the real ROOT `valid_from` for a head/scalar claim, never a fake clock.
 pub(crate) fn prepare(
     mut request: Request,
     choices: &[Choice],
@@ -296,23 +296,21 @@ pub(crate) fn prepare(
             && ov != bv
             && tv != bv
             && ov != tv
+            && let Some(chosen) = merge_lists::merge(&bv, &ov, &tv, *mode)?
         {
-            if let Some(chosen) = merge_lists::merge(&bv, &ov, &tv, *mode)? {
-                decisions.insert(slot.clone(), Decision::Values(set(&chosen)));
-            }
+            decisions.insert(slot.clone(), Decision::Values(set(&chosen)));
         }
     }
     // A decision cannot change a scalar into a list, or inject multiple lists.
     for (slot, decision) in &decisions {
-        if let Decision::Values(values) = decision {
-            if values
+        if let Decision::Values(values) = decision
+            && values
                 .iter()
                 .any(|value| matches!(value, Value::List(_)) != lists.contains_key(slot))
-            {
-                return Err(invalid(
-                    "decision value type differs from the declared slot profile",
-                ));
-            }
+        {
+            return Err(invalid(
+                "decision value type differs from the declared slot profile",
+            ));
         }
     }
     for unit in &request.profile.units {

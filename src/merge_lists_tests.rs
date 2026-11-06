@@ -1,3 +1,4 @@
+use super::model::{Clocks, identity, plan};
 use super::*;
 
 fn seq(values: &[&str]) -> Option<Vec<String>> {
@@ -110,9 +111,11 @@ fn lowering_and_noop_planning_refuse_unidentified_blank_elements() {
                 &value,
                 Mode::Whole,
                 None,
-                "2026-01-01",
-                "2026-01-02",
-                "2026-01-03",
+                Clocks {
+                    ours: "2026-01-01",
+                    incoming: "2026-01-02",
+                    decision: "2026-01-03"
+                },
             )
             .is_err()
         );

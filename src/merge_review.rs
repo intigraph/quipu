@@ -9,7 +9,7 @@ pub(crate) fn convergent(record: &DecisionRecord) -> bool {
 }
 
 /// Include agreeing changes (including agreeing deletions) in slot order.
-/// Unbounded convergence uses usize::MAX as the legacy record's numeric bound;
+/// Unbounded convergence uses `usize::MAX` as the legacy record's numeric bound;
 /// it is not silently treated as maxCount 1.
 pub(crate) fn merge(
     base: &Graph,

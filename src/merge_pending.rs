@@ -271,15 +271,14 @@ pub(crate) fn execute(
         if merge_session::render(&root) != prepared.request.ours {
             return Err(invalid("ROOT snapshot moved"));
         }
-        if let Some(parent) = &prepared.request.parent {
-            if store
+        if let Some(parent) = &prepared.request.parent
+            && store
                 .find_transaction_by_source(&format!("resume_parent={parent};"))?
                 .is_some()
-            {
-                return Err(invalid(
-                    "parent already has an applied child; resume that child's remainder",
-                ));
-            }
+        {
+            return Err(invalid(
+                "parent already has an applied child; resume that child's remainder",
+            ));
         }
         #[cfg(feature = "shacl")]
         if !prepared.request.shapes.trim().is_empty() {
@@ -328,7 +327,7 @@ pub(crate) fn execute(
             rows,
             held_units: prepared.held_units.clone(),
             guards: Vec::new(),
-            reviewed_choices: prepared.reviewed_choices.clone(),
+            reviewed_choices: prepared.reviewed_choices,
             store_shapes_hash: crate::share::sha256(
                 store.get_combined_shapes()?.unwrap_or_default().as_bytes(),
             ),

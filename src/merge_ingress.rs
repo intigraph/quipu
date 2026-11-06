@@ -214,3 +214,38 @@ pub(crate) fn require_remote_identity() -> Result<()> {
         )),
     }
 }
+
+/// Prepare a Git-owned pendant merge without writing a store or repository.
+/// The bounded retained session is decoded strictly; persistence remains Git's.
+pub fn plan_pendant(value: &Json) -> Result<Json> {
+    let bytes = serde_json::to_vec(value).map_err(|e| Error::Serialization(e.to_string()))?;
+    if bytes.len() > MAX_FILE {
+        return Err(invalid("retained session exceeds 8 MiB"));
+    }
+    let file: File = serde_json::from_slice(&bytes).map_err(|e| invalid(&e.to_string()))?;
+    if file.schema != SCHEMA || file.request.path != Path::Pendant {
+        return Err(invalid("not a pendant merge session"));
+    }
+    let prepared = merge_adapters::pendant(file.request, &file.choices)?;
+    Ok(json!({"summary":summary(&prepared),
+        "prospective":crate::merge_session::render(&prepared.prospective)}))
+}
+
+#[cfg(test)]
+mod pendant_tests {
+    use super::*;
+    #[test]
+    fn pendant_planning_is_pure_and_path_checked() {
+        let mut file = json!({"schema":SCHEMA, "authored_at":"", "choices":[],
+            "request":{"store_id":"git", "root_tx":0, "path":"Pendant",
+            "input_id":"theirs", "base_id":"base", "base":"", "ours":"", "theirs":"",
+            "shapes":"", "profile":Profile::default(), "parent":null, "active_slots":null}});
+        let planned = plan_pendant(&file).unwrap();
+        assert_eq!(planned["prospective"], "");
+        file["request"]["path"] = json!("Share");
+        assert!(plan_pendant(&file).is_err());
+        file["request"]["path"] = json!("Pendant");
+        file["unexpected"] = json!(true);
+        assert!(plan_pendant(&file).is_err());
+    }
+}

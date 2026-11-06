@@ -9,18 +9,13 @@ use super::{Decision, MergePlan, SlotInput, plan_merge};
 use crate::error::{Error, Result};
 
 /// Which otherwise valid slot plans may be applied together.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Mode {
+    #[default]
     Atomic,
     PartialEntity,
     PartialSlot,
-}
-
-impl Default for Mode {
-    fn default() -> Self {
-        Self::Atomic
-    }
 }
 
 /// Select a closed set of slots without splitting any supplied merge unit.

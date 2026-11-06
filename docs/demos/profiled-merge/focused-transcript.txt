@@ -11,4 +11,3 @@ test merge_session::tests::held_only_partial_plan_records_pending_without_receiv
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3663 filtered out; finished in 0.02s
 HOME guard: 159 watched paths and 2 UID-keyed resources clean.
-
