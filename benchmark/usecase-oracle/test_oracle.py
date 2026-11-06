@@ -140,6 +140,16 @@ class OracleTests(unittest.TestCase):
         observation["transactions"][0]["assert"].append(dict(observation["history"][0]))
         self.assertFalse(evaluate(fixture, observation)["correct"])
 
+    def test_refused_or_deferred_atomic_conflict_receives_nothing(self):
+        for case in ["C4-both-refused", "C4-defer-atomic"]:
+            fixture = next(f for f in TEMPORAL_CASES if f["case"] == case)
+            observation = self.observation(fixture)
+            observation["transactions"].append({"role": "receive", "close": [], "assert": []})
+            self.assertFalse(evaluate(fixture, observation)["correct"])
+            observation = self.observation(fixture)
+            observation["history"].append({"value": "c", "from": "Td", "to": "Td"})
+            self.assertFalse(evaluate(fixture, observation)["correct"])
+
     def test_replay_fixtures_reject_duplicate_writes_and_lost_first_receipt(self):
         for fixture in REPLAY_CASES:
             self.assertTrue(evaluate(fixture, self.observation(fixture))["correct"])
