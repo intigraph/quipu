@@ -164,8 +164,11 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
         if model:
             assert text_search.get('isError') is not True, text_search
         else:
-            assert text_search.get('isError') is True
-            assert 'no embedding provider' in text_search['content'][0]['text']
+            assert text_search.get('isError') is not True, text_search
+            fallback = json.loads(text_search['content'][0]['text'])
+            assert fallback['retrieval']['mode'] == 'lexical', fallback
+            assert fallback['retrieval']['status'] == 'degraded', fallback
+            assert 'context' not in fallback
         turtle = {'turtle': '<urn:fixture> <urn:p> "fixture" .', 'actor': 'urn:spoof'}
         assert unpack(call('quipu_knot', turtle)).get('isError') is True
         assert unpack(call('quipu_knot', turtle, 'invalid')).get('isError') is True
