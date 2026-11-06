@@ -349,8 +349,14 @@ pub(crate) fn execute(
             .as_ref()
             .map_or(String::new(), |id| format!("resume_parent={id};"));
         let source = format!("merge-session;merge_id={};{parent}", prepared.id);
-        receipt.receive_tx =
-            Some(store.transact(&receive, td, actor, Some(&format!("{source}step=receive")))?);
+        if !receive.is_empty() {
+            receipt.receive_tx = Some(store.transact(
+                &receive,
+                td,
+                actor,
+                Some(&format!("{source}step=receive")),
+            )?);
+        }
         if !decide.is_empty() {
             receipt.decide_tx =
                 Some(store.transact(&decide, td, actor, Some(&format!("{source}step=decide")))?);

@@ -185,3 +185,58 @@ fn explicit_units_hold_without_any_member_receipt() {
         | FactOp::Receipt { value, .. } => value.subject.to_string() != "<urn:e>",
     }));
 }
+
+#[test]
+fn decide_only_convergence_has_no_synthetic_receive_transaction() {
+    let (mut store, mut request) = setup();
+    request.theirs = request.ours.clone();
+    let choices = [Choice {
+        slot: key("p"),
+        decision: Decision::Values(BTreeSet::from([Value::Term("\"chosen\"".into())])),
+    }];
+    let plan = crate::merge_adapters::prepare_store(&store, request, &choices, TT, TD).unwrap();
+    assert!(plan.receive.is_empty() && !plan.decide.is_empty());
+    let before = store.latest_tx_id().unwrap();
+    let receipt =
+        crate::merge_pending::execute(&mut store, "urn:fixture:ledger", plan, TT, TD, None)
+            .unwrap();
+    assert_eq!(receipt.receive_tx, None);
+    assert_eq!(receipt.decide_tx, Some(before + 1));
+    assert_eq!(
+        store.latest_tx_id().unwrap(),
+        before + 2,
+        "decide then durable record only"
+    );
+    let loaded = crate::merge_pending::load(&store, "urn:fixture:ledger", &receipt.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(loaded.receive_tx, None);
+    assert_eq!(loaded.decide_tx, receipt.decide_tx);
+}
+
+#[test]
+fn held_only_partial_plan_records_pending_without_receiving_empty_data() {
+    let (mut store, mut request) = setup();
+    request.theirs = "<urn:e> <urn:p> \"theirs\" .\n<urn:e> <urn:q> \"theirs\" .\n".into();
+    let plan = crate::merge_adapters::prepare_store(&store, request, &[], TT, TD).unwrap();
+    assert!(plan.receive.is_empty() && plan.decide.is_empty());
+    assert_eq!(plan.plan.held, 2);
+    let before = store.latest_tx_id().unwrap();
+    let root = crate::share_merge::root_graph(&store).unwrap().0;
+    let receipt =
+        crate::merge_pending::execute(&mut store, "urn:fixture:ledger", plan, TT, TD, None)
+            .unwrap();
+    assert_eq!((receipt.receive_tx, receipt.decide_tx), (None, None));
+    assert_eq!(
+        store.latest_tx_id().unwrap(),
+        before + 1,
+        "durable pending record only"
+    );
+    assert_eq!(root, crate::share_merge::root_graph(&store).unwrap().0);
+    assert_eq!(receipt.guards.len(), 2);
+    assert!(
+        crate::merge_pending::load(&store, "urn:fixture:ledger", &receipt.id)
+            .unwrap()
+            .is_some()
+    );
+}
