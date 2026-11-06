@@ -85,7 +85,7 @@ impl Store {
         retract_source: Option<&str>,
         window: Option<ClaimWindow>,
     ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
-        self.stage_source_claims_inner(datums, graph, tx, timestamp, retract_source, false)
+        self.stage_source_claims_inner(datums, graph, tx, timestamp, retract_source, window, false)
     }
 
     /// C1 lifecycle changes close validity, retaining assertion history. The
@@ -98,9 +98,10 @@ impl Store {
         tx: i64,
         timestamp: &str,
     ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
-        self.stage_source_claims_inner(datums, graph, tx, timestamp, None, true)
+        self.stage_source_claims_inner(datums, graph, tx, timestamp, None, None, true)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn stage_source_claims_inner(
         &self,
         datums: &[super::Datum],
@@ -108,6 +109,7 @@ impl Store {
         tx: i64,
         timestamp: &str,
         retract_source: Option<&str>,
+        window: Option<ClaimWindow>,
         valid_time_only: bool,
     ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
         use crate::Op;

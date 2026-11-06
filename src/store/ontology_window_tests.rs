@@ -87,7 +87,7 @@ fn ontology_window_token_binds_registry_version_and_transaction_head() {
 
 #[test]
 fn ontology_window_guard_checks_registry_even_without_a_fact_head_change() {
-    let (store, before, through, _) = fixture(1);
+    let (mut store, before, through, _) = fixture(1);
     let plan = store
         .ontology_window_plan(
             "selected",
