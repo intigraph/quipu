@@ -125,6 +125,19 @@ class OracleTests(unittest.TestCase):
         observation["history"][-1]["from"] = TT
         self.assertFalse(evaluate(fixture, observation)["correct"])
 
+    def test_set_merge_does_not_rewrite_root_history_or_duplicate_current_claims(self):
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C3b")
+        observation = self.observation(fixture)
+        observation["history"][0]["to"] = TT
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        fixture = next(f for f in TEMPORAL_CASES if f["case"] == "C3d")
+        observation = self.observation(fixture)
+        observation["history"].append(dict(observation["history"][0]))
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+        observation = self.observation(fixture)
+        observation["transactions"][0]["assert"].append(dict(observation["history"][0]))
+        self.assertFalse(evaluate(fixture, observation)["correct"])
+
 
 if __name__ == "__main__":
     unittest.main()

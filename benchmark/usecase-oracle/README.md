@@ -25,7 +25,9 @@ The fixtures do not run the merge or manufacture observations. Their positive
 and defeated controls validate the judge, not any operator implementation.
 
 `temporal_cases.py` adds explicit single-slot store projections for C1a, C2a,
-C4 ours/theirs, C5b theirs and C7. They include valid intervals and ordered
+C3a–C3d, C4 ours/theirs, C5b theirs and C7. C3 fixes ROOT's existing close
+times and receives only incoming additions, avoiding duplicate current claims.
+They include valid intervals and ordered
 transaction traces. Where a fixture declares `expected_transactions`, an
 observation must provide the trace: reversed receive/decide order, a missing
 receipt transaction, or an extra transaction fails even when final facts and
