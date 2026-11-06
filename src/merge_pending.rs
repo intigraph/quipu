@@ -124,12 +124,26 @@ pub(crate) fn load(store: &Store, ledger: &str, id: &str) -> Result<Option<Recei
     // A ledger can retain private incoming snapshots. Possessing its IRI or
     // guessing a receipt id is not read authority. Unattributed local callers
     // can resume only unattributed local receipts; HTTP requires named identity.
-    match (crate::transaction_auth::current_identity(),store.transaction_auth(fact.tx)?) {
-        (None,None)=>{},
-        (Some(current),Some(recorded)) if current.principal==recorded.principal
-            && matches!(current.auth_class.as_str(),"named_bearer"|"attested_session")
-            && matches!(recorded.auth_class.as_str(),"named_bearer"|"attested_session")=>{},
-        _=>return Err(Error::PolicyDenied("merge receipt belongs to another authenticated writer".into())),
+    match (
+        crate::transaction_auth::current_identity(),
+        store.transaction_auth(fact.tx)?,
+    ) {
+        (None, None) => {}
+        (Some(current), Some(recorded))
+            if current.principal == recorded.principal
+                && matches!(
+                    current.auth_class.as_str(),
+                    "named_bearer" | "attested_session"
+                )
+                && matches!(
+                    recorded.auth_class.as_str(),
+                    "named_bearer" | "attested_session"
+                ) => {}
+        _ => {
+            return Err(Error::PolicyDenied(
+                "merge receipt belongs to another authenticated writer".into(),
+            ));
+        }
     }
     let Value::Str(payload) = &fact.value else {
         return Err(invalid("receipt is not JSON text"));
@@ -240,6 +254,11 @@ pub(crate) fn execute(
     crate::share_merge::core::atomic(store, |store| {
         if let Some(done) = load(store, ledger, &prepared.id)? {
             return Ok(done);
+        }
+        if prepared.authored_at != authored_at || prepared.decision_at != td {
+            return Err(invalid(
+                "prepared operation clocks differ from persistence clocks",
+            ));
         }
         if ledger.trim().is_empty() || store.lookup(ledger)? == Some(crate::schema::ROOT_GRAPH) {
             return Err(invalid("explicit non-ROOT ledger graph required"));

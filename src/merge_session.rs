@@ -38,12 +38,15 @@ pub(crate) struct Profile {
     pub units: Vec<BTreeSet<Slot>>,
 }
 
-fn profile_schema()->String {"quipu-merge-profile/v1".into()}
+fn profile_schema() -> String {
+    "quipu-merge-profile/v1".into()
+}
 
 impl Default for Profile {
     fn default() -> Self {
         Self {
-            schema:profile_schema(),shapes_hash:None,
+            schema: profile_schema(),
+            shapes_hash: None,
             mode: Mode::Atomic,
             lists: Vec::new(),
             units: Vec::new(),
@@ -88,6 +91,10 @@ pub(crate) struct Choice {
 pub(crate) struct Prepared {
     pub request: Request,
     pub id: String,
+    /// Exact clocks used to lower this operation sequence. Persistence cannot
+    /// silently substitute another transaction or incoming-authorship time.
+    pub authored_at: String,
+    pub decision_at: String,
     pub plan: merge_core::MergePlan<Slot, Value>,
     pub prospective: Graph,
     pub receive: Vec<FactOp<oxrdf::Triple>>,
@@ -151,10 +158,24 @@ pub(crate) fn prepare(
         graph(&request.ours)?,
         graph(&request.theirs)?,
     );
-    request.profile=crate::merge_profile::bind(request.profile.clone(),&request.shapes,[&base,&ours,&theirs])?;
-    if let Some(active)=&request.active_slots {
-        request.profile.units.retain(|unit|!unit.is_disjoint(active));
-        if request.profile.units.iter().any(|unit|!unit.is_subset(active)) {return Err(invalid("resume would split a shape-declared unit"));}
+    request.profile = crate::merge_profile::bind(
+        request.profile.clone(),
+        &request.shapes,
+        [&base, &ours, &theirs],
+    )?;
+    if let Some(active) = &request.active_slots {
+        request
+            .profile
+            .units
+            .retain(|unit| !unit.is_disjoint(active));
+        if request
+            .profile
+            .units
+            .iter()
+            .any(|unit| !unit.is_subset(active))
+        {
+            return Err(invalid("resume would split a shape-declared unit"));
+        }
     }
     let mut lists = BTreeMap::new();
     for binding in &request.profile.lists {
@@ -295,7 +316,15 @@ pub(crate) fn prepare(
         }
     }
     for unit in &request.profile.units {
-        for slot in unit {inputs.entry(slot.clone()).or_insert_with(||SlotInput {base:BTreeSet::new(),ours:BTreeMap::new(),theirs:BTreeMap::new(),theirs_closed:BTreeMap::new(),card:Card::Many(None)});}
+        for slot in unit {
+            inputs.entry(slot.clone()).or_insert_with(|| SlotInput {
+                base: BTreeSet::new(),
+                ours: BTreeMap::new(),
+                theirs: BTreeMap::new(),
+                theirs_closed: BTreeMap::new(),
+                card: Card::Many(None),
+            });
+        }
     }
     if let Some(active) = &request.active_slots {
         if active.iter().any(|slot| !inputs.contains_key(slot)) {
@@ -437,6 +466,8 @@ pub(crate) fn prepare(
     Ok(Prepared {
         request,
         id,
+        authored_at: authored_at.to_owned(),
+        decision_at: td.to_owned(),
         plan,
         prospective,
         receive,

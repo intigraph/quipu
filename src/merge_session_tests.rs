@@ -62,7 +62,7 @@ fn p1_pending_resume_is_sequenced_idempotent_and_only_applies_the_remainder() {
             "urn:fixture:ledger",
             again,
             TT,
-            TD,
+            "2026-01-11T00:00:00Z",
             Some("fixture")
         )
         .unwrap()
@@ -99,6 +99,48 @@ fn p1_pending_resume_is_sequenced_idempotent_and_only_applies_the_remainder() {
         crate::merge_adapters::resume(&store, "urn:fixture:ledger", &first.id, &choices, TD)
             .is_err()
     );
+}
+
+#[test]
+fn uncommitted_prepared_clock_drift_refuses_before_any_sequence_or_receipt() {
+    for (authored, decision) in [("2026-01-04T00:00:00Z", TD), (TT, "2026-01-11T00:00:00Z")] {
+        let (mut store, request) = setup();
+        let before = store.latest_tx_id().unwrap();
+        let root = crate::share_merge::root_graph(&store).unwrap().0;
+        let choices = [Choice {
+            slot: key("p"),
+            decision: Decision::Theirs,
+        }];
+        let prepared =
+            crate::merge_adapters::prepare_store(&store, request, &choices, TT, TD).unwrap();
+        assert!(
+            !prepared.receive.is_empty(),
+            "fixture must attempt real writes"
+        );
+        let id = prepared.id.clone();
+        let error = crate::merge_pending::execute(
+            &mut store,
+            "urn:fixture:ledger",
+            prepared,
+            authored,
+            decision,
+            Some("fixture"),
+        )
+        .err()
+        .expect("clock substitution must refuse");
+        assert!(
+            error
+                .to_string()
+                .contains("prepared operation clocks differ")
+        );
+        assert_eq!(before, store.latest_tx_id().unwrap());
+        assert_eq!(root, crate::share_merge::root_graph(&store).unwrap().0);
+        assert!(
+            crate::merge_pending::load(&store, "urn:fixture:ledger", &id)
+                .unwrap()
+                .is_none()
+        );
+    }
 }
 
 #[test]
