@@ -145,10 +145,12 @@ fn changed_archive_unsafe_member_and_duplicate_library_never_publish() {
         sha256: hex::encode(ring::digest::digest(&ring::digest::SHA256, &good)),
     };
     let cache = temp.path().join("cache");
-    assert!(acquire_from(&cache, &expected, &[artifact], |_, out| out
-        .write_all(b"not the pinned ZIP")
-        .map_err(error))
-    .is_err());
+    assert!(
+        acquire_from(&cache, &expected, &[artifact], |_, out| out
+            .write_all(b"not the pinned ZIP")
+            .map_err(error))
+        .is_err()
+    );
     assert!(!cache.join(VERSION).exists());
     for extra in ["../escape", "other/libonnxruntime_providers_shared.so"] {
         let bytes = archive_bytes(&expected.files, Some(extra));
@@ -157,10 +159,12 @@ fn changed_archive_unsafe_member_and_duplicate_library_never_publish() {
             url: "https://files.pythonhosted.org/fixture".into(),
             sha256: hex::encode(ring::digest::digest(&ring::digest::SHA256, &bytes)),
         };
-        assert!(acquire_from(&cache, &expected, &[artifact], |_, out| out
-            .write_all(&bytes)
-            .map_err(error))
-        .is_err());
+        assert!(
+            acquire_from(&cache, &expected, &[artifact], |_, out| out
+                .write_all(&bytes)
+                .map_err(error))
+            .is_err()
+        );
         assert!(!cache.join(VERSION).exists());
     }
 }

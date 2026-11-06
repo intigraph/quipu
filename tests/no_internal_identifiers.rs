@@ -207,9 +207,10 @@ fn hostnames_and_crew_names_are_allowed() {
 fn public_wheel_versions_do_not_hide_private_endpoints() {
     let public = "https://files.pythonhosted.org/packages/ab/cd/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl";
     let (_, rx) = &patterns()[0];
-    assert!(rx
-        .captures_iter(public)
-        .all(|c| !is_real_hit("private address", &c, public)));
+    assert!(
+        rx.captures_iter(public)
+            .all(|c| !is_real_hit("private address", &c, public))
+    );
     for private in [
         "https://10.3.9.90/packages/ab/cd/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl".to_string(),
         format!("{public} endpoint=10.3.9.90"),
