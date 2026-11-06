@@ -2,6 +2,41 @@ use super::*;
 use crate::Store;
 
 #[test]
+fn declared_provenance_is_journal_content_without_local_authentication() {
+    let mut store = Store::open_in_memory().unwrap();
+    let tx = store
+        .transact(&[], "2026-01-01T00:00:00Z", None, None)
+        .unwrap();
+    initialize(&store).unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO transaction_declarations(tx, declarations) VALUES(?1, ?2)",
+            rusqlite::params![tx, r#"{"agent":"declared-only"}"#],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO transaction_auth(tx, principal, auth_class) VALUES(?1, ?2, ?3)",
+            rusqlite::params![tx, "local-principal", "bearer"],
+        )
+        .unwrap();
+    let batch = read_revision(&store, 0, 100).unwrap();
+    assert!(
+        batch.changes.iter().any(|change| {
+            change.table == "transaction_declarations" && change.operation == "put"
+        })
+    );
+    assert!(
+        !batch
+            .changes
+            .iter()
+            .any(|change| change.table == "transaction_auth")
+    );
+}
+
+#[test]
 fn journal_is_explicit_and_does_not_self_initialize_on_a_read() {
     let store = Store::open_in_memory().unwrap();
     let error = read_revision(&store, 0, 100).unwrap_err();

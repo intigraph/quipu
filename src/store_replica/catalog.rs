@@ -9,6 +9,8 @@ use crate::{Result, Store};
 const DATA: &[&str] = &[
     "terms",
     "transactions",
+    // Caller-declared provenance is historical content, never local authority.
+    "transaction_declarations",
     "facts",
     "graphs",
     "shapes",
