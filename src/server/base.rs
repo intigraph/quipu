@@ -139,7 +139,17 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
 
 pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
     store.search_config_mut().clone_from(config);
-    if config.keyword {
+    let fresh = store.created_fact_schema();
+    let initialized = store
+        .lexical_progress()
+        .unwrap_or_else(|e| {
+            eprintln!("error reading keyword index state: {e}");
+            std::process::exit(1);
+        })
+        .is_some();
+    let keyword = config.keyword_for_store(fresh, initialized);
+    store.search_config_mut().keyword = keyword;
+    if keyword && (fresh || config.keyword_explicit) {
         store.initialize_lexical_index().unwrap_or_else(|e| {
             eprintln!("error initializing keyword index: {e}");
             std::process::exit(1);
