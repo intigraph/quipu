@@ -116,3 +116,26 @@ history interval and receive transaction independently. Correct history plus
 an invented current projection is insufficient. Early close at Td, visibility
 at Tz, missing as-of reads and changed authored times must defeat qualification.
 This source slice adds no database reader or temporal mutation.
+
+
+## Prepared read cuts (source checkpoint, unqualified)
+
+`prepare_slot_reads` copies the explicitly bounded touched scope and fixes two
+Store `AsOf` coordinates: declared base tx and captured reserved head tx, at
+one caller-supplied canonical UTC valid time. No `now` default is available.
+It refuses transaction IDs outside Store's signed range. Accessors borrow the
+private captured data, so later mutation of the request slots cannot widen it.
+The coordinates remain declarations, not evidence that a reservation is held.
+Two new tests cover independent tx cuts, Td/Tz preservation, copied scope,
+implicit/noncanonical time refusal and unrepresentable transaction IDs; these
+new tests are unrun. The previous two scope tests passed in the admitted batch.
+
+The existing `store/reads.rs::facts_as_of_in_graph` combined tx/time branch uses
+the stored `valid_to` directly. In contrast,
+`sparql/triple/temporal_visibility.rs::add_conditions` allows a closure recorded
+after the pinned transaction to retain the earlier open interval. Do not wire
+the prepared cuts to the full-graph helper and assume either bounded work or
+historical interval reconstruction. A future touched-slot reader must qualify
+this difference with a row closed after the base, an originally finite interval,
+a future authored close at Tz, and both Td and Tz as-of observations. No existing
+read semantics are changed in this source checkpoint.

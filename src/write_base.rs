@@ -135,6 +135,80 @@ pub fn prepare_scoped_write_base<'a>(
     resolve_write_base(declared, current, legacy)
 }
 
+/// Captured coordinates for bounded historical and current slot reconstruction.
+///
+/// Private fields prevent callers from changing scope or one time cut after
+/// preparation. This is read planning, not reservation ownership or a Store
+/// query. In particular, neither cut grants authentication or write authority.
+#[derive(Debug)]
+pub struct PreparedSlotReads<'a> {
+    base: ResolvedWriteBase<'a>,
+    touched: Vec<Slot>,
+    base_cut: crate::store::AsOf,
+    current_cut: crate::store::AsOf,
+}
+
+impl<'a> PreparedSlotReads<'a> {
+    /// Coordinate binding, still subject to authentic slice/hash verification.
+    pub fn base(&self) -> &ResolvedWriteBase<'a> {
+        &self.base
+    }
+
+    /// Exact bounded request slots, copied to avoid later request mutation.
+    pub fn touched(&self) -> &[Slot] {
+        &self.touched
+    }
+
+    /// Explicit transaction and valid-time coordinates for the declared base.
+    pub fn base_cut(&self) -> &crate::store::AsOf {
+        &self.base_cut
+    }
+
+    /// Reserved head at the same valid time, never a fresh wall-clock read.
+    pub fn current_cut(&self) -> &crate::store::AsOf {
+        &self.current_cut
+    }
+}
+
+/// Prepare independent transaction cuts at one explicit canonical valid time.
+///
+/// Store adapters must read only `touched()` at these cuts, preserving the
+/// interval known at each transaction. Passing the cuts to a full-graph query
+/// and filtering afterward does not satisfy this bounded-read contract.
+pub fn prepare_slot_reads<'a>(
+    declared: Option<&'a SourceBinding>,
+    current: &WriterSnapshot,
+    legacy: LegacyBasePolicy,
+    touched: &[Slot],
+    max_slots: usize,
+    valid_at: &str,
+) -> Result<PreparedSlotReads<'a>> {
+    if crate::time::normalize_rfc3339_utc(valid_at).as_deref() != Some(valid_at) {
+        return Err(Error::InvalidValue(
+            "write base: explicit canonical UTC valid time required".into(),
+        ));
+    }
+    let base = prepare_scoped_write_base(declared, current, legacy, touched, max_slots)?;
+    let tx = |value: u64| {
+        i64::try_from(value)
+            .map_err(|_| Error::InvalidValue("write base: transaction exceeds Store range".into()))
+    };
+    let base_cut = crate::store::AsOf {
+        tx: Some(tx(base.base_tx)?),
+        valid_at: Some(valid_at.to_owned()),
+    };
+    let current_cut = crate::store::AsOf {
+        tx: Some(tx(current.head_tx)?),
+        valid_at: Some(valid_at.to_owned()),
+    };
+    Ok(PreparedSlotReads {
+        base,
+        touched: touched.to_vec(),
+        base_cut,
+        current_cut,
+    })
+}
+
 #[cfg(test)]
 #[path = "write_base_tests.rs"]
 mod tests;
