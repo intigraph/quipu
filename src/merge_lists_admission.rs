@@ -127,4 +127,31 @@ mod tests {
             assert!(admit(&serde_json::to_vec(&variant).unwrap(), "").is_err());
         }
     }
+
+    #[test]
+    fn normalized_duplicate_slots_and_invalid_shapes_refuse() {
+        let mut duplicate = profile();
+        let mut entry = duplicate["slots"][0].clone();
+        entry["subject"] = json!("  <urn:owner>  ");
+        duplicate["slots"].as_array_mut().unwrap().push(entry);
+        assert!(admit(&serde_json::to_vec(&duplicate).unwrap(), "").is_err());
+
+        // A matching digest is necessary but does not make invalid Turtle valid.
+        let shapes = "this is not Turtle";
+        let mut matching = profile();
+        matching["shapes_sha256"] = json!(crate::share::sha256(shapes.as_bytes()));
+        assert!(admit(&serde_json::to_vec(&matching).unwrap(), shapes).is_err());
+
+        // The profile is explicit: a parsed shape alone admits no list slots.
+        let shapes = "<urn:s> <http://www.w3.org/ns/shacl#path> <urn:list> .";
+        let mut empty = profile();
+        empty["shapes_sha256"] = json!(crate::share::sha256(shapes.as_bytes()));
+        empty["slots"] = json!([]);
+        assert!(
+            admit(&serde_json::to_vec(&empty).unwrap(), shapes)
+                .unwrap()
+                .slots
+                .is_empty()
+        );
+    }
 }
