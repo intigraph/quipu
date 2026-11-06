@@ -52,6 +52,9 @@ pub const PLANE_SOURCE: &str = "quipu:inferred-plane";
 /// Source string the one-time migration writes under.
 pub const MIGRATE_SOURCE: &str = "quipu:migrate-inferred";
 
+/// Retraction-only ontology materialization-window cleanup.
+pub const OWL_UNLOAD_SOURCE: &str = "owl:unload";
+
 /// The companion IRI for a premise graph IRI.
 pub fn companion_iri_for(premise_iri: &str) -> String {
     if premise_iri.contains('#') {
@@ -74,6 +77,7 @@ pub fn source_may_write_inferred(source: Option<&str>) -> bool {
                 || s == "owl:materialize"
                 || s == PLANE_SOURCE
                 || s == MIGRATE_SOURCE
+                || s == OWL_UNLOAD_SOURCE
         }
         None => false,
     }
