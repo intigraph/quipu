@@ -60,7 +60,7 @@ counts reconcile to the overall count. These are retained-window physical
 sizing observations, not an entity lookup, ontology assignment or proof that a
 slot should become a fluent.
 
-This is **not** a second implementation of `merge3` and does not provide its
+The retrospective stage is **not** a second implementation of `merge3` and does not provide its
 three-way classification. Read bases, shape/cardinality snapshots, class and
 ontology mapping, individual agent attribution and LWW-loss evidence remain unknown.
 The live shadow stage must call the existing merge core against a declared
@@ -68,3 +68,37 @@ base, preserve normal write behavior, and bind its classification to the actual
 shape/source version. It still needs reviewed source, normal qualification,
 bounded owner-admitted collection, per-ontology reconciliation and coverage
 evidence. Neither synthetic tests nor this source stage complete the census.
+
+## Native exact-base source adapter (not installed)
+
+`merge_core::census::observe_batch` calls the existing `plan_slot` with its
+default decision. It contains no alternate merge rule and executes none of the
+returned fact operations. Native classifications are `unchanged`, `ours`,
+`theirs`, `convergent`, `divergent`, `maxcount-exceeded` and `delete-replace`;
+the two one-sided classes remain distinguishable. A per-slot hold is not a
+claim about what an atomic batch would commit.
+
+The source producer supplies an explicit base-evidence kind and whether the
+shape bound is known. A missing base or unknown bound emits an unclassified
+row, with neither a clean classification nor a false hold result. Known
+unbounded cardinality is represented separately from unknown cardinality.
+Evidence labels describe the producer's input; they do not authenticate it or
+prove that a supplied bound matches the actual shape revision.
+
+Before planning, the adapter refuses an entire batch above 256 slots, 4,096
+value occurrences or 4 MiB of term/time input bytes. Output contains only
+graph/predicate IDs, evidence knownness, native classification and the default
+per-slot hold. It excludes entity IDs, values and timestamps. There is no
+writer hook, persistent event sink, environment activation or live read in this
+adapter. Its Rust tests are source-only until a Cargo START qualifies them.
+
+Live integration must derive base and shape inputs inside the existing writer
+reservation, after authority checks, without changing success/refusal behavior.
+`store/conditional.rs::check_expected` already reserves the writer before
+reading explicit single-slot expectations; an expectation supplies values but
+does not itself prove an actual `sh:maxCount` bound or a read transaction.
+Ordinary writes without a base remain unknown. Ontology/class assignment must
+be resolved from a content-bound profile, outside this value-free adapter;
+graph membership and caller-declared actors cannot substitute for it. A bounded
+nonblocking sink with explicit dropped/unknown counts, producer identity and
+shape-version binding still needs implementation and normal deployment.

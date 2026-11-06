@@ -29,6 +29,8 @@ use serde::Serialize;
 
 use crate::error::{Error, Result};
 
+pub(crate) mod census;
+
 /// The cardinality a slot merges under (spec R4). List slots are slice S5.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Card {
