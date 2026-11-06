@@ -50,6 +50,7 @@ mod cli_attest;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
+mod cli_competency;
 mod cli_compose;
 mod cli_databook;
 mod cli_db;
@@ -124,6 +125,7 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
         "git-merge" => return cli_git_merge::run(&args),
         "merge-driver" => return cli_git_merge::run(&args),
@@ -402,6 +404,7 @@ fn print_usage() {
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
+    qp competency lint <pendant>  Validate contract schema and syntax offline
     qp prime [--brief] [--section <name>] [--static] [--json] [--db <path>]  Agent primer + live store summary
     qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]

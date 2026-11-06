@@ -7,6 +7,8 @@
 
 #[rustfmt::skip]
 pub(crate) static ABOUT: &[(&str, &str)] = &[
+    ("competency", "Inspect pendant competency contracts without opening a store"),
+    ("competency lint", "Validate competency.toml schema and query/command syntax offline; execute nothing"),
     ("version", "Print the version and source commit"),
     ("install-alias", "Add the qp alias beside the quipu binary"),
     ("knot", "Assert Turtle facts, validated against loaded shapes"),
