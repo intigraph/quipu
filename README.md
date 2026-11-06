@@ -110,7 +110,7 @@ Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tool
 ## Before you start
 
 - The CLI runs locally; `quipu-server` supplies the network API and explorer.
-- Semantic search needs a configured model and index; storing a graph alone does not provide either.
+- Fresh stores support keyword search without downloading a model. `quipu search "your terms"` uses keyword search until an embedding provider is configured; explicit `--mode semantic` still requires a model and vectors. Install the pinned default model with `quipu model install` in a full build. Check readiness with `quipu doctor search`.
 - [Configuration](https://intigraph.github.io/quipu/getting-started/configuration.html) covers storage and server settings.
 
 ## What's next

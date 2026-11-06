@@ -36,6 +36,7 @@ pub struct Model {
     pub(super) journal: BTreeMap<Placement, Journal>,
     pub(super) data: BTreeMap<Placement, Authority>,
     pub(super) operations: BTreeMap<String, Request>,
+    pub(super) abandoned: BTreeMap<String, Abandonment>,
     pub(super) seals: BTreeMap<String, Certificate>,
     pub(super) published: BTreeMap<String, Certificate>,
     pub(super) consumed: BTreeMap<String, Activation>,
@@ -70,6 +71,7 @@ impl Model {
             admitted: BTreeMap::from([(owner, authority.clone())]),
             epochs: BTreeSet::from([authority.epoch]),
             operations: BTreeMap::new(),
+            abandoned: BTreeMap::new(),
             seals: BTreeMap::new(),
             published: BTreeMap::new(),
             consumed: BTreeMap::new(),
@@ -80,6 +82,11 @@ impl Model {
     /// Full external phase/head in the model; reading it is not witness contact.
     pub fn witness_head(&self) -> &WitnessHead {
         &self.head
+    }
+
+    /// Retained outcome of an abandoned attempt. Readback grants no admission.
+    pub fn abandonment(&self, operation: &str) -> Option<&Abandonment> {
+        self.abandoned.get(operation)
     }
 
     /// Inspect a role. Absence is UNKNOWN for this enrolled unit, never INACTIVE.
@@ -119,8 +126,9 @@ impl Model {
     pub(super) fn reserved(&self, request: &Request) -> ModelResult<()> {
         request.validate()?;
         require(
-            self.operations.get(&request.operation) == Some(request),
-            "operation not reserved or payload changed",
+            self.operations.get(&request.operation) == Some(request)
+                && !self.abandoned.contains_key(&request.operation),
+            "operation not reserved, abandoned or payload changed",
         )
     }
 

@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-MODEL-BACKFILL 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-model\-backfill \- Embed one bounded batch of existing ROOT subjects
+.SH SYNOPSIS
+\fBquipu model backfill\fR [\fB\-\-db\fR] [\fB\-\-batch\-size\fR] [\fB\-\-after\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Embed one bounded batch of existing ROOT subjects
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-batch\-size\fR \fI<VALUE>\fR
+Number of entries per indexing batch
+.TP
+\fB\-\-after\fR \fI<VALUE>\fR
+Resume after this cursor
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

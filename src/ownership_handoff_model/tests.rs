@@ -460,6 +460,7 @@ fn exploration_actions() -> Vec<Action> {
     for destination in ["B", "C"] {
         let c = certificate(initial(), destination);
         actions.extend(handoff(&c, &format!("epoch-{destination}")));
+        actions.push(Action::Abandon(abandonment(&c)));
         let successor = c.successor(&format!("epoch-{destination}")).unwrap();
         actions.push(Action::Crash(successor.owner.clone()));
         actions.push(Action::Restart {
@@ -512,6 +513,14 @@ fn bounded_enumeration_never_admits_two_writers() {
             model.writable().len() <= 1,
             "split owner; action indices {trace:?}"
         );
+        assert!(
+            model.abandoned.keys().all(|operation| {
+                !model.seals.contains_key(operation)
+                    && !model.published.contains_key(operation)
+                    && !model.consumed.contains_key(operation)
+            }),
+            "abandoned attempt acquired a retirement outcome; trace {trace:?}"
+        );
         if trace.len() == 16 {
             continue;
         }
@@ -530,8 +539,9 @@ fn bounded_enumeration_never_admits_two_writers() {
         }
     }
     eprintln!(
-        "MODEL enumerated {} distinct states, 31 actions, depth 16",
-        seen.len()
+        "MODEL enumerated {} distinct states, {} actions, depth 16",
+        seen.len(),
+        actions.len()
     );
     assert!(
         seen.len() > 50,
@@ -542,18 +552,18 @@ fn bounded_enumeration_never_admits_two_writers() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(128))]
     #[test]
-    fn arbitrary_action_orders_preserve_exclusivity_and_refusal_atomicity(indices in prop::collection::vec(0usize..31,0..80)) {
+    fn arbitrary_action_orders_preserve_exclusivity_and_refusal_atomicity(indices in prop::collection::vec(any::<usize>(),0..80)) {
         let mut model=Model::new(initial()).unwrap();let actions=exploration_actions();
-        prop_assert_eq!(actions.len(),31);
         for index in indices {
             let before=model.clone();
-            if model.apply(&actions[index],observed()).is_err() {prop_assert_eq!(&model,&before);}
+            if model.apply(&actions[index % actions.len()],observed()).is_err() {prop_assert_eq!(&model,&before);}
             prop_assert!(model.writable().len()<=1);
+            prop_assert!(model.abandoned.keys().all(|operation| !model.seals.contains_key(operation) && !model.published.contains_key(operation) && !model.consumed.contains_key(operation)));
         }
     }
 
     #[test]
-    fn record_roundtrip_and_digest_ignore_json_key_order(id in "[a-zA-Z0-9_:-]{1,32}", generation in 0u64..u64::MAX, kind in 0usize..9, witness_phase in 0usize..3) {
+    fn record_roundtrip_and_digest_ignore_json_key_order(id in "[a-zA-Z0-9_:-]{1,32}", generation in 0u64..u64::MAX, kind in 0usize..10, witness_phase in 0usize..3) {
         let mut a=initial();a.store_id=id;a.generation=generation;
         a.predecessor=if generation==0 {None} else {Some([7;32])};
         let c=certificate(a.clone(),"B");let successor=c.successor("epoch-B").unwrap();
@@ -571,7 +581,8 @@ proptest! {
             5=>Payload::Retirement{certificate:c.clone()},
             6=>Payload::Activation{activation:Activation{certificate:c.clone(),authority:successor}},
             7=>Payload::Startup{head:head.clone(),nonce:"fresh-challenge".into()},
-            _=>Payload::Witness{head},
+            8=>Payload::Witness{head},
+            _=>Payload::Abandonment{abandonment:abandonment(&c)},
         };
         let record=Record{version:RECORD_VERSION,payload};
         let bytes=record.encode().unwrap();
@@ -641,4 +652,242 @@ fn strict_schema_rejects_unknown_missing_duplicate_oversized_and_inconsistent_re
         Record::decode(&serde_json::to_vec(&bare_tuple).unwrap()).is_err(),
         "a legacy bare tuple must not erase the witness phase"
     );
+}
+
+fn abandonment(c: &Certificate) -> Abandonment {
+    Abandonment {
+        request: c.request.clone(),
+        reason: "operator cancelled before barrier".into(),
+    }
+}
+
+#[test]
+fn abandon_allows_same_tuple_restart_and_distinct_attempt_but_not_stale_b() {
+    let a = initial();
+    let c = certificate(a.clone(), "B");
+    let mut model = Model::new(a.clone()).unwrap();
+    run(
+        &mut model,
+        &[
+            Action::Prepare(c.request.clone()),
+            Action::Crash(a.owner.clone()),
+        ],
+    );
+    assert!(
+        model
+            .apply(
+                &Action::Restart {
+                    authority: a.clone(),
+                    nonce: "blocked".into(),
+                    challenge: "blocked".into()
+                },
+                observed()
+            )
+            .is_err()
+    );
+    let abandon = Action::Abandon(abandonment(&c));
+    model.apply(&abandon, observed()).unwrap();
+    assert_eq!(
+        model.abandonment(&c.request.operation),
+        Some(&abandonment(&c))
+    );
+    assert_eq!(
+        model.witness_head(),
+        &WitnessHead::Active {
+            authority: a.clone()
+        }
+    );
+    assert!(!model.can_commit(&a)); // Abandon does not restart a crashed process.
+    model
+        .apply(
+            &Action::Restart {
+                authority: a.clone(),
+                nonce: "fresh-after-abandon".into(),
+                challenge: "fresh-after-abandon".into(),
+            },
+            observed(),
+        )
+        .unwrap();
+    assert!(model.can_commit(&a));
+    for stale in handoff(&c, "epoch-B") {
+        let before = model.clone();
+        assert!(model.apply(&stale, observed()).is_err(), "{stale:?}");
+        assert_eq!(model, before);
+    }
+    let mut next = c.clone();
+    next.request.operation = "next-attempt-same-destination".into();
+    model
+        .apply(&Action::Prepare(next.request.clone()), observed())
+        .unwrap();
+    let reserved = model.clone();
+    model.apply(&abandon, observed()).unwrap(); // Old readback cannot rewind new reservation.
+    assert_eq!(model, reserved);
+    run(&mut model, &handoff(&next, "epoch-B")[1..]);
+    let b = next.successor("epoch-B").unwrap();
+    assert_eq!(model.writable(), vec![&b]);
+    let active = model.clone();
+    model.apply(&abandon, observed()).unwrap(); // Nor can it rewind a later owner.
+    assert_eq!(model, active);
+    assert_eq!(
+        model.abandonment(&c.request.operation),
+        Some(&abandonment(&c))
+    );
+}
+
+#[test]
+fn abandoned_attempt_cannot_activate_its_stale_destination() {
+    let a = initial();
+    let c = certificate(a.clone(), "B");
+    let mut model = Model::new(a.clone()).unwrap();
+    model
+        .apply(&Action::Prepare(c.request.clone()), observed())
+        .unwrap();
+    eprintln!(
+        "{}",
+        serde_json::json!({"stage":"reserved", "head":model.witness_head(), "source_writable":model.can_commit(&a)})
+    );
+    model
+        .apply(&Action::Abandon(abandonment(&c)), observed())
+        .unwrap();
+    eprintln!(
+        "{}",
+        serde_json::json!({"stage":"abandoned", "head":model.witness_head(), "outcome":model.abandonment(&c.request.operation)})
+    );
+    // An old destination retries the entire handoff, ignoring each refusal.
+    // Check the resulting authority, not merely a lifecycle marker or error.
+    let refused_steps = handoff(&c, "epoch-B")
+        .iter()
+        .filter(|action| model.apply(action, observed()).is_err())
+        .count();
+    let stale_b = c.successor("epoch-B").unwrap();
+    eprintln!(
+        "{}",
+        serde_json::json!({"stage":"stale_destination_retry", "refused_steps":refused_steps, "destination_writable":model.can_commit(&stale_b), "source_writable":model.can_commit(&a)})
+    );
+    assert!(
+        !model.can_commit(&stale_b),
+        "abandoned attempt activated its old destination"
+    );
+    assert!(model.can_commit(&a));
+    assert!(!model.consumed.contains_key(&c.request.operation));
+}
+
+#[test]
+fn abandon_refuses_after_every_retirement_boundary_and_keeps_outcome_immutable() {
+    let c = certificate(initial(), "B");
+    let steps = handoff(&c, "epoch-B");
+    for prefix in 2..=steps.len() {
+        let mut model = Model::new(initial()).unwrap();
+        run(&mut model, &steps[..prefix]);
+        let before = model.clone();
+        assert!(
+            model
+                .apply(&Action::Abandon(abandonment(&c)), observed())
+                .is_err(),
+            "prefix {prefix}"
+        );
+        assert_eq!(model, before);
+    }
+    // Restoring an old ACTIVE journal cannot erase a sealed retirement outcome.
+    let mut model = Model::new(initial()).unwrap();
+    run(&mut model, &steps[..4]);
+    model
+        .apply(&Action::Crash(initial().owner.clone()), observed())
+        .unwrap();
+    model
+        .apply(
+            &Action::RestoreLocal {
+                placement: initial().owner,
+                journal: Some(Box::new(Journal::Active {
+                    authority: initial(),
+                })),
+                data: Some(initial()),
+            },
+            observed(),
+        )
+        .unwrap();
+    let before = model.clone();
+    assert!(
+        model
+            .apply(&Action::Abandon(abandonment(&c)), observed())
+            .is_err()
+    );
+    assert_eq!(model, before);
+}
+
+#[test]
+fn abandonment_requires_current_authority_exact_request_and_matching_source() {
+    let c = certificate(initial(), "B");
+    let mut model = Model::new(initial()).unwrap();
+    run(&mut model, &[Action::Prepare(c.request.clone())]);
+    for observations in [
+        Observations {
+            authenticated: false,
+            ..observed()
+        },
+        Observations {
+            current_grants: false,
+            ..observed()
+        },
+        Observations {
+            witness_online: false,
+            ..observed()
+        },
+    ] {
+        let before = model.clone();
+        assert!(
+            model
+                .apply(&Action::Abandon(abandonment(&c)), observations)
+                .is_err()
+        );
+        assert_eq!(model, before);
+    }
+    for change in 0..5 {
+        let mut bad = abandonment(&c);
+        match change {
+            0 => bad.request.destination = bad.request.source.owner.clone(),
+            1 => bad.request.operator = "other-operator".into(),
+            2 => bad.request.profile = "other-profile".into(),
+            3 => bad.request.operation = "unknown-attempt".into(),
+            _ => bad.reason = " ".into(),
+        }
+        let before = model.clone();
+        assert!(model.apply(&Action::Abandon(bad), observed()).is_err());
+        assert_eq!(model, before);
+    }
+    model
+        .apply(&Action::Abandon(abandonment(&c)), observed())
+        .unwrap();
+    let before = model.clone();
+    let mut changed = abandonment(&c);
+    changed.reason = "different reason".into();
+    assert!(model.apply(&Action::Abandon(changed), observed()).is_err());
+    assert_eq!(model, before);
+    model
+        .apply(&Action::Abandon(abandonment(&c)), observed())
+        .unwrap();
+    assert_eq!(model, before);
+}
+
+#[test]
+fn abandon_requires_data_to_agree_with_the_active_source_journal() {
+    let c = certificate(initial(), "B");
+    let mut model = Model::new(initial()).unwrap();
+    run(&mut model, &[Action::Prepare(c.request.clone())]);
+    model
+        .apply(
+            &Action::RestoreData {
+                placement: initial().owner,
+                data: None,
+            },
+            observed(),
+        )
+        .unwrap();
+    let before = model.clone();
+    assert!(
+        model
+            .apply(&Action::Abandon(abandonment(&c)), observed())
+            .is_err()
+    );
+    assert_eq!(model, before);
 }
