@@ -84,7 +84,7 @@ fn write(store: &mut Store, step: &Step, graph: i64, e: i64, a: i64) -> Res<()> 
     Ok(())
 }
 
-fn run(request: Request) -> Res<serde_json::Value> {
+fn run(request: &Request) -> Res<serde_json::Value> {
     if request.schema != "quipu-native-input/v1"
         || request.path != "fork-promote"
         || request.case.is_empty()
@@ -212,7 +212,7 @@ fn main() -> Res<()> {
         return Err("input exceeds 64KiB".into());
     }
     let request: Request = serde_json::from_slice(&bytes)?;
-    println!("{}", serde_json::to_string(&run(request)?)?);
+    println!("{}", serde_json::to_string(&run(&request)?)?);
     Ok(())
 }
 
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn c4_native_receipts_and_pinned_queries_are_observed_separately() {
-        let result = run(serde_json::from_value(recipe()).unwrap()).unwrap();
+        let result = run(&serde_json::from_value(recipe()).unwrap()).unwrap();
         assert_eq!(result["native"]["outcome"], "promoted");
         let capture = &result["capture"];
         assert_eq!(capture["current"], json!(["c"]));
@@ -254,7 +254,7 @@ mod tests {
     fn unavailable_receipt_pin_refuses_instead_of_using_latest() {
         let mut input = recipe();
         input["probes"][0]["tx"] = json!("not-a-receipt");
-        assert!(run(serde_json::from_value(input).unwrap()).is_err());
+        assert!(run(&serde_json::from_value(input).unwrap()).is_err());
     }
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
         let mut input = recipe();
         input["resolution"] = json!(null);
         input["probes"] = json!([]);
-        let result = run(serde_json::from_value(input).unwrap()).unwrap();
+        let result = run(&serde_json::from_value(input).unwrap()).unwrap();
         assert_eq!(result["native"]["outcome"], "conflicts");
         assert_eq!(result["before_tx"], result["after_tx"]);
         assert_eq!(result["capture"]["transactions"], json!([]));
