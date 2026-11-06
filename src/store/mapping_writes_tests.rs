@@ -536,3 +536,76 @@ fn refused_replacement_preserves_mapping_state(unsupported: &str, refusal: &str)
         );
     }
 }
+
+/// The DataBook integration must keep the enclosed path's decided-pin refusal.
+#[cfg(feature = "shacl")]
+#[test]
+fn databook_cannot_close_a_decided_pin_or_partially_import_its_graph() {
+    let text = format!(
+        "---\nid: urn:fixture:book\ntitle: Fixture\ntype: databook\nversion: 1.0.0\ncreated: 2026-11-01\ngraph:\n  triple_count: 1\nprocess:\n  transformer: t\n---\n\n```trig\n<urn:fixture:book-graph> {{ <urn:s> <urn:p> <urn:o> . }}\n```\n\n<!-- databook:id: fixture -->\n```shacl\n{NEW}\n```\n"
+    );
+    let opts = crate::databook_store::ImportOptions {
+        graph: None,
+        with_shapes: true,
+        timestamp: NEXT,
+        actor: Some(ACTOR),
+        source: None,
+    };
+    let (mut unpinned, _) = fixture();
+    crate::databook_store::import(&mut unpinned, &text, &opts).unwrap();
+    assert_eq!(unpinned.list_shapes().unwrap()[0].1.trim(), NEW);
+    assert!(
+        unpinned
+            .committed_graph_id("urn:fixture:book-graph")
+            .unwrap()
+            .is_some()
+    );
+
+    let (mut store, mapping) = fixture();
+    let receipt = apply(&mut store, &mapping);
+    let shapes = store.list_shapes().unwrap();
+    let pins = store
+        .current_shape_pins(RegistryKind::Shapes, "fixture")
+        .unwrap();
+    let head = store.latest_tx_id().unwrap();
+    let events = |store: &Store| -> i64 {
+        store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+            .unwrap()
+    };
+    let before = events(&store);
+    let error = crate::databook_store::import(&mut store, &text, &opts)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("own mapping settlement"), "{error}");
+    assert_eq!(store.latest_tx_id().unwrap(), head);
+    assert_eq!(events(&store), before);
+    assert_eq!(store.list_shapes().unwrap(), shapes);
+    assert_eq!(
+        store
+            .current_shape_pins(RegistryKind::Shapes, "fixture")
+            .unwrap(),
+        pins
+    );
+    assert_eq!(
+        store
+            .mapping_state(&mapping.id)
+            .unwrap()
+            .unwrap()
+            .mapping
+            .pins,
+        mapping.pins
+    );
+    let after = store.shape_mapping_receipt(&mapping.id).unwrap().unwrap();
+    assert_eq!(after.status, "decided");
+    assert_eq!(after.record, receipt.record);
+    assert_eq!(after.tx, receipt.tx);
+    assert!(
+        store
+            .committed_graph_id("urn:fixture:book-graph")
+            .unwrap()
+            .is_none()
+    );
+    assert!(store.conn.is_autocommit());
+}

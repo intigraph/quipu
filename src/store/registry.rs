@@ -65,7 +65,8 @@ impl Store {
     }
 
     /// [`Self::load_shapes`] inside the caller's open transaction (a schema
-    /// proposal's migration savepoint, or its dry run). Refuses a load that
+    /// proposal's migration savepoint, its dry run, or an atomic DataBook
+    /// import). Refuses a load that
     /// would have to flag a decided mapping; see
     /// [`Self::mapping_registry_change_enclosed`].
     pub(crate) fn load_shapes_enclosed(
