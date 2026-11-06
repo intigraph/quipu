@@ -164,6 +164,31 @@ fn ejzx_expired_deadline_is_an_error_not_a_false_empty_answer() {
 }
 
 #[test]
+fn ejzx_integrated_auto_keyword_waits_for_complete_index() {
+    let mut store = fixture();
+    store.search_config_mut().keyword = true;
+    store.search_config_mut().mode = "auto".into();
+    store.initialize_lexical_index().unwrap();
+    assert!(!store.lexical_progress().unwrap().unwrap().complete);
+    let q = json!({"query":"OrchidLedger"});
+    let out = super::super::search::tool_search(&store, &q).unwrap();
+    assert_eq!(out["count"], 1);
+    assert_eq!(out["ranking"], "lexical");
+    assert_eq!(out["retrieval"]["status"], "degraded");
+    assert!(out["results"][0].get("similarity").is_none());
+    assert!(out.get("context").is_none());
+    // An explicitly configured keyword backend must retain its readiness gate.
+    store.search_config_mut().mode = "keyword".into();
+    assert!(super::super::search::tool_search(&store, &q).is_err());
+    store.search_config_mut().mode = "auto".into();
+    while !store.backfill_lexical_batch(100).unwrap().complete {}
+    let ready = super::super::search::tool_search(&store, &q).unwrap();
+    assert_eq!(ready["count"], 1);
+    assert_eq!(ready["ranking"], "keyword");
+    assert_eq!(ready["mode_reason"], "no_embedding_provider");
+}
+
+#[test]
 fn ejzx_integrated_auto_keyword_backend_retains_main_fields() {
     let mut store = fixture();
     store.search_config_mut().keyword = true;

@@ -31,11 +31,17 @@ pub(crate) fn run(
     // Main's automatic/explicit keyword backend owns indexed stores. Preserve
     // its ranking, graph coverage and mode reason rather than bypassing it with
     // the unindexed fallback. Explicit request modes still use their own gates.
+    // Auto needs a complete index; an explicit keyword configuration retains
+    // its normal not-ready refusal rather than silently changing backends.
     let config = store.search_config();
     if config.keyword
         && (config.mode == "keyword"
             || (config.mode == "auto" && store.embedding_provider().is_none()))
         && input.get("sparql").is_none()
+        && (config.mode == "keyword"
+            || store
+                .lexical_progress()?
+                .is_some_and(|state| state.complete))
     {
         return keyword_lexical(store, input);
     }
