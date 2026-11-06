@@ -72,12 +72,12 @@ fn malformed_cycles_orphans_and_budget_overflow_refuse() {
     let nil = format!("<{RDF}nil>");
     for body in [
         format!(
-            "{} <{}> _:a . _:a <{RDF}first> \"x\" . _:a <{RDF}rest> _:a .",
+            "{} <{}> _:a .\n_:a <{RDF}first> \"x\" .\n_:a <{RDF}rest> _:a .\n",
             s.0, s.1
         ),
-        format!("{} <{}> _:a . _:a <{RDF}first> \"x\" .", s.0, s.1),
+        format!("{} <{}> _:a .\n_:a <{RDF}first> \"x\" .\n", s.0, s.1),
         format!(
-            "{} <{}> {nil} . _:orphan <{RDF}first> \"x\" . _:orphan <{RDF}rest> {nil} .",
+            "{} <{}> {nil} .\n_:orphan <{RDF}first> \"x\" .\n_:orphan <{RDF}rest> {nil} .\n",
             s.0, s.1
         ),
     ] {
