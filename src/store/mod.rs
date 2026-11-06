@@ -77,6 +77,9 @@ mod reads;
 // Source-stage writer reader; no production caller is admitted yet.
 #[allow(dead_code)]
 mod slot_reads;
+// Source-stage prepared-cut bridge; no production caller or admission authority.
+#[allow(dead_code)]
+mod slot_read_batch;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };

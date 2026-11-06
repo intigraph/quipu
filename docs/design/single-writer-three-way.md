@@ -178,3 +178,31 @@ cuts to a writer. Store/epoch/history/hash authentication, whole-batch budgets,
 incoming lowering and common pending receipt persistence remain open. The
 previous 13 pure `write_base` controls passed their separately admitted slot;
 that result does not qualify this reader.
+
+## Prepared batch bridge (source only, unqualified)
+
+`Store::read_prepared_slot_batch` connects immutable prepared cuts to the
+indexed physical reader. Store identity, log epoch and captured head must match
+both before and after the batch. ROOT uses its reserved IRI/sentinel; a missing
+named graph term refuses. Subject and predicate dictionary lookups never intern
+terms, and missing slot terms produce empty views without a graph scan.
+
+The batch permits at most 256 explicitly prepared slots. Per-read limits remain
+4096 physical claims / 4 MiB; totals across ALL slots and BOTH cuts are capped
+at 65536 physical claims / 16 MiB. Actual scanned rows and encoded bytes are
+charged before temporal filtering or visible-value deduplication. Each cut is
+read separately, including equal legacy cuts. Budget exhaustion refuses the
+whole batch; no partial views escape. A fully consumed budget can conservatively
+refuse a subsequent empty read. Explicit empty scope performs no slot scans.
+
+These checks do not acquire a writer reservation, authenticate the caller,
+prove the declared retention watermark or verify the base slice hash. The
+normal writer must still provide those guarantees. A matching before/after
+head is not a claim that another writer was excluded. This source slice admits
+canonical stable named subjects only; blank-node scope and generalized timestamp
+precision remain open, together with incoming lowering and pending persistence.
+
+Two new source controls bind base/current views and their shared physical
+budgets, including explicit empty scope, and refuse foreign store/graph or moved
+head/epoch. They are uncompiled and unrun. The earlier five single-slot reader
+controls passed separately on 82e48796; that does not qualify this batch bridge.

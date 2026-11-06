@@ -18,6 +18,12 @@ pub(crate) struct SlotReadLimits {
     pub max_bytes: usize,
 }
 
+pub(super) struct SlotRead {
+    pub facts: Vec<Fact>,
+    pub claims: usize,
+    pub bytes: usize,
+}
+
 fn refused() -> Error {
     Error::InvalidValue("write base: bounded slot history unavailable".into())
 }
@@ -42,6 +48,19 @@ impl Store {
         cut: &AsOf,
         limits: SlotReadLimits,
     ) -> Result<Vec<Fact>> {
+        Ok(self
+            .bounded_slot_read_at(graph, entity, attribute, cut, limits)?
+            .facts)
+    }
+
+    pub(super) fn bounded_slot_read_at(
+        &self,
+        graph: i64,
+        entity: i64,
+        attribute: i64,
+        cut: &AsOf,
+        limits: SlotReadLimits,
+    ) -> Result<SlotRead> {
         let (Some(tx), Some(valid_at)) = (cut.tx, cut.valid_at.as_deref()) else {
             return Err(refused());
         };
@@ -133,7 +152,11 @@ impl Store {
                 });
             }
         }
-        Ok(facts)
+        Ok(SlotRead {
+            facts,
+            claims: count,
+            bytes,
+        })
     }
 }
 
