@@ -5,6 +5,9 @@ history records. It reads no shapes and imports no merge operator. History
 records include valid intervals and transaction roles, so preserving a triple
 with the wrong interval does not satisfy the history expectation. List values
 remain structured sequences, including repeated elements.
+Current facts are a set; history is a multiset of records. Duplicate historical
+records are counted, so an extra receipt or a missing repeated record cannot
+disappear through set deduplication.
 
 `current_facts_lost` and `history_records_missing` are separate counts. A rejected
 incoming value can be correctly absent from current state while its receipt

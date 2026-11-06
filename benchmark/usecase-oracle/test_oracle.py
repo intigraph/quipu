@@ -82,6 +82,18 @@ class OracleTests(unittest.TestCase):
         observation["report"]["held"] = 0
         self.assertTrue(evaluate(fixture, observation)["correct"])
 
+    def test_history_multiplicity_cannot_be_erased_by_set_comparison(self):
+        fixture = self.fixture()
+        duplicate = fixture["expected_history"] + [fixture["expected_history"][0]]
+        observation = {"current": fixture["expected_current"], "history": duplicate}
+        result = evaluate(fixture, observation)
+        self.assertFalse(result["correct"])
+        self.assertEqual(len(result["unexpected_history"]), 1)
+        fixture["expected_history"], observation["history"] = duplicate, fixture["expected_history"]
+        result = evaluate(fixture, observation)
+        self.assertFalse(result["correct"])
+        self.assertEqual(result["history_records_missing"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

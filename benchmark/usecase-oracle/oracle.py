@@ -6,6 +6,7 @@ the operator, reads shapes, fetches data, or computes a three-way merge.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any
 
 
@@ -17,6 +18,12 @@ def _records(values: Any, name: str) -> set[str]:
     if not isinstance(values, list):
         raise ValueError(f"{name} must be an explicit list")
     return {_canonical(value) for value in values}
+
+
+def _history_records(values: Any, name: str) -> Counter[str]:
+    if not isinstance(values, list):
+        raise ValueError(f"{name} must be an explicit list")
+    return Counter(_canonical(value) for value in values)
 
 
 def evaluate(fixture: dict, observation: dict) -> dict:
@@ -33,13 +40,13 @@ def evaluate(fixture: dict, observation: dict) -> dict:
     if not isinstance(fixture.get("case"), str) or not fixture["case"]:
         raise ValueError("fixture needs a use-case id")
     expected_current = _records(fixture.get("expected_current"), "expected_current")
-    expected_history = _records(fixture.get("expected_history"), "expected_history")
+    expected_history = _history_records(fixture.get("expected_history"), "expected_history")
     current = _records(observation.get("current"), "current")
-    history = _records(observation.get("history"), "history")
+    history = _history_records(observation.get("history"), "history")
     missing_current = sorted(expected_current - current)
     extra_current = sorted(current - expected_current)
-    missing_history = sorted(expected_history - history)
-    extra_history = sorted(history - expected_history)
+    missing_history = sorted((expected_history - history).elements())
+    extra_history = sorted((history - expected_history).elements())
     report_mismatches = {}
     if "expected_report" in fixture:
         expected_report = fixture["expected_report"]
