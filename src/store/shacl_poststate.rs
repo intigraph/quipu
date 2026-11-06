@@ -97,11 +97,32 @@ impl Store {
             return Ok(());
         }
         let checking = Stopwatch::start();
+        // Time the result before propagating it: refused/error paths are observations too.
+        macro_rules! timed {
+            ($field:ident, $work:expr) => {{
+                let started = Stopwatch::start();
+                let result = $work;
+                self.poststate_profile.$field += started.elapsed();
+                result
+            }};
+        }
+
         // A graph with no history before this write holds exactly what it
         // staged: judge it whole, in batch, rather than per focus under the
         // incremental context cap (aegis-t16).
-        if self.graph_is_new(graph, tx_id)? {
-            let result = self.check_new_graph_in_batch(shapes, graph);
+        let is_new = timed!(check_graph, self.graph_is_new(graph, tx_id));
+        let is_new = match is_new {
+            Ok(is_new) => is_new,
+            Err(error) => {
+                self.poststate_profile.check += checking.elapsed();
+                return Err(error);
+            }
+        };
+        if is_new {
+            let result = timed!(
+                check_new_graph,
+                self.check_new_graph_in_batch(shapes, graph)
+            );
             self.poststate_profile.check += checking.elapsed();
             return result;
         }
@@ -118,78 +139,97 @@ impl Store {
                     })
                 })
                 .collect();
-            let mut value_focuses = self.value_focuses(datums, &plan.object_target_predicates)?;
-            let mut owned = self.value_set_ownership(datums, graph, tx_id, &plan)?;
+            self.poststate_profile.check_subjects += subjects.len() as u64;
+            let (mut value_focuses, mut owned) = timed!(
+                check_ownership,
+                (|| {
+                    Ok::<_, Error>((
+                        self.value_focuses(datums, &plan.object_target_predicates)?,
+                        self.value_set_ownership(datums, graph, tx_id, &plan)?,
+                    ))
+                })()
+            )?;
             let incoming_targets = plan.incoming_predicates.clone();
             let mut facts = Vec::new();
-            for &entity in &subjects {
-                self.append_bounded_entity(&mut facts, entity, graph, None)?;
-                self.append_object_targets(
-                    &mut facts,
-                    &crate::Value::Ref(entity),
-                    graph,
-                    &incoming_targets,
-                )?;
-                if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
-                    // ROOT types can target focuses; ROOT values never affect cardinality.
-                    if let Some(rdf_type) =
-                        self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
-                    {
-                        self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
-                    }
-                }
-            }
-            if !incoming_targets.is_empty() {
-                let mut seen = BTreeSet::new();
-                for datum in datums {
-                    if !matches!(datum.value, crate::Value::Ref(_))
-                        && seen.insert(datum.value.term_key())
-                    {
-                        if let oxrdf::Term::Literal(literal) =
-                            crate::rdf::value_to_term(self, &datum.value)?
-                        {
-                            owned.whole.insert(literal.value().to_owned());
-                        }
+            timed!(
+                check_entities,
+                (|| {
+                    for &entity in &subjects {
+                        self.append_bounded_entity(&mut facts, entity, graph, None)?;
                         self.append_object_targets(
                             &mut facts,
-                            &datum.value,
+                            &crate::Value::Ref(entity),
                             graph,
                             &incoming_targets,
                         )?;
+                        if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
+                            // ROOT types can target focuses; ROOT values never affect cardinality.
+                            if let Some(rdf_type) =
+                                self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
+                            {
+                                self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
+                            }
+                        }
                     }
-                }
-            }
-            self.append_subclass_context(&mut facts, graph)?;
+                    if !incoming_targets.is_empty() {
+                        let mut seen = BTreeSet::new();
+                        for datum in datums {
+                            if !matches!(datum.value, crate::Value::Ref(_))
+                                && seen.insert(datum.value.term_key())
+                            {
+                                if let oxrdf::Term::Literal(literal) =
+                                    crate::rdf::value_to_term(self, &datum.value)?
+                                {
+                                    owned.whole.insert(literal.value().to_owned());
+                                }
+                                self.append_object_targets(
+                                    &mut facts,
+                                    &datum.value,
+                                    graph,
+                                    &incoming_targets,
+                                )?;
+                            }
+                        }
+                    }
+                    self.append_subclass_context(&mut facts, graph)?;
+                    Ok::<_, Error>(())
+                })()
+            )?;
             // Preserve the pre-value-admission context. Exhausting this optional
             // repair budget falls back to the existing payload/maxCount path; a
             // partial context must never manufacture a new value violation.
             let base_len = facts.len();
-            let value_context = (|| {
-                self.append_node_dependents(
-                    &mut facts,
-                    &mut value_focuses,
-                    &subjects,
-                    graph,
-                    &plan.node_reference_predicates,
-                )?;
-                self.append_value_context(
-                    &mut facts,
-                    graph,
-                    &plan.node_reference_predicates,
-                    plan.has_class_constraint,
-                )?;
-                self.append_subclass_context(&mut facts, graph)
-            })();
+            let value_context = timed!(
+                check_values,
+                (|| {
+                    self.append_node_dependents(
+                        &mut facts,
+                        &mut value_focuses,
+                        &subjects,
+                        graph,
+                        &plan.node_reference_predicates,
+                    )?;
+                    self.append_value_context(
+                        &mut facts,
+                        graph,
+                        &plan.node_reference_predicates,
+                        plan.has_class_constraint,
+                    )?;
+                    self.append_subclass_context(&mut facts, graph)
+                })()
+            );
             let complete_values = match value_context {
                 Ok(()) => true,
                 Err(Error::CannotVerify(message)) if context_budget_exhausted(&message) => {
                     facts.truncate(base_len);
+                    self.poststate_profile.check_value_fallbacks += 1;
                     false
                 }
                 Err(error) => return Err(error),
             };
-            let data = self.cardinality_context(&facts)?;
-            let feedback = crate::validate_shapes(shapes, &data)?;
+            self.poststate_profile.check_facts += facts.len() as u64;
+            let data = timed!(check_encode, self.cardinality_context(&facts))?;
+            let feedback = timed!(check_validate, crate::validate_shapes(shapes, &data))?;
             let issues: Vec<_> = feedback
                 .results
                 .iter()
@@ -213,7 +253,10 @@ impl Store {
                 })
                 .collect();
             // Value debt the focus had before this transaction (aegis-g51c C12).
-            let issues = crate::shacl_debt::new_only(self, shapes, &data, issues, graph, tx_id)?;
+            let issues = timed!(
+                check_debt,
+                crate::shacl_debt::new_only(self, shapes, &data, issues, graph, tx_id)
+            )?;
             if issues.is_empty() {
                 return Ok(());
             }
