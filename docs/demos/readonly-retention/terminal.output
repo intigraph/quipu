@@ -1,0 +1,35 @@
+BASELINE
+running 5 tests
+test configured_readonly_keeps_eligible_events ... FAILED
+test configured_readonly_keeps_eligible_vectors ... FAILED
+test writable_event_retention_prunes_events_and_keeps_vectors ... ok
+test writable_vector_retention_prunes_old_versions_and_keeps_events ... ok
+test zero_retention_keeps_both_row_sets_on_a_writable_server ... ok
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.22s
+
+FIXED
+running 5 tests
+test configured_readonly_keeps_eligible_events ... ok
+test configured_readonly_keeps_eligible_vectors ... ok
+test writable_event_retention_prunes_events_and_keeps_vectors ... ok
+test writable_vector_retention_prunes_old_versions_and_keeps_events ... ok
+test zero_retention_keeps_both_row_sets_on_a_writable_server ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.95s
+
+SABOTAGE
+running 5 tests
+test configured_readonly_keeps_eligible_events ... FAILED
+test configured_readonly_keeps_eligible_vectors ... FAILED
+test writable_event_retention_prunes_events_and_keeps_vectors ... ok
+test writable_vector_retention_prunes_old_versions_and_keeps_events ... ok
+test zero_retention_keeps_both_row_sets_on_a_writable_server ... ok
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.74s
+
+RESTORED
+running 5 tests
+test configured_readonly_keeps_eligible_events ... ok
+test configured_readonly_keeps_eligible_vectors ... ok
+test writable_event_retention_prunes_events_and_keeps_vectors ... ok
+test writable_vector_retention_prunes_old_versions_and_keeps_events ... ok
+test zero_retention_keeps_both_row_sets_on_a_writable_server ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.72s
