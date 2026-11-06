@@ -27,6 +27,51 @@ pub(crate) struct Value {
     pub(crate) cells: BTreeSet<String>,
 }
 
+/// A ROOT list component extracted only after the complete profile was read.
+/// The private fields prevent an adapter from passing a full graph to closing.
+pub(crate) struct Original {
+    slot: Slot,
+    graph: Graph,
+    elements: Option<Vec<String>>,
+}
+
+fn originals(graph: &Graph, values: &BTreeMap<Slot, Option<Value>>) -> BTreeMap<Slot, Original> {
+    let owners: BTreeMap<_, _> = values
+        .iter()
+        .flat_map(|(slot, value)| {
+            value
+                .iter()
+                .flat_map(move |value| value.cells.iter().map(move |cell| (cell.as_str(), slot)))
+        })
+        .collect();
+    let mut out: BTreeMap<_, _> = values
+        .iter()
+        .map(|(slot, value)| {
+            (
+                slot.clone(),
+                Original {
+                    slot: slot.clone(),
+                    graph: Graph::new(),
+                    elements: value.as_ref().map(|value| value.elements.clone()),
+                },
+            )
+        })
+        .collect();
+    // One pass, including all slots: no per-slot scan of the full context.
+    for triple in graph {
+        let subject = triple.subject.to_string();
+        let head = (subject.clone(), triple.predicate.as_str().to_owned());
+        if let Some(original) = out.get_mut(&head) {
+            original.graph.insert(triple.clone());
+        } else if let Some(slot) = owners.get(subject.as_str())
+            && let Some(original) = out.get_mut(*slot)
+        {
+            original.graph.insert(triple.clone());
+        }
+    }
+    out
+}
+
 fn invalid(message: &str) -> Error {
     Error::InvalidValue(format!("list merge: {message}"))
 }
@@ -342,14 +387,22 @@ pub(crate) fn plan(
 /// Closing ROOT uses ROOT's original cell identities, not newly generated ones.
 pub(crate) fn lower_ops(
     slot: &Slot,
-    original_ours: &Graph,
+    original_ours: &Original,
     ops: &[crate::merge_core::FactOp<Vec<String>>],
 ) -> Result<Vec<crate::merge_core::FactOp<oxrdf::Triple>>> {
     use crate::merge_core::FactOp;
+    if &original_ours.slot != slot {
+        return Err(invalid("original list belongs to a different slot"));
+    }
     let mut result = Vec::new();
     for op in ops {
         let graph = match op {
-            FactOp::Close { .. } => original_ours.clone(),
+            FactOp::Close { value, .. } => {
+                if original_ours.elements.as_ref() != Some(value) {
+                    return Err(invalid("close does not match the original list value"));
+                }
+                original_ours.graph.clone()
+            }
             FactOp::Assert { value, .. } | FactOp::Receipt { value, .. } => {
                 lower(slot, &Some(value.clone()))?
             }

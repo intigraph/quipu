@@ -46,6 +46,16 @@ included because it may affect shape targeting. This is an input binding, not a
 receipt or an authorization grant; adapters still need to carry it into their
 own merge identity and verify it at replay/resume.
 
+Preparation also returns a typed ROOT list component per slot. Complete-profile
+validation precedes extraction; all components are collected in one graph pass.
+Closing accepts that component rather than an arbitrary graph, so another list
+or non-list context cannot be closed accidentally. Original cell identities
+survive, a different slot token refuses, and the logical close value must equal
+the prepared ROOT sequence (absence remains distinct from an empty list).
+This is a source checkpoint pending focused Cargo qualification, not an adapter
+integration or write receipt. Store adapters still need actual temporal-row
+binding and the ordinary savepoint/write gate; this extraction assigns no time.
+
 Remaining work: adapter input and identity binding; targeted shape/profile
 authorization; complete-list operation grouping; list-divergent presentation;
 qualification of this profile/preparation module and its negative controls. The existing

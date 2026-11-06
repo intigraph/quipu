@@ -78,6 +78,8 @@ pub(crate) struct PreparedSlot {
     pub(crate) base: Option<Value>,
     pub(crate) ours: Option<Value>,
     pub(crate) theirs: Option<Value>,
+    /// Exact ROOT head/cells, excluding other slots and non-list context.
+    pub(crate) ours_original: super::Original,
 }
 
 /// Pure input preparation; no operation has been planned or written yet.
@@ -101,6 +103,7 @@ pub(crate) fn prepare(
     let mut b = super::read(base, &profile.slots)?;
     let mut o = super::read(ours, &profile.slots)?;
     let mut t = super::read(theirs, &profile.slots)?;
+    let mut originals = super::originals(ours, &o);
     let digest = |graph: &Graph| -> Result<String> {
         let mut triples: Vec<_> = graph.iter().map(ToString::to_string).collect();
         triples.sort();
@@ -120,16 +123,19 @@ pub(crate) fn prepare(
     let slots = profile
         .slots
         .into_iter()
-        .map(|(slot, mode)| {
+        .map(|(slot, mode)| -> Result<_> {
             let values = PreparedSlot {
                 mode,
                 base: b.remove(&slot).flatten(),
                 ours: o.remove(&slot).flatten(),
                 theirs: t.remove(&slot).flatten(),
+                ours_original: originals
+                    .remove(&slot)
+                    .ok_or_else(|| invalid("missing prepared original list"))?,
             };
-            (slot, values)
+            Ok((slot, values))
         })
-        .collect();
+        .collect::<Result<_>>()?;
     Ok(Prepared {
         binding: crate::share::sha256(&binding),
         slots,
@@ -274,5 +280,80 @@ mod tests {
         ] {
             assert!(prepare(&bytes, "", b, o, t).is_err());
         }
+    }
+
+    #[test]
+    fn original_close_groups_preserve_neighbor_lists_and_context() {
+        use crate::merge_core::FactOp;
+        let slot = ("<urn:owner>".into(), "urn:list".into());
+        let other = ("<urn:neighbor>".into(), "urn:list".into());
+        let first = crate::share_merge::parse_graph(
+            "<urn:owner> <urn:list> _:original .\n\
+             _:original <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> \"x\" .\n\
+             _:original <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil> .\n",
+            "original cells",
+        ).unwrap();
+        let mut all = first.clone();
+        all.extend(super::super::lower(&other, &Some(vec!["\"x\"".into()])).unwrap());
+        all.extend(
+            crate::share_merge::parse_graph("<urn:owner> <urn:label> \"keep\" .", "context")
+                .unwrap(),
+        );
+        let mut profile = profile();
+        profile["slots"].as_array_mut().unwrap().push(json!({
+            "subject": other.0.clone(), "predicate": other.1.clone(), "mode": "whole"
+        }));
+        let bytes = serde_json::to_vec(&profile).unwrap();
+        let prepared = prepare(&bytes, "", &Graph::new(), &all, &Graph::new()).unwrap();
+        let close = [FactOp::Close {
+            value: vec!["\"x\"".into()],
+            at: "2026-01-03".into(),
+        }];
+        let operations =
+            super::super::lower_ops(&slot, &prepared.slots[&slot].ours_original, &close).unwrap();
+        let closed: Graph = operations
+            .into_iter()
+            .map(|op| match op {
+                FactOp::Close { value, at } => {
+                    assert_eq!(at, "2026-01-03");
+                    value
+                }
+                _ => panic!("close group changed operation kind"),
+            })
+            .collect();
+        // Original cell labels survive; another list and non-list facts do not close.
+        assert_eq!(closed, first);
+        assert!(
+            super::super::lower_ops(&other, &prepared.slots[&slot].ours_original, &close).is_err()
+        );
+        let stale = [FactOp::Close {
+            value: vec!["\"changed\"".into()],
+            at: "2026-01-03".into(),
+        }];
+        assert!(
+            super::super::lower_ops(&slot, &prepared.slots[&slot].ours_original, &stale).is_err()
+        );
+    }
+
+    #[test]
+    fn absent_original_cannot_be_closed_as_an_empty_list() {
+        use crate::merge_core::FactOp;
+        let slot = ("<urn:owner>".into(), "urn:list".into());
+        let bytes = serde_json::to_vec(&profile()).unwrap();
+        let empty = Graph::new();
+        let close = [FactOp::Close {
+            value: Vec::new(),
+            at: "2026-01-03".into(),
+        }];
+        let absent = prepare(&bytes, "", &empty, &empty, &empty).unwrap();
+        assert!(
+            super::super::lower_ops(&slot, &absent.slots[&slot].ours_original, &close).is_err()
+        );
+        let nil = super::super::lower(&slot, &Some(Vec::new())).unwrap();
+        let present = prepare(&bytes, "", &empty, &nil, &empty).unwrap();
+        let closed =
+            super::super::lower_ops(&slot, &present.slots[&slot].ours_original, &close).unwrap();
+        assert_eq!(closed.len(), 1);
+        assert!(matches!(&closed[0], FactOp::Close { value, .. } if nil.contains(value)));
     }
 }
