@@ -1,8 +1,9 @@
 //! Explicit list-mode admission bound to the exact shapes document.
 //! This profile is caller input, not inferred RDF vocabulary or a write grant.
 //! Adapters must bind its bytes into their merge identity before using it.
-use super::{Mode, Slot, invalid};
+use super::{Mode, Slot, Value, invalid};
 use crate::error::{Error, Result};
+use crate::share_merge::Graph;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
@@ -67,6 +68,70 @@ pub(crate) fn admit(bytes: &[u8], shapes: &str) -> Result<Admitted> {
     }
     Ok(Admitted {
         profile_sha256: crate::share::sha256(bytes),
+        slots,
+    })
+}
+
+/// All three structurally validated values for one explicitly admitted slot.
+pub(crate) struct PreparedSlot {
+    pub(crate) mode: Mode,
+    pub(crate) base: Option<Value>,
+    pub(crate) ours: Option<Value>,
+    pub(crate) theirs: Option<Value>,
+}
+
+/// Pure input preparation; no operation has been planned or written yet.
+pub(crate) struct Prepared {
+    /// Adapters must include this binding in their merge/replay identity.
+    pub(crate) binding: String,
+    pub(crate) slots: BTreeMap<Slot, PreparedSlot>,
+}
+
+/// Validate every side before any planner can consume a profile.
+/// The binding is sensitive to profile bytes, shapes bytes, all graph content
+/// and side order, but independent of each graph's hash-table iteration order.
+pub(crate) fn prepare(
+    bytes: &[u8],
+    shapes: &str,
+    base: &Graph,
+    ours: &Graph,
+    theirs: &Graph,
+) -> Result<Prepared> {
+    let profile = admit(bytes, shapes)?;
+    let mut b = super::read(base, &profile.slots)?;
+    let mut o = super::read(ours, &profile.slots)?;
+    let mut t = super::read(theirs, &profile.slots)?;
+    let digest = |graph: &Graph| -> Result<String> {
+        let mut triples: Vec<_> = graph.iter().map(ToString::to_string).collect();
+        triples.sort();
+        let bytes =
+            serde_json::to_vec(&triples).map_err(|e| Error::Serialization(e.to_string()))?;
+        Ok(crate::share::sha256(&bytes))
+    };
+    let binding = serde_json::to_vec(&(
+        "quipu-list-inputs/v1",
+        &profile.profile_sha256,
+        crate::share::sha256(shapes.as_bytes()),
+        digest(base)?,
+        digest(ours)?,
+        digest(theirs)?,
+    ))
+    .map_err(|e| Error::Serialization(e.to_string()))?;
+    let slots = profile
+        .slots
+        .into_iter()
+        .map(|(slot, mode)| {
+            let values = PreparedSlot {
+                mode,
+                base: b.remove(&slot).flatten(),
+                ours: o.remove(&slot).flatten(),
+                theirs: t.remove(&slot).flatten(),
+            };
+            (slot, values)
+        })
+        .collect();
+    Ok(Prepared {
+        binding: crate::share::sha256(&binding),
         slots,
     })
 }
@@ -153,5 +218,61 @@ mod tests {
                 .slots
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn prepared_inputs_bind_sides_profile_and_nonlist_context() {
+        let bytes = serde_json::to_vec(&profile()).unwrap();
+        let slot = ("<urn:owner>".into(), "urn:list".into());
+        let empty = Graph::new();
+        let graph = super::super::lower(&slot, &Some(vec!["\"x\"".into()])).unwrap();
+        let prepared = prepare(&bytes, "", &empty, &empty, &graph).unwrap();
+        let value = &prepared.slots[&slot];
+        assert_eq!(value.mode, Mode::Whole);
+        assert!(value.base.is_none() && value.ours.is_none());
+        assert_eq!(value.theirs.as_ref().unwrap().elements, vec!["\"x\""]);
+        assert_eq!(
+            prepared.binding,
+            prepare(&bytes, "", &empty, &empty, &graph).unwrap().binding
+        );
+        assert_ne!(
+            prepared.binding,
+            prepare(&bytes, "", &empty, &graph, &empty).unwrap().binding
+        );
+        let mut context = graph.clone();
+        context.extend(
+            crate::share_merge::parse_graph("<urn:context> <urn:p> \"changed\" .", "context")
+                .unwrap(),
+        );
+        assert_ne!(
+            prepared.binding,
+            prepare(&bytes, "", &empty, &empty, &context)
+                .unwrap()
+                .binding
+        );
+        let spaced = serde_json::to_vec_pretty(&profile()).unwrap();
+        assert_ne!(
+            prepared.binding,
+            prepare(&spaced, "", &empty, &empty, &graph)
+                .unwrap()
+                .binding
+        );
+    }
+
+    #[test]
+    fn preparing_refuses_a_malformed_side_before_returning_inputs() {
+        let bytes = serde_json::to_vec(&profile()).unwrap();
+        let empty = Graph::new();
+        let bad = crate::share_merge::parse_graph(
+            "<urn:owner> <urn:list> _:a .\n_:a <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> \"x\" .\n",
+            "missing rest",
+        ).unwrap();
+        for (b, o, t) in [
+            (&bad, &empty, &empty),
+            (&empty, &bad, &empty),
+            (&empty, &empty, &bad),
+        ] {
+            assert!(prepare(&bytes, "", b, o, t).is_err());
+        }
     }
 }

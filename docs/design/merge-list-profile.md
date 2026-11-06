@@ -38,7 +38,15 @@ orphan/shared/annotated/cyclic cells and unidentified nested blank-node values.
 Lowering applies the same nested-value boundary, including no-op plans. A literal
 whose lexical value begins with `_:`, however, remains an ordinary literal.
 
+`admission::prepare` performs that validation on base, ours and theirs before
+returning any prepared slot. It binds exact profile bytes, exact shapes bytes and
+all three graph contents in side order. Graph triples are sorted before hashing,
+so hash-table iteration order does not affect the binding. Non-list context is
+included because it may affect shape targeting. This is an input binding, not a
+receipt or an authorization grant; adapters still need to carry it into their
+own merge identity and verify it at replay/resume.
+
 Remaining work: adapter input and identity binding; targeted shape/profile
 authorization; complete-list operation grouping; list-divergent presentation;
-qualification of this profile module and its negative controls. The existing
+qualification of this profile/preparation module and its negative controls. The existing
 fixture-fix qualification is a separate exact source checkpoint.
