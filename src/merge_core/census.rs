@@ -11,6 +11,8 @@ use serde::Serialize;
 use super::{Card, Change, SlotInput, plan_slot};
 use crate::{Error, Result};
 
+pub(crate) mod aggregate;
+
 const MAX_SLOTS: usize = 256;
 const MAX_VALUES: usize = 4096;
 const MAX_BYTES: usize = 4 * 1024 * 1024;

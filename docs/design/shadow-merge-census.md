@@ -102,3 +102,30 @@ be resolved from a content-bound profile, outside this value-free adapter;
 graph membership and caller-declared actors cannot substitute for it. A bounded
 nonblocking sink with explicit dropped/unknown counts, producer identity and
 shape-version binding still needs implementation and normal deployment.
+
+## Bounded aggregation source follow-up (not installed)
+
+`merge_core::census::aggregate::AggregateSink` is an in-memory source-stage
+consumer, without a writer hook, schedule, persistence or export endpoint.
+`try_record` never waits for its mutex. Busy or poisoned state, malformed reports,
+oversized input and exhausted bucket capacity drop the whole batch with an
+explicit health count. Capacity is 256 distinct buckets and at most 256 reports
+per call. A capacity refusal cannot increment existing buckets from that batch;
+existing buckets can still receive later observations when capacity is full.
+
+Buckets separate producer source revision and optional profile revision, graph,
+predicate, base evidence, known/unknown cardinality, native classification and
+per-slot hold. Revisions are caller-supplied evidence, not authentication or proof
+that the writer used that profile. No entity IDs, terms, authored timestamps or
+free-text unknown reasons enter the sink. Counts are slot observations, not
+distinct entities or a durable delivery ledger. Missing profile evidence remains
+explicit; it is never replaced by a guessed revision.
+
+Snapshot reads also use `try_lock`: busy and poisoned reads are explicit, not
+empty successful snapshots. Accepted state is sampled under the same lock;
+drop health counters are independently sampled and labelled as such. All counts
+saturate rather than wrapping, and saturation is reported. This is no claim of
+complete capture, atomic health reconciliation, process-restart retention or
+writer behavior. The producer must still bind real authority/base/profile inputs,
+account for native planning refusal, and connect the source to a separately
+admitted durable consumer. New aggregation tests await a Cargo START.
