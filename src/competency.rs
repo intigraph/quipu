@@ -11,6 +11,7 @@ use crate::error::{Error, Result};
 
 pub mod carriage;
 pub mod report;
+pub mod verify;
 mod compile;
 mod lint;
 #[cfg(test)]
