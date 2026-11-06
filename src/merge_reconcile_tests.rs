@@ -153,6 +153,61 @@ fn json_layout_snapshot() {
 }
 
 #[test]
+fn convergent_unbounded_record_and_presentation_share_null_bound() {
+    let mut file = fixture();
+    let ReconcileFile::Fork(decisions) = &mut file else {
+        panic!("fork fixture");
+    };
+    let row = &mut decisions.rows[0];
+    row.record.max_count = usize::MAX;
+    row.record.theirs = row.record.ours.clone();
+    row.kind = Some(kind(&row.record));
+    row.rule = Some(rule(&row.record, &decisions.labels));
+    row.proposal = None;
+    row.decision = Some(Decision::Choose {
+        choose: Side::Continue,
+    });
+    let wire = serde_json::to_value(&row.record).unwrap();
+    assert_eq!(wire["max_count"], serde_json::Value::Null);
+    let decoded: DecisionRecord = serde_json::from_value(wire).unwrap();
+    assert_eq!(decoded, row.record);
+    let view = file.view("f.json", Surface::Mcp);
+    let json = serde_json::to_value(&view).unwrap();
+    assert_eq!(
+        json["conflicts"][0]["rule"]["max_count"],
+        serde_json::Value::Null
+    );
+    assert_eq!(json["conflicts"][0]["rule"]["kind"], "convergent");
+    assert_eq!(json["conflicts"][0]["decision"], "continue");
+    assert_eq!(
+        json["conflicts"][0]["choices"],
+        serde_json::json!(["continue", "base", "value"])
+    );
+    assert_eq!(view.undecided, 0);
+}
+
+#[test]
+fn finite_review_bound_stays_numeric_and_invalid_wire_is_refused() {
+    let file = fixture();
+    let ReconcileFile::Fork(decisions) = &file else {
+        panic!("fork fixture");
+    };
+    let record = &decisions.rows[0].record;
+    let mut wire = serde_json::to_value(record).unwrap();
+    assert_eq!(wire["max_count"], 1);
+    let view = serde_json::to_value(file.view("f.json", Surface::Mcp)).unwrap();
+    assert_eq!(view["conflicts"][0]["rule"]["max_count"], 1);
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(1.5),
+        serde_json::json!("unbounded"),
+    ] {
+        wire["max_count"] = invalid;
+        assert!(serde_json::from_value::<DecisionRecord>(wire.clone()).is_err());
+    }
+}
+
+#[test]
 fn a_decided_view_says_ready_and_names_only_apply() {
     let mut file = fixture();
     file.resolve(

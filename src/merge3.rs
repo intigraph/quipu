@@ -45,7 +45,7 @@ pub struct DecisionRecord {
 
 // An unbounded convergent slot uses JSON null, not an imprecise/platform-sized
 // integer. Finite legacy conflict records keep their original wire form.
-mod review_bound {
+pub(crate) mod review_bound {
     use serde::{Deserialize, Deserializer, Serializer};
     pub fn serialize<S: Serializer>(value: &usize, serializer: S) -> Result<S::Ok, S::Error> {
         if *value == usize::MAX {

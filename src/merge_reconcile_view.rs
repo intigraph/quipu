@@ -67,6 +67,9 @@ pub struct Named {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RuleView {
     pub kind: ConflictKind,
+    /// Match the decision record: an unbounded convergent row is JSON null,
+    /// never a platform-sized integer in one presentation but not another.
+    #[serde(with = "crate::merge3::review_bound")]
     pub max_count: usize,
     pub text: String,
 }

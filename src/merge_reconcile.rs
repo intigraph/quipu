@@ -38,7 +38,7 @@ use crate::share_merge_decisions::{
 use crate::share_merge_decisions_view::{ConflictKind, kind, rule};
 
 /// Schema of the JSON presentation.
-pub const VIEW_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-view/v1";
+pub const VIEW_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-view/v2";
 
 /// A decisions file of any merge kind.
 #[derive(Debug, Clone, PartialEq)]
