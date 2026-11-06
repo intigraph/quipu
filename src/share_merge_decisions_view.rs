@@ -20,10 +20,10 @@ pub enum ConflictKind {
     /// Both sides changed identically; continue writes nothing.
     Convergent,
     /// Ours and theirs together hold more values than `sh:maxCount`.
-    #[serde(rename = "maxcount-exceeded", alias = "max_count_exceeded")]
+    #[serde(alias = "maxcount-exceeded")]
     MaxCountExceeded,
     /// On a `sh:maxCount 1` slot one side deleted the value the other replaced.
-    #[serde(rename = "delete-replace", alias = "delete_replace")]
+    #[serde(alias = "delete-replace")]
     DeleteReplace,
     #[serde(rename = "list-divergent")]
     ListDivergent,

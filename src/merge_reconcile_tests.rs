@@ -153,6 +153,30 @@ fn json_layout_snapshot() {
 }
 
 #[test]
+fn existing_conflict_kinds_keep_canonical_names_and_read_candidate_aliases() {
+    for (kind, canonical, alias) in [
+        (
+            ConflictKind::MaxCountExceeded,
+            "max_count_exceeded",
+            "maxcount-exceeded",
+        ),
+        (
+            ConflictKind::DeleteReplace,
+            "delete_replace",
+            "delete-replace",
+        ),
+    ] {
+        assert_eq!(serde_json::to_value(kind).unwrap(), canonical);
+        for name in [canonical, alias] {
+            assert_eq!(
+                serde_json::from_value::<ConflictKind>(serde_json::json!(name)).unwrap(),
+                kind
+            );
+        }
+    }
+}
+
+#[test]
 fn convergent_unbounded_record_and_presentation_share_null_bound() {
     let mut file = fixture();
     let ReconcileFile::Fork(decisions) = &mut file else {
