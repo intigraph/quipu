@@ -23,8 +23,8 @@
       "kind": "interface",
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
-      "summary": "The native command-line entrypoint parses local query, share, import and validation commands.",
-      "source_sha256": "0bfbd94ed27e460dd680c402268dd2a6158ff78e2aa04963c211671cd9da814c",
+      "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
+      "source_sha256": "789093ccc9677648721cca45183193a2f6a2c2fbb4ae2adb6823123e0839721b",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "f4355c7d94f57becd9b9670876f2a7485172c44832173bddf0527ab1ef864c80",
+      "source_sha256": "6e779b9eeccccb2bce5dfb5e66bd54821316d96b26d9c7fb24639308f8288047",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "6f81c081ae5b403acbef0a59764ce233c3a3f61bcb185910cbc237f767035346",
+      "source_sha256": "7b4602bf44cf1978e28f30bdb39932f7f339589bb8387d01b5ca2fde939a06e8",
       "properties": {
         "startHereOrder": 2
       }
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "b93723df9d09d08fe7393dcca9a505774615ecf9655c994835f2aa854bdbbda6",
+      "source_sha256": "f972cf3876d7abbbc92a19d68b7d4cfcb1dfb4605fa05006b622de0b154a9748",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "2d1b453c8c85aa7a68de38a14f67f155cdbacbeda971779b32794f9a439619e4",
+      "source_sha256": "4b6784746ffbce10d6b1d644f75d6dea108c3d70cb0af4b96ac4133abd6defd3",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "baed318457519265988ead6f0618902992ff6cc44dc69bca32ea6b68a04c6e7b",
+      "source_sha256": "52146303b12c34e258333a8a412163a199bcdc7005c590a5eef921ce5a9be522",
       "properties": {
         "startHereOrder": 5
       }

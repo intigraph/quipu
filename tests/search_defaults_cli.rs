@@ -152,18 +152,14 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
         after > 0,
         "explicit opt-in installs the bounded-backfill index"
     );
-    let backfill = success(&run(
-        dir.path(),
-        &[
-            "search-index",
-            "backfill",
-            "--batch-size",
-            "500",
-            "--db",
-            "old.db",
-        ],
-    ));
-    assert!(backfill.is_object());
+    // Populate this fixture through the bounded store API: the maintenance
+    // CLI intentionally refuses during UTC minutes 10..20. Its pause policy
+    // has explicit inside/outside clock controls in cli_search's unit tests.
+    let fixture = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    let backfill = fixture.backfill_lexical_batch(500).unwrap();
+    assert!(backfill.complete);
+    assert_eq!(backfill.documents, 1);
+    drop(fixture);
     let result = success(&run(dir.path(), &["search", "Clockwork", "--db", "old.db"]));
     assert_eq!(result["count"], 1);
     assert_eq!(result["ranking"], "keyword");
