@@ -453,6 +453,7 @@ COMMANDS:
     qp events refusals [--db <path>]
     qp changes [--from N] [--capture new_values|old_and_new_values|new_row] [--limit N] [--graph IRI] [--db <path>]
     qp follow --primary <url> [--page-txs N] [--page-gap-ms N] [--bootstrap-only] [--db <path>]  Keep this database a read-only follower of a primary
+    qp asof-rdf --binding <file.json> --frames <file.jsonl> --scratch <private-empty-dir>  Convert a retained cut to coherent RDF chunks offline
     qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
     qp graph label <iri> --label '<JSON label fields>' [--db <path>]
     qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]

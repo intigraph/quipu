@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses query, share, import and validation commands, plus offline coherent RDF chunk conversion from retained as-of frames with explicit bindings and budgets.",
-      "source_sha256": "0f72733ca9d9103d7048ffbda30a19f33cb6a60ab21b935844acf690155a3473",
+      "source_sha256": "dfc0bf3a1903d536642d2836bf1f2f1510bc98d4006dcff46d5defb46a3753e5",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
