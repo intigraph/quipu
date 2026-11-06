@@ -304,6 +304,13 @@ fn prepared_reads_capture_head_and_scope_without_borrowing_mutable_snapshot() {
     assert_eq!(snapshot.head_tx, 99);
     assert_eq!(prepared.base_cut().tx, Some(6));
     assert_eq!(prepared.current_cut().tx, Some(10));
+    assert_eq!(prepared.writer_snapshot().head_tx, 10);
+    assert_eq!(
+        prepared.writer_snapshot().graph,
+        "http://example.test/graph"
+    );
+    assert_eq!(prepared.writer_snapshot().store_id, "store-a");
+    assert_eq!(prepared.writer_snapshot().log_epoch, "epoch-a");
     assert_eq!(prepared.touched(), &[slot("a")]);
     assert_eq!(
         prepared.current_cut().valid_at.as_deref(),
@@ -400,4 +407,30 @@ fn prepared_reads_never_turn_bad_declared_scope_into_legacy_success() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn legacy_read_preparation_retains_store_epoch_graph_and_history_identity() {
+    let mut captured = current();
+    let expected = captured.clone();
+    let prepared = prepare_slot_reads(
+        None,
+        &captured,
+        LegacyBasePolicy::UseCurrentAndFlag,
+        &[slot("a")],
+        1,
+        "2026-01-10T00:00:00Z",
+    )
+    .unwrap();
+    captured.store_id = "restored-store".into();
+    captured.log_epoch = "new-epoch".into();
+    captured.graph = "http://example.test/other".into();
+    captured.oldest_complete_tx = 9;
+    captured.head_tx = 99;
+    assert!(prepared.base().source.is_none());
+    assert!(prepared.base().legacy_unbased);
+    assert_eq!(prepared.writer_snapshot(), &expected);
+    assert_ne!(prepared.writer_snapshot(), &captured);
+    assert_eq!(prepared.base_cut().tx, Some(10));
+    assert_eq!(prepared.current_cut().tx, Some(10));
 }

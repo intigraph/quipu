@@ -141,6 +141,7 @@ pub fn prepare_scoped_write_base<'a>(
 /// preparation. This is read planning, not reservation ownership or a Store
 /// query. In particular, neither cut grants authentication or write authority.
 pub struct PreparedSlotReads<'a> {
+    writer: WriterSnapshot,
     base: ResolvedWriteBase<'a>,
     touched: Vec<Slot>,
     base_cut: crate::store::AsOf,
@@ -148,6 +149,12 @@ pub struct PreparedSlotReads<'a> {
 }
 
 impl<'a> PreparedSlotReads<'a> {
+    /// Captured store/epoch/graph and retention coordinates for BOTH cuts.
+    /// Caller evidence only: this does not certify reservation ownership.
+    pub fn writer_snapshot(&self) -> &WriterSnapshot {
+        &self.writer
+    }
+
     /// Coordinate binding, still subject to authentic slice/hash verification.
     pub fn base(&self) -> &ResolvedWriteBase<'a> {
         &self.base
@@ -201,6 +208,7 @@ pub fn prepare_slot_reads<'a>(
         valid_at: Some(valid_at.to_owned()),
     };
     Ok(PreparedSlotReads {
+        writer: current.clone(),
         base,
         touched: touched.to_vec(),
         base_cut,

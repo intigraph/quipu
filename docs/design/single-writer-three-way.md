@@ -139,3 +139,14 @@ historical interval reconstruction. A future touched-slot reader must qualify
 this difference with a row closed after the base, an originally finite interval,
 a future authored close at Tz, and both Td and Tz as-of observations. No existing
 read semantics are changed in this source checkpoint.
+
+
+The prepared object also copies the validated `WriterSnapshot`: store identity,
+log epoch, graph, oldest-complete retention watermark and reserved head. This
+matters especially for explicit legacy mode, whose resolved base has no declared
+`SourceBinding`. The adapter must not reconstruct that identity from a later
+mutable request or current global store. `writer_snapshot()` provides immutable
+caller evidence, not an attestation that the reservation is held. A new source
+test changes all five original snapshot fields after legacy preparation and
+requires the captured identity and both tx cuts to remain unchanged; it awaits
+the queued Cargo qualification.
