@@ -1,0 +1,94 @@
+# Single-writer three-way admission
+
+Status: source preparation. No server write path uses this proposal. The
+`write_base` module only binds coordinates; it neither validates a slice digest
+nor acquires a writer reservation. Its tests are pending qualification.
+
+## Current behavior and the missing boundary
+
+`store/set.rs::set_triple` reads a complete current slot and passes its values to
+`store/conditional.rs::check_expected`. The latter reserves SQLite's writer
+before comparing that slot. This protects against a writer racing the internal
+read. It cannot recover the state a client read before issuing its replacement.
+An earlier client read therefore needs a declared base, not another current-slot
+compare. Existing conditional-write contracts must remain intact during rollout.
+
+## Base declaration and policy
+
+Reuse `resolver_contract::SourceBinding`: store identity, log epoch, graph,
+base transaction, exact touched scope and base slice hash. Numeric transaction
+ids alone are not portable across stores or restored epochs. The writer captures
+its identity, head and oldest complete retained transaction while holding the
+existing reservation. History completeness is an explicit store guarantee;
+`MIN(facts.tx)` is not a retention watermark.
+
+`write_base::resolve_write_base` checks the coordinates and retained range.
+It preserves the declared base even when newer transactions exist. A supplied
+but unavailable or mismatched base always refuses; it never becomes an unbased
+write. The caller must still read and verify the exact touched slice and input
+hashes. `scope: None` and `scope: Some([])` keep their existing distinct meanings.
+This writer path requires an explicit touched scope; it must not turn `None`
+into a full graph scan.
+
+Legacy policy is explicit per graph: `RequireDeclared` refuses a missing base;
+`UseCurrentAndFlag` resolves to the reserved head and reports `legacy_unbased`.
+There is no default in the source helper and no configuration activation in
+this slice. A counter or response flag is not permission to select compatibility
+mode. The operator chooses the rollout policy separately.
+
+## Reservation, reads and planning
+
+1. Validate request size and scope before acquiring the writer.
+2. Acquire the existing writer reservation before reading head, policy, shapes
+   or any current slot. Preserve normal denial/verdict transaction behavior.
+3. Bind the declaration, read only the declared `(graph, subject, predicate)`
+   slots as of base, and independently verify the slice hash. Do not call
+   `facts_as_of_in_graph` and filter its full-graph result afterward.
+4. Historical membership must account for assertion `tx` and `retracted_tx`.
+   A later retraction must not erase the older base view. Received `[t,t)` rows
+   are evidence, never live slot values. Distinguish transaction state from a
+   valid-time query; a `tx <= base` filter alone is insufficient.
+5. Lower request operations into the incoming complete slot relative to base.
+   An assert batch is a delta, not implicitly a replacement. Preserve explicit
+   deletions and authored times; do not manufacture deletion times from base tx.
+6. Feed these inputs to the shared `merge_core::plan_merge`, with shape-derived
+   cardinality. Do not duplicate its per-value rules. Inference, list lowering
+   and validator/profile identity remain common-core responsibilities.
+7. Persist the common receive/decide sequence and existing authenticated master
+   receipt under this reservation. Recheck bound validator inputs before commit.
+
+## Pending conflicts and dependency
+
+The current planner suppresses both operation vectors when any slot is held.
+It cannot yet persist an incoming conflict receipt plus a pending decision.
+Do not bypass this by independently writing a receipt or overwriting the slot.
+The shared decision schema, receipt ordering and pending/resume implementation
+must supply this behavior first. Reuse its decision identifiers and show/resolve
+surface; do not introduce a second writer-specific decision store.
+
+A real conflict returns a pending result only after its receipt and decision
+record have committed together. Current slot values stay unchanged. A refused
+receipt transaction returns refusal, not pending. Resume captures a fresh head
+under a new reservation and verifies the bound inputs; changed state invalidates
+the old plan. A transaction id in a response proves committed receipt history,
+not that the proposed value became current.
+
+## Qualification before wiring
+
+The initial pure tests cover declared vs current base, explicit legacy flags,
+strict graph policy, foreign store/epoch/graph, future/expired history and
+malformed capture. They do not prove Store reads, authentication or locking.
+Store integration must additionally demonstrate:
+
+- stale single-value replacement becomes pending without overwriting current;
+- compatible set changes merge and equal changes flag convergence;
+- later retracts reconstruct the earlier base; empty receipts never enter it;
+- a second independent writer is excluded until commit or rollback;
+- pending receipt and decision persistence roll back together on denial;
+- retry and resume remain idempotent and revalidate the current head;
+- graph isolation and existing CAS clients retain their contracts;
+- bounded touched-slot reads and the existing query/load budgets hold at scale.
+
+Compilation, focused tests, reference/source witnesses and performance checks
+remain required. This source slice claims none of those results and activates
+no endpoint, graph policy, writer or database migration.
