@@ -24,7 +24,8 @@ fn fixture(scope_graph: &str, expiry: u64) -> (Router, crate::SharedStore) {
     let policy = quipu::http_auth::BearerPolicy::new(Some("shared-fixture".into()), None, None, 1)
         .unwrap()
         .with_named(registry);
-    let store = quipu::Store::open_in_memory().unwrap();
+    let mut store = quipu::Store::open_in_memory().unwrap();
+    store.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
     store.graph_create("urn:example:memory").unwrap();
     let state = Arc::new(crate::StoreHandle::writer_only(store));
     let config = quipu::config::MemoryFilesConfig {
@@ -58,7 +59,8 @@ fn fixture(scope_graph: &str, expiry: u64) -> (Router, crate::SharedStore) {
 }
 
 async fn call(app: &Router, path: &str, token: &str, body: &Value) -> StatusCode {
-    app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::post(path)
                 .header("authorization", format!("Bearer {token}"))
@@ -67,8 +69,18 @@ async fn call(app: &Router, path: &str, token: &str, body: &Value) -> StatusCode
                 .unwrap(),
         )
         .await
-        .unwrap()
-        .status()
+        .unwrap();
+    let status = response.status();
+    if !status.is_success() {
+        let body = axum::body::to_bytes(response.into_body(), 16 * 1024)
+            .await
+            .unwrap();
+        eprintln!(
+            "synthetic memory fixture {path}: {status}: {}",
+            String::from_utf8_lossy(&body)
+        );
+    }
+    status
 }
 
 fn commit() -> Value {
