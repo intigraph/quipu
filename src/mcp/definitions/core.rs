@@ -102,7 +102,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
         // proposes decisions, and the single writer that applies them.
         serde_json::json!({
             "name": "quipu_merge_decisions",
-            "description": "READ. Review rows for merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, with base/ours/theirs values and provenance. Convergent rows default to continue, which preserves the current claim without writing. propose:true adds advisory proposals to conflicts; it never chooses for the reviewer. present:true returns {decisions, presentation, view}. Writes nothing.",
+            "description": "READ. Review rows for merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, with base/ours/theirs values and provenance. Convergent rows default to continue, which preserves the current claim without writing. propose:true adds advisory proposals; conflicts still require the reviewer's choice. present:true returns {decisions, presentation, view}. Writes nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

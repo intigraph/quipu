@@ -106,11 +106,11 @@ impl Choice {
             Some("defer") => side(Choice::Defer),
             Some("value") | None if !values.is_empty() => Ok(Choice::Values(values)),
             Some("value") | None => Err(Error::InvalidValue(
-                "choose one of ours, theirs, base, both, value (with at least one value), defer"
+                "choose one of continue, ours, theirs, base, both, value (with at least one value), defer"
                     .into(),
             )),
             Some(other) => Err(Error::InvalidValue(format!(
-                "unknown choice {other:?}: choose one of ours, theirs, base, both, value, defer"
+                "unknown choice {other:?}: choose one of continue, ours, theirs, base, both, value, defer"
             ))),
         }
     }
