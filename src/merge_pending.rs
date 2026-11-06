@@ -2,8 +2,8 @@
 //! The ledger graph is an explicit caller admission, never ROOT or an inferred
 //! private graph. No command installs or invokes this source-stage API yet.
 use crate::error::{Error, Result};
+use crate::merge_core::FactOp;
 use crate::merge_core::selection::Mode;
-use crate::merge_core::{Change, FactOp};
 use crate::merge_lists::Slot;
 use crate::merge_session::{self, Prepared, Request};
 use crate::store::{Datum, Store};
@@ -14,13 +14,9 @@ use std::collections::BTreeSet;
 const PAYLOAD: &str = "urn:quipu:merge-session:receipt";
 const MAX_RECORD: usize = 8 * 1024 * 1024;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ReportRow {
-    pub slot: Slot,
-    pub kind: String,
-    pub held: bool,
-    pub decision: Option<crate::merge_core::Decision<crate::merge_session::Value>>,
-}
+#[path = "merge_pending_report.rs"]
+mod report;
+pub(crate) use report::ReportRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct Guard {
@@ -309,23 +305,15 @@ pub(crate) fn execute(
                     .iter()
                     .find(|choice| choice.slot == *slot)
                     .map(|choice| choice.decision.clone()),
-                kind: match p.change {
-                    Change::Convergent => "convergent",
-                    Change::MaxcountExceeded | Change::DeleteReplace
-                        if prepared
-                            .request
-                            .profile
-                            .lists
-                            .iter()
-                            .any(|b| b.slot == *slot) =>
-                    {
-                        "list-divergent"
-                    }
-                    Change::MaxcountExceeded => "maxcount-exceeded",
-                    Change::DeleteReplace => "delete-replace",
-                    _ => "clean",
-                }
-                .into(),
+                kind: report::Kind::from_change(
+                    p.change,
+                    prepared
+                        .request
+                        .profile
+                        .lists
+                        .iter()
+                        .any(|b| b.slot == *slot),
+                ),
             })
             .collect();
         let mut receipt = Receipt {
