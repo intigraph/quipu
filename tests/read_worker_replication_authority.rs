@@ -100,7 +100,7 @@ fn request(
     path: &str,
     token: &str,
     body: &str,
-) -> Result<ureq::Response, ureq::Error> {
+) -> Result<ureq::Response, Box<ureq::Error>> {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(2))
         .redirects(0)
@@ -111,7 +111,7 @@ fn request(
         .set("Authorization", &format!("Bearer {token}"));
     match call.send_string(body) {
         Ok(response) | Err(ureq::Error::Status(_, response)) => Ok(response),
-        Err(error) => Err(error),
+        Err(error) => Err(Box::new(error)),
     }
 }
 
