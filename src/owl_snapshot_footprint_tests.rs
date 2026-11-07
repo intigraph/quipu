@@ -6,7 +6,7 @@ const PREFIX: &str = "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . \
     @prefix owl: <http://www.w3.org/2002/07/owl#> .";
 
 fn store(axioms: &str) -> Store {
-    let source = Store::open_in_memory().unwrap();
+    let mut source = Store::open_in_memory().unwrap();
     source
         .load_ontology("test", &format!("{PREFIX} {axioms}"), TS)
         .unwrap();
