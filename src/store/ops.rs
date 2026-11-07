@@ -706,17 +706,22 @@ impl Store {
 ///
 /// Retracting a triple once is also the correct SEMANTICS — the duplicate rows
 /// are one statement, not N — so this both fixes the crash and states the
-/// intent. Dedupe is linear because `Value` is only `PartialEq`; per-entity
-/// fact counts are small.
+/// intent. Index exported term identity rather than scanning every earlier
+/// datum: a source-wide plan can contain hundreds of thousands of triples.
+/// Still confirm `Value` equality within a key bucket: physical codec limits
+/// can make distinct in-memory values share a key. Keep the first physical
+/// value and validity spelling, in input order.
 pub(super) fn retraction_datums(facts: &[Fact]) -> Vec<Datum> {
     let mut datums: Vec<Datum> = Vec::with_capacity(facts.len());
+    let mut seen = std::collections::HashMap::<_, Vec<usize>>::with_capacity(facts.len());
     for f in facts {
-        let already = datums
-            .iter()
-            .any(|d| d.entity == f.entity && d.attribute == f.attribute && d.value == f.value);
-        if already {
+        let prior = seen
+            .entry((f.entity, f.attribute, f.value.term_key()))
+            .or_default();
+        if prior.iter().any(|&index| datums[index].value == f.value) {
             continue;
         }
+        prior.push(datums.len());
         datums.push(Datum {
             entity: f.entity,
             attribute: f.attribute,
@@ -728,3 +733,7 @@ pub(super) fn retraction_datums(facts: &[Fact]) -> Vec<Datum> {
     }
     datums
 }
+
+#[cfg(test)]
+#[path = "retraction_datums_tests.rs"]
+mod retraction_datums_tests;

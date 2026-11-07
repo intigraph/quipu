@@ -7,6 +7,15 @@ use rusqlite::params;
 #[path = "claim_window_tests.rs"]
 mod claim_window_tests;
 
+#[cfg(test)]
+#[path = "claim_close_plan_tests.rs"]
+mod claim_close_plan_tests;
+
+// Probe the owner of each matching physical claim by transaction primary key.
+// Materializing every transaction for a source inside each close execution
+// repeats source-wide work for every datum and its physical aliases.
+const CLAIM_CLOSE_SQL: &str = "UPDATE facts SET valid_to=?1,retracted_tx=?6 WHERE e=?2 AND a=?3 AND v=?4 AND g=?5 AND op=1 AND valid_to IS NULL AND (?7 IS NULL OR EXISTS (SELECT 1 FROM transactions t WHERE t.id=facts.tx AND t.source=?7)) AND (?8 IS NULL OR (tx>?8 AND tx<=?9))";
+
 /// Physical-claim selector. A window is exclusive at its lower watermark and
 /// inclusive at its upper watermark; it never widens to all producer claims.
 #[derive(Clone, Copy)]
@@ -95,7 +104,7 @@ impl Store {
         let mut insert = self.prepare(
             "INSERT INTO facts(e,a,v,g,tx,valid_from,valid_to,op) VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(e,a,v,tx) DO UPDATE SET valid_from=excluded.valid_from,valid_to=excluded.valid_to,op=excluded.op,retracted_tx=NULL",
         )?;
-        let mut close = self.prepare("UPDATE facts SET valid_to=?1,retracted_tx=?6 WHERE e=?2 AND a=?3 AND v=?4 AND g=?5 AND op=1 AND valid_to IS NULL AND (?7 IS NULL OR tx IN (SELECT id FROM transactions WHERE source=?7)) AND (?8 IS NULL OR (tx>?8 AND tx<=?9))")?;
+        let mut close = self.prepare(CLAIM_CLOSE_SQL)?;
         for datum in datums {
             crate::promotion_control::check()?;
             let present =

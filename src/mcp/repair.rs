@@ -131,17 +131,25 @@ fn resolve_committed_graph(store: &Store, graph: Option<&str>) -> Result<i64> {
 /// is removed. Historical duplicate rows under one source close together.
 pub(super) fn dedupe(plan: Vec<Datum>) -> Vec<Datum> {
     let mut out: Vec<Datum> = Vec::with_capacity(plan.len());
+    // Index candidates, then confirm the original Value equality: codec keys
+    // can collide for distinct in-memory values. Preserve the first datum.
+    let mut seen = std::collections::HashMap::<_, Vec<usize>>::with_capacity(plan.len());
     for d in plan {
-        if out
-            .iter()
-            .any(|k| k.entity == d.entity && k.attribute == d.attribute && k.value == d.value)
-        {
+        let prior = seen
+            .entry((d.entity, d.attribute, d.value.term_key()))
+            .or_default();
+        if prior.iter().any(|&index| out[index].value == d.value) {
             continue;
         }
+        prior.push(out.len());
         out.push(d);
     }
     out
 }
+
+#[cfg(test)]
+#[path = "repair_dedupe_tests.rs"]
+mod repair_dedupe_tests;
 
 /// MCP tool: `quipu_retract_source` -- plan or apply a retract-only repair.
 ///
