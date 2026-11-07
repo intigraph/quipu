@@ -193,4 +193,40 @@ mod tests {
         })
         .await;
     }
+    #[tokio::test]
+    async fn opaque_handoff_restores_key_derived_identity_through_strict_auth_guard() {
+        use axum::{Router, routing::post};
+        use tower::ServiceExt;
+        let store = std::sync::Arc::new(crate::StoreHandle::writer_only(
+            quipu::Store::open_in_memory().unwrap(),
+        ));
+        let app = crate::auth_guard::layer(Router::new().route("/query", post(|| async {
+            let identity = crate::auth::request_identity().expect("authenticated identity required");
+            axum::Json(serde_json::json!({"principal":identity.principal,"credential_id":identity.credential_id}))
+        })), crate::auth_guard::Config {
+            auth_policy: quipu::http_auth::BearerPolicy::new(Some("fixture-bearer".into()), None, None, quipu::time::epoch_secs()).unwrap(),
+            session_keys: quipu::http_auth::SessionKeyPolicy { required: true, onboarding_read_paths: vec![] },
+            attest_store: store, replica_config: None, read_only: true, is_relay: false, scoped_enabled: false,
+        });
+        let mut admitted = request("/query", Some(&encoded()), true);
+        admitted
+            .headers_mut()
+            .insert("x-quipu-agent", "urn:untrusted:claim".parse().unwrap());
+        restore(&mut admitted).unwrap();
+        let response = app.clone().oneshot(admitted).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["principal"], "urn:fixture:principal");
+        assert_eq!(value["credential_id"], "fixture-key");
+        // Identical wire headers without the opaque private-guard extension
+        // cannot create authority or bypass strict signature validation.
+        let response = app
+            .oneshot(request("/query", Some(&encoded()), true))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
 }
