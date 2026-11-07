@@ -45,6 +45,7 @@ mod cli;
 mod cli_acquire;
 mod cli_alias;
 mod cli_align;
+mod cli_asof_rdf;
 mod cli_attest;
 mod cli_audit;
 mod cli_changes;
@@ -134,6 +135,7 @@ fn main() {
         "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
         // Hooks are store-free and config-free: a Stop hook must not load a
         // config (which can warn on stderr) or open a database.
+        "asof-rdf" => return cli_asof_rdf::command(&args),
         "hook" => return cli_hooks::cmd_hook(&args),
         "hooks" => return cli_hooks::cmd_hooks(&args),
         "share" if args.get(2).map(String::as_str) == Some("diff") => {
@@ -454,6 +456,7 @@ COMMANDS:
     qp events refusals [--db <path>]
     qp changes [--from N] [--capture new_values|old_and_new_values|new_row] [--limit N] [--graph IRI] [--db <path>]
     qp follow --primary <url> [--page-txs N] [--page-gap-ms N] [--bootstrap-only] [--db <path>]  Keep this database a read-only follower of a primary
+    qp asof-rdf --binding <file.json> --frames <file.jsonl> --scratch <private-empty-dir>  Convert a retained cut to coherent RDF chunks offline
     qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
     qp graph label <iri> --label '<JSON label fields>' [--db <path>]
     qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]
