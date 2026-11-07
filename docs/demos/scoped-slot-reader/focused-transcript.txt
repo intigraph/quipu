@@ -1,0 +1,7 @@
+$ cargo test --locked --features shacl,owl --lib store::slot_read_batch::tests:: -- --test-threads=2
+running 2 tests
+test store::slot_read_batch::tests::prepared_batch_refuses_foreign_coordinates_and_moved_head_or_epoch ... ok
+test store::slot_read_batch::tests::prepared_batch_binds_both_cuts_and_charges_physical_work_before_visibility ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3642 filtered out; finished in 0.03s
+HOME guard: 159 watched paths and 2 UID-keyed resources clean.

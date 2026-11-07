@@ -21,54 +21,9 @@ use crate::types::{Fact, Op, Value};
 use super::owl_parse::{collect_predicate_facts, collect_type_facts, transitive_closure};
 use super::{MaterializeReport, Ontology, RDF_TYPE};
 
-/// Accumulates one derivation pass: a fact is staged only if it is neither in
-/// the store already nor staged earlier in this pass, so counts stay honest
-/// and the fixpoint loop terminates.
-struct Pass<'a> {
-    seen: HashSet<(i64, i64, Vec<u8>)>,
-    datums: Vec<Datum>,
-    timestamp: &'a str,
-    limit: Option<usize>,
-    exhausted: bool,
-}
-
-impl<'a> Pass<'a> {
-    fn from_facts(facts: &[Fact], timestamp: &'a str, limit: Option<usize>) -> Self {
-        let mut seen = HashSet::new();
-        for f in facts {
-            seen.insert((f.entity, f.attribute, f.value.to_bytes()));
-        }
-        Self {
-            seen,
-            datums: Vec::new(),
-            timestamp,
-            limit,
-            exhausted: false,
-        }
-    }
-
-    fn push(&mut self, entity: i64, attribute: i64, value: Value, counter: &mut usize) {
-        let key = (entity, attribute, value.to_bytes());
-        if self.seen.contains(&key) {
-            return;
-        }
-        if self.limit.is_some_and(|limit| self.datums.len() >= limit) {
-            self.exhausted = true;
-            return;
-        }
-        if self.seen.insert(key) {
-            self.datums.push(Datum {
-                entity,
-                attribute,
-                value,
-                valid_from: self.timestamp.to_string(),
-                valid_to: None,
-                op: Op::Assert,
-            });
-            *counter += 1;
-        }
-    }
-}
+#[path = "owl_pass.rs"]
+mod pass;
+use pass::Pass;
 
 /// Disjoint-set forest over entity ids, for the `owl:sameAs` identity closure.
 ///
@@ -290,6 +245,32 @@ impl Ontology {
         seed: Option<&[Fact]>,
         limit: Option<usize>,
     ) -> Result<Vec<Datum>> {
+        self.derive_pass_into(store, companion, timestamp, report, seed, limit, false)
+    }
+
+    /// Enumerate a frozen pass into the private durable unique queue.
+    pub(crate) fn derive_queued_pass(
+        &self,
+        store: &Store,
+        companion: i64,
+        timestamp: &str,
+        report: &mut MaterializeReport,
+    ) -> Result<()> {
+        self.derive_pass_into(store, companion, timestamp, report, None, None, true)?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn derive_pass_into(
+        &self,
+        store: &Store,
+        companion: i64,
+        timestamp: &str,
+        report: &mut MaterializeReport,
+        seed: Option<&[Fact]>,
+        limit: Option<usize>,
+        queued: bool,
+    ) -> Result<Vec<Datum>> {
         let graphs = [crate::schema::ROOT_GRAPH, companion];
         let rdf_type_id = store.intern(RDF_TYPE)?;
 
@@ -331,7 +312,11 @@ impl Ontology {
         } else {
             &[]
         };
-        let mut pass = Pass::from_facts(dedup, timestamp, limit);
+        let mut pass = if queued {
+            Pass::disk(store, timestamp)
+        } else {
+            Pass::from_facts(dedup, timestamp, limit)
+        };
         let type_facts = collect_type_facts(&premises, rdf_type_id);
 
         // 1. Subclass transitive closure: if x : A and A ⊑ B, then x : B.
@@ -346,7 +331,7 @@ impl Ontology {
                         rdf_type_id,
                         Value::Ref(super_id),
                         &mut report.subclass_inferences,
-                    );
+                    )?;
                 }
             }
         }
@@ -373,7 +358,7 @@ impl Ontology {
                         super_id,
                         value.clone(),
                         &mut report.sub_property_inferences,
-                    );
+                    )?;
                 }
             }
         }
@@ -395,7 +380,7 @@ impl Ontology {
                     rdf_type_id,
                     Value::Ref(other),
                     &mut report.equivalent_class_inferences,
-                );
+                )?;
             }
         }
 
@@ -405,7 +390,7 @@ impl Ontology {
             let q_id = store.intern(q)?;
             for (s, o) in &collect_predicate_facts(&premises, p_id) {
                 if let Value::Ref(o_id) = o {
-                    pass.push(*o_id, q_id, Value::Ref(*s), &mut report.inverse_inferences);
+                    pass.push(*o_id, q_id, Value::Ref(*s), &mut report.inverse_inferences)?;
                 }
             }
         }
@@ -420,7 +405,7 @@ impl Ontology {
                         prop_id,
                         Value::Ref(*s),
                         &mut report.symmetric_inferences,
-                    );
+                    )?;
                 }
             }
         }
@@ -479,7 +464,7 @@ impl Ontology {
                             prop_id,
                             Value::Ref(target),
                             &mut report.transitive_inferences,
-                        );
+                        )?;
                     }
                 }
             }
@@ -500,7 +485,7 @@ impl Ontology {
                         to_id,
                         v.clone(),
                         &mut report.equivalent_property_inferences,
-                    );
+                    )?;
                 }
             }
         }
@@ -599,7 +584,12 @@ impl Ontology {
                 for &x in group {
                     for &y in group {
                         if x != y {
-                            pass.push(x, same_as_id, Value::Ref(y), &mut report.same_as_inferences);
+                            pass.push(
+                                x,
+                                same_as_id,
+                                Value::Ref(y),
+                                &mut report.same_as_inferences,
+                            )?;
                         }
                     }
                 }
@@ -623,7 +613,7 @@ impl Ontology {
                                 f.attribute,
                                 f.value.clone(),
                                 &mut report.same_as_inferences,
-                            );
+                            )?;
                         }
                     }
                 }
@@ -637,7 +627,7 @@ impl Ontology {
                                 f.attribute,
                                 Value::Ref(alias),
                                 &mut report.same_as_inferences,
-                            );
+                            )?;
                         }
                     }
                 }
@@ -655,7 +645,7 @@ impl Ontology {
                     rdf_type_id,
                     Value::Ref(class_id),
                     &mut report.domain_range_inferences,
-                );
+                )?;
             }
         }
         for (prop, class) in &self.axioms.ranges {
@@ -668,7 +658,7 @@ impl Ontology {
                         rdf_type_id,
                         Value::Ref(class_id),
                         &mut report.domain_range_inferences,
-                    );
+                    )?;
                 }
             }
         }
@@ -714,6 +704,9 @@ impl Ontology {
         if pass.exhausted {
             return Err(Error::InvalidValue("OWL inference budget exceeded".into()));
         }
+        report.raw_proposals += pass.raw;
+        report.known_proposals += pass.known;
+        report.repeated_proposals += pass.repeated;
         Ok(pass.datums)
     }
 }

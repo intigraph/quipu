@@ -43,6 +43,12 @@ pub enum Disposition {
 /// Kept in one list rather than split per disposition so that adding a table
 /// forces a choice to be made in one place, in front of the reasons.
 pub const DECLARED: &[(&str, Disposition)] = &[
+    // Local OWL resume/commit reconciliation belongs to this store generation;
+    // importing it would authorize a foreign scratch cursor to skip assertions.
+    ("owl_batch_receipts", Disposition::Excluded),
+    ("owl_page_job", Disposition::Excluded),
+    ("owl_page_queue", Disposition::Excluded),
+    ("owl_page_all", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
