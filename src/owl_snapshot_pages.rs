@@ -15,6 +15,7 @@ fn engine() -> &'static str {
             include_str!("owl_pass.rs"),
             include_str!("owl_parse.rs"),
             include_str!("owl_snapshot.rs"),
+            include_str!("owl_snapshot_apply.rs"),
             include_str!("owl_snapshot_pages.rs"),
             include_str!("types.rs"),
             include_str!("owl.rs"),

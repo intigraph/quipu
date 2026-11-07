@@ -3,7 +3,6 @@
 use serde_json::{Value, json};
 
 use super::SharedStore;
-use super::admission::write_blocking;
 use super::base::{AppError, blocking};
 use quipu::owl::snapshot::Snapshot;
 
@@ -66,61 +65,102 @@ pub(crate) async fn run(
     let mut max_writer_batch_micros = 0;
     while snapshot.remaining() > 0 {
         let writer = store.clone();
-        let result = write_blocking(move || {
-            let (n, work, micros) = {
-                let mut live = writer.lock();
-                let started = std::time::Instant::now();
-                let n = snapshot.apply_batch(&mut live)?;
-                (n, live.take_deferred_embed(), started.elapsed().as_micros())
-            };
-            if let Some(work) = work {
-                super::tools::finish_deferred_embed(&writer, &work)?;
-            }
-            Ok((snapshot, permit, n, micros))
+        use quipu::write_observation::{Observation, Path, Stage};
+        let observation = Observation::new(Path::OwlPage, crate::request_middleware::request_id());
+        let dispatch = observation.stage(Stage::QueuedDispatch);
+        let granted = std::sync::Arc::new(std::sync::OnceLock::new());
+        let stamp = granted.clone();
+        let result = super::admission::write_blocking_observed(stamp, move || {
+            dispatch.finish(true);
+            observation.admission_granted(granted.get().copied());
+            observation.run(|| {
+                let (n, work, micros) = {
+                    let waiting = quipu::write_observation::stage(Stage::LockWait);
+                    let mut live = writer.lock();
+                    waiting.finish(true);
+                    let held = quipu::write_observation::stage(Stage::LockHeld);
+                    let started = std::time::Instant::now();
+                    let n = snapshot.apply_batch(&mut live);
+                    let work = if n.is_ok() {
+                        live.take_deferred_embed()
+                    } else {
+                        None
+                    };
+                    drop(live);
+                    let micros = started.elapsed().as_micros();
+                    held.finish(n.is_ok());
+                    (n?, work, micros)
+                };
+                if let Some(work) = work {
+                    super::tools::finish_deferred_embed(&writer, &work)?;
+                }
+                Ok((snapshot, permit, n, micros))
+            })
         })
         .await?;
         (snapshot, permit) = (result.0, result.1);
         applied += result.2;
         max_writer_batch_micros = max_writer_batch_micros.max(result.3);
     }
-    write_blocking(move || {
-        let _permit = permit;
-        let work = {
-            let mut live = store.lock();
-            let final_started = std::time::Instant::now();
-            snapshot.finish(&mut live)?;
-            max_writer_batch_micros =
-                max_writer_batch_micros.max(final_started.elapsed().as_micros());
-            live.take_deferred_embed()
-        };
-        if let Some(work) = work {
-            super::tools::finish_deferred_embed(&store, &work)?;
-        }
-        let r = &snapshot.report;
-        let response = axum::Json(json!({
-            "action": "materialize", "ontologies": snapshot.ontology_count(),
-            "complete": true, "snapshot_tx": snapshot.premise_head,
-            "elapsed_ms": started.elapsed().as_millis(), "applied_proposals": applied,
-            "max_writer_batch_micros": max_writer_batch_micros,
-            "materialized": if snapshot.ontology_count() == 0 { Value::Null } else { json!({
-                "total": r.total, "passes": r.passes,
-                "raw_proposals": r.raw_proposals, "known_proposals": r.known_proposals,
-                "repeated_proposals": r.repeated_proposals,
-                "subclass_inferences": r.subclass_inferences,
-                "same_as_inferences": r.same_as_inferences,
-                "sub_property_inferences": r.sub_property_inferences,
-                "inverse_inferences": r.inverse_inferences,
-                "symmetric_inferences": r.symmetric_inferences,
-                "equivalent_class_inferences": r.equivalent_class_inferences,
-                "domain_range_inferences": r.domain_range_inferences,
-                "transitive_inferences": r.transitive_inferences,
-                "equivalent_property_inferences": r.equivalent_property_inferences
-            })}
-        }));
-        // Close the completed scratch database before releasing single-flight;
-        // the next invocation may replace that completed generation's file.
-        drop(snapshot);
-        Ok(response)
+    use quipu::write_observation::{Observation, Path, Stage};
+    let final_observation =
+        Observation::new(Path::OwlFinish, crate::request_middleware::request_id());
+    let final_dispatch = final_observation.stage(Stage::QueuedDispatch);
+    let granted = std::sync::Arc::new(std::sync::OnceLock::new());
+    let stamp = granted.clone();
+    super::admission::write_blocking_observed(stamp, move || {
+        final_dispatch.finish(true);
+        final_observation.admission_granted(granted.get().copied());
+        final_observation.run(|| {
+            let _permit = permit;
+            let work = {
+                let waiting = quipu::write_observation::stage(Stage::LockWait);
+                let mut live = store.lock();
+                waiting.finish(true);
+                let held = quipu::write_observation::stage(Stage::LockHeld);
+                let final_started = std::time::Instant::now();
+                let result = snapshot.finish(&mut live);
+                let work = if result.is_ok() {
+                    live.take_deferred_embed()
+                } else {
+                    None
+                };
+                drop(live);
+                max_writer_batch_micros =
+                    max_writer_batch_micros.max(final_started.elapsed().as_micros());
+                held.finish(result.is_ok());
+                result?;
+                work
+            };
+            if let Some(work) = work {
+                super::tools::finish_deferred_embed(&store, &work)?;
+            }
+            let r = &snapshot.report;
+            let response = axum::Json(json!({
+                "action": "materialize", "ontologies": snapshot.ontology_count(),
+                "complete": true, "snapshot_tx": snapshot.premise_head,
+                "elapsed_ms": started.elapsed().as_millis(), "applied_proposals": applied,
+                "max_writer_batch_micros": max_writer_batch_micros,
+                "materialized": if snapshot.ontology_count() == 0 { Value::Null } else { json!({
+                    "total": r.total, "passes": r.passes,
+                    "raw_proposals": r.raw_proposals, "known_proposals": r.known_proposals,
+                    "repeated_proposals": r.repeated_proposals,
+                    "subclass_inferences": r.subclass_inferences,
+                    "same_as_inferences": r.same_as_inferences,
+                    "sub_property_inferences": r.sub_property_inferences,
+                    "inverse_inferences": r.inverse_inferences,
+                    "symmetric_inferences": r.symmetric_inferences,
+                    "equivalent_class_inferences": r.equivalent_class_inferences,
+                    "domain_range_inferences": r.domain_range_inferences,
+                    "transitive_inferences": r.transitive_inferences,
+                    "equivalent_property_inferences": r.equivalent_property_inferences
+                })}
+            }));
+            // Close the completed scratch database before releasing single-flight;
+            // the next invocation may replace that completed generation's file.
+            drop(snapshot);
+            Ok(response)
+        })
     })
     .await
 }
