@@ -134,7 +134,7 @@ fn group_snapshot(dir: &Path) {
             c:literalEntity prov:wasGeneratedBy c:literalEpisode ; c:label "literal" .
             c:wrongNamespaceEpisode <urn:decoy:groupId> "wanted" .
             c:wrongNamespaceEntity prov:wasGeneratedBy c:wrongNamespaceEpisode .
-        "#,
+        "#.as_slice(),
         oxrdfio::RdfFormat::Turtle,
         None,
         "2026-01-01T00:00:00Z",
