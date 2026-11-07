@@ -182,6 +182,9 @@
   "/knot/stage": [
     "post"
   ],
+  "/knot/status": [
+    "post"
+  ],
   "/mapping/apply": [
     "post"
   ],

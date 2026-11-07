@@ -13,6 +13,9 @@ use crate::store::inferred::{
 };
 use crate::{Datum, MaterializeReport, Op, Store, Value};
 
+#[path = "owl_snapshot_footprint.rs"]
+mod footprint;
+
 /// Maximum number of proposed assertions applied by one writer acquisition.
 pub const APPLY_BATCH: usize = 64;
 /// Refuse oversized inputs instead of copying the entire historical database.
@@ -49,10 +52,21 @@ impl Snapshot {
         Ok(scratch)
     }
 
-    /// Copy only current ROOT and its inferred companion from a consistent read
-    /// transaction. `scratch` must be an empty, private store owned by the caller.
-    /// No live writes or derivation occur here.
+    /// Copy the complete OWL premise footprint from current ROOT and its inferred
+    /// companion under one consistent read transaction. Unrelated facts are
+    /// omitted only when the ontology/identity rules prove them irrelevant;
+    /// identity-producing property axioms retain the full-input path and cap.
+    /// `scratch` must be empty and private. No live writes or derivation occur here.
     pub fn capture(source: &Store, scratch: Store, timestamp: &str) -> Result<Self> {
+        Self::capture_with_limit(source, scratch, timestamp, MAX_PREMISES)
+    }
+
+    fn capture_with_limit(
+        source: &Store,
+        scratch: Store,
+        timestamp: &str,
+        max_premises: usize,
+    ) -> Result<Self> {
         if !scratch.current_facts()?.is_empty() || !scratch.list_ontologies()?.is_empty() {
             return Err(Error::InvalidValue(
                 "OWL scratch store must be empty".into(),
@@ -63,6 +77,8 @@ impl Snapshot {
         let identity = source.store_id()?;
         let ontologies = source.list_ontologies()?;
         let source_companion = source.lookup(ROOT_INFERRED_GRAPH_IRI)?;
+        let footprint =
+            footprint::Footprint::discover(source, &ontologies, source_companion, max_premises)?;
         let companion = scratch.intern(ROOT_INFERRED_GRAPH_IRI)?;
         let write = scratch.conn.unchecked_transaction()?;
         scratch.conn.execute(
@@ -72,16 +88,9 @@ impl Snapshot {
         let tx = scratch.conn.last_insert_rowid();
         let mut count = 0;
         for graph in std::iter::once(0).chain(source_companion) {
-            let mut stmt = source.conn.prepare(
-                "SELECT f.e, f.a, f.v, f.valid_from FROM facts f \
-                 WHERE f.g=?1 AND f.op=1 AND f.valid_to IS NULL \
-                 AND NOT EXISTS (SELECT 1 FROM transactions t \
-                                 WHERE t.id=f.tx AND t.source=?2)",
-            )?;
-            let mut rows = stmt.query(params![graph, PLANE_SOURCE])?;
-            while let Some(row) = rows.next()? {
+            footprint.for_each(source, graph, |row| {
                 count += 1;
-                if count > MAX_PREMISES {
+                if count > max_premises {
                     return Err(Error::InvalidValue(
                         "OWL snapshot premise budget exceeded".into(),
                     ));
@@ -105,7 +114,8 @@ impl Snapshot {
                         row.get::<_, String>(3)?
                     ],
                 )?;
-            }
+                Ok(())
+            })?;
         }
         for (name, turtle, loaded_at) in &ontologies {
             scratch.load_snapshot_ontology(name, turtle, loaded_at)?;
@@ -295,6 +305,10 @@ impl Snapshot {
 #[cfg(test)]
 #[path = "owl_snapshot_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "owl_snapshot_footprint_tests.rs"]
+mod footprint_tests;
 
 fn remap_id(source: &Store, target: &Store, id: i64) -> Result<i64> {
     target.intern(&source.resolve(id)?)

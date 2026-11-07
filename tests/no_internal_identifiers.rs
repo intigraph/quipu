@@ -66,10 +66,25 @@ fn patterns() -> Vec<(&'static str, regex::Regex)> {
 
 /// A hit is real unless it is a known placeholder. Split out so both the scan and
 /// its controls apply the identical rule.
-fn is_real_hit(label: &str, caps: &regex::Captures) -> bool {
+fn is_real_hit(label: &str, caps: &regex::Captures, text: &str) -> bool {
     if label == "operator home path" {
         let account = caps.get(1).map_or("", |m| m.as_str()).to_ascii_lowercase();
         return !PLACEHOLDER_ACCOUNTS.contains(&account.as_str());
+    }
+    if label == "private address" {
+        // A pinned public wheel's dotted version is not a network endpoint.
+        // Exempt only the version capture inside this complete public URL;
+        // private URL authorities and addresses elsewhere remain forbidden.
+        let version_url = regex::Regex::new(
+            r"https://files\.pythonhosted\.org/packages/[a-f0-9/]+/nvidia_curand_cu12-(\d+\.\d+\.\d+\.\d+)-py3-none-manylinux_2_27_x86_64\.whl",
+        ).unwrap();
+        let hit = caps.get(0).unwrap();
+        if version_url.captures_iter(text).any(|url| {
+            let version = url.get(1).unwrap();
+            version.start() == hit.start() && version.end() == hit.end()
+        }) {
+            return false;
+        }
     }
     true
 }
@@ -106,7 +121,10 @@ fn no_internal_identifiers_in_any_tracked_file() {
         };
         let text = String::from_utf8_lossy(&bytes);
         for (label, rx) in &pats {
-            if let Some(caps) = rx.captures_iter(&text).find(|c| is_real_hit(label, c)) {
+            if let Some(caps) = rx
+                .captures_iter(&text)
+                .find(|c| is_real_hit(label, c, &text))
+            {
                 let rel = path.strip_prefix(root()).unwrap_or(&path);
                 offenders.push(format!(
                     "{}: {} {:?}",
@@ -139,7 +157,10 @@ fn the_ratchet_catches_each_class() {
         ("operator home path", "/Users/JSmith/workspace/x"),
     ] {
         let caught = pats.iter().any(|(label, rx)| {
-            *label == expect && rx.captures_iter(sample).any(|c| is_real_hit(label, &c))
+            *label == expect
+                && rx
+                    .captures_iter(sample)
+                    .any(|c| is_real_hit(label, &c, sample))
         });
         assert!(caught, "the ratchet missed a planted {expect}: {sample:?}");
     }
@@ -158,7 +179,7 @@ fn placeholders_and_public_addresses_are_allowed() {
         "8.8.8.8",
     ] {
         for (label, rx) in &pats {
-            let hit = rx.captures_iter(ok).any(|c| is_real_hit(label, &c));
+            let hit = rx.captures_iter(ok).any(|c| is_real_hit(label, &c, ok));
             assert!(!hit, "{label} wrongly flagged an allowed sample: {ok:?}");
         }
     }
@@ -174,9 +195,28 @@ fn hostnames_and_crew_names_are_allowed() {
         "http://thing.svc/mcp",
         "ask sattler or dearing",
     ] {
-        let flagged = pats
-            .iter()
-            .any(|(label, rx)| rx.captures_iter(sample).any(|c| is_real_hit(label, &c)));
+        let flagged = pats.iter().any(|(label, rx)| {
+            rx.captures_iter(sample)
+                .any(|c| is_real_hit(label, &c, sample))
+        });
         assert!(!flagged, "a hostname or crew name was flagged: {sample:?}");
+    }
+}
+
+#[test]
+fn public_wheel_versions_do_not_hide_private_endpoints() {
+    let public = "https://files.pythonhosted.org/packages/ab/cd/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl";
+    let (_, rx) = &patterns()[0];
+    assert!(
+        rx.captures_iter(public)
+            .all(|c| !is_real_hit("private address", &c, public))
+    );
+    for private in [
+        "https://10.3.9.90/packages/ab/cd/nvidia_curand_cu12-10.3.9.90-py3-none-manylinux_2_27_x86_64.whl".to_string(),
+        format!("{public} endpoint=10.3.9.90"),
+        public.replace("files.pythonhosted.org", "untrusted.example"),
+        public.replace("nvidia_curand_cu12", "unrelated"),
+    ] {
+        assert!(rx.captures_iter(&private).any(|c| is_real_hit("private address", &c, &private)));
     }
 }

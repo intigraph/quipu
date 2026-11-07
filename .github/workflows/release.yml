@@ -583,7 +583,7 @@ jobs:
       # do not paper over it with an install step.
       - name: Build (full feature bundle)
         run: |
-          cargo build --release --locked --features full \
+          cargo build --release --locked --no-default-features --features full \
             --target ${{ matrix.target }} \
             --bin quipu --bin quipu-server
 

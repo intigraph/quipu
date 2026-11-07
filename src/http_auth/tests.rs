@@ -352,6 +352,11 @@ fn routes_in_server_source() -> Vec<String> {
             "server/search_observation.rs",
             include_str!("../server/search_observation.rs"),
         ),
+        // Completion receipts currently register no routes; scan future additions.
+        (
+            "server/knot_completion.rs",
+            include_str!("../server/knot_completion.rs"),
+        ),
         ("server/base.rs", include_str!("../server/base.rs")),
     ];
     // The list above is hand-maintained, and a fragment MISSING from it is
@@ -388,8 +393,9 @@ fn routes_in_server_source() -> Vec<String> {
         "server/request_middleware.rs",
         "server/service_description.rs",
         "server/tests.rs",
-        "server/namespace_tests.rs", // test-only handlers, no route registration
-        "server/namespaces.rs",      // handler only; route registered in server.rs
+        "server/knot_completion_tests.rs", // test-only, no route registration
+        "server/namespace_tests.rs",       // test-only handlers, no route registration
+        "server/namespaces.rs",            // handler only; route registered in server.rs
         "server/tools.rs",
         "server/update.rs",
         // SPARQL Update evaluator with spec DELETE/INSERT order
