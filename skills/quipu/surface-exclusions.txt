@@ -63,6 +63,7 @@ cli status Sharing and replication beyond share/import (see the sharing chapter)
 cli compose Sharing and replication beyond share/import (see the sharing chapter)
 cli acquire Sharing and replication beyond share/import (see the sharing chapter)
 cli follow Sharing and replication beyond share/import (see the sharing chapter)
+cli asof-rdf Offline operator conversion of an admitted retained cut; see the coherent RDF chunks recipe
 cli changes Sharing and replication beyond share/import (see the sharing chapter)
 
 # Sharing and replication beyond share/import (see the sharing chapter)
