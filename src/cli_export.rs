@@ -34,7 +34,7 @@ pub fn cmd_export(args: &[String], db_path: &str) {
         eprintln!("export accepts only one of --graph, --group-id, or --construct");
         std::process::exit(1);
     }
-    let store = if args.iter().any(|arg| arg == "--read-only") {
+    let store = if read_only_requested(args) {
         open_snapshot(db_path, crate::cli_open::config()).unwrap_or_else(|error| {
             eprintln!("error opening read-only export snapshot: {error}");
             std::process::exit(1);
@@ -60,6 +60,22 @@ pub fn cmd_export(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     }
+}
+
+/// Values belong to their option even when they look like a switch.
+fn read_only_requested(args: &[String]) -> bool {
+    let mut tokens = args.iter().skip(2);
+    while let Some(token) = tokens.next() {
+        match token.as_str() {
+            "--db" | "--format" | "--graph" | "--group-id" | "--construct" => {
+                tokens.next();
+            }
+            "--read-only" => return true,
+            "--" => break,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// A cold, custodian-held snapshot only: never run schema setup, index creation,
@@ -93,12 +109,26 @@ fn open_snapshot(db_path: &str, config: &quipu::QuipuConfig) -> Result<quipu::St
     let uri = format!("file:{escaped}?mode=ro&immutable=1");
     let mut store = quipu::Store::open_read_only(&uri).map_err(|error| error.to_string())?;
     store.search_config_mut().clone_from(&config.search);
+    store.set_base_ns(config.base_ns.clone());
+    store.set_code_base(config.code_base.clone());
     Ok(store)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::open_snapshot;
+    use super::{open_snapshot, read_only_requested};
+
+    #[test]
+    fn readonly_switch_is_not_an_option_value() {
+        for option in ["--db", "--format", "--graph", "--group-id", "--construct"] {
+            let mut args = ["quipu", "export", option, "--read-only"]
+                .map(str::to_owned)
+                .to_vec();
+            assert!(!read_only_requested(&args), "{option}");
+            args.push("--read-only".into());
+            assert!(read_only_requested(&args), "{option}");
+        }
+    }
 
     #[test]
     fn readonly_export_handle_refuses_writes_without_changing_the_file() {

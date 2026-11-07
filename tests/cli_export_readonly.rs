@@ -134,7 +134,8 @@ fn group_snapshot(dir: &Path) {
             c:literalEntity prov:wasGeneratedBy c:literalEpisode ; c:label "literal" .
             c:wrongNamespaceEpisode <urn:decoy:groupId> "wanted" .
             c:wrongNamespaceEntity prov:wasGeneratedBy c:wrongNamespaceEpisode .
-        "#.as_slice(),
+        "#
+        .as_slice(),
         oxrdfio::RdfFormat::Turtle,
         None,
         "2026-01-01T00:00:00Z",
@@ -158,7 +159,14 @@ fn readonly_group_export_preserves_configured_namespace_and_scope() {
     let modified = fs::metadata(&db).unwrap().modified().unwrap();
     let readonly = run(
         dir.path(),
-        &["export", "--read-only", "--db", "snapshot.db", "--group-id", "wanted"],
+        &[
+            "export",
+            "--read-only",
+            "--db",
+            "snapshot.db",
+            "--group-id",
+            "wanted",
+        ],
     );
     assert!(readonly.status.success(), "{readonly:?}");
     assert_eq!(readonly.stdout, normal.stdout);
@@ -187,7 +195,14 @@ fn literal_readonly_group_value_does_not_select_snapshot_mode() {
     fs::write(sidecar, b"").unwrap();
     let flagged = run(
         dir.path(),
-        &["export", "--group-id", "--read-only", "--read-only", "--db", "snapshot.db"],
+        &[
+            "export",
+            "--group-id",
+            "--read-only",
+            "--read-only",
+            "--db",
+            "snapshot.db",
+        ],
     );
     assert!(!flagged.status.success(), "{flagged:?}");
     assert!(String::from_utf8_lossy(&flagged.stderr).contains("sidecar exists"));
