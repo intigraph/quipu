@@ -50,6 +50,10 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "auth_class", TermIdKind::None),
     ("transaction_declarations", "tx", TermIdKind::None),
     ("transaction_declarations", "declarations", TermIdKind::None),
+    // OWL receipts contain semantic digests and transaction IDs, never term IDs.
+    ("owl_batch_receipts", "batch", TermIdKind::None),
+    ("owl_batch_receipts", "digest", TermIdKind::None),
+    ("owl_batch_receipts", "tx", TermIdKind::None),
     ("store_identity", "id", TermIdKind::None),
     ("store_identity", "store_id", TermIdKind::None),
     ("log_epoch", "id", TermIdKind::None),

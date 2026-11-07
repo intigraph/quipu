@@ -41,6 +41,9 @@ const DATA: &[&str] = &[
     "search_default_policy",
 ];
 const LOCAL: &[&str] = &[
+    // OWL publication acknowledgements belong to the local scratch generation;
+    // forwarding them could let a different store skip its own publication.
+    "owl_batch_receipts",
     // Authentication adjudication is local evidence, not transferable writer
     // authority. Actor/source text in historical transactions remains data.
     "transaction_auth",

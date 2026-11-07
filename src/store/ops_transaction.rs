@@ -42,6 +42,79 @@ impl Store {
         window: Option<crate::store::source_claims::ClaimWindow>,
         window_guard: Option<&crate::store::source_claims::WindowGuard>,
     ) -> Result<i64> {
+        self.transact_with_owl_receipt(
+            datums,
+            timestamp,
+            actor,
+            source,
+            graph,
+            retract_source,
+            expected,
+            set,
+            window,
+            window_guard,
+            None,
+        )
+    }
+
+    /// Same normal admission/guard pipeline, with an atomic durable batch receipt.
+    #[cfg(feature = "owl")]
+    pub(crate) fn transact_owl_page(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        graph: i64,
+        receipt: (&str, &str),
+        source: &str,
+    ) -> Result<i64> {
+        use rusqlite::OptionalExtension;
+        self.ensure_ownership_writable()?;
+        let prior: Option<(String, i64)> = self
+            .conn
+            .query_row(
+                "SELECT digest,tx FROM owl_batch_receipts WHERE batch=?1",
+                [receipt.0],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        if let Some((digest, tx)) = prior {
+            if digest != receipt.1 {
+                return Err(crate::Error::InvalidValue(
+                    "OWL conflicting batch receipt".into(),
+                ));
+            }
+            return Ok(tx);
+        }
+        self.transact_with_owl_receipt(
+            datums,
+            timestamp,
+            Some("owl"),
+            Some(source),
+            graph,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            Some(receipt),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn transact_with_owl_receipt(
+        &mut self,
+        datums: &[Datum],
+        timestamp: &str,
+        actor: Option<&str>,
+        source: Option<&str>,
+        graph: i64,
+        retract_source: Option<&str>,
+        expected: &[crate::store::conditional::ExpectedValue],
+        set: Option<&crate::store::conditional::SetExpectation>,
+        window: Option<crate::store::source_claims::ClaimWindow>,
+        window_guard: Option<&crate::store::source_claims::WindowGuard>,
+        receipt: Option<(&str, &str)>,
+    ) -> Result<i64> {
         if let Some(window) = window
             && (window.after < 0
                 || window.through <= window.after
@@ -109,6 +182,12 @@ impl Store {
             .and_then(|staged| {
                 self.enforce_shacl_poststate(datums, graph, staged.tx_id, !expected.is_empty())
                     .map_err(|e| self.stash_refusal("shacl", e, datums.len()))?;
+                if let Some((batch, digest)) = receipt {
+                    self.conn.execute(
+                        "INSERT INTO owl_batch_receipts(batch,digest,tx) VALUES(?1,?2,?3)",
+                        params![batch, digest, staged.tx_id],
+                    )?;
+                }
                 crate::promotion_control::claim_commit(source)?;
                 Ok(staged)
             });
