@@ -94,13 +94,46 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("old.db");
     let mut store = quipu::Store::open(db.to_str().unwrap()).unwrap();
+    // New library stores now index by default. Model an actual pre-index
+    // store explicitly; otherwise this fixture tests a fresh indexed store.
+    store.search_config_mut().keyword = false;
     quipu::ingest_rdf(&mut store,
         r#"<https://example.org/legacy> <http://www.w3.org/2000/01/rdf-schema#label> "Clockwork" ."#.as_bytes(),
         oxrdfio::RdfFormat::Turtle, None, "2026-01-01T00:00:00Z", None, None,
     ).unwrap();
     drop(store);
-    let out = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        let installed: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name LIKE 'lexical_%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(installed, 0, "legacy fixture must start without an index");
+    }
+    // The default unindexed path now provides bounded lexical evidence;
+    // explicit keyword mode still requires opt-in and a completed index.
+    let fallback = success(&run(dir.path(), &["search", "Clockwork", "--db", "old.db"]));
+    assert_eq!(fallback["count"], 1);
+    assert_eq!(fallback["ranking"], "lexical");
+    assert_eq!(
+        fallback["retrieval"]["contract"],
+        "quipu-lexical-results/v1"
+    );
+    assert_eq!(fallback["retrieval"]["status"], "degraded");
+    assert_eq!(
+        fallback["results"][0]["entity"],
+        "https://example.org/legacy"
+    );
+    assert!(fallback["results"][0].get("similarity").is_none());
+    let out = run(
+        dir.path(),
+        &["search", "Clockwork", "--mode", "keyword", "--db", "old.db"],
+    );
     assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("disabled"));
     let doctor = success(&run(dir.path(), &["doctor", "search", "--db", "old.db"]));
     assert_eq!(doctor["keyword_ready"], false);
     let conn = rusqlite::Connection::open(&db).unwrap();
@@ -121,7 +154,10 @@ fn old_unindexed_store_requires_explicit_opt_in_and_bounded_backfill() {
         "[quipu.search]\nkeyword = true\n",
     )
     .unwrap();
-    let opted_in = run(dir.path(), &["search", "Clockwork", "--db", "old.db"]);
+    let opted_in = run(
+        dir.path(),
+        &["search", "Clockwork", "--mode", "keyword", "--db", "old.db"],
+    );
     assert!(!opted_in.status.success());
     assert!(String::from_utf8_lossy(&opted_in.stderr).contains("backfill"));
     let after: i64 = conn
