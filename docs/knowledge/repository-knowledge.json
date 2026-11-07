@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "880c6432a4623de42796e565078f8f9073be6eb83999e9f60aa0625e04426d48",
+      "source_sha256": "3f2b6b08b7da79a3262f551f34059270118d958e2614762b80fb81d8bbfa631e",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "5ab8cd5c5cec819ce0a7e10c643322cc18640a7bde4e355f35309fcd78549086",
+      "source_sha256": "62a0c19e1705578820cd52f4dd6b9d7db54dba0515b437cf98a404caa1fbe60a",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
