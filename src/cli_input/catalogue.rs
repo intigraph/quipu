@@ -71,7 +71,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("ontology remove", "<name>", 1, 1, "", ""),
     spec!("validate", "", 0, 0, "shapes data format", ""),
     spec!("repl", "", 0, 0, "", ""),
-    spec!("export", "", 0, 0, "graph group-id construct format", ""),
+    spec!("export", "", 0, 0, "graph group-id construct format", "read-only"),
     spec!("databook", "", GROUP, 0, "", ""),
     spec!("databook export", "", 0, 0, "graph tx valid-at id title version timestamp out", "with-shapes"),
     spec!("databook import", "<file.databook.md>", 1, 1, "graph timestamp actor source", "with-shapes"),

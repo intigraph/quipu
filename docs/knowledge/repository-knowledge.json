@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "696bb01d415c80b896d958ff8ffdc70d59572dee35e2175786fca068203d7e2b",
+      "source_sha256": "a1bdc28c4b5878497610c83f855bcd064c223d7ad958b81188f9110bcdcfd949",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
