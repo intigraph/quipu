@@ -55,6 +55,10 @@ impl OnnxEmbeddingProvider {
             &tokenizer_bytes,
             dim,
         )?;
+        // Device selection must precede this bootstrap. A caller may supply a
+        // verified GPU core; the bundled default is only the CPU fallback.
+        #[cfg(feature = "bundled-onnx")]
+        crate::onnx_runtime::initialize(None)?;
         let session = Session::builder()
             .and_then(|b| b.with_intra_threads(1))
             // Request shapes vary with batch size and token length. ORT's CPU

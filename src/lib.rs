@@ -64,6 +64,8 @@ mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+#[cfg(feature = "onnx")]
+pub mod onnx_runtime;
 /// Portable bootstrap manifest and signature verification, including WASM.
 #[path = "asof_share/manifest.rs"]
 pub mod replica_manifest;
