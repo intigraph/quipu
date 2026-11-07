@@ -23,7 +23,7 @@
       "kind": "interface",
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
-      "summary": "The native command-line entrypoint parses query, share, import, validation and offline competency authoring commands, plus offline coherent RDF chunk conversion from retained as-of frames with explicit bindings and budgets.",
+      "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
       "source_sha256": "171cacac397309f7d57d3f139425d8c63b6ccda86e399ee19089e86320c3f348",
       "properties": {
         "interfaceKind": "CLI",
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "4396838466089175c447c3bd9a8fabfa1b1eb55ab1523f78075c91384a0d25d8",
+      "source_sha256": "8eaf5449dfe7a8150a7a0331d37340dce464a07dd4f7586d781a1505acd933d1",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ed4043abba71af45a5a2f66ee455f44020e3456dd5c02deee95ce7ad3c83284c",
+      "source_sha256": "7b4602bf44cf1978e28f30bdb39932f7f339589bb8387d01b5ca2fde939a06e8",
       "properties": {
         "startHereOrder": 2
       }
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "d7278a260afb1805083fd4f96cf14a6f06e34ef2de0b0a2e17460d66f99a1eaf",
+      "source_sha256": "c5cc2ac997abab1194fbe7533399823fe6fbc4e1733a55fe0c31a99bc9b7d79f",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"

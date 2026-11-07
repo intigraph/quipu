@@ -1,0 +1,13 @@
+Script started on 2026-11-06 00:43:04-05:00 [COMMAND="python3 docs/demos/wheel-platform-selection/demo.py" <not executed on terminal>]
+Target: isolated Git fixture; no hosted runs or installed services
+Base workflow: d52acf0315dd36141716674c218c3e6c08e13632
+Selector source: b3317a35 (source is unchanged by this demonstration)
+Input: pull_request, portable src/generic.rs edit
+Before: {"wheels": 3, "tests": 12}
+After: {"wheels": 2, "tests": 8}
+macOS code control: {"wheels": 3, "tests": 12}
+Scheduled control: {"wheels": 3, "tests": 12}
+Five matrix jobs avoided for the portable PR; platform coverage retained by both controls.
+Limit: one new Linux selector job; no measured live queue-drain or runtime-speed claim.
+
+Script done on 2026-11-06 00:43:05-05:00 [COMMAND_EXIT_CODE="0"]
