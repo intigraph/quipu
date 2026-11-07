@@ -37,6 +37,7 @@ use crate::namespace;
 use crate::store::Store;
 use crate::vector::VectorMatch;
 
+mod adjudication;
 pub(crate) mod cache;
 #[cfg(test)]
 mod cache_tests;
@@ -284,34 +285,57 @@ pub(crate) fn is_slash_qualified_commit_id(name: &str) -> bool {
 /// # Errors
 /// Propagates store and decode failures.
 pub(crate) fn recorded_distinct_from(store: &Store, iri: &str) -> Result<Vec<String>> {
-    // Both sides need every id the IRI denotes across the composition, for the
-    // same reason the label scan does — see [`LabelIndex::build`].
+    // Historical graph-extract decisions used the homelab predicate. Read both
+    // spellings without rewriting either fact, and honor either edge direction.
     let subjects = store.lookup_all(iri)?;
-    let preds = store.lookup_all(namespace::QUIPU_DISTINCT_FROM)?;
-    if subjects.is_empty() || preds.is_empty() {
+    let mut preds = Vec::new();
+    for predicate in [
+        namespace::QUIPU_DISTINCT_FROM,
+        "http://aegis.gastown.local/ontology/distinctFrom",
+    ] {
+        preds.extend(store.lookup_all(predicate)?);
+    }
+    if preds.is_empty() {
         return Ok(Vec::new());
     }
+    let mut values = subjects
+        .iter()
+        .map(|id| crate::types::Value::Ref(*id).to_bytes())
+        .collect::<Vec<_>>();
+    // Preserve the historical literal-object compatibility as well.
+    values.push(crate::types::Value::Str(iri.to_owned()).to_bytes());
+    let placeholders = vec!["?"; values.len()].join(", ");
+    let subject_clause = if subjects.is_empty() {
+        "0".to_owned()
+    } else {
+        format!("e IN ({})", id_list(&subjects))
+    };
     let sql = format!(
-        "SELECT v FROM {} WHERE e IN ({}) AND a IN ({}) AND valid_to IS NULL AND op = 1",
+        "SELECT e,v FROM {} WHERE a IN ({}) AND ({subject_clause} OR v IN ({placeholders})) AND valid_to IS NULL AND op = 1",
         store.facts_source(),
-        id_list(&subjects),
         id_list(&preds),
     );
     let mut stmt = store.conn.prepare(&sql)?;
-    let rows = stmt.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
-
+    let rows = stmt.query_map(rusqlite::params_from_iter(values), |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?))
+    })?;
     let mut out = Vec::new();
     for row in rows {
-        match crate::types::Value::from_bytes(&row?) {
-            // The object is normally an IRI reference…
-            Ok(crate::types::Value::Ref(id)) => out.push(store.resolve(id)?),
-            // …but a writer that asserted it as a plain literal meant the same
-            // thing, and silently ignoring that would put us back to an override
-            // that looks asserted and does nothing.
-            Ok(crate::types::Value::Str(s)) => out.push(s),
-            _ => {}
+        let (subject, bytes) = row?;
+        let subject_iri = store.resolve(subject)?;
+        let object_iri = match crate::types::Value::from_bytes(&bytes)? {
+            crate::types::Value::Ref(id) => store.resolve(id)?,
+            crate::types::Value::Str(s) => s,
+            _ => continue,
+        };
+        if subject_iri == iri {
+            out.push(object_iri);
+        } else if object_iri == iri {
+            out.push(subject_iri);
         }
     }
+    out.sort();
+    out.dedup();
     Ok(out)
 }
 
