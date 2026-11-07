@@ -98,8 +98,9 @@ These files are ownership units, not independently enabled rule sets. Existing
 constraint compatibility payloads and loaded-set contracts remain unchanged.
 
 The [raw alias CQs](https://github.com/intigraph/camayoc/tree/main/competency/aegis-work-aliases)
-compare explicit WorkItem/Bead membership and distinct linked Vtodo nodes with
-the canonical Action population on a common raw snapshot. Compatibility query
+follow the existing WorkItem replacement and Bead subclass declarations to the
+canonical Action population, with distinct linked Vtodo nodes on a common raw
+snapshot. Canonical writes need no duplicated deprecated types. Compatibility query
 rewriting cannot establish this gate. Missing aliases are reported, never
 repaired implicitly or hidden by class inference. These fixture controls do not
 assert production data already meets the condition.
