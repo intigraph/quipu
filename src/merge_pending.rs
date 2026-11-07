@@ -251,6 +251,20 @@ pub(crate) fn execute(
         if let Some(done) = load(store, ledger, &prepared.id)? {
             return Ok(done);
         }
+        // A caller-provided parent id is not resume authority. Reconstruct the
+        // exact remainder through the authenticated ledger inside this same
+        // savepoint, before any receive, decision or receipt can be written.
+        if let Some(parent) = &prepared.request.parent {
+            let receipt =
+                load(store, ledger, parent)?.ok_or_else(|| invalid("unknown parent receipt"))?;
+            if resume_request(store, &receipt)? != prepared.request
+                || receipt.authored_at != authored_at
+            {
+                return Err(invalid(
+                    "request or authored time differs from parent remainder",
+                ));
+            }
+        }
         if prepared.authored_at != authored_at || prepared.decision_at != td {
             return Err(invalid(
                 "prepared operation clocks differ from persistence clocks",
