@@ -79,6 +79,7 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
+mod writer_scope;
 // Source-stage writer reader; no production caller is admitted yet.
 #[allow(dead_code)]
 mod slot_reads;
