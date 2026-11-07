@@ -39,6 +39,10 @@ pub const FORK_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-
 pub const FORK_DECISIONS_SCHEMA_V1: &str =
     "https://github.com/scbrown/quipu/merge-decisions/fork-v1";
 
+#[path = "fork_merge_proposal.rs"]
+mod proposal;
+use proposal::proposal_for;
+
 const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
 
 /// A fork decisions file: the conflicts of promoting one fork.
@@ -271,46 +275,6 @@ pub fn propose(mut file: ForkDecisionFile) -> ForkDecisionFile {
         row.proposal = Some(proposal_for(row));
     }
     file
-}
-
-fn proposal_for(row: &ForkDecisionRow) -> Proposal {
-    if crate::merge_review::convergent(&row.record) {
-        return Proposal {
-            choose: Side::Continue,
-            evidence: vec!["both sides agree; preserve ROOT".into()],
-        };
-    }
-    let r = &row.record;
-    let newest = |facts: &[LocalFact]| facts.iter().map(|f| f.tx).max();
-    let (ours, theirs) = (newest(&row.provenance.ours), newest(&row.provenance.theirs));
-    let mut evidence = Vec::new();
-    let choose = if r.ours.is_empty() {
-        evidence.push(
-            "ROOT deleted the slot and the fork replaced it; proposing the replacement".into(),
-        );
-        Side::Theirs
-    } else if r.theirs.is_empty() {
-        evidence
-            .push("the fork deleted the slot and ROOT replaced it; proposing ROOT's value".into());
-        Side::Ours
-    } else {
-        match (ours, theirs) {
-            (Some(o), Some(t)) if o > t => {
-                evidence.push(format!("ours is newer: ROOT tx {o} > fork tx {t}"));
-                Side::Ours
-            }
-            (o, t) => {
-                evidence.push(format!(
-                    "theirs is newer: fork tx {} >= ROOT tx {}",
-                    t.map_or("?".into(), |t| t.to_string()),
-                    o.map_or("?".into(), |o| o.to_string())
-                ));
-                Side::Theirs
-            }
-        }
-    };
-    evidence.push("mechanical proposal: the operator decides".into());
-    Proposal { choose, evidence }
 }
 
 const FILE_FIELDS: &[&str] = &["schema", "fork", "fork_tx", "labels", "rows"];

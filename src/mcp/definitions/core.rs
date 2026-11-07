@@ -112,7 +112,11 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "propose": { "type": "boolean", "description": "Fill each row's proposal (never its decision)." },
                     "slot_scoped": { "type": "boolean", "default": false, "description": "Opt in to v3 slot values and last-modifying-transaction binding. Default v3-whole-root remains strict over all ROOT changes; legacy v1/v2 files retain their checks." },
                     "fork": { "type": "string", "description": "A fork whose promotion stopped on conflicts, instead of incoming + base." },
-                    "present": { "type": "boolean", "description": "Also return the standard presentation (markdown + JSON view)." }
+                    "present": { "type": "boolean", "description": "Also return the standard presentation (markdown + JSON view)." },
+                    "profile": { "type": "object", "description": "Explicit quipu-merge-profile/v1 selection profile. Opts into authenticated profiled planning; omitted retains the legacy path." },
+                    "resume": { "type": "string", "description": "Retained parent merge ID whose held remainder is resumed. Requires ledger and authenticated receipt ownership." },
+                    "ledger": { "type": "string", "description": "Existing admitted private receipt graph for resume; naming it does not grant access." },
+                    "choices": { "type": "array", "items": { "type": "object" }, "description": "Typed profiled choices: each has slot [subject, predicate] and decision. Omitted choices remain held." }
                 }
             }
         }),
@@ -128,7 +132,8 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "reviewer": { "type": "string", "description": "Who decided. Recorded in provenance." },
                     "actor": { "type": "string", "description": "Who is applying." },
                     "dry_run": { "type": "boolean", "description": "Run every check and report the counts it would write; write nothing." },
-                    "fork": { "type": "string", "description": "Apply to this fork's promotion, instead of incoming + base." }
+                    "fork": { "type": "string", "description": "Apply to this fork's promotion, instead of incoming + base." },
+                    "ledger": { "type": "string", "description": "Existing admitted private receipt graph, required for profiled application. Normal writer and ownership gates still apply." }
                 },
                 "required": ["decisions", "reviewer"]
             }
@@ -143,9 +148,14 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "row": { "type": "string", "description": "The row id, e.g. d1." },
                     "choose": { "type": "string", "enum": ["continue", "ours", "theirs", "base", "both", "value", "defer"] },
                     "values": { "type": "array", "items": { "type": "string" }, "description": "N-Triples terms, with choose: value." },
-                    "by": { "type": "string", "description": "Who decided: the person who chose, or the agent id when the agent rules allow it." }
+                    "by": { "type": "string", "description": "Who decided: the person who chose, or the agent id when the agent rules allow it." },
+                    "slot": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2, "description": "Profiled session slot [subject, predicate], instead of legacy row." },
+                    "decision": { "type": "object", "description": "Typed profiled-session decision, instead of legacy choose/values." }
                 },
-                "required": ["decisions", "row", "by"]
+                "required": ["decisions"],
+                "if": { "properties": { "decisions": { "properties": { "schema": { "const": crate::merge_ingress::SCHEMA } }, "required": ["schema"] } } },
+                "then": { "required": ["slot", "decision"] },
+                "else": { "required": ["row", "by"] }
             }
         }),
         serde_json::json!({

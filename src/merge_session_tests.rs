@@ -1,4 +1,4 @@
-//! Source-only fixtures. None have been compiled or run in this checkpoint.
+//! Private store fixtures, with feature-scoped shape-validation contracts.
 use super::*;
 use crate::store::{Datum, Store};
 use crate::types::{Op, Value as Stored};
@@ -35,6 +35,42 @@ fn setup() -> (Store, Request) {
     (store, request)
 }
 
+#[cfg(not(feature = "shacl"))]
+#[test]
+fn shape_bound_partial_merge_refuses_without_validation_before_any_write() {
+    let (mut store, request) = setup();
+    let before = store.latest_tx_id().unwrap();
+    let root = crate::share_merge::root_graph(&store).unwrap().0;
+    let choices = [Choice {
+        slot: key("p"),
+        decision: Decision::Theirs,
+    }];
+    let prepared = crate::merge_adapters::prepare_store(&store, request, &choices, TT, TD).unwrap();
+    let id = prepared.id.clone();
+    let error = crate::merge_pending::execute(
+        &mut store,
+        "urn:fixture:ledger",
+        prepared,
+        TT,
+        TD,
+        Some("fixture"),
+    )
+    .expect_err("shape-bound application requires validation support");
+    assert!(
+        error
+            .to_string()
+            .contains("shape validation feature required")
+    );
+    assert_eq!(before, store.latest_tx_id().unwrap());
+    assert_eq!(root, crate::share_merge::root_graph(&store).unwrap().0);
+    assert!(
+        crate::merge_pending::load(&store, "urn:fixture:ledger", &id)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[cfg(feature = "shacl")]
 #[test]
 fn p1_pending_resume_is_sequenced_idempotent_and_only_applies_the_remainder() {
     let (mut store, request) = setup();
@@ -142,6 +178,7 @@ fn uncommitted_prepared_clock_drift_refuses_before_any_sequence_or_receipt() {
     }
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn atomic_held_and_late_oversized_record_both_leave_no_transactions() {
     let (mut store, mut request) = setup();
@@ -185,6 +222,7 @@ fn explicit_units_hold_without_any_member_receipt() {
     }));
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn decide_only_convergence_has_no_synthetic_receive_transaction() {
     let (mut store, mut request) = setup();
@@ -213,6 +251,7 @@ fn decide_only_convergence_has_no_synthetic_receive_transaction() {
     assert_eq!(loaded.decide_tx, receipt.decide_tx);
 }
 
+#[cfg(feature = "shacl")]
 #[test]
 fn held_only_partial_plan_records_pending_without_receiving_empty_data() {
     let (mut store, mut request) = setup();
