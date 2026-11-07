@@ -69,6 +69,16 @@ pub fn regenerated() -> Vec<&'static str> {
 /// schema. Dropping it from both formats preserves portable content identity
 /// across explicit restore/adoption without changing historical table hashing.
 pub(crate) fn prune_excluded_table(conn: &Connection, table: &str) -> Result<()> {
+    if table == "writer_graph_instances" {
+        // Authority triggers must not mint excluded rows while a text reader
+        // replays the carried graphs. The next local writer open reinstalls
+        // them and creates fresh pins, without importing any grants.
+        conn.execute_batch(
+            "DROP TRIGGER IF EXISTS writer_graph_insert;
+            DROP TRIGGER IF EXISTS writer_graph_delete;
+            DROP TRIGGER IF EXISTS writer_graph_update;",
+        )?;
+    }
     let verb = if table == "ownership_enforcement" {
         "DROP TABLE"
     } else {

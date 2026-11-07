@@ -310,3 +310,57 @@ fn completed_logical_cut_requires_exact_external_descriptor_and_source_key() {
     new_pin.manifest_sha256 = manifest_hash(&policy).unwrap();
     assert!(!new_pin.accepts(&policy, &sign_snapshot(&policy, &key).unwrap()));
 }
+
+#[test]
+fn scoped_writer_authority_is_local_not_snapshot_or_journal_content() {
+    let store = Store::open_in_memory().unwrap();
+    store.graph_create("urn:local-writer-graph").unwrap();
+    store
+        .conn
+        .execute(
+            "INSERT INTO writer_grants(id,revision,payload) VALUES('local-only',1,'{}')",
+            [],
+        )
+        .unwrap();
+    for table in ["writer_grants", "writer_graph_instances"] {
+        let count: i64 = store
+            .conn
+            .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert!(count > 0, "non-vacuous local metadata for {table}");
+    }
+    let catalog = super::catalog::inspect(&store).unwrap();
+    assert!(catalog.iter().any(|table| table.name == "graphs"));
+    assert!(!catalog.iter().any(|table| matches!(
+        table.name.as_str(),
+        "writer_grants" | "writer_graph_instances"
+    )));
+    initialize(&store).unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE writer_grants SET revision=2 WHERE id='local-only'",
+            [],
+        )
+        .unwrap();
+    store
+        .conn
+        .execute(
+            "UPDATE writer_graph_instances SET generation='local-new-instance'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(read_revision(&store, 0, 100).unwrap().through, 0);
+    store
+        .conn
+        .execute(
+            "INSERT INTO terms(iri) VALUES('urn:replicated-positive')",
+            [],
+        )
+        .unwrap();
+    let batch = read_revision(&store, 0, 100).unwrap();
+    assert_eq!(batch.changes.len(), 1);
+    assert_eq!(batch.changes[0].table, "terms");
+}
