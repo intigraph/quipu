@@ -153,7 +153,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "decision": { "type": "object", "description": "Typed profiled-session decision, instead of legacy choose/values." }
                 },
                 "required": ["decisions"],
-                "if": { "properties": { "decisions": { "properties": { "schema": { "const": crate::merge_ingress::SCHEMA } }, "required": ["schema"] } } },
+                "if": { "properties": { "decisions": { "properties": { "schema": { "const": "https://github.com/scbrown/quipu/merge-session/v1" } }, "required": ["schema"] } } },
                 "then": { "required": ["slot", "decision"] },
                 "else": { "required": ["row", "by"] }
             }
@@ -381,4 +381,19 @@ pub(super) fn defs() -> Vec<JsonValue> {
             }
         }),
     ]
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    #[test]
+    fn profiled_resolution_schema_matches_native_ingress() {
+        let resolve = super::defs()
+            .into_iter()
+            .find(|tool| tool["name"] == "quipu_merge_resolve")
+            .expect("merge resolution tool is declared");
+        assert_eq!(
+            resolve["inputSchema"]["if"]["properties"]["decisions"]["properties"]["schema"]["const"],
+            crate::merge_ingress::SCHEMA
+        );
+    }
 }
