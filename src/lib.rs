@@ -89,6 +89,7 @@ pub mod transaction_auth;
 /// Pure declared write-base binding; no writer integration or admission authority.
 pub mod write_base;
 pub mod write_kind;
+pub mod write_observation;
 pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
 // share the feature gate.
