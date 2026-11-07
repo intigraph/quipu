@@ -319,3 +319,6 @@ fn missing_primary_registry_still_fails_closed() {
     let mut server = spawn(root.path(), address, false);
     refused_start(&mut server, root.path());
 }
+
+#[path = "read_worker_replication_authority/signed_pool.rs"]
+mod signed_pool;
