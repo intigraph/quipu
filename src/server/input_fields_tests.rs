@@ -183,6 +183,7 @@ async fn knot_unknown_dry_run_reports_warning_and_still_writes() {
     let shared = store();
     let response = super::super::publication::knot(
         State(shared.clone()),
+        axum::http::HeaderMap::new(),
         Json(json!({
             "turtle": "<https://example.org/item> <https://example.org/value> \"written\" .",
             "dry_run": true
@@ -205,6 +206,7 @@ async fn knot_unknown_dry_run_reports_warning_and_still_writes() {
     );
     let response = super::super::publication::knot(
         State(shared),
+        axum::http::HeaderMap::new(),
         Json(json!({
             "turtle": "<https://example.org/clean> <https://example.org/value> \"written\" ."
         })),
@@ -220,6 +222,7 @@ async fn handler_errors_are_preserved() {
     assert!(
         super::super::publication::knot(
             State(store()),
+            axum::http::HeaderMap::new(),
             Json(json!({
                 "dry_run": true
             }))

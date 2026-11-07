@@ -245,7 +245,7 @@ A repository commits its project's graph under `.quipu/`, tool-neutral:
 | `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
 | `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
 | `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
-| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and any legacy PRIVATE signing key |
 
 `share --project <id>` names the project once (it is then committed) and
 re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
@@ -508,8 +508,17 @@ re-derivable. `--attest-nonce` must be 32 lowercase hex characters and is checke
 mint time — a share minted with any other nonce is refused by every importer.
 
 The key comes from `--attest-key`, else `$QUIPU_SIGNING_KEY`, else
-`.quipu/verifier.pk8`, created 0600 on first use. That is v1 host-file custody, the
-same the governance plane uses; it is not an HSM.
+`$XDG_DATA_HOME/quipu/verifier.pk8` (default
+`$HOME/.local/share/quipu/verifier.pk8`), created 0600 on first use. The default
+never creates a private key under the working repository. A relative XDG data
+directory or missing user-data location refuses key selection.
+
+A legacy `.quipu/verifier.pk8` triggers a warning. It is not copied or deleted:
+pin its path explicitly to retain that signing identity, or migrate it through
+your normal key-custody process before changing registered trust. Explicit
+legacy key creation adds a final `/verifier.pk8` rule to `.quipu/.gitignore`,
+preserving project-graph entries; an unsafe ignore file refuses creation.
+This is v1 host-file custody, the same the governance plane uses; it is not an HSM.
 
 ### Registering a producer, out of band
 
