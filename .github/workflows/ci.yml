@@ -328,6 +328,8 @@ jobs:
       # argument rests on them. Reuses the full-feature build just above.
       - name: quipu-server binary tests
         run: cargo test --features full --bin quipu-server
+      - name: Configured read-only retention preserves rows
+        run: cargo test --features full --test readonly_retention_server -- --test-threads=1
       - name: Reactive graph scope and withdrawal
         run: |
           cargo test --features full --test reactive_graph_scope

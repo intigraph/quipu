@@ -594,7 +594,6 @@ async fn main() {
     .with_state(state);
 
     let app = process_pool::protect_worker(app);
-
     if let Some(replica) = config.server.replica {
         replica::start_metadata_reader(push_store_outer, replica);
     } else if let Some(relay) = relay {
@@ -604,6 +603,7 @@ async fn main() {
             push_store_outer,
             config.events.retention_days,
             &config.embedding,
+            read_only,
         );
     }
 
