@@ -62,6 +62,15 @@ deploy-server:
     bash scripts/build-deploy-server.sh
 
 # Run tests
+shadow-census mode="test" *args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{mode}}" in
+        test) python3 -W error::ResourceWarning scripts/test_merge_shadow_census.py ;;
+        inspect) python3 scripts/merge-shadow-census.py {{args}} ;;
+        *) echo "usage: just shadow-census [test|inspect <snapshot arguments>]" >&2; exit 2 ;;
+    esac
+
 test *args="":
     cargo test {{args}}
 

@@ -17,6 +17,9 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+// Dormant enrollment inventory: native identity fields, no startup wiring.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_inventory;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_journal;
@@ -78,6 +81,8 @@ mod writer_scope;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };
+#[cfg(feature = "owl")]
+mod ontology_window;
 mod registry;
 pub mod registry_list;
 pub mod respace;
@@ -146,6 +151,7 @@ pub struct Store {
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
+    pub(crate) created_fact_schema: bool,
     pub(crate) labels_config: crate::config::LabelsConfig,
     pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode

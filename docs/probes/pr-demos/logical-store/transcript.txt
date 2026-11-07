@@ -1,0 +1,18 @@
+Script started on 2026-10-29 22:59:25-04:00 [COMMAND="./fixture-tests --exact store_stream::bootstrap_tests::shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history --nocapture 2>demo-stderr.log" <not executed on terminal>]
+
+running 1 test
+fixture source query present: true
+scoped live-fact baseline query: None
+destination-owned graph preserved: true
+interrupted bootstrap cursor: None
+logical bootstrap query rows: [{"value":"closed"}]
+metadata-only fact head: 3 -> 3
+malformed signed tail retained journal cursor: 0
+signed metadata tail query rows: [{"state":"closed"}]
+journal cursor: 0 -> 4
+test store_stream::bootstrap_tests::shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3265 filtered out; finished in 0.16s
+
+
+Script done on 2026-10-29 22:59:25-04:00 [COMMAND_EXIT_CODE="0"]

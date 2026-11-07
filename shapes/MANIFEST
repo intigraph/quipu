@@ -112,6 +112,11 @@
       "file": "access-grants.ttl",
       "action": "exclude",
       "reason": "Staged JIT access-grant records (aegis-bqc); activation needs the Goldblum classification and schema review."
+    },
+    {
+      "file": "fluents-v1.ttl",
+      "action": "exclude",
+      "reason": "Versioned fluent wire contract; structural schema only. Live proposal acceptance and shape activation require the governed writer, transport and retention acceptance packet."
     }
   ]
 }

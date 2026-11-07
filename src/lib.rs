@@ -15,6 +15,7 @@ pub mod changeset;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
 pub mod compact;
+pub mod competency;
 pub mod config;
 mod config_load;
 pub mod context;
@@ -47,16 +48,24 @@ pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
 pub mod merge3;
+/// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
+mod merge_core;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_assets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_backfill;
 pub mod namespace;
 mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+#[cfg(feature = "onnx")]
+pub mod onnx_runtime;
 /// Portable bootstrap manifest and signature verification, including WASM.
 #[path = "asof_share/manifest.rs"]
 pub mod replica_manifest;
@@ -69,6 +78,11 @@ pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
+/// Portable logical full-store replication values.
+pub mod store_replica;
+/// Opt-in logical store replication; opening a store never enables its journal.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
 pub mod write_kind;

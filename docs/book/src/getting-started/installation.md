@@ -231,10 +231,10 @@ Unpacking a `.deb` alone does not exercise package-manager scripts.
 ## Cargo executable installation
 
 The package is **`quipu-ai`**, while the library and CLI are named `quipu`.
-Use `full` to include the companion server:
+The default build includes the CLI, companion server and a bundled CPU ONNX Runtime:
 
 ```sh
-cargo install quipu-ai --locked --features full
+cargo install quipu-ai --locked
 quipu install-alias --check
 quipu install-alias
 quipu --version
@@ -243,12 +243,27 @@ quipu-server --version
 cargo install --list
 ```
 
+The runtime is downloaded and checksum-verified **during the Cargo build**,
+then compressed into the executables. Default CPU startup never downloads a
+runtime. The optional GPU acquisition API verifies pinned downloads when
+explicitly requested after device eligibility checks.
+The default bundle supports Linux GNU x86-64/arm64, macOS x86-64/arm64 and
+Windows x86-64. A model and tokenizer are still separate inputs.
+
+An explicit `ORT_DYLIB_PATH` remains authoritative, including for a matched GPU
+runtime. It must be selected before ONNX initialization; a failed explicit path
+does not silently load the bundled CPU runtime. For a build using only an
+externally managed runtime, use
+`cargo install quipu-ai --locked --no-default-features --features full`.
+For offline builds, `QUIPU_ORT_ARCHIVE` may point to the exact official CPU
+archive for the target; the same pinned checksum is always enforced.
+
 Cargo installs binaries into `CARGO_INSTALL_ROOT/bin`, `ROOT/bin` with `--root ROOT`, or
 `~/.cargo/bin`. `install-alias` creates `qp` beside the running executable and
 refuses another tool's conflicting name. A plain build without the server's
 required features can omit `quipu-server`.
 
-**Upgrade:** rerun `cargo install quipu-ai --locked --features full`; add
+**Upgrade:** rerun `cargo install quipu-ai --locked`; add
 `--version VERSION` to select a published version, or `--force` only when you
 intend to rebuild an already installed version. Repeat the alias and version
 checks.
@@ -325,9 +340,10 @@ In a Cargo project:
 
 ```toml
 [dependencies]
-quipu = { package = "quipu-ai", version = "0.15" }
+quipu = { package = "quipu-ai", version = "0.17", default-features = false, features = ["shacl"] }
 ```
 
+This example keeps the library dependency small and avoids a runtime download.
 Verify with `cargo check`. Enable required capabilities with Cargo features;
 `shacl` supplies validation support, while `full` also includes the
 server-related capabilities. **Upgrade:** update the version requirement deliberately and run

@@ -44,12 +44,26 @@ fn request(
     body: &str,
     content_type: &str,
 ) -> (u16, serde_json::Value) {
-    let result = ureq::post(&format!("http://{address}{path}"))
+    request_with_write_id(address, who, path, body, content_type, None)
+}
+
+fn request_with_write_id(
+    address: &str,
+    who: &str,
+    path: &str,
+    body: &str,
+    content_type: &str,
+    write_id: Option<&str>,
+) -> (u16, serde_json::Value) {
+    let mut request = ureq::post(&format!("http://{address}{path}"))
         .set("authorization", &format!("Bearer fixture-{who}"))
         .set("content-type", content_type)
         .set("x-quipu-agent", "urn:writer:bob")
-        .set("x-quipu-principal", "urn:writer:bob")
-        .send_string(body);
+        .set("x-quipu-principal", "urn:writer:bob");
+    if let Some(write_id) = write_id {
+        request = request.set("x-quipu-write-id", write_id);
+    }
+    let result = request.send_string(body);
     let response = match result {
         Ok(r) | Err(ureq::Error::Status(_, r)) => r,
         Err(e) => panic!("{e}"),
@@ -82,6 +96,7 @@ async fn scoped_writer_http_two_way_scope_and_refusal_atomicity() {
         let router = Router::new()
             .route("/update", post(crate::update::update_post))
             .route("/knot", post(crate::publication::knot))
+            .route("/knot/status", post(crate::knot_completion::status))
             .route("/episode", post(crate::tools::episode))
             .route("/set", post(crate::tools::set_predicate))
             .route("/graph/create", post(crate::tools::graph_create))
@@ -127,6 +142,26 @@ async fn scoped_writer_http_two_way_scope_and_refusal_atomicity() {
                 let knot = json!({"graph":allowed,"turtle":format!("<urn:knot:{who}> <urn:p> 4 ."),"source":format!("snapshot:{who}"),"snapshot":format!("snapshot:{who}"),"replace_snapshot":true});
                 let (status,knot_report) = request(&address,who,"/knot",&knot.to_string(),"application/json");
                 assert_eq!(status,200,"{knot_report}");
+                // The completion wrapper must retain the scoped writer barrier.
+                // A foreign knot records STOPPED, never an accepted transaction.
+                for (target, expected_status, expected_state) in [(allowed, 200, "finished"), (foreign, 403, "stopped")] {
+                    let input = json!({"graph":target,"turtle":format!("<urn:completion:{who}> <urn:p> 5 .")});
+                    let write_id = format!("{:x}", Sha256::digest(format!("{who}:{target}")));
+                    let before = shared.lock().latest_tx_id().unwrap();
+                    let (status, _) = request_with_write_id(&address,who,"/knot",&input.to_string(),"application/json",Some(&write_id));
+                    assert_eq!(status,expected_status);
+                    let query = json!({"write_id":write_id,"request":input});
+                    let (status, completion) = request(&address,who,"/knot/status",&query.to_string(),"application/json");
+                    assert_eq!(status,200);
+                    assert_eq!(completion["state"],expected_state);
+                    if expected_status == 403 {
+                        assert_eq!(shared.lock().latest_tx_id().unwrap(),before);
+                        assert!(completion.get("receipt").is_none());
+                    } else {
+                        assert!(completion["receipt"]["tx_id"].is_u64());
+                    }
+                    assert_eq!(request_with_write_id(&address,who,"/knot",&input.to_string(),"application/json",Some(&write_id)).0,400);
+                }
                 let ep = json!({"graph":allowed,"name":format!("scoped-{who}"),"episode_body":"scoped fixture","nodes":[],"edges":[]});
                 let (status,ep_report) = request(&address,who,"/episode",&ep.to_string(),"application/json");
                 assert_eq!(status,200,"{ep_report}");

@@ -49,6 +49,7 @@ mod cli_attest;
 mod cli_audit;
 mod cli_changes;
 mod cli_commands;
+mod cli_competency;
 mod cli_compose;
 mod cli_databook;
 mod cli_db;
@@ -70,6 +71,7 @@ mod cli_knot;
 mod cli_mcp;
 mod cli_memory_files;
 mod cli_merge;
+mod cli_model;
 mod cli_namespaces;
 mod cli_open;
 mod cli_pack;
@@ -122,6 +124,7 @@ fn main() {
     }
 
     match args[1].as_str() {
+        "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
         "git-merge" => return cli_git_merge::run(&args),
         "merge-driver" => return cli_git_merge::run(&args),
@@ -221,6 +224,7 @@ fn main() {
         "prime" => cli_prime::cmd_prime(&args, db_path),
         "stats" => cli_commands::cmd_stats(db_path),
         "search" => cli_search::cmd_search(&args, db_path),
+        "model" => cli_model::run(&args, db_path),
         "search-index" => cli_search::cmd_index(&args, db_path),
         "doctor" => cli_commands::cmd_doctor(&args, db_path),
         "pack" => cli_pack::cmd_pack(&args, db_path),
@@ -398,6 +402,7 @@ fn print_usage() {
         "qp -- AI-native knowledge graph (legacy command: quipu)
 
 COMMANDS:
+    qp competency lint <pendant>  Validate contract schema and syntax offline
     qp prime [--brief] [--section <name>] [--static] [--json] [--db <path>]  Agent primer + live store summary
     qp install-alias [--bin-dir DIR] [--check]  Add the relative command alias: qp -> quipu
     qp knot <file.ttl> [--shapes <shapes.ttl>] [--timestamp <ISO-8601>] [--db <path>]
@@ -434,9 +439,11 @@ COMMANDS:
     qp memory read|export|commit <input.json> --graph IRI --db PATH [--local-authority]
     qp mcp [--db <path>] [--mcp-token-file <path>]  MCP over stdio
     qp stats [--db <path>]
-    qp search <query> --mode keyword [--limit N] [--valid-at ISO] [--db <path>]
+    qp search <query> [--mode keyword|semantic|hybrid] [--limit N] [--valid-at ISO] [--db <path>]
+    qp model install
+    qp model backfill [--batch-size 32] [--after N] [--db <path>]
     qp search-index status|backfill|drop [--batch-size 500] [--db <path>]
-    qp doctor labels [--db <path>]
+    qp doctor labels|search [--db <path>]
     qp pack <graph-iri> --out <file.pendant.db> [--name N] [--version V] [--space N] [--shapes S]... [--queries Q]... [--with-vectors] [--format turtle]
     qp pack --full --format text --destination internal --out <dir> [--db <path>]
                                                                      LOSSLESS whole-store pack as TEXT: a git-friendly

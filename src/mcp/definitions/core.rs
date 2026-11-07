@@ -18,6 +18,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                     "fork": {"type": "string", "description": "Named fork to query."},
                     "graph": {"type": "string", "description": "Named graph to query."},
                     "include_kinds": {"type": "array", "description": "Graph kinds included in the query dataset.", "items": {"type": "string"}},
+                    "execution_profile": {"type": "boolean", "description": "Opt in to bounded actual local execution-path counts and inclusive timings; bespoke JSON only, not a static plan or SQL EXPLAIN."},
                     "row_labels": {"type": "boolean", "description": "Include per-row graph labels."},
                     "query": { "type": "string", "description": "SPARQL SELECT query" },
                     "valid_at": { "type": "string", "description": "Point-in-time for valid-time filtering (ISO-8601). Omit for current state." },

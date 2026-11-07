@@ -2850,11 +2850,23 @@ ex:bob rdfs:label "Bob" ; rdfs:comment "A data scientist" .
 }
 
 #[test]
-fn test_search_query_text_without_provider_errors() {
+fn test_search_query_text_without_provider_is_explicitly_lexical() {
+    let store = Store::open_in_memory_test_ns().unwrap();
+
+    // No provider: a genuinely empty store is a degraded lexical answer.
+    let input = serde_json::json!({ "query": "software engineer" });
+    let result = tool_search(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+    assert_eq!(result["retrieval"]["mode"], "lexical");
+    assert_eq!(result["retrieval"]["status"], "degraded");
+}
+
+#[test]
+fn test_search_explicit_semantic_without_provider_errors() {
     let store = Store::open_in_memory_test_ns().unwrap();
 
     // No embedding provider → query-text search should fail with a clear message.
-    let input = serde_json::json!({ "query": "software engineer" });
+    let input = serde_json::json!({ "query": "software engineer", "mode": "semantic" });
     let err = tool_search(&store, &input).unwrap_err();
     assert!(err.to_string().contains("no embedding provider"));
 }
@@ -2936,12 +2948,14 @@ ex:alice a ex:Person ; rdfs:label "Alice" .
 }
 
 #[test]
-fn test_hybrid_search_query_text_without_provider_errors() {
+fn test_hybrid_search_query_text_without_provider_is_explicitly_lexical() {
     let store = Store::open_in_memory_test_ns().unwrap();
 
     let input = serde_json::json!({ "query": "test" });
-    let err = tool_hybrid_search(&store, &input).unwrap_err();
-    assert!(err.to_string().contains("no embedding provider"));
+    let result = tool_hybrid_search(&store, &input).unwrap();
+    assert_eq!(result["count"], 0);
+    assert_eq!(result["retrieval"]["mode"], "lexical");
+    assert_eq!(result["retrieval"]["status"], "degraded");
 }
 
 // ── search module tests (text-matching search_nodes / search_facts) ──

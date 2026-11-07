@@ -652,6 +652,55 @@ Response: `{"tx_id": 1, "count": 2, "conforms": true,
 "valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
 normalised key the facts were actually stored under.
 
+#### Completion evidence after a lost response
+
+For an ordinary `/knot` request, persist a fresh random 64-character lowercase
+hex ID alongside the exact request object **before sending it**, then send that
+ID in `X-Quipu-Write-Id`. The server records completion independently of the HTTP
+future. A client timeout or disconnect does not stop a blocking write.
+
+Inspect it with `POST /knot/status`:
+
+```json
+{"write_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request":{"turtle":"<urn:example:item> <urn:example:label> \"example\" ."}}
+```
+
+Use the same authenticated principal and credential as the original request.
+The lookup binds the ID to the original JSON object, not to a caller-supplied
+claim about its outcome. A missing or different credential or request cannot
+read another receipt. With configured bearer authentication, status lookup
+requires that credential even though it is a read and works on a read-only
+server. Scoped-current read profiles retain their existing unsupported-route
+refusal; this endpoint does not bypass that profile.
+
+Every successful status lookup declares `"contract":"quipu.knot-completion/v1"`.
+The same contract appears in `/version` under `write_contracts`.
+
+| State | Evidence and permitted next step |
+| --- | --- |
+| `queued`, `running` | The worker can still commit. Retain custody; do not resend. |
+| `not_started` | A retained record proves the uncalled worker was dropped. It cannot later start. |
+| `finished` | All synchronous work, including deferred embedding, ended. `receipt` retains bounded native transaction fields. Verify the exact effect before resolving custody. |
+| `stopped` | The worker ended with an error or panic. This does **not** prove rollback: an error can follow a commit. Read back the effect before resolving custody. |
+| `unknown` | No usable proof. Retain custody; do not resend. |
+
+Only explicit `not_started` evidence, or `finished`/`stopped` followed by complete
+readback proving non-application of the pending effect, permits a **new** write
+with a new ID. An exact matching effect is verified without another write.
+Partial, truncated, conflicting or unreadable effects remain indeterminate.
+Missing/malformed contract fields, HTTP errors, and expired or disabled request
+timeouts supply no completion proof.
+
+Receipts are process-local, capped at 512 entries and one hour from registration.
+The oldest entry may be evicted under load, including an in-flight entry;
+its eventual completion cannot recreate the receipt. Evicted, expired,
+never-seen, restarted-server and foreign-owner lookups all return `unknown`,
+never `not_started`. Losing a receipt can therefore require operator recovery.
+This is not durable idempotency: never replay a `/knot` request to poll it, or
+reuse a write ID. A still-retained duplicate ID is refused before dispatch.
+Callers omitting the header retain the ordinary write interface and have no
+per-write completion proof. No maximum write lifetime is promised.
+
 ### Resumable snapshot promotion and cancellation
 
 `POST /knot/stage` stores inert, content-addressed parts. Transport parts are
@@ -1302,7 +1351,11 @@ Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
-omitted mode or `mode: "semantic"` preserves vector search.
+omitted mode follows `[quipu.search] mode`, which defaults to `"auto"`: semantic
+when an embedding provider or query embedding is present, keyword otherwise.
+Explicit `mode: "semantic"` always requires embeddings; it never falls back.
+Automatic keyword responses include `search_mode: "keyword"` and
+`mode_reason: "no_embedding_provider"`. Explicit configured modes remain authoritative.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
@@ -1349,7 +1402,7 @@ keyword index, request `mode: "hybrid"`, `alpha` in `[0,1]`,
 Alpha is the semantic contribution: `alpha: 1` returns the existing semantic
 response exactly, without accessing the lexical index; `alpha: 0` returns the
 keyword response exactly, without embedding. Omitted mode and parameters use
-the server search configuration; the default mode remains semantic.
+the server search configuration; the default mode is `auto`.
 
 Weighted fusion min-max normalizes each candidate list independently. A
 nonempty equal-score list normalizes to one; missing candidates contribute zero.
@@ -1384,8 +1437,12 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
-activation installs an empty FTS5 index and same-transaction fact triggers; it
+Keyword search is enabled automatically for new stores. Existing unindexed stores
+require explicit opt-in (`[quipu.search] keyword = true`); opening them with an
+omitted setting installs no keyword tables or triggers. Explicit `false` also
+disables automatic activation for new stores. Already initialized indexes remain
+enabled when the setting is omitted.
+Startup installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
 assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`

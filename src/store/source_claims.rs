@@ -3,6 +3,37 @@ use super::Store;
 use crate::{Result, Value};
 use rusqlite::params;
 
+#[cfg(test)]
+#[path = "claim_window_tests.rs"]
+mod claim_window_tests;
+
+/// Physical-claim selector. A window is exclusive at its lower watermark and
+/// inclusive at its upper watermark; it never widens to all producer claims.
+#[derive(Clone, Copy)]
+pub(super) struct ClaimWindow {
+    pub after: i64,
+    pub through: i64,
+}
+
+/// Rechecked after acquiring SQLite's writer reservation. Registry edits need
+/// their own comparison: loading an ontology need not advance the fact head.
+pub(super) struct WindowGuard {
+    pub head: i64,
+    pub ontology: (String, String, String),
+}
+
+impl Store {
+    pub(super) fn check_window_guard(&self, guard: &WindowGuard) -> Result<()> {
+        if self.latest_tx_id()? != guard.head || !self.list_ontologies()?.contains(&guard.ontology)
+        {
+            return Err(crate::Error::InvalidValue(
+                "ontology window plan changed; preview again before applying".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 impl Store {
     /// Replace one producer snapshot without widening its retraction scope.
     pub(crate) fn transact_snapshot(
@@ -52,6 +83,7 @@ impl Store {
         tx: i64,
         timestamp: &str,
         retract_source: Option<&str>,
+        window: Option<ClaimWindow>,
     ) -> Result<(Vec<super::Datum>, Vec<super::Datum>)> {
         use crate::Op;
         let source: Option<String> =
@@ -63,7 +95,7 @@ impl Store {
         let mut insert = self.prepare(
             "INSERT INTO facts(e,a,v,g,tx,valid_from,valid_to,op) VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(e,a,v,tx) DO UPDATE SET valid_from=excluded.valid_from,valid_to=excluded.valid_to,op=excluded.op,retracted_tx=NULL",
         )?;
-        let mut close = self.prepare("UPDATE facts SET valid_to=?1,retracted_tx=?6 WHERE e=?2 AND a=?3 AND v=?4 AND g=?5 AND op=1 AND valid_to IS NULL AND (?7 IS NULL OR tx IN (SELECT id FROM transactions WHERE source=?7))")?;
+        let mut close = self.prepare("UPDATE facts SET valid_to=?1,retracted_tx=?6 WHERE e=?2 AND a=?3 AND v=?4 AND g=?5 AND op=1 AND valid_to IS NULL AND (?7 IS NULL OR tx IN (SELECT id FROM transactions WHERE source=?7)) AND (?8 IS NULL OR (tx>?8 AND tx<=?9))")?;
         for datum in datums {
             crate::promotion_control::check()?;
             let present =
@@ -87,7 +119,9 @@ impl Store {
                         bytes,
                         graph,
                         tx,
-                        retract_source
+                        retract_source,
+                        window.map(|w| w.after),
+                        window.map(|w| w.through)
                     ])?;
                     if count > 0 {
                         // Exact original blob in the immutable retraction log.

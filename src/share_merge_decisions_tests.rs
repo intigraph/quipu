@@ -995,3 +995,104 @@ fn a_decision_that_only_removes_a_required_value_is_refused() {
     assert_eq!(fact_count(&local), before, "nothing written");
     assert_eq!(values(&local, STATUS), ["\"blocked\""]);
 }
+
+#[test]
+fn decided_share_records_receipt_then_live_winner_at_decision_time() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(
+        &mut file,
+        &Decision::Choose {
+            choose: Side::Theirs,
+        },
+    );
+    let td = "2099-01-10T00:00:00Z";
+    let out = apply(&mut local, &incoming, &file, &bytes, "reviewer", td, None).unwrap();
+    let e = local.lookup(S).unwrap().unwrap();
+    let a = local.lookup(STATUS).unwrap().unwrap();
+    let mut stmt = local.conn.prepare(
+        "SELECT tx, valid_from, valid_to FROM facts WHERE g=0 AND e=?1 AND a=?2 AND op=1 AND v=?3 ORDER BY tx"
+    ).unwrap();
+    let rows: Vec<(i64, String, Option<String>)> = stmt
+        .query_map(
+            rusqlite::params![e, a, crate::types::Value::Str("closed".into()).to_bytes()],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(rows.len(), 2, "incoming receipt and live winner: {rows:?}");
+    assert_eq!(
+        (&rows[0].1, rows[0].2.as_deref()),
+        (&td.to_string(), Some(td))
+    );
+    assert_eq!((&rows[1].1, rows[1].2.as_deref()), (&td.to_string(), None));
+    assert!(rows[0].0 < rows[1].0);
+    assert_eq!(out.merge.tx_id, Some(rows[1].0));
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn decide_gate_failure_rolls_back_the_received_step_and_clean_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let (mut local, incoming) = scenario(root.path());
+    local
+        .load_shapes(
+            "allowed",
+            r#"
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+[] a sh:NodeShape ; sh:targetNode <https://example.org/s> ;
+sh:property [ sh:path <https://example.org/status> ; sh:in ("open" "blocked" "closed") ] .
+"#,
+            "2026-10-07",
+        )
+        .unwrap();
+    local.shacl_config_mut().validate_on_write = true;
+    let mut file = emit(&local, &incoming).unwrap();
+    let bytes = decide(
+        &mut file,
+        &Decision::Values {
+            values: vec!["\"disallowed\"".into()],
+        },
+    );
+    let before = (
+        local.latest_tx_id().unwrap(),
+        values(&local, STATUS),
+        values(&local, TAG),
+    );
+    assert!(
+        apply(
+            &mut local,
+            &incoming,
+            &file,
+            &bytes,
+            "reviewer",
+            "2099-01-10T00:00:00Z",
+            None
+        )
+        .is_err()
+    );
+    assert_eq!(
+        (values(&local, STATUS), values(&local, TAG)),
+        (before.1, before.2)
+    );
+    assert!(
+        local
+            .find_transaction_by_source(&format!("decisions={}", sha256(&bytes)))
+            .unwrap()
+            .is_none()
+    );
+    let receipts: i64 = local
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM facts WHERE op=1 AND valid_from=valid_to AND tx>?1",
+            [before.0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        receipts, 0,
+        "failed decision must not leak receive receipts"
+    );
+}

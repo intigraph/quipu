@@ -7,6 +7,8 @@
 
 #[rustfmt::skip]
 pub(crate) static ABOUT: &[(&str, &str)] = &[
+    ("competency", "Inspect pendant competency contracts without opening a store"),
+    ("competency lint", "Validate competency.toml schema and query/command syntax offline; execute nothing"),
     ("version", "Print the version and source commit"),
     ("install-alias", "Add the qp alias beside the quipu binary"),
     ("knot", "Assert Turtle facts, validated against loaded shapes"),
@@ -37,8 +39,11 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("stats", "Show store statistics"),
     ("prime", "Print the agent primer and a bounded, read-only summary of the store"),
     ("search", "Search entities by keyword, vector or hybrid ranking"),
+    ("model", "Manage the pinned default embedding model"),
+    ("model install", "Download and verify the default embedding model and tokenizer"),
+    ("model backfill", "Embed one bounded batch of existing ROOT subjects"),
     ("search-index", "Report, backfill or drop the search indexes"),
-    ("doctor", "Report graph-label drift and recommended floors"),
+    ("doctor", "Report graph-label drift or search backend readiness"),
     ("pack", "Export a graph, or the whole store, as a pack; or verify a pack"),
     ("unpack", "Merge a published pack into a local graph"),
     ("restore", "Replace the store with a full pack, binary or text"),
@@ -95,6 +100,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("search-index backfill", "Backfill a search index in batches"),
     ("search-index drop", "Drop a search index"),
     ("doctor labels", "Report graph-label drift and recommended floors"),
+    ("doctor search", "Report search backend readiness and remedies"),
     ("share diff", "Diff two packs by entity, or write a PR-review report"),
     ("import delta", "Verify a delta share against its parent share"),
     ("import promote", "Promote a staged share into the store"),

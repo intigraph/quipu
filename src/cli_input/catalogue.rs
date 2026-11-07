@@ -31,6 +31,8 @@ pub(super) fn is_group(spec: &Spec) -> bool {
 
 #[rustfmt::skip]
 pub(super) static SPECS: &[Spec] = &[
+    spec!("competency", "", GROUP, 0, "", ""),
+    spec!("competency lint", "<pendant>", 1, 1, "", ""),
     spec!("store", "", GROUP, 0, "", ""),
     spec!("store status", "", 0, 0, "", ""),
     spec!("store adopt", "", 0, 0, "", ""),
@@ -77,12 +79,16 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("stats", "", 0, 0, "", ""),
     spec!("prime", "", 0, 0, "section", "brief static json"),
     spec!("search", "<query>", 1, 1, "mode limit alpha rrf-k decay anchor anchor-mode direction max-hops via fusion valid-at type group structured-query filters graph graphs", "explain all-graphs"),
+    spec!("model", "", GROUP, 0, "", ""),
+    spec!("model install", "", 0, 0, "", ""),
+    spec!("model backfill", "", 0, 0, "batch-size after", ""),
     spec!("search-index", "", 0, 0, "kind batch-size", ""),
     spec!("search-index status", "", 0, 0, "kind", ""),
     spec!("search-index backfill", "", 0, 0, "kind batch-size", ""),
     spec!("search-index drop", "", 0, 0, "kind", ""),
     spec!("doctor", "", 0, 0, "", ""),
     spec!("doctor labels", "", 0, 0, "", ""),
+    spec!("doctor search", "", 0, 0, "", ""),
     spec!("pack", "[graph-iri]", 0, 1, "verify out space name version shapes queries repo repo-sha model-id model-version destination format", "with-vectors full allow-missing-embedding-recipe"),
     spec!("unpack", "<file.pendant.db>", 1, 1, "into expect-repo head-sha", ""),
     spec!("restore", "<full-pack|text-pack-dir>", 1, 1, "", "force"),

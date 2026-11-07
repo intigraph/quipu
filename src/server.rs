@@ -49,6 +49,11 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/knot_completion.rs"]
+mod knot_completion;
+#[cfg(test)]
+#[path = "server/knot_completion_tests.rs"]
+mod knot_completion_tests;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]
@@ -308,9 +313,13 @@ async fn main() {
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
     if !is_replica {
-        let signing_key_path = quipu::signing::default_key_path();
-        match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
-            Ok(id) => {
+        let identity = quipu::signing::default_key_path().and_then(|path| {
+            quipu::signing::SigningIdentity::load(&path, "quipu")
+                .map(|id| (path, id))
+                .map_err(Into::into)
+        });
+        match identity {
+            Ok((signing_key_path, id)) => {
                 eprintln!(
                     "verdict signing enabled (verifier=quipu, key={})",
                     signing_key_path.display()
@@ -371,7 +380,7 @@ async fn main() {
         eprintln!("cannot start read process pool: {error}");
         std::process::exit(1)
     });
-    let auth_policy = auth::bearer_policy(&config.server);
+    let auth_policy = auth::bearer_policy(&workers.auth_config(&config.server));
     let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required || config.server.scoped_reads.is_some();
     let scoped_profile = config.server.scoped_reads.clone().map(|profile| {
@@ -425,6 +434,7 @@ async fn main() {
         .route("/memory/commit", post(memory_files::commit))
         .route("/memory/receipt", post(memory_files::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
+        .layer(axum::middleware::from_fn(memory_files::scope_guard))
         .layer(axum::Extension(config.memory_files.clone()))
         .merge(assets::routes())
         // Core API
