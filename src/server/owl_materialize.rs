@@ -56,47 +56,56 @@ pub(crate) async fn run(
     let (mut snapshot, mut permit) = blocking(move || {
         let mut snapshot = {
             let source = reader.read();
-            Snapshot::capture(&source, Snapshot::temporary_store()?, &timestamp)?
+            Snapshot::capture_or_resume(&source, &timestamp)?
         };
-        snapshot.derive()?;
+        snapshot.derive_or_resume()?;
         Ok((snapshot, permit))
     })
     .await?;
     let mut applied = 0;
+    let mut max_writer_batch_micros = 0;
     while snapshot.remaining() > 0 {
         let writer = store.clone();
         let result = write_blocking(move || {
-            let (n, work) = {
+            let (n, work, micros) = {
                 let mut live = writer.lock();
+                let started = std::time::Instant::now();
                 let n = snapshot.apply_batch(&mut live)?;
-                (n, live.take_deferred_embed())
+                (n, live.take_deferred_embed(), started.elapsed().as_micros())
             };
             if let Some(work) = work {
                 super::tools::finish_deferred_embed(&writer, &work)?;
             }
-            Ok((snapshot, permit, n))
+            Ok((snapshot, permit, n, micros))
         })
         .await?;
         (snapshot, permit) = (result.0, result.1);
         applied += result.2;
+        max_writer_batch_micros = max_writer_batch_micros.max(result.3);
     }
     write_blocking(move || {
         let _permit = permit;
         let work = {
             let mut live = store.lock();
+            let final_started = std::time::Instant::now();
             snapshot.finish(&mut live)?;
+            max_writer_batch_micros =
+                max_writer_batch_micros.max(final_started.elapsed().as_micros());
             live.take_deferred_embed()
         };
         if let Some(work) = work {
             super::tools::finish_deferred_embed(&store, &work)?;
         }
         let r = &snapshot.report;
-        Ok(axum::Json(json!({
+        let response = axum::Json(json!({
             "action": "materialize", "ontologies": snapshot.ontology_count(),
             "complete": true, "snapshot_tx": snapshot.premise_head,
             "elapsed_ms": started.elapsed().as_millis(), "applied_proposals": applied,
+            "max_writer_batch_micros": max_writer_batch_micros,
             "materialized": if snapshot.ontology_count() == 0 { Value::Null } else { json!({
                 "total": r.total, "passes": r.passes,
+                "raw_proposals": r.raw_proposals, "known_proposals": r.known_proposals,
+                "repeated_proposals": r.repeated_proposals,
                 "subclass_inferences": r.subclass_inferences,
                 "same_as_inferences": r.same_as_inferences,
                 "sub_property_inferences": r.sub_property_inferences,
@@ -107,7 +116,11 @@ pub(crate) async fn run(
                 "transitive_inferences": r.transitive_inferences,
                 "equivalent_property_inferences": r.equivalent_property_inferences
             })}
-        })))
+        }));
+        // Close the completed scratch database before releasing single-flight;
+        // the next invocation may replace that completed generation's file.
+        drop(snapshot);
+        Ok(response)
     })
     .await
 }

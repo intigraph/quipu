@@ -16,6 +16,10 @@ const DATA: &[&str] = &[
     "shapes",
     "ontologies",
     "schema_terms",
+    // Version-pinned mapping definitions/history are replicated content;
+    // local enrollment and write authority remain in LOCAL.
+    "shape_mapping_pins",
+    "shape_mapping_state",
     "queries",
     "query_params",
     "datasets",
@@ -37,6 +41,9 @@ const DATA: &[&str] = &[
     "search_default_policy",
 ];
 const LOCAL: &[&str] = &[
+    // OWL publication acknowledgements belong to the local scratch generation;
+    // forwarding them could let a different store skip its own publication.
+    "owl_batch_receipts",
     // Authentication adjudication is local evidence, not transferable writer
     // authority. Actor/source text in historical transactions remains data.
     "transaction_auth",

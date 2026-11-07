@@ -252,7 +252,7 @@ fn stale_handle_refuses_overlay_create() {
 #[test]
 fn stale_handle_refuses_shape_load() {
     let dir = tempfile::tempdir().unwrap();
-    let (held, ..) = stale_enforced_handle(dir.path());
+    let (mut held, ..) = stale_enforced_handle(dir.path());
     assert!(
         held.load_shapes("held", SHAPES, "2026-10-27T00:00:00Z")
             .is_err()

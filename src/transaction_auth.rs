@@ -180,7 +180,8 @@ thread_local! {
     static IDENTITY: RefCell<Option<Identity>> = const { RefCell::new(None) };
 }
 
-/// Owned evidence from the authentication adapter, never from request JSON.
+/// Owned evidence for synchronous internal writers. A declared JSON actor is
+/// never installed here; adapters establish this scope from verified evidence.
 pub(crate) fn current_identity() -> Option<Identity> {
     IDENTITY.with(|slot| slot.borrow().clone())
 }

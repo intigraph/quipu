@@ -13,7 +13,7 @@ const DECLARATIONS: &str = r#"
 "#;
 
 fn governed_store() -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("governance", SHAPES, "2026-01-01T00:00:00Z")
         .unwrap();
