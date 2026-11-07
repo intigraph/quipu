@@ -120,11 +120,14 @@ fn configured_scoped_listener_has_no_unrestricted_write_fallback() {
             serde_json::from_str::<serde_json::Value>(&response.into_string().unwrap()).unwrap(),
         )
     };
-    assert_eq!(
-        request("invalid-fixture-presentation", "urn:native:allowed").0,
-        401
-    );
+    let invalid = request("invalid-fixture-presentation", "urn:native:allowed").0;
+    println!("invalid bearer -> HTTP {invalid}");
+    assert_eq!(invalid, 401);
     let (status, report) = request(&token, "urn:native:allowed");
+    println!(
+        "scoped allowed graph -> HTTP {status}, asserted={}",
+        report["asserted"]
+    );
     assert_eq!(status, 200, "{report}");
     assert_eq!(report["asserted"], 1);
     let read = quipu::Store::open_read_only(db.to_str().unwrap()).unwrap();
@@ -132,15 +135,23 @@ fn configured_scoped_listener_has_no_unrestricted_write_fallback() {
     let evidence = read.transaction_auth(before).unwrap().unwrap();
     assert_eq!(evidence.principal, "urn:native:curator");
     assert_eq!(evidence.auth_class, "scoped_named_bearer");
-    assert_eq!(request(&token, "urn:native:foreign").0, 403);
+    let foreign = request(&token, "urn:native:foreign").0;
+    println!("scoped foreign graph -> HTTP {foreign}");
+    assert_eq!(foreign, 403);
     assert_eq!(read.latest_tx_id().unwrap(), before);
     let (status, retry) = request(&token, "urn:native:allowed");
     assert_eq!(status, 200);
+    println!(
+        "scoped allowed retry -> HTTP {status}, asserted={}",
+        retry["asserted"]
+    );
     assert_eq!(retry["asserted"], 0);
     assert!(retry["tx"].is_null());
     // Explicit compatibility witness: operator keys stay unrestricted; they
     // must never be advertised as restricted curator credentials.
-    assert_eq!(request(&operator, "urn:native:foreign").0, 200);
+    let compatibility = request(&operator, "urn:native:foreign").0;
+    println!("unrestricted operator foreign graph -> HTTP {compatibility}");
+    assert_eq!(compatibility, 200);
     drop(serving);
     // A missing restricted registry must refuse startup, never silently use
     // the configured unrestricted operator bearer as a fallback profile.
