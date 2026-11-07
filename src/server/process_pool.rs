@@ -373,9 +373,8 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
     if !routed(req.uri().path(), req.method().as_str()) {
         return next.run(req).await;
     }
-    let handoff = match signed_handoff::for_forward(&req) {
-        Ok(value) => value,
-        Err(()) => return unavailable("signed reader identity was not admitted"),
+    let Ok(handoff) = signed_handoff::for_forward(&req) else {
+        return unavailable("signed reader identity was not admitted");
     };
     let operation = super::request_middleware::declared_operation(req.headers());
     let selected = routing.select(routing.heavy(req.uri().path(), operation.as_deref()));

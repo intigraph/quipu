@@ -36,7 +36,7 @@ pub(super) fn for_forward(req: &Request) -> Result<Option<String>, ()> {
     Ok(Some(encoded))
 }
 
-/// Call ONLY after worker_guard has authenticated the private worker key.
+/// Call ONLY after `worker_guard` has authenticated the private worker key.
 /// The opaque extension cannot be constructed from an ordinary public header.
 pub(super) fn restore(req: &mut Request) -> Result<(), ()> {
     let signed = req
