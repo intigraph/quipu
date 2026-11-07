@@ -2330,19 +2330,43 @@ invisible to either alone. A store with nothing loaded answers `"ontologies":
 run of zero — a scheduler has to be able to tell "ran, derived nothing" from
 "there was nothing to derive from".
 
-The REST materialisation action copies current ROOT and companion facts through
-a read-pool connection, then derives on a private temporary SQLite database.
-SQLite removes this database when its connection closes; its page cache is
-limited to 8 MiB and its term cache to 32,768 entries. Provide a writable,
-disk-backed SQLite temporary directory with enough space for the current facts
-and indexes; a RAM-backed temporary filesystem defeats the memory saving.
-Derivation still allocates premise and proposal vectors. It does not hold
-ordinary write admission or the live writer during that work. Publication takes
-write admission in batches of at most 64 assertions, allowing other writes
-between batches. A server without a read pool refuses this action rather than
-falling back to a full scan under the writer lock. Concurrent materialisation
-requests are rejected; a disconnected client cannot admit another derivation
-while its blocking work is still running.
+The REST materialisation action copies current ROOT and companion premises through
+one consistent read-pool snapshot. File-backed servers retain private job state
+in a mode-0700 `.owl-job-<store-id-digest>` directory next to the database, with a
+mode-0600 `snapshot.sqlite` file. Provide writable disk space on that filesystem;
+a RAM-backed filesystem defeats the memory saving. In-memory library stores use
+anonymous scratch. The private cache is 8 MiB with at most 32,768 cached terms.
+
+Each logical pass freezes its premises and streams unique novel keys to a disk
+queue. All rule families must finish before promotion starts. Promotion commits
+at most 200,000 assertions and its cursor atomically; the next pass starts only
+after every page is promoted. Cumulative output from **all** passes is retained.
+An empty completed pass proves fixpoint. Bounds remain 3,000,000 premises,
+64 logical passes, 200,000 keys per proposal page, and 64 assertions per live
+writer batch. The scratch SQLite main file is capped at 8 GiB; journals and temporary
+files need additional filesystem space. A persisted 20-minute job deadline applies;
+resuming never renews that deadline or pass count. These finite limits can refuse
+a job; refusal is incomplete, never successful truncation.
+
+Capture, enumeration and private promotion hold no live writer admission.
+Publication starts only after fixpoint, with normal admission and validation on
+each 64-key batch, yielding to other writes between batches. A generation and
+semantic batch digest receipt in the local `owl_batch_receipts` table commits
+atomically with the assertions. Lost acknowledgements reconcile that receipt
+before advancing the scratch cursor. Final freshness has its own atomic receipt.
+These local receipts and scratch tables are excluded from graph sharing.
+
+The next scheduled invocation resumes a compatible unfinished job, including an
+unfinished pass whose private transaction rolled back. Identity, ontology or
+engine mismatch, retractions, unreadable state, conflicting receipts or exceeded
+limits refuse publication and retain the private job for operator disposition;
+they do not silently recapture or reset cost limits. A completed job is replaced
+on the next invocation. Do not remove an unfinished job to claim completion.
+A row-count bound does not establish production wall-clock writer latency;
+per-batch timing and full workload qualification remain separate measurements.
+A server without a read pool refuses instead of falling back to a writer scan.
+Concurrent materialisation requests are rejected, and a disconnected client
+cannot release single-flight admission while blocking work is still running.
 
 Successful responses include `complete: true`, `snapshot_tx`, `elapsed_ms`, and
 `applied_proposals`. Completion means the captured snapshot was closed, **not**
@@ -2350,7 +2374,8 @@ that facts arriving afterward have been processed. Concurrent additions are
 allowed; a retraction of a premise or a change to the loaded ontologies aborts
 publication. Earlier committed batches can remain as partial historical
 entailments after an error or interruption, but no new freshness marker is
-published. Retry on the next scheduled run. Consumers must inspect freshness;
+published. Compatible jobs resume on the next scheduled run; invalidated jobs
+require operator disposition. Consumers must inspect freshness;
 the companion graph does not automatically hide historical entailments.
 
 **`load` with `"materialize": "deferred"`** persists the ontology under the
