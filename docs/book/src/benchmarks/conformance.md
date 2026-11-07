@@ -37,8 +37,8 @@ boundary for `SERVICE`, including the configured-endpoint policy deviation score
 | Field | Value |
 |---|---|
 | W3C RDF Tests revision | `369a90d1a60c021b746df2e411da0ff36258a758` |
-| Quipu revision (evaluation) | `6f0202eb57162b1db7e34161fff77155371bf682` |
-| Quipu revision (syntax) | `6f0202eb57162b1db7e34161fff77155371bf682` |
+| Quipu revision (evaluation) | `9144f0c6b1acb975742765ab334b5fbc51781657` |
+| Quipu revision (syntax) | `9144f0c6b1acb975742765ab334b5fbc51781657` |
 | Quipu version | `quipu 0.17.0` |
 | Store isolation | one temporary SQLite store per executable test |
 | Test selection | Working Group–approved tests only |
@@ -435,7 +435,7 @@ Ledger: [`shacl-write-path.json`](https://github.com/intigraph/quipu/blob/main/b
 ## Entailment-regime commitments
 
 2 of 6 regimes are goals (RDF, RDFS): **35/35** of their cases pass. The remaining 4 are deliberate non-goals.
-Ledger re-derived 2026-11-07T18:18:51Z by [CI run](https://github.com/intigraph/quipu/actions/runs/42400203186), from quipu `6f0202eb5716`.
+Ledger re-derived 2026-11-07T21:18:28Z by [CI run](https://github.com/intigraph/quipu/actions/runs/42414525676), from quipu `9144f0c6b1ac`.
 Local RDFS and OWL extensions beyond a goal regime are not standards-regime claims.
 
 > **Do not read the goal-regime fraction as "nearly done".** The two numbers have different characters. Most RDF-regime cases are `bind*` tests answerable under simple entailment, so they pass without any additional inference — a high RDF score is not evidence of an entailment engine. The RDFS score DOES reflect one: an RDFS closure (rdfs2/3/5/7/9/11) is materialised into the graph's companion inferred graph and composed into the default graph when the regime is in force, which is what a query like `SELECT ?x WHERE { ex:a ?x ex:c }` needs — its predicate is a variable, so the entailed triple has to EXIST and cannot be produced by rewriting the pattern. What remains failing is not more of the same closure: it is container and axiomatic shapes beyond those six rules, and OWL-flavoured cases filed under RDFS.
