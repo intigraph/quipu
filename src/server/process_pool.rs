@@ -133,6 +133,8 @@ pub(crate) struct ProcessPool {
 }
 #[path = "process_pool_auth.rs"]
 mod auth_config;
+#[path = "process_pool_signed_handoff.rs"]
+pub(crate) mod signed_handoff;
 
 impl Drop for ProcessPool {
     fn drop(&mut self) {
@@ -330,6 +332,9 @@ async fn worker_guard(mut req: Request, next: Next) -> Response {
     {
         return StatusCode::FORBIDDEN.into_response();
     }
+    if signed_handoff::restore(&mut req).is_err() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     // Only the authenticated private channel may restore an original peer.
     // MCP calls without a socket peer stay UNKNOWN rather than becoming localhost.
     let peer = req
@@ -401,6 +406,10 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
     if !routed(req.uri().path(), req.method().as_str()) {
         return next.run(req).await;
     }
+    let handoff = match signed_handoff::for_forward(&req) {
+        Ok(value) => value,
+        Err(()) => return unavailable("signed reader identity was not admitted"),
+    };
     let operation = super::request_middleware::declared_operation(req.headers());
     let selected = routing.select(routing.heavy(req.uri().path(), operation.as_deref()));
     let Some((worker, permit)) = selected else {
@@ -430,6 +439,7 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for (name, value) in &parts.headers {
             if !hop_header(name.as_str())
                 && name.as_str() != HEADER
+                && name.as_str() != signed_handoff::HEADER
                 && name.as_str() != PEER
                 && name.as_str() != "x-quipu-operation"
                 && name.as_str() != "accept-encoding"
@@ -446,6 +456,9 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         if let Some(operation) = operation {
             request = request.set("x-quipu-operation", &operation);
         }
+        if let Some(handoff) = handoff {
+            request = request.set(signed_handoff::HEADER, &handoff);
+        }
         if let Some(peer) = peer {
             request = request.set(PEER, &peer);
         }
@@ -461,6 +474,7 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for name in response.headers_names() {
             if !hop_header(&name)
                 && name != HEADER
+                && name != signed_handoff::HEADER
                 && let (Ok(name), Some(value)) = (
                     HeaderName::from_bytes(name.as_bytes()),
                     response.header(&name),
