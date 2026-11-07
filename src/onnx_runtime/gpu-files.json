@@ -1,0 +1,25 @@
+{
+  "version": "onnx-1.23.2-cuda12-v1",
+  "files": {
+    "libcublas.so.12": "031ce6c2cbfbb9468f040527cab5c599069ce5609e73e28f87503881063eac21",
+    "libcublasLt.so.12": "10b5e6631cf8115c661eb895ed1533826308b58f7956466f53d236a40c9b622c",
+    "libcudart.so.12": "c3a75b33af334a3486d197dbd1584a2985183ba4688d237a2be5f2f679329920",
+    "libcudnn.so.9": "72f74476dcdc074b9d56f8c5cf576ceff6a595989832b9b0798478dc48a4ffcd",
+    "libcudnn_adv.so.9": "c7f2859225c2fc2992235d3a2504f641fa8ec83a1996a354b07609db8208a746",
+    "libcudnn_cnn.so.9": "3d1643d323d9dba75236d5b9a7741a5b6606ea6ffbcf0a6268c0c6e6d4cb3dd4",
+    "libcudnn_engines_precompiled.so.9": "4ab4bb62c6291d0a3650feb583e62693bdc6a5023352dbc64231187b2ec9cfdc",
+    "libcudnn_engines_runtime_compiled.so.9": "20aab41f9c36e846ba4ccc6e59b67251becfbf992e87d281ffaadbf4f24f32c5",
+    "libcudnn_graph.so.9": "7b2abeb742ad5b737aeb50185481168b325ab443c87b66de3ceece6431e0e771",
+    "libcudnn_heuristic.so.9": "6ad33b511a6f9b880c9c13018a669a6d818cddf6842700f5403906fa97eb5279",
+    "libcudnn_ops.so.9": "e822b34d447d2c83f275d2e1e6373a88c19dcadd7a7d289ed27d8ec52a210323",
+    "libcufft.so.11": "5c912146449614f9d73ebd1a5cb604242da6b819d94ba5b4a99272a0649f3761",
+    "libcufftw.so.11": "0fe4db0533c317e21ef73aa6529ec5fafc6edea80aafcff103eb58f00512b8ea",
+    "libcurand.so.10": "f9bea038a2703b721571fd45a299a898141fd8cb264a5912635c95116f5960fe",
+    "libnvJitLink.so.12": "0369e6867d44b800437de4e146d72c65afc6c75adf677a15c2ecd8e6a7ac135f",
+    "libnvblas.so.12": "9d244820d32966f0af47afe6c9ee6f34b230fafe87ea0141dc71241a5d2b340c",
+    "libonnxruntime.so.1.23.2": "c7111c65636e247bb31d922af77ce77c47b4f902b670c13f635a9912f1b39845",
+    "libonnxruntime_providers_cuda.so": "6499069f1a4c2decd4c7281f39939151cb119f3014e8c11e1aa484729ba28603",
+    "libonnxruntime_providers_shared.so": "ee7bf6d4d32f523dbdebf9dec70a1b3287a1a60d019192490732750dc385f98c",
+    "libonnxruntime_providers_tensorrt.so": "130243507df6b6f432a9722a5aeeafb184da20811efd629584ef46477caec172"
+  }
+}

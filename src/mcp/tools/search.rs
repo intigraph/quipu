@@ -15,7 +15,7 @@ use crate::types::Value;
 /// `EmbeddingProvider` is used to embed the text automatically.
 pub fn tool_search(store: &Store, input: &JsonValue) -> Result<JsonValue> {
     crate::search_outcome::observation::run(crate::search_outcome::Operation::Search, input, || {
-        search(store, input)
+        super::fresh_search::run(store, input, || search(store, input))
     })
 }
 
@@ -337,7 +337,7 @@ pub(super) fn keyword_response_in(
 /// it silently drops legitimate in-scope entities from every scoped search. The
 /// old `LIMIT oversample(limit)` capped one populous group at 100 of its
 /// 457 entities, so ~78% of that group's graph was unsearchable.
-fn scoped_entity_iris_at(
+pub(super) fn scoped_entity_iris_at(
     store: &Store,
     entity_type: Option<&str>,
     group_ids: Option<&[&str]>,
@@ -461,7 +461,7 @@ pub fn tool_hybrid_search(store: &Store, input: &JsonValue) -> Result<JsonValue>
     crate::search_outcome::observation::run(
         crate::search_outcome::Operation::HybridSearch,
         input,
-        || hybrid_search(store, input),
+        || super::fresh_search::run(store, input, || hybrid_search(store, input)),
     )
 }
 
