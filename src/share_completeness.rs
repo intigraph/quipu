@@ -135,6 +135,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Local owner authority and registry-instance pins are never imported.
+    ("writer_grants", Disposition::Excluded),
+    ("writer_graph_instances", Disposition::Excluded),
     // Master-local lifecycle admission/receipt state. A foreign pack carries
     // mapping and audit RDF as content, but cannot authorize changes by
     // installing a protected writer's execution cache. Missing cache with an

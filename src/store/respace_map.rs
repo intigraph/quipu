@@ -48,6 +48,11 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("transaction_auth", "principal", TermIdKind::None),
     ("transaction_auth", "credential_id", TermIdKind::None),
     ("transaction_auth", "auth_class", TermIdKind::None),
+    ("writer_grants", "id", TermIdKind::None),
+    ("writer_grants", "revision", TermIdKind::None),
+    ("writer_grants", "payload", TermIdKind::None),
+    ("writer_graph_instances", "g", TermIdKind::Id),
+    ("writer_graph_instances", "generation", TermIdKind::None),
     ("transaction_declarations", "tx", TermIdKind::None),
     ("transaction_declarations", "declarations", TermIdKind::None),
     // OWL receipts contain semantic digests and transaction IDs, never term IDs.

@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "98dad14790dd71ce280fd043406ef8538cef61a497fe77a80b9d498eae02c7bb",
+      "source_sha256": "d5dd4c1a886ebd0e404940fbe59ca88e1e3eb4bb445feff826d5621f7fae15c9",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -128,7 +128,7 @@
       "source": "src/config.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fconfig.rs",
       "summary": "Configuration gives command flags precedence over project TOML, global TOML and built-in defaults.",
-      "source_sha256": "64de6d287c5b448cd3898eeb932a8f153ea3c57836c3630ee53aff6dd5b319fe",
+      "source_sha256": "62a0c19e1705578820cd52f4dd6b9d7db54dba0515b437cf98a404caa1fbe60a",
       "properties": {
         "interfaceKind": "config",
         "publicName": "QuipuConfig and TOML resolution"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "696bb01d415c80b896d958ff8ffdc70d59572dee35e2175786fca068203d7e2b",
+      "source_sha256": "a1bdc28c4b5878497610c83f855bcd064c223d7ad958b81188f9110bcdcfd949",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
