@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-07
+
 ### Added
 
 - *(reconcile)* [**breaking**] Code entities under [quipu].code_base, code vocabulary under base_ns (gju5 S3c) (#1014)([a16f8cf](https://github.com/scbrown/quipu/commit/a16f8cffff710a3af8190cfa5a7c7868c43d3e0f))
@@ -25,6 +27,8 @@ All notable changes to this project will be documented in this file.
 - *(export)* Stage coherent RDF chunks from retained cuts (#1068)([8d46bc1](https://github.com/scbrown/quipu/commit/8d46bc13c6850897b99229c78eb6258804fe41ed))
 - *(shapes)* Add version-pinned master mapping lifecycle (#1060)([f387c3c](https://github.com/scbrown/quipu/commit/f387c3c7766a22df8279891311c1990a2e31ecf1))
 - *(command)* Admit bounded command disk impact summaries (#1066)([017f527](https://github.com/scbrown/quipu/commit/017f5273a529992d7082f0f564609ac609d75609))
+- *(server)* Preserve heavy read cap with reader processes (#1093)([1792a7a](https://github.com/scbrown/quipu/commit/1792a7a6771583876522cff6fa0dfa0f31e7b6ce))
+- *(auth)* Enforce exact graph scope for machine HTTP writers (#1097)([adb765e](https://github.com/scbrown/quipu/commit/adb765e368ac8daee9f9332182c612c823c3c545))
 
 
 
@@ -44,11 +48,14 @@ All notable changes to this project will be documented in this file.
 - *(server)* Expose bounded knot write completion receipts (#1050)([7a2789f](https://github.com/scbrown/quipu/commit/7a2789fac06b9dc3a1968ce7a85b900cc2c9b5e4))
 - *(search)* Return lexical results on fresh stores (#1069)([6280e2b](https://github.com/scbrown/quipu/commit/6280e2bc593b28c0bc34750d0471b05dc2272080))
 - *(sparql)* Retain active graph bindings across subqueries (#1079)([08fe4f2](https://github.com/scbrown/quipu/commit/08fe4f200b50e2cab6a256d4c8165812797524dc))
+- *(cli)* Export cold snapshots read-only (#1029)([fd00093](https://github.com/scbrown/quipu/commit/fd000930627a043be6c8669fe103a019a959efc8))
+- *(server)* Preserve admitted signed identity across reader workers (#1103)([6f0202e](https://github.com/scbrown/quipu/commit/6f0202eb57162b1db7e34161fff77155371bf682))
 
 ### Miscellaneous
 
 - Add glama.json for the Glama MCP directory listing (#1081)([adfe890](https://github.com/scbrown/quipu/commit/adfe890556ae3d59c0fa5340a754513aac75df08))
 - *(conformance)* Re-derive ledgers at dcf112e0 (#1087)([297c89f](https://github.com/scbrown/quipu/commit/297c89fb98692e52e8558552317b8201e618caba))
+- *(conformance)* Re-derive ledgers at adb765e3 (#1101)([2fecc8e](https://github.com/scbrown/quipu/commit/2fecc8e05aa8a06f6b7156acdc7dedf1d3a1a826))
 
 ### Testing
 
