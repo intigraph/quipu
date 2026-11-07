@@ -47,7 +47,7 @@ pub(crate) fn start(
         });
     }
 
-    wal_maintenance::spawn_periodic_checkpoint(push_store_outer.clone());
+    wal_maintenance::spawn_periodic_checkpoint(&push_store_outer);
     graph_metrics::spawn_refresh(&push_store_outer);
 
     spawn_vector_retention(&push_store_outer, vectors);

@@ -13,4 +13,6 @@ cargo test --locked --no-default-features --features shacl,onnx,owl,reactive-rea
 cargo test --locked --no-default-features --features shacl,onnx,owl,reactive-reasoner,server --bin quipu-server owl_materialize
 ```
 
+The startup helper borrows the serving handle only while constructing maintenance; the background task owns no serving handle. The current branch validation is recorded on the pull request.
+
 No production materialization switch or safety budget changes.

@@ -49,7 +49,7 @@ pub(crate) fn reset_at_startup(store: &Store) {
 /// — the failure it exists near. It also cannot reset the FILE (see
 /// [`reset_at_startup`]); it keeps frames moving into the database, and reports
 /// when it is blocked instead of logging a success it did not achieve.
-pub(crate) fn spawn_periodic_checkpoint(store: SharedStore) {
+pub(crate) fn spawn_periodic_checkpoint(store: &SharedStore) {
     let checkpointer = match store.lock().passive_checkpointer() {
         Ok(Some(checkpointer)) => checkpointer,
         Ok(None) => return,
