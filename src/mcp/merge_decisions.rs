@@ -39,6 +39,37 @@ fn pair(input: &JsonValue) -> Result<SharePair> {
 /// A missing or unverifiable share, a base that is not the incoming share's
 /// parent, or a store read error.
 pub fn tool_merge_decisions(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+    if input.get("profile").is_some() || input.get("resume").is_some() {
+        crate::merge_ingress::require_remote_identity()?;
+        let td = crate::time::now_iso();
+        if let Some(parent) = input.get("resume").and_then(JsonValue::as_str) {
+            let ledger = input
+                .get("ledger")
+                .and_then(JsonValue::as_str)
+                .ok_or_else(|| Error::InvalidValue("resume requires ledger".into()))?;
+            return crate::merge_ingress::resume_file(
+                store,
+                ledger,
+                parent,
+                input.get("choices").unwrap_or(&json!([])),
+                &td,
+            );
+        }
+        let profile = crate::merge_ingress::profile(input.get("profile"))?;
+        let (request, authored) = if let Some(fork) = fork_name(input)? {
+            crate::merge_adapters::fork_request(store, fork, profile)?
+        } else {
+            pair(input)?.session(store, profile)?
+        };
+        let choices =
+            serde_json::from_value(input.get("choices").cloned().unwrap_or_else(|| json!([])))
+                .map_err(|e| Error::InvalidValue(format!("invalid choices: {e}")))?;
+        return crate::merge_ingress::presented(
+            store,
+            &crate::merge_ingress::file(request, authored, choices, store, &td)?,
+            &td,
+        );
+    }
     let propose_rows = input.get("propose").and_then(JsonValue::as_bool) == Some(true);
     let file = if let Some(fork) = fork_name(input)? {
         let mut file = crate::fork_merge_decisions::emit(store, fork)?;
@@ -88,6 +119,21 @@ fn presented(input: &JsonValue, file: &ReconcileFile) -> Result<JsonValue> {
 /// # Errors
 /// A missing or unknown file, row or choice; a choice the row does not allow.
 pub fn tool_merge_resolve(input: &JsonValue) -> Result<JsonValue> {
+    if input
+        .pointer("/decisions/schema")
+        .and_then(JsonValue::as_str)
+        == Some(crate::merge_ingress::SCHEMA)
+    {
+        return crate::merge_ingress::resolve(
+            input.get("decisions").expect("schema checked"),
+            input
+                .get("slot")
+                .ok_or_else(|| Error::InvalidValue("profiled resolve requires slot".into()))?,
+            input.get("decision").ok_or_else(|| {
+                Error::InvalidValue("profiled resolve requires typed decision".into())
+            })?,
+        );
+    }
     let decisions = input
         .get("decisions")
         .cloned()
@@ -137,6 +183,47 @@ fn share_decisions(store: &Store, input: &JsonValue) -> Result<DecisionFile> {
 /// As [`crate::share_merge_decisions::apply`]: an undecided row, a stale
 /// file, too many values, or an invalid term all refuse and write nothing.
 pub fn tool_merge_apply(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
+    if input
+        .pointer("/decisions/schema")
+        .and_then(JsonValue::as_str)
+        == Some(crate::merge_ingress::SCHEMA)
+    {
+        crate::merge_ingress::require_remote_identity()?;
+        let value = input.get("decisions").expect("schema checked");
+        let file = crate::merge_ingress::decode(value)?;
+        // Fresh share applies still verify inline envelope/hash and parent.
+        // Resume files are instead bound to a private authenticated receipt.
+        if file.request.parent.is_none() && file.request.path == crate::merge_session::Path::Share {
+            let (actual, _) = pair(input)?.session(store, file.request.profile.clone())?;
+            if actual.input_id != file.request.input_id
+                || actual.base_id != file.request.base_id
+                || actual.base != file.request.base
+                || actual.theirs != file.request.theirs
+                || actual.shapes != file.request.shapes
+            {
+                return Err(Error::InvalidValue(
+                    "session differs from verified inline shares".into(),
+                ));
+            }
+        }
+        let ledger = input
+            .get("ledger")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| Error::InvalidValue("profiled apply requires ledger".into()))?;
+        let reviewer = input
+            .get("reviewer")
+            .and_then(JsonValue::as_str)
+            .ok_or_else(|| Error::InvalidValue("profiled apply requires reviewer".into()))?;
+        return crate::merge_ingress::apply_file(
+            store,
+            value,
+            ledger,
+            reviewer,
+            &crate::time::now_iso(),
+            input.get("actor").and_then(JsonValue::as_str),
+            input.get("dry_run").and_then(JsonValue::as_bool) == Some(true),
+        );
+    }
     let decisions = input
         .get("decisions")
         .ok_or_else(|| Error::InvalidValue("missing 'decisions'".into()))?;
