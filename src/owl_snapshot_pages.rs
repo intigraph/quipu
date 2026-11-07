@@ -16,6 +16,8 @@ fn engine() -> &'static str {
             include_str!("owl_parse.rs"),
             include_str!("owl_snapshot.rs"),
             include_str!("owl_snapshot_apply.rs"),
+            include_str!("owl_snapshot_prepare.rs"),
+            include_str!("owl_snapshot_finish.rs"),
             include_str!("owl_snapshot_pages.rs"),
             include_str!("types.rs"),
             include_str!("owl.rs"),
@@ -134,6 +136,10 @@ pub(crate) fn check_budget(store: &Store) -> Result<()> {
         [],
         |r| r.get(0),
     )?;
+    check_deadline(deadline)
+}
+
+pub(super) fn check_deadline(deadline: i64) -> Result<()> {
     if now() >= deadline {
         return Err(invalid("OWL durable job deadline exceeded; incomplete"));
     }

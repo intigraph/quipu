@@ -15,6 +15,12 @@ use crate::{Datum, MaterializeReport, Op, Store, Value};
 
 #[path = "owl_snapshot_apply.rs"]
 mod apply;
+#[path = "owl_snapshot_finish.rs"]
+mod finish;
+#[path = "owl_snapshot_prepare.rs"]
+mod prepare;
+pub use finish::{CommittedFinish, PreparedFinish};
+pub use prepare::{CommittedPage, PreparedPage};
 #[path = "owl_snapshot_footprint.rs"]
 mod footprint;
 #[path = "owl_snapshot_pages.rs"]
@@ -195,6 +201,10 @@ impl Snapshot {
 #[cfg(test)]
 #[path = "owl_snapshot_pages_tests.rs"]
 mod pages_tests;
+
+#[cfg(test)]
+#[path = "owl_snapshot_prepare_tests.rs"]
+mod prepare_tests;
 
 #[cfg(test)]
 #[path = "owl_snapshot_tests.rs"]

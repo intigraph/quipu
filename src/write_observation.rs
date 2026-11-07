@@ -35,6 +35,7 @@ pub enum Stage {
     Guards,
     Release,
     Hooks,
+    Attestation,
 }
 impl Stage {
     fn name(self) -> &'static str {
@@ -53,6 +54,7 @@ impl Stage {
             Self::Guards => "guards",
             Self::Release => "release",
             Self::Hooks => "hooks",
+            Self::Attestation => "attestation_settlement",
         }
     }
 }
@@ -88,38 +90,49 @@ impl Observation {
             "server_process_id": std::process::id(), "timestamp": crate::time::now_iso(),
             "elapsed_ms": self.0.started.elapsed().as_secs_f64()*1000.0,
             "stage": stage.map(Stage::name), "outcome": outcome,
-            "durations_ms": *self.0.durations.lock().unwrap_or_else(|e| e.into_inner()),
-            "page": *self.0.page.lock().unwrap_or_else(|e| e.into_inner())})
+            "durations_ms": *self.0.durations.lock().unwrap_or_else(std::sync::PoisonError::into_inner),
+            "page": *self.0.page.lock().unwrap_or_else(std::sync::PoisonError::into_inner)})
     }
     /// Separate admission from blocking dispatch using its observed grant.
-    pub fn admission_granted(&self, granted: Option<Instant>) {
+    pub fn admission_granted(&self, queued: Instant, granted: Option<Instant>) {
         if let Some(granted) = granted {
-            let mut d = self.0.durations.lock().unwrap_or_else(|e| e.into_inner());
+            let mut d = self
+                .0
+                .durations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             d.insert(
                 "admission",
-                granted
-                    .saturating_duration_since(self.0.started)
-                    .as_secs_f64()
-                    * 1000.0,
+                granted.saturating_duration_since(queued).as_secs_f64() * 1000.0,
             );
             d.insert("dispatch", granted.elapsed().as_secs_f64() * 1000.0);
         }
     }
     /// Run on the actual blocking thread. Nested scopes restore their parent.
     pub fn run<T, E>(&self, f: impl FnOnce() -> Result<T, E>) -> Result<T, E> {
-        let previous = CURRENT.with(|c| c.replace(Some(self.clone())));
-        let mut scope = Scope {
-            current: self.clone(),
-            previous,
-            outcome: "interrupted",
-        };
-        let result = f();
-        scope.outcome = if result.is_ok() { "ok" } else { "error" };
+        let completion = self.completion();
+        let result = self.scope(f);
+        completion.finish(result.is_ok());
         result
+    }
+    /// Carry this observation through another blocking phase without ending it.
+    pub fn scope<T>(&self, f: impl FnOnce() -> T) -> T {
+        let previous = CURRENT.with(|c| c.replace(Some(self.clone())));
+        let _scope = Scope { previous };
+        f()
+    }
+    /// Owned by the real work, including uncancellable blocking continuations.
+    #[must_use]
+    pub fn completion(&self) -> Completion {
+        Completion {
+            observation: self.clone(),
+            outcome: "interrupted",
+        }
     }
     /// A stage can cross scheduling boundaries without losing its correlation.
     #[must_use]
     pub fn stage(&self, stage: Stage) -> Span {
+        let started = Instant::now();
         eprintln!(
             "{}",
             self.record("write_stage_start", Some(stage), "started")
@@ -127,24 +140,37 @@ impl Observation {
         Span {
             observation: Some(self.clone()),
             stage,
-            started: Instant::now(),
+            started,
             outcome: "interrupted",
         }
     }
 }
 struct Scope {
-    current: Observation,
     previous: Option<Observation>,
-    outcome: &'static str,
 }
 impl Drop for Scope {
     fn drop(&mut self) {
         CURRENT.with(|c| {
             c.replace(self.previous.take());
         });
+    }
+}
+/// Completion follows owned work across async admission and blocking phases.
+pub struct Completion {
+    observation: Observation,
+    outcome: &'static str,
+}
+impl Completion {
+    /// A missing explicit result remains interrupted, never an inferred success.
+    pub fn finish(mut self, success: bool) {
+        self.outcome = if success { "ok" } else { "error" };
+    }
+}
+impl Drop for Completion {
+    fn drop(&mut self) {
         eprintln!(
             "{}",
-            self.current
+            self.observation
                 .record("write_observation_end", None, self.outcome)
         );
     }
@@ -167,7 +193,7 @@ impl Drop for Span {
         if let Some(o) = &self.observation {
             *o.0.durations
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .entry(self.stage.name())
                 .or_default() += self.started.elapsed().as_secs_f64() * 1000.0;
             eprintln!(
@@ -216,7 +242,9 @@ pub fn page(generation: &str, start: i64, end: i64, count: usize) {
     }
     CURRENT.with(|c| {
         if let Some(o) = c.borrow().as_ref() {
-            *o.0.page.lock().unwrap_or_else(|e| e.into_inner()) = Some(serde_json::json!({
+            *o.0.page
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(serde_json::json!({
                 "generation": generation.to_ascii_lowercase(), "cursor_start": start,
                 "cursor_end": end, "keys": count,
             }));
@@ -230,9 +258,9 @@ mod tests {
     #[test]
     fn metadata_is_bounded_and_queue_grant_is_measured_separately() {
         let o = Observation::new(Path::OwlPage, Some(3));
-        o.admission_granted(None);
+        o.admission_granted(Instant::now(), None);
         assert!(o.0.durations.lock().unwrap().is_empty());
-        o.admission_granted(Some(Instant::now()));
+        o.admission_granted(Instant::now(), Some(Instant::now()));
         o.run(|| -> Result<(), ()> {
             page("secret-payload", 0, 64, 64);
             assert!(o.record("test", None, "ok")["page"].is_null());

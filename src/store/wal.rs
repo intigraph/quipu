@@ -161,11 +161,14 @@ mod tests {
     fn independent_checkpoint_completes_while_serving_writer_is_held() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("maintenance.db");
-        let store = Store::open(path.to_str().unwrap()).unwrap();
-        store
-            .conn
-            .execute_batch("CREATE TABLE dirty(value); INSERT INTO dirty VALUES(1);")
-            .unwrap();
+        let mut store = Store::open(path.to_str().unwrap()).unwrap();
+        crate::tool_knot(
+            &mut store,
+            &serde_json::json!({
+                "turtle": "<urn:checkpoint:entity> <urn:checkpoint:value> 1 ."
+            }),
+        )
+        .unwrap();
         assert!(store.wal_bytes().unwrap() > 0);
         let checkpointer = store.passive_checkpointer().unwrap().unwrap();
         let writer = std::sync::Mutex::new(store);
@@ -178,15 +181,14 @@ mod tests {
         drop(held);
         worker.join().unwrap();
         assert!(result.unwrap().unwrap().fully_retired());
-        assert_eq!(
-            writer
-                .lock()
-                .unwrap()
-                .conn
-                .query_row("SELECT value FROM dirty", [], |row| row.get::<_, i64>(0),)
-                .unwrap(),
-            1
-        );
+        let store = writer.lock().unwrap();
+        let entity = store.lookup("urn:checkpoint:entity").unwrap().unwrap();
+        let attribute = store.lookup("urn:checkpoint:value").unwrap().unwrap();
+        assert!(store.current_facts().unwrap().iter().any(|fact| {
+            fact.entity == entity
+                && fact.attribute == attribute
+                && fact.value == crate::Value::Int(1)
+        }));
     }
 
     #[test]

@@ -9,7 +9,7 @@ const TS: &str = "2026-01-01T00:00:00Z";
 // MATERIALIZE is process-wide single flight, and tests run in parallel: every
 // test that takes or observes it holds this first, or one test's permit makes
 // another's run refuse "already running".
-static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(super) static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const ASK: &str = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
     { <urn:twin> <urn:likes> <urn:object> }";
 
@@ -63,7 +63,7 @@ async fn ontology_window_production_handler_preview_and_apply() {
     assert_eq!(store.lock().list_ontologies().unwrap().len(), 1);
 }
 
-fn seeded() -> (tempfile::TempDir, SharedStore) {
+pub(super) fn seeded() -> (tempfile::TempDir, SharedStore) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.db");
     let mut store = quipu::Store::open(path.to_str().unwrap()).unwrap();
