@@ -562,7 +562,7 @@ fn a_refused_graph_write_registers_no_new_graph() {
 #[cfg(feature = "shacl")]
 #[test]
 fn colliding_shape_slugs_get_distinct_ids() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
     store.load_shapes("core_v1", shape, T0).unwrap();
     store.load_shapes("core-v1", shape, T0).unwrap();
@@ -583,7 +583,7 @@ fn colliding_shape_slugs_get_distinct_ids() {
 #[cfg(feature = "shacl")]
 #[test]
 fn crlf_shapes_survive_their_checksum() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\r\n<urn:S> a sh:NodeShape .\r\n";
     store.load_shapes("people", shape, T0).unwrap();
     let opts = ExportOptions {
@@ -626,7 +626,7 @@ fn a_refused_shape_set_rolls_back_the_graph_data() {
 #[cfg(feature = "shacl")]
 #[test]
 fn a_shape_set_name_with_a_bare_cr_cannot_export() {
-    let store = seeded();
+    let mut store = seeded();
     let shape = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:S> a sh:NodeShape .\n";
     let hostile = "people\r```turtle\r<urn:injected> <urn:p> <urn:o> .\r```";
     store.load_shapes(hostile, shape, T0).unwrap();
@@ -637,7 +637,7 @@ fn a_shape_set_name_with_a_bare_cr_cannot_export() {
     let err = export(&store, &opts).unwrap_err().to_string();
     assert!(err.contains("cannot hold"), "{err}");
 
-    let store = seeded();
+    let mut store = seeded();
     store.load_shapes("people", shape, T0).unwrap();
     let text = export(&store, &opts).unwrap();
     let mut target = Store::open_in_memory().unwrap();
@@ -648,4 +648,52 @@ fn a_shape_set_name_with_a_bare_cr_cannot_export() {
     import(&mut target, &text, &with_shapes).unwrap();
     assert_eq!(content(&target, G), content(&store, G));
     assert_eq!(target.lookup("urn:injected").unwrap(), None);
+}
+
+/// The failure occurs after graph writes AND a valid shape load have run.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_later_refused_shape_rolls_back_graphs_shapes_events_and_transactions() {
+    let valid = format!(
+        "{TWO_GRAPHS}\n<!-- databook:id: incoming -->\n```shacl\n@prefix sh: <http://www.w3.org/ns/shacl#> .\n<urn:Incoming> a sh:NodeShape .\n```\n"
+    );
+    let opts = ImportOptions {
+        with_shapes: true,
+        ..import_opts()
+    };
+    let mut control = Store::open_in_memory().unwrap();
+    let report = import(&mut control, &valid, &opts).unwrap();
+    assert_eq!(report.shapes, ["incoming"]);
+    assert!(control.committed_graph_id("urn:g:a").unwrap().is_some());
+
+    let broken =
+        format!("{valid}\n<!-- databook:id: invalid -->\n```shacl\n<urn:s> <urn:p> .\n```\n");
+    let mut store = Store::open_in_memory().unwrap();
+    store
+        .load_shapes("retained", "<urn:kept> <urn:p> <urn:o> .", T0)
+        .unwrap();
+    let head = store.latest_tx_id().unwrap();
+    let shapes = store.list_shapes().unwrap();
+    let counts = |store: &Store| -> (i64, i64) {
+        (
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM shapes", [], |r| r.get(0))
+                .unwrap(),
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))
+                .unwrap(),
+        )
+    };
+    let before = counts(&store);
+    assert!(before.0 > 0 && before.1 > 0, "positive retained state");
+    let error = import(&mut store, &broken, &opts).unwrap_err().to_string();
+    assert!(error.contains("invalid"), "{error}");
+    assert_eq!(store.latest_tx_id().unwrap(), head);
+    assert_eq!(store.list_shapes().unwrap(), shapes);
+    assert_eq!(counts(&store), before);
+    assert!(store.committed_graph_id("urn:g:a").unwrap().is_none());
+    assert!(store.committed_graph_id("urn:g:b").unwrap().is_none());
+    assert!(store.conn.is_autocommit());
 }

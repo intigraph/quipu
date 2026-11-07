@@ -117,6 +117,11 @@
       "file": "fluents-v1.ttl",
       "action": "exclude",
       "reason": "Versioned fluent wire contract; structural schema only. Live proposal acceptance and shape activation require the governed writer, transport and retention acceptance packet."
+    },
+    {
+      "file": "shape-mappings.ttl",
+      "action": "exclude",
+      "reason": "C1 mapping schema remains unloaded pending separately admitted schema activation; source shipment does not activate constraints."
     }
   ]
 }

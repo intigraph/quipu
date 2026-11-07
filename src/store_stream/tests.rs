@@ -174,6 +174,21 @@ fn unknown_schema_and_missing_triggers_refuse_instead_of_omitting_changes() {
             .to_string()
             .contains("future_data")
     );
+    assert!(
+        super::catalog::inspect(&other)
+            .unwrap_err()
+            .to_string()
+            .contains("unclassified logical store tables")
+    );
+    assert!(
+        !other
+            .conn
+            .prepare("SELECT 1 FROM sqlite_schema WHERE name='store_replication_state'")
+            .unwrap()
+            .exists([])
+            .unwrap(),
+        "unknown tables must refuse before journal installation"
+    );
 }
 
 #[test]

@@ -254,7 +254,7 @@ fn ontology_axiom_summary() {
 
 #[test]
 fn store_ontology_persistence() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_ontology("test", TEST_ONTOLOGY, "2026-01-01T00:00:00Z")
         .unwrap();

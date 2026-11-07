@@ -54,6 +54,8 @@ mod knot_completion;
 #[cfg(test)]
 #[path = "server/knot_completion_tests.rs"]
 mod knot_completion_tests;
+#[path = "server/mapping.rs"]
+mod mapping;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]
@@ -453,6 +455,7 @@ async fn main() {
         .route("/share", post(publication::share_payload))
         .merge(publication::acquisition_routes())
         .merge(align::routes())
+        .merge(mapping::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/render", post(render_prepare))
