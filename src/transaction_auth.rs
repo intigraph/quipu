@@ -180,6 +180,13 @@ thread_local! {
     static IDENTITY: RefCell<Option<Identity>> = const { RefCell::new(None) };
 }
 
+/// Owned evidence for synchronous internal writers. A declared JSON actor is
+/// never installed here; adapters establish this scope from verified evidence.
+#[must_use]
+pub fn current_identity() -> Option<Identity> {
+    IDENTITY.with(|slot| slot.borrow().clone())
+}
+
 /// Run synchronous work with owned authentication evidence. Nested scopes,
 /// errors, and unwinding restore the previous value before a worker is reused.
 /// Library/CLI callers that do not enter a scope remain unattributed.
@@ -194,12 +201,6 @@ pub fn with_identity<T>(identity: Option<Identity>, work: impl FnOnce() -> T) ->
     }
     let _restore = Restore(IDENTITY.with(|slot| slot.replace(identity)));
     work()
-}
-
-/// Owned evidence established by the serving adapter, never declared metadata.
-#[must_use]
-pub fn current_identity() -> Option<Identity> {
-    IDENTITY.with(|slot| slot.borrow().clone())
 }
 
 /// Create a locally authored transaction inside the caller's savepoint.

@@ -216,7 +216,7 @@ fn an_object_position_reference_survives_re_interning() {
 
 #[test]
 fn shapes_and_queries_named_on_the_command_travel_with_the_pack() {
-    let store = producer(0);
+    let mut store = producer(0);
     store.load_shapes("s1", "# a shape", TS).unwrap();
     store
         .query_load(
@@ -250,7 +250,7 @@ fn shapes_and_queries_named_on_the_command_travel_with_the_pack() {
 
 #[test]
 fn unpack_materializes_and_versions_registries_beside_existing_entries() {
-    let source = producer(0);
+    let mut source = producer(0);
     source
         .load_shapes("shared", "# producer shape", TS)
         .unwrap();
@@ -281,7 +281,7 @@ fn unpack_materializes_and_versions_registries_beside_existing_entries() {
     .unwrap();
 
     let destination = tmp("unpack-dest");
-    let consumer = Store::open(&destination).unwrap();
+    let mut consumer = Store::open(&destination).unwrap();
     consumer
         .load_shapes("shared", "# consumer shape", "2025-01-01T00:00:00Z")
         .unwrap();
@@ -831,7 +831,7 @@ fn tmpdir(name: &str) -> Tmp {
 
 #[test]
 fn the_turtle_bundle_writes_all_four_files() {
-    let store = producer(0);
+    let mut store = producer(0);
     store.load_shapes("s1", "# a shape", TS).unwrap();
     store
         .query_load(

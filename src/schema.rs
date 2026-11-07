@@ -38,6 +38,13 @@ CREATE TABLE IF NOT EXISTS transaction_declarations (
     declarations TEXT NOT NULL
 );
 
+-- Local commit reconciliation for deferred OWL pages. These are not graph facts.
+CREATE TABLE IF NOT EXISTS owl_batch_receipts (
+    batch TEXT PRIMARY KEY,
+    digest TEXT NOT NULL,
+    tx INTEGER NOT NULL REFERENCES transactions(id)
+);
+
 CREATE TABLE IF NOT EXISTS store_identity (
     id       INTEGER PRIMARY KEY CHECK (id = 1),
     store_id TEXT NOT NULL UNIQUE
