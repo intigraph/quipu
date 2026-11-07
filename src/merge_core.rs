@@ -28,6 +28,11 @@ use crate::error::{Error, Result};
 
 #[path = "merge_core_selection.rs"]
 pub(crate) mod selection;
+// The source-stage census has no production writer binding yet. Compile it
+// with its controls until that binding is implemented; do not ship inert code
+// or suppress dead-code diagnostics across the production merge core.
+#[cfg(test)]
+pub(crate) mod census;
 
 /// The cardinality a slot merges under (spec R4). List slots are slice S5.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

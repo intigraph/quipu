@@ -1,0 +1,6 @@
+Script started on 2026-11-05 10:24:56-05:00 [COMMAND="python3 docs/demos/knot-completion/demo.py "$DEMO_BEFORE" "$DEMO_AFTER"" <not executed on terminal>]
+BEFORE {"completion": null, "dirty": false, "duplicate_http": 200, "native_tx_id": 1, "never_seen": null, "never_seen_http": 404, "revision": "44a403f51645585bc6e5ae9c0cf82abda85bc2e9", "status_http": 404, "write_http": 200}
+AFTER {"completion": {"contract": "quipu.knot-completion/v1", "receipt": {"conforms": true, "count": 1, "replaced": true, "tx_id": 1}, "state": "finished", "write_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, "dirty": false, "duplicate_http": 400, "native_tx_id": 1, "never_seen": {"contract": "quipu.knot-completion/v1", "state": "unknown", "write_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, "never_seen_http": 200, "revision": "c3ba3bef9296c958fa0bb3d1060cd4c6ae3e7284", "status_http": 200, "write_http": 200}
+Private fixtures only; no installation or live timeout recovery claimed.
+
+Script done on 2026-11-05 10:24:57-05:00 [COMMAND_EXIT_CODE="0"]
