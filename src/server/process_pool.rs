@@ -325,6 +325,17 @@ fn unavailable(message: &'static str) -> Response {
         .into_response()
 }
 
+pub(crate) fn route<S: Clone + Send + Sync + 'static>(
+    app: Router<S>,
+    pool: &ProcessPool,
+) -> Router<S> {
+    if let Some(routing) = &pool.routing {
+        app.layer(middleware::from_fn_with_state(routing.clone(), proxy))
+    } else {
+        app
+    }
+}
+
 pub(crate) fn protect_worker(app: Router) -> Router {
     if is_worker() {
         app.layer(middleware::from_fn(signed_handoff::worker_guard))

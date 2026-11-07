@@ -118,17 +118,6 @@ pub(super) async fn worker_guard(mut req: Request, next: Next) -> Response {
     response
 }
 
-pub(crate) fn route<S: Clone + Send + Sync + 'static>(
-    app: Router<S>,
-    pool: &ProcessPool,
-) -> Router<S> {
-    if let Some(routing) = &pool.routing {
-        app.layer(middleware::from_fn_with_state(routing.clone(), proxy))
-    } else {
-        app
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
