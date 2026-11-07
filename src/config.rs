@@ -911,11 +911,8 @@ impl ServerConfig {
         if self.heavy_read_operations.as_slice() != ["owner-rows"] {
             return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
         }
-        if self.read_processes > 0
-            || self.heavy_read_permits == 0
-            || self.heavy_read_permits >= ordinary_readers
-        {
-            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
+            return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());
         }
         Ok(())
     }
