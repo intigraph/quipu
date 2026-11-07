@@ -325,6 +325,11 @@ fn missing_primary_registry_still_fails_closed() {
 // the primary. Each accepted request is also replayed through the public route.
 #[test]
 fn signed_reads_and_writes_cross_the_full_reader_pool_without_replaying_nonces() {
+    exercise_signed_pool(false);
+    exercise_signed_pool(true);
+}
+
+fn exercise_signed_pool(strict: bool) {
     use base64::Engine as _;
     use quipu::session_attestation::{
         AttestationEnvelope, SessionBinding, SignedBinding, WRITE_V2, WriteBinding, body_sha256,
@@ -345,9 +350,20 @@ fn signed_reads_and_writes_cross_the_full_reader_pool_without_replaying_nonces()
             "memory_budget_mib=256",
             "memory_budget_mib=768\nheavy_read_operations=['owner-rows']\nheavy_read_permits=1",
         );
-    let config = format!(
-        "{config}\n[quipu.server.session_keys]\nrequired=true\nonboarding_read_paths=['/health']\n"
-    );
+    let config = if strict {
+        // Strict keys and replication-only credentials intentionally cannot
+        // coexist. Keep both supported profiles, never weaken the startup guard.
+        let config = config
+            .lines()
+            .filter(|line| !line.starts_with("replication_credentials_file="))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "{config}\n[quipu.server.session_keys]\nrequired=true\nonboarding_read_paths=['/health']\n"
+        )
+    } else {
+        config
+    };
     std::fs::write(config_path, config).unwrap();
     let key = Ed25519KeyPair::from_seed_unchecked(&[73; 32]).unwrap();
     let now = quipu::time::epoch_secs();
@@ -498,8 +514,17 @@ fn signed_reads_and_writes_cross_the_full_reader_pool_without_replaying_nonces()
         .set("Content-Type", "application/json")
         .set("Authorization", &format!("Bearer {WRITER}"))
         .set("x-quipu-read-worker-identity", &spoof)
+        .set("x-quipu-attestation", "invalid-attestation")
         .send_string(query);
     assert!(matches!(public, Err(ureq::Error::Status(401, _))));
+    if strict {
+        let unsigned = ureq::post(&format!("http://{address}/query"))
+            .set("Content-Type", "application/json")
+            .set("Authorization", &format!("Bearer {WRITER}"))
+            .set("x-quipu-read-worker-identity", &spoof)
+            .send_string(query);
+        assert!(matches!(unsigned, Err(ureq::Error::Status(401, _))));
+    }
     // Concurrent copies must still be arbitrated once by the primary ledger.
     let signature = sign("/query", query, 10);
     let mut statuses = std::thread::scope(|scope| {
