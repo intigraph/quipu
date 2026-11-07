@@ -167,6 +167,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/export",
     "/memory/projection",
     "/memory/receipt",
+    "/knot/status",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -272,7 +273,10 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/identity" | "/memory/projection" | "/memory/receipt")
+    matches!(
+        path,
+        "/identity" | "/memory/projection" | "/memory/receipt" | "/knot/status"
+    )
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.

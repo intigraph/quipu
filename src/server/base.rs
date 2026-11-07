@@ -239,6 +239,7 @@ pub(crate) async fn version() -> impl IntoResponse {
             quipu::acquisition::history::CONTRACT,
             quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
+        "write_contracts": [crate::knot_completion::CONTRACT],
         "features": compiled_features(),
     }))
 }

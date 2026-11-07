@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn renderer_adapter_preserves_memory_identity_routes() {
         let policy = BearerPolicy::new(Some("test-secret".into()), None, None, 1).unwrap();
-        for path in ["/memory/projection", "/memory/receipt"] {
+        for path in ["/memory/projection", "/memory/receipt", "/knot/status"] {
             for read_only in [false, true] {
                 for header in [None, Some("Bearer wrong")] {
                     assert_eq!(
