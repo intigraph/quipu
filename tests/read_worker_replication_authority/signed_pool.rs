@@ -1,5 +1,6 @@
 use super::{SERIAL, WRITER, fixture, ready, request, spawn};
 use std::net::SocketAddr;
+use std::time::Duration;
 
 // Exercise the public listener with real signatures, not bearer-only requests.
 // The pool must neither consume a signed read twice nor silently serve it on
