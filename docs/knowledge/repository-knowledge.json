@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine used by native clients and repository integrations.",
-      "source_sha256": "6851cfe0e57ee15d2eca2cf31477709238cbe876987cde15cc5b22f8f18fd038",
+      "source_sha256": "6e779b9eeccccb2bce5dfb5e66bd54821316d96b26d9c7fb24639308f8288047",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -83,7 +83,7 @@
       "source": "docs/book/src/getting-started/installation.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Fgetting-started%2Finstallation.md#installation-upgrades-and-removal",
       "summary": "Choose an installation owner, supported platform and matching CLI and server versions before installing.",
-      "source_sha256": "ed4043abba71af45a5a2f66ee455f44020e3456dd5c02deee95ce7ad3c83284c",
+      "source_sha256": "7b4602bf44cf1978e28f30bdb39932f7f339589bb8387d01b5ca2fde939a06e8",
       "properties": {
         "startHereOrder": 2
       }
