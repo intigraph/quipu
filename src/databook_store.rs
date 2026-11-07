@@ -513,7 +513,7 @@ pub fn import(store: &mut Store, text: &str, opts: &ImportOptions<'_>) -> Result
             // A fence holds whole lines; the text they came from ended with one.
             let text = format!("{}\n", block.payload);
             store
-                .load_shapes(&name, &text, opts.timestamp)
+                .load_shapes_enclosed(&name, &text, opts.timestamp)
                 .map_err(|e| invalid(format!("{}: {e}", describe(block))))?;
             report.shapes.push(name);
         }

@@ -176,6 +176,7 @@ impl Store {
                     graph,
                     retract_source,
                     window,
+                    None,
                 )
             })
             .and_then(|staged| {

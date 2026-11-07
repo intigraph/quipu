@@ -14,7 +14,7 @@ fn knot(store: &mut Store, ttl: &str) -> crate::Result<serde_json::Value> {
 }
 
 fn loaded(shapes: &str) -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("t16", shapes, "2026-10-22T00:00:00Z")
         .unwrap();
