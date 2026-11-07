@@ -43,6 +43,12 @@ pub enum Disposition {
 /// Kept in one list rather than split per disposition so that adding a table
 /// forces a choice to be made in one place, in front of the reasons.
 pub const DECLARED: &[(&str, Disposition)] = &[
+    // Local OWL resume/commit reconciliation belongs to this store generation;
+    // importing it would authorize a foreign scratch cursor to skip assertions.
+    ("owl_batch_receipts", Disposition::Excluded),
+    ("owl_page_job", Disposition::Excluded),
+    ("owl_page_queue", Disposition::Excluded),
+    ("owl_page_all", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
@@ -129,6 +135,15 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Local owner authority and registry-instance pins are never imported.
+    ("writer_grants", Disposition::Excluded),
+    ("writer_graph_instances", Disposition::Excluded),
+    // Master-local lifecycle admission/receipt state. A foreign pack carries
+    // mapping and audit RDF as content, but cannot authorize changes by
+    // installing a protected writer's execution cache. Missing cache with an
+    // existing mapping identity refuses new admission rather than overwriting.
+    ("shape_mapping_state", Disposition::Excluded),
+    ("shape_mapping_pins", Disposition::Excluded),
     // REPLAY STATE, and wrong in BOTH directions: carry spent nonces and a
     // legitimate re-import is refused as a replay; omit them silently and a
     // replay the origin had already spent is accepted on the copy. Excluding it

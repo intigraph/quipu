@@ -209,7 +209,7 @@ fn rdfc_canonicalization_erases_blank_node_labels() {
 
 #[test]
 fn shape_selection_is_sorted_and_missing_names_fail_without_output() {
-    let store = fixture();
+    let mut store = fixture();
     store
         .load_shapes(
             "z-shape",
@@ -258,7 +258,7 @@ fn shape_selection_is_sorted_and_missing_names_fail_without_output() {
 
 #[test]
 fn defaults_to_all_loaded_shapes_and_refuses_silent_empty_output() {
-    let store = fixture();
+    let mut store = fixture();
     store
         .load_shapes(
             "another-shape",

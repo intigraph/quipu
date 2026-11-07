@@ -274,10 +274,19 @@ publication, pinning, loading and validation have been verified. They cover:
 - `LXCContainer`, `ProxmoxNode`, `BareMetalHost` — compute resources
 - `SystemdService`, `WebApplication`, `Database` — services
 - `CommandDiskImpactObservation` — one privacy-preserving command/filesystem
-  measurement. `diskDeltaBytes` is signed: positive values mean space consumed
-  and negative values mean space freed. Command and filesystem identity use
-  canonical classes rather than raw arguments or paths; aggregate counts and
-  quantiles belong in a separate summary entity.
+  disk/command-class summary. New producers reuse a stable subject for each
+  filesystem and finite command class, dropping repository and cwd from its
+  identity. `runCount`, `maximumDeltaBytes`, histogram `p95DeltaBytes` and
+  `observedAt` describe the summary; `diskDeltaBytes` is the approximate p90 bucket upper bound. Disk advice
+  uses the exact class maximum to avoid lowering protection by pooling
+  repositories. Signed values mean space consumed (positive) or
+  freed (negative). `aggregateState` holds a fixed 66-bucket histogram and last-update retry
+  identity, with no raw sample list; atomic compare-and-swap replaces the
+  coherent summary. It never
+  mints a subject per run. Historical per-run nodes remain valid during staged
+  migration, and the reader can use exact-signature history until a class
+  aggregate exists. Historical retraction requires a separately admitted,
+  verified archive/export plan; this schema change deletes nothing.
 - `ConfigFile` — optional migration-safe `configPath` and `contentSha256`
   facts support exact drift lookups. When present, each is single-valued and
   the digest must be a full lowercase SHA-256 hexadecimal string.

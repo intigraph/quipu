@@ -1,0 +1,69 @@
+# C1 master-side declarations and audit records. These are inert correspondence
+# rows, not OWL/RDFS axioms; only the mapping consumer may interpret them.
+@prefix q: <https://quipu.dev/ontology/> .
+@prefix sssom: <https://w3id.org/sssom/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# This records the exact lifecycle choice made through the protected writer.
+# It is not a signature or an alternative graph-access grant.
+q:MappingDecisionShape a sh:NodeShape ;
+    sh:targetClass q:MappingDecision ;
+    sh:property [ sh:path q:mapping ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:mappingAction ; sh:datatype xsd:string ; sh:in ("apply" "retire" "flag") ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:mappingDigest ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:decidedBy ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:decidedAtTx ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+q:ShapeMappingShape a sh:NodeShape ;
+    sh:targetClass q:ShapeMapping ;
+    sh:property [ sh:path q:mapsFrom ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 64 ] ;
+    sh:property [ sh:path q:mapsTo ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 64 ] ;
+    sh:property [ sh:path q:pinsShape ; sh:class q:ShapeVersionPin ; sh:minCount 1 ; sh:maxCount 128 ] ;
+    sh:property [ sh:path q:correspondence ; sh:class q:ShapeCorrespondence ; sh:minCount 1 ; sh:maxCount 1024 ] ;
+    sh:property [ sh:path q:mappingStatus ; sh:datatype xsd:string ; sh:in ("decided" "flagged" "retired") ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:mappingDigest ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:decidedBy ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:decidedAtTx ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+q:ShapeVersionPinShape a sh:NodeShape ;
+    sh:targetClass q:ShapeVersionPin ;
+    sh:property [ sh:path q:registryKind ; sh:datatype xsd:string ; sh:in ("shapes" "ontologies") ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:shapeName ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 256 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:shapeValidFrom ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:shapeDigest ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+q:ShapeCorrespondenceShape a sh:NodeShape ;
+    sh:targetClass q:ShapeCorrespondence ;
+    sh:property [ sh:path sssom:subject_id ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sssom:predicate_id ; sh:nodeKind sh:IRI ; sh:in (
+        <http://www.w3.org/2002/07/owl#equivalentClass>
+        <http://www.w3.org/2002/07/owl#equivalentProperty>
+        <http://www.w3.org/2002/07/owl#inverseOf>
+        <http://www.w3.org/2000/01/rdf-schema#subClassOf>
+        <http://www.w3.org/2000/01/rdf-schema#subPropertyOf>
+    ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sssom:object_id ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sssom:author_id ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path sssom:mapping_justification ; sh:datatype xsd:string ; sh:in (
+        "semapv:LexicalMatching" "semapv:LexicalSimilarityThresholdMatching"
+        "semapv:EmbeddingBasedMatching" "semapv:CompositeMatching" "semapv:ManualMappingCuration"
+    ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:quipu_review ; sh:datatype xsd:string ; sh:in ("accepted") ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# MappingRecord points across to the mapping graph by IRI, without a sh:class
+# join that would union graph-local cardinality or require copying the mapping
+# into the protected operations graph. Exact target binding is a writer gate.
+q:MappingRecordShape a sh:NodeShape ;
+    sh:targetClass q:MappingRecord ;
+    sh:property [ sh:path q:mapping ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:actor ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:onAuthority ; sh:class q:MappingDecision ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:tx ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:time ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:oldDigest ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:newDigest ; sh:datatype xsd:string ; sh:pattern "^sha256:[0-9a-f]{64}$" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:oldStatus ; sh:datatype xsd:string ; sh:in ("decided" "flagged" "retired") ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:newStatus ; sh:datatype xsd:string ; sh:in ("decided" "flagged" "retired") ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path q:pinsShape ; sh:class q:ShapeVersionPin ; sh:minCount 1 ; sh:maxCount 128 ] ;
+    sh:property [ sh:path q:causedByShapeVersion ; sh:class q:ShapeVersionPin ; sh:maxCount 1 ] .
