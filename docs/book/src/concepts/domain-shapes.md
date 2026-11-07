@@ -85,3 +85,28 @@ QUIPU_PROPAGATION_CAMAYOC_REPO to existing source repositories. That mode reads
 the pinned Git objects rather than working files, never fetches, and refuses a
 missing object without falling back to network. With neither set, public source
 reads have byte and timeout limits. No service credential or shape write is used.
+
+## Remaining property, rule and raw-data gates
+
+Camayoc also stages a lossless subject-level split of the three unchanged
+property and rule inputs in
+[`inference-placement.json`](https://github.com/intigraph/camayoc/blob/main/shapes/aegis/inference-placement.json).
+Explicit-domain policy/workflow declarations belong to software factory;
+unspecialized declarations and dependency closure remain shared. Host-placement
+closure belongs to infrastructure and commit subsumption to software factory.
+These files are ownership units, not independently enabled rule sets. Existing
+constraint compatibility payloads and loaded-set contracts remain unchanged.
+
+The [raw alias CQs](https://github.com/intigraph/camayoc/tree/main/competency/aegis-work-aliases)
+compare explicit WorkItem/Bead membership and distinct linked Vtodo nodes with
+the canonical Action population on a common raw snapshot. Compatibility query
+rewriting cannot establish this gate. Missing aliases are reported, never
+repaired implicitly or hidden by class inference. These fixture controls do not
+assert production data already meets the condition.
+
+The [removal plan](https://github.com/intigraph/camayoc/blob/main/docs/aegis-domain-removal-plan.md)
+requires a separately admitted same-SHA lab rehearsal with production's pinned
+shape sets, assertions by registry **name**, data revalidation and a named pin
+rollback (restore prior pins and re-apply scoped `shacl` tags). Only proven
+destination serving permits a later compatibility-copy removal proposal. This
+source stage removes no Quipu file and grants no production load or restart.
