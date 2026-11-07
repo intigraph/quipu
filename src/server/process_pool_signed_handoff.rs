@@ -1,4 +1,5 @@
 //! Read identity admitted once by the primary, carried only on the private hop.
+use super::{HeaderValue, IntoResponse, KEY, Next, PEER, PID, Response, StatusCode};
 use axum::extract::Request;
 use base64::Engine as _;
 use quipu::transaction_auth::{AttestState, Identity};
@@ -78,6 +79,54 @@ pub(crate) fn identity(req: &Request) -> Option<Identity> {
     req.extensions()
         .get::<TrustedReadIdentity>()
         .map(|value| value.0.clone())
+}
+
+pub(super) async fn worker_guard(mut req: Request, next: Next) -> Response {
+    let expected = std::env::var(KEY).unwrap_or_default();
+    if expected.is_empty()
+        || req
+            .headers()
+            .get(super::HEADER)
+            .and_then(|v| v.to_str().ok())
+            != Some(expected.as_str())
+    {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    if restore(&mut req).is_err() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    // Only the authenticated private channel may restore an original peer.
+    // MCP calls without a socket peer stay UNKNOWN rather than becoming localhost.
+    let peer = req
+        .headers()
+        .get(PEER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<std::net::SocketAddr>().ok());
+    req.extensions_mut()
+        .remove::<axum::extract::ConnectInfo<std::net::SocketAddr>>();
+    if let Some(peer) = peer {
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(peer));
+    }
+    req.headers_mut().remove(PEER);
+    req.headers_mut().remove(super::HEADER);
+    let mut response = next.run(req).await;
+    response.headers_mut().insert(
+        PID,
+        HeaderValue::from_str(&std::process::id().to_string()).expect("numeric PID"),
+    );
+    response
+}
+
+pub(crate) fn route<S: Clone + Send + Sync + 'static>(
+    app: Router<S>,
+    pool: &ProcessPool,
+) -> Router<S> {
+    if let Some(routing) = &pool.routing {
+        app.layer(middleware::from_fn_with_state(routing.clone(), proxy))
+    } else {
+        app
+    }
 }
 
 #[cfg(test)]
