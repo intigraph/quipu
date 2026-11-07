@@ -5,6 +5,7 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
+mod memory_auth;
 mod render_auth;
 pub use render_auth::authorize_http_bearers;
 
@@ -104,6 +105,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
     "/align/apply",
+    "/mapping/apply",
     // aegis-yavo9c: finishes a share merge from decided conflicts — one
     // transaction asserting and retracting ROOT facts.
     "/merge/apply",
@@ -167,6 +169,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/export",
     "/memory/projection",
     "/memory/receipt",
+    "/knot/status",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -176,6 +179,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // writer of the three is /align/apply, above.
     "/align/propose",
     "/align/decide",
+    "/mapping/propose",
+    "/mapping/decide",
     // aegis-yavo9c: emits (and optionally proposes) merge decisions from
     // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
     "/merge/decisions",
@@ -272,7 +277,10 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/identity" | "/memory/projection" | "/memory/receipt")
+    matches!(
+        path,
+        "/identity" | "/memory/projection" | "/memory/receipt" | "/knot/status"
+    )
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.
@@ -411,7 +419,11 @@ impl BearerPolicy {
                 .authenticate(Some(&format!("Bearer {}", previous.token)))
                 .is_some()
         });
-        if registry.is_empty() || registry.overlaps(&self.named) || shared_collision {
+        if registry.is_empty()
+            || registry.contains_memory_credentials()
+            || registry.overlaps(&self.named)
+            || shared_collision
+        {
             return Err("replication credentials must be nonempty and distinct from writers");
         }
         self.replication_only = registry;
@@ -463,7 +475,9 @@ pub fn authorize_bearers(
 ) -> Authorization {
     // This lower-level API has no route to prove replication admission.
     // Only the HTTP adapter can grant the three exact replication operations.
-    if policy.replication_principal(auth_header).is_some() {
+    if policy.replication_principal(auth_header).is_some()
+        || policy.memory_credential(auth_header).is_some()
+    {
         return Authorization {
             decision: AccessDecision::Unauthorized,
             generation: None,

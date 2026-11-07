@@ -92,7 +92,7 @@ fn producer() -> Store {
 }
 
 fn receiver() -> Store {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("people", SHAPES, "2026-09-01T00:00:00Z")
         .unwrap();

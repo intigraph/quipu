@@ -6,6 +6,7 @@
 pub mod acquisition;
 pub mod align;
 pub mod applier;
+pub mod asof_rdf;
 /// As-of scoped share: a replica bootstrap cut at one transaction.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asof_share;
@@ -64,6 +65,8 @@ mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+#[cfg(feature = "onnx")]
+pub mod onnx_runtime;
 /// Portable bootstrap manifest and signature verification, including WASM.
 #[path = "asof_share/manifest.rs"]
 pub mod replica_manifest;
@@ -83,6 +86,8 @@ pub mod store_replica;
 pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
+/// Pure declared write-base binding; no writer integration or admission authority.
+pub mod write_base;
 pub mod write_kind;
 pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
@@ -184,6 +189,7 @@ pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod promotion_control;
+pub mod shape_mapping;
 pub mod share_alignments;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
@@ -269,6 +275,7 @@ pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
+pub use mcp::mapping::{tool_mapping_apply, tool_mapping_decide, tool_mapping_propose};
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions, tool_merge_resolve};
 pub use mcp::named_query::tool_ask;

@@ -172,17 +172,26 @@ fn load_registry(path: &str) -> Result<quipu::crew_credentials::CredentialRegist
 }
 
 pub(super) async fn run_authorized(
-    req: axum::extract::Request,
+    mut req: axum::extract::Request,
     next: axum::middleware::Next,
     policy: &quipu::http_auth::BearerPolicy,
     authorization: quipu::http_auth::Authorization,
     header: Option<&str>,
 ) -> axum::response::Response {
     if authorization.generation == Some(quipu::http_auth::AuthGeneration::Named) {
-        let principal = policy
-            .replication_principal(header)
-            .or_else(|| policy.named_principal(header))
-            .expect("named authorization has a principal");
+        let principal = if let Some((principal, scope, expiry)) = policy.memory_credential(header) {
+            if quipu::time::epoch_secs() >= expiry {
+                use axum::response::IntoResponse;
+                return axum::http::StatusCode::UNAUTHORIZED.into_response();
+            }
+            req.extensions_mut().insert(scope);
+            principal
+        } else {
+            policy
+                .replication_principal(header)
+                .or_else(|| policy.named_principal(header))
+                .expect("named authorization has a principal")
+        };
         run_named(req, next, principal).await
     } else {
         let identity = req

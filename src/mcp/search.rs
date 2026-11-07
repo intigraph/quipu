@@ -24,7 +24,7 @@ pub fn tool_search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     crate::search_outcome::observation::run(
         crate::search_outcome::Operation::SearchNodes,
         input,
-        || search_nodes(store, input),
+        || super::tools::fresh_search::read_lexical(store, || search_nodes(store, input)),
     )
 }
 
@@ -75,7 +75,11 @@ fn search_nodes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         patterns.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
     }
 
-    let sparql = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {oversample}");
+    let needle = serde_json::to_string(&query.to_lowercase())
+        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let sparql = format!(
+        "SELECT DISTINCT ?s WHERE {{ ?s ?p ?o . {patterns} FILTER(CONTAINS(LCASE(STR(?s)), {needle}) || CONTAINS(LCASE(STR(?o)), {needle})) }} LIMIT {oversample}"
+    );
 
     let result = sparql::query(store, &sparql)?;
 
@@ -113,7 +117,7 @@ pub fn tool_search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> 
     crate::search_outcome::observation::run(
         crate::search_outcome::Operation::SearchFacts,
         input,
-        || search_facts(store, input),
+        || super::tools::fresh_search::read_lexical(store, || search_facts(store, input)),
     )
 }
 
@@ -156,8 +160,11 @@ fn search_facts(store: &Store, input: &JsonValue) -> Result<JsonValue> {
         patterns.push_str(&format!("FILTER({}) ", gid_filters.join(" || ")));
     }
 
-    let sparql =
-        format!("SELECT DISTINCT ?s ?p ?o WHERE {{ ?s ?p ?o . {patterns}}} LIMIT {oversample}");
+    let needle = serde_json::to_string(&query.to_lowercase())
+        .map_err(|e| Error::Serialization(e.to_string()))?;
+    let sparql = format!(
+        "SELECT DISTINCT ?s ?p ?o WHERE {{ ?s ?p ?o . {patterns} FILTER(CONTAINS(LCASE(STR(?p)), {needle}) || CONTAINS(LCASE(STR(?o)), {needle})) }} LIMIT {oversample}"
+    );
 
     let result = sparql::query(store, &sparql)?;
     let query_lower = query.to_lowercase();

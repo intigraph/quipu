@@ -14,6 +14,15 @@ pub struct CrewPrincipal {
     pub credential_id: String,
 }
 
+/// Exact configured repository boundary of a memory-only credential.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryScope {
+    pub graph: String,
+    pub deployment: String,
+    pub project: String,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RegistryFile {
@@ -28,6 +37,10 @@ struct Credential {
     principal: String,
     audience: String,
     token_sha256: String,
+    #[serde(default, deserialize_with = "memory::present")]
+    expires_at_epoch_secs: Option<u64>,
+    #[serde(default, deserialize_with = "memory::present")]
+    memory_scope: Option<MemoryScope>,
 }
 
 /// A validated immutable snapshot. A caller can replace its active registry only
@@ -69,8 +82,21 @@ impl CredentialRegistry {
             if c.principal.len() > 2048 || oxrdf::NamedNode::new(&c.principal).is_err() {
                 return Err("principal must be an absolute IRI of at most 2048 bytes");
             }
-            if audience.is_empty() || c.audience != audience {
+            let memory = audience == "quipu" && c.audience == "quipu-memory";
+            if audience.is_empty() || (c.audience != audience && !memory) {
                 return Err("credential audience does not match this service");
+            }
+            if memory {
+                let scope = c.memory_scope.as_ref().ok_or("memory scope is required")?;
+                if c.expires_at_epoch_secs.is_none_or(|expiry| expiry == 0)
+                    || [&scope.graph, &scope.deployment, &scope.project]
+                        .iter()
+                        .any(|iri| iri.len() > 2048 || oxrdf::NamedNode::new(iri.as_str()).is_err())
+                {
+                    return Err("invalid memory scope or expiry");
+                }
+            } else if c.memory_scope.is_some() || c.expires_at_epoch_secs.is_some() {
+                return Err("memory scope and expiry require the memory audience");
             }
             if c.token_sha256.len() != 64
                 || !c
@@ -108,7 +134,7 @@ impl CredentialRegistry {
                 .bytes()
                 .zip(c.token_sha256.bytes())
                 .fold(0u8, |diff, (a, b)| diff | (a ^ b));
-            if difference == 0 {
+            if difference == 0 && c.memory_scope.is_none() {
                 matched = Some(CrewPrincipal {
                     iri: c.principal.clone(),
                     credential_id: c.credential_id.clone(),
@@ -139,6 +165,8 @@ impl CredentialRegistry {
         })
     }
 }
+
+mod memory;
 
 #[cfg(test)]
 mod tests;
