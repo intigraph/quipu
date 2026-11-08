@@ -325,6 +325,7 @@ fn episode_batch_embeds() {
         nodes: vec![
             Node {
                 name: "Foo".into(),
+                iri: None,
                 node_type: Some("Service".into()),
                 description: Some("The foo service".into()),
                 properties: None,
@@ -332,6 +333,7 @@ fn episode_batch_embeds() {
             },
             Node {
                 name: "Bar".into(),
+                iri: None,
                 node_type: Some("Service".into()),
                 description: Some("The bar service".into()),
                 properties: None,

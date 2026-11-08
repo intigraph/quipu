@@ -225,6 +225,7 @@ mod tests {
             group_id: Some("g".into()),
             nodes: vec![Node {
                 name: format!("{name}-node"),
+                iri: None,
                 node_type: Some("Thing".into()),
                 description: None,
                 properties: None,
