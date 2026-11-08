@@ -43,12 +43,25 @@ pub enum Disposition {
 /// Kept in one list rather than split per disposition so that adding a table
 /// forces a choice to be made in one place, in front of the reasons.
 pub const DECLARED: &[(&str, Disposition)] = &[
+    // Local OWL resume/commit reconciliation belongs to this store generation;
+    // importing it would authorize a foreign scratch cursor to skip assertions.
+    ("owl_batch_receipts", Disposition::Excluded),
+    ("owl_page_job", Disposition::Excluded),
+    ("owl_page_queue", Disposition::Excluded),
+    ("owl_page_all", Disposition::Excluded),
+    // Host-local ownership enrollment is a fence, never portable authority.
+    // Reconstructing it on another store would import an enrollment decision.
+    ("ownership_handoff_enrollment", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection
     // is the entire gap 9f899e exists to close.
     ("facts", Disposition::Content),
     ("transactions", Disposition::Content),
+    // Untrusted caller declarations are historical content, like actor/source.
+    // Retaining them does not authenticate a transaction: the receiver's local
+    // credential evidence in `transaction_auth` is explicitly excluded below.
+    ("transaction_declarations", Disposition::Content),
     ("terms", Disposition::Content),
     ("graphs", Disposition::Content),
     ("shapes", Disposition::Content),
@@ -125,6 +138,15 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // must never install such claims as locally authenticated transactions.
     // Historical actor/source remain content, independently of this evidence.
     ("transaction_auth", Disposition::Excluded),
+    // Local owner authority and registry-instance pins are never imported.
+    ("writer_grants", Disposition::Excluded),
+    ("writer_graph_instances", Disposition::Excluded),
+    // Master-local lifecycle admission/receipt state. A foreign pack carries
+    // mapping and audit RDF as content, but cannot authorize changes by
+    // installing a protected writer's execution cache. Missing cache with an
+    // existing mapping identity refuses new admission rather than overwriting.
+    ("shape_mapping_state", Disposition::Excluded),
+    ("shape_mapping_pins", Disposition::Excluded),
     // REPLAY STATE, and wrong in BOTH directions: carry spent nonces and a
     // legitimate re-import is refused as a replay; omit them silently and a
     // replay the origin had already spent is accepted on the copy. Excluding it
@@ -146,6 +168,11 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // key and manifest. Copying it would admit a different reconstruction as
     // that receiver without independently establishing its trust contract.
     ("replica_bootstrap_admission", Disposition::Excluded),
+    // Source-local logical replication generation and delivery journal. A
+    // reconstruction has its own epoch and must explicitly initialize a new
+    // journal; inheriting these would claim continuity with another source.
+    ("store_replication_state", Disposition::Excluded),
+    ("store_replication_changes", Disposition::Excluded),
     // The digests of the transactions that cursor applied, kept to tell an
     // exact redelivery from a changed one. They belong to the same cursor and
     // mean nothing without it: excluded with it.

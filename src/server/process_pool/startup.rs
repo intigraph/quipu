@@ -5,6 +5,7 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
     let mut pool = ProcessPool {
         children: Vec::new(),
         routing: None,
+        internal_worker: false,
     };
     if config.server.read_processes == 0 {
         return Ok(pool);
@@ -19,6 +20,7 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
         if parent_identity(pid).as_deref() != Some(&expected) {
             return Err("worker parent is gone".into());
         }
+        pool.internal_worker = true;
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(Duration::from_secs(1));
@@ -130,6 +132,11 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
             pid,
             identity,
             available: Arc::new(Semaphore::new(1)),
+            heavy_available: Arc::new(Semaphore::new(if index == 0 {
+                config.server.heavy_read_permits
+            } else {
+                0
+            })),
         });
     }
     let timeout = Duration::from_millis(config.search.request_timeout_ms.clamp(1_000, 120_000));
@@ -143,6 +150,11 @@ pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool
             (allocation.total_bytes / 8 / allocation.connections).min(64 * 1024 * 1024),
         )
         .map_err(|_| "response allocation overflow")?,
+        heavy_permits: if config.server.heavy_read_operations.is_empty() {
+            0
+        } else {
+            config.server.heavy_read_permits
+        },
     }));
     eprintln!(
         "read process pool: {} separate read-only workers; total memory budget {} bytes",

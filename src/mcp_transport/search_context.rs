@@ -4,6 +4,9 @@ use serde_json::{Value, json};
 pub(super) fn render(text: &str) -> Result<String, &'static str> {
     let response: Value =
         serde_json::from_str(text).map_err(|_| "UNKNOWN: invalid search context response")?;
+    if response["retrieval"]["contract"].as_str() == Some("quipu-lexical-results/v1") {
+        return render_lexical(&response);
+    }
     let context = &response["context"];
     if context["contract"].as_str() != Some("quipu-context/v1") || response.get("error").is_some() {
         return Err("UNKNOWN: search context contract unavailable");
@@ -41,7 +44,7 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
     };
     let mut view = json!({"context":context,"insufficient_context":response["insufficient_context"],
         "results":rows,"count":rows.len(),"context_results":rows});
-    for key in ["scoped", "ranking", "search_scope"] {
+    for key in ["scoped", "ranking", "search_scope", "retrieval"] {
         if let Some(value) = response.get(key) {
             view[key] = value.clone();
         }
@@ -49,9 +52,79 @@ pub(super) fn render(text: &str) -> Result<String, &'static str> {
     Ok(view.to_string())
 }
 
+fn render_lexical(response: &Value) -> Result<String, &'static str> {
+    let metadata = &response["retrieval"];
+    if response.get("error").is_some()
+        || metadata["status"] != "degraded"
+        || !matches!(metadata["mode"].as_str(), Some("lexical" | "mixed"))
+    {
+        return Err("UNKNOWN: invalid lexical fallback status");
+    }
+    let rows = response["results"]
+        .as_array()
+        .ok_or("UNKNOWN: missing lexical rows")?;
+    if response["count"].as_u64() != Some(rows.len() as u64) {
+        return Err("UNKNOWN: inconsistent lexical count");
+    }
+    for row in rows {
+        if row["evidence_mode"] == "lexical" {
+            if row.get("similarity").is_some()
+                || row["entity"].as_str().is_none()
+                || row["text"].as_str().is_none()
+            {
+                return Err("UNKNOWN: invalid lexical evidence");
+            }
+        } else {
+            let floor = response["semantic_context"]["similarity_floor"]
+                .as_f64()
+                .filter(|f| f.is_finite() && (0.52..=1.0).contains(f))
+                .ok_or("UNKNOWN: mixed result lacks semantic admission")?;
+            if response["semantic_context"]["contract"] != "quipu-context/v1"
+                || response["semantic_context"]["outcome"] != "CONTEXT"
+                || !row["similarity"]
+                    .as_f64()
+                    .is_some_and(|s| s.is_finite() && (floor..=1.0).contains(&s))
+            {
+                return Err("UNKNOWN: mixed result violates semantic admission");
+            }
+        }
+    }
+    // Explicit lexical evidence, never a semantic CONTEXT result. Legacy
+    // semantic-only consumers must retain UNKNOWN for this different contract.
+    Ok(response.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ejzx_lexical_projection_requires_explicit_evidence_without_cosines() {
+        let mut body = json!({"count":1,"results":[{"entity":"urn:fixture","text":"OrchidLedger","evidence_mode":"lexical"}],
+            "retrieval":{"contract":"quipu-lexical-results/v1","mode":"lexical","status":"degraded"}});
+        assert!(render(&body.to_string()).is_ok());
+        body["results"][0]["similarity"] = json!(0.99);
+        assert!(render(&body.to_string()).is_err());
+        body["results"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("similarity");
+        body["retrieval"]["status"] = json!("ok");
+        assert!(render(&body.to_string()).is_err());
+    }
+
+    #[test]
+    fn ejzx_mixed_projection_preserves_the_semantic_floor() {
+        let mut body = json!({"count":1,"results":[{"entity":"urn:fixture","text":"OrchidLedger","similarity":0.9}],
+            "semantic_context":{"contract":"quipu-context/v1","outcome":"CONTEXT","similarity_floor":0.52},
+            "retrieval":{"contract":"quipu-lexical-results/v1","mode":"mixed","status":"degraded"}});
+        assert!(render(&body.to_string()).is_ok());
+        body["semantic_context"]["similarity_floor"] = json!(0.2);
+        assert!(render(&body.to_string()).is_err());
+        body["semantic_context"]["similarity_floor"] = json!(0.52);
+        body["results"][0]["similarity"] = json!(0.519);
+        assert!(render(&body.to_string()).is_err());
+    }
 
     #[test]
     fn coverage_survives_context_projection_even_for_an_empty_result() {

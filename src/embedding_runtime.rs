@@ -97,18 +97,31 @@ pub fn configure_provider(
     store: &mut crate::Store,
     config: &crate::EmbeddingConfig,
 ) -> Result<ProviderStatus> {
+    let installed_default = config.model_path.is_none() && config.tokenizer_path.is_none();
+    let resolved = crate::model_assets::resolve(config)?;
+    let config = &resolved;
     store.embedding_config_mut().clone_from(config);
     match (&config.model_path, &config.tokenizer_path) {
         (Some(model), Some(tokenizer)) => {
             #[cfg(feature = "onnx")]
             {
                 use std::sync::Arc;
-                let provider = crate::OnnxEmbeddingProvider::load(
-                    model,
-                    tokenizer,
-                    config.dimension,
-                    config.max_sequence_length,
-                )?;
+                let provider = if installed_default {
+                    crate::OnnxEmbeddingProvider::load_pinned(
+                        model,
+                        tokenizer,
+                        config.dimension,
+                        config.max_sequence_length,
+                        &crate::model_assets::recipe(),
+                    )?
+                } else {
+                    crate::OnnxEmbeddingProvider::load(
+                        model,
+                        tokenizer,
+                        config.dimension,
+                        config.max_sequence_length,
+                    )?
+                };
                 store.set_embedding_provider(Arc::new(provider));
                 Ok(ProviderStatus::Ready {
                     dimension: config.dimension,
@@ -117,7 +130,7 @@ pub fn configure_provider(
             }
             #[cfg(not(feature = "onnx"))]
             {
-                let _ = (model, tokenizer);
+                let _ = (model, tokenizer, installed_default);
                 Err(Error::InvalidValue("configured embedding model requires the onnx build feature; no index was created".into()))
             }
         }

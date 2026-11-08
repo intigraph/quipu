@@ -62,6 +62,15 @@ deploy-server:
     bash scripts/build-deploy-server.sh
 
 # Run tests
+shadow-census mode="test" *args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{mode}}" in
+        test) python3 -W error::ResourceWarning scripts/test_merge_shadow_census.py ;;
+        inspect) python3 scripts/merge-shadow-census.py {{args}} ;;
+        *) echo "usage: just shadow-census [test|inspect <snapshot arguments>]" >&2; exit 2 ;;
+    esac
+
 test *args="":
     cargo test {{args}}
 
@@ -337,6 +346,10 @@ docs cmd="build":
     esac
 
 # === Public benchmarks ===
+
+# Linux library-consumer identity control; synthetic in-memory stores only.
+validator-observation command="embedding" *args="":
+    @if [ "{{command}}" = "embedding" ]; then python3 scripts/test-validator-observation-embedding.py {{args}}; else echo 'Use: just validator-observation embedding' >&2; exit 2; fi
 
 # Regenerate the public conformance page and shields badge endpoints from the
 # committed ledgers under benchmark/public/results/.

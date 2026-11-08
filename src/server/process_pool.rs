@@ -97,6 +97,7 @@ struct Worker {
     pid: u32,
     identity: String,
     available: Arc<Semaphore>,
+    heavy_available: Arc<Semaphore>,
 }
 
 fn worker_input(address: &str) -> Result<Stdio, String> {
@@ -119,12 +120,23 @@ struct Routing {
     next: AtomicUsize,
     timeout: Duration,
     response_limit: usize,
+    heavy_permits: usize,
 }
+
+#[path = "process_pool_routing.rs"]
+mod scheduling;
+use scheduling::hop_header;
 
 pub(crate) struct ProcessPool {
     children: Vec<Child>,
     routing: Option<Arc<Routing>>,
+    internal_worker: bool,
 }
+#[path = "process_pool_auth.rs"]
+mod auth_config;
+#[path = "process_pool_signed_handoff.rs"]
+pub(crate) mod signed_handoff;
+
 impl Drop for ProcessPool {
     fn drop(&mut self) {
         for child in &mut self.children {
@@ -163,57 +175,12 @@ fn routed(path: &str, method: &str) -> bool {
             | "/reconcile"
     )
 }
-fn hop_header(name: &str) -> bool {
-    matches!(
-        name,
-        "host"
-            | "connection"
-            | "keep-alive"
-            | "proxy-authenticate"
-            | "proxy-authorization"
-            | "te"
-            | "trailer"
-            | "transfer-encoding"
-            | "upgrade"
-            | "content-length"
-    )
-}
 fn unavailable(message: &'static str) -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         axum::Json(serde_json::json!({"error":message,"reason":"read_process_unavailable"})),
     )
         .into_response()
-}
-
-async fn worker_guard(mut req: Request, next: Next) -> Response {
-    let expected = std::env::var(KEY).unwrap_or_default();
-    if expected.is_empty()
-        || req.headers().get(HEADER).and_then(|v| v.to_str().ok()) != Some(expected.as_str())
-    {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-    // Only the authenticated private channel may restore an original peer.
-    // MCP calls without a socket peer stay UNKNOWN rather than becoming localhost.
-    let peer = req
-        .headers()
-        .get(PEER)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<std::net::SocketAddr>().ok());
-    req.extensions_mut()
-        .remove::<axum::extract::ConnectInfo<std::net::SocketAddr>>();
-    if let Some(peer) = peer {
-        req.extensions_mut()
-            .insert(axum::extract::ConnectInfo(peer));
-    }
-    req.headers_mut().remove(PEER);
-    req.headers_mut().remove(HEADER);
-    let mut response = next.run(req).await;
-    response.headers_mut().insert(
-        PID,
-        HeaderValue::from_str(&std::process::id().to_string()).expect("numeric PID"),
-    );
-    response
 }
 
 pub(crate) fn route<S: Clone + Send + Sync + 'static>(
@@ -229,7 +196,7 @@ pub(crate) fn route<S: Clone + Send + Sync + 'static>(
 
 pub(crate) fn protect_worker(app: Router) -> Router {
     if is_worker() {
-        app.layer(middleware::from_fn(worker_guard))
+        app.layer(middleware::from_fn(signed_handoff::worker_guard))
     } else {
         app
     }
@@ -264,16 +231,11 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
     if !routed(req.uri().path(), req.method().as_str()) {
         return next.run(req).await;
     }
-    let start = routing.next.fetch_add(1, Ordering::Relaxed);
-    let selected = (0..routing.workers.len()).find_map(|offset| {
-        let worker = &routing.workers[(start.wrapping_add(offset)) % routing.workers.len()];
-        worker
-            .available
-            .clone()
-            .try_acquire_owned()
-            .ok()
-            .map(|permit| (worker, permit))
-    });
+    let Ok(handoff) = signed_handoff::for_forward(&req) else {
+        return unavailable("signed reader identity was not admitted");
+    };
+    let operation = super::request_middleware::declared_operation(req.headers());
+    let selected = routing.select(routing.heavy(req.uri().path(), operation.as_deref()));
     let Some((worker, permit)) = selected else {
         return unavailable("all read processes are busy");
     };
@@ -301,7 +263,9 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for (name, value) in &parts.headers {
             if !hop_header(name.as_str())
                 && name.as_str() != HEADER
+                && name.as_str() != signed_handoff::HEADER
                 && name.as_str() != PEER
+                && name.as_str() != "x-quipu-operation"
                 && name.as_str() != "accept-encoding"
                 && let Ok(value) = value.to_str()
             {
@@ -311,6 +275,14 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         request = request
             .set(HEADER, &routing.key)
             .set("accept-encoding", "identity");
+        // Preserve the finite parser's UNKNOWN result. Repeated ureq::set calls
+        // otherwise collapse duplicate declarations into a valid last value.
+        if let Some(operation) = operation {
+            request = request.set("x-quipu-operation", &operation);
+        }
+        if let Some(handoff) = handoff {
+            request = request.set(signed_handoff::HEADER, &handoff);
+        }
         if let Some(peer) = peer {
             request = request.set(PEER, &peer);
         }
@@ -326,6 +298,7 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for name in response.headers_names() {
             if !hop_header(&name)
                 && name != HEADER
+                && name != signed_handoff::HEADER
                 && let (Ok(name), Some(value)) = (
                     HeaderName::from_bytes(name.as_bytes()),
                     response.header(&name),

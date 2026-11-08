@@ -62,9 +62,12 @@ impl Store {
         Ok(!older)
     }
 
-    #[cfg(feature = "shacl")]
     /// Asserted facts selected by `sql` (columns `e, a, v, tx, valid_from, valid_to`).
-    fn post_state_facts(&self, sql: &str, params: &[i64]) -> Result<Vec<crate::Fact>> {
+    pub(super) fn post_state_facts(
+        &self,
+        sql: &str,
+        params: &[i64],
+    ) -> crate::Result<Vec<crate::Fact>> {
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map(rusqlite::params_from_iter(params), |row| {
             Ok((
@@ -92,7 +95,7 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    pub(super) fn check_new_graph_in_batch(&self, shapes: &str, graph: i64) -> Result<()> {
+    pub(super) fn check_new_graph_in_batch(&mut self, shapes: &str, graph: i64) -> Result<()> {
         let mut facts = self.post_state_facts(
             "SELECT e,a,v,tx,valid_from,valid_to FROM facts \
              WHERE g = ?1 AND op = 1 AND valid_to IS NULL",
@@ -176,7 +179,7 @@ impl Store {
                 if !seen.insert(class) {
                     continue;
                 }
-                if seen.len() > 1024 {
+                if seen.len() > super::shacl_poststate::CONTEXT_NODE_BUDGET {
                     return Err(Error::CannotVerify(
                         "post-state SHACL type hierarchy exceeds 1024 classes".into(),
                     ));
@@ -195,7 +198,10 @@ impl Store {
             facts.extend(hierarchy);
         }
         let data = self.cardinality_context(&facts)?;
-        let feedback = crate::validate_shapes(shapes, &data)?;
+        self.observed_validator_input(shapes, &data, true, true);
+        let feedback = crate::validate_shapes(shapes, &data);
+        self.observed_validator_result(&feedback);
+        let feedback = feedback?;
         // Every focus in a new graph was written by this write, and its value
         // closure is complete, so no ownership filter applies.
         // The validator can report one result more than once; count each once.

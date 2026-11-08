@@ -1,5 +1,29 @@
 use super::*;
 
+#[test]
+fn fresh_store_search_without_model() {
+    let mut store = Store::open_in_memory().unwrap();
+    // CLI/server startup applies SearchConfig and prepares the derived index.
+    // The low-level Store is also used by raw SQL fixtures and import staging.
+    store.initialize_lexical_index().unwrap();
+    crate::rdf::ingest_rdf(
+        &mut store,
+        &br#"<https://example.org/a> <http://www.w3.org/2000/01/rdf-schema#label> "Memory Beads" ."#[..],
+        oxrdfio::RdfFormat::Turtle,
+        None,
+        "2026-01-01T00:00:00Z",
+        None,
+        None,
+    ).unwrap();
+    let result = dispatch_search_fusion(&store, &json!({"query":"Memory"})).unwrap();
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["search_mode"], "keyword");
+    assert_eq!(result["mode_reason"], "no_embedding_provider");
+    assert!(dispatch_search_fusion(&store, &json!({"query":"Memory","mode":"semantic"})).is_err());
+    store.search_config_mut().keyword = false;
+    assert!(dispatch_search_fusion(&store, &json!({"query":"Memory"})).is_err());
+}
+
 fn row(id: &str, score: f64) -> JsonValue {
     json!({"entity":id,"score":score,"similarity":score,"bm25":-score,"text":"Memory <script> Beads"})
 }

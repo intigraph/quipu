@@ -44,6 +44,33 @@ including SHACL for a fork, and writes nothing.
 Git alias proposals (two new IRIs that may name one entity) take `accept`
 (adds `owl:sameAs`), `reject` or `defer`.
 
+## Git mergetool
+
+For a pendant merge started with `quipu git-merge`, configure the interactive
+tool in this repository (replace `reviewer` with your identity):
+
+```bash
+git config mergetool.quipu.cmd 'quipu git-mergetool "$MERGED" --by reviewer'
+git config mergetool.quipu.trustExitCode true
+git mergetool --no-prompt --tool=quipu -- pendant/export.nt
+```
+
+The tool prints the standard layout and reads `<row-id> <choice>`, for example
+`conflict:0 theirs` or `alias:0 reject`. It offers no automatic choice. `quit`
+or end of input exits 2 while decisions remain. Invalid or unoffered choices
+do not change the pack. The existing resolver rebuilds and validates the
+pendant from immutable Git snapshots before rewriting it. Stale decisions or
+changed merge inputs refuse; all rows must be resolved before exit 0.
+
+Git stages the selected `export.nt` after a successful tool invocation. Review
+and stage the other pendant files with `git add pendant`, then commit and run
+`pendant-check` on the original base, ours, theirs and result refs. The tool
+itself never stages or commits. It can also run directly as
+`quipu git-mergetool pendant/export.nt --by reviewer`.
+
+This is pendant tooling, not an arbitrary Turtle or JSON-LD file merger.
+DataBook documents are not accepted by this pendant command.
+
 ## What the user sees
 
 `quipu merge show` prints one fixed layout. Agents show it as printed, with
@@ -95,6 +122,21 @@ again and re-decided; never edit its hashes.
 
 Applying the same decisions a second time reports `already-applied` with the
 original transaction and writes nothing, so a retried apply is safe.
+
+Share reconnect and fork promotion use the common temporal write core. A
+one-sided incoming share addition keeps the share manifest's `created_at` as
+its authored time. A one-sided removal closes at that same share time, clamped
+against the local row's start; losing local values in a decided conflict close
+at decision time instead. A decided conflict first records incoming values as
+receipts with the empty valid interval `[Td, Td)`, then closes losing local
+values and starts selected new values at decision time `Td`. Both ordered
+transactions commit atomically; a refused decision rolls the received step
+back too. A receipt is visible in transaction history, never at a valid time.
+The reported transaction is the final step, and counts describe the final
+live graph changes rather than counting receipts as additions.
+
+Plain share merges also carry a stable merge identity. Reapplying the same
+incoming/base pair reports `already-applied` and creates no new transaction.
 
 ## See also
 

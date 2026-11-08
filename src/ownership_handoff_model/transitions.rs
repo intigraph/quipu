@@ -12,6 +12,10 @@ impl Model {
                 r.validate()?;
                 if let Some(old) = self.operations.get(&r.operation) {
                     require(old == r, "operation ID reused with different payload")?;
+                    require(
+                        !self.abandoned.contains_key(&r.operation),
+                        "attempt abandoned",
+                    )?;
                     return Ok(Outcome::Recorded);
                 }
                 require(
@@ -23,11 +27,46 @@ impl Model {
                     "stale predecessor or unavailable source",
                 )?;
                 require(
-                    !self.operations.values().any(|old| old.source == r.source),
+                    !self.operations.values().any(|old| {
+                        old.source == r.source && !self.abandoned.contains_key(&old.operation)
+                    }),
                     "successor already reserved",
                 )?;
                 self.operations.insert(r.operation.clone(), r.clone());
                 self.head = WitnessHead::Reserved { request: r.clone() };
+            }
+            Action::Abandon(abandonment) => {
+                observations.admission()?;
+                abandonment.validate()?;
+                let r = &abandonment.request;
+                if let Some(old) = self.abandoned.get(&r.operation) {
+                    require(old == abandonment, "abandonment changed on retry")?;
+                    // Historical readback never rewinds a later reservation/head.
+                    return Ok(Outcome::Recorded);
+                }
+                self.reserved(r)?;
+                require(
+                    self.head == WitnessHead::Reserved { request: r.clone() },
+                    "witness predecessor CAS refused",
+                )?;
+                require(
+                    self.journal.get(&r.source.owner)
+                        == Some(&Journal::Active {
+                            authority: r.source.clone(),
+                        })
+                        && self.data.get(&r.source.owner) == Some(&r.source),
+                    "abandonment requires source ACTIVE at the reserved tuple",
+                )?;
+                // Even restored ACTIVE journal bytes cannot cancel a sealed cut.
+                require(
+                    !self.seals.contains_key(&r.operation),
+                    "retirement already sealed",
+                )?;
+                self.abandoned
+                    .insert(r.operation.clone(), abandonment.clone());
+                self.head = WitnessHead::Active {
+                    authority: r.source.clone(),
+                };
             }
             Action::Barrier(r) => {
                 observations.authorized()?;

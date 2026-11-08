@@ -140,7 +140,7 @@ fn validate(shapes: &str, data: &str, emit_authorized: bool) -> Result<serde_jso
         )?;
         let blocks = feedback.blocking;
         let mut report = feedback.report()?;
-        let authority = Store::open_in_memory()?;
+        let mut authority = Store::open_in_memory()?;
         authority.load_shapes("composition-authority", shapes, "1970-01-01T00:00:00Z")?;
         let vocabulary = crate::vocabulary::sanctioned(&authority)?;
         let off_vocabulary = crate::vocabulary::ungoverned_types_in_turtle(data, &vocabulary);

@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="assets/header.png" width="704" alt="Quipu: knotted knowledge and history, from the Thread Workshop stack illustration family"/>
-</p>
-
-<p align="center">
   <img src="assets/logo.svg" width="160" alt="Quipu logo: knotted strings forming a knowledge graph"/>
 </p>
 
@@ -21,9 +17,8 @@
 <!-- badges:end -->
 <p align="center"><strong><a href="https://intigraph.github.io/quipu/">Read the book →</a></strong></p>
 
-**Quipu is a governed, bitemporal knowledge store for AI coding agents and the
+**Quipu is a governed, bitemporal knowledge store for AI agents and the
 people who run them.** Use it from the command line, REST, MCP or a Rust application.
-A quipu is an Andean knotted-cord record: cords are entities, knots are facts.
 
 ## Why you would want it
 
@@ -96,38 +91,9 @@ Keep project facts, decisions and relationships together instead of pasting the 
   <img src="assets/sharing-flow.svg" width="900" alt="Animated: export a share, verify it in quarantine, then explicitly promote admitted knowledge; conflicts are not silently merged"/>
 </p>
 
-### Repository knowledge
-
-![Repository pendants compose: dependencies and alignment](docs/book/src/sharing/cross-repo-pendants.svg)
-
 The [latest release](https://github.com/intigraph/quipu/releases/latest) includes a repository pendant,
 checksum and provenance. Verify them together, then use `quipu import SHARE_DIR --db repository.db`;
 import stages knowledge and leaves ROOT unchanged. Follow the [verified import workflow](https://intigraph.github.io/quipu/sharing/index.html).
-
-<!-- delivery-catalog:start -->
-
-## Delivery events
-
-Bring deployment outcomes and change history into the same governed memory.
-These adapters use CDEvents on CloudEvents and Camayoc's single ingress.
-
-[Catalog data](https://github.com/intigraph/camayoc/blob/main/catalog/delivery-emitters.json) · [Updating the table](https://github.com/intigraph/camayoc/blob/main/catalog/README.md)
-
-| Tool | Standard | How | Status | Docs |
-| --- | --- | --- | --- | --- |
-| GitHub / Forgejo Actions | CDEvents on CloudEvents | Reusable deployment-event action or CLI; skipped and cancelled jobs emit no deployment. | Supported adapter; activation is separate | [Guide](https://github.com/intigraph/camayoc/blob/main/actions/deployment-event/README.md) |
-| Ansible | CDEvents on CloudEvents | Callback writes one event per applied host; failed or unreachable recap counters mean failure. | Supported adapter; activation is separate | [Guide](https://github.com/intigraph/camayoc/blob/main/emitters/ansible/README.md) |
-| Terraform | CDEvents on CloudEvents | Wrap an actual apply -json; errors or a nonzero exit after an attempted change mean failure. | Supported adapter; activation is separate | [Guide](https://github.com/intigraph/camayoc/blob/main/emitters/terraform/README.md) |
-| Native CDEvents | CDEvents on CloudEvents | Pass supported CDEvents through the single governed ingress; unknown types are quarantined. | Supported adapter; activation is separate | [Guide](https://github.com/intigraph/camayoc/blob/main/docs/design/ingress.md) |
-| GitHub change lifecycle | CDEvents on CloudEvents | Read change, CI and native review records into ChangeEvent history; scheduling is separate. | Supported adapter; activation is separate | [Guide](https://github.com/intigraph/camayoc/blob/main/emitters/github/changes.py) |
-
-The catalog describes source support, not installed producers or measured event coverage.
-The graph queries for deployment frequency, change failure rate, lead time and restore time
-need recorded events for the selected service, repository and time window.
-Missing change or deployment history is not a measured zero.
-
-<!-- catalog-source-sha256: ea2627bd96ba33263f3c3cc89dd0e64cfbb14788f6a14411df92448ec48aef14 -->
-<!-- delivery-catalog:end -->
 
 ## Wire it into your agent
 
@@ -144,8 +110,7 @@ Use [Tambo](https://github.com/intigraph/tambo) to configure and verify the tool
 ## Before you start
 
 - The CLI runs locally; `quipu-server` supplies the network API and explorer.
-- Keep your database and credentials private. A demo fixture is not a deployment profile.
-- Semantic search needs a configured model and index; storing a graph alone does not provide either.
+- Fresh stores support keyword search without downloading a model. `quipu search "your terms"` uses keyword search until an embedding provider is configured; explicit `--mode semantic` still requires a model and vectors. Install the pinned default model with `quipu model install` in a full build. Check readiness with `quipu doctor search`.
 - [Configuration](https://intigraph.github.io/quipu/getting-started/configuration.html) covers storage and server settings.
 
 ## What's next

@@ -218,6 +218,19 @@ async fn answer_query(
     is_post: bool,
     query_shape: quipu::request_usage::QueryShape,
 ) -> Result<axum::response::Response, AppError> {
+    if input.get("execution_profile").and_then(JsonValue::as_bool) == Some(true)
+        && (input.get("federated").and_then(JsonValue::as_bool) == Some(true)
+            || input.get("_sparql_protocol").and_then(JsonValue::as_bool) == Some(true)
+            || headers
+                .get(header::ACCEPT)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v != "application/json" && v != "*/*"))
+    {
+        return Err(quipu::Error::InvalidValue(
+            "execution_profile requires local bespoke JSON".into(),
+        )
+        .into());
+    }
     // Content negotiation (aegis-u7ag): an explicit standard Accept header opts
     // into the W3C SPARQL 1.1 results/RDF shape; absent / */* / application/json
     // keeps the default bespoke rows shape byte-for-byte, so existing callers are
