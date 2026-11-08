@@ -17,6 +17,7 @@ pub enum WriteOperation {
     Episode,
     Knot,
     Set,
+    EntityRefMint,
 }
 
 impl WriteOperation {
@@ -27,6 +28,7 @@ impl WriteOperation {
             "/episode" => Some(Self::Episode),
             "/knot" => Some(Self::Knot),
             "/set" => Some(Self::Set),
+            "/entity_ref" => Some(Self::EntityRefMint),
             _ => None,
         }
     }
@@ -57,6 +59,18 @@ pub struct WriteGrant {
     pub valid_until: u64,
     pub revision: u64,
     pub revoked: bool,
+    /// Absent on existing grants. Mint-only enrollment binds all selectors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mint_scope: Option<MintScope>,
+}
+
+/// Exact owner-enrolled allocation selectors, in addition to the graph instance.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MintScope {
+    pub namespace: String,
+    pub base_iri: String,
+    pub types: std::collections::BTreeSet<String>,
 }
 
 pub(crate) fn denied() -> Error {
@@ -85,6 +99,25 @@ impl WriteGrant {
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
+        if self.operations.contains(&WriteOperation::EntityRefMint) {
+            let scope = self.mint_scope.as_ref().ok_or_else(denied)?;
+            if self.operations.len() != 1
+                || scope.namespace.is_empty()
+                || scope.namespace.len() > 128
+                || scope.base_iri.len() > 2048
+                || oxrdf::NamedNode::new(&scope.base_iri).is_err()
+                || scope.types.is_empty()
+                || scope.types.len() > 64
+                || scope
+                    .types
+                    .iter()
+                    .any(|kind| kind.len() > 2048 || oxrdf::NamedNode::new(kind).is_err())
+            {
+                return Err(denied());
+            }
+        } else if self.mint_scope.is_some() {
+            return Err(denied());
+        }
         if self.version != 1
             || self.id.is_empty()
             || self.id.len() > 128
@@ -127,6 +160,34 @@ pub(crate) struct Capability {
     pub expires: u64,
     pub authorized_at: u64,
     pub audit: std::sync::Arc<std::sync::Mutex<Audit>>,
+    pub mint_scopes: BTreeMap<i64, Vec<MintScope>>,
+}
+
+/// Called before entropy, key derivation, convergence or RDF mutation.
+pub(crate) fn check_mint(
+    store: &Store,
+    graph: i64,
+    namespace: &str,
+    base_iri: &str,
+    kind: &str,
+) -> Result<()> {
+    if !is_scoped_request() {
+        return Ok(());
+    }
+    check(store, graph)?;
+    CAPABILITY.with(|slot| {
+        let slot = slot.borrow();
+        let scope = slot
+            .as_ref()
+            .and_then(|cap| cap.mint_scopes.get(&graph))
+            .ok_or_else(denied)?;
+        if !scope.iter().any(|scope| {
+            scope.namespace == namespace && scope.base_iri == base_iri && scope.types.contains(kind)
+        }) {
+            return Err(denied());
+        }
+        Ok(())
+    })
 }
 
 thread_local! {

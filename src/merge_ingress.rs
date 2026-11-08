@@ -36,7 +36,7 @@ pub(crate) fn decode(value: &Json) -> Result<File> {
         return Err(invalid("retained session exceeds 8 MiB"));
     }
     let file: File = serde_json::from_slice(&bytes).map_err(|e| invalid(&e.to_string()))?;
-    if file.schema != SCHEMA || file.request.path == Path::Pendant {
+    if file.schema != SCHEMA || file.request.path == Path::Pendant || file.request.scope.is_some() {
         return Err(invalid("not a store merge session"));
     }
     Ok(file)

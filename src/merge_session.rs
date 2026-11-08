@@ -79,6 +79,9 @@ pub(crate) struct Request {
     pub parent: Option<String>,
     /// Resume only these slots; already applied slots must never be replayed.
     pub active_slots: Option<BTreeSet<Slot>>,
+    /// Internal bounded ledger read context; not public write admission.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<crate::merge_pending::Scope>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +156,9 @@ pub(crate) fn prepare(
     mut start: impl FnMut(bool, &Slot, &str) -> Result<String>,
     mut closes: impl FnMut(&Slot) -> Result<BTreeMap<String, String>>,
 ) -> Result<Prepared> {
+    if let Some(scope) = &request.scope {
+        scope.validate_request(&request)?;
+    }
     let (base, ours, theirs) = (
         graph(&request.base)?,
         graph(&request.ours)?,

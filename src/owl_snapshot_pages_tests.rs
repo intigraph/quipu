@@ -2,7 +2,7 @@ use super::*;
 use std::collections::BTreeSet;
 const TS: &str = "2026-01-01T00:00:00Z";
 
-fn corpus(count: usize) -> Store {
+pub(super) fn corpus(count: usize) -> Store {
     let mut store = Store::open_in_memory().unwrap();
     store.load_ontology("properties", "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . <urn:p> rdfs:subPropertyOf <urn:q> . <urn:q> rdfs:range <urn:A> .", TS).unwrap();
     store.load_ontology("classes", "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> . <urn:A> rdfs:subClassOf <urn:B> .", TS).unwrap();
@@ -21,7 +21,7 @@ fn corpus(count: usize) -> Store {
     store
 }
 
-fn canonical(store: &Store) -> BTreeSet<(String, String, String)> {
+pub(super) fn canonical(store: &Store) -> BTreeSet<(String, String, String)> {
     let Some(graph) = store.lookup(ROOT_INFERRED_GRAPH_IRI).unwrap() else {
         return BTreeSet::new();
     };
@@ -43,7 +43,7 @@ fn canonical(store: &Store) -> BTreeSet<(String, String, String)> {
         .collect()
 }
 
-fn reference(count: usize) -> BTreeSet<(String, String, String)> {
+pub(super) fn reference(count: usize) -> BTreeSet<(String, String, String)> {
     let mut store = corpus(count);
     store.ensure_owl_cache().unwrap();
     let ontology = store.owl_cache.as_deref().unwrap().clone();
