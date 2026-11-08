@@ -144,13 +144,26 @@ fn strict_or_disabled_resolution_stays_single_phase() {
 fn strict_configured_at_commit_refuses_a_prepared_duplicate() {
     let mut store = store(0.85);
     tool_episode(&mut store, &episode("seed", &["document-epsilon"])).unwrap();
-    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon"]))
+    // A new spelling is a duplicate candidate; exact same-IRI reuse is safe.
+    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon-variant"]))
         .unwrap()
         .unwrap();
     store.resolution_config_mut().strict_mode = true;
     let before = store.current_facts().unwrap();
     assert!(tool_episode_commit(&mut store, prepared).is_err());
     assert_eq!(store.current_facts().unwrap(), before);
+}
+
+/// A strict-mode transition still permits reuse of the exact existing IRI.
+#[test]
+fn strict_configured_at_commit_preserves_existing_identity_reuse() {
+    let mut store = store(0.85);
+    tool_episode(&mut store, &episode("seed", &["document-epsilon"])).unwrap();
+    let prepared = tool_episode_prepare(&store, &episode("w", &["document-epsilon"]))
+        .unwrap()
+        .unwrap();
+    store.resolution_config_mut().strict_mode = true;
+    assert!(tool_episode_commit(&mut store, prepared).is_ok());
 }
 
 /// An expired budget refuses in phase 0 with the request's own budget, before

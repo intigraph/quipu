@@ -197,13 +197,11 @@ pub fn resolve_episode_nodes(
             declared_distinct: &n.distinct_from,
         })
         .collect();
-    resolve_nodes(
-        store,
-        &queries,
-        opts.threshold,
-        opts.top_k,
-        opts.strict_mode,
-    )
+    let mut result = resolve_nodes(store, &queries, opts.threshold, opts.top_k, false)?;
+    if opts.strict_mode {
+        result.refusal = super::adjudication::refusal(store, nodes, base_ns, opts.threshold)?;
+    }
+    Ok(result)
 }
 
 /// What a resolution pass read, so the writer can tell whether it is stale.
