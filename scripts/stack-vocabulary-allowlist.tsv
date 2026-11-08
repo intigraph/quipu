@@ -83,7 +83,7 @@ src/reasoner/evaluate.rs	1
 src/reasoner/evaluate_tests.rs	4
 src/reasoner/mod.rs	1
 src/reasoner/parse.rs	1
-src/reasoner/parse_tests.rs	6
+src/reasoner/parse_tests.rs	4
 src/reasoner/reactive.rs	3
 src/reasoner/reactive_tests.rs	2
 src/resolution/tests.rs	2

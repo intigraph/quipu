@@ -36,9 +36,11 @@ fn fully_qualified_rules_need_no_ambient_namespace() {
 #[test]
 fn explicit_store_prefix_resolves_predicates_and_named_terms() {
     let store_prefix = "https://example.org/custom#";
-    let parsed = parse_rules(&rules("result(named)", "input(named)"), Some(store_prefix))
-        .unwrap();
-    assert_eq!(parsed.rules[0].head.predicate, format!("{store_prefix}result"));
+    let parsed = parse_rules(&rules("result(named)", "input(named)"), Some(store_prefix)).unwrap();
+    assert_eq!(
+        parsed.rules[0].head.predicate,
+        format!("{store_prefix}result")
+    );
     assert_eq!(
         parsed.rules[0].head.args[0],
         super::Term::Iri(format!("{store_prefix}named"))

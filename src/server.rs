@@ -254,12 +254,12 @@ async fn main() {
     let reactive_reasoner = if is_follower {
         None
     } else {
-        let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
+        let empty = || quipu::reasoner::RuleSet::empty(store.base_ns());
         // A malformed ruleset must not take the server down, but it must not
         // pass unremarked either: the failure mode being avoided is a reasoner
         // that silently does nothing.
         let ruleset = match store.get_combined_shapes() {
-            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
+            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, Some(store.base_ns())) {
                 Ok(rs) => rs,
                 Err(e) => {
                     eprintln!("reactive reasoner starts EMPTY — rules failed to parse: {e}");

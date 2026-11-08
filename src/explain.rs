@@ -77,7 +77,7 @@ impl Context {
             .get_combined_shapes()
             .ok()
             .flatten()
-            .and_then(|ttl| parse_rules(&ttl, None).ok());
+            .and_then(|ttl| parse_rules(&ttl, Some(store.base_ns())).ok());
         let axioms = store
             .get_combined_ontologies()
             .ok()
