@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
-fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
+pub(crate) fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     let o = Command::new("git")
         .arg("-C")
         .arg(repo)
@@ -18,7 +18,7 @@ fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
     }
     Ok(o.stdout)
 }
-fn text(repo: &Path, args: &[&str]) -> Result<String> {
+pub(crate) fn text(repo: &Path, args: &[&str]) -> Result<String> {
     String::from_utf8(git(repo, args)?).map_err(io)
 }
 fn commit(repo: &Path, r: &str) -> Result<String> {
@@ -34,7 +34,7 @@ fn commit(repo: &Path, r: &str) -> Result<String> {
     .trim()
     .into())
 }
-fn file(repo: &Path, r: &str, path: &str) -> Result<Option<String>> {
+pub(crate) fn file(repo: &Path, r: &str, path: &str) -> Result<Option<String>> {
     let entry = text(repo, &["ls-tree", r, "--", path])?;
     if entry.is_empty() {
         return Ok(None);
@@ -104,7 +104,7 @@ fn safe_dir(repo: &Path, dir: &str) -> Result<PathBuf> {
     }
     Ok(out)
 }
-fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]> {
+pub(crate) fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]> {
     if !text(repo, &["rev-parse", "--show-prefix"])?
         .trim()
         .is_empty()
@@ -124,7 +124,7 @@ fn refs(repo: &Path, base: &str, ours: &str, theirs: &str) -> Result<[String; 3]
     }
     Ok(r)
 }
-fn from_env(repo: &Path) -> Result<[String; 3]> {
+pub(crate) fn from_env(repo: &Path) -> Result<[String; 3]> {
     let get = |k| {
         std::env::var(k).map_err(|_| {
             invalid("use quipu git-merge REF; standalone drivers require explicit snapshot context")
