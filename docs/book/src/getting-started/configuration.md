@@ -63,8 +63,9 @@ stops being read.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `store_path` | `.bobbin/quipu/quipu.db` | SQLite database path |
-| `base_ns` | aegis ontology NS | Base namespace for minted IRIs (set before first write; `--base-ns` overrides per CLI call) |
-| `vocabulary` | `legacy` | Which IRIs golden-path terms (`stepOf`, `sourceKind`, …) are written under: `legacy` = under `base_ns`; `intigraph` = the published Camayoc `https://w3id.org/intigraph/camayoc/core/ns#` terms. Individuals keep `base_ns` either way. Switch only once readers see both IRIs for new writes. |
+| `base_ns` | unset | Base namespace for the names a store mints: an absolute IRI ending in `/` or `#`. **Required** for any write that mints a name (episodes); there is no default, and such writes are refused until it is set. Set it before the first write and never change it on an existing store. `--base-ns` overrides per CLI call. |
+| `code_base` | unset | Base of code-entity IRIs (`{code_base}{repo}/{path}`), which the import reconciler (`quipu::reconcile`) reads; the code vocabulary (`imports`, `name`, `language`, `definedIn`) is read under `base_ns`. No default: reconciliation is refused until it is set. Set it to the scheme your code producer actually mints, and never change it on an existing store. |
+| `vocabulary_map` | unset | Path to a Turtle file of `owl:equivalentProperty` / `owl:equivalentClass` statements. For each term Quipu would mint under `base_ns` (the subject), the object IRI is written instead. Vocabulary packs ship their own map; Quipu names none. Individuals keep `base_ns`. Configure a map only once readers see the mapped IRIs. A map that cannot be read stops startup. |
 | `server.enabled` | `false` | Enable REST API server |
 | `server.bind` | `127.0.0.1:3030` | Server bind address |
 | `server.auth_token` | unset | Bearer token required on write endpoints when set |
@@ -82,9 +83,9 @@ stops being read.
 | `labels.deny_policy_tokens` | `[]` | Policy-class tokens that exclude a graph from results |
 | `labels.deny_data_kinds` | `[]` | Refuse queries composing graphs of these `dataKind` tokens (a blocklist — undeclared kinds pass) |
 | `search.default_limit` | `10` | Result limit when the caller passes none |
-| `search.keyword` | `false` | Opt-in SQLite FTS5 keyword search; activation installs schema/triggers without a bulk startup migration. Existing facts require explicit bounded backfill; reads refuse until complete. |
+| `search.keyword` | new stores on; existing unindexed stores off | SQLite FTS5 keyword search. Explicit `true` activates an existing store and bounded backfill prepares its facts. Explicit `false` opts out on any store. Omission preserves an already initialized index without a schema upgrade. |
 | `search.hybrid` | `false` | Enable lexical/vector fusion after offline evaluation; no startup backfill. |
-| `search.mode` | `"semantic"` | Default mode for requests omitting it: semantic, keyword or hybrid. |
+| `search.mode` | `"auto"` | Omitted-mode requests use semantic search with a provider or supplied embedding, otherwise keyword search. Explicit semantic, keyword and hybrid modes remain authoritative. |
 | `search.alpha` | `0.5` | Semantic contribution in hybrid mode; 0 and 1 use exact pure endpoints. |
 | `search.fusion` | `"rrf"` | Weighted reciprocal ranks or `"weighted"` min-max scores. |
 | `search.rrf_k` | `60.0` | Positive RRF denominator offset. |

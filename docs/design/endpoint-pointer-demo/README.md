@@ -3,7 +3,7 @@
 Before: Quipu 0.14.1 at `0cb06945` cannot use the endpoint declaration from
 federation config; the CLI reports no configured remotes and sends no request.
 After: the candidate verifies the local pendant and asks the real
-Tambo/Caboodle endpoint decision CLI before every use. Exact consent returns one
+Tambo/Tambo endpoint decision CLI before every use. Exact consent returns one
 actual SPARQL `SERVICE` row, with no credentials and no imported ROOT facts.
 Foreign, pack-only and revoked consent cause no network request; URL neighbours,
 redirects, forged declarations and malformed policy refuse. HTTP failures remain
@@ -14,7 +14,7 @@ Build the candidate and fixture:
 
 ```bash
 cargo build --features remote --bin quipu --example endpoint_pointer_fixture
-python3 docs/design/endpoint-pointer-demo/demo.py /path/to/quipu /path/to/endpoint_pointer_fixture /path/to/caboodle --baseline /path/to/previous-quipu
+python3 docs/design/endpoint-pointer-demo/demo.py /path/to/quipu /path/to/endpoint_pointer_fixture /path/to/tambo --baseline /path/to/previous-quipu
 ```
 
 The trust CLI must include Tambo PR168's `check-endpoint` command. The demo copies

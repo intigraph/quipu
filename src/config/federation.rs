@@ -12,7 +12,7 @@ pub struct FederationConfig {
     /// List of remote Quipu endpoints.
     pub remotes: Vec<RemoteEndpoint>,
     /// Local verified pendant declarations considered for exact SPARQL SERVICE URLs.
-    /// Declaration is not consent: Caboodle checks current endpoint policy on use.
+    /// Declaration is not consent: Tambo checks current endpoint policy on use.
     pub pendants: Vec<EndpointPendant>,
 }
 

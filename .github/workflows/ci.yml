@@ -74,6 +74,27 @@ jobs:
           components: rustfmt
       - run: cargo fmt --check
 
+  bundled-runtime:
+    if: ${{ github.event_name != 'push' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    name: Bundled ONNX runtime (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bundled-runtime
+      - name: Load the native bundle and refuse corrupt cache or bad explicit override
+        run: cargo test --locked --test bundled_runtime
+
   clippy:
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     name: Clippy (${{ matrix.name }})
@@ -84,7 +105,7 @@ jobs:
           - name: default
             flags: "--no-default-features"
           - name: shacl
-            flags: "--features shacl"
+            flags: "--no-default-features --features shacl"
           # The `full` bundle (Cargo.toml) is what releases ship, and it is a
           # superset of shacl+onnx. Before it existed NOTHING linted quipu-server
           # (required-features shacl+onnx) nor the owl / reactive-reasoner code —
@@ -134,7 +155,7 @@ jobs:
           - name: default
             flags: "--no-default-features"
           - name: shacl
-            flags: "--features shacl"
+            flags: "--no-default-features --features shacl"
           # `owl` is a PUSH-matrix arm, not an extended-features one, and both
           # halves of that are deliberate (aegis-0bk90r).
           #
@@ -524,6 +545,11 @@ jobs:
           python-version: "3.12"
       - run: pip install pre-commit PyYAML==6.0.3
       - run: python3 scripts/check-private-keys.py
+      # Quipu core names no stack vocabulary (namespace, hostname or term list);
+      # vocabularies are data a store loads. Self-test the scanner first so a
+      # broken scanner cannot pass by finding nothing.
+      - run: python3 scripts/check-stack-vocabulary.py --self-test
+      - run: python3 scripts/check-stack-vocabulary.py
       - run: pre-commit run --all-files
         env:
           SKIP: mdbook-build
@@ -663,6 +689,10 @@ jobs:
         run: cargo build --locked --features full --bin quipu-server
       - name: Run mixed load ratchet
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           DB="$(mktemp --suffix=.db)"
           target/debug/quipu-server --db "$DB" --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
@@ -735,6 +765,10 @@ jobs:
             --db /dev/shm/query-perf.db --quipu target/release/quipu
       - name: Run the query performance gate
         run: |
+          # The load test mints its fixture through /episode and queries it under
+          # the legacy namespace; Quipu has no default namespace (gju5 S3a).
+          mkdir -p ~/.config/bobbin
+          printf '[quipu]\nbase_ns = "http://aegis.gastown.local/ontology/"\n' > ~/.config/bobbin/config.toml
           target/release/quipu-server --db /dev/shm/query-perf.db --bind 127.0.0.1:3030 >server.log 2>&1 &
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT

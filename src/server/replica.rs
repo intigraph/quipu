@@ -54,7 +54,9 @@ pub(crate) fn apply_search(
     config: &quipu::SearchConfig,
 ) -> quipu::Result<()> {
     store.search_config_mut().clone_from(config);
-    if config.keyword && store.lexical_progress()?.is_none() {
+    let initialized = store.lexical_progress()?.is_some();
+    store.search_config_mut().keyword = config.keyword_for_store(false, initialized);
+    if store.search_config().keyword && !initialized {
         return Err(quipu::Error::InvalidValue(
             "replica keyword index is absent; initialize it on the primary".into(),
         ));

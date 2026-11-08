@@ -40,7 +40,7 @@
 //!   is the point, pronouncing on it is not this module's right.
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::Store;
 
@@ -66,14 +66,18 @@ impl Candidate {
     /// # Errors
     /// [`Error::InvalidValue`] when the Turtle does not parse, declares no
     /// `aegis:Policy`, or declares more than one (whose numbers would then be
-    /// inseparable in the report).
-    pub fn from_turtle(turtle: &str) -> Result<Self> {
+    /// inseparable in the report); and a `base_ns` that is not usable.
+    ///
+    /// `base_ns` is the store's governance namespace, which names `Policy`,
+    /// `targets` and `claim`.
+    pub fn from_turtle(turtle: &str, base_ns: &str) -> Result<Self> {
+        crate::namespace::require_base_ns(base_ns)?;
         use oxrdf::{NamedOrBlankNode, Term, Triple};
         use oxrdfio::{RdfFormat, RdfParser};
 
-        let policy_type = format!("{DEFAULT_BASE_NS}Policy");
-        let targets_p = format!("{DEFAULT_BASE_NS}targets");
-        let claim_p = format!("{DEFAULT_BASE_NS}claim");
+        let policy_type = format!("{base_ns}Policy");
+        let targets_p = format!("{base_ns}targets");
+        let claim_p = format!("{base_ns}claim");
 
         let mut policies: Vec<String> = Vec::new();
         let mut triples: Vec<(String, String, String)> = Vec::new();

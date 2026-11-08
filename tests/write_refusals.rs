@@ -48,6 +48,10 @@ fn refused_governance_write_counts_once_but_success_and_speculation_do_not() {
     let mut store = Store::open_in_memory().unwrap();
     store.embedding_config_mut().auto_embed = false;
     let ns = quipu::namespace::DEFAULT_BASE_NS;
+    // Governance resolves its vocabulary under the store's base namespace and
+    // refuses (fail closed) when none is configured, so name the one the
+    // policy below is written in.
+    store.set_base_ns(ns.to_string());
     store.governance_config_mut().enforce_on_write = true;
     let policy = vec![
         datum(

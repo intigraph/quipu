@@ -1,68 +1,123 @@
-//! Which IRIs the golden-path vocabulary terms are written under.
+//! Which IRIs the vocabulary terms Quipu mints are written under.
 //!
-//! The vocabulary (the predicates Quipu itself mints, such as `stepOf` or
-//! `sourceKind`) is separate from the store's `base_ns`, which also names the
-//! individuals minted from episode node names. Moving the vocabulary to its
-//! published Camayoc namespace must not move those individuals: changing
-//! `base_ns` on an existing store would fork the identity of every named entity.
+//! Quipu writes a small vocabulary of its own (the golden-path predicates
+//! such as `stepOf`, and the classes its drafts declare) under the store's
+//! `base_ns`. That namespace also names the individuals minted from episode
+//! node names, so it can never change on an existing store without forking
+//! the identity of every named entity.
 //!
-//! [`Vocabulary::Legacy`] (the default) writes every term under `base_ns`,
-//! exactly as before. [`Vocabulary::Intigraph`] writes the terms the Camayoc
-//! vocabulary has published under their stable `https://w3id.org/intigraph/`
-//! IRIs; any other name stays under `base_ns`. Stored data is never rewritten,
-//! and old IRIs stay valid through the published `owl:equivalentProperty`
-//! bridge.
+//! A [`VocabularyMap`] moves the terms without moving the individuals. It is
+//! DATA a store loads (`[quipu] vocabulary_map`), never a list compiled into
+//! Quipu: the map belongs to whichever vocabulary pack published the terms,
+//! and Quipu does not know or name it. The map is read from Turtle:
 //!
-//! Selecting `intigraph` on a store whose readers still query the legacy IRIs
-//! hides new facts from them unless that bridge is live for new writes (reactive
-//! materialization, or readers that query both). Switch only after that holds.
+//! ```turtle
+//! <http://example.org/kb/stepOf>
+//!     owl:equivalentProperty <https://example.com/vocab#stepOf> .
+//! ```
+//!
+//! For each `owl:equivalentProperty` or `owl:equivalentClass` statement whose
+//! SUBJECT is a term Quipu would mint, the OBJECT is written instead. Every
+//! other term stays under `base_ns`. No map means every term stays under
+//! `base_ns`, which is the behaviour of a store that never configured one.
+//! Stored data is never rewritten.
+//!
+//! Loading a map on a store whose readers query the old IRIs hides new facts
+//! from them unless those readers also see the equivalents. Configure a map
+//! only once that holds.
 
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::path::Path;
 
-/// The published Camayoc core vocabulary namespace.
-pub const CAMAYOC_CORE_NS: &str = "https://w3id.org/intigraph/camayoc/core/ns#";
+use crate::error::{Error, Result};
 
-/// The vocabulary a store writes its golden-path terms under.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Vocabulary {
-    /// Every term under the store's `base_ns` (today's behaviour).
-    #[default]
-    Legacy,
-    /// Published terms under their stable Camayoc IRIs.
-    Intigraph,
+const OWL_EQUIVALENT_PROPERTY: &str = "http://www.w3.org/2002/07/owl#equivalentProperty";
+const OWL_EQUIVALENT_CLASS: &str = "http://www.w3.org/2002/07/owl#equivalentClass";
+
+/// Term IRIs Quipu would mint, each with the IRI to write instead.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VocabularyMap {
+    terms: BTreeMap<String, String>,
 }
 
-/// Golden-path terms published in the Camayoc core vocabulary under the same
-/// local name. Every `PathVocab` term is here; none is a kept-legacy term.
-const CAMAYOC_CORE_TERMS: &[&str] = &[
-    "about",
-    "actionKind",
-    "actionTarget",
-    "deadEnd",
-    "falsifier",
-    "omissionAuthority",
-    "omissionRuling",
-    "omitsStep",
-    "omittedStep",
-    "outcome",
-    "prunedFrom",
-    "sourceKind",
-    "stepOf",
-    "stepOrder",
-    "trajectoryOf",
-    "verifiedBy",
-];
-
-/// The IRI for term `local` in `vocabulary`, with `base_ns` as the fallback.
-#[must_use]
-pub fn term(local: &str, base_ns: &str, vocabulary: Vocabulary) -> String {
-    match vocabulary {
-        Vocabulary::Intigraph if CAMAYOC_CORE_TERMS.contains(&local) => {
-            format!("{CAMAYOC_CORE_NS}{local}")
+impl VocabularyMap {
+    /// Read a map from Turtle. Only IRI-to-IRI `owl:equivalentProperty` and
+    /// `owl:equivalentClass` statements are used; every other statement is
+    /// ignored, so a published vocabulary document can serve as its own map.
+    ///
+    /// # Errors
+    ///
+    /// Refuses unparsable Turtle, and a subject mapped to two different
+    /// objects (which IRI to write would be a guess).
+    pub fn from_turtle(turtle: &str) -> Result<Self> {
+        let mut terms: BTreeMap<String, String> = BTreeMap::new();
+        for triple in oxttl::TurtleParser::new().for_reader(turtle.as_bytes()) {
+            let triple = triple.map_err(|e| Error::InvalidValue(format!("vocabulary map: {e}")))?;
+            let predicate = triple.predicate.as_str();
+            if predicate != OWL_EQUIVALENT_PROPERTY && predicate != OWL_EQUIVALENT_CLASS {
+                continue;
+            }
+            let (oxrdf::NamedOrBlankNode::NamedNode(subject), oxrdf::Term::NamedNode(object)) =
+                (&triple.subject, &triple.object)
+            else {
+                continue;
+            };
+            let (from, to) = (subject.as_str(), object.as_str());
+            if from == to {
+                continue;
+            }
+            match terms.get(from) {
+                Some(existing) if existing != to => {
+                    return Err(Error::InvalidValue(format!(
+                        "vocabulary map names two IRIs for {from}: {existing} and {to}"
+                    )));
+                }
+                Some(_) => {}
+                None => {
+                    terms.insert(from.to_string(), to.to_string());
+                }
+            }
         }
-        _ => format!("{base_ns}{local}"),
+        Ok(Self { terms })
     }
+
+    /// Read a map from a Turtle file.
+    ///
+    /// # Errors
+    ///
+    /// Refuses an unreadable file, and everything [`Self::from_turtle`] refuses.
+    pub fn load(path: &Path) -> Result<Self> {
+        let turtle = std::fs::read_to_string(path)
+            .map_err(|e| Error::InvalidValue(format!("vocabulary map {}: {e}", path.display())))?;
+        Self::from_turtle(&turtle)
+    }
+
+    /// The IRI to write for `iri`: its mapped equivalent, or `iri` itself.
+    #[must_use]
+    pub fn resolve(&self, iri: &str) -> String {
+        self.terms
+            .get(iri)
+            .cloned()
+            .unwrap_or_else(|| iri.to_string())
+    }
+
+    /// The number of mapped terms.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.terms.len()
+    }
+
+    /// True when no term is mapped (every term stays under `base_ns`).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+    }
+}
+
+/// The IRI for term `local` under `base_ns`, after `map`.
+#[must_use]
+pub fn term(local: &str, base_ns: &str, map: &VocabularyMap) -> String {
+    map.resolve(&format!("{base_ns}{local}"))
 }
 
 #[cfg(test)]
@@ -70,96 +125,62 @@ mod tests {
     use super::*;
 
     const BASE: &str = "http://example.org/kb/";
+    const MAP: &str = "@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\
+        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n\
+        <http://example.org/kb/stepOf> owl:equivalentProperty <https://example.com/v#stepOf> .\n\
+        <http://example.org/kb/GoldenPath> owl:equivalentClass <https://example.com/v#GoldenPath> .\n\
+        <https://example.com/v#stepOf> rdfs:label \"step of\" .\n\
+        <http://example.org/kb/self> owl:equivalentProperty <http://example.org/kb/self> .\n";
 
     #[test]
-    fn legacy_writes_every_term_under_base_ns() {
-        for local in CAMAYOC_CORE_TERMS.iter().chain(&["closedAt", "anything"]) {
-            assert_eq!(
-                term(local, BASE, Vocabulary::Legacy),
-                format!("{BASE}{local}")
-            );
+    fn no_map_writes_every_term_under_base_ns() {
+        let map = VocabularyMap::default();
+        assert!(map.is_empty());
+        for local in ["stepOf", "sourceKind", "GoldenPath", "anything"] {
+            assert_eq!(term(local, BASE, &map), format!("{BASE}{local}"));
         }
     }
 
     #[test]
-    fn intigraph_writes_published_terms_under_camayoc_core() {
+    fn a_map_moves_exactly_its_subjects() {
+        let map = VocabularyMap::from_turtle(MAP).unwrap();
+        assert_eq!(map.len(), 2, "labels and self-maps are not terms");
+        assert_eq!(term("stepOf", BASE, &map), "https://example.com/v#stepOf");
         assert_eq!(
-            term("stepOf", BASE, Vocabulary::Intigraph),
-            "https://w3id.org/intigraph/camayoc/core/ns#stepOf"
+            term("GoldenPath", BASE, &map),
+            "https://example.com/v#GoldenPath"
         );
-        for local in CAMAYOC_CORE_TERMS {
-            assert_eq!(
-                term(local, BASE, Vocabulary::Intigraph),
-                format!("{CAMAYOC_CORE_NS}{local}")
-            );
-        }
+        assert_eq!(term("sourceKind", BASE, &map), format!("{BASE}sourceKind"));
+        // Another store's base namespace is not this map's subject.
+        assert_eq!(
+            term("stepOf", "http://other.example/", &map),
+            "http://other.example/stepOf"
+        );
     }
 
     #[test]
-    fn intigraph_keeps_unpublished_and_kept_legacy_names_under_base_ns() {
-        // closedAt and assignedTo stay legacy permanently; arbitrary episode
-        // names are individuals or ad-hoc predicates, never moved.
-        for local in ["closedAt", "assignedTo", "checkout", "Service"] {
-            assert_eq!(
-                term(local, BASE, Vocabulary::Intigraph),
-                format!("{BASE}{local}")
-            );
-        }
-    }
-
-    fn path_vocab_iris(v: &crate::path::PathVocab) -> Vec<&str> {
-        vec![
-            &v.step_of,
-            &v.step_order,
-            &v.action_kind,
-            &v.action_target,
-            &v.verified_by,
-            &v.falsifier,
-            &v.trajectory_of,
-            &v.about,
-            &v.outcome,
-            &v.pruned_from,
-            &v.omits_step,
-            &v.omitted_step,
-            &v.omission_authority,
-            &v.omission_ruling,
-            &v.dead_end,
-            &v.source_kind,
-        ]
+    fn the_map_is_directional() {
+        // The object is never rewritten back to the subject.
+        let map = VocabularyMap::from_turtle(MAP).unwrap();
+        assert_eq!(
+            map.resolve("https://example.com/v#stepOf"),
+            "https://example.com/v#stepOf"
+        );
     }
 
     #[test]
-    fn path_vocab_default_is_byte_identical_legacy() {
-        // Deploy-safety gate: a store that never sets `vocabulary` writes
-        // exactly the IRIs it wrote before this module existed.
-        let legacy = crate::path::PathVocab::new(BASE);
-        let iris = path_vocab_iris(&legacy);
-        assert_eq!(iris.len(), CAMAYOC_CORE_TERMS.len());
-        for iri in &iris {
-            let local = iri.strip_prefix(BASE).expect("legacy term under base_ns");
-            assert!(
-                CAMAYOC_CORE_TERMS.contains(&local),
-                "{local} not in the map"
-            );
-        }
+    fn a_term_mapped_twice_is_refused() {
+        let twice = format!(
+            "{MAP}<http://example.org/kb/stepOf> \
+             <http://www.w3.org/2002/07/owl#equivalentProperty> <https://elsewhere.example/stepOf> .\n"
+        );
+        let err = VocabularyMap::from_turtle(&twice).unwrap_err().to_string();
+        assert!(err.contains("two IRIs"), "{err}");
     }
 
     #[test]
-    fn path_vocab_intigraph_moves_every_term_and_nothing_else() {
-        let moved = crate::path::PathVocab::with_vocabulary(BASE, Vocabulary::Intigraph);
-        for iri in path_vocab_iris(&moved) {
-            assert!(
-                iri.starts_with(CAMAYOC_CORE_NS),
-                "{iri} not under Camayoc core"
-            );
-        }
-    }
-
-    #[test]
-    fn config_values_are_lowercase_and_default_is_legacy() {
-        assert_eq!(Vocabulary::default(), Vocabulary::Legacy);
-        let parsed: Vocabulary = serde_json::from_str("\"intigraph\"").unwrap();
-        assert_eq!(parsed, Vocabulary::Intigraph);
-        assert!(serde_json::from_str::<Vocabulary>("\"Intigraph\"").is_err());
+    fn unparsable_turtle_and_a_missing_file_are_refused() {
+        assert!(VocabularyMap::from_turtle("<a> <b>").is_err());
+        assert!(VocabularyMap::load(Path::new("/nonexistent/vocabulary-map.ttl")).is_err());
     }
 }

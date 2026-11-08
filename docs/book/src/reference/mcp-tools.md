@@ -6,8 +6,8 @@ integration, from its own MCP server: `quipu mcp --db <path>` over stdio, or
 `knowledge_*` tools, not these.) The [MCP Tool Index](mcp-tool-index.md)
 lists every tool with its parameters, generated from the tool definitions.
 
-The registry (`tool_definitions()`) exposes **82 tools** in a default build, or
-**84** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
+The registry (`tool_definitions()`) exposes **85 tools** in a default build, or
+**87** when built with the `owl` feature (which adds `quipu_load_ontology` and `quipu_explain`).
 (The counts are pinned by tests in `src/mcp/tests.rs`, which also check this
 page and the README against the manifest.)
 
@@ -1059,10 +1059,36 @@ Manage OWL ontologies: `load` (parse + materialize entailments), `list`, or
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `action` | No | `load`, `list`, or `remove` (default: list) |
-| `name` | For load/remove | Ontology name |
+| `action` | No | `load`, `materialize`, `retract_materialization`, `list`, or `remove` (default: list) |
+| `name` | For load/remove/retract_materialization | Ontology name |
 | `turtle` | For load | OWL ontology in Turtle format |
 | `timestamp` | No | ISO-8601 timestamp |
+| `after_tx` | For retract_materialization | Exclusive lower transaction watermark |
+| `through_tx` | For retract_materialization | Inclusive upper transaction watermark |
+| `apply` | No | Apply one cleanup batch; defaults to a read-only preview |
+| `expect` | With apply | Exact cleanup token from the latest preview or batch response |
+
+`retract_materialization` closes only live `owl:materialize` claims in ROOT's
+companion inferred graph whose assertion transaction is in
+`(after_tx, through_tx]`. The graph and source are fixed. Preview returns an
+`expect` token bound to the store, current transaction head, named ontology
+version, remaining physical claims and selected batch. Apply requires that
+token and rechecks the head and ontology under the writer reservation. A stale
+token refuses without closing claims; preview again after inspecting the change.
+
+Each apply selects at most 5,000 statements, preserves claims outside the
+window and other producers' claims, and passes normal write and deletion-floor
+gates. History remains append-only. The response measures `retracted` and
+`remaining`; `window_complete` means the selected window is empty. Continue
+using each response's token until `remaining` is zero. An interrupted or failed
+request requires read-back before another apply.
+
+The ontology name binds a registry version, **not causal ownership**: OWL uses
+one source across ontologies. Choose bounds from the retained materialization
+receipt, with materializers held throughout cleanup. Registry removal remains
+the separate `remove` action after the window is empty; cleanup reports
+`ontology_removed: false`. This operation does not remove later materializations
+or infer their ownership from the ontology name.
 
 Hybrid fusion parameters on `quipu_search`: `mode: "hybrid"`, `alpha` (semantic
 weight, 0..1), `fusion` (`weighted` or `rrf`), positive `rrf_k`, and `explain`.
@@ -1171,9 +1197,9 @@ Fields: `iri` (required), `expanded`.
 
 ### `quipu_entity_history`
 
-Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.
 
-Fields: `iri` (required).
+Fields: `iri` (required), `graph`, `source_store_id`, `expected_generation`, `since_tx`, `until_tx`, `max_entries`, `max_bytes`, `observation_only`.
 
 ### `quipu_transactions`
 
@@ -1281,3 +1307,35 @@ certify target coverage or graph completeness.
 
 Read serving version, source commit and dirty-build identity without REST.
 No arguments; version identity does not replace behavioral acceptance.
+
+### Shape mapping preparation and settlement
+
+- `quipu_mapping_propose` is read-only: qualify an explicit `mapping` against
+  registered graphs and exact current registry pins; return its proposal digest.
+- `quipu_mapping_decide` is read-only: bind explicit full-key row decisions to
+  `proposal` and declared `reviewer`; return the accepted mapping and digest.
+- `quipu_mapping_apply` writes either `action: "apply"` with a mapping object,
+  or `action: "retire"` with a mapping IRI. Both require `expected_digest` and
+  declared `actor`. Application may select an existing `operations_graph`.
+
+Declared authors are provenance, not credentials. Existing graph authority and
+validation remain enforced. Apply reports per-target `assert_writable`, and
+registry changes flag stale mappings atomically without automatic repinning.
+See [the REST mapping contract](rest-api.md#version-pinned-shape-mappings) for
+fields, the five allowed predicates, replay, and retirement semantics.
+
+### `quipu_mapping_propose`
+
+Read-only explicit mapping qualification. Supply `mapping` with exact registry
+pins and graph scopes. Returns the complete proposal and `expected_digest`.
+
+### `quipu_mapping_decide`
+
+Read-only row decisions. Supply `proposal`, declared `reviewer`, and full-key
+`decisions`. Returns the accepted mapping, digest, and declined rows.
+
+### `quipu_mapping_apply`
+
+Write the accepted mapping or retire an existing mapping using `action`,
+`mapping`, `expected_digest`, and declared `actor`. Application accepts an
+optional existing `operations_graph`. Normal graph authority remains required.

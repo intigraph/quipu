@@ -23,7 +23,8 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | --- | --- |
 | `quipu prime` | Print this primer and a summary of the local store |
 | `quipu read "<sparql>"` | Run a SPARQL query (`--valid-at`, `--tx` for time travel; alias `query`) |
-| `quipu search "<text>"` | Keyword search for entities (`--mode` selects vector or hybrid) |
+| `quipu search "<text>"` | Search automatically with vectors when a provider is ready, keyword otherwise (`--mode` overrides) |
+| `quipu model install` / `quipu model backfill` | Install the pinned default model explicitly; prepare existing ROOT subjects in bounded batches |
 | `quipu cord --type <IRI>` | List entities, optionally of one type |
 | `quipu impact <IRI>` | Walk what depends on an entity (`--remove` for a what-if) |
 | `quipu unravel --valid-at <date>` | See the graph as it was at a point in time |
@@ -34,11 +35,12 @@ ROOT is the default graph; named graphs hold scoped knowledge and are selected e
 | `quipu validate --shapes <s> --data <d>` | Check data against shapes without writing |
 | `quipu shapes list` | Show the SHACL shapes that guard writes |
 | `quipu graph list` | List registered named graphs |
-| `quipu stats` / `quipu doctor labels` | Store statistics and a graph-label drift report |
+| `quipu stats` / `quipu doctor labels` / `quipu doctor search` | Store statistics, graph-label drift, and search readiness |
 | `quipu store status` | Inspect native ownership; explicit `store adopt` / `store restore` mint a new epoch, while ordinary legacy opens remain INACTIVE |
 | `quipu export` | Export RDF from ROOT or one graph |
 | `quipu databook export` / `import` | One graph as a DataBook (Markdown + YAML + Turtle), and back; import never runs its queries |
 | `quipu memory read <owner.json>` | Read versioned file memory (`export`, `commit` for the rest; off unless configured) |
+| `quipu competency lint <pendant>` | Check contract schema and query/command syntax offline; execute nothing |
 | `quipu share` / `quipu import` | Hand a graph to another store and verify one in |
 | `quipu mcp` | Serve the MCP tools over stdio |
 

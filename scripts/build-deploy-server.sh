@@ -293,8 +293,8 @@ prior_sha=""
 [ -f "$ARTIFACT" ] && prior_sha=$(sha256sum "$ARTIFACT" | cut -d' ' -f1)
 built_head=$(git rev-parse HEAD 2>/dev/null || echo "")
 
-say "cargo build --release --bin $BIN --features $FEATURES"
-cargo build --release --bin "$BIN" --features "$FEATURES"
+say "cargo build --release --no-default-features --bin $BIN --features $FEATURES"
+cargo build --release --no-default-features --bin "$BIN" --features "$FEATURES"
 
 # ── FAIL-LOUD GATE 1: the build actually PRODUCED the server binary ──
 # The silent-skip signature is a MISSING artifact: a bare `cargo build` excludes

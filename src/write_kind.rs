@@ -109,6 +109,7 @@ impl WriteKind {
             | "/datasets"
             | "/queries"
             | "/shapes"
+            | "/mapping/apply"
             | "/subscriptions"
             | "/events/commit"
             | "/events/graph/commit" => Self::GraphAdmin,

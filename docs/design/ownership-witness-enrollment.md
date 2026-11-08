@@ -174,10 +174,17 @@ onto `WitnessHead`:
 - `ACTIVE(g+1)` is the successor's `Active`.
 - An `ABANDONED` outcome returns the head to `Active(g)` for the same tuple.
 
-**Model change required before W1:** the accepted model (#939) has no abandon
-transition. P0 must add an `Abandon` action, `Reserved -> Active` at the same
-tuple, guarded by the source journal still being `ACTIVE(g)`, and re-run the
-state enumeration. Two active owners and a stale-B activation must remain
+**Model prerequisite before W1:** the experimental model has an `Abandon`
+action, `Reserved -> Active` at the same tuple, guarded by the source journal
+being `ACTIVE(g)` at the reserved tuple and no retained sealed retirement.
+It retains the exact request and bounded operator reason as an immutable
+`Abandonment` outcome. The next attempt requires a distinct operation ID;
+the model uses operation IDs rather than allocating storage keys `r<k>`.
+An old abandonment readback never rewinds a later reservation or owner, and
+abandonment itself never restarts a crashed source. This is an I/O-free
+specification: it provisions no witness and supplies no runtime transition
+or journal-rollback verification. Re-run the state enumeration before W1.
+Two active owners and a stale-B activation must remain
 unreachable. The model's rule that a request's destination is never its
 source stays unchanged: abandonment is not a self-handoff.
 
@@ -197,7 +204,7 @@ changing the protocol.
 
 ### Witness interface
 
-`AuthorityWitness` is a trait with four operations, each returning
+`AuthorityWitness` is a trait with five operations, each returning
 `Ok`, `Conflict` or `Unknown`, never a guess:
 
 - `head(store_id, anchor)`: the anchored head walk.
@@ -381,3 +388,43 @@ records are quarantined evidence, never replayed.
 
 Until those are decided, slices E1, W1, S1 and T1 are source-only and
 private-fixture only. No lineage is enrolled and no production store changes.
+
+## W1 in-memory candidate boundary
+
+The crate-private `ownership_handoff_model::witness` module stages the five
+operations against a private, mutex-serialized create-only map. Its strict,
+canonical versioned records reuse the model authority/request/certificate and
+abandonment types. It seeds an **assumed** genesis for a disposable model; it
+does not enroll a store. Nothing calls it from Store, startup, a CLI or a
+transport, and it is not a public authority API.
+
+The candidate head walk starts at the caller-supplied journal-role anchor,
+checks exact predecessor/destination and attempt ordering, and rejects
+unexpected keys beyond its stopping point. The in-memory adapter additionally
+checks the complete bounded tail. Generation and attempt indices are at most 32; limits also include 512
+records of at most 65,536 bytes and 256 reads per walk. A
+missing anchor, unreadable/noncanonical body, illegal sequence or exhausted
+budget is `Unknown`, never an inferred active owner. Writes validate from
+genesis; this intentionally bounds the model rather than promising long-lived
+production scalability.
+
+`Unknown`, `Slow`, `Conflict` and lost-reply-after-create are deterministic
+faults. Slow returns `Unknown` immediately; there is no clock, sleep or lease.
+An exact historical retry reads back the immutable body without rewinding a
+newer head. It returns a record outcome, never writer admission. Mutex
+contention or poisoning also returns `Unknown`.
+
+Abandonment checks modeled source-journal state and the retained-seal input.
+Those inputs are **not** protected-journal verification or credentials. As with
+the existing executable model's oracle observations, only a future separately
+reviewed transition adapter may obtain real authority evidence. A retirement
+certificate's syntax likewise does not prove actual source retirement: the
+model composition must first enforce its existing retirement prerequisite.
+The witness cannot authenticate that fact or stop a physical writer.
+
+The draft controls compose the actual witness with the actual ownership model,
+including skipped-boundary enumeration and unchanged local state after a lost
+reply. The existing retirement-guard mutant remains a required qualification
+falsifier. Draft tests are not a passing qualification receipt. Runtime
+protected-journal/through-COMMIT fencing, W2, S1/T1 and physical two-host P5/P6
+acceptance remain separate; no production use is admitted by this source slice.

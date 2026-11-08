@@ -31,6 +31,19 @@ pub(super) fn commit<'a>(
         *slot = phase.elapsed().as_secs_f64();
         phase = Instant::now();
     };
+    if quipu::writer_scope::is_scoped_request() {
+        for q in removed.clone().chain(asserted.clone()) {
+            let GraphName::NamedNode(g) = &q.graph_name else {
+                return Err(
+                    quipu::Error::PolicyDenied("scoped writer target denied".into()).into(),
+                );
+            };
+            let id = store
+                .committed_graph_id(g.as_str())?
+                .ok_or_else(|| quipu::Error::PolicyDenied("scoped writer target denied".into()))?;
+            store.check_writer_scope(id)?;
+        }
+    }
     // The write gates /knot enforces, on what this update asserts, before any
     // term is interned or any transaction begins (aegis-1hfyk5).
     update_gates::enforce(

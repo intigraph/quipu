@@ -17,6 +17,9 @@ pub mod decision_deck;
 mod decision_nonces;
 mod ownership;
 mod ownership_fence;
+// Dormant enrollment inventory: native identity fields, no startup wiring.
+#[cfg(not(target_arch = "wasm32"))]
+mod ownership_inventory;
 // Protected per-lineage authority journal (aegis-s24.8 P1); native only.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_journal;
@@ -34,6 +37,8 @@ mod ownership_stage_a_tests;
 #[cfg(test)]
 mod ownership_tests;
 mod poststate_profile;
+mod validator_observation;
+pub use validator_observation::ValidatorObservation;
 #[cfg(feature = "shacl")]
 mod shacl_focus;
 mod shacl_new_graph;
@@ -61,6 +66,8 @@ pub mod labels;
 pub mod labels_advisory;
 mod literal_identity;
 mod literal_overlay;
+mod mapping_atomic;
+mod mapping_writes;
 mod migrate;
 mod named_graphs;
 mod open;
@@ -74,9 +81,18 @@ pub mod push;
 pub mod queries;
 pub mod read_model;
 mod reads;
+mod writer_scope;
+// Source-stage writer reader; no production caller is admitted yet.
+#[allow(dead_code)]
+mod slot_reads;
+// Source-stage prepared-cut bridge; no production caller or admission authority.
+#[allow(dead_code)]
+pub(crate) mod slot_read_batch;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };
+#[cfg(feature = "owl")]
+mod ontology_window;
 mod registry;
 pub mod registry_list;
 pub mod respace;
@@ -145,6 +161,7 @@ pub struct Store {
     /// these from `[quipu.search]` at startup so callers can't request
     /// unbounded result sets (hq-gkd).
     pub(crate) search_config: SearchConfig,
+    pub(crate) created_fact_schema: bool,
     pub(crate) labels_config: crate::config::LabelsConfig,
     pub(crate) import_policy_config: crate::config::ImportPolicyConfig,
     /// SHACL validation policy. When `validate_on_write` is set, episode
@@ -161,6 +178,9 @@ pub struct Store {
     /// [`Store::take_poststate_profile`] (aegis-wlf0). Accumulated, never read
     /// by the gate itself, so it cannot change a write decision.
     pub(crate) poststate_profile: PoststateProfile,
+    validator_observation: std::cell::RefCell<Option<validator_observation::ObservationState>>,
+    #[cfg(feature = "owl")]
+    pub(super) owl_cache_source: Option<crate::resolver_contract::ContentDigest>,
     /// Whether `idx_current_g` has the exact current-membership definition,
     /// memoized against `PRAGMA schema_version` (aegis-ek4): a correlated
     /// named-graph leaf asks once per outer row.
@@ -231,9 +251,11 @@ pub struct Store {
     /// path. Before this field, `config.base_ns` was read by nothing and every
     /// REST/MCP ingest hardcoded `DEFAULT_BASE_NS`.
     pub(crate) base_ns: String,
-    /// Golden-path vocabulary selection; set from `[quipu].vocabulary` at
-    /// startup. Defaults to legacy (every term under `base_ns`).
-    pub(crate) vocabulary: crate::term_vocabulary::Vocabulary,
+    /// Code-entity IRI base, from `[quipu].code_base` (empty when unset).
+    pub(crate) code_base: String,
+    /// Vocabulary term map, loaded from `[quipu].vocabulary_map` at startup.
+    /// Empty by default (every term under `base_ns`).
+    pub(crate) vocabulary: std::sync::Arc<crate::term_vocabulary::VocabularyMap>,
     pub(crate) namespace_settings: crate::entity_namespaces::Settings,
     /// When set, vector search is delegated to an external provider (e.g.
     /// Bobbin's `LanceDB`). Auto-embedding on write is skipped.

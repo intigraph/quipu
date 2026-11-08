@@ -21,6 +21,13 @@ impl Database {
         })
     }
 
+    /// Name the namespace this store mints names under. There is no default:
+    /// an episode write is refused until a namespace is set.
+    #[wasm_bindgen(js_name = setBaseNs)]
+    pub fn set_base_ns(&mut self, base_ns: &str) -> Result<(), JsValue> {
+        self.engine.set_base_ns(base_ns).map_err(super::err_js)
+    }
+
     /// Return the actual engine build, storage and operation manifest as JSON.
     pub fn capabilities(&self) -> Result<String, JsValue> {
         serde_json::to_string(&self.engine.capabilities()).map_err(super::err_js)
@@ -60,8 +67,7 @@ impl Database {
     /// false until a freshness challenge exists.
     #[wasm_bindgen(js_name = replicaFreshness)]
     pub fn replica_freshness(&self, now_ms: f64) -> Result<String, JsValue> {
-        serde_json::to_string(&self.engine.replica_freshness(millis(now_ms)))
-            .map_err(super::err_js)
+        serde_json::to_string(&self.engine.replica_freshness(millis(now_ms))).map_err(super::err_js)
     }
 
     /// Invoke a supported native handler with lossless JSON text in and out.

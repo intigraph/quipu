@@ -266,3 +266,103 @@ fn feed_refuses_disagreeing_closed_claims_instead_of_picking_one() {
             .is_err()
     );
 }
+
+/// aegis-karb.2 (ruling B): a decided fork promote writes a receipt `[Td, Td)`
+/// and then a live winner. The changes feed, the replica applier and as-of
+/// readers must all treat the receipt as current at no time.
+#[cfg(feature = "shacl")]
+#[test]
+fn a_decided_promote_with_a_receipt_replicates_with_equal_answers() {
+    const TD: &str = "2026-06-01T00:00:00Z";
+    let mut primary = Store::open_in_memory().unwrap();
+    primary
+        .load_shapes(
+            "one",
+            "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
+             <urn:example:S> a sh:NodeShape ; sh:targetSubjectsOf <urn:example:status> ;\n\
+             sh:property [ sh:path <urn:example:status> ; sh:maxCount 1 ] .\n",
+            SEED,
+        )
+        .unwrap();
+    let status = |store: &Store, v: &str, from: &str, op| {
+        let mut d = d(
+            store,
+            "urn:example:item",
+            "urn:example:status",
+            Value::Str(v.into()),
+            op,
+        );
+        d.valid_from = from.into();
+        d
+    };
+    primary
+        .transact(
+            &[status(&primary, "base", SEED, Op::Assert)],
+            SEED,
+            None,
+            None,
+        )
+        .unwrap();
+    let fork = primary
+        .fork_create("f", primary.latest_tx_id().unwrap(), SEED, None)
+        .unwrap();
+    let ours = [
+        status(&primary, "base", "2026-02-01T00:00:00Z", Op::Retract),
+        status(&primary, "ours", "2026-02-01T00:00:00Z", Op::Assert),
+    ];
+    primary
+        .transact(&ours, "2026-02-01T00:00:00Z", None, None)
+        .unwrap();
+    let theirs = [
+        status(&primary, "base", CORRECTION, Op::Retract),
+        status(&primary, "theirs", CORRECTION, Op::Assert),
+    ];
+    primary
+        .transact_to_graph(&theirs, CORRECTION, None, None, fork.g)
+        .unwrap();
+    let (e, a) = (theirs[1].entity, theirs[1].attribute);
+    let decided =
+        crate::store::forks::ForkResolutions::from([((e, a), vec![Value::Str("theirs".into())])]);
+    let crate::ForkPromotion::Promoted { tx, .. } = primary
+        .fork_promote_resolved("f", &decided, "sha", "rev", TD, None, false)
+        .unwrap()
+    else {
+        panic!("expected Promoted");
+    };
+    let receive = tx - 1;
+    assert_eq!(answers(&primary, TD, None), ["Str(\"theirs\")"]);
+    assert_eq!(answers(&primary, TD, Some(receive)), ["Str(\"ours\")"]);
+
+    let mut replica = Store::open_in_memory().unwrap();
+    let mut applier = Applier::open(&replica).unwrap();
+    for page in pages(&primary) {
+        let result = applier
+            .apply_frame(&mut replica, "quipu.changes", &page, 1)
+            .unwrap();
+        assert!(matches!(result, Outcome::Applied { .. }), "{result:?}");
+    }
+    for at in [
+        SEED,
+        "2026-02-15T00:00:00Z",
+        CORRECTION,
+        TD,
+        "2026-07-01T00:00:00Z",
+    ] {
+        assert_eq!(
+            answers(&replica, at, None),
+            answers(&primary, at, None),
+            "valid time {at}"
+        );
+    }
+    let source = applier.progress().unwrap().source.clone();
+    let local = |t| {
+        super::super::map::local_cursor(&replica, &source, t)
+            .unwrap()
+            .unwrap()
+    };
+    assert_eq!(
+        answers(&replica, TD, Some(local(receive))),
+        answers(&primary, TD, Some(receive)),
+        "the receive pin: the receipt is current at no time on either side"
+    );
+}

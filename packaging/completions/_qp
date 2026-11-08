@@ -27,7 +27,34 @@ _qp() {
         (( CURRENT += 1 ))
         curcontext="${curcontext%:*:*}:qp-command-$line[1]:"
         case $line[1] in
-            (store)
+            (competency)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__competency_commands" \
+"*::: :->competency" \
+&& ret=0
+
+    case $state in
+    (competency)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-competency-command-$line[1]:"
+        case $line[1] in
+            (lint)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-pendant:_default' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(store)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -455,6 +482,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--group-id=[Select facts belonging to this group]:VALUE:_default' \
 '*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
 '*--format=[Output or input format for this operation]:VALUE:_default' \
+'--read-only[Export a cold local snapshot without writes; refuses sidecars and attachments]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -570,6 +598,41 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-query:_default' \
 && ret=0
 ;;
+(model)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_qp__subcmd__model_commands" \
+"*::: :->model" \
+&& ret=0
+
+    case $state in
+    (model)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:qp-model-command-$line[1]:"
+        case $line[1] in
+            (install)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(backfill)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--batch-size=[Number of entries per indexing batch]:VALUE:_default' \
+'*--after=[Resume after this cursor]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
 (search-index)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -632,6 +695,13 @@ _arguments "${_arguments_options[@]}" : \
         curcontext="${curcontext%:*:*}:qp-doctor-command-$line[1]:"
         case $line[1] in
             (labels)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(search)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
 '-h[Print help]' \
@@ -955,6 +1025,16 @@ _arguments "${_arguments_options[@]}" : \
 '*--page-txs=[Transactions per follower page]:VALUE:_default' \
 '*--page-gap-ms=[Delay between follower pages in milliseconds]:VALUE:_default' \
 '--bootstrap-only[Bootstrap a follower and exit without polling]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(asof-rdf)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--binding=[Private JSON cut/profile binding and finite resource limits]:VALUE:_default' \
+'*--frames=[Private retained event/data JSONL file, with exact transport data strings]:VALUE:_default' \
+'*--scratch=[Empty canonical private directory matching SQLITE_TMPDIR]:VALUE:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -2131,6 +2211,7 @@ esac
 (( $+functions[_qp_commands] )) ||
 _qp_commands() {
     local commands; commands=(
+'competency:Inspect pendant competency contracts without opening a store' \
 'store:Inspect native ownership, or explicitly adopt or restore a disk store' \
 'version:Print the version and source commit' \
 'install-alias:Add the qp alias beside the quipu binary' \
@@ -2162,8 +2243,9 @@ _qp_commands() {
 'stats:Show store statistics' \
 'prime:Print the agent primer and a bounded, read-only summary of the store' \
 'search:Search entities by keyword, vector or hybrid ranking' \
+'model:Manage the pinned default embedding model' \
 'search-index:Report, backfill or drop the search indexes' \
-'doctor:Report graph-label drift and recommended floors' \
+'doctor:Report graph-label drift or search backend readiness' \
 'pack:Export a graph, or the whole store, as a pack; or verify a pack' \
 'unpack:Merge a published pack into a local graph' \
 'restore:Replace the store with a full pack, binary or text' \
@@ -2174,6 +2256,7 @@ _qp_commands() {
 'compose:Compose verified packs into a named inspection dataset' \
 'changes:Read whole transaction change pages from the change feed' \
 'follow:Keep this database a read-only follower of a primary server' \
+'asof-rdf:Convert one retained as-of share into bounded coherent RDF chunks offline' \
 'acquire:Measure the bounded scope of a direct-main graph acquisition' \
 'migrate-vectors:Move stored vectors between backends (lancedb feature)' \
 'git-merge:Merge pendants from Git snapshots and stop before committing' \
@@ -2243,6 +2326,11 @@ _qp__subcmd__align__subcmd__export_commands() {
 _qp__subcmd__align__subcmd__propose_commands() {
     local commands; commands=()
     _describe -t commands 'qp align propose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__asof-rdf_commands] )) ||
+_qp__subcmd__asof-rdf_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp asof-rdf commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__attest_commands] )) ||
 _qp__subcmd__attest_commands() {
@@ -2352,6 +2440,18 @@ _qp__subcmd__changes_commands() {
     local commands; commands=()
     _describe -t commands 'qp changes commands' commands "$@"
 }
+(( $+functions[_qp__subcmd__competency_commands] )) ||
+_qp__subcmd__competency_commands() {
+    local commands; commands=(
+'lint:Validate competency.toml schema and query/command syntax offline; execute nothing' \
+    )
+    _describe -t commands 'qp competency commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__competency__subcmd__lint_commands] )) ||
+_qp__subcmd__competency__subcmd__lint_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp competency lint commands' commands "$@"
+}
 (( $+functions[_qp__subcmd__compose_commands] )) ||
 _qp__subcmd__compose_commands() {
     local commands; commands=()
@@ -2460,6 +2560,7 @@ _qp__subcmd__diff-textconv_commands() {
 _qp__subcmd__doctor_commands() {
     local commands; commands=(
 'labels:Report graph-label drift and recommended floors' \
+'search:Report search backend readiness and remedies' \
     )
     _describe -t commands 'qp doctor commands' commands "$@"
 }
@@ -2467,6 +2568,11 @@ _qp__subcmd__doctor_commands() {
 _qp__subcmd__doctor__subcmd__labels_commands() {
     local commands; commands=()
     _describe -t commands 'qp doctor labels commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__doctor__subcmd__search_commands] )) ||
+_qp__subcmd__doctor__subcmd__search_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp doctor search commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__entity-ref_commands] )) ||
 _qp__subcmd__entity-ref_commands() {
@@ -2828,6 +2934,24 @@ _qp__subcmd__merge-driver_commands() {
 _qp__subcmd__migrate-vectors_commands() {
     local commands; commands=()
     _describe -t commands 'qp migrate-vectors commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__model_commands] )) ||
+_qp__subcmd__model_commands() {
+    local commands; commands=(
+'install:Download and verify the default embedding model and tokenizer' \
+'backfill:Embed one bounded batch of existing ROOT subjects' \
+    )
+    _describe -t commands 'qp model commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__model__subcmd__backfill_commands] )) ||
+_qp__subcmd__model__subcmd__backfill_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp model backfill commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__model__subcmd__install_commands] )) ||
+_qp__subcmd__model__subcmd__install_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp model install commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__namespaces_commands] )) ||
 _qp__subcmd__namespaces_commands() {

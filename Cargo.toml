@@ -1,6 +1,6 @@
 [package]
 name = "quipu-ai"
-version = "0.16.6"
+version = "0.17.0"
 edition = "2024"
 description = "AI-native knowledge graph with strict ontology enforcement — Bobbin's knowledge module"
 authors = ["Steve Brown"]
@@ -124,6 +124,8 @@ parking_lot = "0.12"
 # GitHub), so the remote feature must carry ureq's TLS backend.
 ureq = { version = "2", features = ["tls"], optional = true }
 flate2 = "1"
+# Same pinned ZIP decoder as build-time ORT packaging; GPU acquisition owns one path.
+runtime-zip = { package = "zip", version = "=8.6.0", default-features = false, features = ["deflate-flate2"], optional = true }
 tar = "0.4"
 # `serialize` carries the wasm export/import story (quipu-2l5,
 # docs/design/wasm-support.md §6): sqlite3_serialize IS the .db interchange
@@ -215,7 +217,7 @@ ring = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
 tikv-jemallocator = { version = "0.6", optional = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [features]
-default = ["shacl"]
+default = ["full", "bundled-onnx"]
 # Source-only HA profile: not in default/full, no server/config/packaging caller.
 ha-read-profile = ["rustix/time"]
 # Rudof enables RDF 1.2 terms; every parser/serializer must agree in this
@@ -227,7 +229,7 @@ owl = []
 # ureq); `server` is the REST/MCP server, and it implies `remote` because
 # `quipu-server` builds a federated provider from config at startup.
 #
-# Both are OFF by default: a library should not carry a web server, and neither
+# Minimal libraries use --no-default-features: neither
 # crate compiles for wasm32 (mio has no wasm target) — see
 # docs/design/wasm-support.md §4.3.
 remote = ["dep:ureq"]
@@ -237,7 +239,10 @@ server = ["mcp", "dep:axum", "dep:tower-http", "dep:tokio", "dep:url", "dep:oxig
 # carries it (aegis-67p0lj). Reported in /version features as `jemalloc`.
 jemalloc = ["dep:tikv-jemallocator"]
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures", "dep:tokio"]
-onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
+onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray", "dep:ureq", "dep:runtime-zip"]
+# The Cargo-install default embeds a checksum-pinned CPU runtime at build time.
+# `full` alone keeps the existing externally supplied dynamic runtime contract.
+bundled-onnx = ["onnx", "dep:ureq", "dep:runtime-zip"]
 reactive-reasoner = []
 # The Quipu-vs-Oxigraph comparison harness (aegis-j0yaxj.2). OFF by default and
 # never in the shipped binaries: it exists to measure, not to ship.
@@ -318,3 +323,16 @@ tokio-tungstenite = { version = "0.28.0", default-features = false, features = [
 [target.'cfg(unix)'.dependencies]
 # Safe descriptor-relative private diagnostics; already present transitively.
 rustix = { version = "=1.1.4", features = ["fs", "process"] }
+
+# Build-only acquisition; fetching is gated by bundled-onnx.
+[build-dependencies]
+ureq = { version = "2", features = ["tls"], optional = true }
+sha2 = "0.10"
+tar = "0.4"
+flate2 = "1"
+runtime-zip = { package = "zip", version = "=8.6.0", default-features = false, features = ["deflate-flate2"], optional = true }
+
+# docs.rs builds offline: document the full API without acquiring a native bundle.
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["full"]

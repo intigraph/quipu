@@ -13,6 +13,13 @@ use crate::store::inferred::{
 };
 use crate::{Datum, MaterializeReport, Op, Store, Value};
 
+#[path = "owl_snapshot_footprint.rs"]
+mod footprint;
+#[path = "owl_snapshot_pages.rs"]
+pub(crate) mod pages;
+#[path = "owl_snapshot_persistent.rs"]
+mod persistent;
+
 /// Maximum number of proposed assertions applied by one writer acquisition.
 pub const APPLY_BATCH: usize = 64;
 /// Refuse oversized inputs instead of copying the entire historical database.
@@ -28,8 +35,6 @@ pub struct Snapshot {
     /// Transaction watermark of the consistent premise snapshot.
     pub premise_head: i64,
     timestamp: String,
-    proposals: Vec<Datum>,
-    next: usize,
     derived: bool,
     /// Derivation counts, before applying to the live store.
     pub report: MaterializeReport,
@@ -49,10 +54,22 @@ impl Snapshot {
         Ok(scratch)
     }
 
-    /// Copy only current ROOT and its inferred companion from a consistent read
-    /// transaction. `scratch` must be an empty, private store owned by the caller.
-    /// No live writes or derivation occur here.
+    /// Copy the complete OWL premise footprint from current ROOT and its inferred
+    /// companion under one consistent read transaction. Unrelated facts are
+    /// omitted only when the ontology/identity rules prove them irrelevant;
+    /// identity-producing property axioms retain the full-input path and cap.
+    /// `scratch` must be empty and private. No live writes or derivation occur here.
     pub fn capture(source: &Store, scratch: Store, timestamp: &str) -> Result<Self> {
+        Self::capture_with_limit(source, scratch, timestamp, MAX_PREMISES)
+    }
+
+    fn capture_with_limit(
+        source: &Store,
+        scratch: Store,
+        timestamp: &str,
+        max_premises: usize,
+    ) -> Result<Self> {
+        pages::limits(&scratch)?;
         if !scratch.current_facts()?.is_empty() || !scratch.list_ontologies()?.is_empty() {
             return Err(Error::InvalidValue(
                 "OWL scratch store must be empty".into(),
@@ -63,6 +80,8 @@ impl Snapshot {
         let identity = source.store_id()?;
         let ontologies = source.list_ontologies()?;
         let source_companion = source.lookup(ROOT_INFERRED_GRAPH_IRI)?;
+        let footprint =
+            footprint::Footprint::discover(source, &ontologies, source_companion, max_premises)?;
         let companion = scratch.intern(ROOT_INFERRED_GRAPH_IRI)?;
         let write = scratch.conn.unchecked_transaction()?;
         scratch.conn.execute(
@@ -72,16 +91,9 @@ impl Snapshot {
         let tx = scratch.conn.last_insert_rowid();
         let mut count = 0;
         for graph in std::iter::once(0).chain(source_companion) {
-            let mut stmt = source.conn.prepare(
-                "SELECT f.e, f.a, f.v, f.valid_from FROM facts f \
-                 WHERE f.g=?1 AND f.op=1 AND f.valid_to IS NULL \
-                 AND NOT EXISTS (SELECT 1 FROM transactions t \
-                                 WHERE t.id=f.tx AND t.source=?2)",
-            )?;
-            let mut rows = stmt.query(params![graph, PLANE_SOURCE])?;
-            while let Some(row) = rows.next()? {
+            footprint.for_each(source, graph, |row| {
                 count += 1;
-                if count > MAX_PREMISES {
+                if count > max_premises {
                     return Err(Error::InvalidValue(
                         "OWL snapshot premise budget exceeded".into(),
                     ));
@@ -105,26 +117,27 @@ impl Snapshot {
                         row.get::<_, String>(3)?
                     ],
                 )?;
-            }
+                Ok(())
+            })?;
         }
         for (name, turtle, loaded_at) in &ontologies {
-            scratch.load_ontology(name, turtle, loaded_at)?;
+            scratch.load_snapshot_ontology(name, turtle, loaded_at)?;
         }
         let committed = write.commit();
         crate::store::release::settle(&scratch.conn, committed)?;
         read.commit()?;
-        Ok(Self {
+        let snapshot = Self {
             scratch,
             identity,
             ontologies,
             source_companion,
             premise_head,
             timestamp: timestamp.to_owned(),
-            proposals: Vec::new(),
-            next: 0,
             derived: false,
             report: MaterializeReport::default(),
-        })
+        };
+        pages::initialize(&snapshot)?;
+        Ok(snapshot)
     }
 
     /// Compute the closure on the private store. No live lock is needed.
@@ -132,36 +145,28 @@ impl Snapshot {
         if self.derived {
             return Err(Error::InvalidValue("OWL snapshot already derived".into()));
         }
-        self.scratch.ensure_owl_cache()?;
-        let Some(ontology) = self.scratch.owl_cache.as_deref().cloned() else {
-            self.derived = true;
-            return Ok(());
-        };
-        let before = self.scratch.transaction_head()?;
-        self.report =
-            ontology.materialize_limited(&mut self.scratch, &self.timestamp, MAX_PROPOSALS)?;
-        if self.report.pass_budget_exhausted || self.report.total > MAX_PROPOSALS {
-            return Err(Error::InvalidValue(
-                "OWL derivation budget exceeded; not applied".into(),
-            ));
-        }
-        let mut stmt = self.scratch.conn.prepare(
-            "SELECT f.e,f.a,f.v FROM facts f JOIN transactions t ON t.id=f.tx \
-             WHERE f.tx>?1 AND t.source='owl:materialize' AND f.op=1 AND f.valid_to IS NULL",
-        )?;
-        let mut rows = stmt.query(params![before])?;
-        while let Some(row) = rows.next()? {
-            self.proposals.push(Datum {
-                entity: row.get(0)?,
-                attribute: row.get(1)?,
-                value: Value::from_bytes(&row.get::<_, Vec<u8>>(2)?)?,
-                valid_from: self.timestamp.clone(),
-                valid_to: None,
-                op: Op::Assert,
-            });
-        }
-        self.derived = true;
-        Ok(())
+        pages::derive(self, MAX_PROPOSALS)
+    }
+
+    /// Reopen a private snapshot without renewing its deadline or logical-pass budget.
+    /// The caller supplies the same private database and ordinary resource admission.
+    pub fn resume(scratch: Store) -> Result<Self> {
+        pages::limits(&scratch)?;
+        let job = pages::load(&scratch)?;
+        let derived = matches!(
+            job.phase.as_str(),
+            "FIXPOINT_COMPLETE" | "APPLYING" | "COMPLETE"
+        );
+        Ok(Self {
+            scratch,
+            identity: job.identity,
+            ontologies: job.ontologies,
+            source_companion: job.source_companion,
+            premise_head: job.premise_head,
+            timestamp: job.timestamp,
+            derived,
+            report: job.report,
+        })
     }
 
     /// Number of ontologies in the snapshot (zero is distinct from an empty closure).
@@ -171,17 +176,55 @@ impl Snapshot {
 
     /// Number of proposals remaining to apply.
     pub fn remaining(&self) -> usize {
-        self.proposals.len() - self.next
+        // A missing/unreadable queue must never appear complete.
+        let result = (|| -> Result<usize> {
+            let job = pages::load(&self.scratch)?;
+            let count = self.scratch.conn.query_row(
+                "SELECT count(*) FROM owl_page_all WHERE id>?1",
+                [job.apply_cursor],
+                |r| r.get::<_, i64>(0),
+            )?;
+            pages::cardinality(count)
+        })();
+        result.unwrap_or(usize::MAX)
     }
 
     /// Publish freshness only after every batch succeeded and its premises are
     /// still valid. Uses indexed point reads, never a companion-wide scan.
     pub fn finish(&self, live: &mut Store) -> Result<()> {
+        pages::check_budget(&self.scratch)?;
         if !self.derived || self.remaining() != 0 {
             return Err(Error::InvalidValue("OWL snapshot is incomplete".into()));
         }
         self.validate(live)?;
+        let job = pages::load(&self.scratch)?;
+        let (count, last): (i64, i64) = self.scratch.conn.query_row(
+            "SELECT count(*),coalesce(max(id),0) FROM owl_page_all",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        let receipts: i64 = live.conn.query_row(
+            "SELECT count(*) FROM owl_batch_receipts WHERE batch GLOB ?1 AND batch<>?2",
+            params![
+                format!("{}:*", job.generation),
+                format!("{}:finish", job.generation)
+            ],
+            |r| r.get(0),
+        )?;
+        let count = pages::cardinality(count)?;
+        let receipts = pages::cardinality(receipts)?;
+        if count != job.report.total
+            || job.apply_cursor != last
+            || receipts != count.div_ceil(APPLY_BATCH)
+        {
+            return Err(Error::InvalidValue(
+                "OWL publication receipts/cursor do not cover the complete closure".into(),
+            ));
+        }
         if self.ontologies.is_empty() {
+            let mut job = pages::load(&self.scratch)?;
+            job.phase = "COMPLETE".into();
+            pages::save(&self.scratch, &job)?;
             return Ok(());
         }
         let graph = live.intern(ROOT_INFERRED_GRAPH_IRI)?;
@@ -219,13 +262,20 @@ impl Snapshot {
             valid_to: None,
             op: Op::Assert,
         });
-        live.transact_to_graph(
+        let job = pages::load(&self.scratch)?;
+        let receipt = format!("{}:finish", job.generation);
+        let digest = format!("{}:{}:{}", job.identity, job.premise_head, job.generation);
+        live.transact_owl_page(
             &datums,
             &self.timestamp,
-            Some("owl"),
-            Some(PLANE_SOURCE),
             graph,
+            (&receipt, &digest),
+            PLANE_SOURCE,
         )?;
+        pages::checkpoint("after_freshness_commit")?;
+        let mut job = pages::load(&self.scratch)?;
+        job.phase = "COMPLETE".into();
+        pages::save(&self.scratch, &job)?;
         Ok(())
     }
 
@@ -241,40 +291,90 @@ impl Snapshot {
             ));
         }
         self.validate(live)?;
-        let end = (self.next + APPLY_BATCH).min(self.proposals.len());
-        let mut batch = Vec::with_capacity(end - self.next);
-        for datum in &self.proposals[self.next..end] {
+        pages::check_budget(&self.scratch)?;
+        let mut job = pages::load(&self.scratch)?;
+        let page = pages::read_page(
+            &self.scratch,
+            "owl_page_all",
+            job.apply_cursor,
+            APPLY_BATCH,
+            &self.timestamp,
+        )?;
+        if page.is_empty() {
+            return Ok(0);
+        }
+        let mut batch = Vec::with_capacity(page.len());
+        let mut digest = sha2::Sha256::new();
+        use sha2::Digest;
+        // Digest semantic values, never transient live term ids. Length-prefix every field.
+        for (_, datum) in &page {
+            let entity = self.scratch.resolve(datum.entity)?;
+            let attribute = self.scratch.resolve(datum.attribute)?;
+            let value = match &datum.value {
+                Value::Ref(id) => format!("ref:{}", self.scratch.resolve(*id)?).into_bytes(),
+                value => value.to_bytes(),
+            };
+            for field in [entity.as_bytes(), attribute.as_bytes(), value.as_slice()] {
+                digest.update((field.len() as u64).to_le_bytes());
+                digest.update(field);
+            }
             batch.push(Datum {
                 entity: remap_id(&self.scratch, live, datum.entity)?,
                 attribute: remap_id(&self.scratch, live, datum.attribute)?,
                 value: remap_value(&self.scratch, live, datum.value.clone())?,
-                valid_from: datum.valid_from.clone(),
+                valid_from: self.timestamp.clone(),
                 valid_to: None,
                 op: Op::Assert,
             });
         }
-        if !batch.is_empty() {
-            let companion = live.intern(ROOT_INFERRED_GRAPH_IRI)?;
-            live.transact_to_graph(
-                &batch,
-                &self.timestamp,
-                Some("owl"),
-                Some("owl:materialize"),
-                companion,
-            )?;
-        }
-        self.next = end;
+        let end = page.last().expect("nonempty page").0;
+        let receipt = format!("{}:{}:{}", job.generation, job.apply_cursor, end);
+        let digest = format!("{:x}", digest.finalize());
+        let companion = live.intern(ROOT_INFERRED_GRAPH_IRI)?;
+        // A lost acknowledgement leaves the local cursor untouched. The next call
+        // reconciles exactly this receipt before making any additional assertion.
+        live.transact_owl_page(
+            &batch,
+            &self.timestamp,
+            companion,
+            (&receipt, &digest),
+            "owl:materialize",
+        )?;
+        pages::checkpoint("after_live_commit")?;
+        job.apply_cursor = end;
+        job.phase = "APPLYING".into();
+        pages::save(&self.scratch, &job)?;
         Ok(batch.len())
     }
 
     fn validate(&self, live: &Store) -> Result<()> {
+        let job = pages::load(&self.scratch)?;
+        if matches!(job.phase.as_str(), "FAILED" | "INVALIDATED") {
+            return Err(Error::InvalidValue(format!(
+                "OWL job {}: {}",
+                job.phase,
+                job.failure.unwrap_or_default()
+            )));
+        }
+        let result = self.validate_inner(live);
+        if let Err(Error::InvalidValue(reason)) = &result
+            && let Ok(mut job) = pages::load(&self.scratch)
+        {
+            job.phase = "INVALIDATED".into();
+            job.failure = Some(reason.clone());
+            let _ = pages::save(&self.scratch, &job);
+        }
+        result
+    }
+
+    fn validate_inner(&self, live: &Store) -> Result<()> {
         if live.store_id()? != self.identity || live.list_ontologies()? != self.ontologies {
             return Err(Error::InvalidValue(
                 "OWL snapshot identity or ontology changed".into(),
             ));
         }
         let freshness = live.lookup(DERIVED_AS_OF_TX)?.unwrap_or(-1);
-        for graph in std::iter::once(0).chain(self.source_companion) {
+        for graph in std::iter::once(0).chain(live.lookup(ROOT_INFERRED_GRAPH_IRI)?) {
             let retracted: bool = live.conn.query_row(
                 "SELECT EXISTS(SELECT 1 FROM facts INDEXED BY idx_retracted_tx \
                  WHERE g=?1 AND retracted_tx>?2 \
@@ -293,8 +393,16 @@ impl Snapshot {
 }
 
 #[cfg(test)]
+#[path = "owl_snapshot_pages_tests.rs"]
+mod pages_tests;
+
+#[cfg(test)]
 #[path = "owl_snapshot_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "owl_snapshot_footprint_tests.rs"]
+mod footprint_tests;
 
 fn remap_id(source: &Store, target: &Store, id: i64) -> Result<i64> {
     target.intern(&source.resolve(id)?)

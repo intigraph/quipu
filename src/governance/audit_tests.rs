@@ -503,7 +503,7 @@ fn an_unreadable_line_is_counted_never_skipped() {
 
 #[test]
 fn an_unknown_field_does_not_stop_the_read() {
-    // A checker that refused a spool because hank had added a field would stop
+    // A checker that refused a spool because yupana had added a field would stop
     // auditing at exactly the moment the two repos drifted.
     let (records, unreadable) = parse_trace(r#"{"kind":"guard","brand_new_field":42}"#);
     assert_eq!(unreadable, 0);
@@ -532,7 +532,7 @@ fn the_summary_states_the_unreadable_count_even_at_zero() {
 fn check_jsonl_reads_the_spec_from_the_store() {
     // The liveness half: the passes above run on a hand-built Spec, and this is
     // the one that proves `check` actually loads Σ from the graph.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let iri = "http://ex/policy/p";
     let entity = store.intern(iri).unwrap();
     let ns = crate::namespace::DEFAULT_BASE_NS;
@@ -574,7 +574,7 @@ fn check_jsonl_reads_the_spec_from_the_store() {
 fn check_jsonl_catches_the_drift_it_exists_for() {
     // The RED half of the end-to-end: the store says soft/PAA, the trace says
     // hard/PAG, and only the comparison against the real Σ can see it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let iri = "http://ex/policy/p";
     let entity = store.intern(iri).unwrap();
     let ns = crate::namespace::DEFAULT_BASE_NS;

@@ -1,0 +1,16 @@
+{
+  "target": "isolated in-memory working-tree candidate",
+  "base_commit": "aa3fcea404ef1b9cf614394e2657d19fa75a9e86",
+  "captured_at": "2026-11-04T21:20:12.498419+00:00",
+  "source_sha256": {
+    "src/acquisition/history.rs": "442a8f78d9087f19eb0cbeea556ef5b74fc6a200bab2091d85c3f91a6518a453",
+    "src/acquisition/history_tests.rs": "336c8d2b2f374722f8d61791a7a7adfa3fe75628075e3884055d9032fd63c110",
+    "src/mcp/history.rs": "fb7b963ce6319024188373eff2a593a8ebc29a627c18909f5c4356a46daf2e57",
+    "src/server/entity.rs": "42878c6e47afefd0e95a0f25953452b146d3a9126fde462b33fd0afe89508a22",
+    "src/server/entity_history_tests.rs": "661611b77deca251e726357375c7773c19adf692fc0da3b9c8c1df533e501010",
+    "src/write_provenance.rs": "33c09c0d37bd4be7c6fb66e0648aa6866e31679b12f65384875d832a737d5452",
+    "src/transaction_auth.rs": "eb08748023222ec6d156e878dcfcbe50114755038a4d6812aeea81567b284f07"
+  },
+  "invocation": "just test --locked --features full history -- --test-threads=1 --nocapture",
+  "note": "Actual candidate calls compare legacy ROOT scope with qualified MAIN graph scope; no old binary rerun or deployed acceptance."
+}

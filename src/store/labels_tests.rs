@@ -93,6 +93,33 @@ fn an_expired_declaration_reads_as_undeclared_not_as_its_last_value() {
 }
 
 #[test]
+fn a_label_ending_at_its_own_start_is_refused_and_writes_nothing() {
+    // aegis-karb.2: an assertion closed at its own start is a merge receipt,
+    // which the write gate exempts from functional supersede and OWL checks. A
+    // label write must never take that shape, so valid_to == timestamp is
+    // refused here, before any datum exists.
+    let mut store = store_with_graph("urn:g:receipt-shaped");
+    let before = store.latest_tx_id().unwrap();
+    let ts = "2020-01-01T00:00:00Z";
+    let err = store
+        .set_graph_label_until(
+            "urn:g:receipt-shaped",
+            &GraphLabel {
+                durability: Some(Durability::Backed),
+                ..Default::default()
+            },
+            ts,
+            Some(ts),
+            None,
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("later than valid_from"), "{err}");
+    assert_eq!(store.latest_tx_id().unwrap(), before);
+    let label = store.label_of("urn:g:receipt-shaped").unwrap();
+    assert_eq!(label.durability.coverage, Coverage::None);
+}
+
+#[test]
 fn a_graph_that_does_not_exist_is_undeclared_not_an_error() {
     let store = Store::open_in_memory().unwrap();
     let l = store.label_of("urn:g:never-created").unwrap();

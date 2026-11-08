@@ -91,9 +91,24 @@ pub(crate) fn read_only(config: &quipu::QuipuConfig, is_replica: bool) -> bool {
 /// (hq-uye): without it, `[quipu.resolution] enabled = true` is inert.
 pub(crate) fn apply_identity_policies(store: &mut quipu::Store, config: &quipu::QuipuConfig) {
     store.set_base_ns(config.base_ns.clone());
-    store.set_vocabulary(config.vocabulary);
-    if config.base_ns != quipu::namespace::DEFAULT_BASE_NS {
-        eprintln!("minting IRIs under configured base_ns: {}", config.base_ns);
+    store.set_code_base(config.code_base.clone());
+    if let Some(path) = &config.vocabulary_map {
+        // A configured map that cannot be read must stop startup: writing the
+        // unmapped IRIs instead would be a silent change of vocabulary.
+        let map = quipu::term_vocabulary::VocabularyMap::load(path).unwrap_or_else(|e| {
+            eprintln!("error loading vocabulary map: {e}");
+            std::process::exit(1);
+        });
+        eprintln!(
+            "vocabulary map {} loaded: {} term(s) written under their mapped IRIs",
+            path.display(),
+            map.len()
+        );
+        store.set_vocabulary(map);
+    }
+    match quipu::namespace::require_base_ns(&config.base_ns) {
+        Ok(()) => eprintln!("minting IRIs under configured base_ns: {}", config.base_ns),
+        Err(e) => eprintln!("warning: writes that mint names will be refused: {e}"),
     }
     store.resolution_config_mut().clone_from(&config.resolution);
     if config.resolution.enabled {
@@ -124,7 +139,17 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
 
 pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
     store.search_config_mut().clone_from(config);
-    if config.keyword {
+    let fresh = store.created_fact_schema();
+    let initialized = store
+        .lexical_progress()
+        .unwrap_or_else(|e| {
+            eprintln!("error reading keyword index state: {e}");
+            std::process::exit(1);
+        })
+        .is_some();
+    let keyword = config.keyword_for_store(fresh, initialized);
+    store.search_config_mut().keyword = keyword;
+    if keyword && (fresh || config.keyword_explicit) {
         store.initialize_lexical_index().unwrap_or_else(|e| {
             eprintln!("error initializing keyword index: {e}");
             std::process::exit(1);
@@ -211,7 +236,10 @@ pub(crate) async fn version() -> impl IntoResponse {
             "quipu-acquisition/v1",
             "quipu-acquisition/composed-v1",
             quipu::acquisition::eligibility::CONTRACT,
+            quipu::acquisition::history::CONTRACT,
+            quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
+        "write_contracts": [crate::knot_completion::CONTRACT],
         "features": compiled_features(),
     }))
 }
@@ -453,6 +481,13 @@ impl AppError {
     pub(crate) fn with_usage(mut self, usage: quipu::request_usage::RequestUsage) -> Self {
         self.1 = Some(usage);
         self
+    }
+
+    /// The underlying error's message, for a response that must report a
+    /// failure AFTER an earlier step committed (aegis-fej9 deferred load).
+    #[cfg(feature = "owl")]
+    pub(crate) fn message(&self) -> String {
+        self.0.to_string()
     }
 }
 

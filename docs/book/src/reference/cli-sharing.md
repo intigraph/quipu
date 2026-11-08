@@ -245,7 +245,7 @@ A repository commits its project's graph under `.quipu/`, tool-neutral:
 | `.quipu/project` | yes | one line, the project id; the graph is `urn:quipu:project:<id>` |
 | `.quipu/graph/` | yes | the share bundle for that graph (`manifest.json`, `export.nt`, …) |
 | `.quipu/.gitignore` | yes | written by quipu: an allow-list for the two above |
-| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and the host's PRIVATE signing key |
+| `.quipu/local.db*`, `.quipu/verifier.pk8` | **never** | the local store, and any legacy PRIVATE signing key |
 
 `share --project <id>` names the project once (it is then committed) and
 re-shares the graph into `.quipu/graph/`. Re-running it replaces the bundle;
@@ -508,8 +508,17 @@ re-derivable. `--attest-nonce` must be 32 lowercase hex characters and is checke
 mint time — a share minted with any other nonce is refused by every importer.
 
 The key comes from `--attest-key`, else `$QUIPU_SIGNING_KEY`, else
-`.quipu/verifier.pk8`, created 0600 on first use. That is v1 host-file custody, the
-same the governance plane uses; it is not an HSM.
+`$XDG_DATA_HOME/quipu/verifier.pk8` (default
+`$HOME/.local/share/quipu/verifier.pk8`), created 0600 on first use. The default
+never creates a private key under the working repository. A relative XDG data
+directory or missing user-data location refuses key selection.
+
+A legacy `.quipu/verifier.pk8` triggers a warning. It is not copied or deleted:
+pin its path explicitly to retain that signing identity, or migrate it through
+your normal key-custody process before changing registered trust. Explicit
+legacy key creation adds a final `/verifier.pk8` rule to `.quipu/.gitignore`,
+preserving project-graph entries; an unsafe ignore file refuses creation.
+This is v1 host-file custody, the same the governance plane uses; it is not an HSM.
 
 ### Registering a producer, out of band
 
@@ -538,8 +547,8 @@ refuses as `revoked`, which is a different finding from an unbound key. Rotation
 new binding plus a revoke of the old one.
 
 To set up an agent end to end (its own user, `sd key init`, enrollment, verification
-and revocation), follow CABOODLE's
-[agent identity and write access](https://scbrown.github.io/caboodle/agents.html#agent-identity-and-write-access)
+and revocation), follow Tambo's
+[agent identity and write access](https://intigraph.github.io/tambo/agents.html#agent-identity-and-write-access)
 guide.
 
 **Importing a share never registers its producer.** This is the point, not an
@@ -897,3 +906,16 @@ These are operator actions, never automatic server startup repairs. Source
 installation does not authorize production adoption. See the
 ownership and failure contract in `docs/design/store-ownership.md` for partial
 completion, supported host identity and rollout limits.
+
+## Export a cold snapshot without writes
+
+Use `qp export --read-only --db /path/to/snapshot.db --graph <iri>` for a
+custodian-held, cold local snapshot. The custodian must keep it cold for the
+entire export. The flag opens SQLite read-only and immutable, skips migrations
+and index initialization, and refuses existing WAL, shared-memory or journal
+sidecars and configured attachments. It does not create missing stores. Graph,
+group and CONSTRUCT selection retain their normal export semantics. A graph
+export is RDF triples; preserve its graph IRI separately when importing it.
+
+This flag does not fence an external writer and must not be used against a live
+database. Without the flag, the existing configured writable open is unchanged.

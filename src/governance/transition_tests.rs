@@ -7,6 +7,7 @@ use ring::rand::SystemRandom;
 use ring::signature::Ed25519KeyPair;
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 use crate::namespace::RDF_TYPE;
 use crate::signing::{public_key_hex, sign_hex};
 use crate::store::Store;
@@ -330,7 +331,7 @@ fn govern(store: &mut Store) {
 
 #[test]
 fn an_unsigned_transition_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let datums = transition_datums(&mut store, "reviewed", None);
     let err = store.transact(&datums, TS, None, None);
@@ -351,7 +352,7 @@ fn an_unsigned_transition_is_refused_at_the_write_path() {
 #[test]
 fn a_signed_registered_transition_lands_with_the_flag_on() {
     // The GREEN case, end to end: real key, real registration, real gate.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     register(&mut store, &public_key_hex(&kp), 0);
@@ -365,7 +366,7 @@ fn a_signed_registered_transition_lands_with_the_flag_on() {
 
 #[test]
 fn udr9_named_identity_registration_requires_root_migration_and_endorsement() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let identity = store.graph_create("urn:app:identity").unwrap();
     let kp = keypair();
@@ -391,7 +392,7 @@ fn udr9_named_identity_registration_requires_root_migration_and_endorsement() {
 
 #[test]
 fn an_unregistered_signer_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair(); // never registered
     let sig = sign(&kp, "open", "reviewed");
@@ -408,7 +409,7 @@ fn an_unregistered_signer_is_refused_at_the_write_path() {
 
 #[test]
 fn a_wrong_key_signature_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let registered = keypair();
     register(&mut store, &public_key_hex(&registered), 0);
@@ -427,7 +428,7 @@ fn a_wrong_key_signature_is_refused_at_the_write_path() {
 fn a_tampered_payload_is_refused_at_the_write_path() {
     // Alice signs open→reviewed; the export claims open→approved. Genuine
     // key, registered signer, lying content.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     register(&mut store, &public_key_hex(&kp), 0);
@@ -446,7 +447,7 @@ fn the_control_an_unsigned_transition_lands_with_the_flag_off() {
     // Same datums, flag off => accepted. That is what makes every rejection
     // above attributable to this gate — and it is today's default behaviour,
     // unchanged: turning verification on is a deliberate configuration act.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     assert!(
         !store.governance_config_mut().verify_transitions,
         "the flag must default to off"
@@ -460,7 +461,7 @@ fn the_control_an_unsigned_transition_lands_with_the_flag_off() {
 #[test]
 fn a_non_transition_write_is_not_touched() {
     // The pre-filter: ordinary traffic costs nothing and is never refused.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let e = store.intern("urn:test:thing").unwrap();
     let datums = vec![assert_datum(
@@ -477,7 +478,7 @@ fn a_non_transition_write_is_not_touched() {
 #[test]
 fn udr9_unsigned_root_or_named_registration_cannot_authorize_a_transition() {
     for named in [false, true] {
-        let mut store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory_test_ns().unwrap();
         store.governance_config_mut().verify_transitions = true;
         let graph = if named {
             store.graph_create("urn:app:identity").unwrap()
@@ -502,7 +503,7 @@ fn udr9_unsigned_root_or_named_registration_cannot_authorize_a_transition() {
 
 #[test]
 fn udr9_a_named_tier_marker_never_endorses_a_registration() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let graph = store.graph_create("urn:app:identity").unwrap();
     let kp = keypair();
@@ -526,7 +527,7 @@ fn udr9_a_named_tier_marker_never_endorses_a_registration() {
 
 #[test]
 fn udr9_named_graph_key_shadowing_cannot_replace_an_endorsed_root_key() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let root_key = keypair();
     register(&mut store, &public_key_hex(&root_key), 0);
@@ -553,7 +554,7 @@ fn udr9_named_graph_key_shadowing_cannot_replace_an_endorsed_root_key() {
 
 #[test]
 fn udr9_revocation_refuses_a_new_backdated_transition_but_preserves_the_old_event() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     let key = public_key_hex(&kp);
@@ -590,7 +591,7 @@ fn udr9_revocation_refuses_a_new_backdated_transition_but_preserves_the_old_even
 
 #[test]
 fn udr9_self_registration_and_transition_in_one_write_are_rolled_back_together() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let kp = keypair();
     let mut datums = registration_datums(&mut store, &public_key_hex(&kp));
@@ -616,7 +617,7 @@ fn udr9_self_registration_and_transition_in_one_write_are_rolled_back_together()
 
 #[test]
 fn udr9_a_finite_unsigned_root_tier_cannot_authorize_a_persisted_transition() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     crate::governance::trust_root::test_support::ensure_root(&mut store);
     let kp = keypair();
@@ -645,7 +646,7 @@ fn udr9_a_finite_unsigned_root_tier_cannot_authorize_a_persisted_transition() {
 
 #[test]
 fn udr9_a_bounded_key_cannot_shadow_a_human_endorsed_registration() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().verify_transitions = true;
     let genuine = keypair();
     register(&mut store, &public_key_hex(&genuine), 0);
@@ -681,7 +682,7 @@ fn udr9_a_bounded_key_cannot_shadow_a_human_endorsed_registration() {
 #[test]
 fn udr9_bounded_human_tier_is_raw_data_not_current_human_authority() {
     use crate::governance::verifier_registry::{Scope, Witness, governed_tier, registered_keys};
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     crate::governance::trust_root::test_support::ensure_root(&mut store);
     let kp = keypair();
     let key = public_key_hex(&kp);

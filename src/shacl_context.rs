@@ -12,7 +12,7 @@
 //! The consequence is worse than strictness. It made the verdict a function of
 //! how a caller PARTITIONED its triples: the same facts, submitted whole,
 //! conformed; submitted split across two writes, the second was refused.
-//! Measured at scale on hank's chunked promotion (aegis-sd5fj) — 2315 of 7638
+//! Measured at scale on yupana's chunked promotion (aegis-sd5fj) — 2315 of 7638
 //! symbols refused at chunk 2 of 71, every one of them a correct fact about a
 //! module that was already typed in the store. A validator whose answer depends
 //! on submission order is not reporting conformance, it is reporting an
