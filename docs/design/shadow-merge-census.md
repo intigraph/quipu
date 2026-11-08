@@ -130,7 +130,6 @@ writer behavior. The producer must still bind real authority/base/profile inputs
 account for native planning refusal, and connect the source to a separately
 admitted durable consumer. New aggregation tests await a Cargo START.
 
-
 ## Default-off observation bridge (source only, unqualified)
 
 `AggregateSink::try_observe` connects the existing bounded native observer to
@@ -149,7 +148,6 @@ export or live-store read is installed by this change. Bounded input planning
 and a nonwaiting mutex do not prove a wall-clock or writer-latency budget;
 producer capture cost and worst-case qualification remain open. The two new
 bridge tests are unrun pending a separate Cargo START.
-
 
 ## Writer capture and commit evidence (design, not wired)
 

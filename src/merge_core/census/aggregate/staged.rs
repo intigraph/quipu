@@ -4,6 +4,7 @@ use super::*;
 
 /// Evidence supplied by a future authenticated writer adapter, not a capability.
 /// No HTTP status or coalesced commit wake may manufacture this declaration.
+#[derive(Clone, Copy)]
 pub(crate) enum WriteOutcome {
     Committed { transaction: u64 },
     NoDataChange,
