@@ -396,6 +396,7 @@ Finish all three the same way:
 Decide a row yourself only when every side was written by agents and you take the suggested choice; record your agent id with `--by` and say so.
 Otherwise ask the user once, for all rows, with the numbered choices: always when a person wrote either side or you cannot tell, for `value` and `both`, and for `sh:maxCount` conflicts on human-owned data.
 If apply says the decisions are stale, emit again; never edit the file's hashes.
+For interactive Git decisions, `quipu git-mergetool <pendant>/export.nt --by <who>` uses the same layout and resolver; quit or EOF leaves pending decisions unresolved.
 
 #### Next steps
 

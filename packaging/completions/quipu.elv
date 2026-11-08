@@ -69,6 +69,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
+            cand git-mergetool 'Interactively resolve a pendant using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
@@ -787,6 +788,12 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --from 'Source vector backend'
             cand --to 'Destination vector backend'
             cand --dry-run 'Preview the operation without applying it'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;git-mergetool'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --by 'Identity recording a resolution'
             cand -h 'Print help'
             cand --help 'Print help'
         }

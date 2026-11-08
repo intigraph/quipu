@@ -74,6 +74,7 @@ complete -c quipu -n "__fish_quipu_needs_command" -f -a "follow" -d 'Keep this d
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "asof-rdf" -d 'Convert one retained as-of share into bounded coherent RDF chunks offline'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "acquire" -d 'Measure the bounded scope of a direct-main graph acquisition'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "migrate-vectors" -d 'Move stored vectors between backends (lancedb feature)'
+complete -c quipu -n "__fish_quipu_needs_command" -f -a "git-mergetool" -d 'Interactively resolve a pendant using the standard merge layout'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "git-merge" -d 'Merge pendants from Git snapshots and stop before committing'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "merge-driver" -d 'Low-level Git merge driver for pendant files'
 complete -c quipu -n "__fish_quipu_needs_command" -f -a "pendant-resolve" -d 'Record a resolution choice for one pendant merge conflict'
@@ -520,6 +521,9 @@ complete -c quipu -n "__fish_quipu_using_subcommand migrate-vectors" -l from -d 
 complete -c quipu -n "__fish_quipu_using_subcommand migrate-vectors" -l to -d 'Destination vector backend' -r
 complete -c quipu -n "__fish_quipu_using_subcommand migrate-vectors" -l dry-run -d 'Preview the operation without applying it'
 complete -c quipu -n "__fish_quipu_using_subcommand migrate-vectors" -s h -l help -d 'Print help'
+complete -c quipu -n "__fish_quipu_using_subcommand git-mergetool" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
+complete -c quipu -n "__fish_quipu_using_subcommand git-mergetool" -l by -d 'Identity recording a resolution' -r
+complete -c quipu -n "__fish_quipu_using_subcommand git-mergetool" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -l db -d 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)' -r
 complete -c quipu -n "__fish_quipu_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -s h -l help -d 'Print help'
 complete -c quipu -n "__fish_quipu_using_subcommand git-merge; and not __fish_seen_subcommand_from show resolve" -a "show" -d 'Show a pendant\'s pending merge decisions in the standard layout'

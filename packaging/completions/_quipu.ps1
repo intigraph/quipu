@@ -72,6 +72,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('asof-rdf', 'asof-rdf', [CompletionResultType]::ParameterValue, 'Convert one retained as-of share into bounded coherent RDF chunks offline')
             [CompletionResult]::new('acquire', 'acquire', [CompletionResultType]::ParameterValue, 'Measure the bounded scope of a direct-main graph acquisition')
             [CompletionResult]::new('migrate-vectors', 'migrate-vectors', [CompletionResultType]::ParameterValue, 'Move stored vectors between backends (lancedb feature)')
+            [CompletionResult]::new('git-mergetool', 'git-mergetool', [CompletionResultType]::ParameterValue, 'Interactively resolve a pendant using the standard merge layout')
             [CompletionResult]::new('git-merge', 'git-merge', [CompletionResultType]::ParameterValue, 'Merge pendants from Git snapshots and stop before committing')
             [CompletionResult]::new('merge-driver', 'merge-driver', [CompletionResultType]::ParameterValue, 'Low-level Git merge driver for pendant files')
             [CompletionResult]::new('pendant-resolve', 'pendant-resolve', [CompletionResultType]::ParameterValue, 'Record a resolution choice for one pendant merge conflict')
@@ -874,6 +875,13 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Source vector backend')
             [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Destination vector backend')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;git-mergetool' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
