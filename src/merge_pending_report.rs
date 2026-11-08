@@ -38,6 +38,32 @@ impl Kind {
     }
 }
 
+pub(super) fn rows(prepared: &crate::merge_session::Prepared) -> Vec<ReportRow> {
+    prepared
+        .plan
+        .slots
+        .iter()
+        .map(|(slot, p)| ReportRow {
+            slot: slot.clone(),
+            held: p.held,
+            decision: prepared
+                .choices
+                .iter()
+                .find(|choice| choice.slot == *slot)
+                .map(|choice| choice.decision.clone()),
+            kind: Kind::from_change(
+                p.change,
+                prepared
+                    .request
+                    .profile
+                    .lists
+                    .iter()
+                    .any(|b| b.slot == *slot),
+            ),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

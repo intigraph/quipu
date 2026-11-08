@@ -30,6 +30,7 @@ pub(crate) fn share_request(
             profile,
             parent: None,
             active_slots: None,
+            scope: None,
         },
         incoming.manifest.created_at,
     ))
@@ -56,6 +57,7 @@ pub(crate) fn fork_request(
             profile,
             parent: None,
             active_slots: None,
+            scope: None,
         },
         fork.created_at,
     ))
