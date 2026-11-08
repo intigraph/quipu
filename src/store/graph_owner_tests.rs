@@ -863,3 +863,72 @@ fn strict_cut_callback_and_late_identity_failures_release_every_transaction() {
         assert!(owner.writer.try_lock().is_some());
     }
 }
+
+#[test]
+fn strict_cut_pins_post_open_dictionary_growth_and_canonical_reference_values() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    // Readers already exist. Give the same new IRI different file-local IDs;
+    // neither a startup dictionary nor raw numeric identity is a valid oracle.
+    a.writer
+        .lock()
+        .intern("urn:test:dictionary-padding")
+        .unwrap();
+    let turtle = "<urn:test:late-subject> <urn:test:late-predicate> <urn:test:late-object> .";
+    for owner in [&a, &b] {
+        owner
+            .knot(
+                &request(owner),
+                &json!({
+                    "graph": owner.route.graph, "turtle": turtle,
+                    "source": "test-producer", "snapshot": "late-dictionary",
+                    "replace_snapshot": true,
+                }),
+            )
+            .unwrap();
+    }
+    let iri = "urn:test:late-object";
+    let a_id = a.writer.lock().lookup(iri).unwrap().unwrap();
+    let b_id = b.writer.lock().lookup(iri).unwrap().unwrap();
+    assert_ne!(a_id, b_id, "fixture must distinguish file-local IDs");
+    let query = |read: &CapturedRead<'_>| {
+        crate::tool_query(
+            read.store,
+            &json!({
+                "graph": read.route.graph,
+                "query": "SELECT ?object WHERE { <urn:test:late-subject> <urn:test:late-predicate> ?object }",
+            }),
+        )
+    };
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        for read in reads {
+            let result = query(read)?;
+            assert_eq!(result["count"], 1);
+            assert_eq!(result["rows"][0]["object"], iri);
+        }
+        // Add entirely new dictionary terms after the common cut. The old
+        // snapshots must resolve the old Ref while a later cut sees the new one.
+        for owner in [&a, &b] {
+            owner.knot(&request(owner), &json!({
+                "graph": owner.route.graph,
+                "turtle": "<urn:test:late-subject> <urn:test:late-predicate> <urn:test:new-object> .",
+                "source": "test-producer", "snapshot": "late-dictionary",
+                "replace_snapshot": true,
+            }))?;
+        }
+        for read in reads {
+            assert_eq!(query(read)?["rows"][0]["object"], iri);
+            assert!(read.store.lookup("urn:test:new-object")?.is_none());
+        }
+        Ok(())
+    }).unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        for read in reads {
+            let result = query(read)?;
+            assert_eq!(result["count"], 1);
+            assert_eq!(result["rows"][0]["object"], "urn:test:new-object");
+        }
+        Ok(())
+    })
+    .unwrap();
+}
