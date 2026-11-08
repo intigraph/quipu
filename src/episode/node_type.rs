@@ -4,17 +4,32 @@ use super::sanitize_iri_local;
 use crate::error::Result;
 use crate::namespace;
 
-/// The one type prefix an episode node may carry: the public Quechua vocabulary
-/// (aegis-kpy8ec). Any other prefix is refused by `validate_node_type`.
+/// The one abbreviated type prefix an episode node may carry: Quechua.
+/// Other namespaces use an explicit absolute class IRI.
 pub(crate) const QUECHUA_TYPE_PREFIX: &str = "quechua:";
+
+/// Recognized role spelling for name heuristics, never a class identity bridge.
+/// An unrelated namespace ending in `WorkItem` must not acquire its exemption.
+pub(crate) fn local_name<'a>(ntype: &'a str, base: &str) -> &'a str {
+    ntype
+        .strip_prefix(QUECHUA_TYPE_PREFIX)
+        .or_else(|| ntype.strip_prefix(namespace::QUECHUA))
+        .or_else(|| ntype.strip_prefix(base))
+        .unwrap_or(ntype)
+}
 
 /// The class IRI an episode node `type` denotes. A bare name is the legacy
 /// domain vocabulary under `base_ns`, byte-for-byte as before; `quechua:Local`
 /// is `<QUECHUA>Local`. The type namespace is independent of `base_ns`, so the
 /// instance IRIs an episode mints do not move when a writer switches vocabulary.
+/// An explicit absolute class IRI is preserved and subject to the same loaded
+/// vocabulary gate; it is never prefixed with the legacy base.
 /// Turtle emission and both vocabulary gates resolve through here, so the class
 /// that is checked is the class that is written.
 pub(crate) fn node_type_iri(ntype: &str, base_ns: &str) -> String {
+    if super::address::absolute_syntax(ntype) {
+        return ntype.to_owned();
+    }
     match ntype.strip_prefix(QUECHUA_TYPE_PREFIX) {
         Some(local) => format!("{}{}", namespace::QUECHUA, sanitize_iri_local(local)),
         None => format!("{base_ns}{}", sanitize_iri_local(ntype)),
@@ -41,6 +56,9 @@ pub(crate) fn node_type_iri(ntype: &str, base_ns: &str) -> String {
 /// whether the same request is legal.
 pub(super) fn validate_node_type(node_name: &str, ntype: &str) -> Result<()> {
     let t = ntype.trim();
+    if super::address::absolute_syntax(t) {
+        return super::address::validate_absolute(ntype);
+    }
     if let Some(local) = t.strip_prefix(QUECHUA_TYPE_PREFIX) {
         if local.is_empty() || sanitize_iri_local(local) != local {
             return Err(crate::error::Error::InvalidValue(format!(

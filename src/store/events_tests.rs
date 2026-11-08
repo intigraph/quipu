@@ -23,6 +23,7 @@ fn ep(name: &str, nodes: Vec<Node>, edges: Vec<Edge>) -> Episode {
 fn node(name: &str, ty: &str) -> Node {
     Node {
         name: name.into(),
+        iri: None,
         node_type: Some(ty.into()),
         description: Some(format!("{name} description")),
         properties: None,

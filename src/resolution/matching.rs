@@ -184,11 +184,12 @@ pub fn resolve_episode_nodes(
     base_ns: &str,
     opts: &crate::episode::IngestResolutionOpts,
 ) -> Result<EpisodeResolution> {
+    crate::episode::address::validate_nodes(nodes, base_ns)?;
     let queries: Vec<NodeQuery<'_>> = nodes
         .iter()
         .map(|n| NodeQuery {
             name: &n.name,
-            iri: crate::episode::node_iri(&n.name, base_ns),
+            iri: crate::episode::address::resolved_node_iri(n, base_ns),
             properties: n
                 .description
                 .as_ref()
@@ -272,7 +273,7 @@ pub fn revalidate_episode_resolution(
     let mut claims: Vec<(String, String, f64)> = Vec::new();
     for node in nodes {
         crate::time::check_request_deadline()?;
-        let iri = crate::episode::node_iri(&node.name, base_ns);
+        let iri = crate::episode::address::resolved_node_iri(node, base_ns);
         let mut excused = recorded_distinct_from(store, &iri)?;
         excused.extend(node.distinct_from.iter().cloned());
         let mut candidates = previous
