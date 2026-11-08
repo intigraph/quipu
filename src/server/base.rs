@@ -239,9 +239,29 @@ pub(crate) async fn version() -> impl IntoResponse {
             quipu::acquisition::history::CONTRACT,
             quipu::acquisition::history::OBSERVATION_CONTRACT,
         ],
-        "write_contracts": [crate::knot_completion::CONTRACT],
+        "write_contracts": [
+            crate::knot_completion::CONTRACT,
+            quipu::episode::EXPLICIT_ADDRESS_CONTRACT,
+        ],
         "features": compiled_features(),
     }))
+}
+
+#[cfg(test)]
+mod episode_address_contract_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn version_advertises_explicit_episode_addressing() {
+        let response = version().await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let value: JsonValue = serde_json::from_slice(&body).unwrap();
+        let contracts = value["write_contracts"].as_array().unwrap();
+        assert!(contracts.contains(&json!("quipu.episode-addresses/v1")));
+        assert!(contracts.contains(&json!("quipu.knot-completion/v1")));
+    }
 }
 
 /// Every declared feature and whether this binary has it (aegis-t1u2h).
