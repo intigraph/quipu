@@ -15,6 +15,9 @@ pub mod changeset;
 /// Change-sets against a live store: `/diff` and the `/patch` state check.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
+pub mod client_changeset;
+/// Separately signed resolver evidence, without changing the client v1 wire.
+pub mod client_resolver;
 pub mod compact;
 pub mod competency;
 pub mod config;

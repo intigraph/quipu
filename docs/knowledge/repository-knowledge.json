@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "d5dd4c1a886ebd0e404940fbe59ca88e1e3eb4bb445feff826d5621f7fae15c9",
+      "source_sha256": "56528862b6a7b93b72dc0ee89f2b97eea3f1ace12b9f584e77f4e4fbca796801",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
