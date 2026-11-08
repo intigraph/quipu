@@ -74,7 +74,7 @@ fn rt9f_distinct_ids_kinds_and_existing_iri_remain_writable() {
             "TerraformResource",
             "LXCContainer",
         ),
-        ("aegis-abcd", "aegis-abce", "WorkItem", "WorkItem"),
+        ("ticket-abcd", "ticket-abce", "WorkItem", "WorkItem"),
     ] {
         let mut store = crate::Store::open_in_memory().unwrap();
         let ns = crate::namespace::DEFAULT_BASE_NS;
@@ -197,10 +197,11 @@ fn rt9f_hint_mode_is_explicitly_advisory() {
 fn rt9f_legacy_distinction_is_symmetric_and_honored() {
     for predicate in [
         "https://quipu.dev/ontology/distinctFrom",
-        "http://aegis.gastown.local/ontology/distinctFrom",
+        "http://example.org/domain/distinctFrom",
     ] {
         for reverse in [false, true] {
             let mut store = crate::Store::open_in_memory().unwrap();
+            store.set_base_ns("http://example.org/domain/");
             let left = "http://example.org/controller";
             let right = "http://example.org/controller.lan";
             let (subject, object) = if reverse {

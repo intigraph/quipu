@@ -285,14 +285,12 @@ pub(crate) fn is_slash_qualified_commit_id(name: &str) -> bool {
 /// # Errors
 /// Propagates store and decode failures.
 pub(crate) fn recorded_distinct_from(store: &Store, iri: &str) -> Result<Vec<String>> {
-    // Historical graph-extract decisions used the homelab predicate. Read both
-    // spellings without rewriting either fact, and honor either edge direction.
+    // Domain writers use the configured instance namespace. Read their
+    // predicate alongside the native one and honor either edge direction.
     let subjects = store.lookup_all(iri)?;
     let mut preds = Vec::new();
-    for predicate in [
-        namespace::QUIPU_DISTINCT_FROM,
-        "http://aegis.gastown.local/ontology/distinctFrom",
-    ] {
+    let domain_predicate = format!("{}distinctFrom", store.base_ns());
+    for predicate in [namespace::QUIPU_DISTINCT_FROM, domain_predicate.as_str()] {
         preds.extend(store.lookup_all(predicate)?);
     }
     if preds.is_empty() {

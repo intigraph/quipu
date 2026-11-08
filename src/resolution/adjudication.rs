@@ -7,10 +7,18 @@ use crate::{Result, Store, episode, namespace, types::Value};
 
 pub(super) fn needs_check(node: &episode::Node) -> bool {
     static OPAQUE: OnceLock<regex::Regex> = OnceLock::new();
-    let opaque = OPAQUE.get_or_init(|| regex::Regex::new(
-        r"(?i)^(?:(?:aegis|bobbin|gt|qp|gassy|hq|mol|na)-[a-z0-9][a-z0-9.\-]*|(?:commit-|stmt_)?[0-9a-f]{7,64}|main-watch-[0-9a-f]{40}(?:[0-9a-f]{24})?|commit/[^\s]+/[0-9a-f]{7,64})$"
-    ).expect("constant opaque identifier pattern"));
-    !node.name.starts_with("code/") && !opaque.is_match(&node.name)
+    let opaque = OPAQUE.get_or_init(|| {
+        regex::Regex::new(r"(?i)^(?:(?:commit-|stmt_)?[0-9a-f]{7,64}|main-watch-[0-9a-f]{40}(?:[0-9a-f]{24})?|commit/[^\s]+/[0-9a-f]{7,64})$")
+            .expect("constant opaque identifier pattern")
+    });
+    static WORK_ID: OnceLock<regex::Regex> = OnceLock::new();
+    let work_id = WORK_ID.get_or_init(|| {
+        regex::Regex::new(r"(?i)^[a-z][a-z0-9]*-[a-z0-9][a-z0-9.\-]*$")
+            .expect("constant work identifier pattern")
+    });
+    let work = matches!(node.node_type.as_deref(), Some("WorkItem" | "Bead"))
+        && work_id.is_match(&node.name);
+    !node.name.starts_with("code/") && !opaque.is_match(&node.name) && !work
 }
 
 fn container_id(name: &str) -> Option<String> {
