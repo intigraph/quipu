@@ -55,6 +55,7 @@ fn configured_scoped_listener_has_no_unrestricted_write_fallback() {
         valid_until: quipu::time::epoch_secs() + 3600,
         revision: 1,
         revoked: false,
+        mint_scope: None,
     };
     // A deliberately has no owner CLI: enroll the isolated fixture through
     // the reviewed local Store API before starting the actual HTTP listener.

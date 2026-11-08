@@ -223,9 +223,15 @@ impl Store {
                     .as_ref()
                     == Some(&grant.instance)
             {
-                eligible
-                    .entry(grant.instance.graph.clone())
-                    .or_insert((grant.instance, grant.valid_until));
+                let entry = eligible.entry(grant.instance.graph.clone()).or_insert((
+                    grant.instance,
+                    grant.valid_until,
+                    Vec::new(),
+                ));
+                if let Some(scope) = grant.mint_scope {
+                    entry.1 = entry.1.min(grant.valid_until);
+                    entry.2.push(scope);
+                }
             }
         }
         if graphs.is_empty() || graphs.len() > 64 {
@@ -233,11 +239,15 @@ impl Store {
         }
         let mut instances = BTreeMap::new();
         let mut expires = u64::MAX;
+        let mut mint_scopes = BTreeMap::new();
         for graph in graphs {
-            let (instance, expiry) = eligible.get(graph).ok_or_else(denied)?;
+            let (instance, expiry, mint_scope) = eligible.get(graph).ok_or_else(denied)?;
             let g = self.committed_graph_id(graph)?.ok_or_else(denied)?;
             instances.insert(g, instance.clone());
             expires = expires.min(*expiry);
+            if !mint_scope.is_empty() {
+                mint_scopes.insert(g, mint_scope.clone());
+            }
         }
         Ok(Capability {
             principal: identity.principal,
@@ -246,6 +256,7 @@ impl Store {
             expires,
             authorized_at: now,
             audit: Default::default(),
+            mint_scopes,
         })
     }
 }
