@@ -2,6 +2,8 @@
 use super::*;
 #[cfg(target_os = "linux")]
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(target_os = "linux")]
+mod image;
 
 #[cfg(any(target_os = "linux", feature = "owl"))]
 pub(super) fn digest(bytes: &[u8]) -> ContentDigest {
@@ -27,7 +29,14 @@ pub(super) fn implementation() -> Option<ValidatorImplementation> {
     #[cfg(target_os = "linux")]
     {
         use std::io::Read;
-        let mut file = std::fs::File::open("/proc/self/exe").ok()?;
+        #[cfg(feature = "shacl")]
+        let code = [
+            implementation as *const () as usize,
+            crate::shacl::Validator::validate as *const () as usize,
+        ];
+        #[cfg(not(feature = "shacl"))]
+        let code = [implementation as *const () as usize];
+        let mut file = image::open_executable_with_code(&code)?;
         let mut hash = ring::digest::Context::new(&ring::digest::SHA256);
         let mut buffer = [0u8; 65536];
         loop {
@@ -56,7 +65,10 @@ pub(super) fn implementation() -> Option<ValidatorImplementation> {
                     "validation_mode".into(),
                     "post-state-owned-components/new-debt-only/v1".into(),
                 ),
-                ("artifact_kind".into(), "running-executable".into()),
+                (
+                    "artifact_kind".into(),
+                    "running-executable;verified-code-mappings/v1".into(),
+                ),
             ]),
         })
     }

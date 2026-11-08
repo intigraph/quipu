@@ -34,12 +34,21 @@ unknown, or failed validation never produces `Complete` coverage. Raw SHACL
 conformance and the gate's filtered ownership/debt decision are separate fields.
 A successful gate is not evidence of full staged-graph SHACL conformance.
 
-On Linux the scope hashes `/proc/self/exe`, the embedded dependency
-lock and the existing compiler-generated complete feature stamp. Validator
-engine, parser, bases and gate policy are explicit options. This is the running
-executable's identity, not a source revision or a deployment assertion. On other targets, including Wasm,
-where this API cannot authenticate the host's artifact bytes, manifest extraction
-refuses instead of inventing an executable identity.
+On Linux, hashing `/proc/self/exe` is supported only after executable code
+mappings prove that both Quipu's extraction and its actual validator entry point
+belong to that same device and inode. The proof also checks its own code image.
+Path names, a readable host executable, and a library's presence in the process
+are insufficient. Missing, malformed, oversized or foreign mappings refuse
+manifest extraction. In particular a Rust `cdylib` consumer under Python is
+unsupported: hashing Python would not identify the validator library.
+
+The supported executable identity also binds the embedded dependency lock,
+compiler-generated complete feature stamp, and explicit engine/parser/base/gate
+options. It is not a source revision or deployment assertion. Non-Linux targets,
+including Wasm, refuse extraction while loaded-image identity is unproved.
+`just validator-observation embedding` exercises two different real Rust
+shared-library consumers under one host. Their writes still succeed, but their
+manifest extraction must refuse rather than report the unchanged host hash.
 
 OWL cache-source identity is recorded when the actual cache is constructed and
 cleared on explicit invalidation. An actual empty ontology lookup proves the
@@ -74,3 +83,6 @@ the real staged bytes; it never substitutes an empty graph for missing evidence.
 
 See the [execution transcript](../demos/validator-observation/observation.txt)
 for actual source probes and observation-removal controls.
+
+See the [loaded-image regression](../demos/validator-observation/linkage.txt)
+for the failing-first shared-library control.

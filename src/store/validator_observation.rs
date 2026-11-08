@@ -69,7 +69,7 @@ impl ValidatorObservation {
         }
         self.manifest.as_ref().ok_or_else(|| {
             Error::CannotVerify(
-                "actual executable identity unavailable on this build surface".into(),
+                "validator executable linkage is unproved on this build surface".into(),
             )
         })
     }
