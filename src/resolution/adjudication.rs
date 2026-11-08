@@ -5,6 +5,11 @@ use std::sync::OnceLock;
 use super::{LabelIndex, id_list, recorded_distinct_from};
 use crate::{Result, Store, episode, namespace, types::Value};
 
+fn semantic_kind(kind: &str) -> &str {
+    kind.strip_prefix(episode::node_type::QUECHUA_TYPE_PREFIX)
+        .unwrap_or(kind)
+}
+
 pub(super) fn needs_check(node: &episode::Node) -> bool {
     static OPAQUE: OnceLock<regex::Regex> = OnceLock::new();
     let opaque = OPAQUE.get_or_init(|| {
@@ -16,8 +21,10 @@ pub(super) fn needs_check(node: &episode::Node) -> bool {
         regex::Regex::new(r"(?i)^[a-z][a-z0-9]*-[a-z0-9][a-z0-9.\-]*$")
             .expect("constant work identifier pattern")
     });
-    let work = matches!(node.node_type.as_deref(), Some("WorkItem" | "Bead"))
-        && work_id.is_match(&node.name);
+    let work = matches!(
+        node.node_type.as_deref().map(semantic_kind),
+        Some("WorkItem" | "Bead")
+    ) && work_id.is_match(&node.name);
     !node.name.starts_with("code/") && !opaque.is_match(&node.name) && !work
 }
 
@@ -33,7 +40,7 @@ fn container_id(name: &str) -> Option<String> {
 }
 
 fn near(a: &str, b: &str, kind: &str, threshold: f64) -> bool {
-    if matches!(kind, "LXCContainer" | "Container" | "Host")
+    if matches!(semantic_kind(kind), "LXCContainer" | "Container" | "Host")
         && let (Some(a), Some(b)) = (container_id(a), container_id(b))
     {
         return a == b;
@@ -107,11 +114,30 @@ pub(super) fn refusal(
         }
         // No top-k truncation before type filtering: unrelated kinds must not
         // crowd the compatible match out of admission.
-        for candidate in index.entity_candidates(store, &node.name, threshold)? {
-            if candidate.iri == mine || excused.contains(&candidate.iri) {
+        let mut candidates: Vec<String> = index
+            .entity_candidates(store, &node.name, threshold)?
+            .into_iter()
+            .map(|candidate| candidate.iri)
+            .collect();
+        // Numeric identity is independent of spelling similarity. Enumerate
+        // matching numeric labels even when raw Jaro scoring pruned them.
+        if matches!(semantic_kind(kind), "LXCContainer" | "Container" | "Host")
+            && let Some(identity) = container_id(&node.name)
+        {
+            for entry in &index.entries {
+                crate::time::check_request_deadline()?;
+                if container_id(&entry.lower).as_ref() == Some(&identity) {
+                    candidates.push(store.resolve(entry.entity_id)?);
+                }
+            }
+        }
+        candidates.sort();
+        candidates.dedup();
+        for candidate in candidates {
+            if candidate == mine || excused.contains(&candidate) {
                 continue;
             }
-            let context = facts(store, &candidate.iri)?;
+            let context = facts(store, &candidate)?;
             let mut compatible = node.node_type.is_none();
             for (attribute, value) in &context {
                 if attribute == namespace::RDF_TYPE
@@ -124,7 +150,7 @@ pub(super) fn refusal(
                 a == namespace::RDFS_LABEL
                     && matches!(v, Value::Str(label) if near(&node.name, label, kind, threshold))
             }) {
-                return Ok(Some(message(&node.name, &candidate.iri)));
+                return Ok(Some(message(&node.name, &candidate)));
             }
         }
         // Detect aliases submitted together before either one exists.
