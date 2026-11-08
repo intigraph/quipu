@@ -23,7 +23,7 @@ fn a_bound_subject_or_predicate_resolves_to_its_iri() {
     let store = Store::open_in_memory().unwrap();
     let alice = store.intern(&format!("{EX}alice")).unwrap();
     let knows = store.intern(&format!("{EX}knows")).unwrap();
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::default();
     bindings.insert("s".into(), Value::Ref(alice));
     bindings.insert("p".into(), Value::Ref(knows));
 
@@ -49,7 +49,7 @@ fn a_bound_subject_or_predicate_resolves_to_its_iri() {
 #[test]
 fn unbound_sentinel_and_literal_bindings_stay_unresolved() {
     let store = Store::open_in_memory().unwrap();
-    let mut bindings = Bindings::new();
+    let mut bindings = Bindings::default();
     bindings.insert("never".into(), Value::Ref(-1));
     bindings.insert("lit".into(), Value::Str("x".into()));
     for name in ["unbound", "never", "lit"] {

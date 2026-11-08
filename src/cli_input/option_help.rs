@@ -2,6 +2,16 @@
 
 pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
     match (path, name) {
+        ("export", "read-only") => {
+            Some("Export a cold local snapshot without writes; refuses sidecars and attachments")
+        }
+        ("asof-rdf", "binding") => {
+            Some("Private JSON cut/profile binding and finite resource limits")
+        }
+        ("asof-rdf", "frames") => {
+            Some("Private retained event/data JSONL file, with exact transport data strings")
+        }
+        ("asof-rdf", "scratch") => Some("Empty canonical private directory matching SQLITE_TMPDIR"),
         ("db respace", "into") => Some("New integer namespace space number"),
         ("db attach", "list") => Some("List mounted read-only databases"),
         ("render", "path") => Some("Relative output path template"),
@@ -14,6 +24,14 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         ("project", "to") => Some("Destination entity IRI for shortest-path projection"),
         ("share", "project") => Some("Export this repository's project graph to .quipu/graph"),
         ("prime", "full") => Some("Print the full agent primer"),
+        ("databook export", "id") => Some("DataBook IRI written to its frontmatter"),
+        ("databook export", "title") => Some("DataBook title written to its frontmatter"),
+        ("databook export", "version") => Some("DataBook version, 1.0.0 when omitted"),
+        ("databook export", "timestamp") => {
+            Some("Creation time recorded in the DataBook's provenance")
+        }
+        ("databook export", "with-shapes") => Some("Also export the loaded SHACL shapes"),
+        ("databook import", "with-shapes") => Some("Also load the DataBook's SHACL shape blocks"),
         ("align export", "license") => Some("License IRI for the mapping set; required"),
         ("align export", "prefix") => Some("Extra CURIE prefix as name=<namespace>; repeatable"),
         ("align export", "author-prefix") => {

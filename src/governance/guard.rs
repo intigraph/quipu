@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use rusqlite::params;
 
 use crate::error::{Error, Result};
-use crate::namespace::{DEFAULT_BASE_NS, RDF_TYPE};
+use crate::namespace::RDF_TYPE;
 use crate::sparql::{self, QueryResult, TemporalContext};
 use crate::store::{Datum, Store};
 use crate::types::Value;
@@ -100,8 +100,14 @@ impl PolicyRegistry {
     /// [`Self::build`] as the store stood at `at`: the policy set that governed
     /// a historical transaction, read through the same compile path.
     pub(crate) fn build_at(store: &Store, at: &TemporalContext) -> Result<Self> {
+        // Refuses on a store with no usable base_ns: an empty namespace would
+        // load zero policies, and a guard with no policies denies nothing.
+        let ns = store.governance_ns()?;
+        // ... and on policies written under another namespace, which it would
+        // otherwise ignore just as silently.
+        super::stranded::refuse_stranded_policies(store, ns)?;
         let q = format!(
-            "PREFIX a: <{DEFAULT_BASE_NS}> \
+            "PREFIX a: <{ns}> \
              SELECT ?p ?t ?c ?e ?probe ?window ?exemplar WHERE {{ \
                 ?p a a:Policy ; a:targets ?t ; a:claim ?c ; a:boundary \"action\" . \
                 OPTIONAL {{ ?p a:effect ?e }} \
@@ -592,7 +598,7 @@ fn evaluate_one(
         Escalation::Ruled { ruling, .. } => Err(Error::PolicyDenied(format!(
             "'{entity_iri}' blocked by policy '{}': {}{}",
             policy.policy_iri,
-            ruling.reason(&policy.policy_iri, entity_iri),
+            ruling.reason(ctx.store.governance_ns()?, &policy.policy_iri, entity_iri),
             policy.exemplar_citation()
         ))),
         // No request yet: this attempt is what opens one. The request itself is
@@ -667,6 +673,11 @@ fn iri_of(store: &Store, v: Option<&Value>) -> Result<String> {
 /// invisible until an unrelated policy write.) Cheap: integer term-id compares
 /// over the datums after a handful of interned lookups.
 pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
+    // No usable base_ns means no registry can be built (see
+    // `PolicyRegistry::build_at`), so there is no cache to invalidate.
+    let Ok(ns) = store.governance_ns() else {
+        return Ok(false);
+    };
     let mut pred_ids = Vec::new();
     for p in [
         "targets",
@@ -679,12 +690,12 @@ pub fn is_governance_write(store: &Store, datums: &[Datum]) -> Result<bool> {
         // amending the policy — the cache must not keep serving the old span.
         "appliesTo",
     ] {
-        if let Some(id) = store.lookup(&format!("{DEFAULT_BASE_NS}{p}"))? {
+        if let Some(id) = store.lookup(&format!("{ns}{p}"))? {
             pred_ids.push(id);
         }
     }
     let rdf_type_id = store.lookup(RDF_TYPE)?;
-    let policy_type_id = store.lookup(&format!("{DEFAULT_BASE_NS}Policy"))?;
+    let policy_type_id = store.lookup(&format!("{ns}Policy"))?;
     for d in datums {
         if pred_ids.contains(&d.attribute) {
             return Ok(true);

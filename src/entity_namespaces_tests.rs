@@ -16,7 +16,7 @@ fn public_defaults_and_invalid_configuration() {
     let defaults = Namespace::default();
     assert_eq!(defaults.base_iri, "https://w3id.org/intigraph/");
     assert_eq!(defaults.audience, "public");
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut cfg = config();
     configure(&mut store, &cfg).unwrap();
     cfg.namespaces[0].visibility = "private".into();
@@ -61,7 +61,7 @@ fn registry_survives_reopen_and_does_not_declassify_when_config_is_absent() {
 
 #[test]
 fn opaque_mint_selectors_legacy_and_exact_reference() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut cfg = config();
     cfg.namespaces[0].types = vec!["urn:example:Host".into()];
     cfg.namespaces[0].graphs = vec!["urn:quipu:graph:root".into()];
@@ -114,7 +114,7 @@ fn opaque_mint_selectors_legacy_and_exact_reference() {
 
 #[test]
 fn label_keys_never_recycle_and_unknown_fields_refuse() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let mut cfg = config();
     cfg.namespaces[0].minting = "label".into();
     configure(&mut store, &cfg).unwrap();

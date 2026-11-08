@@ -121,7 +121,7 @@ fn hardware_registrations(
          ?r ?_verifier {v} ; a:signatureScheme {s} ; ?_key ?k . \
          OPTIONAL {{ ?r a:webauthnRpId ?rp }} OPTIONAL {{ ?r a:webauthnOrigin ?o }} }}"
     );
-    let text = |row: &std::collections::HashMap<String, crate::types::Value>, k: &str| {
+    let text = |row: &sparql::Bindings, k: &str| {
         row.get(k).and_then(|v| match v {
             crate::types::Value::Str(s) => Some(s.clone()),
             _ => None,

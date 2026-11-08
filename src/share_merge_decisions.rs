@@ -11,9 +11,10 @@
 //! 2. [`propose`] fills each row's `proposal` from mechanical evidence. It never
 //!    fills `decision` and never writes the store: an agent proposes, the
 //!    operator decides.
-//! 3. [`apply`] commits the clean merge plus every decided slot in ONE
-//!    transaction whose source names the reviewer and the decisions file's
-//!    hash. It refuses, writing nothing, on an undecided row, a stale file
+//! 3. [`apply`] commits the clean merge and incoming receipts, then each
+//!    decision, as ordered transactions in one atomic writer scope. Sources
+//!    name the reviewer, decisions hash and merge identity. It refuses, writing
+//!    nothing, on an undecided row, a stale file
 //!    (a reviewed slot or incoming share moved, or the conflicts are no longer the
 //!    ones decided), a decided value count above the slot's `sh:maxCount`, or a
 //!    value that is not an RDF term.
@@ -38,9 +39,15 @@ mod binding;
 use crate::share_merge_decisions_view::{check_fields, kind, labels, rule};
 use crate::store::Store;
 use binding::{local_facts, slot_hash};
+#[path = "share_merge_decisions_apply.rs"]
+mod apply_plan;
+use apply_plan::plan_pair;
 
 /// Schema of the decisions file.
-pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v2";
+pub const DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-decisions/v3";
+pub const DECISIONS_SCHEMA_WHOLE: &str =
+    "https://github.com/scbrown/quipu/merge-decisions/v3-whole-root";
+pub const DECISIONS_SCHEMA_V2: &str = "https://github.com/scbrown/quipu/merge-decisions/v2";
 /// Legacy files retain their whole-ROOT staleness check.
 pub const DECISIONS_SCHEMA_V1: &str = "https://github.com/scbrown/quipu/merge-decisions/v1";
 
@@ -121,6 +128,8 @@ pub struct ShareOrigin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Side {
+    /// Keep an agreeing change without writing a receipt or decision.
+    Continue,
     Ours,
     Theirs,
     Base,
@@ -190,6 +199,30 @@ pub struct SharePair {
 }
 
 impl SharePair {
+    pub(crate) fn session(
+        self,
+        store: &Store,
+        profile: crate::merge_session::Profile,
+    ) -> Result<(crate::merge_session::Request, String)> {
+        Ok((
+            crate::merge_session::Request {
+                store_id: store.store_id()?,
+                root_tx: store.latest_tx_id()?,
+                path: crate::merge_session::Path::Share,
+                input_id: self.incoming.manifest.share_id,
+                base_id: self.base.manifest.share_id,
+                base: crate::merge_session::render(&self.base.graph),
+                ours: crate::merge_session::render(&root_graph(store)?.0),
+                theirs: crate::merge_session::render(&self.incoming.graph),
+                shapes: self.incoming.shapes,
+                profile,
+                parent: None,
+                active_slots: None,
+                scope: None,
+            },
+            self.incoming.manifest.created_at,
+        ))
+    }
     /// Read `incoming_dir` and locate its base beside it.
     ///
     /// # Errors
@@ -279,7 +312,7 @@ pub fn emit_pair_scoped(store: &Store, pair: SharePair) -> Result<DecisionFile> 
 
 fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<DecisionFile> {
     let i = inputs(store, pair)?;
-    let (_, conflicts) = merge_graphs(
+    let (_, conflicts) = crate::merge_review::merge(
         &i.base.graph,
         &i.ours,
         &i.incoming.graph,
@@ -308,9 +341,11 @@ fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<De
             },
             kind: Some(kind(&record)),
             rule: Some(rule(&record, &labels)),
+            decision: crate::merge_review::convergent(&record).then_some(Decision::Choose {
+                choose: Side::Continue,
+            }),
             record,
             proposal: None,
-            decision: None,
             decided_by: None,
             decided_at: None,
         });
@@ -319,7 +354,7 @@ fn emit_with_scope(store: &Store, pair: SharePair, requested: bool) -> Result<De
         schema: if scoped {
             DECISIONS_SCHEMA
         } else {
-            DECISIONS_SCHEMA_V1
+            DECISIONS_SCHEMA_WHOLE
         }
         .into(),
         incoming_share: i.incoming.manifest.share_id,
@@ -341,6 +376,12 @@ pub fn propose(mut file: DecisionFile) -> DecisionFile {
 }
 
 fn proposal_for(row: &DecisionRow) -> Proposal {
+    if crate::merge_review::convergent(&row.record) {
+        return Proposal {
+            choose: Side::Continue,
+            evidence: vec!["both sides agree; preserve the current claim".into()],
+        };
+    }
     let r = &row.record;
     let mut evidence = Vec::new();
     if r.ours == r.base {
@@ -401,6 +442,26 @@ fn chosen(row: &DecisionRow) -> Result<Vec<String>> {
                 "row {} ({} {}) is undecided; nothing was written",
                 row.id, r.subject, r.predicate
             )));
+        }
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) if crate::merge_review::convergent(r) => r.ours.clone(),
+        Some(Decision::Choose {
+            choose: Side::Continue,
+        }) => {
+            return Err(Error::InvalidValue(
+                "continue requires a convergent row".into(),
+            ));
+        }
+        Some(Decision::Choose { choose: Side::Ours }) if !crate::merge_review::convergent(r) => {
+            r.ours.clone()
+        }
+        Some(Decision::Choose {
+            choose: Side::Ours | Side::Theirs | Side::Both,
+        }) if crate::merge_review::convergent(r) => {
+            return Err(Error::InvalidValue(
+                "convergent rows take continue/base/value".into(),
+            ));
         }
         Some(Decision::Choose { choose: Side::Ours }) => r.ours.clone(),
         Some(Decision::Choose {
@@ -483,149 +544,6 @@ pub fn dry_run_pair(
     reviewer: &str,
 ) -> Result<DecidedMerge> {
     plan_pair(store, pair, file, file_bytes, reviewer, "", None, true)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn plan_pair(
-    store: &mut Store,
-    pair: SharePair,
-    file: &DecisionFile,
-    file_bytes: &[u8],
-    reviewer: &str,
-    timestamp: &str,
-    actor: Option<&str>,
-    dry_run: bool,
-) -> Result<DecidedMerge> {
-    if reviewer.trim().is_empty() {
-        return Err(Error::InvalidValue("a reviewer is required".into()));
-    }
-    let scoped = file.schema == DECISIONS_SCHEMA;
-    if !scoped && file.schema != DECISIONS_SCHEMA_V1 {
-        return Err(Error::InvalidValue(format!(
-            "not a merge decisions file: schema {:?}",
-            file.schema
-        )));
-    }
-    check_fields(file_bytes)?;
-    let decisions_sha256 = sha256(file_bytes);
-    if let Some(done) = binding::already_applied(store, file, &decisions_sha256, reviewer)? {
-        return Ok(done);
-    }
-    let i = inputs(store, pair)?;
-    let stale = |what: &str| {
-        Error::InvalidValue(format!(
-            "stale decisions: {what} changed since they were emitted (--emit-decisions / quipu_merge_decisions); emit again and re-decide. Nothing was written"
-        ))
-    };
-    if file.incoming_share != i.incoming.manifest.share_id {
-        return Err(stale("the incoming share"));
-    }
-    if file.base_share != i.base.manifest.share_id {
-        return Err(stale("the base share"));
-    }
-    if file.incoming_graph_hash != i.incoming.manifest.graph_hash {
-        return Err(stale("the incoming graph"));
-    }
-    if !scoped && file.local_graph_hash != i.ours_hash {
-        return Err(stale("ROOT"));
-    }
-    let (mut merged, conflicts) = merge_graphs(
-        &i.base.graph,
-        &i.ours,
-        &i.incoming.graph,
-        &i.incoming.shapes,
-    )?;
-    // Same conflicts, in any row order: an operator may sort the file.
-    let same = conflicts.len() == file.rows.len()
-        && conflicts
-            .iter()
-            .all(|c| file.rows.iter().any(|row| &row.record == c));
-    if !same {
-        return Err(stale("the set of conflicts"));
-    }
-    if scoped {
-        for row in &file.rows {
-            if !row.record.subject.starts_with('<') {
-                return Err(stale("a slot without verifiable local provenance"));
-            }
-            if row.local_slot_hash.as_deref() != Some(slot_hash(store, &row.record)?.as_str()) {
-                return Err(stale("a reviewed slot's values or provenance"));
-            }
-        }
-    }
-    let mut applied = Vec::new();
-    for row in &file.rows {
-        let r = &row.record;
-        let values = chosen(row)?;
-        if values.len() > r.max_count {
-            return Err(Error::InvalidValue(format!(
-                "row {} decides {} values for {} {}, above sh:maxCount {}; nothing was written",
-                row.id,
-                values.len(),
-                r.subject,
-                r.predicate,
-                r.max_count
-            )));
-        }
-        merged.retain(|t| {
-            !(t.subject.to_string() == r.subject && t.predicate.as_str() == r.predicate)
-        });
-        for value in &values {
-            let line = format!("{} <{}> {} .", r.subject, r.predicate, value);
-            let parsed = parse_graph(&line, &format!("row {} value {value}", row.id))
-                .map_err(|e| Error::InvalidValue(format!("{e}; nothing was written")))?;
-            // The value is spliced into one N-Triples line, so a newline in it
-            // could add triples outside this slot or past sh:maxCount. Exactly
-            // one triple, on this row's subject and predicate, or refuse.
-            let mut triples = parsed.into_iter();
-            let one = match (triples.next(), triples.next()) {
-                (Some(t), None)
-                    if t.subject.to_string() == r.subject
-                        && t.predicate.as_str() == r.predicate =>
-                {
-                    t
-                }
-                _ => {
-                    return Err(Error::InvalidValue(format!(
-                        "row {} value {value:?} is not one RDF term for {} {}; nothing was written",
-                        row.id, r.subject, r.predicate
-                    )));
-                }
-            };
-            merged.insert(one);
-        }
-        applied.push(AppliedRow {
-            id: row.id.clone(),
-            subject: r.subject.clone(),
-            predicate: r.predicate.clone(),
-            values,
-            decided_by: row.decided_by.clone(),
-            decided_at: row.decided_at.clone(),
-        });
-    }
-    let parents = [i.ours_hash, i.incoming.manifest.share_id.clone()];
-    let source = format!(
-        "share-merge:parents={},{};decisions={decisions_sha256};reviewer={reviewer}",
-        parents[0], parents[1]
-    );
-    let merge = if dry_run {
-        MergeResult {
-            outcome: "dry-run".into(),
-            tx_id: None,
-            asserted: merged.difference(&i.ours).count(),
-            retracted: i.ours.difference(&merged).count(),
-            provenance_parents: parents,
-            conflicts: Vec::new(),
-        }
-    } else {
-        commit(store, &i.ours, &merged, parents, &source, timestamp, actor)?
-    };
-    Ok(DecidedMerge {
-        merge,
-        reviewer: reviewer.into(),
-        decisions_sha256,
-        applied,
-    })
 }
 
 #[cfg(test)]

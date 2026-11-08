@@ -1,11 +1,11 @@
-//! Endpoint declaration resolution. Caboodle owns all endpoint trust policy.
+//! Endpoint declaration resolution. Tambo owns all endpoint trust policy.
 use super::{FederationConfig, RemoteEndpoint};
 use crate::time::Deadline;
 use crate::{Error, Result};
 
 impl FederationConfig {
     /// Resolve only the exact requested endpoint. Verification and current
-    /// Caboodle consent precede every use; no endpoint or pack is fetched here.
+    /// Tambo consent precede every use; no endpoint or pack is fetched here.
     pub(crate) fn pointer_endpoint(
         &self,
         endpoint: &str,
@@ -67,16 +67,21 @@ fn check_deadline(deadline: Option<Deadline>) -> Result<()> {
     Ok(())
 }
 
+fn trust_command(remote: &str, endpoint: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("tambo");
+    command.args(["packs", "trust", "check-endpoint", remote, endpoint]);
+    command
+}
+
 fn check_endpoint(remote: &str, endpoint: &str, deadline: Option<Deadline>) -> Result<()> {
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
     let error = |reason: &str| {
         Error::InvalidValue(format!(
-            "caboodle endpoint trust {reason}: {endpoint} declared by {remote}"
+            "tambo endpoint trust {reason}: {endpoint} declared by {remote}"
         ))
     };
     check_deadline(deadline)?;
-    let child = Command::new("caboodle")
-        .args(["packs", "trust", "check-endpoint", remote, endpoint])
+    let child = trust_command(remote, endpoint)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -121,7 +126,7 @@ fn wait_for_policy(
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(Error::InvalidValue(
-                    "caboodle endpoint trust did not complete".into(),
+                    "tambo endpoint trust did not complete".into(),
                 ));
             }
         }

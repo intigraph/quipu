@@ -1,19 +1,19 @@
 # Performant edit hooks for policy
 
 > **Implementation status (2026-07-23, kelly):** ✅ **Phase A implemented** (Phase B
-> is hank-side, separate/blocked). Verified by mechanism: the quipu pre-commit policy
+> is yupana-side, separate/blocked). Verified by mechanism: the quipu pre-commit policy
 > gate is `src/governance/guard.rs` (`PolicyGuard::build` + `evaluate_write`), invoked
 > on the write path via `stage_and_guard` (`src/store/ops.rs`) and runtime-gated by
 > `[quipu.governance] enforce_on_write` (`src/store/mod.rs`, `src/config.rs`); the
 > read-only `quipu_policy_check` MCP/REST call also exists (REST-only until
 > quipu-227 registered it, with the six other governance/overlay tools, in
-> `tool_definitions()` — agents can now discover the gate). Phase B (hank-side
-> structural-policy projection) is a separate system, blocked on hank↔quipu wiring —
+> `tool_definitions()` — agents can now discover the gate). Phase B (yupana-side
+> structural-policy projection) is a separate system, blocked on yupana↔quipu wiring —
 > outside quipu's code.
 
 Status: **in progress** — the quipu write-path gate (Phase A below) is being
-implemented under this design. The hank-side projection (Phase B) is
-tracked in the backlog and blocked on the Phase-4 hank↔quipu wiring.
+implemented under this design. The yupana-side projection (Phase B) is
+tracked in the backlog and blocked on the Phase-4 yupana↔quipu wiring.
 
 ## Problem
 
@@ -39,15 +39,15 @@ Evaluate a policy where its evidence is already hot.
   graph (provenance, prior verdicts, workflow/transition state). Quipu holds
   that evidence. These must evaluate at quipu's **pre-commit gate**.
 - **Structural-evidence policies** — the claim reasons over call graph,
-  reachability, blast radius, symbols. **Hank** holds that hot, per tenant, at
-  the `boundary:"action"` edit-time seam (`hank hook pre-edit` + resident
-  daemon). These evaluate in hank, against a hot **projection** of quipu's
+  reachability, blast radius, symbols. **Yupana** holds that hot, per tenant, at
+  the `boundary:"action"` edit-time seam (`yupana hook pre-edit` + resident
+  daemon). These evaluate in yupana, against a hot **projection** of quipu's
   canonical policies.
 
 The dividing line is *where the evidence lives*, not *which system owns policy*.
 Canonical policy definitions, SHACL validation, verdict signing, and the
 human-owned `VerifierRegistration` root of trust **stay in quipu** regardless;
-hank holds only a projected read cache.
+yupana holds only a projected read cache.
 
 ## Phase A — quipu pre-commit policy gate (this change)
 
@@ -116,7 +116,7 @@ existing `TransactObserver` seam is post-commit and cannot veto).
 
 ### The tree-sitter-tier catalog (`shapes/policies/treesitter.ttl`)
 
-The canonical, SHACL-validated source of the structural policies Hank projects.
+The canonical, SHACL-validated source of the structural policies Yupana projects.
 Each is composed from the governance atoms: an `aegis:Selector` (a tree-sitter
 `.scm` capture — which nodes) and an `aegis:Predicate` (a regex + an
 `aegis:matchType` of `must-match` / `must-not-match` / `must-exist`, plus an
@@ -126,11 +126,11 @@ examples: `todo-needs-ticket` (a TODO comment must cite a ticket) and
 `no-ticket-in-comment` (the opposite direction). The catalog is validated against
 `governance.ttl` in `src/governance_tests.rs::treesitter_policy_catalog_conforms`.
 
-The atom field names line up one-to-one with Hank's `rules::Rule`
+The atom field names line up one-to-one with Yupana's `rules::Rule`
 (`evidenceSource`↔`query`/`pattern`, `matchType`↔`match_type`, `gate`↔`gate`,
 `tier`↔`Tier::TreeSitter`), so the Phase-B projection deserializes a policy
 straight into a `Rule` — the seam is a decode, not a redesign. An
-`aegis:VerifierRegistration` for the `hank` verifier authorizes it to attest
+`aegis:VerifierRegistration` for the `yupana` verifier authorizes it to attest
 these predicates when its edit-time verdicts promote back (H-PROMOTE-VERDICT).
 
 ### The tripwire catalog (`shapes/policies/tripwire.ttl`)
@@ -151,17 +151,17 @@ Yupana enforces the PAG wires at `hook pre-edit` first; PAA-side projection is
 its sequencing step 2. Validated in
 `src/governance_tests.rs::tripwire_policy_catalog_conforms`.
 
-## Phase B — hank projection (backlogged, Phase-4-blocked)
+## Phase B — yupana projection (backlogged, Phase-4-blocked)
 
-Hank holds a **hot, compiled projection** of quipu's `boundary:"action"`
+Yupana holds a **hot, compiled projection** of quipu's `boundary:"action"`
 policies whose claims are structural, evaluates them at `hook pre-edit` against
 the resident graph, and emits verdicts that promote back into quipu as signed
 facts (the existing `commit → touched` promote path). The projection is
-**strictly one-directional** (quipu canonical → hank cache) with invalidation on
-quipu policy writes; hank never defines policy, only caches it — otherwise hank
-could allow what quipu would deny. This leans on hank freshness-serving (FR-3)
+**strictly one-directional** (quipu canonical → yupana cache) with invalidation on
+quipu policy writes; yupana never defines policy, only caches it — otherwise yupana
+could allow what quipu would deny. This leans on yupana freshness-serving (FR-3)
 so a verdict can declare whether the registry it used was fresh or stale, and on
-the hank↔quipu dep being wired (commented out today). See the backlog.
+the yupana↔quipu dep being wired (commented out today). See the backlog.
 
 ## SARC conformance
 
@@ -177,7 +177,7 @@ them, and their joint effect is a *decidable audit* (Definition 2, §3.6): given
 a specification Σ and a trace T, an auditor can mechanically check `T ⊨ Σ` in
 `O(|T|·|C|)` without access to the model or its prompts.
 
-Measured against that, quipu's write gate and hank's pre-edit hook together are
+Measured against that, quipu's write gate and yupana's pre-edit hook together are
 a solid PAG and a solid policy-layer reference monitor, and the signed
 `aegis:Verdict` + `VerifierRegistration` machinery is ahead of SARC's own
 reference artifact (a JSON spec file and a Python checker, §3.6). Note also that
@@ -192,14 +192,14 @@ The gaps are specific: the constraint object is under-declared — no
 class-to-placement rules of §4.2 (Table 3) cannot be checked at all. There is no
 PAA, no ATM, no escalation router, and nothing checks correspondence.
 
-The gap analysis and build order live in hank's book, at
+The gap analysis and build order live in yupana's book, at
 `docs/book/src/design/sarc-conformance.md` — the same cross-repo citation style
 this document already uses; its Sources section carries the full reference list.
 The quipu-side work it implies is listed as `Q-SARC-*` in the backlog below.
 
 ## Backlog (beads)
 
-Each entry: rationale + acceptance criteria. `Q-*` = quipu, `H-*` = hank.
+Each entry: rationale + acceptance criteria. `Q-*` = quipu, `H-*` = yupana.
 Status: ☐ open · ☑ done (this change).
 
 ### quipu
@@ -269,7 +269,7 @@ Status: ☐ open · ☑ done (this change).
   The gate's evidence is a SPARQL ASK over the committed store, which has no
   stable serialisation to hash, and inventing one that moved with unrelated facts
   would make every verdict spuriously stale. That makes this binding narrower
-  than hank's, which hashes the edit text it genuinely saw — and saying so is
+  than yupana's, which hashes the edit text it genuinely saw — and saying so is
   better than implying a guarantee the shape of the evidence cannot support.
 - **Q-SARC-CLASS** ☑ Complete the constraint object in `shapes/governance.ttl`:
   `constraintClass ∈ {hard,soft,escalation}`, `verificationPoint ∈
@@ -463,7 +463,7 @@ Status: ☐ open · ☑ done (this change).
 
 - **Q-SARC-INVENTORY** ☑ The dispatch-graph inventory for I7
   (`src/governance/inventory.rs`, `shapes/dispatch-inventory.ttl`). Enforcement
-  completeness is a property of the dispatch graph, and hank's
+  completeness is a property of the dispatch graph, and yupana's
   `work-scoped-governance.md` §"What this cannot reach" stated it as prose —
   which goes stale the first time a harness adds a tool, with nothing to notice.
   As `aegis:ToolClass` facts, a new ungoverned class is a failing check.
@@ -525,18 +525,18 @@ Status: ☐ open · ☑ done (this change).
   stack does; building the predicate without one would ship it dark. The boundary
   is declared and reported on every run, and that is the whole claim.
 
-### hank
+### yupana
 
 - **H-SARC-I6** ☑ Check `aegis:hostedAtLayer` against reality at the projection
   seam. The field is declared and unconsumed: nothing compares it to where a
   constraint is ACTUALLY evaluated, so a policy may claim `"tool"` — the layer an
-  agent cannot route around — while being enforced solely by hank's
+  agent cannot route around — while being enforced solely by yupana's
   orchestration-layer pre-edit hook, which an agent bypasses by writing the file
   another way. I6 is checked for well-formedness and not for truth, and a false
   `tool` claim is worse than an honest `orchestration` one because it stops
   people looking.
 
-  Hank knows what it is: a rule evaluated by `hank hook pre-edit` is hosted at
+  Yupana knows what it is: a rule evaluated by `yupana hook pre-edit` is hosted at
   the orchestration layer, always — a constant, not a setting. On projection,
   compare declared against actual. The check is **one-directional**: declaring a
   weaker layer than the truth understates robustness and is harmless; declaring a
@@ -547,16 +547,16 @@ Status: ☐ open · ☑ done (this change).
   trading a documentation error for an enforcement gap. Record the layer actually
   used on the verdict and trace record so the Q-SARC-AUDIT checker can verify
   claim against record rather than taking the claim. *AC:* a projected policy
-  declaring `"tool"` and evaluated by hank produces a mismatch notice naming the
+  declaring `"tool"` and evaluated by yupana produces a mismatch notice naming the
   policy, the claimed layer and the real one, and still evaluates and still
   blocks if hard; `"orchestration"` and an absent declaration both produce
   silence.
 - **H-DEP** ☐ Pin and wire the `quipu` git dep (commented out in
-  `hank/Cargo.toml`; Phase-4 kickoff). *AC:* `--features quipu` builds against a
+  `yupana/Cargo.toml`; Phase-4 kickoff). *AC:* `--features quipu` builds against a
   real quipu rev; promote path reaches a live `/knot`.
 - **H-PROJECTION** ☐ Hot projection of quipu `boundary:"action"` structural
-  policies into hank, one-directional with invalidation. *AC:* a policy added in
-  quipu appears in hank's registry on the next refresh; hank never originates a
+  policies into yupana, one-directional with invalidation. *AC:* a policy added in
+  quipu appears in yupana's registry on the next refresh; yupana never originates a
   policy definition.
 - **H-EDIT-EVAL** ☐ Evaluate projected structural policies at `hook pre-edit`
   against the resident graph. *AC:* an edit violating a structural `deny` policy
@@ -564,6 +564,6 @@ Status: ☐ open · ☑ done (this change).
 - **H-FRESHNESS** ☐ Serve FR-3 freshness so a projected-policy verdict declares
   fresh/stale of the registry it used. *AC:* a verdict computed against a stale
   projection is tagged stale, never silently `fresh`.
-- **H-PROMOTE-VERDICT** ☐ Promote hank edit-time verdicts into quipu as signed
-  facts (extend the `commit → touched` promote path). *AC:* a hank verdict lands
-  as a bitemporal quipu Verdict attributable to the hank verifier identity.
+- **H-PROMOTE-VERDICT** ☐ Promote yupana edit-time verdicts into quipu as signed
+  facts (extend the `commit → touched` promote path). *AC:* a yupana verdict lands
+  as a bitemporal quipu Verdict attributable to the yupana verifier identity.

@@ -272,32 +272,32 @@
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_subject",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_subject_reversed",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_triple",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "per_triple_reversed",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "subject_halves",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ],
   [
    "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001",
    "subject_halves_reversed",
-   "cannot verify: post-state value-set constraints require a predicate or inverse predicate path"
+   "cannot verify: post-state value-set constraints (sh:maxCount, sh:uniqueLang, sh:disjoint, sh:lessThan, sh:lessThanOrEquals) need a predicate, inverse predicate, or an alternative of those as their path; (http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p1 / http://datashapes.org/sh/tests/core/path/path-sequence-duplicate-001.test#p2) is not one"
   ]
  ]
 }

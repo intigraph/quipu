@@ -10,7 +10,13 @@ pub(crate) fn open_pool(
     config: &quipu::config::ServerConfig,
 ) -> super::handle::ReadPool {
     use super::handle::ReadPool;
-    let count = if config.read_processes > 0 {
+    // A capped process profile needs concurrent ordinary readers inside each
+    // worker. The primary still opens none; worker startup verifies this pool
+    // really opened before its private health response can admit the parent.
+    let worker_pool = config.read_processes > 0
+        && config.replica.is_some()
+        && !config.heavy_read_operations.is_empty();
+    let count = if config.read_processes > 0 && !worker_pool {
         0
     } else {
         config.read_pool_size
@@ -44,6 +50,16 @@ pub(crate) fn open_pool(
         std::process::exit(1);
     }
     let point_reserved = read_pool.reserve_point_reads(config.reserve_point_reads);
+    let ordinary = if config.read_processes > 0 && config.replica.is_none() {
+        config.read_pool_size
+    } else {
+        read_pool.ordinary_len()
+    };
+    if let Err(error) = config.validate_heavy_reads(ordinary) {
+        eprintln!("error: {error}");
+        std::process::exit(1);
+    }
+    super::admission::heavy_reads::init(config);
 
     if read_pool.len() > 0 {
         eprintln!("read pool: {} read-only connections", read_pool.len());

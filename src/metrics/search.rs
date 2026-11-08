@@ -17,6 +17,16 @@ struct Counts {
 #[derive(Default)]
 pub(super) struct SearchMetrics(Mutex<Counts>);
 
+/// Fixed-label deltas only; never serialize a terminal event into aggregate state.
+#[cfg(unix)]
+pub(crate) fn counter_delta(event: &Event) -> String {
+    let counters = SearchMetrics::default();
+    counters.observe(event);
+    let mut out = String::new();
+    counters.render(&mut out);
+    out
+}
+
 impl SearchMetrics {
     pub(super) fn observe(&self, event: &Event) {
         let mut counts = self

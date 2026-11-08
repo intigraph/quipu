@@ -7,6 +7,7 @@
 //! paired with the near-miss that must fail.
 
 use super::*;
+use crate::namespace::DEFAULT_BASE_NS;
 
 fn action(class: Option<&str>, point: Option<&str>) -> Placement {
     Placement {
@@ -239,7 +240,7 @@ const HARD_AT_PAA: &[(&str, &str)] = &[
 
 #[test]
 fn a_malformed_policy_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
 
     let err = define(&mut store, "http://ex/bad", HARD_AT_PAA);
@@ -262,7 +263,7 @@ fn the_control_the_same_write_lands_with_the_flag_off() {
     // Without this the test above proves only that SOMETHING rejected the
     // write. Same store, same datums, flag off => accepted. That is what makes
     // the rejection attributable to this check.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     assert!(
         !store.governance_config_mut().validate_placement,
         "the flag must default to off"
@@ -274,7 +275,7 @@ fn the_control_the_same_write_lands_with_the_flag_off() {
 #[test]
 fn a_well_placed_policy_lands_with_the_flag_on() {
     // The GREEN case. A check that rejects everything is not a check.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define(
         &mut store,
@@ -295,7 +296,7 @@ fn a_well_placed_policy_lands_with_the_flag_on() {
 fn a_non_policy_write_is_not_touched() {
     // The pre-filter: the check must cost nothing on ordinary traffic, and must
     // certainly not reject it.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let datums = vec![Datum {
         entity: store.intern("http://ex/thing").unwrap(),
@@ -315,7 +316,7 @@ fn amending_a_policy_revalidates_it() {
     // A definition is not only its first write. Landing a well-placed policy and
     // then moving it to an incompatible point must be refused too, or the check
     // guards creation and nothing else.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define(
         &mut store,
@@ -365,7 +366,7 @@ fn a_clean_re_placement_retracting_the_old_value_lands() {
     // The recoverability half. If ambiguity is refused, there has to be a way
     // to legitimately move a policy — otherwise the check strands the operator,
     // which is worse than the thing it prevents.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define(
         &mut store,
@@ -468,7 +469,7 @@ fn the_value_checks_apply_outside_the_action_boundary_too() {
 #[test]
 fn a_bad_value_is_refused_at_the_write_path() {
     // Liveness for the value checks, through the real transact.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define(
         &mut store,
@@ -495,7 +496,7 @@ fn a_forbidden_hosting_layer_is_refused_through_the_read_path() {
     // so `read_placements` never saw hostedAtLayer and the prompt-layer refusal
     // was dead code — reachable only by constructing a Placement directly. This
     // goes through the real transact, so it fails if the projection regresses.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define(
         &mut store,
@@ -555,7 +556,7 @@ fn an_escalating_effect_with_a_non_escalation_class_is_rejected() {
 
 #[test]
 fn an_escalating_effect_without_the_escalation_class_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define(
         &mut store,
@@ -762,7 +763,7 @@ fn define_predicate(
 
 #[test]
 fn a_grounded_predicate_without_a_query_is_refused_at_the_write_path() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define_predicate(
         &mut store,
@@ -787,7 +788,7 @@ fn a_grounded_predicate_without_a_query_is_refused_at_the_write_path() {
 fn a_grounded_predicate_with_its_query_lands() {
     // The green half of the write-path pair, and the shape of the shipped
     // exemplar (aegis:pred_no_ticket_in_comment_v2).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define_predicate(
         &mut store,
@@ -814,7 +815,7 @@ fn the_grounding_query_rule_applies_to_the_embedding_tier_linkage_predicate() {
     // so the similarity tier buys no exemption: without its id-set query the
     // citation half of the check evaluates against emptiness, exactly like
     // the exact-tier case.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let fields = |with_query: bool| {
         let mut f = vec![
@@ -908,7 +909,7 @@ fn an_inexact_policy_hard_denying_at_the_gate_is_refused_at_the_write_path() {
     // Liveness through the predicate-tier join: this fails if read_placements
     // stops projecting ?ptier, the same way the ?layer projection once
     // regressed (quipu-sio).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define_inexact_policy(&mut store, "embedding", "deny", "hard", "PAG", Some(0.08));
     let Err(Error::PolicyDenied(why)) = err else {
@@ -924,7 +925,7 @@ fn an_inexact_policy_hard_denying_at_the_gate_is_refused_at_the_write_path() {
 fn an_inexact_policy_claiming_exactness_is_refused_at_the_write_path() {
     // Liveness through the operating-point join, with the tolerance written
     // as a Float — the direct-transact route for a decimal.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define_inexact_policy(&mut store, "model", "warn", "soft", "PAA", Some(0.0));
     assert!(
@@ -1025,7 +1026,7 @@ fn throttle_fields(with_backoff: bool) -> Vec<(&'static str, &'static str)> {
 fn a_backoffless_throttle_is_refused_at_the_write_path() {
     // Liveness: this fails if read_placements stops projecting ?backoff, the
     // way the ?layer projection once regressed (quipu-sio).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     let err = define(&mut store, "http://ex/p", &throttle_fields(false));
     let Err(Error::PolicyDenied(why)) = err else {
@@ -1039,7 +1040,7 @@ fn a_backoffless_throttle_is_refused_at_the_write_path() {
 
 #[test]
 fn a_throttle_declaring_its_backoff_lands_with_the_flag_on() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define(&mut store, "http://ex/p", &throttle_fields(true))
         .expect("a throttle wire declaring its backoff must land");
@@ -1049,7 +1050,7 @@ fn a_throttle_declaring_its_backoff_lands_with_the_flag_on() {
 fn the_backoffless_throttle_control_lands_with_the_flag_off() {
     // Same datums, flag off => accepted: the rejection above is attributable
     // to this check and nothing else.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     assert!(
         !store.governance_config_mut().validate_placement,
         "the flag must default to off"
@@ -1062,7 +1063,7 @@ fn the_backoffless_throttle_control_lands_with_the_flag_off() {
 fn a_calibrated_inexact_policy_lands_at_the_paa() {
     // The GREEN case for the whole composition: soft, advisory, at the PAA,
     // with a tolerant operating point — the placement design B prescribes.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     store.governance_config_mut().validate_placement = true;
     define_inexact_policy(&mut store, "embedding", "warn", "soft", "PAA", Some(0.08))
         .expect("an advisory, calibrated embedding-tier policy must land");

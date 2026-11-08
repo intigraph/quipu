@@ -8,8 +8,12 @@ use crate::Store;
 /// is created LAZILY on a code path no fixture walks.
 fn tables_created_in_source() -> std::collections::BTreeSet<String> {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    tables_created_under(&src)
+}
+
+fn tables_created_under(src: &std::path::Path) -> std::collections::BTreeSet<String> {
     let mut found = std::collections::BTreeSet::new();
-    let mut stack = vec![src];
+    let mut stack = vec![src.to_path_buf()];
     while let Some(dir) = stack.pop() {
         for entry in std::fs::read_dir(&dir).expect("read src") {
             let path = entry.expect("dir entry").path();
@@ -22,7 +26,8 @@ fn tables_created_in_source() -> std::collections::BTreeSet<String> {
             }
             // Test sources re-declare tables in fixtures (and declare throwaways
             // like `t`), which are not store schema.
-            if path.to_string_lossy().contains("test") {
+            let relative = path.strip_prefix(src).expect("source path under root");
+            if relative.to_string_lossy().contains("test") {
                 continue;
             }
             let text = std::fs::read_to_string(&path).expect("read source");
@@ -45,13 +50,51 @@ fn tables_created_in_source() -> std::collections::BTreeSet<String> {
                     .chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                     .collect();
-                if !table.is_empty() {
+                // These tables live in the separately opened private
+                // counts.sqlite sidecar, not in the Store connection. Scope
+                // this exception to its exact producer: a future Store table
+                // named counts or health must still be audited normally.
+                let counter_sidecar = relative
+                    == std::path::Path::new("search_outcome/counters_only.rs")
+                    && matches!(table.as_str(), "counts" | "health");
+                if !table.is_empty() && !counter_sidecar {
                     found.insert(table);
                 }
             }
         }
     }
     found
+}
+
+#[test]
+fn counter_sidecar_exception_does_not_hide_store_tables_with_the_same_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(src.join("search_outcome")).unwrap();
+    std::fs::create_dir_all(src.join("store")).unwrap();
+    let sidecar = src.join("search_outcome/counters_only.rs");
+    std::fs::write(
+        &sidecar,
+        "CREATE TABLE counts (n INTEGER);\nCREATE TABLE health (n INTEGER);\n",
+    )
+    .unwrap();
+    assert!(tables_created_under(&src).is_empty());
+
+    // A global name exemption would incorrectly hide counts and health here. The
+    // source-path exception must preserve the original lazy-schema detector.
+    std::fs::write(
+        src.join("store/schema.rs"),
+        "CREATE TABLE counts (n INTEGER);\nCREATE TABLE health (n INTEGER);\n",
+    )
+    .unwrap();
+    std::fs::write(&sidecar, "CREATE TABLE unexpected_sidecar (n INTEGER);\n").unwrap();
+    assert_eq!(
+        tables_created_under(&src),
+        ["counts", "health", "unexpected_sidecar"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    );
 }
 
 /// Every table a real store creates must be classified.

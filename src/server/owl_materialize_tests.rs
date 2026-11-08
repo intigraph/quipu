@@ -4,8 +4,63 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const TS: &str = "2026-01-01T00:00:00Z";
+
+// MATERIALIZE is process-wide single flight, and tests run in parallel: every
+// test that takes or observes it holds this first, or one test's permit makes
+// another's run refuse "already running".
+static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const ASK: &str = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
     { <urn:twin> <urn:likes> <urn:object> }";
+
+#[tokio::test]
+async fn ontology_window_production_handler_preview_and_apply() {
+    let (_dir, store) = seeded();
+    let (before, through) = {
+        let mut live = store.lock();
+        let graph = live.ensure_companion_inferred_graph(0, TS).unwrap();
+        let before = live.latest_tx_id().unwrap();
+        let d = quipu::Datum {
+            entity: live.intern("urn:window:derived").unwrap(),
+            attribute: live.intern("urn:window:predicate").unwrap(),
+            value: quipu::Value::Str("entailed".into()),
+            valid_from: TS.into(),
+            valid_to: None,
+            op: quipu::Op::Assert,
+        };
+        let through = live
+            .transact_to_graph(&[d], TS, None, Some("owl:materialize"), graph)
+            .unwrap();
+        (before, through)
+    };
+    let body = json!({"action":"retract_materialization", "name":"test", "after_tx":before, "through_tx":through});
+    let preview = crate::tools::ontology(
+        State(store.clone()),
+        axum::http::HeaderMap::new(),
+        None,
+        axum::Json(body.clone()),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(preview["planned"], 1);
+    assert_eq!(preview["applied"], false);
+    let mut apply = body;
+    apply["apply"] = json!(true);
+    apply["expect"] = preview["expect"].clone();
+    let result = crate::tools::ontology(
+        State(store.clone()),
+        axum::http::HeaderMap::new(),
+        None,
+        axum::Json(apply),
+    )
+    .await
+    .unwrap()
+    .0;
+    assert_eq!(result["remaining"], 0);
+    assert_eq!(result["retracted"], 1);
+    assert_eq!(result["ontology_removed"], false);
+    assert_eq!(store.lock().list_ontologies().unwrap().len(), 1);
+}
 
 fn seeded() -> (tempfile::TempDir, SharedStore) {
     let dir = tempfile::tempdir().unwrap();
@@ -59,6 +114,7 @@ fn seeded() -> (tempfile::TempDir, SharedStore) {
 #[tokio::test]
 #[allow(clippy::await_holding_lock)] // Intentionally stall snapshot capture, not the writer.
 async fn scheduled_handler_entails_and_leaves_ordinary_write_admission_free() {
+    let _serial = SERIAL.lock().await;
     let (_dir, store) = seeded();
     assert!(matches!(
         quipu::sparql::query(&store.lock(), ASK).unwrap(),
@@ -128,4 +184,199 @@ async fn scheduled_handler_entails_and_leaves_ordinary_write_admission_free() {
         .unwrap()
         .0;
     assert_eq!(second["materialized"]["total"], 0);
+}
+
+// ── aegis-fej9 (gju5 Q1): a deferred /ontology load ──
+
+const EQ_ONTOLOGY: &str = "<urn:p> <http://www.w3.org/2002/07/owl#equivalentProperty> <urn:q> .";
+const EQ_ASK: &str = "ASK FROM <urn:quipu:graph:root> FROM <urn:quipu:graph:root#inferred> \
+    { <urn:a> <urn:q> <urn:b> }";
+
+/// A store with one base fact and NO ontology; `pool` decides whether it has
+/// a read pool, which the off-lock path requires.
+fn bare(pool: bool) -> (tempfile::TempDir, SharedStore) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.db");
+    let mut store = quipu::Store::open(path.to_str().unwrap()).unwrap();
+    let (a, p, b) = (
+        store.intern("urn:a").unwrap(),
+        store.intern("urn:p").unwrap(),
+        store.intern("urn:b").unwrap(),
+    );
+    store
+        .transact(
+            &[quipu::Datum {
+                entity: a,
+                attribute: p,
+                value: quipu::Value::Ref(b),
+                valid_from: TS.into(),
+                valid_to: None,
+                op: quipu::Op::Assert,
+            }],
+            TS,
+            None,
+            None,
+        )
+        .unwrap();
+    let readers = pool.then(|| crate::ReadPool::open(path.to_str().unwrap(), &store, 1));
+    let mut handle = crate::StoreHandle::writer_only(store);
+    if let Some(readers) = readers {
+        handle.readers = readers;
+    }
+    (dir, Arc::new(handle))
+}
+
+async fn load(store: &SharedStore, extra: Value) -> Result<Value, AppError> {
+    let mut input = json!({"action":"load","name":"eq","turtle":EQ_ONTOLOGY,"timestamp":TS});
+    for (k, v) in extra.as_object().unwrap() {
+        input[k] = v.clone();
+    }
+    crate::tools::ontology(
+        State(store.clone()),
+        axum::http::HeaderMap::new(),
+        None,
+        axum::Json(input),
+    )
+    .await
+    .map(|r| r.0)
+}
+
+fn asks(store: &SharedStore, query: &str) -> bool {
+    matches!(
+        quipu::sparql::query(&store.lock(), query).unwrap(),
+        quipu::sparql::QueryResult::Ask(true)
+    )
+}
+
+fn ontology_names(store: &SharedStore) -> Vec<String> {
+    let live = store.lock();
+    live.list_ontologies()
+        .unwrap()
+        .into_iter()
+        .map(|(name, _, _)| name)
+        .collect()
+}
+
+#[tokio::test]
+async fn deferred_load_derives_the_same_entailment_as_inline() {
+    let _serial = SERIAL.lock().await;
+    let (_d1, inline) = bare(true);
+    let (_d2, deferred) = bare(true);
+    assert!(!asks(&inline, EQ_ASK) && !asks(&deferred, EQ_ASK));
+
+    let i = load(&inline, json!({})).await.unwrap();
+    let d = load(&deferred, json!({"materialize":"deferred"}))
+        .await
+        .unwrap();
+
+    // Inline is unchanged: no materialization block, the derivation inline.
+    assert!(i.get("materialization").is_none());
+    assert!(i["materialized"]["total"].as_u64().unwrap() > 0);
+    assert_eq!(d["materialize"], "deferred");
+    assert_eq!(d["materialization"]["complete"], true);
+    assert!(
+        d["materialized"]["equivalent_property_inferences"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(asks(&inline, EQ_ASK) && asks(&deferred, EQ_ASK));
+    // Restated only where an axiom says so.
+    let unrelated = EQ_ASK.replace("urn:a", "urn:b");
+    assert!(!asks(&inline, &unrelated) && !asks(&deferred, &unrelated));
+    // The derived facts are in the inferred plane, never ROOT, on both paths.
+    let root_only = "ASK FROM <urn:quipu:graph:root> { <urn:a> <urn:q> <urn:b> }";
+    assert!(!asks(&inline, root_only) && !asks(&deferred, root_only));
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)] // Intentionally stall snapshot capture, not the writer.
+async fn deferred_load_does_not_hold_write_admission_during_derivation() {
+    let _serial = SERIAL.lock().await;
+    let (_dir, store) = bare(true);
+    let held_reader = store.readers.conns[0].lock();
+    let task_store = store.clone();
+    let task =
+        tokio::spawn(async move { load(&task_store, json!({"materialize":"deferred"})).await });
+    // The load persists first, then blocks in snapshot capture on the reader.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while MATERIALIZE.available_permits() != 0 || ontology_names(&store).is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("deferred load must persist, then enter off-lock materialisation");
+    let writer = store.clone();
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        write_blocking(move || {
+            writer.lock().intern("urn:concurrent-writer")?;
+            Ok(())
+        }),
+    )
+    .await
+    .expect("a deferred load must not monopolise write admission")
+    .unwrap();
+    assert!(
+        !asks(&store, EQ_ASK),
+        "nothing derived before the snapshot runs"
+    );
+    drop(held_reader);
+    let result = tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["materialization"]["complete"], true);
+    assert!(asks(&store, EQ_ASK));
+}
+
+#[tokio::test]
+async fn deferred_load_refusals_persist_nothing() {
+    let _serial = SERIAL.lock().await;
+    // No read pool: refused, never a silent writer fallback, and not loaded.
+    let (_d1, no_pool) = bare(false);
+    let err = load(&no_pool, json!({"materialize":"deferred"}))
+        .await
+        .unwrap_err();
+    assert!(
+        err.message().contains("requires a read pool"),
+        "{}",
+        err.message()
+    );
+    assert!(ontology_names(&no_pool).is_empty());
+
+    // A materialisation already running: refused before the persist.
+    let (_d2, store) = bare(true);
+    {
+        let _running = MATERIALIZE.try_acquire().unwrap();
+        let err = load(&store, json!({"materialize":"deferred"}))
+            .await
+            .unwrap_err();
+        assert!(
+            err.message().contains("already running"),
+            "{}",
+            err.message()
+        );
+    }
+    assert!(ontology_names(&store).is_empty());
+
+    // An unknown mode is refused before parse or persist, on every spelling.
+    for mode in [json!("Deferred"), json!("later"), json!(true), json!(null)] {
+        let err = load(&store, json!({"materialize": mode}))
+            .await
+            .unwrap_err();
+        assert!(
+            err.message().contains("unknown materialize mode"),
+            "{}",
+            err.message()
+        );
+    }
+    assert!(ontology_names(&store).is_empty());
+    assert!(!asks(&store, EQ_ASK));
+
+    // Explicit inline is the default path.
+    let inline = load(&store, json!({"materialize":"inline"})).await.unwrap();
+    assert!(inline.get("materialization").is_none());
+    assert!(asks(&store, EQ_ASK));
 }

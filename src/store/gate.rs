@@ -75,6 +75,7 @@ impl Store {
     #[cfg(feature = "owl")]
     pub fn invalidate_owl_cache(&mut self) {
         self.owl_cache = None;
+        self.owl_cache_source = None;
     }
 
     /// Close the prior value of a functional property so a new one can replace it
@@ -122,7 +123,7 @@ impl Store {
         let mut proposed: std::collections::HashMap<(i64, i64), Vec<Vec<u8>>> =
             std::collections::HashMap::new();
         for d in datums {
-            if d.op != Op::Assert {
+            if d.op != Op::Assert || is_receipt(d) {
                 continue;
             }
             let Ok(attr_iri) = self.resolve(d.attribute) else {
@@ -223,6 +224,8 @@ impl Store {
         }
         let stored = self.list_ontologies()?;
         if stored.is_empty() {
+            // This execution proved that no axioms feed the absent cache.
+            self.owl_cache_source = Some(super::validator_observation::cache_source(""));
             return Ok(());
         }
         let combined: String = stored
@@ -231,6 +234,7 @@ impl Store {
             .collect::<Vec<_>>()
             .join("\n");
         self.owl_cache = Some(Box::new(crate::owl::Ontology::from_turtle(&combined)?));
+        self.owl_cache_source = Some(super::validator_observation::cache_source(&combined));
         Ok(())
     }
 
@@ -311,7 +315,16 @@ impl Store {
         let Some(ontology) = self.owl_cache.take() else {
             return Ok(());
         };
-        let result = ontology.validate(self, datums);
+        // Receipts hold no valid time, so they cannot violate a constraint on
+        // what holds at once (aegis-karb.2).
+        let open: Vec<Datum>;
+        let checked = if datums.iter().any(is_receipt) {
+            open = datums.iter().filter(|d| !is_receipt(d)).cloned().collect();
+            open.as_slice()
+        } else {
+            datums
+        };
+        let result = ontology.validate(self, checked);
         self.owl_cache = Some(ontology);
         let violations = result?;
         if violations.is_empty() {
@@ -344,6 +357,9 @@ impl Store {
     /// keyed by the verdict it backs, and an entry for a verdict that was never
     /// written would be evidence for nothing.
     pub(crate) fn flush_pending_verdicts(&mut self, timestamp: &str, actor: Option<&str>) {
+        if crate::writer_scope::defer_verdicts(timestamp, actor) {
+            return;
+        }
         // Gate bookkeeping, counted as such rather than as the request that
         // triggered it (aegis-gwkd76).
         crate::write_kind::scoped(Some(crate::write_kind::WriteKind::Verdict), || {
@@ -422,6 +438,11 @@ impl Store {
     /// at once. What the flag buys is that a chain, once supplied, is BINDING —
     /// so adopting attribution is opt-in per caller and cannot silently widen.
     pub(crate) fn enforce_graph_authority(&self, graph: i64) -> Result<()> {
+        // Only this private server-audit path may write its signed verdicts
+        // outside the caller's graph. Actor/source strings never set this flag.
+        if !self.recording_verdicts {
+            crate::writer_scope::check(self, graph)?;
+        }
         if !self.governance_config.enforce_authority
             || self.recording_verdicts
             || self.principal_chain.is_empty()
@@ -519,11 +540,12 @@ impl Store {
     /// inspects asserted `aegis:signatureScheme` datums, so every write that
     /// does not mention that predicate is unaffected.
     pub(crate) fn refuse_disabled_signature_schemes(&self, datums: &[Datum]) -> Result<()> {
-        let Some(attr) = self.lookup(&format!(
-            "{}signatureScheme",
-            crate::namespace::DEFAULT_BASE_NS
-        ))?
-        else {
+        // A store with no governance namespace refuses a write that names
+        // `signatureScheme` in any namespace instead of letting it past.
+        let Some(ns) = self.governance_ns_for_write(datums)? else {
+            return Ok(());
+        };
+        let Some(attr) = self.lookup(&format!("{ns}signatureScheme"))? else {
             return Ok(());
         };
         for datum in datums
@@ -559,4 +581,19 @@ impl Store {
         }
         Ok(())
     }
+}
+
+/// A receipt: an assertion closed at its own start, `[t, t)`. It records that
+/// a value was received and is current at no valid time, so it neither
+/// supersedes a functional value nor counts toward an OWL constraint
+/// (aegis-karb.2, the merge spec's R3 under ruling B).
+///
+/// The test compares `valid_to` and `valid_from` as TEXT, exactly as the store
+/// orders valid time. Two different spellings of one instant (an offset
+/// against `Z`, or a fractional second) are not equal, so such a datum is not
+/// a receipt and keeps every check: the exemption fails closed. The merge core
+/// writes both ends from one string, so its receipts always match.
+#[cfg(feature = "owl")]
+fn is_receipt(d: &Datum) -> bool {
+    d.op == Op::Assert && d.valid_to.as_deref() == Some(d.valid_from.as_str())
 }

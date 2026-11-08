@@ -69,7 +69,7 @@ fn history(store: &mut Store) -> (i64, i64, i64, i64) {
 
 #[test]
 fn the_hit_list_identifies_what_when_and_on_which_target() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, tx2, tx3, tx4) = history(&mut store);
     let window = Window {
         from_tx: tx1,
@@ -108,7 +108,7 @@ fn evaluation_is_as_of_the_transaction_not_of_the_present() {
     // covers tx1 must still fire — the claim is asked against the graph as it
     // stood, which is the difference between a retrospective evaluation and a
     // present-state check wearing one's name.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, ..) = history(&mut store);
     let window = Window {
         from_tx: tx1,
@@ -124,7 +124,7 @@ fn zero_hits_is_a_measured_answer() {
     // The green side of the honesty rule: a window where every touched target
     // was compliant reports 0 hits WITH the evaluations that back the number,
     // and is not unevaluable.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (_, tx2, tx3, _) = history(&mut store);
     let window = Window {
         from_tx: tx2,
@@ -140,7 +140,7 @@ fn zero_hits_is_a_measured_answer() {
 
 #[test]
 fn a_claimless_candidate_is_unevaluable_never_silently_clean() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, _, _, tx4) = history(&mut store);
     let window = Window {
         from_tx: tx1,
@@ -168,7 +168,7 @@ fn a_claimless_candidate_is_unevaluable_never_silently_clean() {
 
 #[test]
 fn a_targetless_claim_is_unevaluable() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, _, _, tx4) = history(&mut store);
     let report = backtest(
         &store,
@@ -196,7 +196,7 @@ fn a_malformed_claim_is_unevaluable_with_the_parse_reason() {
     // Failing to evaluate must come back as "cannot measure, here is why" —
     // an Err would read as the BACKTEST being broken, and a silent skip would
     // read as clean.
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, _, _, tx4) = history(&mut store);
     let report = backtest(
         &store,
@@ -225,7 +225,7 @@ fn a_malformed_claim_is_unevaluable_with_the_parse_reason() {
 
 #[test]
 fn window_last_clamps_to_recorded_history() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (_, _, _, tx4) = history(&mut store);
     let w = Window::last(&store, 2).unwrap();
     assert_eq!((w.from_tx, w.to_tx), (tx4 - 1, tx4));
@@ -242,7 +242,7 @@ fn a_candidate_reads_out_of_draft_turtle_and_backtests_end_to_end() {
     // The whole quipu-side gesture composed: scaffold → parse → backtest,
     // with the store untouched by the candidate throughout (pre-creation is
     // the point).
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let (tx1, _, _, tx4) = history(&mut store);
     let turtle = super::super::draft::draft_turtle(&super::super::draft::DraftIntent {
         name: "no-unlabeled-docs".into(),
@@ -254,9 +254,10 @@ fn a_candidate_reads_out_of_draft_turtle_and_backtests_end_to_end() {
         point: None,
         layer: None,
         authority: None,
+        base_ns: crate::namespace::DEFAULT_BASE_NS.to_string(),
     })
     .unwrap();
-    let cand = Candidate::from_turtle(&turtle).unwrap();
+    let cand = Candidate::from_turtle(&turtle, crate::namespace::DEFAULT_BASE_NS).unwrap();
     assert_eq!(cand.target_type_iri.as_deref(), Some(DOC_TYPE));
     assert_eq!(cand.claim.as_deref(), Some(REQUIRE_LABEL));
 
@@ -280,11 +281,17 @@ fn a_candidate_reads_out_of_draft_turtle_and_backtests_end_to_end() {
 
 #[test]
 fn turtle_with_zero_or_two_policies_is_refused() {
-    assert!(Candidate::from_turtle("@prefix ex: <http://ex/> .").is_err());
+    assert!(
+        Candidate::from_turtle(
+            "@prefix ex: <http://ex/> .",
+            crate::namespace::DEFAULT_BASE_NS
+        )
+        .is_err()
+    );
     let two = "@prefix aegis: <http://aegis.gastown.local/ontology/> .\n\
                <http://ex/p1> a aegis:Policy .\n\
                <http://ex/p2> a aegis:Policy .";
-    let err = Candidate::from_turtle(two);
+    let err = Candidate::from_turtle(two, crate::namespace::DEFAULT_BASE_NS);
     assert!(
         err.is_err(),
         "two policies in one candidate file must be refused: {err:?}"

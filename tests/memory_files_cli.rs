@@ -7,7 +7,20 @@ use std::{
     process::{Command, Output},
 };
 
+/// A HOME holding a user config that names the store namespace: Quipu has no
+/// default, and writes that mint names refuse without one.
+fn config_home(home: &Path) {
+    let dir = home.join(".config/bobbin");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("config.toml"),
+        "[quipu]\nbase_ns = \"http://aegis.gastown.local/ontology/\"\n",
+    )
+    .unwrap();
+}
+
 fn run(root: &Path, args: &[&str]) -> Output {
+    config_home(root);
     let executable =
         std::env::var_os("QUIPU_TEST_CLI").unwrap_or_else(|| env!("CARGO_BIN_EXE_quipu").into());
     Command::new(executable)

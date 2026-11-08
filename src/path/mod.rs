@@ -5,8 +5,8 @@
 //! verified results leaves a Trajectory of Steps; the provenance cone says
 //! which steps the verified result depended on; the backtest replays a pruned
 //! candidate over recorded history; the draft emits the `GoldenPath` as Turtle
-//! for human review. The vocabulary is camayoc's (its `ontology/core.ttl`),
-//! declared in the store's base namespace.
+//! for human review. The vocabulary is declared in the store's base
+//! namespace, or written through the store's vocabulary map.
 //!
 //! Nothing here writes to the store: `cone` and `backtest` are reads, and
 //! `draft` emits Turtle exactly as the governance drafting scaffold does —
@@ -55,14 +55,14 @@ impl PathVocab {
     /// `[quipu] base_ns`).
     #[must_use]
     pub fn new(base_ns: &str) -> Self {
-        Self::with_vocabulary(base_ns, crate::term_vocabulary::Vocabulary::Legacy)
+        Self::with_vocabulary(base_ns, &crate::term_vocabulary::VocabularyMap::default())
     }
 
-    /// Resolve the vocabulary for `vocabulary` (see [`crate::term_vocabulary`]):
-    /// legacy terms under `base_ns`, or the published Camayoc w3id terms.
+    /// Resolve the vocabulary against `base_ns`, writing each term through
+    /// `map` (see [`crate::term_vocabulary`]).
     #[must_use]
-    pub fn with_vocabulary(base_ns: &str, vocabulary: crate::term_vocabulary::Vocabulary) -> Self {
-        let t = |local: &str| crate::term_vocabulary::term(local, base_ns, vocabulary);
+    pub fn with_vocabulary(base_ns: &str, map: &crate::term_vocabulary::VocabularyMap) -> Self {
+        let t = |local: &str| crate::term_vocabulary::term(local, base_ns, map);
         Self {
             step_of: t("stepOf"),
             step_order: t("stepOrder"),

@@ -194,7 +194,7 @@ an active server bearer. For a named credential, the administrator registers its
 verifier and activates the validated registry before supplying the plaintext to
 the client. Installing an arbitrary token on a client cannot grant access.
 
-Shantytown and CABOODLE use `~/.config/quipu/token` as the default credential
+Shantytown and Tambo use `~/.config/quipu/token` as the default credential
 file. A nonempty `QUIPU_AUTH_TOKEN` overrides `QUIPU_AUTH_TOKEN_FILE`, which
 overrides this default. Files are read at request time. This is a client
 convention; the server neither reads your home directory nor distributes secrets.
@@ -202,8 +202,8 @@ convention; the server neither reads your home directory nor distributes secrets
 ```sh
 install -d -m 700 "$HOME/.config/quipu" && install -m 400 /secure/issued-token "$HOME/.config/quipu/token"
 st ops doctor quipu --no-latest
-# Or, on a CABOODLE host:
-caboodle doctor
+# Or, on a Tambo host:
+tambo doctor
 ```
 
 Keep an existing explicit file override until provisioning and rotation move
@@ -651,6 +651,55 @@ curl -s localhost:3030/knot -X POST \
 Response: `{"tx_id": 1, "count": 2, "conforms": true,
 "valid_from": "2026-03-04T08:15:00Z"}` — the echoed `valid_from` is the
 normalised key the facts were actually stored under.
+
+#### Completion evidence after a lost response
+
+For an ordinary `/knot` request, persist a fresh random 64-character lowercase
+hex ID alongside the exact request object **before sending it**, then send that
+ID in `X-Quipu-Write-Id`. The server records completion independently of the HTTP
+future. A client timeout or disconnect does not stop a blocking write.
+
+Inspect it with `POST /knot/status`:
+
+```json
+{"write_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","request":{"turtle":"<urn:example:item> <urn:example:label> \"example\" ."}}
+```
+
+Use the same authenticated principal and credential as the original request.
+The lookup binds the ID to the original JSON object, not to a caller-supplied
+claim about its outcome. A missing or different credential or request cannot
+read another receipt. With configured bearer authentication, status lookup
+requires that credential even though it is a read and works on a read-only
+server. Scoped-current read profiles retain their existing unsupported-route
+refusal; this endpoint does not bypass that profile.
+
+Every successful status lookup declares `"contract":"quipu.knot-completion/v1"`.
+The same contract appears in `/version` under `write_contracts`.
+
+| State | Evidence and permitted next step |
+| --- | --- |
+| `queued`, `running` | The worker can still commit. Retain custody; do not resend. |
+| `not_started` | A retained record proves the uncalled worker was dropped. It cannot later start. |
+| `finished` | All synchronous work, including deferred embedding, ended. `receipt` retains bounded native transaction fields. Verify the exact effect before resolving custody. |
+| `stopped` | The worker ended with an error or panic. This does **not** prove rollback: an error can follow a commit. Read back the effect before resolving custody. |
+| `unknown` | No usable proof. Retain custody; do not resend. |
+
+Only explicit `not_started` evidence, or `finished`/`stopped` followed by complete
+readback proving non-application of the pending effect, permits a **new** write
+with a new ID. An exact matching effect is verified without another write.
+Partial, truncated, conflicting or unreadable effects remain indeterminate.
+Missing/malformed contract fields, HTTP errors, and expired or disabled request
+timeouts supply no completion proof.
+
+Receipts are process-local, capped at 512 entries and one hour from registration.
+The oldest entry may be evicted under load, including an in-flight entry;
+its eventual completion cannot recreate the receipt. Evicted, expired,
+never-seen, restarted-server and foreign-owner lookups all return `unknown`,
+never `not_started`. Losing a receipt can therefore require operator recovery.
+This is not durable idempotency: never replay a `/knot` request to poll it, or
+reuse a write ID. A still-retained duplicate ID is refused before dispatch.
+Callers omitting the header retain the ordinary write interface and have no
+per-write completion proof. No maximum write lifetime is promised.
 
 ### Resumable snapshot promotion and cancellation
 
@@ -1302,7 +1351,11 @@ Queries over 4096 UTF-8 bytes cannot supply usable context under this contract.
 Vector similarity search. Body: `embedding` (or `query`), optional `limit`,
 `valid_at`, `ranking`, and best-effort scoping by `group_ids` / `entity_type`.
 Optional `mode: "keyword"` selects the derived SQLite FTS5 index described below;
-omitted mode or `mode: "semantic"` preserves vector search.
+omitted mode follows `[quipu.search] mode`, which defaults to `"auto"`: semantic
+when an embedding provider or query embedding is present, keyword otherwise.
+Explicit `mode: "semantic"` always requires embeddings; it never falls back.
+Automatic keyword responses include `search_mode: "keyword"` and
+`mode_reason: "no_embedding_provider"`. Explicit configured modes remain authoritative.
 
 Select one registered graph with `graph: "<IRI>"`, several with
 `graphs: ["<IRI>", "<IRI>"]`, or ROOT plus all named graphs with
@@ -1349,7 +1402,7 @@ keyword index, request `mode: "hybrid"`, `alpha` in `[0,1]`,
 Alpha is the semantic contribution: `alpha: 1` returns the existing semantic
 response exactly, without accessing the lexical index; `alpha: 0` returns the
 keyword response exactly, without embedding. Omitted mode and parameters use
-the server search configuration; the default mode remains semantic.
+the server search configuration; the default mode is `auto`.
 
 Weighted fusion min-max normalizes each candidate list independently. A
 nonempty equal-score list normalizes to one; missing candidates contribute zero.
@@ -1384,8 +1437,12 @@ requests are refused while disabled. Fusion creates no additional persisted inde
 
 #### Keyword index
 
-Keyword search is off by default (`[quipu.search] keyword = false`). Explicit
-activation installs an empty FTS5 index and same-transaction fact triggers; it
+Keyword search is enabled automatically for new stores. Existing unindexed stores
+require explicit opt-in (`[quipu.search] keyword = true`); opening them with an
+omitted setting installs no keyword tables or triggers. Explicit `false` also
+disables automatic activation for new stores. Already initialized indexes remain
+enabled when the setting is omitted.
+Startup installs an empty FTS5 index and same-transaction fact triggers; it
 never backfills during startup or a read. Writes, source replacement, closure,
 rollback and physical deletion are reflected atomically. Index documents are
 assertion rows with graph IDs; omitted scope reads ROOT only. `valid_at`
@@ -1924,7 +1981,9 @@ optional `timestamp`.
 
 ### `POST /entity_history`
 
-Return the full fact history (across transactions) for an entity. The body field is
+Without an explicit graph, return retained **ROOT-only** fact history for an entity.
+An empty ROOT result says nothing about that entity's named-graph history.
+The body field is
 **`iri`**, not `entity` — `{"entity": ...}` returns
 `{"error": "missing 'iri' parameter"}`.
 
@@ -1935,7 +1994,60 @@ curl -s localhost:3030/entity_history -X POST -H "Content-Type: application/json
 
 Returns `{"iri", "count", "history": [{"op", "predicate", "value", "tx",
 "valid_from", "valid_to"}, ...]}`. The `tx` is the handle for `/transactions` below —
-together they answer "which write path asserted this fact, and who owned it".
+together they answer "which write path asserted this fact, and who owned it" in
+that local file. A bare transaction ID is not a composed or cross-store pin.
+
+#### Qualified retained MAIN history
+
+First require `quipu-entity-history/main-v1` in `/version.read_contracts`.
+Supply `iri`, `graph`, and the expected `source_store_id` from trusted MAIN
+metadata. A graph is mandatory: wrong identities, missing registration,
+datasets, overlays, frozen graphs and ambiguous composed term aliases refuse;
+they never fall back to ROOT or reinterpret another provider's IDs.
+
+```json
+{
+  "iri": "https://example.org/item/one",
+  "graph": "https://example.org/project/board",
+  "source_store_id": "<expected-main-store-id>"
+}
+```
+
+The response contains `schema`, exact `iri` and `graph`, `history`, `count`,
+and `source_receipt`. Each history entry carries a `qualified_tx` with provider
+`main`, persistent source lineage, current generation and file-local transaction,
+plus transaction timestamp/actor/source, authenticated evidence and separate
+caller declarations. Values carry explicit types: integer lexical strings,
+IEEE float64 bits, hex bytes, full IRI references, strings, booleans, and
+language/datatype literals preserve their original representation.
+
+`source_receipt.complete` means every retained MAIN physical row in this exact
+subject/graph/range was returned. It does **not** mean continuous historical
+coverage. The receipt says `continuous_history: false` and
+`historical_policy_proof: false`, names excluded attachment aliases, and binds
+the current connection incarnation, graph/policy generation, source head and
+retained transaction-log floor. It never reads attached fact tables or claims
+their history. Current graph label floors still apply. The scope remains
+owner-only when scoped read authorization is enabled.
+
+Optional `since_tx` (exclusive) and `until_tx` (inclusive) require the previously
+observed `expected_generation`. Reopen/remount, policy, graph metadata or retained
+log-floor changes invalidate that generation. Unknown, old and future bounds
+refuse; no historical composition is inferred from a current MAIN transaction.
+For a subject too large for one response, bootstrap with `observation_only: true`.
+That metadata-only response has the distinct schema
+`quipu-entity-history/observation-v1`, generation, head and floor, and **no**
+history/count/completeness claim. It cannot include transaction bounds. Use its
+generation for explicit smaller ranges; the observation grants no history access.
+
+Defaults are 1000 entries and 1 MiB; `max_entries` and `max_bytes` may select
+positive caps up to 10000 entries and 4 MiB. Overflow, an expired request or the
+one-second SQLite read budget refuses the whole response, never partial success.
+History reads reject signed-write attestations before acquiring a non-settling
+canonical handle, so reading does not spend a write nonce. Neither retained
+declarations nor this receipt authenticate a physical host. This contract does
+not include comment-child entities automatically or certify that a reconstructed
+seed version is complete across archived providers.
 
 ### `GET /transactions`
 
@@ -1951,7 +2063,7 @@ There is no `offset`. Passing `limit` alone therefore returns the *oldest* N —
 38k-transaction store, `?limit=40000` hands back transactions 1–10000 and nothing
 recent. To look up a specific transaction, use `?since=<tx-1>&limit=1`.
 
-Each entry is `{id, timestamp, actor, source, authenticated}`. `authenticated`
+Each entry is `{id, timestamp, actor, source, authenticated, declared}`. `authenticated`
 is null when local credential evidence is absent; otherwise it contains
 `principal`, `credential_id` (null for a shared bearer), and `auth_class`
 (`named_bearer` or `legacy_shared_bearer`). It is separate from declared fields. `source` identifies the write path:
@@ -1959,6 +2071,16 @@ is null when local credential evidence is absent; otherwise it contains
 `/episode/retract`), or caller-supplied free text (`/knot`). `actor` and `source` are
 both optional on `/knot`. Supply them for source provenance; authenticated
 credential evidence does not reconstruct a missing source or historical actor.
+
+`declared` is the committed request's caller-declared `agent`, `harness`, `host`,
+`session` and `model` headers, with at most 1024 UTF-8 bytes per value. Missing,
+blank or oversized values are omitted. It is null for a transaction without
+retained declarations, including older stores. An empty object means the
+request context existed but supplied no accepted values. These declarations
+commit or roll back with the fact transaction; they are never authenticated
+host or session evidence. Verified agent/session credit does not invent missing
+header values. A transaction ID remains local to its store: this endpoint does
+not establish a composed-history cursor or repair named-graph entity history.
 
 ### `POST /embed_backfill`
 
@@ -2229,7 +2351,7 @@ through to `list`.
 ### `POST /ontology`
 
 Manage OWL ontologies: `{"action": "load"|"materialize"|"list"|"remove",
-"name", "turtle", "timestamp"}` (mirrors `quipu_load_ontology`). Registered
+"name", "turtle", "timestamp", "materialize"}` (mirrors `quipu_load_ontology`). Registered
 even without the `owl` feature — a build without it answers with an explicit
 error naming the missing feature rather than a 404, so "not compiled in"
 and "no such route" stay distinguishable.
@@ -2257,19 +2379,43 @@ invisible to either alone. A store with nothing loaded answers `"ontologies":
 run of zero — a scheduler has to be able to tell "ran, derived nothing" from
 "there was nothing to derive from".
 
-The REST materialisation action copies current ROOT and companion facts through
-a read-pool connection, then derives on a private temporary SQLite database.
-SQLite removes this database when its connection closes; its page cache is
-limited to 8 MiB and its term cache to 32,768 entries. Provide a writable,
-disk-backed SQLite temporary directory with enough space for the current facts
-and indexes; a RAM-backed temporary filesystem defeats the memory saving.
-Derivation still allocates premise and proposal vectors. It does not hold
-ordinary write admission or the live writer during that work. Publication takes
-write admission in batches of at most 64 assertions, allowing other writes
-between batches. A server without a read pool refuses this action rather than
-falling back to a full scan under the writer lock. Concurrent materialisation
-requests are rejected; a disconnected client cannot admit another derivation
-while its blocking work is still running.
+The REST materialisation action copies current ROOT and companion premises through
+one consistent read-pool snapshot. File-backed servers retain private job state
+in a mode-0700 `.owl-job-<store-id-digest>` directory next to the database, with a
+mode-0600 `snapshot.sqlite` file. Provide writable disk space on that filesystem;
+a RAM-backed filesystem defeats the memory saving. In-memory library stores use
+anonymous scratch. The private cache is 8 MiB with at most 32,768 cached terms.
+
+Each logical pass freezes its premises and streams unique novel keys to a disk
+queue. All rule families must finish before promotion starts. Promotion commits
+at most 200,000 assertions and its cursor atomically; the next pass starts only
+after every page is promoted. Cumulative output from **all** passes is retained.
+An empty completed pass proves fixpoint. Bounds remain 3,000,000 premises,
+64 logical passes, 200,000 keys per proposal page, and 64 assertions per live
+writer batch. The scratch SQLite main file is capped at 8 GiB; journals and temporary
+files need additional filesystem space. A persisted 20-minute job deadline applies;
+resuming never renews that deadline or pass count. These finite limits can refuse
+a job; refusal is incomplete, never successful truncation.
+
+Capture, enumeration and private promotion hold no live writer admission.
+Publication starts only after fixpoint, with normal admission and validation on
+each 64-key batch, yielding to other writes between batches. A generation and
+semantic batch digest receipt in the local `owl_batch_receipts` table commits
+atomically with the assertions. Lost acknowledgements reconcile that receipt
+before advancing the scratch cursor. Final freshness has its own atomic receipt.
+These local receipts and scratch tables are excluded from graph sharing.
+
+The next scheduled invocation resumes a compatible unfinished job, including an
+unfinished pass whose private transaction rolled back. Identity, ontology or
+engine mismatch, retractions, unreadable state, conflicting receipts or exceeded
+limits refuse publication and retain the private job for operator disposition;
+they do not silently recapture or reset cost limits. A completed job is replaced
+on the next invocation. Do not remove an unfinished job to claim completion.
+A row-count bound does not establish production wall-clock writer latency;
+per-batch timing and full workload qualification remain separate measurements.
+A server without a read pool refuses instead of falling back to a writer scan.
+Concurrent materialisation requests are rejected, and a disconnected client
+cannot release single-flight admission while blocking work is still running.
 
 Successful responses include `complete: true`, `snapshot_tx`, `elapsed_ms`, and
 `applied_proposals`. Completion means the captured snapshot was closed, **not**
@@ -2277,8 +2423,34 @@ that facts arriving afterward have been processed. Concurrent additions are
 allowed; a retraction of a premise or a change to the loaded ontologies aborts
 publication. Earlier committed batches can remain as partial historical
 entailments after an error or interruption, but no new freshness marker is
-published. Retry on the next scheduled run. Consumers must inspect freshness;
+published. Compatible jobs resume on the next scheduled run; invalidated jobs
+require operator disposition. Consumers must inspect freshness;
 the companion graph does not automatically hide historical entailments.
+
+**`load` with `"materialize": "deferred"`** persists the ontology under the
+writer lock, then runs this same off-lock materialisation in the same request.
+The default, `"inline"`, is unchanged: it derives while holding the writer, and
+every ordinary write waits for the whole derivation. A deferred load takes
+materialisation admission first, so a server without a read pool, or with a
+materialisation already running, refuses it **before** anything is persisted.
+An unknown mode is refused before the Turtle is parsed. If derivation fails
+after the ontology was persisted, the response is still the successful load,
+with `"materialization": {"complete": false, "error": ..., "retry":
+{"action": "materialize"}}`: the load committed and is not undone, and the
+retry is an ordinary `materialize`. On success, `materialized` carries the
+counts and `materialization` carries `complete`, `snapshot_tx`, `elapsed_ms` and
+`applied_proposals`. Like `materialize`, a deferred load derives over the
+**combined** ontology, not only the document just loaded.
+
+```bash
+curl -s localhost:3030/ontology -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $QUIPU_AUTH_TOKEN" \
+  -d '{"action": "load", "name": "bridge", "turtle": "...", "materialize": "deferred"}'
+# {"action":"load","name":"bridge","materialize":"deferred",
+#  "materialized":{"equivalent_property_inferences":42, ...},
+#  "materialization":{"complete":true,"snapshot_tx":1234,...}}
+```
 
 Input snapshots are limited to three million current facts, and derivation is
 limited to 200,000 new assertions and 64 passes. Exhausting a budget is an error,
@@ -2627,7 +2799,7 @@ in `transact` — appends a `write.refused` event *after* the refused write's
 savepoint has rolled back, so the event survives the rollback that the refusal
 caused. A failure to record never masks the refusal error itself.
 
-Payload: `{gate, graph, actor, source, reason, refused_datums}` where `gate`
+Payload: `{gate, graph, actor, source, reason, reason_code, shape, client, refused_datums}` where `gate`
 is one of `shacl | policy | authority | owl | placement`, `graph` is the
 destination graph IRI, `reason` is the gate's own terse text (shape/policy id,
 constraint name; truncated), and `refused_datums` counts what was refused.
@@ -2640,7 +2812,9 @@ whole speculation rolls back by design, so a hypothetical write's refusal is
 not a real one.
 
 Query via `GET /events?types=write.refused`, or count by gate with the CLI:
-`quipu events refusals`.
+`quipu events refusals`. The additive `reason_code`, `shape` and `client` fields
+provide bounded classifications and structured attribution. See [write refusal
+accounting](write-refusals.md) for counters, `/stats` and reset semantics.
 
 ### Admitted debt events (`shacl.debt_admitted`)
 
@@ -2756,3 +2930,46 @@ Explicit native adoption persists a sticky `ownership_enforcement` marker;
 its authority and filesystem binding are excluded from reconstruction shares.
 Malformed/partial enforced state refuses instead of falling back to INACTIVE.
 No ownership HTTP route, activation default or backend identity fallback is added.
+
+## Version-pinned shape mappings
+
+`POST /mapping/propose`, `POST /mapping/decide`, and `POST /mapping/apply`
+expose the master-side mapping lifecycle. All three are owner-only on servers
+using scoped read authorization. Preparation grants no graph access.
+
+`/mapping/propose` accepts `{"mapping": M}`. `M` contains an `id`, a registered
+named `graph`, explicit `maps_from` and `maps_to` graph arrays, exact `pins`,
+and correspondence `rows`. Each pin specifies `registry` (`shapes` or
+`ontologies`), `name`, `valid_from`, and canonical RDF `digest`. Each row carries
+`subject_id`, `predicate_id`, `object_id`, `mapping_justification`, `author_id`,
+and `quipu_review`. The response binds the complete proposal to an
+`expected_digest`; proposing writes no transaction or decision.
+
+`/mapping/decide` accepts `proposal`, a declared reviewer IRI, and `decisions`.
+Each decision names the complete subject/predicate/object key and an `accept`
+boolean. Every proposed row needs exactly one decision. The response contains
+the accepted mapping and its new `expected_digest`. This is a pure preparation
+step: a reviewer name is provenance, not authentication or a write grant.
+
+`/mapping/apply` is a write. For application, supply `action: "apply"`, the
+accepted `mapping` object, its exact `expected_digest`, a declared `actor` IRI,
+and optionally an existing named `operations_graph`. The default operations
+graph is `urn:quipu:graph:operations`; it must already exist. Existing graph
+write authority and validation apply to both graphs. Application records its
+lifecycle decision and `MappingRecord` in the same transaction as the mapping.
+For retirement, supply `action: "retire"`, the mapping IRI as `mapping`,
+`expected_digest`, and `actor`. Retirement closes validity and retains history.
+
+Allowed correspondence predicates are `owl:equivalentClass`,
+`owl:equivalentProperty`, `owl:inverseOf`, `rdfs:subClassOf`, and
+`rdfs:subPropertyOf`, expressed as full IRIs. Chains and conflicting rows are
+refused. Receipts report `assert_writable` per target term: only a unique,
+invertible inverse across active mappings in overlapping target scope qualifies.
+Flagged and retired mappings report false. Exact application replay returns the
+original application record without resurrecting a retired mapping.
+
+Closing a pinned registry version flags affected mappings and records the old
+pin, replacement versions, lifecycle record, and `mapping.flagged` event in the
+same transaction. No mapping is automatically repinned. Explicitly proposing and
+applying the replacement pin produces a different digest. Loading mapping
+vocabulary alone creates no mapping, replica, scoped view, or grant.

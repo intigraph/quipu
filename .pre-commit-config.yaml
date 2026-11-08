@@ -73,6 +73,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(README\.md|scripts/(check-readme-badges|test_check_readme_badges)\.py)$
+      - id: stack-installer-current-command
+        name: stack installer current command and review boundary
+        entry: python3 scripts/test-install-stack.py
+        language: system
+        pass_filenames: false
+        files: ^scripts/(install-stack\.sh|test-install-stack\.py)$
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --check
@@ -96,7 +102,7 @@ repos:
 
       - id: cargo-clippy-shacl
         name: cargo clippy (shacl)
-        entry: cargo clippy --features shacl --all-targets -- -D warnings -A missing-docs
+        entry: cargo clippy --no-default-features --features shacl --all-targets -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false

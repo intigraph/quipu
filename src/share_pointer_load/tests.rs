@@ -134,7 +134,7 @@ fn trust_is_checked_before_network_and_before_cached_reuse() {
                 &mut store,
                 "urn:remote",
                 &mut cache,
-                |_, _| Err(fail("caboodle trust refused")),
+                |_, _| Err(fail("tambo trust refused")),
                 |_| panic!("must not fetch"),
                 TS,
                 None,
@@ -142,7 +142,7 @@ fn trust_is_checked_before_network_and_before_cached_reuse() {
             .unwrap_err();
         assert!(
             err.to_string()
-                .contains("pack pointer urn:remote: caboodle trust refused"),
+                .contains("pack pointer urn:remote: tambo trust refused"),
             "{err}"
         );
         assert!(store.dataset_list().unwrap().is_empty());

@@ -82,7 +82,7 @@ fn the_filtered_variable_is_seeded_with_the_iri() {
     let store = store();
     let t_id = store.lookup(&format!("{EX}T")).unwrap().unwrap();
     let eq = Expression::Equal(var("t"), iri("T"));
-    let seed = seed_iri_equalities(&store, &eq, &type_bgp(), &Bindings::new()).unwrap();
+    let seed = seed_iri_equalities(&store, &eq, &type_bgp(), &Bindings::default()).unwrap();
     assert_eq!(
         seed.and_then(|s| s.get("t").cloned()),
         Some(Value::Ref(t_id))
@@ -90,7 +90,7 @@ fn the_filtered_variable_is_seeded_with_the_iri() {
     // Mirrored operands and sameTerm push the same way.
     let same = Expression::SameTerm(iri("T"), var("t"));
     assert!(
-        seed_iri_equalities(&store, &same, &type_bgp(), &Bindings::new())
+        seed_iri_equalities(&store, &same, &type_bgp(), &Bindings::default())
             .unwrap()
             .is_some()
     );
@@ -102,7 +102,7 @@ fn nothing_is_seeded_where_it_could_change_the_answer() {
     let none = |e: &Expression, p: &GraphPattern, seed: &Bindings| {
         seed_iri_equalities(&store, e, p, seed).unwrap().is_none()
     };
-    let empty = Bindings::new();
+    let empty = Bindings::default();
     // Under OR: either side may hold.
     let or = Expression::Or(
         Box::new(Expression::Equal(var("t"), iri("T"))),
@@ -118,7 +118,7 @@ fn nothing_is_seeded_where_it_could_change_the_answer() {
         "absent var"
     );
     // Already bound by the caller.
-    let mut bound = Bindings::new();
+    let mut bound = Bindings::default();
     bound.insert("t".into(), Value::Ref(-1));
     assert!(
         none(&Expression::Equal(var("t"), iri("T")), &type_bgp(), &bound),

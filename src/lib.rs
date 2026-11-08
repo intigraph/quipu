@@ -6,6 +6,7 @@
 pub mod acquisition;
 pub mod align;
 pub mod applier;
+pub mod asof_rdf;
 /// As-of scoped share: a replica bootstrap cut at one transaction.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asof_share;
@@ -15,10 +16,15 @@ pub mod changeset;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod changeset_store;
 pub mod compact;
+pub mod competency;
 pub mod config;
 mod config_load;
 pub mod context;
 pub mod crew_credentials;
+/// DataBook documents: parse and render (kurtcagle/databook 1.5.0).
+pub mod databook;
+/// Export a graph as a DataBook; import a DataBook's graph data.
+pub mod databook_store;
 pub mod derivation;
 pub mod embedding;
 pub mod embedding_runtime;
@@ -43,16 +49,38 @@ pub mod mcp;
 pub mod memory_budget;
 pub mod memory_files;
 pub mod merge3;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_adapters;
+/// One merge write core: the merge spec's time, sequencing and report rules (aegis-karb.2).
+mod merge_core;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod merge_ingress;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_lists;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_pending;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_profile;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_review;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_session;
 pub mod metrics;
 #[cfg(feature = "lancedb")]
 pub mod migration;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_assets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_backfill;
 pub mod namespace;
 mod namespace_publication;
 mod numeric_value;
 #[cfg(feature = "onnx")]
 pub mod onnx_embedder;
+#[cfg(feature = "onnx")]
+pub mod onnx_runtime;
 /// Portable bootstrap manifest and signature verification, including WASM.
 #[path = "asof_share/manifest.rs"]
 pub mod replica_manifest;
@@ -60,11 +88,20 @@ pub mod replica_provider;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod replicate_source;
 pub mod replicate_wire;
+/// Prospective resolver types and content-bound validation evidence; no admission authority.
+pub mod resolver_contract;
 mod search_graph_scope;
 pub mod search_outcome;
 pub mod search_trace;
+/// Portable logical full-store replication values.
+pub mod store_replica;
+/// Opt-in logical store replication; opening a store never enables its journal.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store_stream;
 pub mod substring;
 pub mod transaction_auth;
+/// Pure declared write-base binding; no writer integration or admission authority.
+pub mod write_base;
 pub mod write_kind;
 pub mod write_provenance;
 // `explain` resolves OWL axiom families through the `owl` module, so the two
@@ -102,6 +139,10 @@ pub mod follow_ready;
 pub mod fork_merge_decisions;
 /// Immutable admission plans for the per-graph writer pilot; not an activation API.
 pub mod graph_catalog;
+pub mod grant_scope;
+/// Inactive SQLite-only HA read profile; no serving adapter is installed.
+#[cfg(all(feature = "ha-read-profile", target_os = "linux"))]
+pub mod ha_read;
 /// Experimental pure ownership-handoff model; no Store or runtime integration.
 pub mod ownership_handoff_model;
 mod rdf_graph_store;
@@ -133,6 +174,7 @@ pub mod shacl_unsupported;
 pub mod share;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod verified_write;
+pub mod writer_scope;
 // The delta FORMAT is wasm-safe; only its filesystem entry points are gated,
 // inside the module. The wasm explorer produces the same `share-delta/v1`
 // artifact the CLI does, and it can only do that if the builder compiles there
@@ -165,6 +207,7 @@ pub mod share_diff;
 // The PR-review report over two pack versions: facts, introduced SHACL
 // violations, merge decisions, alias caveat (aegis-fxpbys.1, M2).
 pub mod promotion_control;
+pub mod shape_mapping;
 pub mod share_alignments;
 pub mod share_import;
 pub(crate) mod share_import_resolve;
@@ -250,6 +293,7 @@ pub use mcp::explain::tool_explain;
 pub use mcp::graphiti::tool_episodes_complete;
 pub use mcp::history::tool_entity_history;
 pub use mcp::impact::tool_impact;
+pub use mcp::mapping::{tool_mapping_apply, tool_mapping_decide, tool_mapping_propose};
 #[cfg(not(target_arch = "wasm32"))]
 pub use mcp::merge_decisions::{tool_merge_apply, tool_merge_decisions, tool_merge_resolve};
 pub use mcp::named_query::tool_ask;

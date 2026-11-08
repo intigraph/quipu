@@ -18,80 +18,13 @@ use super::triple::eval_bgp as eval_bgp_inner;
 use super::values::eval_values;
 use super::{Bindings, GraphScope, TemporalContext};
 
-/// Whether a `Slice` cap may be pushed through this subtree to the BGP leaf
-/// (quipu-0lr).
-///
-/// True only for chains where every intermediate operator is row-monotonic
-/// AND prefix-safe — it passes each input row through at most once, in order,
-/// dropping none: `Project` (1:1 column projection) and `Reduced` (advisory).
-/// Everything else is a hard no: `Filter` drops rows (the leaf would need to
-/// overshoot by an unknowable factor), `Distinct` collapses them, `OrderBy`
-/// needs the full set before any row is final, joins multiply, and `Union`
-/// concatenates two branches that would each need their own budget. When this
-/// says no, evaluation is exactly what it was before the pushdown existed.
-pub(crate) fn limit_pushdown_safe(pattern: &GraphPattern) -> bool {
-    match pattern {
-        GraphPattern::Bgp { .. } => true,
-        GraphPattern::Project { inner, .. } | GraphPattern::Reduced { inner } => {
-            limit_pushdown_safe(inner)
-        }
-        _ => false,
-    }
-}
+mod entry;
 
-fn ordered_limit_safe(pattern: &GraphPattern) -> bool {
-    match pattern {
-        GraphPattern::OrderBy { .. } => true,
-        GraphPattern::Project { inner, .. } => ordered_limit_safe(inner),
-        _ => false,
-    }
-}
+pub(crate) use entry::limit_pushdown_safe;
+use entry::ordered_limit_safe;
+pub use entry::{eval_pattern, eval_pattern_result_limited, eval_pattern_seeded};
 
-/// Evaluate a graph pattern, returning rows and the variable names encountered.
-pub fn eval_pattern(
-    store: &Store,
-    pattern: &GraphPattern,
-    ctx: &TemporalContext,
-) -> Result<(Vec<Bindings>, Vec<String>)> {
-    eval_pattern_seeded(store, pattern, ctx, &Bindings::new())
-}
-
-/// Evaluate a top-level result with the service response ceiling pushed to the
-/// SQL leaf only when doing so preserves SPARQL semantics.
-///
-/// `query_result` historically truncated only after the evaluator had
-/// materialized every solution. On the production graph, a plain `?s ?p ?o`
-/// scan therefore built hundreds of thousands of bindings to return 10,000,
-/// consuming seconds and gigabytes under concurrency. A prefix-safe plan can
-/// stop at `max_sparql_rows + 1` (the extra row proves truncation) without
-/// changing which prefix is returned. Any operator that can drop, reorder,
-/// combine, or collapse rows keeps the uncapped evaluator.
-pub fn eval_pattern_result_limited(
-    store: &Store,
-    pattern: &GraphPattern,
-    ctx: &TemporalContext,
-) -> Result<(Vec<Bindings>, Vec<String>)> {
-    let Some(cap) = ctx.result_limit else {
-        return eval_pattern(store, pattern, ctx);
-    };
-    if !limit_pushdown_safe(pattern) {
-        return eval_pattern(store, pattern, ctx);
-    }
-    let capped = TemporalContext {
-        row_limit: Some(ctx.row_limit.map_or(cap, |existing| existing.min(cap))),
-        ..ctx.clone()
-    };
-    eval_pattern(store, pattern, &capped)
-}
-
-/// Evaluate a graph pattern SEEDED with pre-bound variables (`seed`), which
-/// initialise every leaf (BGP / property path) so evaluation is CONSTRAINED by
-/// them — the SPARQL EXISTS substitution semantics. A bound ?s makes a path
-/// traverse only from that ?s, not the whole graph (the unseeded
-/// per-outer-row re-eval held the store mutex O(n x `inner_eval`)). An empty seed
-/// reproduces the original unconstrained evaluation exactly. The deadline check
-/// stays here so seeded recursion is budget-bounded like the wrapper was.
-pub fn eval_pattern_seeded(
+fn eval_pattern_seeded_inner(
     store: &Store,
     pattern: &GraphPattern,
     ctx: &TemporalContext,
@@ -159,22 +92,41 @@ pub fn eval_pattern_seeded(
             let (rows, vars) = match super::status_pushdown::candidates(
                 store, expr, inner, inner_ctx, inner_seed,
             )? {
-                Some(candidates) => candidates,
+                Some(candidates) => {
+                    super::profile::choice("filter_status_candidates", 1, Some(candidates.0.len()));
+                    candidates
+                }
                 // aegis-xacr: scan the pattern the filter can judge first.
                 None => {
                     match super::literal_exclusion::candidates(
                         store, expr, inner, inner_ctx, inner_seed,
                     )? {
-                        Some(candidates) => candidates,
+                        Some(candidates) => {
+                            super::profile::choice(
+                                "filter_literal_exclusion",
+                                1,
+                                Some(candidates.0.len()),
+                            );
+                            candidates
+                        }
                         None => match super::filter_drive::try_eval(
                             store, expr, inner, inner_ctx, inner_seed,
                         )? {
-                            Some(driven) => driven,
-                            None => eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?,
+                            Some(driven) => {
+                                super::profile::choice("filter_driven", 1, Some(driven.0.len()));
+                                driven
+                            }
+                            None => {
+                                let done =
+                                    eval_pattern_seeded(store, inner, inner_ctx, inner_seed)?;
+                                super::profile::choice("filter_recursive", 1, Some(done.0.len()));
+                                done
+                            }
                         },
                     }
                 }
             };
+            let candidates = rows.len();
             let mut filtered = Vec::with_capacity(rows.len());
             for (i, row) in rows.into_iter().enumerate() {
                 // A pure-Rust filter over pre-materialized rows touches
@@ -190,6 +142,7 @@ pub fn eval_pattern_seeded(
                     filtered.push(row);
                 }
             }
+            super::profile::choice("filter_output", candidates, Some(filtered.len()));
             Ok((filtered, vars))
         }
 
@@ -452,6 +405,16 @@ pub fn eval_pattern_seeded(
                     super::graph_filter::record_scan();
                     let (mut graph_rows, graph_vars) =
                         eval_pattern_seeded(store, inner, &graph_ctx, &graph_seed)?;
+                    // GRAPH binds its name outside an inner SELECT's projection.
+                    // Do not leak that name into subquery-local variables, or
+                    // overwrite an incompatible explicitly projected binding.
+                    graph_rows.retain_mut(|row| match row.get(&graph_var) {
+                        Some(value) => value == &Value::Ref(graph.g),
+                        None => {
+                            row.insert(graph_var.clone(), Value::Ref(graph.g));
+                            true
+                        }
+                    });
                     rows.append(&mut graph_rows);
                     for var in graph_vars {
                         if !vars.contains(&var) {

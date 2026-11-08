@@ -28,7 +28,7 @@ fn put(store: &mut Store, subject: &str, predicate: &str, value: Value, source: 
 
 #[test]
 fn rule_answer_states_native_snapshot_controls_removal_and_failed_reads() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let target = store.intern("urn:target").unwrap();
     for (subject, predicate) in [
         ("supported", "positive"),
@@ -142,7 +142,7 @@ fn rule_answer_states_sqlite_readonly_connection_and_missing_term_are_readonly()
 
 #[test]
 fn rule_answer_states_native_literal_aliases_and_cap_are_not_false_zeros() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     put(
         &mut store,
         "claim",
@@ -178,7 +178,7 @@ fn rule_answer_states_native_literal_aliases_and_cap_are_not_false_zeros() {
 
 #[test]
 fn rule_answer_states_oversized_provenance_is_unknown_before_materializing_it() {
-    let mut store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory_test_ns().unwrap();
     let target = store.intern("urn:target").unwrap();
     put(
         &mut store,

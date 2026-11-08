@@ -337,3 +337,89 @@ fn owner_guard_demo_12000_actions() {
 
 #[path = "dense_tests.rs"]
 mod dense_tests;
+
+#[test]
+fn execution_profile_reports_actual_guard_path_without_changing_answers() {
+    for dense in [false, true] {
+        let (store, _dir) = fixture_density(false, dense);
+        let text =
+            include_str!("owner_guard.sparql").replacen("ASK {", "SELECT ?s ?bad WHERE {", 1);
+        let input = serde_json::json!({"query":text,"verbose":true});
+        let expected = crate::mcp::tool_query(&store, &input).unwrap();
+        let mut profiled = input.clone();
+        profiled["execution_profile"] = serde_json::json!(true);
+        let mut actual = crate::mcp::tool_query(&store, &profiled).unwrap();
+        let profile = actual
+            .as_object_mut()
+            .unwrap()
+            .remove("execution_profile")
+            .unwrap();
+        assert_eq!(actual, expected);
+        let choices = profile["choices"].as_array().unwrap();
+        let selected = if dense {
+            "filter_join_dense"
+        } else {
+            "filter_join_seeded_output"
+        };
+        assert!(
+            choices.iter().any(|e| e["path"] == selected
+                && e["input_rows"].as_u64().is_some_and(|n| n > 0)
+                && e["output_rows"].as_u64().is_some()),
+            "{profile}"
+        );
+        assert!(
+            profile["operators"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|e| e["operator"] == "join" && e["calls"].as_u64().unwrap() > 0)
+        );
+        assert!(!profile.to_string().contains("http://example.org"));
+        assert_eq!(crate::mcp::tool_query(&store, &input).unwrap(), expected);
+        let mut invalid = input.clone();
+        invalid["execution_profile"] = serde_json::json!("true");
+        assert!(crate::mcp::tool_query(&store, &invalid).is_err());
+    }
+}
+
+#[test]
+fn execution_profile_covers_bound_type_filter_without_a_join() {
+    let (store, _dir) = fixture(false);
+    let text = r#"SELECT ?s WHERE { GRAPH <http://example.org/board> {
+        ?s <https://schema.org/agent> "target"; <http://example.org/status> "open" .
+        FILTER EXISTS { ?s a <https://schema.org/Action> }
+        FILTER NOT EXISTS { ?s <http://example.org/absent> ?x }
+    } }"#;
+    let base = serde_json::json!({"query":text,"verbose":true});
+    let expected = crate::mcp::tool_query(&store, &base).unwrap();
+    let mut input = base.clone();
+    input["execution_profile"] = serde_json::json!(true);
+    let mut actual = crate::mcp::tool_query(&store, &input).unwrap();
+    let profile = actual
+        .as_object_mut()
+        .unwrap()
+        .remove("execution_profile")
+        .unwrap();
+    assert_eq!(actual, expected);
+    assert!(actual["count"].as_u64().unwrap() > 0);
+    let paths = profile["paths"].as_array().unwrap();
+    assert!(
+        paths
+            .iter()
+            .any(|e| e["path"] == "filter_output" && e["calls"].as_u64().unwrap() > 0)
+    );
+    assert!(paths.iter().any(|e| {
+        [
+            "filter_status_candidates",
+            "filter_literal_exclusion",
+            "filter_driven",
+            "filter_recursive",
+        ]
+        .contains(&e["path"].as_str().unwrap())
+    }));
+    assert!(
+        !paths
+            .iter()
+            .any(|e| e["path"].as_str().unwrap().starts_with("filter_join"))
+    );
+}

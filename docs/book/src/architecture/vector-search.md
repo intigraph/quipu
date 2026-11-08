@@ -109,3 +109,35 @@ let results = store.vector_search(&query, 10, Some("2026-03-01T00:00:00Z")).unwr
 
 Expired embeddings (where `valid_to` is set) are automatically excluded
 from current searches.
+
+### Retention of superseded embeddings
+
+Each change to an entity's embedded text closes its current embedding
+(`valid_to` is set) and stores a new one. The server keeps closed embeddings
+for `[quipu.embedding] superseded_retention_days` days (default 30) and then
+deletes them, hourly, at most `superseded_prune_max_per_pass` rows (default
+50 000) per pass. Current embeddings are never deleted. A closed row whose
+`valid_to` is not a parseable timestamp is kept.
+
+This is a trade-off for `valid_at` search. A `valid_at` inside the retention
+window behaves exactly as before. A `valid_at` older than the window still
+finds every entity whose embedding was current at that time and is current
+now (unchanged entities lose nothing), but it no longer finds an entity's
+older text once that text was superseded more than the window ago, and an
+entity whose every old embedding has aged out is missing from that search.
+Facts are unaffected: `quipu read --valid-at` reads the fact log, which
+retention does not touch. Set `superseded_retention_days = 0` to keep every
+embedding forever, as before this setting existed.
+
+Deleted rows free pages for reuse inside the database file, so the file
+stops growing; it does not shrink until the database is vacuumed.
+Retention runs only on the SQLite vector backend's table.
+
+Progress is exported on `/metrics` once retention has run:
+`quipu_vector_retention_pruned_total` (rows deleted),
+`quipu_vector_retention_last_pass_rows`,
+`quipu_vector_retention_last_pass_capped` (1 while a backlog remains, 0 once
+a pass found nothing more to delete), `quipu_vector_retention_last_pass_end_seconds`,
+and `quipu_vector_retention_batch_held_seconds`, a histogram of how long each
+delete batch held the store lock. A failed pass records no pass, so a stale
+end time is the sign of a failing prune.

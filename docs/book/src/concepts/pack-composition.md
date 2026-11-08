@@ -208,7 +208,7 @@ quipu compose --use-pointer urn:project:api \
 ```
 
 The receiver supplies the repository remote and local authority. The command
-runs `caboodle packs trust check` against that repository and the pointed
+runs `tambo packs trust check` against that repository and the pointed
 archive hash before reading the cache or fetching. A missing trust tool or a
 refused decision stops the operation. Foreign bundles never become global
 shape policy, and nothing is promoted into ROOT. Use the returned `dataset` in
@@ -220,7 +220,10 @@ reads reverify the bytes and recheck trust. Cached archives work offline. A
 corrupt cache entry refuses rather than silently fetching a replacement.
 Fetch, integrity and validation failures name the requested pointer and leave
 no partial composition. Nested pointers are reported, not recursively loaded.
-The download limit is 16 MiB and the expanded archive limit is 64 MiB.
+The download limit is 16 MiB and the expanded archive limit is 96 MiB, including
+both RDF views and metadata. The v0.17 repository share expands to 69,411,571
+bytes after adding compatibility mappings; the finite bound accommodates it
+without skipping validation. Larger archives are refused before import.
 
 Library consumers supply their own trust and transport callbacks plus an
 `ArchiveCache`. Construction performs no network access. Invoke `use_graph`
@@ -242,7 +245,7 @@ const rows = engine.query(`SELECT ?s ?p ?o FROM <${result.dataset}> WHERE { ?s ?
 ```
 
 `authorize(pointer)` is the receiving application's policy decision, such as a
-Caboodle policy exported by its trusted host. It must return the literal
+Tambo policy exported by its trusted host. It must return the literal
 boolean `true`; the archive cannot supply consent. The helper checks it before
 cache or network access. Rust checks trust and both integrity layers before
 composition, using the same implementation as native. Browser requests omit
