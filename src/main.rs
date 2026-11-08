@@ -64,6 +64,7 @@ mod cli_follow;
 mod cli_fork;
 mod cli_gate;
 mod cli_git_merge;
+mod cli_git_mergetool;
 mod cli_graph;
 mod cli_hooks;
 mod cli_ingest;
@@ -127,10 +128,10 @@ fn main() {
     match args[1].as_str() {
         "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
-        "git-merge" => return cli_git_merge::run(&args),
-        "merge-driver" => return cli_git_merge::run(&args),
-        "pendant-resolve" => return cli_git_merge::run(&args),
-        "pendant-check" => return cli_git_merge::run(&args),
+        "git-mergetool" => return cli_git_mergetool::run(&args),
+        "git-merge" | "merge-driver" | "pendant-resolve" | "pendant-check" => {
+            return cli_git_merge::run(&args);
+        }
         // Store-free pack readers: no config, no database (aegis-fxpbys.1).
         "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
         // Hooks are store-free and config-free: a Stop hook must not load a

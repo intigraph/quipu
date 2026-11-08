@@ -2,7 +2,8 @@
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
 pub use crate::git_merge_repo::{
-    check, check_history, driver, merge, merge_refs, merge_with_pending, resolve, resolve_by,
+    check, check_history, driver, merge, merge_refs, merge_with_pending, reconcile, resolve,
+    resolve_by,
 };
 use crate::share::{ShareManifest, canonicalize_ntriples, manifest_bytes, sha256};
 use crate::share_merge::{DecisionRecord, Graph, parse_graph};

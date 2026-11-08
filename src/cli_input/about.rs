@@ -58,6 +58,7 @@ pub(crate) static ABOUT: &[(&str, &str)] = &[
     ("acquire", "Measure the bounded scope of a direct-main graph acquisition"),
     ("migrate-vectors", "Move stored vectors between backends (lancedb feature)"),
     ("git-merge", "Merge pendants from Git snapshots and stop before committing"),
+    ("git-mergetool", "Interactively resolve a pendant using the standard merge layout"),
     ("merge-driver", "Low-level Git merge driver for pendant files"),
     ("pendant-resolve", "Record a resolution choice for one pendant merge conflict"),
     ("pendant-check", "Check a pendant merge result in CI without a merge driver"),

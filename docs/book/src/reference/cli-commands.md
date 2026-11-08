@@ -1146,6 +1146,16 @@ Merge pendants from Git snapshots and stop before committing.
 qp git-merge <ref>
 ```
 
+## `qp git-mergetool`
+
+Interactively resolve a pendant using the standard merge layout.
+
+```text
+qp git-mergetool <pendant-export.nt>
+```
+
+- `--by <VALUE>`: Identity recording a resolution.
+
 ### `qp git-merge show`
 
 Show a pendant's pending merge decisions in the standard layout.
