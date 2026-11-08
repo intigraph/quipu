@@ -1,0 +1,13 @@
+$ cargo test --locked --features shacl,owl --lib merge_session::tests::decide_only_convergence_has_no_synthetic_receive_transaction -- --test-threads=2
+running 1 test
+test merge_session::tests::decide_only_convergence_has_no_synthetic_receive_transaction ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3663 filtered out; finished in 0.02s
+HOME guard: 159 watched paths and 2 UID-keyed resources clean.
+
+$ cargo test --locked --features shacl,owl --lib merge_session::tests::held_only_partial_plan_records_pending_without_receiving_empty_data -- --test-threads=2
+running 1 test
+test merge_session::tests::held_only_partial_plan_records_pending_without_receiving_empty_data ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3663 filtered out; finished in 0.02s
+HOME guard: 159 watched paths and 2 UID-keyed resources clean.

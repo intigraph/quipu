@@ -26,16 +26,19 @@ use serde::Serialize;
 use serde_json::Value as JsonValue;
 
 use crate::error::{Error, Result};
-use crate::fork_merge_decisions::{FORK_DECISIONS_SCHEMA, ForkDecisionFile, decided_values};
+use crate::fork_merge_decisions::{
+    FORK_DECISIONS_SCHEMA, FORK_DECISIONS_SCHEMA_V1, ForkDecisionFile, decided_values,
+};
 use crate::git_merge::Decisions as GitDecisions;
 use crate::merge3::DecisionRecord;
 use crate::share_merge_decisions::{
-    DECISIONS_SCHEMA, DECISIONS_SCHEMA_V1, Decision, DecisionFile, LocalFact, Proposal, Side, union,
+    DECISIONS_SCHEMA, DECISIONS_SCHEMA_V1, DECISIONS_SCHEMA_V2, DECISIONS_SCHEMA_WHOLE, Decision,
+    DecisionFile, LocalFact, Proposal, Side, union,
 };
 use crate::share_merge_decisions_view::{ConflictKind, kind, rule};
 
 /// Schema of the JSON presentation.
-pub const VIEW_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-view/v1";
+pub const VIEW_SCHEMA: &str = "https://github.com/scbrown/quipu/merge-view/v2";
 
 /// A decisions file of any merge kind.
 #[derive(Debug, Clone, PartialEq)]
@@ -56,7 +59,8 @@ pub enum ReconcileFile {
 }
 
 /// Schema of a Git pendant `decisions.json`.
-pub const GIT_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/git-decisions/v1";
+pub const GIT_DECISIONS_SCHEMA: &str = "https://github.com/scbrown/quipu/git-decisions/v2";
+pub const GIT_DECISIONS_SCHEMA_V1: &str = "https://github.com/scbrown/quipu/git-decisions/v1";
 
 /// Which surface the "next" commands are written for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +98,7 @@ impl Choice {
             }
         };
         match choose {
+            Some("continue") => side(Choice::Side(Side::Continue)),
             Some("ours") => side(Choice::Side(Side::Ours)),
             Some("theirs") => side(Choice::Side(Side::Theirs)),
             Some("base") => side(Choice::Side(Side::Base)),
@@ -101,11 +106,11 @@ impl Choice {
             Some("defer") => side(Choice::Defer),
             Some("value") | None if !values.is_empty() => Ok(Choice::Values(values)),
             Some("value") | None => Err(Error::InvalidValue(
-                "choose one of ours, theirs, base, both, value (with at least one value), defer"
+                "choose one of continue, ours, theirs, base, both, value (with at least one value), defer"
                     .into(),
             )),
             Some(other) => Err(Error::InvalidValue(format!(
-                "unknown choice {other:?}: choose one of ours, theirs, base, both, value, defer"
+                "unknown choice {other:?}: choose one of continue, ours, theirs, base, both, value, defer"
             ))),
         }
     }
@@ -139,7 +144,10 @@ impl ReconcileFile {
             .map_err(|e| Error::Store(format!("read {}: {e}", path.display())))?;
         let value: JsonValue = serde_json::from_slice(&bytes)
             .map_err(|e| Error::InvalidValue(format!("decisions file is not JSON: {e}")))?;
-        if value.get("schema").and_then(JsonValue::as_str) != Some(GIT_DECISIONS_SCHEMA) {
+        if !matches!(
+            value.get("schema").and_then(JsonValue::as_str),
+            Some(GIT_DECISIONS_SCHEMA | GIT_DECISIONS_SCHEMA_V1)
+        ) {
             return Self::from_json(value);
         }
         let decisions: GitDecisions = serde_json::from_value(value)
@@ -188,11 +196,14 @@ impl ReconcileFile {
             Error::InvalidValue(format!("not a valid {schema} decisions file: {e}"))
         };
         match schema.as_str() {
-            DECISIONS_SCHEMA | DECISIONS_SCHEMA_V1 => {
-                serde_json::from_value(value).map(Self::Share).map_err(bad)
+            DECISIONS_SCHEMA
+            | DECISIONS_SCHEMA_V1
+            | DECISIONS_SCHEMA_V2
+            | DECISIONS_SCHEMA_WHOLE => serde_json::from_value(value).map(Self::Share).map_err(bad),
+            FORK_DECISIONS_SCHEMA | FORK_DECISIONS_SCHEMA_V1 => {
+                serde_json::from_value(value).map(Self::Fork).map_err(bad)
             }
-            FORK_DECISIONS_SCHEMA => serde_json::from_value(value).map(Self::Fork).map_err(bad),
-            GIT_DECISIONS_SCHEMA => Err(Error::InvalidValue(
+            GIT_DECISIONS_SCHEMA | GIT_DECISIONS_SCHEMA_V1 => Err(Error::InvalidValue(
                 "a Git pendant decisions.json is read from its pendant directory: \
                  `quipu merge show <pendant>/decisions.json`, resolved with \
                  `quipu git-merge resolve <pendant> <key> --choose <choice> --by <who>`"
