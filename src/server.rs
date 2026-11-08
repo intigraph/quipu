@@ -49,6 +49,13 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/knot_completion.rs"]
+mod knot_completion;
+#[cfg(test)]
+#[path = "server/knot_completion_tests.rs"]
+mod knot_completion_tests;
+#[path = "server/mapping.rs"]
+mod mapping;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]
@@ -254,12 +261,12 @@ async fn main() {
     let reactive_reasoner = if is_follower {
         None
     } else {
-        let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
+        let empty = || quipu::reasoner::RuleSet::empty(store.base_ns());
         // A malformed ruleset must not take the server down, but it must not
         // pass unremarked either: the failure mode being avoided is a reasoner
         // that silently does nothing.
         let ruleset = match store.get_combined_shapes() {
-            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
+            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, Some(store.base_ns())) {
                 Ok(rs) => rs,
                 Err(e) => {
                     eprintln!("reactive reasoner starts EMPTY — rules failed to parse: {e}");
@@ -308,9 +315,13 @@ async fn main() {
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
     if !is_replica {
-        let signing_key_path = quipu::signing::default_key_path();
-        match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
-            Ok(id) => {
+        let identity = quipu::signing::default_key_path().and_then(|path| {
+            quipu::signing::SigningIdentity::load(&path, "quipu")
+                .map(|id| (path, id))
+                .map_err(Into::into)
+        });
+        match identity {
+            Ok((signing_key_path, id)) => {
                 eprintln!(
                     "verdict signing enabled (verifier=quipu, key={})",
                     signing_key_path.display()
@@ -371,7 +382,7 @@ async fn main() {
         eprintln!("cannot start read process pool: {error}");
         std::process::exit(1)
     });
-    let auth_policy = auth::bearer_policy(&config.server);
+    let auth_policy = auth::bearer_policy(&workers.auth_config(&config.server));
     let session_keys = auth::session_key_policy(&config.server);
     let preflight_keys_required = session_keys.required || config.server.scoped_reads.is_some();
     let scoped_profile = config.server.scoped_reads.clone().map(|profile| {
@@ -497,6 +508,7 @@ fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedSt
         .route("/memory/commit", post(memory_files::commit))
         .route("/memory/receipt", post(memory_files::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
+        .layer(axum::middleware::from_fn(memory_files::scope_guard))
         .layer(axum::Extension(memory_files))
         .merge(assets::routes())
         // Core API
@@ -515,6 +527,7 @@ fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedSt
         .route("/share", post(publication::share_payload))
         .merge(publication::acquisition_routes())
         .merge(align::routes())
+        .merge(mapping::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/render", post(render_prepare))

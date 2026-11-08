@@ -2,7 +2,7 @@
 
 # MCP Tool Index
 
-All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
+All 87 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
 
 ## `quipu_accept_proposal`
 
@@ -165,11 +165,19 @@ Dereference an exact IRI as JSON-LD. IRIs are encoded as query values, including
 
 ## `quipu_entity_history`
 
-Read the existing entity-history endpoint for an exact IRI. Its current MAIN-history semantics do not certify composed/named-graph audit completeness.
+Read exact entity history. Without graph, legacy ROOT-only history. With graph and source_store_id, the quipu-entity-history/main-v1 contract returns bounded retained MAIN history with source/generation-qualified transactions; attachments, continuous history and historical-policy proof remain outside coverage.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
+| `expected_generation` | string | no |  |
+| `graph` | string | no |  |
 | `iri` | string | yes |  |
+| `max_bytes` | integer | no |  |
+| `max_entries` | integer | no |  |
+| `observation_only` | boolean | no |  |
+| `since_tx` | integer | no |  |
+| `source_store_id` | string | no |  |
+| `until_tx` | integer | no |  |
 
 ## `quipu_entity_ref`
 
@@ -482,49 +490,91 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `action` | string: `load`, `list`, `remove` | no | Action to perform (default: list) |
+| `action` | string: `load`, `materialize`, `retract_materialization`, `list`, `remove` | no | Action to perform (default: list) |
+| `actor` | string | no | Declared actor for retract_materialization; not authentication |
+| `after_tx` | integer | no | Exclusive lower materialization transaction watermark |
+| `apply` | boolean | no | Apply one bounded cleanup batch; default previews without writes |
+| `expect` | string | no | Exact token from the latest cleanup preview, required with apply |
 | `materialize` | string: `inline`, `deferred` | no | load only. inline (default): derive entailments while holding the writer. deferred: persist the ontology, then derive off-lock from a snapshot and apply in short batches, so ordinary writes are not blocked for the derivation. A deferred derivation that fails after the load reports materialization.complete=false; retry with action=materialize. |
-| `name` | string | no | Ontology name (required for load/remove) |
+| `name` | string | no | Ontology name (required for load/remove/retract_materialization) |
+| `through_tx` | integer | no | Inclusive upper materialization transaction watermark |
 | `timestamp` | string | no | ISO-8601 timestamp |
 | `turtle` | string | no | OWL ontology in Turtle format (required for load) |
 
+## `quipu_mapping_apply`
+
+WRITE. Apply or retire a decided mapping with exact expected_digest. Both graphs must already exist; existing graph authority/validation gates remain. Records the actual lifecycle decision and MappingRecord in the same tx. Exact replay does not reopen retirement. No consumer or replica activation.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string: `apply`, `retire` | yes |  |
+| `actor` | string | yes |  |
+| `expected_digest` | string | yes |  |
+| `mapping` | varies | yes | Decided mapping object for apply, mapping IRI string for retire. |
+| `operations_graph` | string | no | Existing committed audit graph; default urn:quipu:graph:operations. Only for apply. |
+
+## `quipu_mapping_decide`
+
+READ. Pure explicit per-row accept/decline decisions bound to the whole proposal digest. Every full correspondence key needs exactly one decision. Returns the selected mapping and expected_digest; declared reviewer is provenance, not a credential.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `decisions` | array | yes |  |
+| `proposal` | object | yes |  |
+| `reviewer` | string | yes |  |
+
+## `quipu_mapping_propose`
+
+READ. Qualify explicit one-hop schema correspondences, existing named scope and exact current shape/ontology pins. Returns a digest-bound proposal. Creates no graphs or transactions and performs no automatic matching.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mapping` | object | yes |  |
+
 ## `quipu_merge_apply`
 
-WRITE. Finish a share merge (incoming + base) or a fork promotion (fork): the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (either side moved), more values than sh:maxCount, a value that is not an RDF term, or (forks) a SHACL refusal. Applying the same decisions again returns outcome already-applied and writes nothing.
+WRITE. Finish a share merge (incoming + base) or fork promotion (fork) under one writer reservation, with ordered receive/decide transactions recording reviewer and decisions hash. Convergent continue writes no slot operations. Refuses undecided or stale inputs, invalid RDF values, invalid explicit cardinality decisions or failed validation. Applying the same decisions again reports already-applied and writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `actor` | string | no | Who is applying. |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
-| `decisions` | object | yes | The file from merge_decisions with each row's decision set (quipu_merge_resolve): {choose: ours\|theirs\|base\|both} or {values: [N-Triples terms]}. |
+| `decisions` | object | yes | The file from merge_decisions with each row decided through quipu_merge_resolve. Convergence accepts continue/base/value; conflicts accept their advertised choices. Explicit values are N-Triples terms. |
 | `dry_run` | boolean | no | Run every check and report the counts it would write; write nothing. |
 | `fork` | string | no | Apply to this fork's promotion, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph, required for profiled application. Normal writer and ownership gates still apply. |
 | `reviewer` | string | yes | Who decided. Recorded in provenance. |
 
 ## `quipu_merge_decisions`
 
-READ. The conflicts of merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to what was reviewed. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. present:true returns {decisions, presentation, view}: the standard markdown to show the user, unchanged. Writes nothing.
+READ. Review rows for merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, with base/ours/theirs values and provenance. Convergent rows default to continue, which preserves the current claim without writing. propose:true adds advisory proposals; conflicts still require the reviewer's choice. present:true returns {decisions, presentation, view}. Writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
+| `choices` | array | no | Typed profiled choices: each has slot [subject, predicate] and decision. Omitted choices remain held. |
 | `fork` | string | no | A fork whose promotion stopped on conflicts, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph for resume; naming it does not grant access. |
 | `present` | boolean | no | Also return the standard presentation (markdown + JSON view). |
+| `profile` | object | no | Explicit quipu-merge-profile/v1 selection profile. Opts into authenticated profiled planning; omitted retains the legacy path. |
 | `propose` | boolean | no | Fill each row's proposal (never its decision). |
-| `slot_scoped` | boolean | no | Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes. |
+| `resume` | string | no | Retained parent merge ID whose held remainder is resumed. Requires ledger and authenticated receipt ownership. |
+| `slot_scoped` | boolean | no | Opt in to v3 slot values and last-modifying-transaction binding. Default v3-whole-root remains strict over all ROOT changes; legacy v1/v2 files retain their checks. |
 
 ## `quipu_merge_resolve`
 
-Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Choices: ours, theirs, base, both (only within sh:maxCount), value (with values), defer. Validates the choice against the row; touches no store. Apply with quipu_merge_apply.
+Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Convergent rows accept continue/base/value. Conflicts accept ours/theirs/base/both (within sh:maxCount), value or defer. Continue is refused on a conflicting row. Touches no store. Apply with quipu_merge_apply.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `by` | string | yes | Who decided: the person who chose, or the agent id when the agent rules allow it. |
-| `choose` | string: `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `by` | string | no | Who decided: the person who chose, or the agent id when the agent rules allow it. |
+| `choose` | string: `continue`, `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `decision` | object | no | Typed profiled-session decision, instead of legacy choose/values. |
 | `decisions` | object | yes | The decisions file from quipu_merge_decisions. |
-| `row` | string | yes | The row id, e.g. d1. |
+| `row` | string | no | The row id, e.g. d1. |
+| `slot` | array | no | Profiled session slot [subject, predicate], instead of legacy row. |
 | `values` | array | no | N-Triples terms, with choose: value. |
 
 ## `quipu_namespaces`
@@ -657,6 +707,7 @@ Execute a SPARQL SELECT query against the knowledge graph (supports time-travel 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `entailment` | string | no | Entailment regime; currently rdfs. |
+| `execution_profile` | boolean | no | Opt in to bounded actual local execution-path counts and inclusive timings; bespoke JSON only, not a static plan or SQL EXPLAIN. |
 | `fork` | string | no | Named fork to query. |
 | `graph` | string | no | Named graph to query. |
 | `include_kinds` | array | no | Graph kinds included in the query dataset. |
@@ -777,7 +828,7 @@ Read explicit positive/negative support as supported/refuted/both/neither, plus 
 
 ## `quipu_search`
 
-Semantic vector search (default), opt-in SQLite FTS5 keyword search, or configurable lexical/vector hybrid fusion. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider. Ranked REST results are diagnostic candidates; native MCP renders admitted context only. Agent context uses context_results when insufficient_context is false under quipu-context/v1.
+Search defaults to semantic when an embedding provider or query embedding is available, otherwise SQLite FTS5 keyword search. Explicit modes override automatic selection. Configurable lexical/vector hybrid fusion is opt-in. Keyword mode requires query text and an enabled, backfilled index; it needs no embedding provider. Ranked REST results are diagnostic candidates; native MCP renders admitted context only. Agent context uses context_results when insufficient_context is false under quipu-context/v1.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -799,7 +850,7 @@ Semantic vector search (default), opt-in SQLite FTS5 keyword search, or configur
 | `infer_types` | boolean | no | Keyword mode only: type scope includes subclass inference when true; defaults false (asserted full-IRI types only). Type tokens are always asserted; response marks both choices. |
 | `limit` | integer | no | Maximum results (default: 10) |
 | `max_hops` | integer | no | Anchor neighbourhood radius (default 3, server cap 4). |
-| `mode` | string: `semantic`, `keyword`, `hybrid` | no | Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true. |
+| `mode` | string: `semantic`, `keyword`, `hybrid` | no | Omitted mode follows server configuration (auto by default). Keyword: literal terms and quoted phrases ranked by BM25 over labels, alt labels, descriptions/full bodies, literal attributes, type names and IRI local tokens. Requires [quipu.search] keyword=true. |
 | `query` | string | no | Natural language search query (auto-embedded when EmbeddingProvider is attached) |
 | `ranking` | string: `content`, `semantic` | no | Content ranking demotes repository artifacts lacking explanatory content; semantic returns raw cosine order. |
 | `rrf_k` | number | no | Positive RRF constant; server default 60. |

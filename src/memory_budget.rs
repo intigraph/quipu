@@ -38,6 +38,14 @@ impl MemoryAllocation {
         }
         let readers = if config.read_processes == 0 {
             config.read_pool_size
+        } else if !config.heavy_read_operations.is_empty() {
+            // Each worker has its base read-only connection PLUS its local
+            // ordinary read pool. Include every connection in the one budget.
+            config
+                .read_pool_size
+                .checked_add(1)
+                .and_then(|n| n.checked_mul(config.read_processes))
+                .ok_or_else(|| Error::InvalidValue("connection count overflow".into()))?
         } else {
             config.read_processes
         };
@@ -90,6 +98,34 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn capped_process_profile_counts_worker_base_and_reader_connections() {
+        for processes in [1, 2, 4] {
+            let config = ServerConfig {
+                memory_budget_mib: Some(8192),
+                read_processes: processes,
+                read_pool_size: 4,
+                heavy_read_operations: vec!["owner-rows".into()],
+                ..Default::default()
+            };
+            let plan = MemoryAllocation::for_server(&config).unwrap().unwrap();
+            assert_eq!(plan.connections, 1 + processes as u64 * 5);
+            assert!(
+                (plan.cache_kib * 1024 + plan.mmap_bytes) * plan.connections
+                    <= plan.total_bytes / 2
+            );
+        }
+        assert!(
+            MemoryAllocation::for_server(&ServerConfig {
+                memory_budget_mib: Some(256),
+                read_processes: 1,
+                heavy_read_operations: vec!["owner-rows".into()],
+                ..Default::default()
+            })
+            .is_err()
+        );
     }
 
     #[test]

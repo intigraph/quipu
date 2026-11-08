@@ -21,7 +21,7 @@ fn activity_is_governed_for_native_bulk_facts() {
     store
         .load_shapes("provenance", SHAPES, "2026-01-01T00:00:00Z")
         .unwrap();
-    let vocabulary = tool_shapes(&store, &json!({"action": "vocabulary"})).unwrap();
+    let vocabulary = tool_shapes(&mut store, &json!({"action": "vocabulary"})).unwrap();
     assert!(
         vocabulary["classes"]
             .as_array()

@@ -111,7 +111,7 @@ pub fn cmd_retract(args: &[String], db_path: &str) {
 pub fn cmd_shapes(args: &[String], db_path: &str) {
     let action = args.get(2).map_or("list", std::string::String::as_str);
 
-    let store = crate::cli_open::open_store(db_path);
+    let mut store = crate::cli_open::open_store(db_path);
 
     match action {
         "load" => {
@@ -142,7 +142,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
                 "turtle": turtle,
                 "timestamp": chrono_now(),
             });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(_) => println!("loaded shape graph \"{name}\" from {file_path}"),
                 Err(e) => {
                     eprintln!("error loading shapes: {e}");
@@ -159,7 +159,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
                 }
             };
             let input = serde_json::json!({ "action": "remove", "name": name });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(result) => {
                     if result["found"].as_bool().unwrap_or(false) {
                         println!("removed shape graph \"{name}\"");
@@ -175,7 +175,7 @@ pub fn cmd_shapes(args: &[String], db_path: &str) {
         }
         _ => {
             let input = serde_json::json!({ "action": "list" });
-            match quipu::tool_shapes(&store, &input) {
+            match quipu::tool_shapes(&mut store, &input) {
                 Ok(result) => {
                     let shapes = result["shapes"].as_array().unwrap();
                     if shapes.is_empty() {
@@ -368,75 +368,8 @@ fn run_query_temporal(store: &quipu::Store, sparql: &str, ctx: &quipu::TemporalC
     }
 }
 
-/// `quipu doctor labels` — recompute every graph's label from the meta-graph
-/// facts and report where the `graphs` cache disagrees (quipu #65).
-///
-/// RDF is the source of truth. A non-empty report means the CACHE is wrong,
-/// never the facts — so this reports rather than repairs, and says which side
-/// is authoritative in its own output. Exits non-zero on drift so a cron or CI
-/// caller can gate on it without parsing the text.
-pub fn cmd_doctor(args: &[String], db_path: &str) {
-    let sub = args.get(2).map_or("labels", String::as_str);
-    if sub != "labels" {
-        eprintln!("usage: quipu doctor labels [--db <path>]");
-        std::process::exit(1);
-    }
-
-    let store = crate::cli_open::open_store(db_path);
-
-    // quipu #80: surface producers' RECOMMENDED floors here. They are advisory
-    // — the store never applies them — so they are reported beside the drift
-    // report rather than mixed into it, and the banner says so on every line.
-    // (#75's attach path is the other intended print point; `RecommendedFloor::line`
-    // is what it will call.)
-    if let Ok(graphs) = store.all_named_graph_ids() {
-        let mut shown = false;
-        for g in graphs {
-            let Ok(iri) = store.resolve(g) else { continue };
-            let Ok(rec) = store.recommended_floor(&iri) else {
-                continue;
-            };
-            if !rec.is_empty() {
-                if !shown {
-                    println!("recommended floors (advisory — NOT enforced):");
-                    shown = true;
-                }
-                println!("  {}", rec.line(&iri));
-            }
-        }
-        if shown {
-            println!();
-        }
-    }
-
-    match store.graph_label_drift() {
-        Ok(drift) if drift.is_empty() => {
-            println!("labels: no drift — every cached label agrees with the meta-graph");
-        }
-        Ok(drift) => {
-            println!(
-                "labels: {} disagreement(s) between the meta-graph (authoritative) \
-                 and the graphs cache\n",
-                drift.len()
-            );
-            for d in &drift {
-                println!("  {}", d.graph_iri);
-                println!("    axis:   {}", d.axis);
-                println!("    rdf:    {}   <- authoritative", d.rdf);
-                println!("    cached: {}", d.cached);
-            }
-            println!(
-                "\nThe cache is derived; the facts are the truth. Re-declare these \
-                 graphs' labels with set_graph_label to rebuild the cache."
-            );
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("doctor error: {e}");
-            std::process::exit(1);
-        }
-    }
-}
+mod doctor;
+pub use doctor::cmd_doctor;
 
 /// `quipu db respace --into <space> --out <file>` (quipu #74).
 ///

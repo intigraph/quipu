@@ -36,6 +36,10 @@ use crate::types::{Fact, Op, Value};
 pub use super::forks_merge::ForkResolutions;
 use super::{Datum, Store};
 
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "forks_sessions.rs"]
+mod sessions;
+
 /// IRI prefix fork graphs are minted under: `urn:quipu:fork:<name>`.
 pub const FORK_IRI_PREFIX: &str = "urn:quipu:fork:";
 
@@ -338,7 +342,7 @@ impl Store {
     ) -> Result<(ForkInfo, Vec<crate::merge3::DecisionRecord>)> {
         let f = self.require_open_fork(name, "inspect")?;
         let (base, ours, theirs) = self.fork_sides(&f)?;
-        let merge = self.fork_merge(base, ours, theirs, None, "")?;
+        let merge = self.fork_merge(base, ours, theirs, None, f.g, None)?;
         Ok((f, merge.conflicts))
     }
 
@@ -412,10 +416,34 @@ impl Store {
         decided: Option<(&ForkResolutions, &str, &str)>,
         dry_run: bool,
     ) -> Result<ForkPromotion> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if crate::merge_plan_gate::policy()?.is_some() && !dry_run {
+            return crate::share_merge::core::atomic(self, |store| {
+                store.promote_fork_planned(name, timestamp, actor, decided, dry_run)
+            });
+        }
+        self.promote_fork_planned(name, timestamp, actor, decided, dry_run)
+    }
+
+    fn promote_fork_planned(
+        &mut self,
+        name: &str,
+        timestamp: &str,
+        actor: Option<&str>,
+        decided: Option<(&ForkResolutions, &str, &str)>,
+        dry_run: bool,
+    ) -> Result<ForkPromotion> {
         let f = self.require_open_fork(name, "promote")?;
         let fork_g = f.g;
         let (base, ours, theirs) = self.fork_sides(&f)?;
-        let diff = self.fork_merge(base, ours, theirs, decided.map(|d| d.0), timestamp)?;
+        let diff = self.fork_merge(
+            base,
+            ours,
+            theirs,
+            decided.map(|d| d.0),
+            fork_g,
+            Some(timestamp),
+        )?;
         if !diff.conflicts.is_empty() {
             return Ok(ForkPromotion::Conflicts(diff.conflicts));
         }
@@ -457,30 +485,9 @@ impl Store {
             }
         }
 
-        let mut datums: Vec<Datum> = Vec::with_capacity(diff.added.len() + diff.removed.len());
-        for f in &diff.added {
-            datums.push(Datum {
-                entity: f.entity,
-                attribute: f.attribute,
-                value: f.value.clone(),
-                // The fork fact's own valid-time claim, not the promote instant.
-                valid_from: f.valid_from.clone(),
-                valid_to: None,
-                op: Op::Assert,
-            });
-        }
-        for f in &diff.removed {
-            datums.push(Datum {
-                entity: f.entity,
-                attribute: f.attribute,
-                value: f.value.clone(),
-                valid_from: f.valid_from.clone(),
-                valid_to: None,
-                op: Op::Retract,
-            });
-        }
-
         if dry_run {
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::merge_plan_gate::datums(self, &[&diff.receive, &diff.decide], None)?;
             return Ok(ForkPromotion::Promoted {
                 tx: 0,
                 asserted: diff.added.len(),
@@ -496,20 +503,38 @@ impl Store {
         self.ensure_ownership_writable()?;
         self.conn.execute_batch("SAVEPOINT quipu_fork_promote")?;
         let result = (|| -> Result<i64> {
-            let tx = if datums.is_empty() {
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::merge_plan_gate::datums(self, &[&diff.receive, &diff.decide], None)?;
+            // Spec R3 (ruling B): receive, then decide, in this savepoint. Each
+            // step passes the ordinary write gate; closes carry their own
+            // valid time (the fork's, clamped), so nothing is re-timed after.
+            let receive_tx = if diff.receive.is_empty() {
                 0
             } else {
                 self.transact_to_graph(
-                    &datums,
+                    &diff.receive,
                     timestamp,
                     actor,
                     Some(&source),
                     crate::schema::ROOT_GRAPH,
                 )?
             };
-            // Close each replaced ROOT value at the fork's own close time,
-            // as a direct write of the same correction would (aegis-jxxd).
-            self.retime_promoted_closes(tx, fork_g, &diff.removed)?;
+            let decide_tx = if diff.decide.is_empty() {
+                0
+            } else {
+                self.transact_to_graph(
+                    &diff.decide,
+                    timestamp,
+                    actor,
+                    Some(&format!("{source};step=decide")),
+                    crate::schema::ROOT_GRAPH,
+                )?
+            };
+            let tx = if decide_tx == 0 {
+                receive_tx
+            } else {
+                decide_tx
+            };
             self.conn.execute(
                 "UPDATE forks SET status = 'promoted' WHERE name = ?1",
                 params![name],
@@ -523,6 +548,7 @@ impl Store {
                         "decisions": sha,
                         "reviewer": reviewer,
                         "promote_tx": tx,
+                        "receive_tx": receive_tx,
                     }),
                 )?,
                 None => self.emit_registry_event("fork.promoted", name, timestamp)?,
@@ -593,3 +619,7 @@ mod tests;
 #[cfg(test)]
 #[path = "forks_valid_time_tests.rs"]
 mod valid_time_tests;
+
+#[cfg(test)]
+#[path = "forks_core_tests.rs"]
+mod core_tests;

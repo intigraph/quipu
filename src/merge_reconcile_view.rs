@@ -12,6 +12,13 @@ pub fn choices(record: &DecisionRecord) -> Vec<String> {
 /// [`choices`], without `value` where the merge cannot take typed values
 /// (Git pendant merges).
 pub(super) fn choices_for(record: &DecisionRecord, value: bool) -> Vec<String> {
+    if crate::merge_review::convergent(record) {
+        return if value {
+            vec!["continue".into(), "base".into(), "value".into()]
+        } else {
+            vec!["continue".into(), "base".into()]
+        };
+    }
     let mut out = vec!["ours".to_string(), "theirs".into(), "base".into()];
     if union(&record.ours, &record.theirs).len() <= record.max_count {
         out.push("both".into());
@@ -60,6 +67,9 @@ pub struct Named {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct RuleView {
     pub kind: ConflictKind,
+    /// Match the decision record: an unbounded convergent row is JSON null,
+    /// never a platform-sized integer in one presentation but not another.
+    #[serde(with = "crate::merge3::review_bound")]
     pub max_count: usize,
     pub text: String,
 }
@@ -115,6 +125,7 @@ pub struct ConflictCard {
 
 pub(super) fn side_name(side: Side) -> &'static str {
     match side {
+        Side::Continue => "continue",
         Side::Ours => "ours",
         Side::Theirs => "theirs",
         Side::Base => "base",

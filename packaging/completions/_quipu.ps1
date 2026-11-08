@@ -24,6 +24,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('competency', 'competency', [CompletionResultType]::ParameterValue, 'Inspect pendant competency contracts without opening a store')
             [CompletionResult]::new('store', 'store', [CompletionResultType]::ParameterValue, 'Inspect native ownership, or explicitly adopt or restore a disk store')
             [CompletionResult]::new('version', 'version', [CompletionResultType]::ParameterValue, 'Print the version and source commit')
             [CompletionResult]::new('install-alias', 'install-alias', [CompletionResultType]::ParameterValue, 'Add the qp alias beside the quipu binary')
@@ -55,8 +56,9 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('stats', 'stats', [CompletionResultType]::ParameterValue, 'Show store statistics')
             [CompletionResult]::new('prime', 'prime', [CompletionResultType]::ParameterValue, 'Print the agent primer and a bounded, read-only summary of the store')
             [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Search entities by keyword, vector or hybrid ranking')
+            [CompletionResult]::new('model', 'model', [CompletionResultType]::ParameterValue, 'Manage the pinned default embedding model')
             [CompletionResult]::new('search-index', 'search-index', [CompletionResultType]::ParameterValue, 'Report, backfill or drop the search indexes')
-            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('doctor', 'doctor', [CompletionResultType]::ParameterValue, 'Report graph-label drift or search backend readiness')
             [CompletionResult]::new('pack', 'pack', [CompletionResultType]::ParameterValue, 'Export a graph, or the whole store, as a pack; or verify a pack')
             [CompletionResult]::new('unpack', 'unpack', [CompletionResultType]::ParameterValue, 'Merge a published pack into a local graph')
             [CompletionResult]::new('restore', 'restore', [CompletionResultType]::ParameterValue, 'Replace the store with a full pack, binary or text')
@@ -67,8 +69,10 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('compose', 'compose', [CompletionResultType]::ParameterValue, 'Compose verified packs into a named inspection dataset')
             [CompletionResult]::new('changes', 'changes', [CompletionResultType]::ParameterValue, 'Read whole transaction change pages from the change feed')
             [CompletionResult]::new('follow', 'follow', [CompletionResultType]::ParameterValue, 'Keep this database a read-only follower of a primary server')
+            [CompletionResult]::new('asof-rdf', 'asof-rdf', [CompletionResultType]::ParameterValue, 'Convert one retained as-of share into bounded coherent RDF chunks offline')
             [CompletionResult]::new('acquire', 'acquire', [CompletionResultType]::ParameterValue, 'Measure the bounded scope of a direct-main graph acquisition')
             [CompletionResult]::new('migrate-vectors', 'migrate-vectors', [CompletionResultType]::ParameterValue, 'Move stored vectors between backends (lancedb feature)')
+            [CompletionResult]::new('git-mergetool', 'git-mergetool', [CompletionResultType]::ParameterValue, 'Interactively resolve a pendant using the standard merge layout')
             [CompletionResult]::new('git-merge', 'git-merge', [CompletionResultType]::ParameterValue, 'Merge pendants from Git snapshots and stop before committing')
             [CompletionResult]::new('merge-driver', 'merge-driver', [CompletionResultType]::ParameterValue, 'Low-level Git merge driver for pendant files')
             [CompletionResult]::new('pendant-resolve', 'pendant-resolve', [CompletionResultType]::ParameterValue, 'Record a resolution choice for one pendant merge conflict')
@@ -92,6 +96,19 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('events', 'events', [CompletionResultType]::ParameterValue, 'Read store event records such as refusals')
             [CompletionResult]::new('fork', 'fork', [CompletionResultType]::ParameterValue, 'Create, list, diff, drop or promote named forks of ROOT')
             [CompletionResult]::new('audit', 'audit', [CompletionResultType]::ParameterValue, 'Check traces, namespaces, replays and quarantine against policy')
+            break
+        }
+        'quipu;competency' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('lint', 'lint', [CompletionResultType]::ParameterValue, 'Validate competency.toml schema and query/command syntax offline; execute nothing')
+            break
+        }
+        'quipu;competency;lint' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
         'quipu;store' {
@@ -414,6 +431,7 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--read-only', '--read-only', [CompletionResultType]::ParameterName, 'Export a cold local snapshot without writes; refuses sidecars and attachments')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -509,6 +527,28 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;model' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('install', 'install', [CompletionResultType]::ParameterValue, 'Download and verify the default embedding model and tokenizer')
+            [CompletionResult]::new('backfill', 'backfill', [CompletionResultType]::ParameterValue, 'Embed one bounded batch of existing ROOT subjects')
+            break
+        }
+        'quipu;model;install' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;model;backfill' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--batch-size', '--batch-size', [CompletionResultType]::ParameterName, 'Number of entries per indexing batch')
+            [CompletionResult]::new('--after', '--after', [CompletionResultType]::ParameterName, 'Resume after this cursor')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;search-index' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('--kind', '--kind', [CompletionResultType]::ParameterName, 'Index or graph kind to select')
@@ -547,9 +587,16 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('labels', 'labels', [CompletionResultType]::ParameterValue, 'Report graph-label drift and recommended floors')
+            [CompletionResult]::new('search', 'search', [CompletionResultType]::ParameterValue, 'Report search backend readiness and remedies')
             break
         }
         'quipu;doctor;labels' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;doctor;search' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
@@ -796,6 +843,15 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'quipu;asof-rdf' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--binding', '--binding', [CompletionResultType]::ParameterName, 'Private JSON cut/profile binding and finite resource limits')
+            [CompletionResult]::new('--frames', '--frames', [CompletionResultType]::ParameterName, 'Private retained event/data JSONL file, with exact transport data strings')
+            [CompletionResult]::new('--scratch', '--scratch', [CompletionResultType]::ParameterName, 'Empty canonical private directory matching SQLITE_TMPDIR')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'quipu;acquire' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
@@ -819,6 +875,13 @@ Register-ArgumentCompleter -Native -CommandName 'quipu' -ScriptBlock {
             [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Source vector backend')
             [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Destination vector backend')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'quipu;git-mergetool' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

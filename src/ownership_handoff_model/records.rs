@@ -138,6 +138,25 @@ impl Request {
     }
 }
 
+/// Immutable abandonment of one reserved attempt, not a retirement certificate.
+/// The operator is bound by the request; a reason cannot change on retry.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Abandonment {
+    /// Exact reserved source, destination, operation and operator.
+    pub request: Request,
+    /// Bounded operator explanation, retained with the outcome.
+    pub reason: String,
+}
+
+impl Abandonment {
+    /// Validate content only, never the caller's authority or source state.
+    pub fn validate(&self) -> ModelResult<()> {
+        self.request.validate()?;
+        identifier(&self.reason)
+    }
+}
+
 /// A sealed cut's coordinates and digests; actual bytes are checked by adapters.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -139,7 +139,17 @@ pub(crate) fn apply_vector_backend(store: &mut quipu::Store, config: &quipu::Qui
 
 pub(crate) fn apply_search(store: &mut quipu::Store, config: &quipu::SearchConfig) {
     store.search_config_mut().clone_from(config);
-    if config.keyword {
+    let fresh = store.created_fact_schema();
+    let initialized = store
+        .lexical_progress()
+        .unwrap_or_else(|e| {
+            eprintln!("error reading keyword index state: {e}");
+            std::process::exit(1);
+        })
+        .is_some();
+    let keyword = config.keyword_for_store(fresh, initialized);
+    store.search_config_mut().keyword = keyword;
+    if keyword && (fresh || config.keyword_explicit) {
         store.initialize_lexical_index().unwrap_or_else(|e| {
             eprintln!("error initializing keyword index: {e}");
             std::process::exit(1);
@@ -226,9 +236,32 @@ pub(crate) async fn version() -> impl IntoResponse {
             "quipu-acquisition/v1",
             "quipu-acquisition/composed-v1",
             quipu::acquisition::eligibility::CONTRACT,
+            quipu::acquisition::history::CONTRACT,
+            quipu::acquisition::history::OBSERVATION_CONTRACT,
+        ],
+        "write_contracts": [
+            crate::knot_completion::CONTRACT,
+            quipu::episode::EXPLICIT_ADDRESS_CONTRACT,
         ],
         "features": compiled_features(),
     }))
+}
+
+#[cfg(test)]
+mod episode_address_contract_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn version_advertises_explicit_episode_addressing() {
+        let response = version().await.into_response();
+        let body = axum::body::to_bytes(response.into_body(), 8192)
+            .await
+            .unwrap();
+        let value: JsonValue = serde_json::from_slice(&body).unwrap();
+        let contracts = value["write_contracts"].as_array().unwrap();
+        assert!(contracts.contains(&json!("quipu.episode-addresses/v1")));
+        assert!(contracts.contains(&json!("quipu.knot-completion/v1")));
+    }
 }
 
 /// Every declared feature and whether this binary has it (aegis-t1u2h).

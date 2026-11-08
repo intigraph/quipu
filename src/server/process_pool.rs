@@ -97,6 +97,7 @@ struct Worker {
     pid: u32,
     identity: String,
     available: Arc<Semaphore>,
+    heavy_available: Arc<Semaphore>,
 }
 
 fn worker_input(address: &str) -> Result<Stdio, String> {
@@ -113,17 +114,29 @@ fn worker_input(address: &str) -> Result<Stdio, String> {
     }
 }
 struct Routing {
+    configured: usize,
     workers: Vec<Worker>,
     key: String,
     next: AtomicUsize,
     timeout: Duration,
     response_limit: usize,
+    heavy_permits: usize,
 }
+
+#[path = "process_pool_routing.rs"]
+mod scheduling;
+use scheduling::hop_header;
 
 pub(crate) struct ProcessPool {
     children: Vec<Child>,
     routing: Option<Arc<Routing>>,
+    internal_worker: bool,
 }
+#[path = "process_pool_auth.rs"]
+mod auth_config;
+#[path = "process_pool_signed_handoff.rs"]
+pub(crate) mod signed_handoff;
+
 impl Drop for ProcessPool {
     fn drop(&mut self) {
         for child in &mut self.children {
@@ -142,140 +155,9 @@ pub(crate) fn in_process() -> ProcessPool {
     }
 }
 
-pub(crate) fn start(config: &QuipuConfig, args: &[String]) -> Result<ProcessPool, String> {
-    let mut pool = ProcessPool {
-        children: Vec::new(),
-        routing: None,
-    };
-    if config.server.read_processes == 0 {
-        return Ok(pool);
-    }
-    if is_worker() {
-        let expected = std::env::var(PARENT).map_err(|_| "missing worker parent")?;
-        let pid = expected
-            .split(':')
-            .next()
-            .and_then(|n| n.parse::<u32>().ok())
-            .ok_or("invalid worker parent")?;
-        if parent_identity(pid).as_deref() != Some(&expected) {
-            return Err("worker parent is gone".into());
-        }
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(Duration::from_secs(1));
-                if parent_identity(pid).as_deref() != Some(&expected) {
-                    std::process::exit(1);
-                }
-            }
-        });
-        return Ok(pool);
-    }
-    let allocation = MemoryAllocation::for_server(&config.server)
-        .map_err(|e| e.to_string())?
-        .ok_or("missing memory budget")?;
-    let mut random = [0u8; 32];
-    SystemRandom::new()
-        .fill(&mut random)
-        .map_err(|_| "worker identity randomness unavailable")?;
-    let key: String = random.iter().map(|b| format!("{b:02x}")).collect();
-    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let parent = parent_identity(std::process::id()).ok_or("cannot establish parent start time")?;
-    let public: std::net::SocketAddr = config
-        .server
-        .bind
-        .parse()
-        .map_err(|_| "invalid primary bind")?;
-    let loopback = if public.is_ipv6() { "::1" } else { "127.0.0.1" };
-    let primary = format!(
-        "http://{}",
-        std::net::SocketAddr::new(loopback.parse().expect("loopback literal"), public.port())
-    );
-    let db = std::fs::canonicalize(&config.store_path).map_err(|e| e.to_string())?;
-    let mut workers = Vec::new();
-    for index in 0..config.server.read_processes {
-        let port = config.server.read_process_base_port + index as u16;
-        let address = format!("127.0.0.1:{port}");
-        // Reserve the actual listener, not a port number followed by a race.
-        // No worker credential is ever sent to a pre-existing local listener.
-        let input = worker_input(&address)?;
-        let child = Command::new(&executable)
-            .args([
-                "--db",
-                db.to_str().ok_or("non-UTF8 database path")?,
-                "--bind",
-                &address,
-                "--read-only",
-                "--primary-url",
-                &primary,
-            ])
-            .env(KEY, &key)
-            .env(PARENT, &parent)
-            .env("TOKIO_WORKER_THREADS", "2")
-            .env("QUIPU_READ_WORKER_LISTENER_FD", "0")
-            .stdin(input)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        let pid = child.id();
-        pool.children.push(child);
-        let url = format!("http://{address}");
-        let mut ready = false;
-        let client = ureq::AgentBuilder::new()
-            .timeout(Duration::from_millis(200))
-            .redirects(0)
-            .build();
-        for _ in 0..100 {
-            if pool
-                .children
-                .last_mut()
-                .expect("child inserted")
-                .try_wait()
-                .map_err(|e| e.to_string())?
-                .is_some()
-            {
-                break;
-            }
-            if let Ok(response) = client
-                .get(&format!("{url}/health"))
-                .set(HEADER, &key)
-                .set("X-Quipu-Client", "read-worker-startup")
-                .call()
-                && response.header(PID) == Some(pid.to_string().as_str())
-            {
-                ready = true;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        if !ready {
-            return Err(format!(
-                "reader worker {index} failed startup; pool refused"
-            ));
-        }
-        workers.push(Worker {
-            url,
-            pid,
-            identity: parent_identity(pid).ok_or("reader exited during startup")?,
-            available: Arc::new(Semaphore::new(1)),
-        });
-    }
-    let timeout = Duration::from_millis(config.search.request_timeout_ms.clamp(1_000, 120_000));
-    pool.routing = Some(Arc::new(Routing {
-        workers,
-        key,
-        next: AtomicUsize::new(0),
-        timeout,
-        response_limit: usize::try_from(
-            (allocation.total_bytes / 8 / allocation.connections).min(64 * 1024 * 1024),
-        )
-        .map_err(|_| "response allocation overflow")?,
-    }));
-    eprintln!(
-        "read process pool: {} separate read-only workers; total memory budget {} bytes",
-        config.server.read_processes, allocation.total_bytes
-    );
-    let _ = args; // Child configuration comes from the same cwd, never a copied credential file.
-    Ok(pool)
-}
+#[path = "process_pool/startup.rs"]
+mod startup;
+pub(crate) use startup::start;
 
 /// Only bounded data routes. Streams, exports, health/metrics and writes remain primary.
 fn routed(path: &str, method: &str) -> bool {
@@ -302,57 +184,12 @@ fn routed(path: &str, method: &str) -> bool {
             | "/reconcile"
     )
 }
-fn hop_header(name: &str) -> bool {
-    matches!(
-        name,
-        "host"
-            | "connection"
-            | "keep-alive"
-            | "proxy-authenticate"
-            | "proxy-authorization"
-            | "te"
-            | "trailer"
-            | "transfer-encoding"
-            | "upgrade"
-            | "content-length"
-    )
-}
 fn unavailable(message: &'static str) -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         axum::Json(serde_json::json!({"error":message,"reason":"read_process_unavailable"})),
     )
         .into_response()
-}
-
-async fn worker_guard(mut req: Request, next: Next) -> Response {
-    let expected = std::env::var(KEY).unwrap_or_default();
-    if expected.is_empty()
-        || req.headers().get(HEADER).and_then(|v| v.to_str().ok()) != Some(expected.as_str())
-    {
-        return StatusCode::FORBIDDEN.into_response();
-    }
-    // Only the authenticated private channel may restore an original peer.
-    // MCP calls without a socket peer stay UNKNOWN rather than becoming localhost.
-    let peer = req
-        .headers()
-        .get(PEER)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<std::net::SocketAddr>().ok());
-    req.extensions_mut()
-        .remove::<axum::extract::ConnectInfo<std::net::SocketAddr>>();
-    if let Some(peer) = peer {
-        req.extensions_mut()
-            .insert(axum::extract::ConnectInfo(peer));
-    }
-    req.headers_mut().remove(PEER);
-    req.headers_mut().remove(HEADER);
-    let mut response = next.run(req).await;
-    response.headers_mut().insert(
-        PID,
-        HeaderValue::from_str(&std::process::id().to_string()).expect("numeric PID"),
-    );
-    response
 }
 
 pub(crate) fn route<S: Clone + Send + Sync + 'static>(
@@ -368,7 +205,7 @@ pub(crate) fn route<S: Clone + Send + Sync + 'static>(
 
 pub(crate) fn protect_worker(app: Router) -> Router {
     if is_worker() {
-        app.layer(middleware::from_fn(worker_guard))
+        app.layer(middleware::from_fn(signed_handoff::worker_guard))
     } else {
         app
     }
@@ -383,12 +220,12 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
                 parent_identity(worker.pid).as_deref() == Some(worker.identity.as_str())
             })
             .count();
-        if alive != routing.workers.len() {
+        if alive != routing.configured {
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 axum::Json(serde_json::json!({
                     "status": "degraded", "reason": "read_process_unavailable",
-                    "read_processes": routing.workers.len(), "read_processes_alive": alive
+                    "read_processes": routing.configured, "read_processes_alive": alive
                 })),
             )
                 .into_response();
@@ -403,16 +240,11 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
     if !routed(req.uri().path(), req.method().as_str()) {
         return next.run(req).await;
     }
-    let start = routing.next.fetch_add(1, Ordering::Relaxed);
-    let selected = (0..routing.workers.len()).find_map(|offset| {
-        let worker = &routing.workers[(start.wrapping_add(offset)) % routing.workers.len()];
-        worker
-            .available
-            .clone()
-            .try_acquire_owned()
-            .ok()
-            .map(|permit| (worker, permit))
-    });
+    let Ok(handoff) = signed_handoff::for_forward(&req) else {
+        return unavailable("signed reader identity was not admitted");
+    };
+    let operation = super::request_middleware::declared_operation(req.headers());
+    let selected = routing.select(routing.heavy(req.uri().path(), operation.as_deref()));
     let Some((worker, permit)) = selected else {
         return unavailable("all read processes are busy");
     };
@@ -440,7 +272,9 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for (name, value) in &parts.headers {
             if !hop_header(name.as_str())
                 && name.as_str() != HEADER
+                && name.as_str() != signed_handoff::HEADER
                 && name.as_str() != PEER
+                && name.as_str() != "x-quipu-operation"
                 && name.as_str() != "accept-encoding"
                 && let Ok(value) = value.to_str()
             {
@@ -450,6 +284,14 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         request = request
             .set(HEADER, &routing.key)
             .set("accept-encoding", "identity");
+        // Preserve the finite parser's UNKNOWN result. Repeated ureq::set calls
+        // otherwise collapse duplicate declarations into a valid last value.
+        if let Some(operation) = operation {
+            request = request.set("x-quipu-operation", &operation);
+        }
+        if let Some(handoff) = handoff {
+            request = request.set(signed_handoff::HEADER, &handoff);
+        }
         if let Some(peer) = peer {
             request = request.set(PEER, &peer);
         }
@@ -465,6 +307,7 @@ async fn proxy(State(routing): State<Arc<Routing>>, req: Request, next: Next) ->
         for name in response.headers_names() {
             if !hop_header(&name)
                 && name != HEADER
+                && name != signed_handoff::HEADER
                 && let (Ok(name), Some(value)) = (
                     HeaderName::from_bytes(name.as_bytes()),
                     response.header(&name),

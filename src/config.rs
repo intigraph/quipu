@@ -86,8 +86,7 @@ impl LabelsConfig {
 
 /// Search/limit guardrails (hq-gkd). Without these, callers could pass
 /// `limit: 1_000_000` and unbounded SPARQL could scan the whole fact log.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
+#[derive(Debug, Clone)]
 pub struct SearchConfig {
     /// Result count used when a caller omits a limit (default: 10).
     pub default_limit: usize,
@@ -149,14 +148,17 @@ pub struct SearchConfig {
     /// default until its evaluation gate passes; an anchored request on a
     /// server with this off is refused, never silently answered unanchored.
     pub anchored: bool,
-    /// SQLite FTS5 keyword search. Default off; activation creates only empty
-    /// schema/triggers. Historical rows require explicit bounded backfill.
+    /// SQLite FTS5 keyword search. Automatic activation is new-store only;
+    /// an existing store requires explicit configuration to install triggers.
     pub keyword: bool,
+    /// Whether keyword was explicitly configured. Set this for programmatic
+    /// opt-in on an existing unindexed store; TOML loading tracks it directly.
+    pub keyword_explicit: bool,
     /// Explicit structured candidate filters. SQLite-only, default off.
     pub structured: bool,
     /// Hybrid lexical/vector fusion. Off until its offline evaluation passes.
     pub hybrid: bool,
-    /// Default search mode; semantic preserves the existing API.
+    /// Default mode: auto selects semantic with a provider, keyword otherwise.
     pub mode: String,
     /// Semantic contribution, with exact pure-mode endpoints.
     pub alpha: f64,
@@ -175,6 +177,55 @@ pub struct SearchConfig {
     pub exclude_graphs: Vec<String>,
 }
 
+// Preserve the distinction between an omitted default and an operator opt-in.
+// The boolean remains the effective runtime API; startup resolves the omitted
+// setting against store age/index state before any lexical DDL can run.
+impl<'de> serde::Deserialize<'de> for SearchConfig {
+    fn deserialize<D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let serde_json::Value::Object(mut fields) = value else {
+            return Err(serde::de::Error::custom(
+                "search configuration must be a table",
+            ));
+        };
+        let mut config = Self {
+            keyword_explicit: fields.contains_key("keyword"),
+            ..Self::default()
+        };
+        macro_rules! read {
+            ($($field:ident),* $(,)?) => { $(
+                if let Some(value) = fields.remove(stringify!($field)) {
+                    config.$field = serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+                }
+            )* };
+        }
+        read!(
+            default_limit,
+            max_limit,
+            oversample_factor,
+            max_sparql_rows,
+            query_timeout_ms,
+            request_timeout_ms,
+            episode_request_timeout_ms,
+            max_join_rows,
+            anchored,
+            keyword,
+            structured,
+            hybrid,
+            mode,
+            alpha,
+            fusion,
+            rrf_k,
+            named_graphs,
+            default_graph_scope,
+            exclude_graphs
+        );
+        Ok(config)
+    }
+}
+
 impl Default for SearchConfig {
     fn default() -> Self {
         Self {
@@ -187,10 +238,11 @@ impl Default for SearchConfig {
             episode_request_timeout_ms: 0,
             max_join_rows: 1_000_000,
             anchored: false,
-            keyword: false,
+            keyword: true,
+            keyword_explicit: false,
             structured: false,
             hybrid: false,
-            mode: "semantic".into(),
+            mode: "auto".into(),
             alpha: 0.5,
             fusion: "rrf".into(),
             rrf_k: 60.0,
@@ -202,6 +254,16 @@ impl Default for SearchConfig {
 }
 
 impl SearchConfig {
+    /// Resolve omitted keyword configuration without activating an old store.
+    #[must_use]
+    pub fn keyword_for_store(&self, fresh: bool, initialized: bool) -> bool {
+        if self.keyword_explicit || !self.keyword {
+            self.keyword
+        } else {
+            fresh || initialized
+        }
+    }
+
     /// Resolve a caller-supplied limit: fall back to `default_limit` when
     /// absent, clamp to `max_limit`, and never return 0.
     pub fn clamp_limit(&self, requested: Option<u64>) -> usize {
@@ -707,6 +769,10 @@ pub struct ServerConfig {
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
+    /// Separate verifier registry for exact-graph machine writers. Every write
+    /// requires an owner-local grant; no shared/ordinary-named fallback.
+    pub scoped_writer_credentials_file: Option<String>,
+
     /// Verifier-only full-store replication identities. This is a distinct
     /// registry, never a source of graph-write or scoped-read grants.
     pub replication_credentials_file: Option<String>,
@@ -812,6 +878,7 @@ impl Default for ServerConfig {
             auth_token: None,
             session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
+            scoped_writer_credentials_file: None,
             replication_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
@@ -849,11 +916,8 @@ impl ServerConfig {
         if self.heavy_read_operations.as_slice() != ["owner-rows"] {
             return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
         }
-        if self.read_processes > 0
-            || self.heavy_read_permits == 0
-            || self.heavy_read_permits >= ordinary_readers
-        {
-            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
+            return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());
         }
         Ok(())
     }
