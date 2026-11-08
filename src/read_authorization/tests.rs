@@ -560,6 +560,16 @@ fn controlled_mutants_each_turn_their_paired_negative_red() {
             }),
         ),
         (
+            // An intersection is nonempty for {A,B}, but B remains denied.
+            Mutant::DatasetIntersection,
+            Box::new(|| {
+                snapshot
+                    .authorize(&identity(P), ReadOperation::Query, Some(&selected_ab), 2)
+                    .and_then(|read| read.open(&source, 2))
+                    .is_ok_and(|view| exposes_hidden(&view))
+            }),
+        ),
+        (
             // The scoped copy holds only A and C, so the observable failure is
             // the refusal itself turning into an answer about an ungranted graph.
             Mutant::QueryDatasetClause,

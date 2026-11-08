@@ -22,6 +22,8 @@ pub(crate) enum Mutant {
     GrantValidity,
     /// `authorize`: an explicit dataset need not be a subset of the grant.
     DatasetSubset,
+    /// `authorize`: mere overlap stands in for full dataset permission.
+    DatasetIntersection,
     /// `query_response`: `FROM` / `FROM NAMED` outside the grant are not refused.
     QueryDatasetClause,
     /// `query_response`: `GRAPH <iri>` outside the grant is not refused.
