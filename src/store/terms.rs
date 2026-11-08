@@ -305,8 +305,9 @@ impl Store {
     /// Map an id to the one the LOCAL store uses for the same IRI.
     ///
     /// An id with no alias row — every id on an unattached store, and every
-    /// local id — is returned unchanged, so this is an identity function until
-    /// a composition actually contains an alias.
+    /// local id — is returned unchanged unless the current dictionaries now
+    /// contain a shared IRI added after open. Startup aliases are a fast path;
+    /// a miss is checked against the query's current dictionary snapshot.
     ///
     /// This is the *"sharp edge"* of `multi-db-composition.md` §1.2. SQL
     /// `DISTINCT` runs over raw ids, so an entity present in both files
@@ -320,14 +321,35 @@ impl Store {
         if self.attachments.is_empty() {
             return Ok(id);
         }
-        Ok(self
+        if let Some(canonical) = self
             .conn
             // Cache the compiled statement, never the row or a negative lookup.
             // Composed label scans perform this lookup for every current label.
             .prepare_cached("SELECT canonical_id FROM term_alias WHERE alias_id = ?1")?
             .query_row(params![id], |r| r.get(0))
             .optional()?
-            .unwrap_or(id))
+        {
+            return Ok(canonical);
+        }
+        // The startup table cannot contain terms interned after this connection
+        // opened. Resolve a miss against the current dictionary snapshot using
+        // the remote primary key and local unique IRI index. Do not memoize a
+        // miss: the local spelling may be interned by the very next commit.
+        for attachment in &self.attachments {
+            let sql = format!(
+                "SELECT l.id FROM {}.terms r JOIN main.terms l ON l.iri = r.iri WHERE r.id = ?1",
+                attachment.alias
+            );
+            if let Some(canonical) = self
+                .conn
+                .prepare_cached(&sql)?
+                .query_row(params![id], |row| row.get(0))
+                .optional()?
+            {
+                return Ok(canonical);
+            }
+        }
+        Ok(id)
     }
 
     /// Look up a term id by IRI, returning None if not interned.
