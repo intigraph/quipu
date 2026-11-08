@@ -2405,6 +2405,22 @@ atomically with the assertions. Lost acknowledgements reconcile that receipt
 before advancing the scratch cursor. Final freshness has its own atomic receipt.
 These local receipts and scratch tables are excluded from graph sharing.
 
+Each publication page is resolved and digested in the private store before
+writer admission. The live store mutex covers revalidation, term remapping and
+the normal atomic transaction; private cursor acknowledgement follows after
+that mutex is released. Write admission remains owned through acknowledgement
+and deferred work. Final publication checks the exact contiguous receipt names
+and digests for cumulative output from every pass before publishing freshness.
+
+Payload-free `write_stage_start`, `write_stage_end` and summary log records
+correlate `/knot` and OWL publication stages with the server request ID when
+available. Durations include admission, blocking dispatch, store wait and held
+time, private preparation and acknowledgement, and transaction stages. Store
+wait includes any signed-request attestation settlement, which has its own
+stage. Totals overlap and must not be added together. An interrupted stage or
+missing summary is incomplete evidence. These records neither enable scheduled
+materialisation nor establish a production latency bound.
+
 The next scheduled invocation resumes a compatible unfinished job, including an
 unfinished pass whose private transaction rolled back. Identity, ontology or
 engine mismatch, retractions, unreadable state, conflicting receipts or exceeded

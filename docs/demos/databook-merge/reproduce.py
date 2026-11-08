@@ -8,12 +8,14 @@ import tempfile
 before, after = (str(Path(value).resolve()) for value in sys.argv[1:3])
 
 
-def run(args, expected=0, input=None):
+def run(args, expected=0, input=None, diagnostic=None):
     result = subprocess.run(args, input=input, text=True, capture_output=True)
     print(result.stdout, end="")
     print(result.stderr, end="")
     print(f"exit {result.returncode}")
     assert result.returncode == expected, "unexpected demonstration result"
+    if diagnostic is not None:
+        assert diagnostic in result.stderr, "unexpected refusal diagnostic"
 
 
 def document(value):
@@ -65,7 +67,12 @@ with tempfile.TemporaryDirectory() as directory:
     print("AFTER: quipu git-merge theirs (declared DataBook, functional conflict)")
     run([after, "git-merge", "theirs"], expected=2)
     print("BEFORE: installed older CLI, same DataBook mergetool command")
-    run([before, "git-mergetool", "people.databook.md", "--by", "reviewer"], expected=2)
+    # A pendant-aware baseline recognizes the verb and refuses this path (exit 1);
+    # the earlier unknown-command baseline returned 2. Require its exact reason.
+    refusal = "pendant mergetool refused: git-mergetool takes a pendant's repository-relative export.nt"
+    print(f"BEFORE expected refusal (exit 1): {refusal}")
+    run([before, "git-mergetool", "people.databook.md", "--by", "reviewer"],
+        expected=1, diagnostic=refusal)
     print("AFTER: quipu git-mergetool people.databook.md --by reviewer")
     print("input: graph:0/conflict:0 theirs")
     run([after, "git-mergetool", "people.databook.md", "--by", "reviewer"],

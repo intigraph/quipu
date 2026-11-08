@@ -49,15 +49,25 @@ pub(crate) fn reset_at_startup(store: &Store) {
 /// — the failure it exists near. It also cannot reset the FILE (see
 /// [`reset_at_startup`]); it keeps frames moving into the database, and reports
 /// when it is blocked instead of logging a success it did not achieve.
-pub(crate) fn spawn_periodic_checkpoint(store: SharedStore) {
+pub(crate) fn spawn_periodic_checkpoint(store: &SharedStore) {
+    let checkpointer = match store.lock().passive_checkpointer() {
+        Ok(Some(checkpointer)) => checkpointer,
+        Ok(None) => return,
+        Err(error) => {
+            eprintln!("wal: independent maintenance unavailable: {error}");
+            return;
+        }
+    };
+    // The maintenance task owns only its connection, never SharedStore. No
+    // checkpoint I/O or fsync can queue HTTP writers behind the Rust mutex.
     tokio::spawn(async move {
+        let mut checkpointer = checkpointer;
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
         loop {
             tick.tick().await;
-            let store = store.clone();
-            let _ = tokio::task::spawn_blocking(move || {
-                let store = store.lock();
-                match store.checkpoint_wal_passive() {
+            let result = tokio::task::spawn_blocking(move || {
+                let started = std::time::Instant::now();
+                match checkpointer.checkpoint() {
                     Ok(o) if o.fully_retired() => {}
                     Ok(o) => eprintln!(
                         "wal: checkpoint did NOT retire the log — {} of {} pages moved{} \
@@ -68,8 +78,20 @@ pub(crate) fn spawn_periodic_checkpoint(store: SharedStore) {
                     ),
                     Err(e) => eprintln!("wal: checkpoint failed: {e}"),
                 }
+                eprintln!(
+                    "wal: passive checkpoint elapsed_ms={}",
+                    started.elapsed().as_millis()
+                );
+                checkpointer
             })
             .await;
+            match result {
+                Ok(returned) => checkpointer = returned,
+                Err(error) => {
+                    eprintln!("wal: maintenance worker stopped: {error}");
+                    return;
+                }
+            }
         }
     });
 }
