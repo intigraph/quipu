@@ -64,7 +64,13 @@ head or body string, it resolves the full IRI using this precedence:
 
 1. **Per-rule** `rule:prefix` property (highest priority)
 2. **Ruleset** `rule:defaultPrefix` property
-3. **Fallback** `http://quipu.local/default/` (lowest priority)
+3. **Caller-selected fallback** (lowest priority): the configured store namespace
+   for CLI/server calls, or the explicit library argument.
+
+Without a non-empty prefix, bare predicates and named IRI terms refuse; fully
+qualified rules remain valid. The parser never guesses a namespace. Existing
+per-rule and ruleset declarations still take precedence; no store namespace is
+changed by parsing or evaluating rules.
 
 ### Atoms and Terms
 

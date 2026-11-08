@@ -151,6 +151,7 @@ impl Store {
                 Ok(()) => true,
                 Err(Error::CannotVerify(message)) if context_budget_exhausted(&message) => {
                     facts.truncate(base_len);
+                    self.observed_context_exhausted(&message);
                     self.poststate_profile.check_value_fallbacks += 1;
                     false
                 }
@@ -158,7 +159,10 @@ impl Store {
             };
             self.poststate_profile.check_facts += facts.len() as u64;
             let data = timed!(check_encode, self.cardinality_context(&facts))?;
-            let feedback = timed!(check_validate, crate::validate_shapes(shapes, &data))?;
+            self.observed_validator_input(shapes, &data, complete_values, false);
+            let feedback = timed!(check_validate, crate::validate_shapes(shapes, &data));
+            self.observed_validator_result(&feedback);
+            let feedback = feedback?;
             let issues: Vec<_> = feedback
                 .results
                 .iter()
@@ -212,6 +216,7 @@ impl Store {
             Err(Error::CannotVerify(message))
                 if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
             {
+                self.observed_context_exhausted(&message);
                 Ok(())
             }
             result => result,

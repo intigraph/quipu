@@ -75,6 +75,7 @@ impl Store {
     #[cfg(feature = "owl")]
     pub fn invalidate_owl_cache(&mut self) {
         self.owl_cache = None;
+        self.owl_cache_source = None;
     }
 
     /// Close the prior value of a functional property so a new one can replace it
@@ -223,6 +224,8 @@ impl Store {
         }
         let stored = self.list_ontologies()?;
         if stored.is_empty() {
+            // This execution proved that no axioms feed the absent cache.
+            self.owl_cache_source = Some(super::validator_observation::cache_source(""));
             return Ok(());
         }
         let combined: String = stored
@@ -231,6 +234,7 @@ impl Store {
             .collect::<Vec<_>>()
             .join("\n");
         self.owl_cache = Some(Box::new(crate::owl::Ontology::from_turtle(&combined)?));
+        self.owl_cache_source = Some(super::validator_observation::cache_source(&combined));
         Ok(())
     }
 

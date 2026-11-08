@@ -40,6 +40,8 @@ impl Store {
             self.conn
                 .execute("UPDATE attest_switch SET enabled=enabled WHERE id=1", [])?;
             let (value, write) = body(self, &ts)?;
+            #[cfg(test)]
+            super::census_fixture::capture(self, write.is_some(), &ts)?;
             let Some((graph_iri, actor, datums)) = write else {
                 return Ok((value, None));
             };

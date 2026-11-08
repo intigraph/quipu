@@ -13,7 +13,9 @@ use rusqlite::{Connection, Error, ffi};
 
 /// `RELEASE name`, rolling back immediately if the commit was refused.
 pub(crate) fn release(conn: &Connection, name: &str) -> rusqlite::Result<()> {
-    settle(conn, conn.execute_batch(&format!("RELEASE {name}")))
+    crate::write_observation::observe(crate::write_observation::Stage::Release, || {
+        settle(conn, conn.execute_batch(&format!("RELEASE {name}")))
+    })
 }
 
 /// `ROLLBACK TO name; RELEASE name` (a write scope's error path), with the

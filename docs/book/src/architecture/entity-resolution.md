@@ -1,5 +1,33 @@
 # Entity Resolution
 
+## Typed write admission
+
+When episode resolution and **strict mode** are enabled, a new entity with a near name
+and the same asserted class as a stored entity requires adjudication before
+commit. An omitted type cannot bypass admission. Existing IRIs remain writable; this does
+not merge existing fragments or rewrite identifiers. The configured threshold
+still controls name similarity. Type filtering precedes admission truncation,
+so unrelated kinds cannot hide a compatible match outside the displayed top-k.
+
+Container numbers are identities rather than fuzzy spelling: `CT101`, `ct-101`
+and `CT-101-guest` require a decision, while `ct-101` and `ct-102` are distinct.
+Opaque work/commit IDs and qualified code symbols retain their separate roles.
+Aliases in one incoming batch are checked before either entity is stored.
+
+Reuse the existing entity IRI/name, or declare its exact IRI in `distinct_from`
+with a nonempty `properties.distinctReason`. The reason and distinction are
+stored atomically with the entity. Existing recorded distinctions remain valid.
+No similarity score establishes identity automatically. If the store changes
+during the read/commit interval, typed admission must be recomputed; a stale
+advisory result cannot admit a concurrent duplicate. Hint mode remains advisory;
+this does not silently enable strict mode. A measured dry run is required before
+changing the governed endpoint's configuration.
+
+The regression suite checks refusal without a new transaction, different
+container IDs/kinds, safe reassertion and a reasoned distinct write. Precision
+measurements must identify the sampled population and unadjudicated pairs;
+a numeric-ID sample does not establish general semantic precision.
+
 > **Implementation status (2026-08-12):** ✅ **Built.** The resolver lives in
 > `src/resolution.rs` (embedding + Jaro-Winkler matching, dedup by IRI,
 > `top_k`); `[quipu.resolution]` config is parsed and applied; episode ingest

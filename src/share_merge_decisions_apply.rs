@@ -40,8 +40,8 @@ fn plan_pair_inner(
     if reviewer.trim().is_empty() {
         return Err(Error::InvalidValue("a reviewer is required".into()));
     }
-    let scoped = file.schema == DECISIONS_SCHEMA;
-    if !scoped && file.schema != DECISIONS_SCHEMA_V1 {
+    let scoped = file.schema == DECISIONS_SCHEMA || file.schema == DECISIONS_SCHEMA_V2;
+    if !scoped && file.schema != DECISIONS_SCHEMA_V1 && file.schema != DECISIONS_SCHEMA_WHOLE {
         return Err(Error::InvalidValue(format!(
             "not a merge decisions file: schema {:?}",
             file.schema
@@ -70,12 +70,22 @@ fn plan_pair_inner(
     if !scoped && file.local_graph_hash != i.ours_hash {
         return Err(stale("ROOT"));
     }
-    let (mut merged, conflicts) = merge_graphs(
-        &i.base.graph,
-        &i.ours,
-        &i.incoming.graph,
-        &i.incoming.shapes,
-    )?;
+    let (mut merged, conflicts) =
+        if file.schema == DECISIONS_SCHEMA || file.schema == DECISIONS_SCHEMA_WHOLE {
+            crate::merge_review::merge(
+                &i.base.graph,
+                &i.ours,
+                &i.incoming.graph,
+                &i.incoming.shapes,
+            )?
+        } else {
+            merge_graphs(
+                &i.base.graph,
+                &i.ours,
+                &i.incoming.graph,
+                &i.incoming.shapes,
+            )?
+        };
     // Same conflicts, in any row order: an operator may sort the file.
     let same = conflicts.len() == file.rows.len()
         && conflicts
@@ -97,8 +107,19 @@ fn plan_pair_inner(
     let mut applied = Vec::new();
     for row in &file.rows {
         let r = &row.record;
+        if (file.schema == DECISIONS_SCHEMA || file.schema == DECISIONS_SCHEMA_WHOLE)
+            && row.kind != Some(kind(r))
+        {
+            return Err(stale("a report kind"));
+        }
         let values = chosen(row)?;
-        if values.len() > r.max_count {
+        if !matches!(
+            row.decision.as_ref(),
+            Some(Decision::Choose {
+                choose: Side::Continue
+            })
+        ) && values.len() > r.max_count
+        {
             return Err(Error::InvalidValue(format!(
                 "row {} decides {} values for {} {}, above sh:maxCount {}; nothing was written",
                 row.id,
@@ -165,6 +186,9 @@ fn plan_pair_inner(
             .iter()
             .map(|row| {
                 let decision = match &row.decision {
+                    Some(Decision::Choose {
+                        choose: Side::Continue,
+                    }) => CoreDecision::Continue,
                     Some(Decision::Choose { choose: Side::Ours }) => CoreDecision::Ours,
                     Some(Decision::Choose {
                         choose: Side::Theirs,

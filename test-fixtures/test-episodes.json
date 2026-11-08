@@ -358,7 +358,6 @@
       {
         "name": "design-quipu-ui",
         "type": "DesignDoc",
-        "description": "Quipu UI design document — web components for knowledge graph exploration",
         "properties": { "status": "accepted", "author": "owen" }
       }
     ],

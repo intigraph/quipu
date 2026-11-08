@@ -59,6 +59,26 @@ where
     write_blocking_with(&WRITE_ADMISSION, f).await
 }
 
+/// Same write admission, with a single-assignment observation of its grant.
+pub(crate) async fn write_blocking_observed<T, F>(
+    stamp: AdmissionStamp,
+    f: F,
+) -> Result<T, AppError>
+where
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+    T: Send + 'static,
+{
+    admit_with_deadline_observed(
+        &WRITE_ADMISSION,
+        "write",
+        request_budget(),
+        std::time::Instant::now(),
+        Some(stamp),
+        f,
+    )
+    .await
+}
+
 pub(crate) async fn write_blocking_with<T, F>(
     admission: &'static tokio::sync::Semaphore,
     f: F,

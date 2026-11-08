@@ -1,0 +1,9 @@
+fixture mutant rejected: TrustClientResult
+fixture: 3 durable native receipts, 1 drain hint, 3 unique exports, repeat drain 0 exports
+fixture mutant rejected: ReservationIsCommit
+fixture mutant rejected: PublishInnerRelease
+fixture mutant rejected: ReceiptIsData
+fixture mutant rejected: OneWakeOneWrite
+fixture mutant rejected: VolatileOnly
+fixture mutant rejected: PropagateObserverError
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 3971 filtered out; finished in 0.93s

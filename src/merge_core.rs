@@ -26,6 +26,8 @@ use serde::Serialize;
 
 use crate::error::{Error, Result};
 
+#[path = "merge_core_selection.rs"]
+pub(crate) mod selection;
 // The source-stage census has no production writer binding yet. Compile it
 // with its controls until that binding is implemented; do not ship inert code
 // or suppress dead-code diagnostics across the production merge core.
@@ -50,6 +52,7 @@ impl Card {
 }
 
 /// How a slot changed relative to base.
+#[cfg_attr(test, derive(serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum Change {
@@ -73,12 +76,15 @@ impl Change {
 
 /// An operator decision for one slot (merge-reconcile.md §3.1, plus R2's
 /// `continue` for a convergent slot).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(bound(deserialize = "V: Ord + serde::Deserialize<'de>"))]
+#[serde(tag = "choose", content = "values", rename_all = "lowercase")]
 pub(crate) enum Decision<V> {
     Ours,
     Theirs,
     Base,
     Both,
+    #[serde(rename = "value")]
     Values(BTreeSet<V>),
     // Explicit convergent decisions arrive with the decisions schema slice.
     #[cfg_attr(not(test), allow(dead_code))]
