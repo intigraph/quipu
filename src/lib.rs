@@ -60,6 +60,10 @@ mod merge_lists;
 #[cfg(not(target_arch = "wasm32"))]
 mod merge_pending;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod merge_plan;
+#[cfg(not(target_arch = "wasm32"))]
+mod merge_plan_gate;
+#[cfg(not(target_arch = "wasm32"))]
 mod merge_profile;
 /// One way to reconcile a failed merge: shared decisions view, resolve and layout (aegis-k7l).
 pub mod merge_reconcile;
@@ -113,6 +117,7 @@ pub mod explain;
 pub mod owl;
 // Reactive OWL rides the observer infrastructure, which is gated behind
 // `reactive-reasoner`; it needs both features.
+mod change_risk;
 #[cfg(all(feature = "owl", feature = "reactive-reasoner"))]
 mod owl_reactive;
 pub mod pack;
