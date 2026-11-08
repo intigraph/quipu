@@ -23,6 +23,7 @@ fn grant(store: &Store, name: &str, graph: &str) -> WriteGrant {
         valid_until: crate::time::epoch_secs() + 3600,
         revision: 1,
         revoked: false,
+        mint_scope: None,
     }
 }
 
