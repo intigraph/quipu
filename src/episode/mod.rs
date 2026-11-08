@@ -18,6 +18,7 @@ use crate::shacl;
 use crate::{namespace, store::Store};
 
 pub(crate) mod address;
+use address::validate_node_name;
 mod commit;
 mod descriptions;
 mod edge_predicate;
@@ -744,34 +745,6 @@ fn node_term(local: &str, base_ns: &str) -> String {
         format!("<{base_ns}{local}>")
     } else {
         format!("aegis:{local}")
-    }
-}
-
-/// Slash-bearing names are deliberate canonical paths, not labels to sanitize.
-/// Keep the accepted grammar narrow so permitting `/` cannot introduce schemes,
-/// traversal, query/fragment syntax, whitespace, or Turtle escapes.
-fn validate_node_name(name: &str) -> Result<()> {
-    if !name.contains('/') {
-        return Ok(());
-    }
-    let valid = !name.starts_with('/')
-        && !name.ends_with('/')
-        && name.split('/').all(|segment| {
-            !segment.is_empty()
-                && segment != "."
-                && segment != ".."
-                && segment
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
-        });
-    if valid {
-        Ok(())
-    } else {
-        Err(crate::error::Error::InvalidValue(format!(
-            "node name '{name}' is not a safe relative IRI path — slash paths must use \
-             non-empty segments containing only ASCII letters, digits, '-', '_' or '.', \
-             and may not contain '.' or '..' segments"
-        )))
     }
 }
 

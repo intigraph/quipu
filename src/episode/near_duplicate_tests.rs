@@ -170,11 +170,7 @@ fn rt9f_numeric_aliases_ignore_fuzzy_threshold() {
     let ns = crate::namespace::DEFAULT_BASE_NS;
     for (left, right) in [("CT101", "CT-101-guest"), ("ct-1", "ct-0000001-guest")] {
         for (first, second) in [(left, right), (right, left)] {
-            for kind in [
-                "LXCContainer",
-                "quechua:LXCContainer",
-                "https://w3id.org/intigraph/camayoc/core/ns#LXCContainer",
-            ] {
+            for kind in ["LXCContainer", "quechua:LXCContainer"] {
                 for threshold in [0.85, 0.99] {
                     for batch in [false, true] {
                         let mut store = crate::Store::open_in_memory().unwrap();

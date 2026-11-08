@@ -14,7 +14,6 @@ pub(crate) fn local_name<'a>(ntype: &'a str, base: &str) -> &'a str {
     ntype
         .strip_prefix(QUECHUA_TYPE_PREFIX)
         .or_else(|| ntype.strip_prefix(namespace::QUECHUA))
-        .or_else(|| ntype.strip_prefix("https://w3id.org/intigraph/camayoc/core/ns#"))
         .or_else(|| ntype.strip_prefix(base))
         .unwrap_or(ntype)
 }

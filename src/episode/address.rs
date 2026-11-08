@@ -4,6 +4,34 @@ use std::collections::HashMap;
 use super::Node;
 use crate::{Result, error::Error};
 
+/// Slash-bearing names are deliberate canonical paths, not labels to sanitize.
+/// Keep the accepted grammar narrow so permitting `/` cannot introduce schemes,
+/// traversal, query/fragment syntax, whitespace, or Turtle escapes.
+pub(super) fn validate_node_name(name: &str) -> Result<()> {
+    if !name.contains('/') {
+        return Ok(());
+    }
+    let valid = !name.starts_with('/')
+        && !name.ends_with('/')
+        && name.split('/').all(|segment| {
+            !segment.is_empty()
+                && segment != "."
+                && segment != ".."
+                && segment
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(crate::error::Error::InvalidValue(format!(
+            "node name '{name}' is not a safe relative IRI path — slash paths must use \
+             non-empty segments containing only ASCII letters, digits, '-', '_' or '.', \
+             and may not contain '.' or '..' segments"
+        )))
+    }
+}
+
 pub(super) fn absolute_syntax(iri: &str) -> bool {
     iri.split_once(':').is_some_and(|(scheme, tail)| {
         scheme.eq_ignore_ascii_case("urn")

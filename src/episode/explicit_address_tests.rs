@@ -248,7 +248,8 @@ fn foreign_work_item_spelling_does_not_acquire_the_opaque_role() {
     let base = namespace::DEFAULT_BASE_NS;
     for (kind, permitted) in [
         ("https://example.org/unrelated#WorkItem", false),
-        ("https://w3id.org/intigraph/camayoc/core/ns#WorkItem", true),
+        ("https://example.org/another#WorkItem", false),
+        ("WorkItem", true),
     ] {
         let mut store = Store::open_in_memory_test_ns().unwrap();
         let mut first = payload();
