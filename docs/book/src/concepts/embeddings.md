@@ -89,6 +89,12 @@ this recipe remain importable; local indexing does not attest which model the
 publisher intended. Re-importing with a real provider recomputes eligible
 vectors instead of treating matching text as proof of model identity.
 
+For the explicitly installed default model, the native loader also checks the
+model and tokenizer buffers against the installation's compiled pins before
+runtime initialization. A cache verification followed by a changed file is
+refused. Ordinary commands still do not download model assets, and explicit
+custom model paths keep their own recipe and the selected runtime bootstrap.
+
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.
 

@@ -40,6 +40,26 @@ impl OnnxEmbeddingProvider {
         dim: usize,
         max_seq_len: usize,
     ) -> Result<Self> {
+        Self::load_checked(model_path, tokenizer_path, dim, max_seq_len, None)
+    }
+
+    pub(crate) fn load_pinned(
+        model_path: &Path,
+        tokenizer_path: &Path,
+        dim: usize,
+        max_seq_len: usize,
+        expected: &crate::embedding_runtime::EmbeddingRecipe,
+    ) -> Result<Self> {
+        Self::load_checked(model_path, tokenizer_path, dim, max_seq_len, Some(expected))
+    }
+
+    fn load_checked(
+        model_path: &Path,
+        tokenizer_path: &Path,
+        dim: usize,
+        max_seq_len: usize,
+        expected: Option<&crate::embedding_runtime::EmbeddingRecipe>,
+    ) -> Result<Self> {
         // Hash and load the SAME buffers: a path reopened after hashing is
         // not proof of the bytes consumed by the runtime.
         let model_bytes = std::fs::read(model_path)
@@ -55,6 +75,11 @@ impl OnnxEmbeddingProvider {
             &tokenizer_bytes,
             dim,
         )?;
+        if expected.is_some_and(|expected| expected != &recipe) {
+            return Err(crate::Error::InvalidValue(
+                "installed default consumed-buffer pin mismatch; refusing inference".into(),
+            ));
+        }
         // Device selection must precede this bootstrap. A caller may supply a
         // verified GPU core; the bundled default is only the CPU fallback.
         #[cfg(feature = "bundled-onnx")]
@@ -270,6 +295,42 @@ impl EmbeddingProvider for OnnxEmbeddingProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn installed_default_rechecks_consumed_model_and_tokenizer_before_runtime() {
+        for replaced in ["model.onnx", "tokenizer.json"] {
+            let dir = tempfile::tempdir().unwrap();
+            let model = dir.path().join("model.onnx");
+            let tokenizer = dir.path().join("tokenizer.json");
+            std::fs::write(&model, b"model0").unwrap();
+            std::fs::write(&tokenizer, b"tokens0").unwrap();
+            let expected = crate::embedding_runtime::EmbeddingRecipe::from_bytes(
+                "model.onnx",
+                b"model0",
+                b"tokens0",
+                384,
+            )
+            .unwrap();
+            // A prior path verification cannot attest bytes replaced before
+            // the runtime reads them, even when the file length is unchanged.
+            std::fs::write(
+                dir.path().join(replaced),
+                if replaced == "model.onnx" {
+                    &b"model1"[..]
+                } else {
+                    &b"tokens1"[..]
+                },
+            )
+            .unwrap();
+            let error = OnnxEmbeddingProvider::load_pinned(&model, &tokenizer, 384, 256, &expected)
+                .err()
+                .expect("replaced input must be refused before ORT bootstrap");
+            assert!(
+                error.to_string().contains("consumed-buffer pin mismatch"),
+                "{error}"
+            );
+        }
+    }
 
     #[test]
     fn fixed_model_padding_is_replaced_with_batch_longest() {
