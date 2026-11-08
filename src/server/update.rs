@@ -458,6 +458,9 @@ fn insert_fact(
     Ok(())
 }
 
+#[path = "writer_targets.rs"]
+pub(super) mod writer_targets;
+
 // Write gates (aegis-1hfyk5); declared here because server.rs is at the size cap.
 #[path = "update_commit.rs"]
 pub(super) mod update_commit;

@@ -35,6 +35,18 @@ fn public_defaults_and_invalid_configuration() {
 }
 
 #[test]
+fn namespace_prefix_accepts_internal_hyphens_without_accepting_invalid_syntax() {
+    let mut store = Store::open_in_memory_test_ns().unwrap();
+    let mut cfg = config();
+    cfg.namespaces[0].prefix = "fixture-infra".into();
+    configure(&mut store, &cfg).unwrap();
+    for prefix in ["-invalid", "invalid space", "invalid:prefix", ""] {
+        cfg.namespaces[0].prefix = prefix.into();
+        assert!(configure(&mut store, &cfg).is_err());
+    }
+}
+
+#[test]
 fn registry_survives_reopen_and_does_not_declassify_when_config_is_absent() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("registry.db");

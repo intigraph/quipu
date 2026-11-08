@@ -7,6 +7,10 @@ use axum::{http::StatusCode, response::IntoResponse};
 #[path = "replication_guard_tests.rs"]
 mod replication_guard_tests;
 
+#[cfg(test)]
+#[path = "memory_credential_tests.rs"]
+mod memory_credential_tests;
+
 pub(crate) struct Config {
     pub auth_policy: quipu::http_auth::BearerPolicy,
     pub session_keys: quipu::http_auth::SessionKeyPolicy,
@@ -42,6 +46,16 @@ pub(crate) fn layer<S: Clone + Send + Sync + 'static>(
                     let is_write = quipu::http_auth::is_write_request(&path, req.method().as_str());
                     if let Some(replica) = &replica_config && is_write {
                         return replica::write_refusal(replica, &path);
+                    }
+                    // The private worker guard alone creates this opaque read
+                    // identity, after the primary verified and spent its nonce.
+                    // Keep the original attestation; never verify/spend it twice.
+                    if !is_write && let Some(identity) = super::process_pool::signed_handoff::identity(&req) {
+                        let mut req = req;
+                        req.extensions_mut().insert(quipu::http_auth::AuthenticatedPrincipal::attested(&identity.principal));
+                        let mut response = auth::run_identified(Some(identity), next.run(req)).await;
+                        response.extensions_mut().insert(quipu::request_usage::AuthOutcome::AuthenticatedAttested);
+                        return response;
                     }
                     // A relay serves its children's streams and challenges,
                     // which are write-class, and refuses every other write.

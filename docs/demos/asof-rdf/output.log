@@ -1,0 +1,10 @@
+Script started on 2026-11-05 23:20:32-05:00 [COMMAND="python3 docs/demos/asof-rdf/demo.py" <not executed on terminal>]
+Candidate binary SHA256: 31d3bbe80fc5cc4585ee4f0101a1bfc694429be6fa1f502d486591aecc1dc88f
+Offline fixture only: one retained record, no network, no configured database.
+corrupt-digest exit= 2 completion= False
+complete-cut exit= 0 completion= True
+Observed receipt: {"chunks": 1, "frames": 1, "input_bytes": 727, "output_bytes": 139, "output_sha256": "16cd3ce46268153b8e6869331c76f0a51349de6f74f7acbd371b5db7ca0b5d26", "source_tx": 3}
+RDF chunk contains the retained label: offline
+PASS: corrupt input refused; complete cut converted; no ambient database created.
+
+Script done on 2026-11-05 23:20:33-05:00 [COMMAND_EXIT_CODE="0"]

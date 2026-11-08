@@ -4,6 +4,20 @@
 
 Every `quipu` command path with its syntax, generated from the same catalogue that admits arguments, so it cannot list a command the binary refuses or miss one it accepts. `qp` is the same binary. Every command also takes `--db <path>` (default `.bobbin/quipu/quipu.db`). For explanations and examples see [CLI Commands](cli.md); `man quipu-<command>` prints the same syntax.
 
+## `qp competency`
+
+Inspect pendant competency contracts without opening a store.
+
+Subcommands: `competency lint`.
+
+### `qp competency lint`
+
+Validate competency.toml schema and query/command syntax offline; execute nothing.
+
+```text
+qp competency lint <pendant>
+```
+
 ## `qp store`
 
 Inspect native ownership, or explicitly adopt or restore a disk store.
@@ -454,6 +468,8 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+- `--read-only`: Export a cold local snapshot without writes; refuses sidecars and attachments.
+
 ## `qp databook`
 
 Export a graph as a DataBook, or import a DataBook's graph data.
@@ -602,6 +618,32 @@ qp search <query>
 
 - `--all-graphs`: Search all permitted graphs explicitly.
 
+## `qp model`
+
+Manage the pinned default embedding model.
+
+Subcommands: `model install`, `model backfill`.
+
+### `qp model install`
+
+Download and verify the default embedding model and tokenizer.
+
+```text
+qp model install
+```
+
+### `qp model backfill`
+
+Embed one bounded batch of existing ROOT subjects.
+
+```text
+qp model backfill
+```
+
+- `--batch-size <VALUE>`: Number of entries per indexing batch.
+
+- `--after <VALUE>`: Resume after this cursor.
+
 ## `qp search-index`
 
 Report, backfill or drop the search indexes.
@@ -648,7 +690,7 @@ qp search-index drop
 
 ## `qp doctor`
 
-Report graph-label drift and recommended floors.
+Report graph-label drift or search backend readiness.
 
 ```text
 qp doctor
@@ -660,6 +702,14 @@ Report graph-label drift and recommended floors.
 
 ```text
 qp doctor labels
+```
+
+### `qp doctor search`
+
+Report search backend readiness and remedies.
+
+```text
+qp doctor search
 ```
 
 ## `qp pack`
@@ -1036,6 +1086,20 @@ qp follow
 
 - `--bootstrap-only`: Bootstrap a follower and exit without polling.
 
+## `qp asof-rdf`
+
+Convert one retained as-of share into bounded coherent RDF chunks offline.
+
+```text
+qp asof-rdf
+```
+
+- `--binding <VALUE>`: Private JSON cut/profile binding and finite resource limits.
+
+- `--frames <VALUE>`: Private retained event/data JSONL file, with exact transport data strings.
+
+- `--scratch <VALUE>`: Empty canonical private directory matching SQLITE_TMPDIR.
+
 ## `qp acquire`
 
 Measure the bounded scope of a direct-main graph acquisition.
@@ -1081,6 +1145,16 @@ Merge pendants from Git snapshots and stop before committing.
 ```text
 qp git-merge <ref>
 ```
+
+## `qp git-mergetool`
+
+Interactively resolve a pendant using the standard merge layout.
+
+```text
+qp git-mergetool <pendant-export.nt>
+```
+
+- `--by <VALUE>`: Identity recording a resolution.
 
 ### `qp git-merge show`
 

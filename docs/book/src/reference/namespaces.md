@@ -98,6 +98,29 @@ Markdown may link directly to an IRI; frontmatter `entities:` may list IRIs;
 code comments may use `quipu: prefix:key` with their registry context. These
 references can feed explicit Bobbin/anchor links; no reactor is launched.
 
+## Restricted automation
+
+Owner-local scoped writer enrollment can grant `entity_ref_mint` as a mint-only
+operation. Its `mint_scope` binds the exact namespace prefix, retained base IRI
+and nonempty type-IRI allowlist, in addition to the existing credential,
+principal, graph instance, expiry and revocation checks. The request must select
+an explicit graph and `action: mint`. Resolve/verify and broader mutations do
+not inherit this authority. The namespace still must be explicitly applied.
+
+This is off by default: an ordinary named credential, a registered namespace,
+or an existing graph-write grant is insufficient. Owner enrollment uses the
+existing protected local `Store::writer_grant_apply` API; there is no HTTP/MCP
+enrollment endpoint. Do not put an automation credential in the operator lane.
+Missing or mismatched selectors refuse before key allocation or convergence.
+Repeating a known key still requires a current grant. A mint-only grant cannot
+also carry update, episode, knot or set authority. Existing grant JSON without
+`mint_scope` remains compatible and gains no mint authority.
+
+The data commit retains the existing authority barrier and graph generation
+pin. Multiple narrow mint grants can authorize separate selectors on the same
+graph; one grant never acquires another namespace or type by inference. This
+feature changes no namespace, issues no credential and enables no writer.
+
 ## Verify a key reference
 
 Key-minting namespaces bind an IRI to its declared type and ordered key values.

@@ -1,0 +1,19 @@
+Script started on 2026-11-08 03:20:47-05:00 [COMMAND="bash docs/demos/client-resolver-observation/run.sh" <not executed on terminal>]
+Before c2e3a34979ba4d34144363e01b2350ab623231af: resolver artifact/consumer module absent (source check only).
+After: actual isolated writer, signed resolver evidence and refusal controls.
+
+running 5 tests
+unexecuted validator: bound=Unknown; empty observation scope refused
+.actual graph=ROOT id=0, signed=urn:graph:a: Err(CannotVerify("quipu-changeset-v1: resolver observation binding supports actual ROOT only"))
+actual graph=urn:graph:a id=2, signed=ROOT: Err(CannotVerify("quipu-changeset-v1: resolver observation binding supports actual ROOT only"))
+actual graph=urn:graph:a id=2, signed=urn:graph:b: Err(CannotVerify("quipu-changeset-v1: resolver observation binding supports actual ROOT only"))
+actual graph=urn:graph:b id=3, signed=urn:graph:a: Err(CannotVerify("quipu-changeset-v1: resolver observation binding supports actual ROOT only"))
+.actual writer: raw_conforms=Some(true), gate_error=false, bound=Conforms
+actual writer: raw_conforms=Some(false), gate_error=true, bound=Violates
+..valid signature over substituted manifest: refused against actual observation
+re-signed unrelated candidate: refused against actual staged graph
+.
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 3779 filtered out; finished in 1.01s
+
+
+Script done on 2026-11-08 03:21:29-05:00 [COMMAND_EXIT_CODE="0"]

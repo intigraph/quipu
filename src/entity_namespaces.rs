@@ -79,7 +79,7 @@ impl Namespace {
             || !self
                 .prefix
                 .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             || !self.prefix.as_bytes()[0].is_ascii_alphabetic()
             || !["public", "private"].contains(&self.visibility.as_str())
             || !audience_valid(&self.audience)

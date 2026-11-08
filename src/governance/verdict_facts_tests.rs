@@ -109,6 +109,70 @@ fn a_denied_write_still_records_its_verdict() {
 }
 
 #[test]
+fn a_scoped_denied_write_preserves_server_audit_after_the_outer_rollback() {
+    use crate::writer_scope::{WriteGrant, WriteOperation};
+    use std::collections::BTreeSet;
+    let mut store = signed_store();
+    define_policy(&mut store, "http://ex/P1");
+    let graph = "urn:scoped:audit";
+    let g = store.graph_create(graph).unwrap();
+    store
+        .writer_grant_apply(&WriteGrant {
+            version: 1,
+            id: "audit".into(),
+            principal: "urn:principal:curator".into(),
+            credential_id: "audit".into(),
+            instance: store.writer_graph_instance(graph).unwrap(),
+            operations: BTreeSet::from([WriteOperation::Update]),
+            valid_from: 0,
+            valid_until: crate::time::epoch_secs() + 3600,
+            revision: 1,
+            revoked: false,
+            mint_scope: None,
+        })
+        .unwrap();
+    let bad = vec![datum(
+        &store,
+        "http://ex/scoped-doc",
+        RDF_TYPE,
+        Value::Ref(store.intern(DOC_TYPE).unwrap()),
+    )];
+    let identity = crate::transaction_auth::Identity {
+        principal: "urn:principal:curator".into(),
+        credential_id: Some("audit".into()),
+        auth_class: "scoped_named_bearer".into(),
+        attestation: Default::default(),
+    };
+    crate::transaction_auth::with_identity(Some(identity), || {
+        let result = store.with_writer_scope(
+            WriteOperation::Update,
+            &BTreeSet::from([graph.into()]),
+            |store| {
+                store.transact_to_graph(
+                    &bad,
+                    TS,
+                    Some("declared-actor"),
+                    Some("scoped-audit-fixture"),
+                    g,
+                )
+            },
+        );
+        assert!(matches!(result, Err(Error::PolicyDenied(_))));
+    });
+    assert!(store.current_facts_in_graph(g).unwrap().is_empty());
+    assert_eq!(verdict_outcomes(&store), vec!["unsatisfied".to_string()]);
+    let refusals: i64 = store
+        .conn
+        .query_row(
+            "SELECT count(*) FROM events WHERE type='write.refused'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(refusals, 1);
+}
+
+#[test]
 fn an_accepted_write_records_a_satisfied_verdict() {
     // The other half. Without this the gate could only ever prove what it
     // stopped, and "did this policy ever pass anything?" would need the absence

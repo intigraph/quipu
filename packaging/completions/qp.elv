@@ -21,6 +21,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help (see more with ''--help'')'
             cand --help 'Print help (see more with ''--help'')'
+            cand competency 'Inspect pendant competency contracts without opening a store'
             cand store 'Inspect native ownership, or explicitly adopt or restore a disk store'
             cand version 'Print the version and source commit'
             cand install-alias 'Add the qp alias beside the quipu binary'
@@ -52,8 +53,9 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand stats 'Show store statistics'
             cand prime 'Print the agent primer and a bounded, read-only summary of the store'
             cand search 'Search entities by keyword, vector or hybrid ranking'
+            cand model 'Manage the pinned default embedding model'
             cand search-index 'Report, backfill or drop the search indexes'
-            cand doctor 'Report graph-label drift and recommended floors'
+            cand doctor 'Report graph-label drift or search backend readiness'
             cand pack 'Export a graph, or the whole store, as a pack; or verify a pack'
             cand unpack 'Merge a published pack into a local graph'
             cand restore 'Replace the store with a full pack, binary or text'
@@ -64,8 +66,10 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand compose 'Compose verified packs into a named inspection dataset'
             cand changes 'Read whole transaction change pages from the change feed'
             cand follow 'Keep this database a read-only follower of a primary server'
+            cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
+            cand git-mergetool 'Interactively resolve a pendant using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
@@ -89,6 +93,17 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand events 'Read store event records such as refusals'
             cand fork 'Create, list, diff, drop or promote named forks of ROOT'
             cand audit 'Check traces, namespaces, replays and quarantine against policy'
+        }
+        &'qp;competency'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand lint 'Validate competency.toml schema and query/command syntax offline; execute nothing'
+        }
+        &'qp;competency;lint'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
         }
         &'qp;store'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -371,6 +386,7 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand --read-only 'Export a cold local snapshot without writes; refuses sidecars and attachments'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -458,6 +474,25 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;model'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand install 'Download and verify the default embedding model and tokenizer'
+            cand backfill 'Embed one bounded batch of existing ROOT subjects'
+        }
+        &'qp;model;install'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;model;backfill'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --batch-size 'Number of entries per indexing batch'
+            cand --after 'Resume after this cursor'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;search-index'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --kind 'Index or graph kind to select'
@@ -492,8 +527,14 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
             cand labels 'Report graph-label drift and recommended floors'
+            cand search 'Report search backend readiness and remedies'
         }
         &'qp;doctor;labels'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;doctor;search'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'
@@ -718,6 +759,14 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'qp;asof-rdf'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --binding 'Private JSON cut/profile binding and finite resource limits'
+            cand --frames 'Private retained event/data JSONL file, with exact transport data strings'
+            cand --scratch 'Empty canonical private directory matching SQLITE_TMPDIR'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'qp;acquire'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
@@ -739,6 +788,12 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --from 'Source vector backend'
             cand --to 'Destination vector backend'
             cand --dry-run 'Preview the operation without applying it'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;git-mergetool'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --by 'Identity recording a resolution'
             cand -h 'Print help'
             cand --help 'Print help'
         }
