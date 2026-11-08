@@ -96,6 +96,35 @@ fn failed_sqlite_open_releases_ownership_without_truncation() {
 }
 
 #[test]
+fn sqlite_transactions_and_connection_close_preserve_process_ownership() {
+    let _serial = PROCESS_TESTS.lock().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    for mode in ["DELETE", "WAL"] {
+        let path = dir.path().join(format!("sqlite-{mode}.db"));
+        let guard = WriterLock::acquire(path.to_str().unwrap()).unwrap();
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(&format!(
+                "PRAGMA journal_mode={mode}; CREATE TABLE sentinel(value INTEGER); \
+                 BEGIN IMMEDIATE; INSERT INTO sentinel VALUES (17); COMMIT;"
+            ))
+            .unwrap();
+        assert_eq!(
+            connection
+                .query_row("SELECT value FROM sentinel", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            17
+        );
+        child(&path, "refuse");
+        connection.close().unwrap();
+        // Closing SQLite's descriptor must not release the ownership guard.
+        child(&path, "refuse");
+        drop(guard);
+        child(&path, "open");
+    }
+}
+
+#[test]
 fn memory_and_uri_paths_cannot_create_an_unrelated_lock_file() {
     let _serial = PROCESS_TESTS.lock().unwrap();
     assert_eq!(

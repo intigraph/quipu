@@ -29,11 +29,44 @@ impl WriterLock {
             .truncate(false)
             .open(path)
             .map_err(|e| Error::Store(format!("cannot open writer lock for {path}: {e}")))?;
-        file.try_lock().map_err(|e| {
+        try_lock(&file).map_err(|e| {
             Error::Store(format!(
                 "cannot acquire single-writer lock for {path}: {e}; use the REST client for a served database"
             ))
         })?;
         Ok(Self { _file: file })
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn try_lock(file: &File) -> std::result::Result<(), std::fs::TryLockError> {
+    file.try_lock()
+}
+
+#[cfg(target_os = "macos")]
+fn try_lock(file: &File) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+
+    // Darwin flock conflicts with SQLite's POSIX transaction locks, including
+    // in this process. Reserve byte zero with an open-file-description lock;
+    // SQLite locks its database at PENDING_BYTE (0x40000000).
+    // OFD ownership survives unrelated SQLite descriptors closing, unlike a
+    // process-associated F_SETLK lock. Closing this guard releases ownership.
+    // Unsupported filesystems must refuse rather than open without a lock.
+    let lock = libc::flock {
+        l_start: 0,
+        l_len: 1,
+        l_pid: -1,
+        l_type: libc::F_WRLCK,
+        l_whence: libc::SEEK_SET as _,
+    };
+    // SAFETY: file owns a live descriptor and lock is initialized for this
+    // nonblocking call. The kernel does not retain the Rust reference.
+    #[allow(unsafe_code)] // Narrow FFI boundary; the safety argument is above.
+    let status = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) };
+    if status == -1 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
