@@ -229,7 +229,7 @@ fn is_delimiter(line: &str) -> bool {
 }
 
 /// Find the frontmatter: `(yaml, first body line, form)`.
-fn frontmatter(lines: &[&str]) -> Result<(String, usize, FrontmatterForm)> {
+pub(crate) fn frontmatter(lines: &[&str]) -> Result<(String, usize, FrontmatterForm)> {
     let first = lines.iter().position(|l| !l.trim().is_empty());
     if let Some(start) = first.filter(|&i| is_delimiter(lines[i])) {
         let end = (start + 1..lines.len())

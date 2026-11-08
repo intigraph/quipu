@@ -47,6 +47,8 @@ pub enum ReconcileFile {
     Share(DecisionFile),
     /// `quipu fork promote <name> --emit-decisions`.
     Fork(ForkDecisionFile),
+    /// A lossless DataBook Git merge; choices require immutable Git inputs.
+    DataBook(crate::git_merge::databook::File),
     /// A Git pendant merge's `<pendant>/decisions.json` (`quipu git-merge`).
     /// Resolved in the repository, because each choice rewrites the pack.
     Git {
@@ -144,6 +146,11 @@ impl ReconcileFile {
             .map_err(|e| Error::Store(format!("read {}: {e}", path.display())))?;
         let value: JsonValue = serde_json::from_slice(&bytes)
             .map_err(|e| Error::InvalidValue(format!("decisions file is not JSON: {e}")))?;
+        if value.get("schema").and_then(JsonValue::as_str)
+            == Some(crate::git_merge::databook::SCHEMA)
+        {
+            return crate::git_merge::databook::load_path(path).map(Self::DataBook);
+        }
         if !matches!(
             value.get("schema").and_then(JsonValue::as_str),
             Some(GIT_DECISIONS_SCHEMA | GIT_DECISIONS_SCHEMA_V1)
@@ -203,12 +210,14 @@ impl ReconcileFile {
             FORK_DECISIONS_SCHEMA | FORK_DECISIONS_SCHEMA_V1 => {
                 serde_json::from_value(value).map(Self::Fork).map_err(bad)
             }
-            GIT_DECISIONS_SCHEMA | GIT_DECISIONS_SCHEMA_V1 => Err(Error::InvalidValue(
-                "a Git pendant decisions.json is read from its pendant directory: \
+            GIT_DECISIONS_SCHEMA | GIT_DECISIONS_SCHEMA_V1 | crate::git_merge::databook::SCHEMA => {
+                Err(Error::InvalidValue(
+                    "a Git pendant decisions.json is read from its pendant directory: \
                  `quipu merge show <pendant>/decisions.json`, resolved with \
                  `quipu git-merge resolve <pendant> <key> --choose <choice> --by <who>`"
-                    .into(),
-            )),
+                        .into(),
+                ))
+            }
             other => Err(Error::InvalidValue(format!(
                 "not a merge decisions file: schema {other:?}"
             ))),
@@ -223,6 +232,7 @@ impl ReconcileFile {
         match self {
             Self::Share(f) => serde_json::to_value(f),
             Self::Fork(f) => serde_json::to_value(f),
+            Self::DataBook(f) => serde_json::to_value(f),
             Self::Git { decisions, .. } => serde_json::to_value(decisions),
         }
         .map_err(|e| Error::Serialization(e.to_string()))
@@ -326,6 +336,7 @@ impl ReconcileFile {
                     },
                 )
             }
+            Self::DataBook(f) => return f.view(),
             Self::Git {
                 decisions,
                 dir,
@@ -462,6 +473,12 @@ impl ReconcileFile {
                     &mut r.decided_by,
                     &mut r.decided_at,
                 )
+            }
+            Self::DataBook(f) => {
+                return Err(Error::InvalidValue(format!(
+                    "a DataBook choice rewrites the document: run `quipu git-merge resolve {} {row} --choose <choice> --by {by}`",
+                    f.document
+                )));
             }
             Self::Git { dir, .. } => {
                 return Err(Error::InvalidValue(format!(

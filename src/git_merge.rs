@@ -12,10 +12,10 @@ use std::collections::BTreeMap;
 
 #[path = "git_merge_core.rs"]
 mod core;
-#[path = "git_merge_graph.rs"]
-mod graph;
 #[path = "databook_merge.rs"]
 pub mod databook;
+#[path = "git_merge_graph.rs"]
+mod graph;
 
 #[derive(Clone)]
 pub(crate) struct Pack {
@@ -183,9 +183,17 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
             "Git pendant merge requires IRI subjects/objects; skolemize blank nodes first",
         ));
     }
-    let (graph, decisions) = graph::prepare(&b, &o, &t, &shapes, [
-        base.manifest.share_id.clone(), ours.manifest.share_id.clone(), theirs.manifest.share_id.clone()
-    ])?;
+    let (graph, decisions) = graph::prepare(
+        &b,
+        &o,
+        &t,
+        &shapes,
+        [
+            base.manifest.share_id.clone(),
+            ours.manifest.share_id.clone(),
+            theirs.manifest.share_id.clone(),
+        ],
+    )?;
     let mut pack = Pack {
         graph: render(&graph),
         shapes,

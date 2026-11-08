@@ -1,0 +1,57 @@
+AFTER: quipu git-merge theirs (declared DataBook, functional conflict)
+Auto-merging people.databook.md
+CONFLICT (content): Merge conflict in people.databook.md
+Automatic merge failed; fix conflicts and then commit the result.
+Merge needs your decision: DataBook 'people.databook.md' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 1 undecided. Nothing has been written.
+
+[graph:0/conflict:0] <urn:person> · urn:name
+  rule     <urn:people>: sh:maxCount 1 on urn:name: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  (none)
+
+Next: quipu merge resolve people.databook.md.decisions.json graph:0/conflict:0 --choose <ours|theirs|base|defer> --by <you>
+Then: git add people.databook.md people.databook.md.decisions.json && git commit (CI databook-check verifies immutable inputs)
+pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json
+pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json (here: people.databook.md/decisions.json)
+exit 2
+BEFORE: installed older CLI, same DataBook mergetool command
+unknown command: git-mergetool
+Use qp --help for usage.
+exit 2
+AFTER: quipu git-mergetool people.databook.md --by reviewer
+input: graph:0/conflict:0 theirs
+Merge needs your decision: DataBook 'people.databook.md' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 1 undecided. Nothing has been written.
+
+[graph:0/conflict:0] <urn:person> · urn:name
+  rule     <urn:people>: sh:maxCount 1 on urn:name: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  (none)
+
+Next: quipu merge resolve people.databook.md.decisions.json graph:0/conflict:0 --choose <ours|theirs|base|defer> --by <you>
+Then: git add people.databook.md people.databook.md.decisions.json && git commit (CI databook-check verifies immutable inputs)
+Enter <row-id> <choice>, or quit; no choice is automatic:
+Merge decided, ready to apply: DataBook 'people.databook.md' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 0 undecided. Nothing has been written.
+
+[graph:0/conflict:0] <urn:person> · urn:name
+  rule     <urn:people>: sh:maxCount 1 on urn:name: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  theirs (by reviewer at 2026-11-08T07:32:38Z)
+
+Next: git add people.databook.md people.databook.md.decisions.json && git commit (CI databook-check verifies immutable inputs)
+exit 0
+PRESERVED: unknown YAML field, human prose and unchanged shape bytes
+CONTROL: immutable databook-check base ours theirs HEAD people.databook.md
+databook-check: immutable document and decisions verified
+exit 0

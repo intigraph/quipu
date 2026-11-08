@@ -232,6 +232,7 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
     let theirs = commit(repo, incoming)?;
     let base = text(repo, &["merge-base", "--all", &ours, &theirs])?;
     let r = refs(repo, base.trim(), &ours, &theirs)?;
+    let books = crate::git_merge::databook::prepare(repo, &r)?;
     // Compute every overlapping pendant before Git mutates anything. Shapes conflicts
     // and incompatible envelopes fail here, irrespective of Git's per-file order.
     let mut plans = Vec::new();
@@ -254,12 +255,15 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         .to_string_lossy()
         .replace('\'', "'\\''");
     let command = format!("'{exe}' merge-driver %O %A %B %P");
+    let book_command = format!("'{exe}' databook-merge-driver %O %A %B %P");
     let status = Command::new("git")
         .arg("-C")
         .arg(repo)
         .args([
             "-c",
             &format!("merge.quipu.driver={command}"),
+            "-c",
+            &format!("merge.quipu-databook.driver={book_command}"),
             "merge",
             "--no-ff",
             "--no-commit",
@@ -271,7 +275,9 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
         .env("QUIPU_QPACK_THEIRS", &theirs)
         .status()
         .map_err(|e| spawn_git(&e))?;
-    if !plans.is_empty() && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs) {
+    if (!plans.is_empty() || !books.is_empty())
+        && !commit(repo, "MERGE_HEAD").is_ok_and(|head| head == theirs)
+    {
         return Err(invalid(
             "Git did not enter the expected merge; no pendant outputs rewritten",
         ));
@@ -286,6 +292,12 @@ pub fn merge_with_pending(repo: &Path, incoming: &str) -> Result<(bool, Vec<Stri
             pending.push(dir.clone());
         }
         write(&safe_dir(repo, &dir)?, &merged)?;
+    }
+    for (path, mut plan) in books {
+        if !crate::git_merge::databook::finish(repo, &path, &mut plan)? {
+            ready = false;
+            pending.push(path);
+        }
     }
     Ok((ready, pending))
 }
