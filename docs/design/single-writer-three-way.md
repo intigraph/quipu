@@ -243,3 +243,40 @@ The existing planner provenance-start callback still reads current entity facts;
 this slice does not claim all planner work is bounded. Only the common pending
 snapshot/guard paths are replaced. Bounding that callback, authenticating declared
 base slices and full writer integration must precede live admission.
+
+## Reserved admission fixture (source prototype)
+
+The private `store::reserved_admission_fixture` module exists only in native
+unit-test builds. No endpoint, production adapter, configuration switch or live
+writer calls it. Its enable argument defaults to refusal at the call boundary.
+
+It composes the existing share-merge writer reservation with native WRITE_V2
+verification against the protected session registry. The signature binds the
+complete proposal, receiving store, explicit time, incoming sets and profile.
+Nonce consumption, base reconstruction, merge planning and data writes share
+one outer reservation. The authenticated signer narrows any existing authority
+chain; ROOT is never added to named-graph capabilities.
+
+A private fresh-fixture genesis witness supplies retained-history evidence.
+This is deliberately not a production retention watermark. Both cuts use the
+bounded slot reader. The independently reconstructed base hash uses canonical
+RDF terms and explicit empty slots, rather than local term ids or the current
+head. Extra source inputs and unsupported profiles refuse.
+
+The profile is exactly the fixture's one loaded maxCount-one shape. Complete
+incoming sets feed the unified slot planner. Held conflicts refuse without
+writing; pending-ledger persistence and no-data settlement remain unwired.
+Actual normal transactions provide validator observations. Their coordinates,
+loaded profile and complete staged bytes must bind before the outer release;
+a separate full SHACL check refuses old violations outside incremental focus.
+The whole-graph check has a 4096-fact fixture cap, not a production cost claim.
+
+The native fixture controls pass on default and SHACL-only builds (seven on
+each); the full publication gate is recorded with the PR. Both OWL flags are
+explicitly false in fixture setup, matching this asserted/SHACL-only profile.
+The actual binding guards retain both refusals. This prototype does not
+complete the whole writer:
+production retained-history proof, general shape-derived cardinalities,
+authenticated master receipts, pending-ledger integration, durable publication
+and runtime enrollment remain separate gates. Native unit tests cover the
+prototype; Wasm only checks that the production-disabled boundary stays absent.
