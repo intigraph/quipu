@@ -10,6 +10,19 @@ use super::{Store, intern_in_space};
 use crate::error::Result;
 
 impl Store {
+    /// Protected master-local client authority and operation receipts. Neither
+    /// table is populated through RDF, shares or a transport enrollment API.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn migrate_client_changesets(conn: &Connection) -> Result<()> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS client_changeset_grants (id TEXT PRIMARY KEY, \
+             revision INTEGER NOT NULL, payload TEXT NOT NULL);\
+             CREATE TABLE IF NOT EXISTS client_changeset_receipts \
+             (operation_id TEXT PRIMARY KEY, receipt TEXT NOT NULL);",
+        )?;
+        Ok(())
+    }
+
     /// Additive migration for named-graph support (aegis-g1al / #36). A store
     /// created before the `g` column existed has a `facts` table without it;
     /// `CREATE TABLE IF NOT EXISTS` is a no-op there, so add the column here.
