@@ -9,7 +9,7 @@ use crate::namespace;
 pub(crate) const QUECHUA_TYPE_PREFIX: &str = "quechua:";
 
 /// Recognized role spelling for name heuristics, never a class identity bridge.
-/// An unrelated namespace ending in WorkItem must not acquire its exemption.
+/// An unrelated namespace ending in `WorkItem` must not acquire its exemption.
 pub(crate) fn local_name<'a>(ntype: &'a str, base: &str) -> &'a str {
     ntype
         .strip_prefix(QUECHUA_TYPE_PREFIX)
