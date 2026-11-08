@@ -75,6 +75,9 @@ commit_preprocessors = [
     { pattern = '(?m)^Bound declared owner-row reads before shared admission \(#868\)$', replace = "fix(admission): bound declared owner-row reads before shared admission (#868)" },
     { pattern = '(?m)^Add opt-in SQLite HA read eligibility profile \(#1025\)$', replace = "feat(store): add opt-in SQLite HA read eligibility profile (#1025)" },
     { pattern = '(?m)^Count refused writes in metrics and stats \(#1005\)$', replace = "feat(metrics): count refused writes in metrics and stats (#1005)" },
+    # Preserve the exact merged #1066 and #1083 subjects in regenerated notes.
+    { pattern = '(?m)^Admit bounded command disk impact summaries \(#1066\)$', replace = "feat(command): admit bounded command disk impact summaries (#1066)" },
+    { pattern = '(?m)^Prepare bounded declared-base reads for single-writer merges \(#1083\)$', replace = "feat(merge): prepare bounded declared-base reads for single-writer merges (#1083)" },
     # "(ID, rest)" -> "(rest)"   e.g. (proj-1a2b, #36/#37) -> (#36/#37)
     { pattern = '\((?:aegis|hq|gassy|qp)-[a-z0-9]{3,6}(?:\.[0-9]+)*,[ \t]*', replace = "(" },
     # "(rest, ID)" -> "(rest)"

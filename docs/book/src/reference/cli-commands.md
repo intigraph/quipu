@@ -468,6 +468,8 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+- `--read-only`: Export a cold local snapshot without writes; refuses sidecars and attachments.
+
 ## `qp databook`
 
 Export a graph as a DataBook, or import a DataBook's graph data.

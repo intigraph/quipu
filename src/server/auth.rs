@@ -116,7 +116,10 @@ pub(super) fn bearer_policy(
                 );
                 auth_policy.with_named(registry)
             }
-            Err(_) if config.scoped_reads.is_some() => {
+            Err(_)
+                if config.scoped_reads.is_some()
+                    || config.scoped_writer_credentials_file.is_some() =>
+            {
                 eprintln!("error: scoped credential authority unavailable; refusing startup");
                 std::process::exit(2);
             }
@@ -132,11 +135,19 @@ pub(super) fn bearer_policy(
             }
         },
     };
-    replication_policy(config, auth_policy).unwrap_or_else(|reason| {
+    let auth_policy = replication_policy(config, auth_policy).unwrap_or_else(|reason| {
+        eprintln!("error: {reason}; refusing startup");
+        std::process::exit(2);
+    });
+    scoped_writer_policy(config, auth_policy).unwrap_or_else(|reason| {
         eprintln!("error: {reason}; refusing startup");
         std::process::exit(2);
     })
 }
+
+#[path = "scoped_writer_auth.rs"]
+mod scoped_writer_auth;
+use scoped_writer_auth::scoped_writer_policy;
 
 fn replication_policy(
     config: &quipu::config::ServerConfig,
@@ -178,6 +189,9 @@ pub(super) async fn run_authorized(
     authorization: quipu::http_auth::Authorization,
     header: Option<&str>,
 ) -> axum::response::Response {
+    if let Some(principal) = policy.scoped_writer_principal(header) {
+        return scoped_writer_auth::run_scoped(req, next, principal).await;
+    }
     if authorization.generation == Some(quipu::http_auth::AuthGeneration::Named) {
         let principal = if let Some((principal, scope, expiry)) = policy.memory_credential(header) {
             if quipu::time::epoch_secs() >= expiry {
@@ -208,9 +222,18 @@ pub(super) async fn run_authorized(
 }
 
 pub(super) async fn run_named(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+    principal: quipu::crew_credentials::CrewPrincipal,
+) -> axum::response::Response {
+    run_named_class(req, next, principal, "named_bearer").await
+}
+
+pub(super) async fn run_named_class(
     mut req: axum::extract::Request,
     next: axum::middleware::Next,
     principal: quipu::crew_credentials::CrewPrincipal,
+    auth_class: &'static str,
 ) -> axum::response::Response {
     use std::sync::atomic::{AtomicU64, Ordering};
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -225,7 +248,7 @@ pub(super) async fn run_named(
         serde_json::json!({
             "event": phase, "timestamp": quipu::time::now_iso(),
             "credential_request_id": id, "principal": principal.iri,
-            "credential_id": principal.credential_id, "auth_class": "named_bearer",
+            "credential_id": principal.credential_id, "auth_class": auth_class,
             "method": method, "endpoint": endpoint, "status": status,
         })
     };
@@ -238,7 +261,7 @@ pub(super) async fn run_named(
     let identity = quipu::transaction_auth::Identity {
         principal: principal.iri.clone(),
         credential_id: Some(principal.credential_id.clone()),
-        auth_class: "named_bearer".to_owned(),
+        auth_class: auth_class.to_owned(),
         attestation: Default::default(),
     };
     let response = REQUEST_IDENTITY.scope(Some(identity), next.run(req)).await;
@@ -470,3 +493,7 @@ mod preflight_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "scoped_writer_tests.rs"]
+mod scoped_writer_tests;

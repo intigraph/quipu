@@ -12,6 +12,9 @@ mod records;
 mod state;
 mod transitions;
 
+// Dormant W1 candidate; no runtime callers or public exports.
+pub(crate) mod witness;
+
 pub use actions::*;
 pub use codec::*;
 pub use records::*;

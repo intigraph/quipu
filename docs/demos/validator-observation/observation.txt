@@ -1,0 +1,58 @@
+Actual execution transcript (source fixtures, not installed acceptance).
+Base: 9144f0c6b1acb975742765ab334b5fbc51781657.
+The before case is a local draft, not an API available at the base revision.
+No terminal recording configured; this is a readable transcript fallback.
+
+Fixtures: isolated in-memory Store writes, including a refused two-value slot,
+pre-existing debt, and 100001 facts that exhaust the actual context budget.
+The same no-SHACL assertion fails before the fix and passes after it.
+Each removed observation hook must make its targeted regression fail.
+
+Repeat normal source probes:
+just test --no-default-features --lib store::validator_observation -- --nocapture
+just test --no-default-features --features shacl,owl --lib store::validator_observation -- --nocapture
+just test --no-default-features --features shacl,owl --test write_cardinality --test write_late_targeting
+just wasm check
+
+No-SHACL draft before shared staged-graph capture
+running 1 test
+actual staged datum omitted
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3348 filtered out; finished in 0.09s
+RESULT: clean — no unsafe changes; 1 same-target symlink relink(s) benign. (command exit 101)
+
+Shared renderer: no-SHACL, SHACL+OWL and existing write controls
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3348 filtered out; finished in 0.08s
+running 10 tests
+actual incremental execution: coverage=Complete, raw_conforms=Some(false), gate_refused=true, checked_first=true, checked_second=true
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 3765 filtered out; finished in 4.43s
+running 28 tests
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+running 10 tests
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+RESULT: clean — 160 watched path(s) and 5 UID-keyed resource(s), none touched. (command exit 0)
+
+Control: remove actual debt pre-state observation
+running 1 test
+no entry found for key
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3774 filtered out; finished in 0.10s
+RESULT: clean — 160 watched path(s) and 5 UID-keyed resource(s), none touched. (command exit 101)
+
+Control: remove actual outer-exhaustion observation
+running 1 test
+  left: Unknown
+ right: BudgetExhausted
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3774 filtered out; finished in 4.34s
+RESULT: clean — 160 watched path(s) and 5 UID-keyed resource(s), none touched. (command exit 101)
+
+Exact Rust source inputs for the successful matrix (SHA-256):
+90507964c9c0be0e95602e7da9f65d12cf709eff7ba867defd229274ead0b468  src/store/validator_observation.rs
+5b03124eb5b4db1c4dfab0be7dfb662805efbe2cda502e0b9994ff4f2a74d314  src/store/validator_observation/snapshot.rs
+65bef5b14f5eaede7fc1f16d677e2903090b3565384d80c0ffe1929e6a9c829a  src/store/validator_observation/tests.rs
+dc705776d161bf372ac302d3a699fb0f73d62c9ab941d31c729f297ff007ae8c  src/store/shacl_poststate.rs
+a101e7322f24a7d63e3328545f4d5647f0f85a07ff38d683cbeba5d846fbc27b  src/store/shacl_new_graph.rs
+0a538bc8f345d7bc21f3f2b31e20a1f8f085fe482427372508a23b1fb8337d69  src/store/shacl_poststate/instrumented_check.rs
+6d1f5357372b2689f5fac1e1babb72af0f5083af612575497781e55f248a3407  src/shacl_debt.rs
+
+The mutation drivers restored exact original source bytes after each run.
+The complete quality gate, hosted CI and independent review remain separate.

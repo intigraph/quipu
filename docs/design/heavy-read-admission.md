@@ -10,8 +10,21 @@ When enabled with `heavy_read_operations = ["owner-rows"]`, at most
 acquired before shared read admission. A waiting heavy query cannot reserve
 a shared reader, leaving `N - K` ordinary readers available to other work.
 The server validates `0 < K < N` against its actual usable ordinary pool after
-point reservation. Unknown or duplicate operations, worker-process serving
-and unavailable reserves refuse startup. No connection is added.
+point reservation. Unknown or duplicate configured operations and unavailable
+reserves refuse startup.
+
+With reader processes enabled, each worker opens the configured local reader
+pool. Declared owner-row queries always go to the first worker, whose task-owned
+cap remains service-wide even after an HTTP timeout. There is no heavy-query
+failover to another worker or the writer. A separate forwarding lane admits one
+ordinary request per worker without reserving heavy capacity. The aggregate
+memory allocation counts the primary connection and every worker's base and
+reader-pool connections; a budget too small for those connections refuses
+startup. The default disabled profile keeps its existing connection topology.
+
+The proxy forwards only the parsed finite operation declaration. Repeated or
+unknown operation headers remain undeclared across the hop rather than being
+collapsed into a valid last value by the HTTP client.
 
 The operation uses the same finite header parser as request completion logs.
 Absent, unknown or duplicate declarations do not match. This is cooperative

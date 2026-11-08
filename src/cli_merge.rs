@@ -4,7 +4,7 @@ use crate::cli::{chrono_now, flag_value};
 
 pub(crate) const MERGE_USAGE: &str = "usage: quipu merge <share-dir> [--actor <id>] [--db <path>]\n\
        quipu merge show <decisions.json> [--format text|md|json]\n\
-       quipu merge resolve <decisions.json> <row> --choose ours|theirs|base|both|value|defer [--value <term>]... --by <who>\n\
+       quipu merge resolve <decisions.json> <row> --choose continue|ours|theirs|base|both|value|defer [--value <term>]... --by <who>\n\
        quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]\n\
        quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]";
 

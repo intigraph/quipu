@@ -278,9 +278,21 @@ pub(crate) async fn knot(
                     let mut st = store.lock();
                     waiting.finish(true);
                     let held = quipu::write_observation::stage(Stage::LockHeld);
-                    let result = observe(Stage::Tool, || quipu::tool_knot(&mut st, &input));
+                    let targets = super::update::writer_targets::json(&input);
+                    let result = observe(Stage::Tool, || {
+                        st.with_writer_scope(
+                            quipu::writer_scope::WriteOperation::Knot,
+                            &targets,
+                            |st| quipu::tool_knot(st, &input),
+                        )
+                    });
                     let work = if result.is_ok() {
-                        st.take_deferred_embed()
+                        if quipu::writer_scope::is_scoped_request() {
+                            let _ = st.take_deferred_embed();
+                            None
+                        } else {
+                            st.take_deferred_embed()
+                        }
                     } else {
                         None
                     };

@@ -47,6 +47,10 @@ const LOCAL: &[&str] = &[
     // Authentication adjudication is local evidence, not transferable writer
     // authority. Actor/source text in historical transactions remains data.
     "transaction_auth",
+    // Owner-enrolled grants and graph-instance pins are local authority,
+    // never logical replica content or journal entries.
+    "writer_grants",
+    "writer_graph_instances",
     "store_identity",
     "log_epoch",
     "consumers",

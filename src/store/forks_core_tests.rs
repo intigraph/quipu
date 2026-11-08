@@ -245,6 +245,7 @@ fn a_receipt_does_not_supersede_a_functional_value() {
 }
 
 #[test]
+// Regression for aegis-0s2a: a reclaim after promotion stays live.
 fn a_root_reclaim_after_the_fork_is_closed_at_promotion() {
     // Base a@T0. The fork closes it at Tf; ROOT closes it and re-claims it at
     // Tr > Tf. The fork's close predates ROOT's row, so the row closes at the

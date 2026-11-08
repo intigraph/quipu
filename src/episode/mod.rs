@@ -24,9 +24,11 @@ mod hash;
 #[cfg(test)]
 use edge_predicate::KNOWN_PREFIXES;
 use edge_predicate::resolve_edge_predicate;
-mod node_type;
+pub(crate) mod node_type;
 use node_type::validate_node_type;
 pub(crate) use node_type::{QUECHUA_TYPE_PREFIX, node_type_iri};
+#[cfg(test)]
+mod near_duplicate_tests;
 #[cfg(feature = "shacl")]
 mod refusals;
 mod validation;

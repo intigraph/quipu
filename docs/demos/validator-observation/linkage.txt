@@ -1,0 +1,19 @@
+Loaded-image identity regression (Linux; actual public Store observation API)
+
+Before: fb60a143d6d3fbd1c2fd91caad06e5bb7b477a64
+Two different Rust cdylibs loaded by one unchanged Python executable.
+Both writes succeeded; both manifests identified the host executable.
+Expected unsupported-linkage refusal: FAIL (child exit 1).
+
+After: device/inode plus executable code-mapping proof
+Two different Rust cdylibs loaded by that same host.
+Both writes succeeded; both manifest extractions returned CannotVerify.
+Expected unsupported-linkage refusal: PASS (child exit 0).
+
+Focused native observation tests: 12 passed.
+No-default-features observation tests: passed.
+Wasm compilation: passed.
+HOME guard and independent child status: both zero for all repaired phases.
+
+Reproduce the shared-image control: just validator-observation embedding
+This is a library regression, not deployment or production-caller evidence.
