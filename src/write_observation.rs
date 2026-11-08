@@ -140,7 +140,7 @@ impl Observation {
         Span {
             observation: Some(self.clone()),
             stage,
-            started,
+            started: Some(started),
             outcome: "interrupted",
         }
     }
@@ -179,7 +179,7 @@ impl Drop for Completion {
 pub struct Span {
     observation: Option<Observation>,
     stage: Stage,
-    started: Instant,
+    started: Option<Instant>,
     outcome: &'static str,
 }
 impl Span {
@@ -190,12 +190,12 @@ impl Span {
 }
 impl Drop for Span {
     fn drop(&mut self) {
-        if let Some(o) = &self.observation {
+        if let (Some(o), Some(started)) = (&self.observation, self.started) {
             *o.0.durations
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .entry(self.stage.name())
-                .or_default() += self.started.elapsed().as_secs_f64() * 1000.0;
+                .or_default() += started.elapsed().as_secs_f64() * 1000.0;
             eprintln!(
                 "{}",
                 o.record("write_stage_end", Some(self.stage), self.outcome)
@@ -211,7 +211,9 @@ pub fn stage(stage: Stage) -> Span {
         .unwrap_or(Span {
             observation: None,
             stage,
-            started: Instant::now(),
+            // Unscoped writers must not touch the native clock (unsupported
+            // by wasm32-unknown-unknown) or emit stage observations.
+            started: None,
             outcome: "interrupted",
         })
 }
@@ -255,6 +257,15 @@ pub fn page(generation: &str, start: i64, end: i64, count: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unscoped_writers_do_not_start_a_clock_or_observation() {
+        assert!(CURRENT.with(|c| c.borrow().is_none()));
+        let span = stage(Stage::Release);
+        assert!(span.observation.is_none());
+        assert!(span.started.is_none());
+        span.finish(true);
+        assert_eq!(observe(Stage::Guards, || Ok::<_, ()>(7)), Ok(7));
+    }
     #[test]
     fn metadata_is_bounded_and_queue_grant_is_measured_separately() {
         let o = Observation::new(Path::OwlPage, Some(3));
