@@ -702,3 +702,164 @@ fn live_owner_refuses_adoption_without_epoch_change_and_releases_lease_on_drop()
     assert_eq!(after["count"], 1);
     assert_eq!(after["rows"][0]["value"], "after-drop");
 }
+
+fn strict_fixture(root: &Path) -> (Owner, Owner) {
+    let (a, ar) = fixture(root, "a");
+    let (b, br) = fixture(root, "b");
+    let catalog = catalog(vec![ar.clone(), br.clone()]);
+    let a = Owner::prepare(catalog.clone(), root, &ar.graph, a, "policy-v1").unwrap();
+    let b = Owner::prepare(catalog, root, &br.graph, b, "policy-v1").unwrap();
+    (a, b)
+}
+fn strict_deadline() -> std::time::Instant {
+    std::time::Instant::now() + Duration::from_secs(3)
+}
+fn captured_value(read: &CapturedRead<'_>) -> Value {
+    crate::tool_query(
+        read.store,
+        &json!({"graph": read.route.graph,
+        "query": "SELECT ?value WHERE { <urn:test:subject> <urn:test:value> ?value }"}),
+    )
+    .unwrap()
+}
+
+#[test]
+fn strict_cut_retains_all_snapshots_after_releasing_commit_fences() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    for (owner, value) in [(&a, "old-a"), (&b, "old-b")] {
+        owner.knot(&request(owner), &input(owner, value)).unwrap();
+    }
+    let heads = [
+        a.read(Store::latest_tx_id).unwrap(),
+        b.read(Store::latest_tx_id).unwrap(),
+    ];
+    Owner::read_strict(&[&b, &a], strict_deadline(), |reads| {
+        assert_eq!(reads.len(), 2);
+        for (i, owner) in [&a, &b].into_iter().enumerate() {
+            assert_eq!(reads[i].route, &owner.route);
+            assert_eq!(reads[i].catalog_revision, 7);
+            assert_eq!(reads[i].local_tx, heads[i]);
+            assert!(
+                owner.writer.try_lock().is_some(),
+                "evaluation retained a commit fence"
+            );
+            assert!(
+                !reads[i].store.conn.is_autocommit(),
+                "capture lost its SQLite snapshot"
+            );
+        }
+        a.knot(&request(&a), &input(&a, "new-a"))?;
+        b.knot(&request(&b), &input(&b, "new-b"))?;
+        for (i, old) in ["old-a", "old-b"].into_iter().enumerate() {
+            let value = captured_value(&reads[i]);
+            assert_eq!(value["count"], 1);
+            assert_eq!(value["rows"][0]["value"], old);
+            assert_eq!(reads[i].store.latest_tx_id()?, heads[i]);
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(values(&a)["rows"][0]["value"], "new-a");
+    assert_eq!(values(&b)["rows"][0]["value"], "new-b");
+}
+
+#[test]
+fn strict_cut_contention_releases_partial_admission_without_waiting_or_partial_callback() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let occupied = b.writer.lock();
+    let invoked = std::cell::Cell::new(false);
+    assert!(
+        Owner::read_strict(&[&a, &b], strict_deadline(), |_| {
+            invoked.set(true);
+            Ok(())
+        })
+        .is_err()
+    );
+    assert!(!invoked.get());
+    assert!(a.writer.try_lock().is_some());
+    // An unselected hot owner must not participate in this barrier.
+    Owner::read_strict(&[&a], strict_deadline(), |_| Ok(())).unwrap();
+    drop(occupied);
+    let occupied = b.readers[0].lock();
+    assert!(
+        Owner::read_strict(&[&a, &b], strict_deadline(), |_| {
+            invoked.set(true);
+            Ok(())
+        })
+        .is_err()
+    );
+    assert!(!invoked.get());
+    assert!(a.writer.try_lock().is_some());
+    assert!(b.writer.try_lock().is_some());
+    assert!(a.readers[0].lock().conn.is_autocommit());
+    drop(occupied);
+    Owner::read_strict(&[&a, &b], strict_deadline(), |_| Ok(())).unwrap();
+}
+
+#[test]
+fn strict_cut_refuses_invalid_selection_and_expired_deadline_before_callback() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let mut invoked = false;
+    for selected in [vec![], vec![&a, &a]] {
+        assert!(
+            Owner::read_strict(&selected, strict_deadline(), |_| {
+                invoked = true;
+                Ok(())
+            })
+            .is_err()
+        );
+    }
+    assert!(
+        Owner::read_strict(
+            &[&a, &b],
+            std::time::Instant::now() - Duration::from_secs(1),
+            |_| {
+                invoked = true;
+                Ok(())
+            }
+        )
+        .is_err()
+    );
+    assert!(!invoked);
+    Owner::read_strict(&[&a, &b], strict_deadline(), |_| Ok(())).unwrap();
+}
+
+#[test]
+fn strict_cut_callback_and_late_identity_failures_release_every_transaction() {
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let mut invoked = false;
+    assert!(
+        Owner::read_strict::<()>(&[&a, &b], strict_deadline(), |_| {
+            invoked = true;
+            Err(refused("test callback failure"))
+        })
+        .is_err()
+    );
+    assert!(invoked, "negative callback never reached");
+    for owner in [&a, &b] {
+        assert!(owner.readers[0].lock().conn.is_autocommit());
+        assert!(owner.writer.try_lock().is_some());
+    }
+    Owner::read_strict(&[&a, &b], strict_deadline(), |_| Ok(())).unwrap();
+    b.writer
+        .lock()
+        .mint_log_epoch("private strict-cut identity failure")
+        .unwrap();
+    invoked = false;
+    assert!(
+        Owner::read_strict(&[&a, &b], strict_deadline(), |_| {
+            invoked = true;
+            Ok(())
+        })
+        .is_err()
+    );
+    assert!(!invoked);
+    for owner in [&a, &b] {
+        assert!(owner.readers[0].lock().conn.is_autocommit());
+        assert!(owner.writer.try_lock().is_some());
+    }
+}

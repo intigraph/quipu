@@ -250,6 +250,10 @@ impl Owner {
     }
 }
 
+#[path = "graph_owner_read.rs"]
+mod strict_read;
+pub use strict_read::CapturedRead;
+
 #[cfg(test)]
 #[path = "graph_owner_tests.rs"]
 mod tests;
