@@ -85,8 +85,14 @@ pub struct Axioms {
 }
 
 /// Report from materialization: counts of inferred facts by type.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct MaterializeReport {
+    /// Raw candidate emissions in completed durable snapshot passes.
+    pub raw_proposals: usize,
+    /// Candidate emissions already present in their frozen pass premises.
+    pub known_proposals: usize,
+    /// Repeated novel emissions excluded by the durable unique queue.
+    pub repeated_proposals: usize,
     /// Subclass type inferences (instance of parent class).
     pub subclass_inferences: usize,
     /// `rdfs:subPropertyOf` inferences (fact restated under the superproperty).

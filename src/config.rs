@@ -769,6 +769,10 @@ pub struct ServerConfig {
     /// Optional verifier-only registry of additive per-crew credentials.
     pub crew_credentials_file: Option<String>,
 
+    /// Separate verifier registry for exact-graph machine writers. Every write
+    /// requires an owner-local grant; no shared/ordinary-named fallback.
+    pub scoped_writer_credentials_file: Option<String>,
+
     /// Verifier-only full-store replication identities. This is a distinct
     /// registry, never a source of graph-write or scoped-read grants.
     pub replication_credentials_file: Option<String>,
@@ -874,6 +878,7 @@ impl Default for ServerConfig {
             auth_token: None,
             session_keys: crate::http_auth::SessionKeyPolicy::default(),
             crew_credentials_file: None,
+            scoped_writer_credentials_file: None,
             replication_credentials_file: None,
             previous_auth_token: None,
             previous_auth_token_expires_at_epoch_secs: None,
@@ -911,11 +916,8 @@ impl ServerConfig {
         if self.heavy_read_operations.as_slice() != ["owner-rows"] {
             return Err("heavy_read_operations currently accepts only [\"owner-rows\"]".into());
         }
-        if self.read_processes > 0
-            || self.heavy_read_permits == 0
-            || self.heavy_read_permits >= ordinary_readers
-        {
-            return Err("heavy reads require in-process ordinary readers and 0 < heavy_read_permits < ordinary_readers".into());
+        if self.heavy_read_permits == 0 || self.heavy_read_permits >= ordinary_readers {
+            return Err("heavy reads require 0 < heavy_read_permits < ordinary_readers".into());
         }
         Ok(())
     }

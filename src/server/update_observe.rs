@@ -40,8 +40,18 @@ pub(super) fn apply_update_observed(
     let wait = waiting.elapsed().as_secs_f64();
     let acquired = Instant::now();
     let mut times = UpdateTimes::default();
-    let (result, profile) = store
-        .observe_poststate(|store| apply_locked(store, &plan, update, attribution, &mut times));
+    let targets = if quipu::writer_scope::is_scoped_request() {
+        super::writer_targets::update(update)?
+    } else {
+        Default::default()
+    };
+    let (result, profile) = store.observe_poststate(|store| {
+        store.with_writer_scope(
+            quipu::writer_scope::WriteOperation::Update,
+            &targets,
+            |store| apply_locked(store, &plan, update, attribution, &mut times),
+        )
+    });
     // While the guard is still alive, as /query does, so `held` is the
     // lock-holding interval.
     let held = acquired.elapsed().as_secs_f64();
@@ -71,6 +81,17 @@ pub(super) fn apply_update_observed(
             "poststate_split_ms": ms(profile.split.as_secs_f64()),
             "poststate_plan_ms": ms(profile.plan.as_secs_f64()),
             "poststate_check_ms": ms(profile.check.as_secs_f64()),
+            "poststate_check_graph_ms": ms(profile.check_graph.as_secs_f64()),
+            "poststate_check_ownership_ms": ms(profile.check_ownership.as_secs_f64()),
+            "poststate_check_entities_ms": ms(profile.check_entities.as_secs_f64()),
+            "poststate_check_values_ms": ms(profile.check_values.as_secs_f64()),
+            "poststate_check_encode_ms": ms(profile.check_encode.as_secs_f64()),
+            "poststate_check_validate_ms": ms(profile.check_validate.as_secs_f64()),
+            "poststate_check_debt_ms": ms(profile.check_debt.as_secs_f64()),
+            "poststate_check_new_graph_ms": ms(profile.check_new_graph.as_secs_f64()),
+            "poststate_check_subjects": profile.check_subjects,
+            "poststate_check_facts": profile.check_facts,
+            "poststate_check_value_fallbacks": profile.check_value_fallbacks,
             "conditional_prepare_ms": ms(profile.conditional_prepare.as_secs_f64()),
             "conditional_reject_ms": ms(profile.conditional_reject.as_secs_f64()),
             "conditional_emit_ms": ms(profile.conditional_emit.as_secs_f64()),

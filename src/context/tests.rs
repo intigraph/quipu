@@ -378,11 +378,13 @@ fn tool_context_exposes_embedding_status() {
 }
 
 #[test]
-fn hybrid_search_without_provider_names_the_missing_config() {
+fn explicit_semantic_search_without_provider_names_the_missing_config() {
     let store = setup_test_store();
-    let err =
-        crate::mcp::tools::tool_hybrid_search(&store, &serde_json::json!({"query": "traefik"}))
-            .expect_err("no provider is attached, and no embedding was supplied");
+    let err = crate::mcp::tools::tool_hybrid_search(
+        &store,
+        &serde_json::json!({"query": "traefik", "mode": "semantic"}),
+    )
+    .expect_err("no provider is attached, and no embedding was supplied");
     let msg = err.to_string();
 
     // The point of #53: the error has to name what to configure, not merely

@@ -1,0 +1,16 @@
+Script started on 2026-11-06 22:34:28-05:00 [COMMAND="./run.sh" <not executed on terminal>]
+Synthetic library fixture; no service or production store.
+Probe: unchanged total-limit=1 versus durable page-limit=1, same input.
+./native-test owl::snapshot::pages_tests::demo_total_budget_to_bounded_pages --exact --nocapture
+
+running 1 test
+fixture: two property facts; same property/range/subclass ontology union
+unchanged baseline total-limit=1: REFUSED (OWL inference budget exceeded)
+candidate page-limit=1: total=6 logical_passes=4
+complete=true canonical_full_set_matches_reference=true
+test owl::snapshot::pages_tests::demo_total_budget_to_bounded_pages ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3725 filtered out; finished in 0.08s
+
+
+Script done on 2026-11-06 22:34:29-05:00 [COMMAND_EXIT_CODE="0"]

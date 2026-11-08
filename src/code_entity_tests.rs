@@ -407,7 +407,7 @@ bobbin:doc a bobbin:Document ; rdfs:label "README" .
 
 #[test]
 fn document_remains_a_sanctioned_class_in_code_entities_only() {
-    let store = crate::store::Store::open_in_memory().unwrap();
+    let mut store = crate::store::Store::open_in_memory().unwrap();
     store
         .load_shapes("code-entities", SHAPES, "2026-01-01T00:00:00Z")
         .unwrap();

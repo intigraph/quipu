@@ -318,6 +318,8 @@ impl Store {
         Self::migrate_decision_deck(&conn)?;
         Self::migrate_registry_amendment_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
+        crate::shape_mapping::migrate_registry_digests(&conn)?;
+        Self::migrate_shape_mapping_state(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
@@ -327,6 +329,7 @@ impl Store {
         Self::migrate_frozen_packs(&conn)?;
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
+        Self::migrate_writer_scope(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which

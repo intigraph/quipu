@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn loaded_prefix_compacts_and_round_trips_while_unknown_stays_full() {
-        let store = Store::open_in_memory().unwrap();
+        let mut store = Store::open_in_memory().unwrap();
         store
             .load_shapes(
                 "test",
