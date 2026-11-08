@@ -1,0 +1,6 @@
+Script started on 2026-11-08 14:03:44-05:00 [COMMAND="stty -onlcr; bash --noprofile --norc /dev/stdin" <not executed on terminal>]
+SOURCE FIXTURE DEMO — candidate a73112f6, not a deployed service
+Replaying actual dev generator with explicit and configured custom namespaces.
+PASS: explicit/configured custom namespace, corrected legacy identity, invalid namespace refusal
+
+Script done on 2026-11-08 14:03:47-05:00 [COMMAND_EXIT_CODE="0"]

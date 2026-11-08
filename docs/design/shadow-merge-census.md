@@ -222,3 +222,38 @@ capture, rollback/unknown/abandonment, no-op versus commit/contention, and
 disabled/refused planning are source-only and unrun. The previous eight
 aggregate controls passed the earlier admitted combined slot; that result
 does not qualify this extension.
+
+## Receipt/outbox fixture boundary
+
+The receipt/outbox experiment is compiled only under `cfg(test)`. It installs its
+schema explicitly in disposable test databases; it registers no production
+producer, endpoint, migration, background task, or configuration switch. Its
+only native tap runs after the attested atomic body records its verified receipt
+and before graph staging. A nested savepoint stages a bounded, value-free outbox
+record. The native outer transaction owns its durability. An inner release alone
+never authorizes export.
+
+The fixture consumer takes a transaction snapshot and verifies the native
+receipt, store identity, log epoch, and positive data transaction before counting
+a graph commit. It scans durable receipts rather than counting wake hints.
+Receipt-only settlement is a separate bucket. The public attested route always
+writes provenance RDF; its receipt-only control therefore exercises the private
+atomic primitive and does not claim a public no-data route.
+
+A separate disposable SQLite sink deduplicates logical records by store, epoch,
+and nonce. Reopening both databases and losing an acknowledgement exercises
+persistent replay. This does not promise exactly-once in-memory metrics across
+arbitrary sink failures or simulate an operating-system crash. The fixture owns
+its retained base cut and uses a fixed test cardinality profile; neither is an
+authenticated client base or a loaded production shape witness.
+
+Controls cover lost response, authority refusal, classification followed by
+outer rollback, receipt-only settlement, coalesced hints, close/reopen with lost
+acknowledgement, and capacity/contention/poison/nonfatal observer SQL failures.
+Additional controls reject invalid capture bindings and tampered receipts, and
+confirm an unarmed writer produces no outbox record. The [fixture transcript](../demos/receipt-outbox/README.md) records native
+default-feature results and seven rejected naive policies. Other feature surfaces
+and the full gate require their own qualification receipts. SQLite failures that abort
+the entire transaction, such as some disk-full paths, are outside the nonfatal
+observer-isolation claim. Live binding, corpus collection, and runtime activation
+remain separate acceptance work.
