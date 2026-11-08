@@ -1,7 +1,7 @@
 use super::*;
 use crate::graph_catalog::Budget;
 use serde_json::json;
-use std::{sync::mpsc, time::Duration};
+use std::{fs::File, sync::mpsc, time::Duration};
 
 fn fixture(root: &Path, name: &str) -> (Store, Route) {
     let path = root.join(format!("{name}.db"));
@@ -209,8 +209,10 @@ fn duplicate_native_owner_and_replaced_placement_refuse() {
     )
     .unwrap();
     let path = temp.path().join("a.db");
-    let duplicate = Store::open(path.to_str().unwrap()).unwrap();
-    assert!(Owner::prepare(catalog, temp.path(), &route.graph, duplicate, "policy-v1").is_err());
+    assert!(matches!(
+        Store::open(path.to_str().unwrap()),
+        Err(crate::Error::PolicyDenied(_))
+    ));
     owner
         .knot(&request(&owner), &input(&owner, "before"))
         .unwrap();
@@ -570,4 +572,133 @@ fn blocked_embedding_releases_writer_and_preserves_independent_owner_progress() 
     assert_eq!(a.read(KnowledgeVectorStore::vector_count).unwrap(), 1);
     assert_eq!(b.read(KnowledgeVectorStore::vector_count).unwrap(), 0);
     assert_eq!(a.admitted.load(Ordering::Acquire), 0);
+}
+
+// arming: library -- native owner admission regression controls.
+fn qualification_probe_ordinary_writer(held_before_owner: bool) {
+    let temp = tempfile::tempdir().unwrap();
+    let (store, route) = fixture(temp.path(), "probe");
+    let path = temp.path().join("probe.db");
+    let path = path.to_str().unwrap();
+    let mut ordinary = held_before_owner.then(|| Store::open(path).unwrap());
+    let prepared = Owner::prepare(
+        catalog(vec![route.clone()]),
+        temp.path(),
+        &route.graph,
+        store,
+        "policy-v1",
+    );
+    let owner = match prepared {
+        Err(crate::Error::PolicyDenied(_)) if held_before_owner => return,
+        Err(error) => panic!("owner positive admission unproved: {error:?}"),
+        Ok(owner) => owner,
+    };
+    owner
+        .knot(&request(&owner), &input(&owner, "owner-control"))
+        .unwrap();
+    let before = values(&owner);
+    assert!(
+        before.to_string().contains("owner-control"),
+        "owner point-read control missing"
+    );
+    if ordinary.is_none() {
+        ordinary = match Store::open(path) {
+            Err(crate::Error::PolicyDenied(_)) => return,
+            Err(error) => panic!("ordinary open has an unrelated failure: {error:?}"),
+            Ok(store) => Some(store),
+        };
+    }
+    let result = crate::tool_knot(
+        ordinary.as_mut().unwrap(),
+        &input(&owner, "ordinary-bypass"),
+    );
+    let after = values(&owner);
+    assert!(
+        matches!(&result, Err(crate::Error::PolicyDenied(_))) && after == before,
+        "ordinary native write escaped prepared owner; held_before_owner={held_before_owner}; actual_result={result:?}; before={before}; after={after}"
+    );
+}
+
+#[test]
+fn qualification_ordinary_new_handle_cannot_bypass_owner() {
+    qualification_probe_ordinary_writer(false);
+}
+
+#[test]
+fn qualification_ordinary_already_open_handle_cannot_bypass_owner() {
+    qualification_probe_ordinary_writer(true);
+}
+
+#[test]
+fn ordinary_multi_handle_writes_and_readers_remain_available_without_owner() {
+    let temp = tempfile::tempdir().unwrap();
+    let (mut first, route) = fixture(temp.path(), "ordinary");
+    let path = temp.path().join("ordinary.db");
+    let mut second = Store::open(path.to_str().unwrap()).unwrap();
+    for (store, value) in [(&mut first, "first"), (&mut second, "second")] {
+        crate::tool_knot(
+            store,
+            &json!({"graph": route.graph,
+            "turtle": format!("<urn:test:subject> <urn:test:value> {value:?} ."),
+            "snapshot": "test-producer", "replace_snapshot": true,
+            "source": "test-producer"}),
+        )
+        .unwrap();
+    }
+    let reader = Store::open_read_only(path.to_str().unwrap()).unwrap();
+    let result = crate::tool_query(
+        &reader,
+        &json!({"graph": route.graph,
+        "query": "SELECT ?value WHERE { <urn:test:subject> <urn:test:value> ?value }"}),
+    )
+    .unwrap();
+    assert_eq!(result["count"], 1);
+    assert_eq!(result["rows"][0]["value"], "second");
+}
+
+#[test]
+fn live_owner_refuses_adoption_without_epoch_change_and_releases_lease_on_drop() {
+    let temp = tempfile::tempdir().unwrap();
+    let (store, route) = fixture(temp.path(), "lifetime");
+    let path = temp.path().join("lifetime.db");
+    let path = path.to_str().unwrap();
+    let owner = Owner::prepare(
+        catalog(vec![route.clone()]),
+        temp.path(),
+        &route.graph,
+        store,
+        "policy-v1",
+    )
+    .unwrap();
+    owner
+        .knot(&request(&owner), &input(&owner, "owner-control"))
+        .unwrap();
+    let before = values(&owner);
+    assert!(matches!(
+        Store::adopt(path),
+        Err(crate::Error::PolicyDenied(_))
+    ));
+    let reader = Store::open_read_only(path).unwrap();
+    assert_eq!(reader.log_epoch().unwrap(), route.log_epoch);
+    assert_eq!(values(&owner), before);
+    drop(owner);
+    // A lifetime lease is intentionally not durable owner enrollment. This
+    // control prevents claiming that it survives process exit or retirement.
+    let mut ordinary = Store::open(path).unwrap();
+    crate::tool_knot(
+        &mut ordinary,
+        &json!({"graph": route.graph,
+        "turtle": "<urn:test:subject> <urn:test:value> \"after-drop\" .",
+        "snapshot": "test-producer", "replace_snapshot": true,
+        "source": "test-producer"}),
+    )
+    .unwrap();
+    let after = crate::tool_query(
+        &reader,
+        &json!({"graph": route.graph,
+        "query": "SELECT ?value WHERE { <urn:test:subject> <urn:test:value> ?value }"}),
+    )
+    .unwrap();
+    assert_eq!(after["count"], 1);
+    assert_eq!(after["rows"][0]["value"], "after-drop");
 }

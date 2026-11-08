@@ -246,6 +246,9 @@ impl Store {
         // Every initializing constructor checks sticky ownership before DDL,
         // including deserialized stores; unsupported providers cannot downgrade.
         super::ownership_startup::require_unenrolled(&conn)?;
+        // Acquire before migrations or any other initializing write.
+        #[cfg(unix)]
+        let writer_lease = super::writer_lease::Lease::claim(&conn)?;
         let inspected = Self::with_connection(conn);
         inspected.ownership_state()?;
         let conn = inspected.conn;
@@ -353,6 +356,10 @@ impl Store {
         alias::build_term_alias(&conn, attachments)?;
 
         let mut store = Self::with_connection(conn);
+        #[cfg(unix)]
+        {
+            store.writer_lease = writer_lease;
+        }
         store.created_fact_schema = created_fact_schema;
         // A later direct-library vector write must not activate FTS on an old
         // unindexed store merely because the global new-store default is on.
@@ -563,6 +570,8 @@ impl Store {
         Self {
             conn,
             ownership_fence: None,
+            #[cfg(unix)]
+            writer_lease: None,
             signing: None,
             embedding_provider: None,
             embedding_config: EmbeddingConfig::default(),

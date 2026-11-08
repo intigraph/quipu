@@ -6,13 +6,12 @@
 //! connections never fall back to another writer.
 //!
 //! This primitive does NOT publish a server route. Its advisory file lease
-//! excludes other instances of this primitive, not arbitrary SQLite clients.
+//! excludes cooperating writable Store handles, not arbitrary SQLite clients.
 //! Durable bypass fencing, aggregate memory allocation and composed-read parity
 //! remain mandatory before a server may advertise a routed graph.
 
 use std::{
-    fs::{File, OpenOptions},
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -44,7 +43,7 @@ pub struct Owner {
 
 struct Placement {
     path: PathBuf,
-    file: File,
+    lease: Arc<super::writer_lease::Lease>,
     device: u64,
     inode: u64,
 }
@@ -64,20 +63,19 @@ impl Placement {
         if !path.is_absolute() || path.canonicalize().map_err(refused)? != path {
             return Err(refused("canonical path without symlinks required"));
         }
-        let file = OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(&path)
-            .map_err(refused)?;
-        let metadata = file.metadata().map_err(refused)?;
+        let lease = store
+            .writer_lease
+            .as_ref()
+            .ok_or_else(|| refused("writable Store admission required"))?
+            .clone();
+        lease.claim_exclusive()?;
+        let metadata = lease.file.metadata().map_err(refused)?;
         if !metadata.is_file() {
             return Err(refused("store is not a regular file"));
         }
-        rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive)
-            .map_err(|_| refused("native inode already has an owner lease"))?;
         let placement = Self {
             path,
-            file,
+            lease,
             device: metadata.dev(),
             inode: metadata.ino(),
         };
@@ -87,7 +85,7 @@ impl Placement {
 
     fn verify(&self) -> Result<()> {
         let metadata = std::fs::symlink_metadata(&self.path).map_err(refused)?;
-        let held = self.file.metadata().map_err(refused)?;
+        let held = self.lease.file.metadata().map_err(refused)?;
         if !metadata.is_file()
             || metadata.dev() != self.device
             || metadata.ino() != self.inode

@@ -20,6 +20,8 @@ mod decision_nonces;
 pub mod graph_owner;
 mod ownership;
 mod ownership_fence;
+#[cfg(unix)]
+mod writer_lease;
 // Dormant enrollment inventory: native identity fields, no startup wiring.
 #[cfg(not(target_arch = "wasm32"))]
 mod ownership_inventory;
@@ -148,6 +150,9 @@ pub struct Store {
     /// SQLite's last-writer WAL/SHM cleanup.
     ownership_fence: Option<Arc<ownership_fence::CommitFence>>,
     pub(crate) conn: Connection,
+    // Release the writer connection before its native lifetime admission lease.
+    #[cfg(unix)]
+    writer_lease: Option<Arc<writer_lease::Lease>>,
     /// v1 verdict-signing identity (ed25519, host-file key). When set, the
     /// governance committed-tier evaluator signs verdicts (aegis-g1al / the
     /// loom, Phase 0). The server loads it at startup; None → verdicts are

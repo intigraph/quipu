@@ -318,6 +318,10 @@ impl Store {
             rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
         )?;
         super::ownership_startup::require_unenrolled(&conn)?;
+        // Adoption mutates lineage and sidecar authority; an active graph
+        // owner excludes it just as it excludes another ordinary writer.
+        #[cfg(unix)]
+        let _writer_lease = super::writer_lease::Lease::claim(&conn)?;
         host()?;
         let recognizable: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name IN ('facts', 'attestation_bindings'))",
