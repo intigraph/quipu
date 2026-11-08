@@ -134,6 +134,18 @@ pub(crate) fn apply_store(
                 return Ok(done);
             }
             let name = prepared.request.input_id.clone();
+            // A fresh retained file is a proposal, not authority over the fork
+            // snapshot: a forged base turns a ROOT-only fact into an incoming
+            // deletion. Rebuild the request and clock here, inside the writer's
+            // savepoint, before any receive, decision or receipt. Resumed files
+            // are bound to their authenticated parent receipt in execute.
+            if prepared.request.parent.is_none() {
+                let (actual, authored) =
+                    fork_request(store, &name, prepared.request.profile.clone())?;
+                if actual != prepared.request || authored != authored_at {
+                    return Err(invalid("session differs from the current fork snapshot"));
+                }
+            }
             let (fork, _, _, current) = store.fork_session_snapshot(&name)?;
             if fork.status != "open"
                 || current != prepared.request.theirs

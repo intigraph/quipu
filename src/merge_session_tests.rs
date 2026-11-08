@@ -282,3 +282,7 @@ fn held_only_partial_plan_records_pending_without_receiving_empty_data() {
 #[cfg(feature = "shacl")]
 #[path = "merge_parent_tests.rs"]
 mod parent;
+
+#[cfg(feature = "shacl")]
+#[path = "merge_fresh_tests.rs"]
+mod fresh;

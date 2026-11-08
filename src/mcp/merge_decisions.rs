@@ -194,12 +194,16 @@ pub fn tool_merge_apply(store: &mut Store, input: &JsonValue) -> Result<JsonValu
         // Fresh share applies still verify inline envelope/hash and parent.
         // Resume files are instead bound to a private authenticated receipt.
         if file.request.parent.is_none() && file.request.path == crate::merge_session::Path::Share {
-            let (actual, _) = pair(input)?.session(store, file.request.profile.clone())?;
+            // The verified manifest's created_at is the incoming clock: it
+            // becomes valid_from on clean incoming assertions.
+            let (actual, authored) = pair(input)?.session(store, file.request.profile.clone())?;
             if actual.input_id != file.request.input_id
                 || actual.base_id != file.request.base_id
                 || actual.base != file.request.base
                 || actual.theirs != file.request.theirs
                 || actual.shapes != file.request.shapes
+                || actual.active_slots != file.request.active_slots
+                || authored != file.authored_at
             {
                 return Err(Error::InvalidValue(
                     "session differs from verified inline shares".into(),
