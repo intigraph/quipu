@@ -158,6 +158,7 @@ impl SignedResolverArtifact {
     /// This binds evidence only. The caller owns reconstruction, reservation,
     /// current key authority and commit/receipt handling. Even Conforms is the
     /// incremental gate result, not full-graph conformance or a committed write.
+    /// Only ROOT can currently be bound: named graph observations expose no IRI.
     pub fn bind_observation(
         &self,
         proposal: &SignedChangeSet,
@@ -171,6 +172,14 @@ impl SignedResolverArtifact {
                 "resolver evidence requires exactly one actual gate execution",
             ));
         };
+        // The public observation exposes a local graph ID, not its IRI.
+        // ROOT is the sole identity provable without a caller-supplied mapping.
+        // Do not rebind equal RDF from a named graph (or ROOT) by re-signing it.
+        if proposal.envelope.graph != "ROOT" || observation.graph() != crate::schema::ROOT_GRAPH {
+            return Err(refuse(
+                "resolver observation binding supports actual ROOT only",
+            ));
+        }
         let manifest = observation.manifest()?;
         if manifest.implementation.options.get("store_id") != Some(&proposal.envelope.store_id) {
             return Err(refuse("resolver source differs from actual observed store"));

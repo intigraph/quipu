@@ -12,7 +12,28 @@ fn observed(
     SignedResolverArtifact,
     Vec<crate::store::ValidatorObservation>,
 ) {
+    observed_in_graph(shapes, violates, "ROOT")
+}
+fn observed_in_graph(
+    shapes: bool,
+    violates: bool,
+    graph: &str,
+) -> (
+    SignedChangeSet,
+    SignedResolverArtifact,
+    Vec<crate::store::ValidatorObservation>,
+) {
     let mut store = Store::open_in_memory().unwrap();
+    // Both named graphs belong to this same store; equal RDF must not erase
+    // their distinct identities when a candidate is re-signed below.
+    let named_a = store.graph_create("urn:graph:a").unwrap();
+    let named_b = store.graph_create("urn:graph:b").unwrap();
+    let graph_id = match graph {
+        "ROOT" => crate::schema::ROOT_GRAPH,
+        "urn:graph:a" => named_a,
+        "urn:graph:b" => named_b,
+        _ => panic!("unknown fixture graph"),
+    };
     if shapes {
         store.load_shapes("one", SHAPES, TS).unwrap();
     }
@@ -30,7 +51,7 @@ fn observed(
         store.store_id().unwrap(),
         store.log_epoch().unwrap(),
         store.latest_tx_id().unwrap(),
-        "ROOT".into(),
+        graph.into(),
         digest(
             store
                 .get_combined_shapes()
@@ -70,7 +91,8 @@ fn observed(
         second.value = Value::Str("second".into());
         data.push(second);
     }
-    let (result, observations) = store.observe_validator(|s| s.transact(&data, TS, None, None));
+    let (result, observations) =
+        store.observe_validator(|s| s.transact_to_graph(&data, TS, None, None, graph_id));
     assert_eq!(result.is_err(), violates);
     assert_eq!(observations.len(), 1);
     let manifest = observations[0].manifest().unwrap().clone();
@@ -224,4 +246,75 @@ fn resigned_supplied_manifest_and_reconstructed_candidate_cannot_replace_actual_
             .is_err()
     );
     println!("re-signed unrelated candidate: refused against actual staged graph");
+}
+
+fn rebind_graph(
+    mut proposal: SignedChangeSet,
+    signed: SignedResolverArtifact,
+    graph: &str,
+) -> (SignedChangeSet, SignedResolverArtifact) {
+    let mut changeset = proposal.changeset().unwrap();
+    for row in changeset.deletes.iter_mut().chain(&mut changeset.inserts) {
+        row.graph = (graph != "ROOT").then(|| graph.to_owned());
+    }
+    proposal.body = changeset.to_sparql_update();
+    proposal.envelope.graph = graph.into();
+    proposal.envelope.scope_digest = crate::asof_share::scope_digest(&[graph.into()], &[]);
+    proposal.envelope.delta_sha256 = format!("sha256:{}", changeset.digest());
+    proposal.envelope.body_sha256 = digest(proposal.body.as_bytes());
+    proposal.signature = quipu_signing::sign_hex(&key(7), &proposal.envelope.message().unwrap());
+    let pk = quipu_signing::public_key_hex(&key(7));
+    proposal.verify(&pk).unwrap();
+    let mut artifact = signed.artifact;
+    artifact.proposal_fingerprint = proposal.fingerprint().unwrap();
+    artifact.candidate.source.graph = graph.into();
+    let signed = artifact.sign(&proposal, &key(7)).unwrap();
+    signed.verify(&proposal, &pk).unwrap();
+    (proposal, signed)
+}
+
+#[test]
+fn actual_graph_identity_cannot_be_rebound_by_resigning_equal_rdf() {
+    for (actual, supplied) in [
+        ("ROOT", "urn:graph:a"),
+        ("urn:graph:a", "ROOT"),
+        ("urn:graph:a", "urn:graph:b"),
+        ("urn:graph:b", "urn:graph:a"),
+    ] {
+        let (proposal, signed, observations) = observed_in_graph(true, false, actual);
+        assert_eq!(observations[0].validator_conforms(), Some(true));
+        let actual_id = observations[0].graph();
+        assert_eq!(actual_id == crate::schema::ROOT_GRAPH, actual == "ROOT");
+        let (proposal, signed) = rebind_graph(proposal, signed, supplied);
+        let result = signed.bind_observation(
+            &proposal,
+            &quipu_signing::public_key_hex(&key(7)),
+            &signed.artifact.candidate,
+            &observations,
+        );
+        println!("actual graph={actual} id={actual_id}, signed={supplied}: {result:?}");
+        assert!(
+            result.is_err(),
+            "actual {actual} must not certify {supplied}"
+        );
+    }
+}
+
+#[test]
+fn named_graph_binding_refuses_until_actual_iri_evidence_is_available() {
+    for graph in ["urn:graph:a", "urn:graph:b"] {
+        let (proposal, signed, observations) = observed_in_graph(true, false, graph);
+        assert_ne!(observations[0].graph(), crate::schema::ROOT_GRAPH);
+        assert_eq!(observations[0].validator_conforms(), Some(true));
+        assert!(
+            signed
+                .bind_observation(
+                    &proposal,
+                    &quipu_signing::public_key_hex(&key(7)),
+                    &signed.artifact.candidate,
+                    &observations,
+                )
+                .is_err()
+        );
+    }
 }

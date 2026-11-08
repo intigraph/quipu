@@ -33,8 +33,13 @@ captured by public `Store::observe_validator`. It compares the signed candidate
 with the caller's independently reconstructed candidate, compares the complete
 signed manifest with the actual observation, compares candidate RDF rows with
 the actual complete staged graph using the existing parser, and binds the raw validator outcome
-through the existing DTO. Missing/ambiguous observations and mismatched artifacts
-refuse. Unexecuted validation or a gate error cannot produce Conforms; the DTO
+through the existing DTO. Binding currently requires both the signed graph label
+`ROOT` and the actual observation's ROOT graph ID. The public observation exposes
+local named-graph IDs without their IRIs, so named-graph evidence binding refuses
+rather than trusting a caller mapping. Equal RDF and valid re-signatures cannot
+substitute a different graph. Named proposals/artifacts can still be serialized
+and verified; that does not make their observations bindable.
+Missing/ambiguous observations and mismatched artifacts refuse. Unexecuted validation or a gate error cannot produce Conforms; the DTO
 retains Unknown for incomplete context and RequiresAdmissionTime for unresolved
 times. A violation remains Violates even though the write rolled back.
 
