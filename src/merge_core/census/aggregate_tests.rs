@@ -189,3 +189,81 @@ fn poisoning_stays_explicit_and_saturating_counts_never_wrap_to_zero() {
     assert!(matches!(sink.try_snapshot(), SnapshotRead::Poisoned));
     assert_eq!(sink.poisoned.load(Ordering::Relaxed), 1);
 }
+
+#[test]
+fn disabled_observer_skips_planning_and_enabled_refusal_is_counted() {
+    let sink = AggregateSink::default();
+    let slots = BTreeMap::new();
+    let over_budget = "PRIVATE".repeat(super::super::MAX_BYTES / 7 + 1);
+    assert_eq!(
+        sink.try_observe(ShadowMode::default(), binding(None), &slots, &over_budget),
+        ObservationOutcome::Disabled
+    );
+    let disabled = snapshot(&sink);
+    assert_eq!(disabled.disabled_batches, 1);
+    assert_eq!(disabled.planning_refused_batches, 0);
+    assert_eq!(disabled.accepted_batches, 0);
+    assert_eq!(
+        sink.try_observe(ShadowMode::Observe, binding(None), &slots, &over_budget),
+        ObservationOutcome::PlanningRefused
+    );
+    let result = snapshot(&sink);
+    assert_eq!(result.planning_refused_batches, 1);
+    assert_eq!(result.accepted_batches, 0);
+    assert!(result.buckets.is_empty());
+    assert!(!serde_json::to_string(&result).unwrap().contains("PRIVATE"));
+}
+
+#[test]
+fn source_observer_preserves_sink_outcomes_and_records_unknown_inputs() {
+    use crate::merge_core::{Card, SlotInput};
+    let sink = AggregateSink::default();
+    let slot = SlotInput {
+        base: BTreeSet::<String>::new(),
+        ours: BTreeMap::new(),
+        theirs: BTreeMap::new(),
+        theirs_closed: BTreeMap::new(),
+        card: Card::ONE,
+    };
+    let slots = BTreeMap::from([(
+        SlotKey {
+            graph: 7,
+            entity: 123456789,
+            predicate: 11,
+        },
+        ObservationInput {
+            slot: &slot,
+            base: BaseEvidence::Missing,
+            shape_bound_known: false,
+        },
+    )]);
+    assert_eq!(
+        sink.try_observe(
+            ShadowMode::Observe,
+            binding(None),
+            &slots,
+            "2026-01-01T00:00:00Z"
+        ),
+        ObservationOutcome::Recorded(RecordOutcome::Accepted)
+    );
+    let first = snapshot(&sink);
+    assert_eq!(first.accepted_slot_observations, 1);
+    assert_eq!(first.buckets[0].0.classification, "unknown");
+    assert_eq!(first.buckets[0].0.would_hold_slot, None);
+    let wire = serde_json::to_string(&first).unwrap();
+    assert!(!wire.contains("123456789"));
+    let guard = sink.state.lock().unwrap();
+    assert_eq!(
+        sink.try_observe(
+            ShadowMode::Observe,
+            binding(None),
+            &slots,
+            "2026-01-01T00:00:00Z"
+        ),
+        ObservationOutcome::Recorded(RecordOutcome::DroppedBusy)
+    );
+    drop(guard);
+    let after = snapshot(&sink);
+    assert_eq!(after.accepted_batches, 1);
+    assert_eq!(after.dropped_busy_batches, 1);
+}
