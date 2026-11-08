@@ -8,11 +8,14 @@
 use std::collections::BTreeSet;
 
 #[cfg(feature = "shacl")]
-use super::shacl_new_graph::{COMPONENTS, VALUE_SETS};
+mod instrumented_check;
 use crate::time::Stopwatch;
 
 use super::{Datum, Store};
 use crate::{Error, Result};
+
+pub(super) const CONTEXT_NODE_BUDGET: usize = 1024;
+pub(super) const CONTEXT_FACT_BUDGET: u32 = 100_000;
 
 impl Store {
     /// Supply explicit shapes to every transaction made by one operation.
@@ -44,12 +47,26 @@ impl Store {
         tx_id: i64,
         conditional: bool,
     ) -> Result<()> {
+        let observation = self.begin_validator_observation(graph, tx_id, conditional);
+        let result = self.enforce_shacl_poststate_observed(datums, graph, tx_id, conditional);
+        self.finish_validator_observation(observation, &result);
+        result
+    }
+
+    fn enforce_shacl_poststate_observed(
+        &mut self,
+        datums: &[Datum],
+        graph: i64,
+        tx_id: i64,
+        conditional: bool,
+    ) -> Result<()> {
         // Verdict/refusal writers must not recursively validate their evidence.
         if self.recording_verdicts {
             return Ok(());
         }
         let started = Stopwatch::start();
         let loaded = if self.shacl_config.validate_on_write || conditional {
+            self.observed_loaded_selection();
             self.get_combined_shapes()?
         } else {
             None
@@ -79,174 +96,6 @@ impl Store {
     }
 
     #[cfg(feature = "shacl")]
-    fn check_poststate_cardinality(
-        &mut self,
-        shapes: &str,
-        datums: &[Datum],
-        graph: i64,
-        tx_id: i64,
-    ) -> Result<()> {
-        // The caller selects reject shapes using its existing admission policy.
-        // CLI --shapes and inline episode shapes remain strict, as before.
-        // Reuse batch's compiled schema and relative-IRI base. Inactive shapes
-        // must not impose unsupported-path or context-gathering obligations.
-        let planning = Stopwatch::start();
-        let plan = crate::shacl::cached_validator(shapes)?.cardinality_plan()?;
-        self.poststate_profile.plan += planning.elapsed();
-        if !(plan.has_value_set_constraint || plan.has_value_constraint) || datums.is_empty() {
-            return Ok(());
-        }
-        let checking = Stopwatch::start();
-        // A graph with no history before this write holds exactly what it
-        // staged: judge it whole, in batch, rather than per focus under the
-        // incremental context cap (aegis-t16).
-        if self.graph_is_new(graph, tx_id)? {
-            let result = self.check_new_graph_in_batch(shapes, graph);
-            self.poststate_profile.check += checking.elapsed();
-            return result;
-        }
-        let result = (|| {
-            let subjects: BTreeSet<_> = datums
-                .iter()
-                .flat_map(|d| {
-                    // Object targets can become applicable when this write adds an
-                    // incoming edge. Include referenced focuses without validating
-                    // unrelated subjects elsewhere in the graph.
-                    std::iter::once(d.entity).chain(match d.value {
-                        crate::Value::Ref(object) => Some(object),
-                        _ => None,
-                    })
-                })
-                .collect();
-            let mut value_focuses = self.value_focuses(datums, &plan.object_target_predicates)?;
-            let mut owned = self.value_set_ownership(datums, graph, tx_id, &plan)?;
-            let incoming_targets = plan.incoming_predicates.clone();
-            let mut facts = Vec::new();
-            for &entity in &subjects {
-                self.append_bounded_entity(&mut facts, entity, graph, None)?;
-                self.append_object_targets(
-                    &mut facts,
-                    &crate::Value::Ref(entity),
-                    graph,
-                    &incoming_targets,
-                )?;
-                if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
-                    // ROOT types can target focuses; ROOT values never affect cardinality.
-                    if let Some(rdf_type) =
-                        self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
-                    {
-                        self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
-                    }
-                }
-            }
-            if !incoming_targets.is_empty() {
-                let mut seen = BTreeSet::new();
-                for datum in datums {
-                    if !matches!(datum.value, crate::Value::Ref(_))
-                        && seen.insert(datum.value.term_key())
-                    {
-                        if let oxrdf::Term::Literal(literal) =
-                            crate::rdf::value_to_term(self, &datum.value)?
-                        {
-                            owned.whole.insert(literal.value().to_owned());
-                        }
-                        self.append_object_targets(
-                            &mut facts,
-                            &datum.value,
-                            graph,
-                            &incoming_targets,
-                        )?;
-                    }
-                }
-            }
-            self.append_subclass_context(&mut facts, graph)?;
-            // Preserve the pre-value-admission context. Exhausting this optional
-            // repair budget falls back to the existing payload/maxCount path; a
-            // partial context must never manufacture a new value violation.
-            let base_len = facts.len();
-            let value_context = (|| {
-                self.append_node_dependents(
-                    &mut facts,
-                    &mut value_focuses,
-                    &subjects,
-                    graph,
-                    &plan.node_reference_predicates,
-                )?;
-                self.append_value_context(
-                    &mut facts,
-                    graph,
-                    &plan.node_reference_predicates,
-                    plan.has_class_constraint,
-                )?;
-                self.append_subclass_context(&mut facts, graph)
-            })();
-            let complete_values = match value_context {
-                Ok(()) => true,
-                Err(Error::CannotVerify(message)) if context_budget_exhausted(&message) => {
-                    facts.truncate(base_len);
-                    false
-                }
-                Err(error) => return Err(error),
-            };
-            let data = self.cardinality_context(&facts)?;
-            let feedback = crate::validate_shapes(shapes, &data)?;
-            let issues: Vec<_> = feedback
-                .results
-                .iter()
-                .filter(|issue| {
-                    let Some(component) = issue
-                        .component
-                        .trim_matches(['<', '>'])
-                        .strip_prefix("http://www.w3.org/ns/shacl#")
-                    else {
-                        return false;
-                    };
-                    let focus = issue.focus_node.trim_matches(['<', '>']);
-                    let mine = if VALUE_SETS.contains(&component) {
-                        owned.owns(component, focus, issue.path.as_deref())
-                    } else {
-                        complete_values
-                            && COMPONENTS.contains(&component)
-                            && value_focuses.contains(focus)
-                    };
-                    mine && issue.severity.eq_ignore_ascii_case("violation")
-                })
-                .collect();
-            // Value debt the focus had before this transaction (aegis-g51c C12).
-            let issues = crate::shacl_debt::new_only(self, shapes, &data, issues, graph, tx_id)?;
-            if issues.is_empty() {
-                return Ok(());
-            }
-            Err(Error::ValidationFailed {
-                violations: issues.len(),
-                messages: issues
-                    .iter()
-                    .map(|issue| {
-                        format!(
-                            "post-state {} on {}: {}",
-                            issue.component,
-                            issue.focus_node,
-                            issue
-                                .message
-                                .as_deref()
-                                .unwrap_or("post-state value constraint violated"),
-                        )
-                    })
-                    .collect(),
-            })
-        })();
-        self.poststate_profile.check += checking.elapsed();
-        match result {
-            Err(Error::CannotVerify(message))
-                if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
-            {
-                Ok(())
-            }
-            result => result,
-        }
-    }
-
-    #[cfg(feature = "shacl")]
     fn append_node_dependents(
         &self,
         facts: &mut Vec<crate::Fact>,
@@ -265,7 +114,7 @@ impl Store {
             if !seen.insert(child) {
                 continue;
             }
-            if seen.len() > 1024 {
+            if seen.len() > CONTEXT_NODE_BUDGET {
                 return Err(Error::CannotVerify(
                     "post-state SHACL node dependencies exceed 1024 nodes".into(),
                 ));
@@ -372,7 +221,7 @@ impl Store {
                 if !seen.insert(entity) {
                     continue;
                 }
-                if seen.len() > 1024 {
+                if seen.len() > CONTEXT_NODE_BUDGET {
                     return Err(Error::CannotVerify(
                         "post-state SHACL value context exceeds 1024 nodes".into(),
                     ));
@@ -389,7 +238,6 @@ impl Store {
         Ok(())
     }
 
-    #[cfg(feature = "shacl")]
     pub(super) fn cardinality_context(&self, facts: &[crate::Fact]) -> Result<String> {
         use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Triple};
         use oxrdfio::{RdfFormat, RdfSerializer};
@@ -447,7 +295,7 @@ impl Store {
             )?;
             let mut rows = stmt.query(rusqlite::params![bytes, attribute, graph])?;
             while let Some(row) = rows.next()? {
-                if facts.len() >= 100_000 {
+                if facts.len() >= CONTEXT_FACT_BUDGET as usize {
                     return Err(Error::CannotVerify(
                         "post-state SHACL context exceeds 100000 facts".into(),
                     ));
@@ -477,11 +325,13 @@ impl Store {
         // Bound the indexed per-entity read BEFORE materializing facts.
         let count: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM (SELECT 1 FROM facts WHERE e=?1 AND g=?2 \
-             AND op=1 AND valid_to IS NULL LIMIT 100001)",
-            rusqlite::params![entity, graph],
+             AND op=1 AND valid_to IS NULL LIMIT ?3)",
+            rusqlite::params![entity, graph, CONTEXT_FACT_BUDGET + 1],
             |row| row.get(0),
         )?;
-        if count > 100_000 || facts.len() + count as usize > 100_000 {
+        if count > CONTEXT_FACT_BUDGET
+            || facts.len() + count as usize > CONTEXT_FACT_BUDGET as usize
+        {
             return Err(Error::CannotVerify(
                 "post-state SHACL context exceeds 100000 facts".into(),
             ));
@@ -496,7 +346,7 @@ impl Store {
 }
 
 #[cfg(feature = "shacl")]
-fn context_budget_exhausted(message: &str) -> bool {
+pub(super) fn context_budget_exhausted(message: &str) -> bool {
     message.starts_with("post-state SHACL ")
         && (message.contains("exceeds 100000 facts")
             || message.contains("exceed 1024 nodes")

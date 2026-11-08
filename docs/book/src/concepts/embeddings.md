@@ -12,7 +12,23 @@ with the setting omitted creates no keyword tables or write triggers.
 Quipu answers two different kinds of question. **Lexical** retrieval (SPARQL,
 `CONTAINS`, exact match) needs nothing but the fact log. **Semantic** retrieval
 (`/context`, `quipu_hybrid_search`, `/search` with `mode: "semantic"`) needs vectors, and vectors need
-an embedding provider you configure yourself.
+an embedding provider you configure yourself. With a fresh unindexed local store,
+plain-text `quipu_search` and `quipu_hybrid_search` instead return bounded lexical
+matches. No Bobbin service or model download is required for that fallback.
+
+Fallback responses report `retrieval.mode = "lexical"`, `status = "degraded"`,
+the current embedding count, candidate ceiling and time budget. Partial indexes
+can return `mode = "mixed"`: admitted vector hits plus unindexed lexical matches.
+Lexical rows carry `evidence_mode = "lexical"` and have no cosine similarity.
+Their `quipu-lexical-results/v1` contract is separate from semantic context
+admission; semantic-only clients must treat an unsupported contract as UNKNOWN.
+Explicit vector, mode, anchored and structured requests retain their own gates.
+`quipu_search_nodes` and `quipu_search_facts` report lexical mode too. Literal
+matching happens before the candidate limit, avoiding empty results caused by
+sampling unrelated early records. Lexical work has a one-second ceiling, also
+respecting a shorter existing request deadline; timeout remains an error, never
+an empty successful answer. The response's candidate ceiling is not a claim of
+complete corpus or embedding coverage.
 
 Automatic embedding is enabled by default when a provider is configured.
 No model is downloaded automatically. To install the default explicitly:
@@ -72,6 +88,12 @@ available mismatched provider refuses **before staging**. Legacy shares without
 this recipe remain importable; local indexing does not attest which model the
 publisher intended. Re-importing with a real provider recomputes eligible
 vectors instead of treating matching text as proof of model identity.
+
+For the explicitly installed default model, the native loader also checks the
+model and tokenizer buffers against the installation's compiled pins before
+runtime initialization. A cache verification followed by a changed file is
+refused. Ordinary commands still do not download model assets, and explicit
+custom model paths keep their own recipe and the selected runtime bootstrap.
 
 Existing graph data can still use the explicit startup `--embed-backfill` or
 bounded `POST /embed_backfill_graph` operations when needed.

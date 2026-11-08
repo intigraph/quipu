@@ -45,6 +45,7 @@ mod cli;
 mod cli_acquire;
 mod cli_alias;
 mod cli_align;
+mod cli_asof_rdf;
 mod cli_attest;
 mod cli_audit;
 mod cli_changes;
@@ -63,6 +64,7 @@ mod cli_follow;
 mod cli_fork;
 mod cli_gate;
 mod cli_git_merge;
+mod cli_git_mergetool;
 mod cli_graph;
 mod cli_hooks;
 mod cli_ingest;
@@ -126,14 +128,15 @@ fn main() {
     match args[1].as_str() {
         "competency" => return cli_competency::run(&args),
         "install-alias" => return cli_alias::run(&args),
-        "git-merge" => return cli_git_merge::run(&args),
-        "merge-driver" => return cli_git_merge::run(&args),
-        "pendant-resolve" => return cli_git_merge::run(&args),
-        "pendant-check" => return cli_git_merge::run(&args),
+        "git-mergetool" => return cli_git_mergetool::run(&args),
+        "git-merge" | "merge-driver" | "pendant-resolve" | "pendant-check" => {
+            return cli_git_merge::run(&args);
+        }
         // Store-free pack readers: no config, no database (aegis-fxpbys.1).
         "diff-textconv" => return cli_share_diff::cmd_textconv(&args),
         // Hooks are store-free and config-free: a Stop hook must not load a
         // config (which can warn on stderr) or open a database.
+        "asof-rdf" => return cli_asof_rdf::command(&args),
         "hook" => return cli_hooks::cmd_hook(&args),
         "hooks" => return cli_hooks::cmd_hooks(&args),
         "share" if args.get(2).map(String::as_str) == Some("diff") => {
@@ -454,6 +457,7 @@ COMMANDS:
     qp events refusals [--db <path>]
     qp changes [--from N] [--capture new_values|old_and_new_values|new_row] [--limit N] [--graph IRI] [--db <path>]
     qp follow --primary <url> [--page-txs N] [--page-gap-ms N] [--bootstrap-only] [--db <path>]  Keep this database a read-only follower of a primary
+    qp asof-rdf --binding <file.json> --frames <file.jsonl> --scratch <private-empty-dir>  Convert a retained cut to coherent RDF chunks offline
     qp graph create <iri> [--actor <who>] [--timestamp <utc>] [--db <path>]
     qp graph label <iri> --label '<JSON label fields>' [--db <path>]
     qp graph list [--kind <token>] [--frozen] [--json] [--db <path>]
@@ -502,6 +506,7 @@ COMMANDS:
     qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
     qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
     qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    qp git-mergetool <pendant>/export.nt --by <who>   interactively resolve Git decisions
     qp pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     qp pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     qp share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff

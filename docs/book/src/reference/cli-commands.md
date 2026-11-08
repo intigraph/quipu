@@ -468,6 +468,8 @@ qp export
 
 - `--format <VALUE>`: Output or input format for this operation.
 
+- `--read-only`: Export a cold local snapshot without writes; refuses sidecars and attachments.
+
 ## `qp databook`
 
 Export a graph as a DataBook, or import a DataBook's graph data.
@@ -1086,6 +1088,20 @@ qp follow
 
 - `--bootstrap-only`: Bootstrap a follower and exit without polling.
 
+## `qp asof-rdf`
+
+Convert one retained as-of share into bounded coherent RDF chunks offline.
+
+```text
+qp asof-rdf
+```
+
+- `--binding <VALUE>`: Private JSON cut/profile binding and finite resource limits.
+
+- `--frames <VALUE>`: Private retained event/data JSONL file, with exact transport data strings.
+
+- `--scratch <VALUE>`: Empty canonical private directory matching SQLITE_TMPDIR.
+
 ## `qp acquire`
 
 Measure the bounded scope of a direct-main graph acquisition.
@@ -1131,6 +1147,16 @@ Merge pendants from Git snapshots and stop before committing.
 ```text
 qp git-merge <ref>
 ```
+
+## `qp git-mergetool`
+
+Interactively resolve a pendant using the standard merge layout.
+
+```text
+qp git-mergetool <pendant-export.nt>
+```
+
+- `--by <VALUE>`: Identity recording a resolution.
 
 ### `qp git-merge show`
 

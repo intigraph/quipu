@@ -318,6 +318,8 @@ impl Store {
         Self::migrate_decision_deck(&conn)?;
         Self::migrate_registry_amendment_nonces(&conn)?;
         Self::migrate_bitemporal_registries(&conn)?;
+        crate::shape_mapping::migrate_registry_digests(&conn)?;
+        Self::migrate_shape_mapping_state(&conn)?;
         Self::migrate_query_registry(&conn)?;
         Self::migrate_pending_share_queries(&conn)?;
         Self::migrate_retraction_tx(&conn)?;
@@ -327,6 +329,7 @@ impl Store {
         Self::migrate_frozen_packs(&conn)?;
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
+        Self::migrate_writer_scope(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which
@@ -574,6 +577,9 @@ impl Store {
             write_shapes: None,
             write_reference_graphs: None,
             poststate_profile: PoststateProfile::default(),
+            validator_observation: std::cell::RefCell::new(None),
+            #[cfg(feature = "owl")]
+            owl_cache_source: None,
             current_g_index: std::cell::Cell::new(None),
             owl_config: OwlConfig::default(),
             #[cfg(feature = "owl")]

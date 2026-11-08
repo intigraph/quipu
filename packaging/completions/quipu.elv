@@ -66,8 +66,10 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand compose 'Compose verified packs into a named inspection dataset'
             cand changes 'Read whole transaction change pages from the change feed'
             cand follow 'Keep this database a read-only follower of a primary server'
+            cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
+            cand git-mergetool 'Interactively resolve a pendant using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
@@ -384,6 +386,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --group-id 'Select facts belonging to this group'
             cand --construct 'SPARQL CONSTRUCT query selecting the share'
             cand --format 'Output or input format for this operation'
+            cand --read-only 'Export a cold local snapshot without writes; refuses sidecars and attachments'
             cand -h 'Print help'
             cand --help 'Print help'
         }
@@ -757,6 +760,14 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand -h 'Print help'
             cand --help 'Print help'
         }
+        &'quipu;asof-rdf'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --binding 'Private JSON cut/profile binding and finite resource limits'
+            cand --frames 'Private retained event/data JSONL file, with exact transport data strings'
+            cand --scratch 'Empty canonical private directory matching SQLITE_TMPDIR'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
         &'quipu;acquire'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
@@ -778,6 +789,12 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --from 'Source vector backend'
             cand --to 'Destination vector backend'
             cand --dry-run 'Preview the operation without applying it'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;git-mergetool'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand --by 'Identity recording a resolution'
             cand -h 'Print help'
             cand --help 'Print help'
         }

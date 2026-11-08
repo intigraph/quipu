@@ -5,6 +5,16 @@ pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
         ("share", "competency") => {
             Some("Verbatim competency.toml to compile and seal with the share")
         }
+        ("export", "read-only") => {
+            Some("Export a cold local snapshot without writes; refuses sidecars and attachments")
+        }
+        ("asof-rdf", "binding") => {
+            Some("Private JSON cut/profile binding and finite resource limits")
+        }
+        ("asof-rdf", "frames") => {
+            Some("Private retained event/data JSONL file, with exact transport data strings")
+        }
+        ("asof-rdf", "scratch") => Some("Empty canonical private directory matching SQLITE_TMPDIR"),
         ("db respace", "into") => Some("New integer namespace space number"),
         ("db attach", "list") => Some("List mounted read-only databases"),
         ("render", "path") => Some("Relative output path template"),

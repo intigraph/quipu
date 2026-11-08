@@ -23,7 +23,7 @@ impl EmbeddingProvider for Slow {
     }
 }
 fn store() -> Store {
-    let store = {
+    let mut store = {
         let mut s = Store::open_in_memory().unwrap();
         s.set_base_ns(quipu::namespace::DEFAULT_BASE_NS.to_string());
         s
@@ -33,7 +33,7 @@ fn store() -> Store {
         store.base_ns()
     );
     quipu::mcp::tools::tool_shapes(
-        &store,
+        &mut store,
         &serde_json::json!({"action":"load", "name":"documents", "turtle":shapes}),
     )
     .unwrap();

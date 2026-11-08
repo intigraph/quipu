@@ -69,8 +69,10 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('compose', 'compose', [CompletionResultType]::ParameterValue, 'Compose verified packs into a named inspection dataset')
             [CompletionResult]::new('changes', 'changes', [CompletionResultType]::ParameterValue, 'Read whole transaction change pages from the change feed')
             [CompletionResult]::new('follow', 'follow', [CompletionResultType]::ParameterValue, 'Keep this database a read-only follower of a primary server')
+            [CompletionResult]::new('asof-rdf', 'asof-rdf', [CompletionResultType]::ParameterValue, 'Convert one retained as-of share into bounded coherent RDF chunks offline')
             [CompletionResult]::new('acquire', 'acquire', [CompletionResultType]::ParameterValue, 'Measure the bounded scope of a direct-main graph acquisition')
             [CompletionResult]::new('migrate-vectors', 'migrate-vectors', [CompletionResultType]::ParameterValue, 'Move stored vectors between backends (lancedb feature)')
+            [CompletionResult]::new('git-mergetool', 'git-mergetool', [CompletionResultType]::ParameterValue, 'Interactively resolve a pendant using the standard merge layout')
             [CompletionResult]::new('git-merge', 'git-merge', [CompletionResultType]::ParameterValue, 'Merge pendants from Git snapshots and stop before committing')
             [CompletionResult]::new('merge-driver', 'merge-driver', [CompletionResultType]::ParameterValue, 'Low-level Git merge driver for pendant files')
             [CompletionResult]::new('pendant-resolve', 'pendant-resolve', [CompletionResultType]::ParameterValue, 'Record a resolution choice for one pendant merge conflict')
@@ -429,6 +431,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--group-id', '--group-id', [CompletionResultType]::ParameterName, 'Select facts belonging to this group')
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'Output or input format for this operation')
+            [CompletionResult]::new('--read-only', '--read-only', [CompletionResultType]::ParameterName, 'Export a cold local snapshot without writes; refuses sidecars and attachments')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
@@ -841,6 +844,15 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break
         }
+        'qp;asof-rdf' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--binding', '--binding', [CompletionResultType]::ParameterName, 'Private JSON cut/profile binding and finite resource limits')
+            [CompletionResult]::new('--frames', '--frames', [CompletionResultType]::ParameterName, 'Private retained event/data JSONL file, with exact transport data strings')
+            [CompletionResult]::new('--scratch', '--scratch', [CompletionResultType]::ParameterName, 'Empty canonical private directory matching SQLITE_TMPDIR')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
         'qp;acquire' {
             [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
@@ -864,6 +876,13 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Source vector backend')
             [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Destination vector backend')
             [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Preview the operation without applying it')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'qp;git-mergetool' {
+            [CompletionResult]::new('--db', '--db', [CompletionResultType]::ParameterName, 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)')
+            [CompletionResult]::new('--by', '--by', [CompletionResultType]::ParameterName, 'Identity recording a resolution')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             break

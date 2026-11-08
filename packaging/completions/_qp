@@ -482,6 +482,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--group-id=[Select facts belonging to this group]:VALUE:_default' \
 '*--construct=[SPARQL CONSTRUCT query selecting the share]:VALUE:_default' \
 '*--format=[Output or input format for this operation]:VALUE:_default' \
+'--read-only[Export a cold local snapshot without writes; refuses sidecars and attachments]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -1029,6 +1030,16 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(asof-rdf)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--binding=[Private JSON cut/profile binding and finite resource limits]:VALUE:_default' \
+'*--frames=[Private retained event/data JSONL file, with exact transport data strings]:VALUE:_default' \
+'*--scratch=[Empty canonical private directory matching SQLITE_TMPDIR]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (acquire)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -1068,6 +1079,15 @@ _arguments "${_arguments_options[@]}" : \
 '--dry-run[Preview the operation without applying it]' \
 '-h[Print help]' \
 '--help[Print help]' \
+&& ret=0
+;;
+(git-mergetool)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--by=[Identity recording a resolution]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-pendant-export-nt:_default' \
 && ret=0
 ;;
 (git-merge)
@@ -2246,8 +2266,10 @@ _qp_commands() {
 'compose:Compose verified packs into a named inspection dataset' \
 'changes:Read whole transaction change pages from the change feed' \
 'follow:Keep this database a read-only follower of a primary server' \
+'asof-rdf:Convert one retained as-of share into bounded coherent RDF chunks offline' \
 'acquire:Measure the bounded scope of a direct-main graph acquisition' \
 'migrate-vectors:Move stored vectors between backends (lancedb feature)' \
+'git-mergetool:Interactively resolve a pendant using the standard merge layout' \
 'git-merge:Merge pendants from Git snapshots and stop before committing' \
 'merge-driver:Low-level Git merge driver for pendant files' \
 'pendant-resolve:Record a resolution choice for one pendant merge conflict' \
@@ -2315,6 +2337,11 @@ _qp__subcmd__align__subcmd__export_commands() {
 _qp__subcmd__align__subcmd__propose_commands() {
     local commands; commands=()
     _describe -t commands 'qp align propose commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__asof-rdf_commands] )) ||
+_qp__subcmd__asof-rdf_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp asof-rdf commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__attest_commands] )) ||
 _qp__subcmd__attest_commands() {
@@ -2673,6 +2700,11 @@ _qp__subcmd__git-merge__subcmd__resolve_commands() {
 _qp__subcmd__git-merge__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'qp git-merge show commands' commands "$@"
+}
+(( $+functions[_qp__subcmd__git-mergetool_commands] )) ||
+_qp__subcmd__git-mergetool_commands() {
+    local commands; commands=()
+    _describe -t commands 'qp git-mergetool commands' commands "$@"
 }
 (( $+functions[_qp__subcmd__graph_commands] )) ||
 _qp__subcmd__graph_commands() {

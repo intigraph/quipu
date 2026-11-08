@@ -5,6 +5,7 @@
 //! write? is it allowed under read-only mode? does the bearer token match? — is
 //! pure and lives here so it can be unit-tested without standing up a server.
 
+mod memory_auth;
 mod render_auth;
 pub use render_auth::authorize_http_bearers;
 
@@ -104,6 +105,7 @@ pub const WRITE_ENDPOINTS: &[&str] = &[
     // owl:sameAs / quipu:distinctFrom, AND creates the derived alignment graph
     // (a graphs-registry write, the same reason /overlay/create is here).
     "/align/apply",
+    "/mapping/apply",
     // aegis-yavo9c: finishes a share merge from decided conflicts — one
     // transaction asserting and retracting ROOT facts.
     "/merge/apply",
@@ -167,6 +169,7 @@ pub const READ_ENDPOINTS: &[&str] = &[
     "/memory/export",
     "/memory/projection",
     "/memory/receipt",
+    "/knot/status",
     "/rule_query",
     "/watermark",
     // aegis-tnh: follower readiness from its own records; never asks the primary.
@@ -176,6 +179,8 @@ pub const READ_ENDPOINTS: &[&str] = &[
     // writer of the three is /align/apply, above.
     "/align/propose",
     "/align/decide",
+    "/mapping/propose",
+    "/mapping/decide",
     // aegis-yavo9c: emits (and optionally proposes) merge decisions from
     // inline shares and ROOT; commits nothing. Its writer is /merge/apply.
     "/merge/decisions",
@@ -272,7 +277,10 @@ pub fn is_write_endpoint(path: &str) -> bool {
 
 /// Own-file projection needs verified identity without making shared reads private.
 pub fn requires_read_identity(path: &str) -> bool {
-    matches!(path, "/identity" | "/memory/projection" | "/memory/receipt")
+    matches!(
+        path,
+        "/identity" | "/memory/projection" | "/memory/receipt" | "/knot/status"
+    )
 }
 
 /// Classify routes whose write-ness depends on the HTTP method.
@@ -333,6 +341,7 @@ pub struct BearerPolicy {
     previous: Option<ExpiringBearer>,
     named: crate::crew_credentials::CredentialRegistry,
     replication_only: crate::crew_credentials::CredentialRegistry,
+    scoped_writers: crate::crew_credentials::CredentialRegistry,
 }
 
 #[derive(Clone)]
@@ -383,6 +392,7 @@ impl BearerPolicy {
             previous,
             named: crate::crew_credentials::CredentialRegistry::default(),
             replication_only: crate::crew_credentials::CredentialRegistry::default(),
+            scoped_writers: crate::crew_credentials::CredentialRegistry::default(),
         })
     }
 
@@ -411,11 +421,52 @@ impl BearerPolicy {
                 .authenticate(Some(&format!("Bearer {}", previous.token)))
                 .is_some()
         });
-        if registry.is_empty() || registry.overlaps(&self.named) || shared_collision {
+        if registry.is_empty()
+            || registry.contains_memory_credentials()
+            || registry.overlaps(&self.named)
+            || registry.overlaps(&self.scoped_writers)
+            || shared_collision
+        {
             return Err("replication credentials must be nonempty and distinct from writers");
         }
         self.replication_only = registry;
         Ok(self)
+    }
+
+    /// Install a separate, fail-closed writer registry after all privileged
+    /// registries are installed. Credential ids AND verifiers must be disjoint.
+    pub fn with_scoped_writers(
+        mut self,
+        registry: crate::crew_credentials::CredentialRegistry,
+    ) -> Result<Self, &'static str> {
+        let collision = self
+            .current
+            .iter()
+            .chain(self.previous.iter().map(|p| &p.token))
+            .any(|token| {
+                registry
+                    .authenticate(Some(&format!("Bearer {token}")))
+                    .is_some()
+            });
+        if registry.is_empty()
+            || registry.contains_memory_credentials()
+            || registry.overlaps(&self.named)
+            || registry.overlaps(&self.replication_only)
+            || collision
+        {
+            return Err("scoped writer credentials must be nonempty and distinct");
+        }
+        self.scoped_writers = registry;
+        Ok(self)
+    }
+
+    /// Authentication only; a successful lookup supplies NO graph grant.
+    #[must_use]
+    pub fn scoped_writer_principal(
+        &self,
+        header: Option<&str>,
+    ) -> Option<crate::crew_credentials::CrewPrincipal> {
+        self.scoped_writers.authenticate(header)
     }
 
     /// Look up only the dedicated replication transport identity.
@@ -463,10 +514,22 @@ pub fn authorize_bearers(
 ) -> Authorization {
     // This lower-level API has no route to prove replication admission.
     // Only the HTTP adapter can grant the three exact replication operations.
-    if policy.replication_principal(auth_header).is_some() {
+    if policy.replication_principal(auth_header).is_some()
+        || policy.memory_credential(auth_header).is_some()
+    {
         return Authorization {
             decision: AccessDecision::Unauthorized,
             generation: None,
+        };
+    }
+    if policy.scoped_writer_principal(auth_header).is_some() {
+        return Authorization {
+            decision: if is_write && read_only {
+                AccessDecision::ReadOnly
+            } else {
+                AccessDecision::Allow
+            },
+            generation: (!is_write || !read_only).then_some(AuthGeneration::Named),
         };
     }
     if !is_write {

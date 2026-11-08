@@ -2,12 +2,16 @@
 use crate::error::{Error, Result};
 use crate::git_merge_alias::{AliasProposal, propose};
 pub use crate::git_merge_repo::{
-    check, check_history, driver, merge, merge_refs, merge_with_pending, resolve, resolve_by,
+    check, check_history, driver, merge, merge_refs, merge_with_pending, reconcile, resolve,
+    resolve_by,
 };
 use crate::share::{ShareManifest, canonicalize_ntriples, manifest_bytes, sha256};
-use crate::share_merge::{DecisionRecord, Graph, merge_graphs, parse_graph};
+use crate::share_merge::{DecisionRecord, Graph, parse_graph};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+#[path = "git_merge_core.rs"]
+mod core;
 
 #[derive(Clone)]
 pub(crate) struct Pack {
@@ -17,10 +21,14 @@ pub(crate) struct Pack {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Decisions {
     pub schema: String,
     pub inputs: [String; 3],
     pub conflicts: Vec<DecisionRecord>,
+    /// v2 report kinds aligned with rows; v1 files omit them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kinds: Vec<crate::share_merge_decisions_view::ConflictKind>,
     pub aliases: Vec<AliasProposal>,
     #[serde(default)]
     pub resolutions: BTreeMap<String, String>,
@@ -33,25 +41,7 @@ pub struct Decisions {
 
 /// The values a conflict resolves to under `choice`, or why it cannot.
 pub(crate) fn resolved_values(c: &DecisionRecord, choice: &str) -> Result<Vec<String>> {
-    Ok(match choice {
-        "base" => c.base.clone(),
-        "ours" => c.ours.clone(),
-        "theirs" => c.theirs.clone(),
-        "both" => {
-            let values = crate::share_merge_decisions::union(&c.ours, &c.theirs);
-            if values.len() > c.max_count {
-                return Err(invalid(format!(
-                    "`both` would hold {} values for {} <{}>, above sh:maxCount {}",
-                    values.len(),
-                    c.subject,
-                    c.predicate,
-                    c.max_count
-                )));
-            }
-            values
-        }
-        _ => return Err(invalid("conflict resolution must be base/ours/theirs/both")),
-    })
+    core::resolve(c, choice)
 }
 
 pub(crate) struct Merged {
@@ -190,17 +180,29 @@ pub(crate) fn plan(base: &Pack, ours: &Pack, theirs: &Pack) -> Result<Merged> {
             "Git pendant merge requires IRI subjects/objects; skolemize blank nodes first",
         ));
     }
-    let (graph, conflicts) = merge_graphs(&b, &o, &t, &shapes)?;
+    let (graph, _) = core::merge(&b, &o, &t, &shapes)?;
+    let (_, conflicts) = crate::merge_review::merge(&b, &o, &t, &shapes)?;
+    let kinds = conflicts
+        .iter()
+        .map(crate::share_merge_decisions_view::kind)
+        .collect();
+    let resolutions = conflicts
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| crate::merge_review::convergent(r))
+        .map(|(i, _)| (format!("conflict:{i}"), "continue".into()))
+        .collect();
     let decisions = Decisions {
-        schema: "https://github.com/scbrown/quipu/git-decisions/v1".into(),
+        schema: "https://github.com/scbrown/quipu/git-decisions/v2".into(),
         inputs: [
             base.manifest.share_id.clone(),
             ours.manifest.share_id.clone(),
             theirs.manifest.share_id.clone(),
         ],
         conflicts,
+        kinds,
         aliases: propose(&b, &o, &t),
-        resolutions: BTreeMap::new(),
+        resolutions,
         resolved_by: BTreeMap::new(),
     };
     let mut pack = Pack {
@@ -221,6 +223,13 @@ impl Merged {
     pub(crate) fn apply(&mut self, recorded: Option<&Decisions>) -> Result<bool> {
         if let Some(recorded) = recorded {
             let mut expected = self.decisions.clone();
+            if recorded.schema == "https://github.com/scbrown/quipu/git-decisions/v1" {
+                expected.schema = recorded.schema.clone();
+                expected
+                    .conflicts
+                    .retain(|r| !crate::merge_review::convergent(r));
+                expected.kinds.clear();
+            }
             expected.resolutions = recorded.resolutions.clone();
             expected.resolved_by = recorded.resolved_by.clone();
             if expected != *recorded {

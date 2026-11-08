@@ -466,8 +466,17 @@ fn attest_options(args: &[String]) -> Option<quipu::share::AttestOptions> {
             std::process::exit(2);
         }
     };
-    let key_path = flag_value(args, "--attest-key")
-        .map_or_else(quipu::signing::default_key_path, std::path::PathBuf::from);
+    let key_path = match flag_value(args, "--attest-key") {
+        Some(path) => std::path::PathBuf::from(path),
+        None => quipu::signing::default_key_path().unwrap_or_else(|error| {
+            eprintln!("cannot select signing key: {error}");
+            std::process::exit(2);
+        }),
+    };
+    quipu::signing::protect_repository_key(&key_path).unwrap_or_else(|error| {
+        eprintln!("cannot protect signing key: {error}");
+        std::process::exit(2);
+    });
     let issued: u64 = match flag_value(args, "--attest-issued-at") {
         Some(v) => v.parse().unwrap_or_else(|_| {
             eprintln!("--attest-issued-at must be seconds since the epoch");

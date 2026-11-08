@@ -301,6 +301,20 @@ pub fn merge_refs(repo: &Path) -> Result<[String; 3]> {
     refs(repo, base.trim(), &ours, &theirs)
 }
 
+/// Rebuild and validate an existing pendant decision file against the active
+/// merge before a mergetool reports success. Never trust a displayed row count.
+pub fn reconcile(repo: &Path, dir: &str) -> Result<bool> {
+    let r = merge_refs(repo)?;
+    let output = safe_dir(repo, dir)?;
+    let decisions: Decisions =
+        serde_json::from_slice(&std::fs::read(output.join("decisions.json")).map_err(io)?)
+            .map_err(io)?;
+    let mut merged = build(repo, &r, dir)?;
+    let ready = merged.apply(Some(&decisions))?;
+    write(&output, &merged)?;
+    Ok(ready)
+}
+
 /// Recompute the plan from Git, validate a selected decision, and rehash the pack.
 pub fn resolve(
     repo: &Path,

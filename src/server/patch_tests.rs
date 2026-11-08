@@ -19,7 +19,7 @@ const PROFILE: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> .\n\
        sh:property [ sh:path ex:sourceKind ; sh:minCount 1 ] .";
 
 fn shared(shapes: Option<&str>) -> SharedStore {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     if let Some(s) = shapes {
         store
             .load_shapes("profile", s, "2026-10-07T00:00:00Z")

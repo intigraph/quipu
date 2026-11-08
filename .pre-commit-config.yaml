@@ -102,7 +102,7 @@ repos:
 
       - id: cargo-clippy-shacl
         name: cargo clippy (shacl)
-        entry: cargo clippy --features shacl --all-targets -- -D warnings -A missing-docs
+        entry: cargo clippy --no-default-features --features shacl --all-targets -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false
