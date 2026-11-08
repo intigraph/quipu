@@ -11,6 +11,10 @@ use crate::types::{Op, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+#[path = "merge_pending_scope.rs"]
+mod scope;
+pub(crate) use scope::Scope;
+
 const PAYLOAD: &str = "urn:quipu:merge-session:receipt";
 const MAX_RECORD: usize = 8 * 1024 * 1024;
 
@@ -56,6 +60,9 @@ fn subject_id(store: &Store, subject: &str) -> Result<Option<i64>> {
 }
 
 fn guard(store: &Store, slot: &Slot, request: &Request) -> Result<String> {
+    if request.scope.is_some() {
+        return Err(invalid("scoped guards require a bounded batch"));
+    }
     let mut subjects = BTreeSet::from([slot.0.clone()]);
     if request
         .profile
@@ -281,8 +288,13 @@ pub(crate) fn execute(
         {
             return Err(invalid("stale store or transaction head"));
         }
-        let (root, _) = crate::share_merge::root_graph(store)?;
-        if merge_session::render(&root) != prepared.request.ours {
+        let current = if let Some(scope) = &prepared.request.scope {
+            scope.validate_request(&prepared.request)?;
+            scope.snapshot(store)?.graph
+        } else {
+            merge_session::render(&crate::share_merge::root_graph(store)?.0)
+        };
+        if current != prepared.request.ours {
             return Err(invalid("ROOT snapshot moved"));
         }
         if let Some(parent) = &prepared.request.parent
@@ -306,29 +318,7 @@ pub(crate) fn execute(
         if !prepared.request.shapes.trim().is_empty() {
             return Err(invalid("shape validation feature required"));
         }
-        let rows = prepared
-            .plan
-            .slots
-            .iter()
-            .map(|(slot, p)| ReportRow {
-                slot: slot.clone(),
-                held: p.held,
-                decision: prepared
-                    .choices
-                    .iter()
-                    .find(|choice| choice.slot == *slot)
-                    .map(|choice| choice.decision.clone()),
-                kind: report::Kind::from_change(
-                    p.change,
-                    prepared
-                        .request
-                        .profile
-                        .lists
-                        .iter()
-                        .any(|b| b.slot == *slot),
-                ),
-            })
-            .collect();
+        let rows = report::rows(&prepared);
         let mut receipt = Receipt {
             schema: "quipu-partial-merge/v1".into(),
             id: prepared.id.clone(),
@@ -374,11 +364,25 @@ pub(crate) fn execute(
             receipt.decide_tx =
                 Some(store.transact(&decide, td, actor, Some(&format!("{source}step=decide")))?);
         }
+        let scoped = receipt
+            .request
+            .scope
+            .as_ref()
+            .map(|scope| scope.snapshot(store))
+            .transpose()?;
         for row in &receipt.rows {
             if row.held {
+                let digest = match &scoped {
+                    Some(snapshot) => snapshot
+                        .guards
+                        .get(&row.slot)
+                        .cloned()
+                        .ok_or_else(|| invalid("held slot outside bounded scope"))?,
+                    None => guard(store, &row.slot, &receipt.request)?,
+                };
                 receipt.guards.push(Guard {
                     slot: row.slot.clone(),
-                    digest: guard(store, &row.slot, &receipt.request)?,
+                    digest,
                 });
             }
         }
@@ -424,15 +428,35 @@ fn resume_request(store: &Store, parent: &Receipt) -> Result<Request> {
     {
         return Err(invalid("active shapes moved since the partial apply"));
     }
+    let scoped = parent
+        .request
+        .scope
+        .as_ref()
+        .map(|scope| {
+            scope.validate_request(&parent.request)?;
+            scope.snapshot(store)
+        })
+        .transpose()?;
     for proof in &parent.guards {
-        if guard(store, &proof.slot, &parent.request)? != proof.digest {
+        let actual = match &scoped {
+            Some(snapshot) => snapshot
+                .guards
+                .get(&proof.slot)
+                .cloned()
+                .ok_or_else(|| invalid("held guard outside bounded scope"))?,
+            None => guard(store, &proof.slot, &parent.request)?,
+        };
+        if actual != proof.digest {
             return Err(invalid("held slot values or provenance moved"));
         }
     }
     let mut request = parent.request.clone();
     request.parent = Some(parent.id.clone());
     request.root_tx = store.latest_tx_id()?;
-    request.ours = merge_session::render(&crate::share_merge::root_graph(store)?.0);
+    request.ours = match scoped {
+        Some(snapshot) => snapshot.graph,
+        None => merge_session::render(&crate::share_merge::root_graph(store)?.0),
+    };
     let active: BTreeSet<_> = parent.guards.iter().map(|g| g.slot.clone()).collect();
     request
         .profile

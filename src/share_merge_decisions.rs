@@ -218,6 +218,7 @@ impl SharePair {
                 profile,
                 parent: None,
                 active_slots: None,
+                scope: None,
             },
             self.incoming.manifest.created_at,
         ))

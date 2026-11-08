@@ -31,7 +31,7 @@ fn setup() -> (Store, Request) {
         ours:render(&crate::share_merge::root_graph(&store).unwrap().0),
         theirs:"<urn:e> <urn:p> \"theirs\" .\n<urn:e> <urn:q> \"theirs\" .\n<urn:f> <urn:r> \"clean\" .\n".into(),
         shapes:"@prefix sh: <http://www.w3.org/ns/shacl#> . [] sh:path <urn:p>; sh:maxCount 1 . [] sh:path <urn:q>; sh:maxCount 1 .".into(),
-        profile:Profile {mode:Mode::PartialSlot,..Profile::default()},parent:None,active_slots:None};
+        profile:Profile {mode:Mode::PartialSlot,..Profile::default()},parent:None,active_slots:None,scope:None};
     (store, request)
 }
 
@@ -286,3 +286,200 @@ mod parent;
 #[cfg(feature = "shacl")]
 #[path = "merge_fresh_tests.rs"]
 mod fresh;
+
+#[cfg(feature = "shacl")]
+fn scoped_fixture() -> (Store, Request) {
+    let (mut store, mut request) = setup();
+    let unrelated = Datum {
+        entity: store.intern("urn:unrelated").unwrap(),
+        attribute: store.intern("urn:other").unwrap(),
+        value: Stored::Str("outside".into()),
+        valid_from: TT.into(),
+        valid_to: None,
+        op: Op::Assert,
+    };
+    store.transact(&[unrelated], TT, None, None).unwrap();
+    request.root_tx = store.latest_tx_id().unwrap();
+    // Scope omits the unrelated subject; this is deliberately not all ROOT.
+    request.ours = "<urn:e> <urn:p> \"ours\" .\n<urn:e> <urn:q> \"ours\" .\n".into();
+    let mut wire = serde_json::to_value(request).unwrap();
+    wire["scope"] = serde_json::json!({
+        "schema":"quipu-writer-read-scope/v1",
+        "graph":crate::schema::ROOT_GRAPH_IRI,
+        "valid_at":TD,
+        "slots":[
+            {"subject":"<urn:e>","predicate":"urn:p"},
+            {"subject":"<urn:e>","predicate":"urn:q"},
+            {"subject":"<urn:f>","predicate":"urn:r"}
+        ]
+    });
+    let request = serde_json::from_value(wire).expect("bounded ledger scope must decode");
+    (store, request)
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn scoped_ledger_resumes_after_unrelated_write_without_whole_root_snapshot() {
+    let (mut store, request) = scoped_fixture();
+    let prepared = crate::merge_adapters::prepare_store(&store, request, &[], TT, TD).unwrap();
+    let receipt = crate::merge_pending::execute(
+        &mut store,
+        "urn:scoped:ledger",
+        prepared,
+        TT,
+        TD,
+        Some("fixture"),
+    )
+    .unwrap();
+    assert_eq!((receipt.applied, receipt.held), (1, 2));
+    assert!(
+        crate::merge_pending::load(&store, "urn:scoped:ledger", &receipt.id)
+            .unwrap()
+            .is_some()
+    );
+    let e = store.intern("urn:unrelated").unwrap();
+    let p = store.intern("urn:other").unwrap();
+    store
+        .set_triple(e, p, Stored::Str("changed".into()), TD, None, true, None)
+        .unwrap();
+    let choices = ["p", "q"].map(|p| Choice {
+        slot: key(p),
+        decision: Decision::Ours,
+    });
+    let prepared =
+        crate::merge_adapters::resume(&store, "urn:scoped:ledger", &receipt.id, &choices, TD)
+            .unwrap();
+    let child = crate::merge_pending::execute(
+        &mut store,
+        "urn:scoped:ledger",
+        prepared,
+        TT,
+        TD,
+        Some("fixture"),
+    )
+    .unwrap();
+    assert_eq!(child.held, 0);
+    assert_eq!(
+        store.entity_facts(e).unwrap()[0].value,
+        Stored::Str("changed".into())
+    );
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn scoped_ledger_refuses_a_scope_that_hides_an_incoming_slot_without_writes() {
+    let (mut store, request) = scoped_fixture();
+    let mut wire = serde_json::to_value(request).unwrap();
+    wire["scope"]["slots"].as_array_mut().unwrap().pop();
+    let before = store.latest_tx_id().unwrap();
+    let result = serde_json::from_value(wire)
+        .map_err(|e| e.to_string())
+        .and_then(|request| {
+            crate::merge_adapters::prepare_store(&store, request, &[], TT, TD)
+                .map_err(|e| e.to_string())
+        })
+        .and_then(|plan| {
+            crate::merge_pending::execute(&mut store, "urn:scoped:ledger", plan, TT, TD, None)
+                .map_err(|e| e.to_string())
+        });
+    assert!(result.is_err());
+    assert_eq!(before, store.latest_tx_id().unwrap());
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn scoped_ledger_guard_binds_invisible_physical_history_not_only_live_values() {
+    let (mut store, request) = scoped_fixture();
+    let prepared = crate::merge_adapters::prepare_store(&store, request, &[], TT, TD).unwrap();
+    let receipt = crate::merge_pending::execute(
+        &mut store,
+        "urn:scoped:ledger",
+        prepared,
+        TT,
+        TD,
+        Some("fixture"),
+    )
+    .unwrap();
+    let e = store.lookup("urn:e").unwrap().unwrap();
+    let p = store.lookup("urn:p").unwrap().unwrap();
+    let visible = store.entity_facts(e).unwrap();
+    // An empty received interval changes evidence while live values stay equal.
+    store
+        .conn
+        .execute(
+            "INSERT INTO facts(g,e,a,v,tx,valid_from,valid_to,op) VALUES(0,?1,?2,?3,?4,?5,?5,1)",
+            rusqlite::params![
+                e,
+                p,
+                Stored::Str("invisible receipt".into()).to_bytes(),
+                store.latest_tx_id().unwrap(),
+                TD
+            ],
+        )
+        .unwrap();
+    assert_eq!(visible, store.entity_facts(e).unwrap());
+    let choices = [Choice {
+        slot: key("p"),
+        decision: Decision::Ours,
+    }];
+    let before = store.latest_tx_id().unwrap();
+    assert!(
+        crate::merge_adapters::resume(&store, "urn:scoped:ledger", &receipt.id, &choices, TD)
+            .is_err()
+    );
+    assert_eq!(before, store.latest_tx_id().unwrap());
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn scoped_ledger_refuses_physical_overflow_even_when_all_extra_claims_are_invisible() {
+    let (mut store, request) = scoped_fixture();
+    let prepared = crate::merge_adapters::prepare_store(&store, request, &[], TT, TD).unwrap();
+    let e = store.lookup("urn:e").unwrap().unwrap();
+    let p = store.lookup("urn:p").unwrap().unwrap();
+    let before = store.latest_tx_id().unwrap();
+    for i in 0..4096 {
+        store.conn.execute(
+            "INSERT INTO facts(g,e,a,v,tx,valid_from,valid_to,op) VALUES(0,?1,?2,?3,?4,?5,?5,1)",
+            rusqlite::params![e,p,Stored::Str(format!("invisible-{i}")).to_bytes(),before,TD],
+        ).unwrap();
+    }
+    assert!(
+        crate::merge_pending::execute(&mut store, "urn:scoped:ledger", prepared, TT, TD, None)
+            .is_err()
+    );
+    assert_eq!(before, store.latest_tx_id().unwrap());
+}
+
+#[cfg(feature = "shacl")]
+#[test]
+fn scoped_ledger_rejects_public_ingress_and_binds_scope_to_session_identity() {
+    let (store, request) = scoped_fixture();
+    let file = crate::merge_ingress::File {
+        schema: crate::merge_ingress::SCHEMA.into(),
+        request: request.clone(),
+        authored_at: TT.into(),
+        choices: vec![],
+    };
+    assert!(crate::merge_ingress::decode(&serde_json::to_value(&file).unwrap()).is_err());
+    let id = crate::merge_ingress::id(&file).unwrap();
+    let mut changed = serde_json::to_value(&file).unwrap();
+    changed["request"]["scope"]["valid_at"] = serde_json::json!("2026-01-11T00:00:00Z");
+    let changed: crate::merge_ingress::File = serde_json::from_value(changed).unwrap();
+    assert_ne!(id, crate::merge_ingress::id(&changed).unwrap());
+    // Legacy requests omit the extension, keeping their existing ID framing.
+    let (_, legacy) = setup();
+    assert!(serde_json::to_value(legacy).unwrap().get("scope").is_none());
+    let mut invalid = serde_json::to_value(request).unwrap();
+    invalid["scope"]["graph"] = serde_json::json!("urn:foreign-graph");
+    assert!(
+        crate::merge_adapters::prepare_store(
+            &store,
+            serde_json::from_value(invalid).unwrap(),
+            &[],
+            TT,
+            TD
+        )
+        .is_err()
+    );
+}
