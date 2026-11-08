@@ -1,0 +1,22 @@
+Retained actual test-output excerpts, synthetic in-memory store.
+Baseline source: 734b59a87ab55003442244c0f00602d83341a671 plus the same new regression module.
+Candidate: the parent-binding repair in this artifact commit.
+Repeat: just test --features shacl --lib merge_session::tests::parent -- --nocapture
+The baseline accepts the nonexistent parent; the regression panics on that successful apply.
+The repaired run refuses it without data or receipt writes; the legitimate child/replay control remains successful.
+No installed-service result or full-proposal acceptance is asserted.
+
+BASELINE (actual excerpt)
+unverified parent must refuse: Object {"outcome": String("applied"), "receipt": Object {"applied": Number(3), "authored_at": String("2026-01-03T00:00:00Z"), "decide_tx": Number(3), "guards": Array [], "held": Number(0), "held_units": Array [], "id": String("sha256:8855a1169ee0028bb2d9cb1109d91a8088ff93718770e1d78b00efae77ff8e68"), "receive_tx": Number(2), "request": Object {"active_slots": Null, "base": String("<urn:e> <urn:p> \"base\" .\n<urn:e> <urn:q> \"base\" .\n"), "base_id": String("base"), "input_id": String("incoming"), "ours": String("<urn:e> <urn:p> \"ours\" .\n<urn:e> <urn:q> \"ours\" .\n"), "parent": String("nonexistent-parent"), "path": String("share"), "profile": Object {"lists": Array [], "mode": String("partial-slot"), "schema": String("quipu-merge-profile/v1"), "shapes_hash": String("sha256:5153180aed591b6d5f48a5e50626055535737805765d5695d1a75c542645c02f"), "units": Array []}, "root_tx": Number(1), "shapes": String("@prefix sh: <http://www.w3.org/ns/shacl#> . [] sh:path <urn:p>; sh:maxCount 1 . [] sh:path <urn:q>; sh:maxCount 1 ."), "store_id": String("urn:uuid:a0d2aea9-272d-4608-a07b-acf6fb077fda"), "theirs": String("<urn:e> <urn:p> \"theirs\" .\n<urn:e> <urn:q> \"theirs\" .\n<urn:f> <urn:r> \"clean\" .\n")}, "reviewed_choices": Array [Object {"decision": Object {"choose": String("theirs")}, "slot": Array [String("<urn:e>"), String("urn:p")]}, Object {"decision": Object {"choose": String("theirs")}, "slot": Array [String("<urn:e>"), String("urn:q")]}], "rows": Array [Object {"decision": Object {"choose": String("theirs")}, "held": Bool(false), "kind": String("max_count_exceeded"), "slot": Array [String("<urn:e>"), String("urn:p")]}, Object {"decision": Object {"choose": String("theirs")}, "held": Bool(false), "kind": String("max_count_exceeded"), "slot": Array [String("<urn:e>"), String("urn:q")]}, Object {"decision": Null, "held": Bool(false), "kind": String("clean"), "slot": Array [String("<urn:f>"), String("urn:r")]}], "schema": String("quipu-partial-merge/v1"), "store_shapes_hash": String("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")}, "reviewer": String("fixture")}
+test merge_session::tests::parent::nonexistent_parent_cannot_skip_inline_share_verification ... FAILED
+test merge_session::tests::parent::resumed_inputs_selection_and_authored_time_are_bound_before_writes ... FAILED
+test merge_session::tests::parent::foreign_owner_parent_cannot_authorize_new_child ... FAILED
+test merge_session::tests::parent::legitimate_parent_remainder_applies_and_replay_writes_nothing ... ok
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 3846 filtered out; finished in 0.07s
+
+REPAIRED (actual excerpt)
+test merge_session::tests::parent::nonexistent_parent_cannot_skip_inline_share_verification ... ok
+test merge_session::tests::parent::foreign_owner_parent_cannot_authorize_new_child ... ok
+test merge_session::tests::parent::legitimate_parent_remainder_applies_and_replay_writes_nothing ... ok
+test merge_session::tests::parent::resumed_inputs_selection_and_authored_time_are_bound_before_writes ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3846 filtered out; finished in 0.34s
