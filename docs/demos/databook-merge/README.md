@@ -13,10 +13,11 @@ The before executable is the older installed Quipu revision
 `1792a7a6771583876522cff6fa0dfa0f31e7b6ce`, which refuses the mergetool command.
 It is **not a rebuilt PR parent**. The candidate is an uninstalled copy of the
 scoped-test executable, SHA-256
-`6cb3379a0d1f6bbc3cda0e7e7d159b245c08ae685aedcdef2b3c149b06115494`.
-Its build identity reports parent `87a319093d1111a4759bd6c15d8b62d5ba35e5cd`
-with the DataBook source changes present (`git_dirty: true`); the recording
-does not claim that parent alone implements the adapter.
+`ea3ec0c6e3cfe7b3be732efd14a19f9dfbe8536617b3d72db76167c870f42053`.
+Its build identity reports `9a47af8f0c39e05e9c537152b99c5dac4a34ee87`
+and `git_dirty: true`. All tracked Rust inputs, the manifest, lockfile and build
+script matched that commit when the tested executable was copied. The recording
+proves the copied artifact behavior; no installed acceptance is claimed.
 
 Repeat with both executable paths:
 
@@ -24,8 +25,8 @@ Repeat with both executable paths:
 python3 reproduce.py /path/to/older/quipu /path/to/candidate/quipu
 ```
 
-The asciicast contains actual terminal output and timing (nine output events,
-0.235 seconds). Download it for a compatible terminal player, for example
+The asciicast contains actual terminal output and timing (7 output events,
+0.247 seconds). Download it for a compatible terminal player, for example
 `asciinema play demo.cast`; this page does not promise inline playback. The
 repeat script asserts the final document is exactly the selected version,
 including its prose, and verifies the result through the immutable Git check.

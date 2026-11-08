@@ -47,7 +47,7 @@ Merge decided, ready to apply: DataBook 'people.databook.md' (Git merge: MERGE_H
   ours     "ours"  (HEAD)
   theirs   "theirs"  (MERGE_HEAD)
   choose   1) ours  2) theirs  3) base  4) defer
-  decided  theirs (by reviewer at 2026-11-08T07:32:38Z)
+  decided  theirs (by reviewer at 2026-11-08T07:45:00Z)
 
 Next: git add people.databook.md people.databook.md.decisions.json && git commit (CI databook-check verifies immutable inputs)
 exit 0
