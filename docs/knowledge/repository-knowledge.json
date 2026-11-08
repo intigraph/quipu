@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "171cacac397309f7d57d3f139425d8c63b6ccda86e399ee19089e86320c3f348",
+      "source_sha256": "7f2ccebbdb1be4d3fd5bd08e917a7febce6294cf4de40aeace98abe3368a167a",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -35,7 +35,7 @@
       "source": "src/lib.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Flib.rs",
       "summary": "The Rust library exposes the embedded graph engine and bounded retained-cut RDF conversion used by native clients and repository integrations; conversion is separate from whole-graph validation.",
-      "source_sha256": "56528862b6a7b93b72dc0ee89f2b97eea3f1ace12b9f584e77f4e4fbca796801",
+      "source_sha256": "1b238f08774002a552b7deb744c6af54b288f13c62e1a0ae286f30a1e2835fc1",
       "properties": {
         "interfaceKind": "library",
         "publicName": "quipu"
@@ -117,7 +117,7 @@
       "source": "docs/book/src/reference/rest-api.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Frest-api.md#rest-api",
       "summary": "The native server exposes graph operations over HTTP; authentication, request budgets and provenance headers have separate roles.",
-      "source_sha256": "6690555e3103d08e955d7ebd999ecdb94f76eff140afcb553f6e17cbf34c7f5a",
+      "source_sha256": "04132b625f6e0e590cc0b13c663b47d65b45a049bc9c7b7fb930dac789bb04ed",
       "properties": {
         "interfaceKind": "REST",
         "publicName": "quipu-server HTTP"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "a1bdc28c4b5878497610c83f855bcd064c223d7ad958b81188f9110bcdcfd949",
+      "source_sha256": "8e5c2dea9eaccdc26097bd949ea8fbffe4c78eca503dba6ab56084d1cd537b49",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "52146303b12c34e258333a8a412163a199bcdc7005c590a5eef921ce5a9be522",
+      "source_sha256": "a911faaf3fc4e2984770485033e82fb72a55802dd9e859ab5fa0ff74096ae768",
       "properties": {
         "startHereOrder": 5
       }
