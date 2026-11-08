@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use super::{LabelIndex, id_list, recorded_distinct_from};
 use crate::{Result, Store, episode, namespace, types::Value};
 
-pub(super) fn needs_check(node: &episode::Node) -> bool {
+pub(super) fn needs_check(node: &episode::Node, base: &str) -> bool {
     static OPAQUE: OnceLock<regex::Regex> = OnceLock::new();
     let opaque = OPAQUE.get_or_init(|| {
         regex::Regex::new(r"(?i)^(?:(?:commit-|stmt_)?[0-9a-f]{7,64}|main-watch-[0-9a-f]{40}(?:[0-9a-f]{24})?|commit/[^\s]+/[0-9a-f]{7,64})$")
@@ -19,7 +19,7 @@ pub(super) fn needs_check(node: &episode::Node) -> bool {
     let work = matches!(
         node.node_type
             .as_deref()
-            .map(episode::node_type::local_name),
+            .map(|kind| episode::node_type::local_name(kind, base)),
         Some("WorkItem" | "Bead")
     ) && work_id.is_match(&node.name);
     !node.name.starts_with("code/") && !opaque.is_match(&node.name) && !work
@@ -84,7 +84,11 @@ pub(super) fn refusal(
     threshold: f64,
 ) -> Result<Option<String>> {
     let index = LabelIndex::build(store)?;
-    for (position, node) in nodes.iter().enumerate().filter(|(_, n)| needs_check(n)) {
+    for (position, node) in nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| needs_check(n, base))
+    {
         crate::time::check_request_deadline()?;
         let mine = episode::address::resolved_node_iri(node, base);
         // Updating/retyping an existing IRI is not minting a spelling variant.
@@ -92,7 +96,7 @@ pub(super) fn refusal(
             continue;
         }
         let raw_kind = node.node_type.as_deref().unwrap_or("");
-        let kind = episode::node_type::local_name(raw_kind);
+        let kind = episode::node_type::local_name(raw_kind, base);
         let type_iri = episode::node_type::node_type_iri(raw_kind, base);
         let mut excused = recorded_distinct_from(store, &mine)?;
         if !node.distinct_from.is_empty() {
@@ -112,11 +116,30 @@ pub(super) fn refusal(
         }
         // No top-k truncation before type filtering: unrelated kinds must not
         // crowd the compatible match out of admission.
-        for candidate in index.entity_candidates(store, &node.name, threshold)? {
-            if candidate.iri == mine || excused.contains(&candidate.iri) {
+        let mut candidates: Vec<String> = index
+            .entity_candidates(store, &node.name, threshold)?
+            .into_iter()
+            .map(|candidate| candidate.iri)
+            .collect();
+        // Numeric identity is independent of spelling similarity. Enumerate
+        // matching numeric labels even when raw Jaro scoring pruned them.
+        if matches!(kind, "LXCContainer" | "Container" | "Host")
+            && let Some(identity) = container_id(&node.name)
+        {
+            for entry in &index.entries {
+                crate::time::check_request_deadline()?;
+                if container_id(&entry.lower).as_ref() == Some(&identity) {
+                    candidates.push(store.resolve(entry.entity_id)?);
+                }
+            }
+        }
+        candidates.sort();
+        candidates.dedup();
+        for candidate in candidates {
+            if candidate == mine || excused.contains(&candidate) {
                 continue;
             }
-            let context = facts(store, &candidate.iri)?;
+            let context = facts(store, &candidate)?;
             let mut compatible = node.node_type.is_none();
             for (attribute, value) in &context {
                 if attribute == namespace::RDF_TYPE
@@ -129,7 +152,7 @@ pub(super) fn refusal(
                 a == namespace::RDFS_LABEL
                     && matches!(v, Value::Str(label) if near(&node.name, label, kind, threshold))
             }) {
-                return Ok(Some(message(&node.name, &candidate.iri)));
+                return Ok(Some(message(&node.name, &candidate)));
             }
         }
         // Detect aliases submitted together before either one exists.

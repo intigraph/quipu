@@ -244,6 +244,41 @@ fn explicit_addressing_preserves_strict_alias_refusal_and_exact_reuse() {
 }
 
 #[test]
+fn foreign_work_item_spelling_does_not_acquire_the_opaque_role() {
+    let base = namespace::DEFAULT_BASE_NS;
+    for (kind, permitted) in [
+        ("https://example.org/unrelated#WorkItem", false),
+        ("https://w3id.org/intigraph/camayoc/core/ns#WorkItem", true),
+    ] {
+        let mut store = Store::open_in_memory_test_ns().unwrap();
+        let mut first = payload();
+        first["nodes"][0]["name"] = json!("ticket-abcd");
+        first["nodes"][0]["type"] = json!(kind);
+        let first: Episode = serde_json::from_value(first).unwrap();
+        ingest_episode(&mut store, &first, "2026-11-08", base).unwrap();
+        let mut second = payload();
+        second["name"] = json!("second-ticket");
+        second["nodes"][0]["name"] = json!("ticket-abce");
+        second["nodes"][0]["iri"] = json!("urn:example:second-ticket");
+        second["nodes"][0]["type"] = json!(kind);
+        let second: Episode = serde_json::from_value(second).unwrap();
+        let opts = IngestResolutionOpts {
+            enabled: true,
+            strict_mode: true,
+            threshold: 0.85,
+            top_k: 1,
+        };
+        let before = store.latest_tx_id().unwrap();
+        let result =
+            ingest_episode_with_resolution(&mut store, &second, "2026-11-08", base, Some(&opts));
+        assert_eq!(result.is_ok(), permitted, "{kind}");
+        if !permitted {
+            assert_eq!(before, store.latest_tx_id().unwrap());
+        }
+    }
+}
+
+#[test]
 fn legacy_names_are_not_reinterpreted_as_absolute_addresses() {
     let mut store = Store::open_in_memory_test_ns().unwrap();
     let input =

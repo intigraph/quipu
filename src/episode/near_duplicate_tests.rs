@@ -166,6 +166,85 @@ fn rt9f_aliases_in_one_batch_are_not_invisible() {
 }
 
 #[test]
+fn rt9f_numeric_aliases_ignore_fuzzy_threshold() {
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    for (left, right) in [("CT101", "CT-101-guest"), ("ct-1", "ct-0000001-guest")] {
+        for (first, second) in [(left, right), (right, left)] {
+            for kind in [
+                "LXCContainer",
+                "quechua:LXCContainer",
+                "https://w3id.org/intigraph/camayoc/core/ns#LXCContainer",
+            ] {
+                for threshold in [0.85, 0.99] {
+                    for batch in [false, true] {
+                        let mut store = crate::Store::open_in_memory().unwrap();
+                        let mut ep = episode("candidate", second, kind);
+                        if batch {
+                            ep.nodes
+                                .push(episode("unused", first, kind).nodes.remove(0));
+                        } else {
+                            ingest_episode(
+                                &mut store,
+                                &episode("seed", first, kind),
+                                "2026-11-08",
+                                ns,
+                            )
+                            .unwrap();
+                        }
+                        let before = store.latest_tx_id().unwrap();
+                        let opts = IngestResolutionOpts {
+                            enabled: true,
+                            threshold,
+                            top_k: 1,
+                            strict_mode: true,
+                        };
+                        assert!(
+                            ingest_episode_with_resolution(
+                                &mut store,
+                                &ep,
+                                "2026-11-08",
+                                ns,
+                                Some(&opts)
+                            )
+                            .is_err(),
+                            "missed {first}/{second} {kind} threshold={threshold} batch={batch}"
+                        );
+                        assert_eq!(store.latest_tx_id().unwrap(), before);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn rt9f_prefixed_distinct_ids_and_work_items_remain_writable() {
+    let ns = crate::namespace::DEFAULT_BASE_NS;
+    for (left, right, kind) in [
+        ("ct-236", "ct-243", "quechua:LXCContainer"),
+        ("ticket-abcd", "ticket-abce", "quechua:WorkItem"),
+        ("ticket-abcd", "ticket-abce", "quechua:Bead"),
+    ] {
+        let mut store = crate::Store::open_in_memory().unwrap();
+        ingest_episode(&mut store, &episode("seed", left, kind), "2026-11-08", ns).unwrap();
+        let opts = IngestResolutionOpts {
+            enabled: true,
+            threshold: 0.85,
+            top_k: 1,
+            strict_mode: true,
+        };
+        ingest_episode_with_resolution(
+            &mut store,
+            &episode("candidate", right, kind),
+            "2026-11-08",
+            ns,
+            Some(&opts),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
 fn rt9f_hint_mode_is_explicitly_advisory() {
     let mut store = crate::Store::open_in_memory().unwrap();
     let ns = crate::namespace::DEFAULT_BASE_NS;

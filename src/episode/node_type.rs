@@ -8,9 +8,15 @@ use crate::namespace;
 /// Other namespaces use an explicit absolute class IRI.
 pub(crate) const QUECHUA_TYPE_PREFIX: &str = "quechua:";
 
-/// Local class spelling used only by typed name heuristics, never as identity.
-pub(crate) fn local_name(ntype: &str) -> &str {
-    ntype.rsplit(['#', '/', ':']).next().unwrap_or(ntype)
+/// Recognized role spelling for name heuristics, never a class identity bridge.
+/// An unrelated namespace ending in WorkItem must not acquire its exemption.
+pub(crate) fn local_name<'a>(ntype: &'a str, base: &str) -> &'a str {
+    ntype
+        .strip_prefix(QUECHUA_TYPE_PREFIX)
+        .or_else(|| ntype.strip_prefix(namespace::QUECHUA))
+        .or_else(|| ntype.strip_prefix("https://w3id.org/intigraph/camayoc/core/ns#"))
+        .or_else(|| ntype.strip_prefix(base))
+        .unwrap_or(ntype)
 }
 
 /// The class IRI an episode node `type` denotes. A bare name is the legacy
