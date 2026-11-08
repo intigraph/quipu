@@ -1,0 +1,11 @@
+Script started on 2026-11-08 01:06:23-05:00 [COMMAND="python3 docs/demos/episode-addresses/reproduce.py" <not executed on terminal>]
+Synthetic in-memory fixture; no server or deployment writes.
+explicit=false: outcome="created"
+  urn:example:worker: present=false
+  https://example.org/legacy/worker: present=true
+explicit=true: outcome="created"
+  urn:example:worker: present=true
+  https://example.org/legacy/worker: present=false
+  malformed address refused=true; transaction unchanged=true
+
+Script done on 2026-11-08 01:06:26-05:00 [COMMAND_EXIT_CODE="0"]
