@@ -506,6 +506,7 @@ COMMANDS:
     qp merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]
     qp git-merge <ref>   merge pendants from Git snapshots, stop before commit
     qp merge-driver <base-file> <ours-file> <theirs-file> <path>   low-level Git driver
+    qp git-mergetool <pendant>/export.nt --by <who>   interactively resolve Git decisions
     qp pendant-resolve <base-ref> <ours-ref> <theirs-ref> <dir> <key> <choice>
     qp pendant-check <base-ref> <ours-ref> <theirs-ref> <result-ref>   CI verdict without a driver
     qp share diff <old> <new> [--format text|markdown|json]   entity-grouped pack diff
