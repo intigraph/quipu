@@ -123,8 +123,8 @@ wasm cmd="check" n="1000":
 # === Fixtures ===
 
 # Generate test-fixtures/test-store.db from static assets
-seed:
-    cargo run --bin seed-fixtures --features dev-tools
+seed *args="":
+    cargo run --bin seed-fixtures --features dev-tools -- {{args}}
 
 # Serve the test fixture database on localhost:3030
 serve-fixtures:
