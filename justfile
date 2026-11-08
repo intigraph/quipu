@@ -347,6 +347,10 @@ docs cmd="build":
 
 # === Public benchmarks ===
 
+# Linux library-consumer identity control; synthetic in-memory stores only.
+validator-observation command="embedding" *args="":
+    @if [ "{{command}}" = "embedding" ]; then python3 scripts/test-validator-observation-embedding.py {{args}}; else echo 'Use: just validator-observation embedding' >&2; exit 2; fi
+
 # Regenerate the public conformance page and shields badge endpoints from the
 # committed ledgers under benchmark/public/results/.
 conformance-report:
