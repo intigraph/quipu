@@ -1,10 +1,10 @@
 {
   "benchmark": "W3C RDF Tests SPARQL 1.1 evaluation classes",
   "suite_revision": "369a90d1a60c021b746df2e411da0ff36258a758",
-  "quipu_revision": "6f0202eb57162b1db7e34161fff77155371bf682",
-  "quipu_version": "quipu 0.17.0\ngit_sha: 6f0202eb57162b1db7e34161fff77155371bf682\ngit_dirty: false",
-  "generated_at": "2026-11-07T18:19:09Z",
-  "generated_by": "https://github.com/intigraph/quipu/actions/runs/42400203186",
+  "quipu_revision": "9144f0c6b1acb975742765ab334b5fbc51781657",
+  "quipu_version": "quipu 0.17.0\ngit_sha: 9144f0c6b1acb975742765ab334b5fbc51781657\ngit_dirty: false",
+  "generated_at": "2026-11-07T21:18:46Z",
+  "generated_by": "https://github.com/intigraph/quipu/actions/runs/42414525676",
   "isolation": "one temporary SQLite store per executable test",
   "reproduce": {
     "build": "cargo build --release --bin quipu --bin quipu-server --features shacl,onnx,server",
