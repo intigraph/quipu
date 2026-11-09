@@ -236,6 +236,8 @@ impl Store {
         receipt: Option<(&str, &str)>,
         fluent: Option<crate::fluent::writer::NativeWrite<'_>>,
     ) -> Result<i64> {
+        let observation_guards =
+            crate::write_observation::stage(crate::write_observation::Stage::Guards);
         if let Some(window) = window
             && (window.after < 0
                 || window.through <= window.after
@@ -322,6 +324,7 @@ impl Store {
                 crate::promotion_control::claim_commit(source)?;
                 Ok(staged)
             });
+        observation_guards.finish(staged.is_ok());
         match staged {
             Ok(mut staged) => {
                 if staged.replayed {
@@ -355,6 +358,8 @@ impl Store {
                     self.pending_quarantine = None;
                     return Err(error.into());
                 }
+                let observation_hooks =
+                    crate::write_observation::stage(crate::write_observation::Stage::Hooks);
                 self.after_commit_hooks(datums, staged, timestamp, source, graph)?;
                 // A write that defined or amended a policy makes the cached
                 // registry stale.
@@ -363,6 +368,7 @@ impl Store {
                 // the write vouched for it, drop when it could not (quipu-m9h).
                 self.set_write_in_progress(false);
                 self.maintain_read_model(graph, effective.as_deref(), tx_id);
+                observation_hooks.finish(true);
                 // Memory telemetry (memory telemetry): count the commit and sample RSS
                 // so a burst-export spike is captured at the write that caused it.
                 let kind = crate::write_kind::classify(actor, source);

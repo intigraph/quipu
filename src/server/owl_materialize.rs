@@ -3,9 +3,11 @@
 use serde_json::{Value, json};
 
 use super::SharedStore;
-use super::admission::write_blocking;
 use super::base::{AppError, blocking};
 use quipu::owl::snapshot::Snapshot;
+
+#[path = "owl_publish.rs"]
+mod publish;
 
 // Not WRITE_ADMISSION: holding that permit during derivation would block every
 // ordinary write even with the store mutex released. Reject overlap rather than
@@ -53,7 +55,7 @@ pub(crate) async fn run(
     let reader = store.clone();
     // Move the permit into blocking work: a disconnected client must not release
     // single-flight admission while its derivation still consumes resources.
-    let (mut snapshot, mut permit) = blocking(move || {
+    let (snapshot, permit) = blocking(move || {
         let mut snapshot = {
             let source = reader.read();
             Snapshot::capture_or_resume(&source, &timestamp)?
@@ -62,40 +64,14 @@ pub(crate) async fn run(
         Ok((snapshot, permit))
     })
     .await?;
-    let mut applied = 0;
-    let mut max_writer_batch_micros = 0;
-    while snapshot.remaining() > 0 {
-        let writer = store.clone();
-        let result = write_blocking(move || {
-            let (n, work, micros) = {
-                let mut live = writer.lock();
-                let started = std::time::Instant::now();
-                let n = snapshot.apply_batch(&mut live)?;
-                (n, live.take_deferred_embed(), started.elapsed().as_micros())
-            };
-            if let Some(work) = work {
-                super::tools::finish_deferred_embed(&writer, &work)?;
-            }
-            Ok((snapshot, permit, n, micros))
-        })
-        .await?;
-        (snapshot, permit) = (result.0, result.1);
-        applied += result.2;
-        max_writer_batch_micros = max_writer_batch_micros.max(result.3);
-    }
-    write_blocking(move || {
+    let publish::Published {
+        snapshot,
+        permit,
+        applied,
+        max_writer_batch_micros,
+    } = publish::publish(store, snapshot, permit).await?;
+    blocking(move || {
         let _permit = permit;
-        let work = {
-            let mut live = store.lock();
-            let final_started = std::time::Instant::now();
-            snapshot.finish(&mut live)?;
-            max_writer_batch_micros =
-                max_writer_batch_micros.max(final_started.elapsed().as_micros());
-            live.take_deferred_embed()
-        };
-        if let Some(work) = work {
-            super::tools::finish_deferred_embed(&store, &work)?;
-        }
         let r = &snapshot.report;
         let response = axum::Json(json!({
             "action": "materialize", "ontologies": snapshot.ontology_count(),

@@ -1,7 +1,8 @@
 //! Seed binary — generates test-fixtures/test-store.db from static assets.
 //!
 //! Run with: `cargo run --bin seed-fixtures --features shacl`
-//! Or via:   `just seed`
+//! Or via:   `just seed --base-ns https://example.org/fixtures/`
+//! With no flag, the namespace comes from the project configuration.
 
 use quipu::episode::{Episode, ingest_episode};
 use quipu::namespace::DEFAULT_BASE_NS;
@@ -28,6 +29,28 @@ fn main() {
 }
 
 fn run() -> quipu::Result<()> {
+    let mut args = std::env::args().skip(1);
+    let namespace = match args.next().as_deref() {
+        None => quipu::QuipuConfig::load_strict(Path::new("."))?.base_ns,
+        Some("--base-ns") => args
+            .next()
+            .ok_or_else(|| quipu::Error::InvalidValue("--base-ns requires a namespace".into()))?,
+        Some(_) => {
+            return Err(quipu::Error::InvalidValue(
+                "usage: seed-fixtures [--base-ns IRI]".into(),
+            ));
+        }
+    };
+    if args.next().is_some() {
+        return Err(quipu::Error::InvalidValue(
+            "unexpected seed-fixtures argument".into(),
+        ));
+    }
+    quipu::namespace::require_base_ns(&namespace)?;
+    seed(&namespace)
+}
+
+fn seed(ns: &str) -> quipu::Result<()> {
     // 1. Delete existing DB.
     if Path::new(DB_PATH).exists() {
         fs::remove_file(DB_PATH).expect("failed to remove existing DB");
@@ -36,6 +59,7 @@ fn run() -> quipu::Result<()> {
 
     // 2. Open file-backed store.
     let mut store = Store::open(DB_PATH)?;
+    store.set_base_ns(ns);
     println!("  opened {DB_PATH}");
 
     // 3. Infrastructure subgraph (~30 entities).
@@ -44,6 +68,7 @@ fn run() -> quipu::Result<()> {
         INFRA_PATH,
         "2026-01-15T10:00:00Z",
         "fixture:infra",
+        ns,
     )?;
     println!("  infra:      tx={tx}  triples={n}");
 
@@ -53,6 +78,7 @@ fn run() -> quipu::Result<()> {
         AGENTS_PATH,
         "2026-02-01T10:00:00Z",
         "fixture:agents",
+        ns,
     )?;
     println!("  agents:     tx={tx}  triples={n}");
 
@@ -62,11 +88,12 @@ fn run() -> quipu::Result<()> {
         KNOWLEDGE_PATH,
         "2026-02-15T10:00:00Z",
         "fixture:knowledge",
+        ns,
     )?;
     println!("  knowledge:  tx={tx}  triples={n}");
 
     // 6. Temporal mutations.
-    temporal_mutations(&mut store)?;
+    temporal_mutations(&mut store, ns)?;
 
     // 7. Ingest episodes from JSON.
     let episodes_json = fs::read_to_string(EPISODES_PATH)
@@ -85,19 +112,23 @@ fn run() -> quipu::Result<()> {
     ];
     for (i, ep) in episodes.iter().enumerate() {
         let ts = timestamps.get(i).copied().unwrap_or("2026-04-12T00:00:00Z");
-        let (tx, n) = ingest_episode(&mut store, ep, ts, DEFAULT_BASE_NS)?;
+        let (tx, n) = ingest_episode(&mut store, ep, ts, ns)?;
         println!("  episode[{}]: tx={tx}  triples={n}  name={}", i, ep.name);
     }
 
     // 8. Load SHACL shapes.
     let shapes = fs::read_to_string(SHAPES_PATH)
         .unwrap_or_else(|e| panic!("failed to read {SHAPES_PATH}: {e}"));
-    store.load_shapes("test-fixtures", &shapes, "2026-04-12T00:00:00Z")?;
+    store.load_shapes(
+        "test-fixtures",
+        &fixture_namespace(&shapes, ns),
+        "2026-04-12T00:00:00Z",
+    )?;
     println!("  shapes:     loaded from {SHAPES_PATH}");
 
     // 9. Layout seed metadata.
-    let meta_entity = store.intern(&format!("{DEFAULT_BASE_NS}__layout_metadata"))?;
-    let seed_attr = store.intern(&format!("{DEFAULT_BASE_NS}layoutSeed"))?;
+    let meta_entity = store.intern(&format!("{ns}__layout_metadata"))?;
+    let seed_attr = store.intern(&format!("{ns}layoutSeed"))?;
     store.transact(
         &[Datum {
             entity: meta_entity,
@@ -114,7 +145,7 @@ fn run() -> quipu::Result<()> {
     println!("  metadata:   layoutSeed=42");
 
     // 10. Verification.
-    verify(&store)?;
+    verify(&store, ns)?;
 
     println!("\nseed-fixtures complete: {DB_PATH}");
     Ok(())
@@ -122,8 +153,7 @@ fn run() -> quipu::Result<()> {
 
 // ── Temporal mutations ────────────────────────────────────────────
 
-fn temporal_mutations(store: &mut Store) -> quipu::Result<()> {
-    let ns = DEFAULT_BASE_NS;
+fn temporal_mutations(store: &mut Store, ns: &str) -> quipu::Result<()> {
     let status_attr = store.intern(&format!("{ns}status"))?;
 
     // korimako: online (01-15) -> down (03-27T09:00)
@@ -256,9 +286,7 @@ fn status_datum(entity: i64, attribute: i64, value: &str, valid_from: &str) -> D
 
 // ── Verification ──────────────────────────────────────────────────
 
-fn verify(store: &Store) -> quipu::Result<()> {
-    let ns = DEFAULT_BASE_NS;
-
+fn verify(store: &Store, ns: &str) -> quipu::Result<()> {
     // Count entities via SPARQL.
     let result = quipu::sparql_query(
         store,
@@ -339,15 +367,46 @@ fn ingest_ttl(
     path: &str,
     timestamp: &str,
     source: &str,
+    ns: &str,
 ) -> quipu::Result<(i64, usize)> {
     let turtle = fs::read_to_string(path).unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
     ingest_rdf(
         store,
-        turtle.as_bytes(),
+        fixture_namespace(&turtle, ns).as_bytes(),
         RdfFormat::Turtle,
         None,
         timestamp,
         Some("seed"),
         Some(source),
     )
+}
+
+// This renderer is only for the fixed development fixture assets, never a
+// policy-pack loader or existing-store namespace migration.
+fn fixture_namespace(turtle: &str, ns: &str) -> String {
+    turtle.replace(DEFAULT_BASE_NS, ns)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_assets_use_one_namespace_and_legacy_bytes_are_unchanged() {
+        for asset in [
+            include_str!("../../test-fixtures/seed-infra.ttl"),
+            include_str!("../../test-fixtures/seed-agents.ttl"),
+            include_str!("../../test-fixtures/seed-knowledge.ttl"),
+            include_str!("../../test-fixtures/test-shapes.ttl"),
+        ] {
+            assert!(asset.contains(DEFAULT_BASE_NS));
+            assert_eq!(
+                fixture_namespace(asset, DEFAULT_BASE_NS).as_bytes(),
+                asset.as_bytes()
+            );
+            let rendered = fixture_namespace(asset, "https://example.org/fixture#");
+            assert!(!rendered.contains(DEFAULT_BASE_NS));
+            assert!(rendered.contains("https://example.org/fixture#"));
+        }
+    }
 }

@@ -128,6 +128,7 @@ fn a_scoped_denied_write_preserves_server_audit_after_the_outer_rollback() {
             valid_until: crate::time::epoch_secs() + 3600,
             revision: 1,
             revoked: false,
+            mint_scope: None,
         })
         .unwrap();
     let bad = vec![datum(

@@ -1,0 +1,11 @@
+test store::wal::tests::wal_bytes_is_unknown_not_zero_for_a_store_with_no_wal_on_disk ... ok
+test store::wal::tests::independent_checkpoint_completes_while_serving_writer_is_held ... ok
+test store::wal::tests::independent_checkpoint_preserves_enrollment_and_identity_refusals ... ok
+test store::wal::tests::passive_checkpoint_retires_the_log_when_no_reader_holds_it ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3782 filtered out; finished in 3.46s
+test owl_materialize::tests::ontology_window_production_handler_preview_and_apply ... ok
+test owl_materialize::tests::scheduled_handler_entails_and_leaves_ordinary_write_admission_free ... ok
+test owl_materialize::tests::deferred_load_derives_the_same_entailment_as_inline ... ok
+test owl_materialize::tests::deferred_load_refusals_persist_nothing ... ok
+test owl_materialize::tests::deferred_load_does_not_hold_write_admission_during_derivation ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 350 filtered out; finished in 4.99s

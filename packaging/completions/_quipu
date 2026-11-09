@@ -1080,6 +1080,15 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(git-mergetool)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--by=[Identity recording a resolution]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-pendant-export-nt:_default' \
+&& ret=0
+;;
 (git-merge)
 _arguments "${_arguments_options[@]}" : \
 '--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
@@ -1128,6 +1137,29 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-base:_default' \
 ':arg-ours:_default' \
 ':arg-theirs:_default' \
+':arg-path:_default' \
+&& ret=0
+;;
+(databook-merge-driver)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-base:_default' \
+':arg-ours:_default' \
+':arg-theirs:_default' \
+':arg-path:_default' \
+&& ret=0
+;;
+(databook-check)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-base-ref:_default' \
+':arg-ours-ref:_default' \
+':arg-theirs-ref:_default' \
+':arg-result-ref:_default' \
 ':arg-path:_default' \
 && ret=0
 ;;
@@ -2259,8 +2291,11 @@ _quipu_commands() {
 'asof-rdf:Convert one retained as-of share into bounded coherent RDF chunks offline' \
 'acquire:Measure the bounded scope of a direct-main graph acquisition' \
 'migrate-vectors:Move stored vectors between backends (lancedb feature)' \
+'git-mergetool:Interactively resolve a pendant or declared DataBook using the standard merge layout' \
 'git-merge:Merge pendants from Git snapshots and stop before committing' \
 'merge-driver:Low-level Git merge driver for pendant files' \
+'databook-merge-driver:Low-level Git merge driver for declared DataBook files' \
+'databook-check:Verify an immutable DataBook merge result and its decisions' \
 'pendant-resolve:Record a resolution choice for one pendant merge conflict' \
 'pendant-check:Check a pendant merge result in CI without a merge driver' \
 'diff-textconv:Render a pack with labels for git diff textconv' \
@@ -2480,6 +2515,16 @@ _quipu__subcmd__databook__subcmd__import_commands() {
     local commands; commands=()
     _describe -t commands 'quipu databook import commands' commands "$@"
 }
+(( $+functions[_quipu__subcmd__databook-check_commands] )) ||
+_quipu__subcmd__databook-check_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu databook-check commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__databook-merge-driver_commands] )) ||
+_quipu__subcmd__databook-merge-driver_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu databook-merge-driver commands' commands "$@"
+}
 (( $+functions[_quipu__subcmd__db_commands] )) ||
 _quipu__subcmd__db_commands() {
     local commands; commands=(
@@ -2689,6 +2734,11 @@ _quipu__subcmd__git-merge__subcmd__resolve_commands() {
 _quipu__subcmd__git-merge__subcmd__show_commands() {
     local commands; commands=()
     _describe -t commands 'quipu git-merge show commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__git-mergetool_commands] )) ||
+_quipu__subcmd__git-mergetool_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu git-mergetool commands' commands "$@"
 }
 (( $+functions[_quipu__subcmd__graph_commands] )) ||
 _quipu__subcmd__graph_commands() {

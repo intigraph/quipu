@@ -49,6 +49,9 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     ("owl_page_job", Disposition::Excluded),
     ("owl_page_queue", Disposition::Excluded),
     ("owl_page_all", Disposition::Excluded),
+    // Host-local ownership enrollment is a fence, never portable authority.
+    // Reconstructing it on another store would import an enrollment decision.
+    ("ownership_handoff_enrollment", Disposition::Excluded),
     // -- content ------------------------------------------------------------
     // `facts` is the WHOLE row — g, tx, valid_from, valid_to, op, retracted_tx —
     // not the (e,a,v) projection a current-facts export emits. That projection

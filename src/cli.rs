@@ -423,7 +423,8 @@ pub fn cmd_reason(args: &[String], db_path: &str) {
         }
     };
 
-    let ruleset = match quipu::reasoner::parse_rules(&ttl, None) {
+    let mut store = crate::cli_open::open_store(db_path);
+    let ruleset = match quipu::reasoner::parse_rules(&ttl, Some(store.base_ns())) {
         Ok(rs) => rs,
         Err(e) => {
             eprintln!("error parsing rules: {e}");
@@ -435,8 +436,6 @@ pub fn cmd_reason(args: &[String], db_path: &str) {
         println!("no rules found in {rules_path}");
         return;
     }
-
-    let mut store = crate::cli_open::open_store(db_path);
 
     let now = chrono_now();
     let report = match quipu::reasoner::evaluate(&mut store, &ruleset, &now) {

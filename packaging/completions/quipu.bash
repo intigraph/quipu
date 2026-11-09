@@ -46,6 +46,12 @@ _quipu() {
             quipu,databook)
                 cmd="quipu__subcmd__databook"
                 ;;
+            quipu,databook-check)
+                cmd="quipu__subcmd__databook__subcmd__check"
+                ;;
+            quipu,databook-merge-driver)
+                cmd="quipu__subcmd__databook__subcmd__merge__subcmd__driver"
+                ;;
             quipu,db)
                 cmd="quipu__subcmd__db"
                 ;;
@@ -87,6 +93,9 @@ _quipu() {
                 ;;
             quipu,git-merge)
                 cmd="quipu__subcmd__git__subcmd__merge"
+                ;;
+            quipu,git-mergetool)
+                cmd="quipu__subcmd__git__subcmd__mergetool"
                 ;;
             quipu,graph)
                 cmd="quipu__subcmd__graph"
@@ -563,7 +572,7 @@ _quipu() {
 
     case "${cmd}" in
         quipu)
-            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-merge merge-driver pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
+            opts="-h --db --help competency store version install-alias knot load ingest read query rule-query cord unravel impact explain project report reason demotions episode retract shapes namespaces entity-ref ontology validate repl export databook render stats prime search model search-index doctor pack unpack restore share status merge import compose changes follow asof-rdf acquire migrate-vectors git-mergetool git-merge merge-driver databook-merge-driver databook-check pendant-resolve pendant-check diff-textconv mcp hook hooks policy gate path align propose memory attest signer deck trust-root graph db events fork audit"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1350,6 +1359,42 @@ _quipu() {
             ;;
         quipu__subcmd__databook)
             opts="-h --db --help export import"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__databook__subcmd__check)
+            opts="-h --db --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__databook__subcmd__merge__subcmd__driver)
+            opts="-h --db --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -2240,6 +2285,28 @@ _quipu() {
                     return 0
                     ;;
                 --format)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__git__subcmd__mergetool)
+            opts="-h --db --by --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --by)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

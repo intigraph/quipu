@@ -13,6 +13,7 @@ use super::{
 
 const MAX_BUCKETS: usize = 256;
 
+mod fixture_support;
 pub(crate) mod staged;
 
 /// Caller-supplied revision evidence, not authentication or profile validation.

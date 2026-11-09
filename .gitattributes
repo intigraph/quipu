@@ -43,3 +43,4 @@ docs/demos/vector-scan/output.txt -text whitespace=cr-at-eol
 docs/demos/readonly-export/output.log whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 docs/demos/knot-completion/output.log -text whitespace=cr-at-eol
 docs/demos/asof-rdf/output.log -text whitespace=cr-at-eol
+docs/demos/client-resolver-observation/output.log -text whitespace=cr-at-eol
