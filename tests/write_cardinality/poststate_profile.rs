@@ -41,6 +41,18 @@ fn poststate_profile_times_gated_writes_without_changing_decisions() {
         + profile.check_validate
         + profile.check_debt;
     assert!(phases <= profile.check, "nested phases: {profile:?}");
+    let entity_leaves = profile.check_entity_bounded
+        + profile.check_entity_object_targets
+        + profile.check_entity_reference_types
+        + profile.check_entity_subclasses;
+    assert!(
+        entity_leaves <= profile.check_entities,
+        "entity leaves: {profile:?}"
+    );
+    assert!(
+        profile.check_entity_bounded > std::time::Duration::ZERO,
+        "{profile:?}"
+    );
     assert_eq!(
         store.take_poststate_profile(),
         quipu::store::PoststateProfile::default(),

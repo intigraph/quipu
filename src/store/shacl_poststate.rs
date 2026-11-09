@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 
 #[cfg(feature = "shacl")]
 mod instrumented_check;
+#[cfg(all(test, feature = "shacl"))]
+mod lookup_tests;
 use crate::time::Stopwatch;
 
 use super::{Datum, Store};
@@ -347,14 +349,17 @@ impl Store {
         predicates: &BTreeSet<String>,
     ) -> Result<()> {
         // Existing incoming target edges need not have been in this payload.
-        // Read only (predicate, bound object) through the existing value index.
+        // Bind both value and attribute: idx_active_vge omits the attribute
+        // and can fetch a large unrelated value cohort before filtering it.
+        // Keep graph/current filters: idx_vaet also contains other graphs/history.
         for predicate in predicates {
             let Some(attribute) = self.lookup(predicate)? else {
                 continue;
             };
             let bytes = object.to_bytes();
             let mut stmt = self.conn.prepare(
-                "SELECT e,a,v,tx,valid_from,valid_to,op FROM facts WHERE v=?1 AND a=?2 \
+                "SELECT e,a,v,tx,valid_from,valid_to,op FROM facts INDEXED BY idx_vaet \
+                 WHERE v=?1 AND a=?2 \
                  AND g=?3 AND op=1 AND valid_to IS NULL LIMIT 100001",
             )?;
             let mut rows = stmt.query(rusqlite::params![bytes, attribute, graph])?;

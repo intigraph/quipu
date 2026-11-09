@@ -89,21 +89,38 @@ impl Store {
                 check_entities,
                 (|| {
                     for &entity in &subjects {
-                        self.append_bounded_entity(&mut facts, entity, graph, None)?;
-                        self.append_object_targets(
-                            &mut facts,
-                            &crate::Value::Ref(entity),
-                            graph,
-                            &incoming_targets,
+                        timed!(
+                            check_entity_bounded,
+                            self.append_bounded_entity(&mut facts, entity, graph, None)
                         )?;
-                        if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
-                            // ROOT types can target focuses; ROOT values never affect cardinality.
-                            if let Some(rdf_type) =
-                                self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
-                            {
-                                self.append_bounded_entity(&mut facts, entity, 0, Some(rdf_type))?;
-                            }
-                        }
+                        timed!(
+                            check_entity_object_targets,
+                            self.append_object_targets(
+                                &mut facts,
+                                &crate::Value::Ref(entity),
+                                graph,
+                                &incoming_targets,
+                            )
+                        )?;
+                        timed!(
+                            check_entity_reference_types,
+                            (|| {
+                                if graph != 0 && self.reference_type_graphs(graph).contains(&0) {
+                                    // ROOT types can target focuses; ROOT values never affect cardinality.
+                                    if let Some(rdf_type) = self
+                                        .lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
+                                    {
+                                        self.append_bounded_entity(
+                                            &mut facts,
+                                            entity,
+                                            0,
+                                            Some(rdf_type),
+                                        )?;
+                                    }
+                                }
+                                Ok::<_, Error>(())
+                            })()
+                        )?;
                     }
                     if !incoming_targets.is_empty() {
                         let mut seen = BTreeSet::new();
@@ -116,16 +133,22 @@ impl Store {
                                 {
                                     owned.whole.insert(literal.value().to_owned());
                                 }
-                                self.append_object_targets(
-                                    &mut facts,
-                                    &datum.value,
-                                    graph,
-                                    &incoming_targets,
+                                timed!(
+                                    check_entity_object_targets,
+                                    self.append_object_targets(
+                                        &mut facts,
+                                        &datum.value,
+                                        graph,
+                                        &incoming_targets,
+                                    )
                                 )?;
                             }
                         }
                     }
-                    self.append_subclass_context(&mut facts, graph)?;
+                    timed!(
+                        check_entity_subclasses,
+                        self.append_subclass_context(&mut facts, graph)
+                    )?;
                     Ok::<_, Error>(())
                 })()
             )?;
