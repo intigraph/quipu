@@ -650,6 +650,7 @@ Register-ArgumentCompleter -Native -CommandName 'qp' -ScriptBlock {
             [CompletionResult]::new('--construct', '--construct', [CompletionResultType]::ParameterName, 'SPARQL CONSTRUCT query selecting the share')
             [CompletionResult]::new('--shapes', '--shapes', [CompletionResultType]::ParameterName, 'Shapes used for validation or packaging')
             [CompletionResult]::new('--queries', '--queries', [CompletionResultType]::ParameterName, 'Stored queries to include')
+            [CompletionResult]::new('--competency', '--competency', [CompletionResultType]::ParameterName, 'Verbatim competency.toml to compile and seal with the share')
             [CompletionResult]::new('--alignments', '--alignments', [CompletionResultType]::ParameterName, 'Reviewed SSSOM/RDF alignment file to carry')
             [CompletionResult]::new('--parent-share', '--parent-share', [CompletionResultType]::ParameterName, 'Parent share for a delta export')
             [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'Starting share or transaction for incremental output')

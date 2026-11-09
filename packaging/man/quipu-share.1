@@ -4,7 +4,7 @@
 .SH NAME
 quipu\-share \- Write a portable share of a graph, scope or project
 .SH SYNOPSIS
-\fBquipu share\fR [\fB\-\-db\fR] [\fB\-\-output\fR] [\fB\-\-graph\fR] [\fB\-\-group\-id\fR] [\fB\-\-construct\fR] [\fB\-\-shapes\fR] [\fB\-\-queries\fR] [\fB\-\-alignments\fR] [\fB\-\-parent\-share\fR] [\fB\-\-since\fR] [\fB\-\-destination\fR] [\fB\-\-pack\-dir\fR] [\fB\-\-actor\fR] [\fB\-\-attest\-key\fR] [\fB\-\-attest\-issued\-at\fR] [\fB\-\-attest\-ttl\fR] [\fB\-\-attest\-agent\fR] [\fB\-\-attest\-session\fR] [\fB\-\-attest\-introducer\fR] [\fB\-\-attest\-nonce\fR] [\fB\-\-pointers\fR] [\fB\-\-no\-shapes\fR] [\fB\-\-no\-queries\fR] [\fB\-\-turtle\fR] [\fB\-\-attest\fR] [\fB\-\-project\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
+\fBquipu share\fR [\fB\-\-db\fR] [\fB\-\-output\fR] [\fB\-\-graph\fR] [\fB\-\-group\-id\fR] [\fB\-\-construct\fR] [\fB\-\-shapes\fR] [\fB\-\-queries\fR] [\fB\-\-competency\fR] [\fB\-\-alignments\fR] [\fB\-\-parent\-share\fR] [\fB\-\-since\fR] [\fB\-\-destination\fR] [\fB\-\-pack\-dir\fR] [\fB\-\-actor\fR] [\fB\-\-attest\-key\fR] [\fB\-\-attest\-issued\-at\fR] [\fB\-\-attest\-ttl\fR] [\fB\-\-attest\-agent\fR] [\fB\-\-attest\-session\fR] [\fB\-\-attest\-introducer\fR] [\fB\-\-attest\-nonce\fR] [\fB\-\-pointers\fR] [\fB\-\-no\-shapes\fR] [\fB\-\-no\-queries\fR] [\fB\-\-turtle\fR] [\fB\-\-attest\fR] [\fB\-\-project\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
 .SH DESCRIPTION
 Write a portable share of a graph, scope or project
 .SH OPTIONS
@@ -29,6 +29,9 @@ Shapes used for validation or packaging
 .TP
 \fB\-\-queries\fR \fI<VALUE>\fR
 Stored queries to include
+.TP
+\fB\-\-competency\fR \fI<VALUE>\fR
+Verbatim competency.toml to compile and seal with the share
 .TP
 \fB\-\-alignments\fR \fI<VALUE>\fR
 Reviewed SSSOM/RDF alignment file to carry
