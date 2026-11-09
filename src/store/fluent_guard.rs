@@ -79,6 +79,54 @@ pub(super) fn check_native_inferences(
     check(store, graph, &additional)
 }
 
+/// Check the complete staged graph, not only the selected fluent or each
+/// imported event in isolation. The writer reservation and savepoint are held;
+/// a refusal rolls back definitions, terms, transactions and origin receipts.
+pub(super) fn check_native_capacity(store: &Store, graph: i64) -> Result<()> {
+    let (Some(type_id), Some(fluent_type)) = (
+        store.lookup(crate::namespace::RDF_TYPE)?,
+        store.lookup(&format!("{}Fluent", crate::namespace::QUIPU))?,
+    ) else {
+        return Ok(());
+    };
+    let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU))?;
+    // Only the protected live declaration types are needed. Avoid loading
+    // every observation log just to enforce the reader's declaration bounds.
+    let mut query = store.conn.prepare_cached(
+        "SELECT DISTINCT e, v FROM facts WHERE g=?1 AND a=?2 AND op=1 \
+         AND valid_to IS NULL AND (v=?3 OR v=?4)",
+    )?;
+    let rows = query.query_map(
+        params![
+            graph,
+            type_id,
+            Value::Ref(fluent_type).to_bytes(),
+            observable_type.map(|id| Value::Ref(id).to_bytes()),
+        ],
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?)),
+    )?;
+    let mut all = BTreeSet::new();
+    let mut derived = BTreeSet::new();
+    let fluent_value = Value::Ref(fluent_type).to_bytes();
+    for row in rows {
+        let (entity, value) = row?;
+        if value == fluent_value {
+            all.insert(entity);
+        } else {
+            derived.insert(entity);
+        }
+    }
+    let bases = all.difference(&derived).count();
+    if bases > crate::fluent::Registry::BASE_LIMIT
+        || derived.len() > crate::fluent::Registry::OBSERVABLE_LIMIT
+    {
+        return Err(Error::InvalidValue(
+            "fluent: native registry exceeds supported declaration capacity".into(),
+        ));
+    }
+    Ok(())
+}
+
 impl Store {
     /// Event identity is global within this local Store, even when the value
     /// reader is graph-scoped. Do not manufacture a second origin elsewhere.

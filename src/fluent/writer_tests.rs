@@ -384,4 +384,35 @@ mod inference_tests {
             );
         });
     }
+
+    #[cfg(feature = "shacl")]
+    #[test]
+    fn primitive_declaration_limit_refuses_before_breaking_existing_native_reads() {
+        let mut store = loaded();
+        with_identity(Some(identity()), || {
+            for i in 0..128 {
+                let mut r = request();
+                r.fluent = format!("urn:fluent:capacity:{i}");
+                r.event = format!("urn:event:capacity:{i}");
+                store.append_fluent_native(&r, 0).unwrap();
+            }
+            store
+                .fluent_current_native(0, "urn:fluent:capacity:0")
+                .unwrap();
+            let tx = store.latest_tx_id().unwrap();
+            let facts = store.current_facts().unwrap().len();
+            let mut r = request();
+            r.fluent = "urn:fluent:capacity:overflow".into();
+            r.event = "urn:event:capacity:overflow".into();
+            assert!(
+                store.append_fluent_native(&r, 0).is_err(),
+                "reject unsupported registry poststate before commit"
+            );
+            assert_eq!(store.latest_tx_id().unwrap(), tx);
+            assert_eq!(store.current_facts().unwrap().len(), facts);
+            store
+                .fluent_current_native(0, "urn:fluent:capacity:0")
+                .unwrap();
+        });
+    }
 }

@@ -22,6 +22,9 @@ pub struct Registry {
 }
 
 impl Registry {
+    pub(crate) const BASE_LIMIT: usize = 128;
+    pub(crate) const OBSERVABLE_LIMIT: usize = 128;
+
     /// Start one graph-scoped registry. This does not authorize Store writes.
     pub fn new(graph: &str) -> Result<Self> {
         NamedNode::new(graph).map_err(|_| invalid("observable graph must be an IRI"))?;
@@ -54,7 +57,7 @@ impl Registry {
                 Err(invalid("fluent declaration identity changed"))
             };
         }
-        if self.bases.len() >= 128 {
+        if self.bases.len() >= Self::BASE_LIMIT {
             return Err(invalid("base registry exceeds 128 declarations"));
         }
         self.bases.insert(name.into(), binding);
@@ -96,7 +99,7 @@ impl Registry {
         candidate
             .definitions
             .insert(observable.name.clone(), observable);
-        if candidate.definitions.len() > 128 {
+        if candidate.definitions.len() > Self::OBSERVABLE_LIMIT {
             return Err(invalid("observable registry exceeds 128 definitions"));
         }
         let mut done = BTreeSet::new();

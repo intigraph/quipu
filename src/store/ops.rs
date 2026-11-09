@@ -297,6 +297,8 @@ impl Store {
         if let Some(request) = fluent {
             request.persist_origin(self, graph, tx_id)?;
             self.finish_native_fluent_records(tx_id)?;
+            super::fluent_guard::check_native_capacity(self, graph)
+                .map_err(|e| self.stash_refusal("fluent", e, staged_datums.len()))?;
         }
         let written_asserts: Vec<_> = asserts.iter().collect();
         let written_retracts: Vec<_> = retracts.iter().collect();
