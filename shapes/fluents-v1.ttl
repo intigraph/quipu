@@ -3,7 +3,7 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix qp: <https://quipu.dev/ontology/> .
+@prefix qp: <https://w3id.org/intigraph/quipu/ns#> .
 
 qp:Fluent a rdfs:Class .
 qp:FluentObservation a rdfs:Class .
