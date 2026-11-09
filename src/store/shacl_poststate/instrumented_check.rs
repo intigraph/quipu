@@ -55,11 +55,6 @@ impl Store {
             self.poststate_profile.check += checking.elapsed();
             return result;
         }
-        let subclass = self.lookup("http://www.w3.org/2000/01/rdf-schema#subClassOf")?;
-        let hierarchy_changed = plan.has_value_constraint
-            && datums.iter().any(|datum| Some(datum.attribute) == subclass);
-        let required_path_context =
-            hierarchy_changed || !plan.affected_value_path_predicates.is_empty();
         let result = (|| {
             let subjects: BTreeSet<_> = datums
                 .iter()
@@ -152,26 +147,6 @@ impl Store {
                     Ok::<_, Error>(())
                 })()
             )?;
-            if required_path_context {
-                let mut predicates = plan.affected_value_path_predicates.clone();
-                if hierarchy_changed {
-                    // A new hierarchy link can make stored instances targets.
-                    // Gather those dependencies with the same bounded, indexed
-                    // component walk instead of accepting or refusing blindly.
-                    predicates.insert("http://www.w3.org/2000/01/rdf-schema#subClassOf".into());
-                    predicates.insert("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".into());
-                }
-                timed!(
-                    check_values,
-                    self.append_affected_path_context(
-                        &mut facts,
-                        &mut value_focuses,
-                        &subjects,
-                        graph,
-                        &predicates,
-                    )
-                )?;
-            }
             // Preserve the pre-value-admission context. Exhausting this optional
             // repair budget falls back to the existing payload/maxCount path; a
             // partial context must never manufacture a new value violation.
@@ -197,9 +172,7 @@ impl Store {
             );
             let complete_values = match value_context {
                 Ok(()) => true,
-                Err(Error::CannotVerify(message))
-                    if context_budget_exhausted(&message) && !required_path_context =>
-                {
+                Err(Error::CannotVerify(message)) if context_budget_exhausted(&message) => {
                     facts.truncate(base_len);
                     self.observed_context_exhausted(&message);
                     self.poststate_profile.check_value_fallbacks += 1;
@@ -264,9 +237,7 @@ impl Store {
         self.poststate_profile.check += checking.elapsed();
         match result {
             Err(Error::CannotVerify(message))
-                if !plan.has_value_set_constraint
-                    && !required_path_context
-                    && context_budget_exhausted(&message) =>
+                if !plan.has_value_set_constraint && context_budget_exhausted(&message) =>
             {
                 self.observed_context_exhausted(&message);
                 Ok(())
