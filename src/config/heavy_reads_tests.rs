@@ -17,7 +17,8 @@ fn heavy_policy_defaults_inert_and_rejects_unusable_reserves() {
     }
     config.heavy_read_permits = 1;
     config.read_processes = 2;
-    assert!(config.validate_heavy_reads(4).is_err());
+    assert!(config.validate_heavy_reads(4).is_ok());
+    assert!(config.validate_heavy_reads(1).is_err());
     config.read_processes = 0;
     for operations in [
         vec!["unknown".into()],

@@ -1,0 +1,24 @@
+Native library fixture transcript; no running service was called.
+Base: d3cdf6483ac25068d141ed69d42a04885f6401b6.
+The PR caption identifies the exact demonstrated source commit.
+Input: ASK { ?s rdfs:label ?o }
+
+BEFORE (controlled restoration of the original error mapping at all three parser entry points):
+SPARQL parse error: error at 1:20: expected one of Prefix not found, ['%'], ['-' | '0' ..= '9' | '\u{00B7}' | '\u{0300}'..='\u{036F}' |
+'\u{203F}'..='\u{2040}'], ['.'], [':'], ['A' ..= 'Z' | 'a' ..= 'z' | '\u{00C0}'..='\u{00D6}' | '\u{00D8}'..='\u{00F6}'
+| '\u{00F8}'..='\u{02FF}' | '\u{0370}'..='\u{037D}' | '\u{037F}'..='\u{1FFF}'
+| '\u{200C}'..='\u{200D}' | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}'
+| '\u{3001}'..='\u{D7FF}' | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}'], ['\\'], ['_']
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4023 filtered out; finished in 0.02s
+
+AFTER (same input after byte-for-byte restoration of the repaired entry points):
+test sparql_structure::diagnostics::contract_tests::public_query_path_names_the_prefix_and_requires_explicit_namespace ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 4017 filtered out; finished in 0.02s
+The passing integration assertions require a named rdfs: declaration hint,
+no assumed or inserted namespace, the same hint on row-labeled queries,
+and successful parsing of an explicitly declared custom namespace.
+
+LOADED-VOCABULARY REFUSAL (unknown type remains refused, no facts written;
+a legal loaded-type write/read is the positive control):
+refused/no-write with legal-type positive: unknown rdf:type IRIs: urn:fixture:job#Role. No loaded shape sanctions these classes; choose a class from POST /shapes {"action":"vocabulary"} or propose and load a shape before retrying. Similar loaded class IRIs: https://example.test/Role (lexical similarity only, not semantic equivalence; inspect the shapes before choosing, or propose a new shape if none fits). No facts were written
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 4022 filtered out; finished in 0.03s

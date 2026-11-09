@@ -165,11 +165,10 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
             assert text_search.get('isError') is not True, text_search
         else:
             assert text_search.get('isError') is not True, text_search
-            empty = json.loads(text_search['content'][0]['text'])
-            assert empty['ranking'] == 'keyword', empty
-            assert empty['context']['outcome'] == 'NO CONTEXT', empty
-            assert empty['insufficient_context'] is True, empty
-            assert empty['results'] == empty['context_results'] == [], empty
+            fallback = json.loads(text_search['content'][0]['text'])
+            assert fallback['retrieval']['mode'] == 'lexical', fallback
+            assert fallback['retrieval']['status'] == 'degraded', fallback
+            assert 'context' not in fallback
             explicit = unpack(call('quipu_search', {'query': 'fixture', 'mode': 'semantic'}))
             assert explicit.get('isError') is True, explicit
             assert 'no embedding provider' in explicit['content'][0]['text'], explicit
@@ -178,10 +177,15 @@ with tempfile.TemporaryDirectory(prefix='quipu-native-mcp-') as directory:
             code, raw = http('/search', {'query': 'fixture'})
             assert code == 200 and raw['count'] >= 1, raw
             assert raw['ranking'] == 'keyword' and 'similarity' not in raw['results'][0], raw
-            projected = tool_body(call('quipu_search', {'query': 'fixture'}))
+            projected = tool_body(call('quipu_search', {'query': 'fixture', 'mode': 'keyword'}))
             assert projected['context']['candidate_count'] >= 1, projected
             assert projected['context']['reason'] == 'similarity_unavailable', projected
             assert projected['results'] == projected['context_results'] == [], projected
+            lexical = tool_body(call('quipu_search', {'query': 'fixture'}))
+            assert lexical['count'] >= 1, lexical
+            assert lexical['retrieval']['mode'] == 'lexical', lexical
+            assert lexical['retrieval']['status'] == 'degraded', lexical
+            assert 'context' not in lexical, lexical
         turtle = {'turtle': '<urn:fixture> <urn:p> "fixture" .', 'actor': 'urn:spoof'}
         assert unpack(call('quipu_knot', turtle)).get('isError') is True
         assert unpack(call('quipu_knot', turtle, 'invalid')).get('isError') is True

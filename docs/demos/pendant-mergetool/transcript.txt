@@ -1,0 +1,56 @@
+AFTER: quipu git-merge theirs (a real slot conflict)
+Auto-merging pendant/export.nt
+CONFLICT (content): Merge conflict in pendant/export.nt
+Auto-merging pendant/manifest.json
+Automatic merge failed; fix conflicts and then commit the result.
+Merge needs your decision: pendant 'pendant' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 1 undecided. Nothing has been written.
+
+[conflict:0] <urn:ticket> · urn:value
+  rule     sh:maxCount 1 on urn:value: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  (none)
+
+Next: quipu git-merge resolve pendant conflict:0 --choose <ours|theirs|base|defer> --by <you>
+Then: git add pendant && git commit (CI pendant-check re-runs the merge and verifies the result)
+pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json (here: pendant/decisions.json)
+pendant decisions pending; nothing is committed. Show them with: quipu merge show <pendant>/decisions.json (here: pendant/decisions.json)
+exit 2
+BEFORE: quipu git-mergetool pendant/export.nt --by reviewer
+unknown command: git-mergetool
+Use qp --help for usage.
+exit 2
+AFTER: same command, input: conflict:0 theirs
+Merge needs your decision: pendant 'pendant' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 1 undecided. Nothing has been written.
+
+[conflict:0] <urn:ticket> · urn:value
+  rule     sh:maxCount 1 on urn:value: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  (none)
+
+Next: quipu git-merge resolve pendant conflict:0 --choose <ours|theirs|base|defer> --by <you>
+Then: git add pendant && git commit (CI pendant-check re-runs the merge and verifies the result)
+Enter <row-id> <choice>, or quit; no choice is automatic:
+Merge decided, ready to apply: pendant 'pendant' (Git merge: MERGE_HEAD -> HEAD)
+1 conflict, 0 undecided. Nothing has been written.
+
+[conflict:0] <urn:ticket> · urn:value
+  rule     sh:maxCount 1 on urn:value: ours and theirs together hold 2 values
+  base     "base"
+  ours     "ours"  (HEAD)
+  theirs   "theirs"  (MERGE_HEAD)
+  choose   1) ours  2) theirs  3) base  4) defer
+  decided  theirs (by reviewer at 2026-11-08T06:23:14Z)
+
+Next: git add pendant && git commit (CI pendant-check re-runs the merge and verifies the result)
+exit 0
+CONTROL: immutable pendant-check base ours theirs HEAD
+pendant-check: 1 packs verified
+exit 0

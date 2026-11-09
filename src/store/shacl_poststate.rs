@@ -16,6 +16,9 @@ use crate::time::Stopwatch;
 use super::{Datum, Store};
 use crate::{Error, Result};
 
+pub(super) const CONTEXT_NODE_BUDGET: usize = 1024;
+pub(super) const CONTEXT_FACT_BUDGET: u32 = 100_000;
+
 impl Store {
     /// Supply explicit shapes to every transaction made by one operation.
     /// Nested scopes and unwinding restore the prior context. This does not
@@ -46,12 +49,26 @@ impl Store {
         tx_id: i64,
         conditional: bool,
     ) -> Result<()> {
+        let observation = self.begin_validator_observation(graph, tx_id, conditional);
+        let result = self.enforce_shacl_poststate_observed(datums, graph, tx_id, conditional);
+        self.finish_validator_observation(observation, &result);
+        result
+    }
+
+    fn enforce_shacl_poststate_observed(
+        &mut self,
+        datums: &[Datum],
+        graph: i64,
+        tx_id: i64,
+        conditional: bool,
+    ) -> Result<()> {
         // Verdict/refusal writers must not recursively validate their evidence.
         if self.recording_verdicts {
             return Ok(());
         }
         let started = Stopwatch::start();
         let loaded = if self.shacl_config.validate_on_write || conditional {
+            self.observed_loaded_selection();
             self.get_combined_shapes()?
         } else {
             None
@@ -99,7 +116,7 @@ impl Store {
             if !seen.insert(child) {
                 continue;
             }
-            if seen.len() > 1024 {
+            if seen.len() > CONTEXT_NODE_BUDGET {
                 return Err(Error::CannotVerify(
                     "post-state SHACL node dependencies exceed 1024 nodes".into(),
                 ));
@@ -206,7 +223,7 @@ impl Store {
                 if !seen.insert(entity) {
                     continue;
                 }
-                if seen.len() > 1024 {
+                if seen.len() > CONTEXT_NODE_BUDGET {
                     return Err(Error::CannotVerify(
                         "post-state SHACL value context exceeds 1024 nodes".into(),
                     ));
@@ -223,7 +240,6 @@ impl Store {
         Ok(())
     }
 
-    #[cfg(feature = "shacl")]
     pub(super) fn cardinality_context(&self, facts: &[crate::Fact]) -> Result<String> {
         use oxrdf::{BlankNode, NamedNode, NamedOrBlankNode, Triple};
         use oxrdfio::{RdfFormat, RdfSerializer};
@@ -284,7 +300,7 @@ impl Store {
             )?;
             let mut rows = stmt.query(rusqlite::params![bytes, attribute, graph])?;
             while let Some(row) = rows.next()? {
-                if facts.len() >= 100_000 {
+                if facts.len() >= CONTEXT_FACT_BUDGET as usize {
                     return Err(Error::CannotVerify(
                         "post-state SHACL context exceeds 100000 facts".into(),
                     ));
@@ -314,11 +330,13 @@ impl Store {
         // Bound the indexed per-entity read BEFORE materializing facts.
         let count: u32 = self.conn.query_row(
             "SELECT COUNT(*) FROM (SELECT 1 FROM facts WHERE e=?1 AND g=?2 \
-             AND op=1 AND valid_to IS NULL LIMIT 100001)",
-            rusqlite::params![entity, graph],
+             AND op=1 AND valid_to IS NULL LIMIT ?3)",
+            rusqlite::params![entity, graph, CONTEXT_FACT_BUDGET + 1],
             |row| row.get(0),
         )?;
-        if count > 100_000 || facts.len() + count as usize > 100_000 {
+        if count > CONTEXT_FACT_BUDGET
+            || facts.len() + count as usize > CONTEXT_FACT_BUDGET as usize
+        {
             return Err(Error::CannotVerify(
                 "post-state SHACL context exceeds 100000 facts".into(),
             ));
@@ -333,7 +351,7 @@ impl Store {
 }
 
 #[cfg(feature = "shacl")]
-fn context_budget_exhausted(message: &str) -> bool {
+pub(super) fn context_budget_exhausted(message: &str) -> bool {
     message.starts_with("post-state SHACL ")
         && (message.contains("exceeds 100000 facts")
             || message.contains("exceed 1024 nodes")

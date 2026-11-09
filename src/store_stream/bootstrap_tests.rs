@@ -115,6 +115,20 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         "scoped live-fact baseline query: {:?}",
         legacy.query_get(&query.name).unwrap()
     );
+    // Exercise nonempty mapping metadata, including retained history and BLOB
+    // model bytes. An empty-table bootstrap would miss silent data omission.
+    source
+        .conn
+        .execute_batch(
+            "INSERT INTO shape_mapping_state VALUES
+         ('urn:public:mapping',1,'old',X'00FF','[]','retired','actor','authority',
+          '2026-01-01T00:00:00Z','old-record','2026-01-02T00:00:00Z'),
+         ('urn:public:mapping',2,'current',X'FF0001','[]','decided','actor','authority',
+          '2026-01-02T00:00:00Z','current-record',NULL);
+         INSERT INTO shape_mapping_pins VALUES
+         ('urn:public:mapping','shape','urn:public:shape','2026-01-01T00:00:00Z','current');",
+        )
+        .unwrap();
     initialize(&source).unwrap();
     let mut spool = Vec::new();
     let receipt = write_snapshot(&source, &mut spool, 1024 * 1024).unwrap();
@@ -272,7 +286,25 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         "metadata-only fact head: {fact_head} -> {}",
         source.latest_tx_id().unwrap()
     );
+    source
+        .conn
+        .execute_batch(
+            "BEGIN;
+         UPDATE shape_mapping_state SET valid_to='2026-01-06T00:00:00Z'
+         WHERE mapping='urn:public:mapping' AND tx=2;
+         INSERT INTO shape_mapping_state VALUES
+         ('urn:public:mapping',3,'next',X'0002FF','[]','flagged','next-actor','authority',
+          '2026-01-06T00:00:00Z','next-record',NULL);
+         DELETE FROM shape_mapping_pins WHERE digest='current';
+         INSERT INTO shape_mapping_pins VALUES
+         ('urn:public:mapping','shape','urn:public:shape','2026-01-06T00:00:00Z','next');
+         COMMIT;",
+        )
+        .unwrap();
     let tail = read_revision(&source, since, 100).unwrap();
+    for name in ["shape_mapping_state", "shape_mapping_pins"] {
+        assert!(tail.changes.iter().any(|change| change.table == name));
+    }
     let mut broken = tail.clone();
     broken.changes.last_mut().unwrap().table = "unadmitted-table".into();
     let broken_signature = crate::store_replica::sign_revision(&broken, &key).unwrap();
@@ -308,6 +340,24 @@ fn shared_applier_logical_bootstrap_preserves_stored_ask_dataset_and_history() {
         replica.query_get("logical_status").unwrap(),
         Some(changed_query)
     );
+    for name in ["shape_mapping_state", "shape_mapping_pins"] {
+        let read = |store: &Store| {
+            let sql = format!("SELECT * FROM {name} ORDER BY 1,2,3,4,5");
+            let mut statement = store.conn.prepare(&sql).unwrap();
+            let width = statement.column_count();
+            statement
+                .query_map([], |row| {
+                    (0..width)
+                        .map(|i| row.get::<_, rusqlite::types::Value>(i))
+                        .collect::<rusqlite::Result<Vec<_>>>()
+                })
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+        };
+        assert_eq!(read(&source), read(&replica), "signed mapping tail: {name}");
+        assert!(!read(&replica).is_empty());
+    }
     let changed_expected = crate::mcp::named_query::tool_ask(&source, &request).unwrap();
     let before = replica.conn.total_changes();
     let changed_actual = crate::mcp::named_query::tool_ask(&replica, &request).unwrap();

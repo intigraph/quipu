@@ -1,0 +1,38 @@
+# PENDING PROPOSAL ONLY. Not a loaded shape set or an admitted write contract.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix qp: <https://w3id.org/intigraph/quipu/ns#> .
+
+qp:Fluent a rdfs:Class .
+qp:FluentObservation a rdfs:Class .
+qp:Observable a rdfs:Class ; rdfs:subClassOf qp:Fluent .
+
+qp:FluentShape a sh:NodeShape ; sh:targetClass qp:Fluent ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path qp:slotSubject ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:slotPredicate ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:inGraph ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:propertyShape ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:currentValuePolicy ; sh:datatype xsd:string ;
+        sh:in ( "latest" "max" "sum" "set" ) ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+qp:FluentObservationShape a sh:NodeShape ; sh:targetClass qp:FluentObservation ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path qp:forFluent ; sh:class qp:Fluent ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:originTx ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:writer ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:asOf ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:recordedOn ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path qp:observationValue ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+qp:ObservableShape a sh:NodeShape ; sh:targetClass qp:Observable ;
+    sh:nodeKind sh:IRI ;
+    sh:property [ sh:path qp:observes ; sh:class qp:Fluent ; sh:nodeKind sh:IRI ; sh:minCount 1 ] ;
+    sh:property [ sh:path qp:computedBy ; sh:datatype xsd:string ;
+        sh:in ( "latest" "max" "sum" "set" ) ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+# Immutable identity/content, writer-assigned transaction authenticity, cycle
+# checks, numeric-policy compatibility, and retention are writer invariants.
+# SHACL structural conformance alone does not establish any of these facts.

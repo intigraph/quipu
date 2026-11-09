@@ -509,14 +509,17 @@ pub(crate) fn poststate_preexisting(
     pre.push_str(&store_type_context_in_graph(store, &referenced, graph)?);
 
     let validator = crate::shacl::cached_validator(shapes_turtle)?;
-    let debt: BTreeSet<String> = validator
-        .validate(pre.as_bytes())?
+    let before = validator.validate(pre.as_bytes());
+    store.observed_debt_call("pre", shapes_turtle, &pre, &before);
+    let debt: BTreeSet<String> = before?
         .results
         .iter()
         .filter(|r| is_violation(r) && is_focus_local(r) && existing.contains(&r.focus_node))
         .map(debt_key)
         .collect();
-    let post = validator.validate(post_data.as_bytes())?;
+    let post = validator.validate(post_data.as_bytes());
+    store.observed_debt_call("post", shapes_turtle, post_data, &post);
+    let post = post?;
     let graph_iri = store.graph_iri_of(graph);
     for issue in issues {
         let focus = issue.focus_node.trim_matches(['<', '>']);

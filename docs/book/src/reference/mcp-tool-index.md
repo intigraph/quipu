@@ -2,7 +2,7 @@
 
 # MCP Tool Index
 
-All 84 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
+All 87 tools that `quipu mcp` and `quipu-server` serve in a build with the `owl` feature, generated from the tool definitions. For connection details, workflows and examples see [MCP Tools](mcp-tools.md).
 
 ## `quipu_accept_proposal`
 
@@ -432,7 +432,7 @@ Promote a staged share only when existing promotion gates permit it. Does not by
 
 ## `quipu_knot`
 
-Assert facts into the knowledge graph (with optional SHACL validation)
+Assert facts into the knowledge graph (with optional SHACL validation). When a loaded class vocabulary exists, unknown rdf:type IRIs refuse before writing. Inspect quipu_shapes with action=vocabulary; similar class names are not semantic equivalence. Propose and load a shape if no sanctioned type fits.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -501,43 +501,80 @@ Manage OWL ontologies: load (parse + materialize entailments), list, or remove. 
 | `timestamp` | string | no | ISO-8601 timestamp |
 | `turtle` | string | no | OWL ontology in Turtle format (required for load) |
 
+## `quipu_mapping_apply`
+
+WRITE. Apply or retire a decided mapping with exact expected_digest. Both graphs must already exist; existing graph authority/validation gates remain. Records the actual lifecycle decision and MappingRecord in the same tx. Exact replay does not reopen retirement. No consumer or replica activation.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string: `apply`, `retire` | yes |  |
+| `actor` | string | yes |  |
+| `expected_digest` | string | yes |  |
+| `mapping` | varies | yes | Decided mapping object for apply, mapping IRI string for retire. |
+| `operations_graph` | string | no | Existing committed audit graph; default urn:quipu:graph:operations. Only for apply. |
+
+## `quipu_mapping_decide`
+
+READ. Pure explicit per-row accept/decline decisions bound to the whole proposal digest. Every full correspondence key needs exactly one decision. Returns the selected mapping and expected_digest; declared reviewer is provenance, not a credential.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `decisions` | array | yes |  |
+| `proposal` | object | yes |  |
+| `reviewer` | string | yes |  |
+
+## `quipu_mapping_propose`
+
+READ. Qualify explicit one-hop schema correspondences, existing named scope and exact current shape/ontology pins. Returns a digest-bound proposal. Creates no graphs or transactions and performs no automatic matching.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `mapping` | object | yes |  |
+
 ## `quipu_merge_apply`
 
-WRITE. Finish a share merge (incoming + base) or a fork promotion (fork): the clean part plus every decided row in ONE transaction whose source records the reviewer and the decisions hash. Refuses and writes nothing on an undecided row, stale decisions (either side moved), more values than sh:maxCount, a value that is not an RDF term, or (forks) a SHACL refusal. Applying the same decisions again returns outcome already-applied and writes nothing.
+WRITE. Finish a share merge (incoming + base) or fork promotion (fork) under one writer reservation, with ordered receive/decide transactions recording reviewer and decisions hash. Convergent continue writes no slot operations. Refuses undecided or stale inputs, invalid RDF values, invalid explicit cardinality decisions or failed validation. Applying the same decisions again reports already-applied and writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `actor` | string | no | Who is applying. |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
-| `decisions` | object | yes | The file from merge_decisions with each row's decision set (quipu_merge_resolve): {choose: ours\|theirs\|base\|both} or {values: [N-Triples terms]}. |
+| `decisions` | object | yes | The file from merge_decisions with each row decided through quipu_merge_resolve. Convergence accepts continue/base/value; conflicts accept their advertised choices. Explicit values are N-Triples terms. |
 | `dry_run` | boolean | no | Run every check and report the counts it would write; write nothing. |
 | `fork` | string | no | Apply to this fork's promotion, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph, required for profiled application. Normal writer and ownership gates still apply. |
 | `reviewer` | string | yes | Who decided. Recorded in provenance. |
 
 ## `quipu_merge_decisions`
 
-READ. The conflicts of merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, one row per slot with base/ours/theirs values and each side's provenance, bound to what was reviewed. propose:true adds a mechanical proposal with evidence per row; it never sets a decision. present:true returns {decisions, presentation, view}: the standard markdown to show the user, unchanged. Writes nothing.
+READ. Review rows for merging an incoming share (incoming + base) or promoting a fork (fork) into ROOT, with base/ours/theirs values and provenance. Convergent rows default to continue, which preserves the current claim without writing. propose:true adds advisory proposals; conflicts still require the reviewer's choice. present:true returns {decisions, presentation, view}. Writes nothing.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `base` | object | no | Its parent share. Inline, as /import takes it. |
+| `choices` | array | no | Typed profiled choices: each has slot [subject, predicate] and decision. Omitted choices remain held. |
 | `fork` | string | no | A fork whose promotion stopped on conflicts, instead of incoming + base. |
 | `incoming` | object | no | The share to merge. Inline, as /import takes it. |
+| `ledger` | string | no | Existing admitted private receipt graph for resume; naming it does not grant access. |
 | `present` | boolean | no | Also return the standard presentation (markdown + JSON view). |
+| `profile` | object | no | Explicit quipu-merge-profile/v1 selection profile. Opts into authenticated profiled planning; omitted retains the legacy path. |
 | `propose` | boolean | no | Fill each row's proposal (never its decision). |
-| `slot_scoped` | boolean | no | Opt in to v2 slot values and last-modifying-transaction binding. Default v1 remains strict over all ROOT changes. |
+| `resume` | string | no | Retained parent merge ID whose held remainder is resumed. Requires ledger and authenticated receipt ownership. |
+| `slot_scoped` | boolean | no | Opt in to v3 slot values and last-modifying-transaction binding. Default v3-whole-root remains strict over all ROOT changes; legacy v1/v2 files retain their checks. |
 
 ## `quipu_merge_resolve`
 
-Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Choices: ours, theirs, base, both (only within sh:maxCount), value (with values), defer. Validates the choice against the row; touches no store. Apply with quipu_merge_apply.
+Record one choice on one row of a merge decisions file (share or fork) and return {decisions, presentation, view}. Convergent rows accept continue/base/value. Conflicts accept ours/theirs/base/both (within sh:maxCount), value or defer. Continue is refused on a conflicting row. Touches no store. Apply with quipu_merge_apply.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `by` | string | yes | Who decided: the person who chose, or the agent id when the agent rules allow it. |
-| `choose` | string: `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `by` | string | no | Who decided: the person who chose, or the agent id when the agent rules allow it. |
+| `choose` | string: `continue`, `ours`, `theirs`, `base`, `both`, `value`, `defer` | no |  |
+| `decision` | object | no | Typed profiled-session decision, instead of legacy choose/values. |
 | `decisions` | object | yes | The decisions file from quipu_merge_decisions. |
-| `row` | string | yes | The row id, e.g. d1. |
+| `row` | string | no | The row id, e.g. d1. |
+| `slot` | array | no | Profiled session slot [subject, predicate], instead of legacy row. |
 | `values` | array | no | N-Triples terms, with choose: value. |
 
 ## `quipu_namespaces`
@@ -665,7 +702,7 @@ Manage STORED named queries — competency questions a consumer ships with its d
 
 ## `quipu_query`
 
-Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)
+Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx). Declare every prefixed name with an explicit PREFIX; namespaces are not assumed. For exploratory text discovery use quipu_search instead of unbound FILTER(CONTAINS(...)) scans. Search does not replace exact-ID, owner-plate, named-graph or absence checks.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

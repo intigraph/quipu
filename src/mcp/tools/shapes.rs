@@ -178,7 +178,7 @@ pub fn tool_subscriptions(store: &Store, input: &JsonValue) -> Result<JsonValue>
     }
 }
 
-pub fn tool_shapes(store: &Store, input: &JsonValue) -> Result<JsonValue> {
+pub fn tool_shapes(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
     let action = input
         .get("action")
         .and_then(|v| v.as_str())
@@ -271,7 +271,7 @@ fn vocabulary_json(store: &Store) -> Result<JsonValue> {
     }))
 }
 
-fn list_shapes_json(store: &Store) -> Result<JsonValue> {
+pub(crate) fn list_shapes_json(store: &Store) -> Result<JsonValue> {
     let shapes = store.list_shapes()?;
     let items: Vec<JsonValue> = shapes
         .iter()

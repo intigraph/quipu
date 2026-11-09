@@ -9,8 +9,13 @@
 // this records "unknown" rather than a plausible-looking wrong value. An
 // unknown SHA must never be mistaken for a known one.
 use std::process::Command;
+#[cfg(feature = "bundled-onnx")]
+#[path = "build/onnx_runtime.rs"]
+mod onnx_runtime;
 
 fn main() {
+    #[cfg(feature = "bundled-onnx")]
+    onnx_runtime::bundle();
     let sha = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .output()

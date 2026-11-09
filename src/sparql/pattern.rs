@@ -405,6 +405,16 @@ fn eval_pattern_seeded_inner(
                     super::graph_filter::record_scan();
                     let (mut graph_rows, graph_vars) =
                         eval_pattern_seeded(store, inner, &graph_ctx, &graph_seed)?;
+                    // GRAPH binds its name outside an inner SELECT's projection.
+                    // Do not leak that name into subquery-local variables, or
+                    // overwrite an incompatible explicitly projected binding.
+                    graph_rows.retain_mut(|row| match row.get(&graph_var) {
+                        Some(value) => value == &Value::Ref(graph.g),
+                        None => {
+                            row.insert(graph_var.clone(), Value::Ref(graph.g));
+                            true
+                        }
+                    });
                     rows.append(&mut graph_rows);
                     for var in graph_vars {
                         if !vars.contains(&var) {

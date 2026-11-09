@@ -24,6 +24,8 @@ use std::collections::BTreeSet;
 use crate::error::{Error, Result};
 use crate::store::Store;
 
+mod suggestions;
+
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const TARGET_CLASS: &str = "http://www.w3.org/ns/shacl#targetClass";
 const SUBCLASS_OF: &str = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
@@ -130,7 +132,10 @@ pub fn enforce_turtle(store: &Store, turtle: &str) -> Result<()> {
     if vocabulary.is_empty() {
         return Ok(());
     }
-    refuse(&ungoverned_types_in_turtle(turtle, &vocabulary))
+    refuse(
+        &ungoverned_types_in_turtle(turtle, &vocabulary),
+        &vocabulary,
+    )
 }
 
 /// Refuse unknown episode node types before entity resolution can mint them.
@@ -150,16 +155,17 @@ pub fn enforce_episode_types<'a>(
             unknown.insert(iri);
         }
     }
-    refuse(&unknown.into_iter().collect::<Vec<_>>())
+    refuse(&unknown.into_iter().collect::<Vec<_>>(), &vocabulary)
 }
 
-fn refuse(unknown: &[String]) -> Result<()> {
+fn refuse(unknown: &[String], vocabulary: &BTreeSet<String>) -> Result<()> {
     if unknown.is_empty() {
         return Ok(());
     }
     Err(Error::InvalidValue(format!(
-        "unknown rdf:type IRIs: {}. No loaded shape sanctions these classes; choose a class from POST /shapes {{\"action\":\"vocabulary\"}} or propose and load a shape before retrying. No facts were written",
-        unknown.join(", ")
+        "unknown rdf:type IRIs: {}. No loaded shape sanctions these classes; choose a class from POST /shapes {{\"action\":\"vocabulary\"}} or propose and load a shape before retrying.{} No facts were written",
+        unknown.join(", "),
+        suggestions::hint(unknown, vocabulary)
     )))
 }
 

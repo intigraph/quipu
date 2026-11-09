@@ -39,6 +39,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: pinned-ci-asset-mirror
+        name: pinned CI mirror acquisition controls
+        entry: python3 scripts/test-ci-asset-mirror.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/(fetch-pinned-ci-asset|prepare-ci-onnx|test-ci-asset-mirror)\.py|build/onnx_catalogue\.rs|\.github/workflows/ci\.yml)$
       - id: shape-propagation
         name: shape propagation warning and counterexamples
         entry: python scripts/shape-propagation-ci.py
@@ -102,7 +108,7 @@ repos:
 
       - id: cargo-clippy-shacl
         name: cargo clippy (shacl)
-        entry: cargo clippy --features shacl --all-targets -- -D warnings -A missing-docs
+        entry: cargo clippy --no-default-features --features shacl --all-targets -- -D warnings -A missing-docs
         language: system
         types: [rust]
         pass_filenames: false

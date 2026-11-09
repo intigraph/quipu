@@ -49,6 +49,13 @@ mod graph_store_compact;
 mod handle;
 #[path = "server/input_fields.rs"]
 mod input_fields;
+#[path = "server/knot_completion.rs"]
+mod knot_completion;
+#[cfg(test)]
+#[path = "server/knot_completion_tests.rs"]
+mod knot_completion_tests;
+#[path = "server/mapping.rs"]
+mod mapping;
 #[path = "server/memory_files.rs"]
 mod memory_files;
 #[cfg(test)]
@@ -254,12 +261,12 @@ async fn main() {
     let reactive_reasoner = if is_follower {
         None
     } else {
-        let empty = || quipu::reasoner::RuleSet::empty(quipu::namespace::DEFAULT_BASE_NS);
+        let empty = || quipu::reasoner::RuleSet::empty(store.base_ns());
         // A malformed ruleset must not take the server down, but it must not
         // pass unremarked either: the failure mode being avoided is a reasoner
         // that silently does nothing.
         let ruleset = match store.get_combined_shapes() {
-            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, None) {
+            Ok(Some(ttl)) => match quipu::reasoner::parse_rules(&ttl, Some(store.base_ns())) {
                 Ok(rs) => rs,
                 Err(e) => {
                     eprintln!("reactive reasoner starts EMPTY — rules failed to parse: {e}");
@@ -308,9 +315,13 @@ async fn main() {
     // v1 verdict signing (the loom, Phase 0): load-or-generate the host-file
     // ed25519 key. QUIPU_SIGNING_KEY overrides the default path.
     if !is_replica {
-        let signing_key_path = quipu::signing::default_key_path();
-        match quipu::signing::SigningIdentity::load(&signing_key_path, "quipu") {
-            Ok(id) => {
+        let identity = quipu::signing::default_key_path().and_then(|path| {
+            quipu::signing::SigningIdentity::load(&path, "quipu")
+                .map(|id| (path, id))
+                .map_err(Into::into)
+        });
+        match identity {
+            Ok((signing_key_path, id)) => {
                 eprintln!(
                     "verdict signing enabled (verifier=quipu, key={})",
                     signing_key_path.display()
@@ -418,14 +429,87 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    let app = Router::new()
+    let app = api_routes(config.memory_files.clone());
+    let app = protected_app(
+        app,
+        &workers,
+        scoped_profile,
+        scoped_source,
+        auth_guard::Config {
+            auth_policy,
+            session_keys,
+            attest_store,
+            replica_config,
+            read_only,
+            is_relay,
+            scoped_enabled,
+        },
+    )
+    // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
+    // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
+    // preflight (GH#5). Built above from the configured allowlist.
+    .layer(cors)
+    // Strict profiles cannot admit an unsigned CORS preflight before the
+    // signature verifier. Use a same-origin client or authenticated broker.
+    .layer(axum::middleware::from_fn(move |req, next| {
+        auth::strict_preflight(preflight_keys_required, req, next)
+    }))
+    // Body limit: axum's 2MB default silently caps /knot at small graphs —
+    // a code-graph promotion of one real repository is ~9MB of Turtle and
+    // was refused 413. 64MB bounds a whole-repo promotion with headroom
+    // while still refusing runaway bodies.
+    .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
+    // Request log, outermost so every request (including CORS preflights
+    // and auth rejections) leaves a trace. Until this existed, server.log
+    // was startup banners only, and a wedged instance left NOTHING to RCA
+    // from — the whole incident was reconstructed from gdb.
+    // stderr on purpose: stdout is block-buffered under systemd, stderr is
+    // not, and the journal timestamps every line itself.
+    .layer(axum::middleware::from_fn(request_middleware::log_request))
+    .layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        replica::headers,
+    ))
+    .with_state(state);
+
+    let app = process_pool::protect_worker(app);
+
+    if let Some(replica) = config.server.replica {
+        replica::start_metadata_reader(push_store_outer, replica);
+    } else if let Some(relay) = relay {
+        relay::start(push_store_outer, relay);
+    } else {
+        background::start(
+            push_store_outer,
+            config.events.retention_days,
+            &config.embedding,
+        );
+    }
+
+    // Everything committed before this line is STARTUP in quipu_write_facts_total
+    // (aegis-gwkd76): the work every restart repeats.
+    quipu::write_kind::set_serving();
+    if scoped_enabled {
+        scoped_reads::serve_http(app, &bind_addr).await;
+    } else {
+        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    }
+    drop(workers);
+}
+
+/// Every HTTP route the server registers. Serve it only through
+/// [`protected_app`]; a route merged after that call would not meet the
+/// scoped-read guard or authentication (aegis-44r).
+fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedStore> {
+    Router::new()
         .route("/memory/read", post(memory_files::read))
         .route("/memory/export", post(memory_files::export))
         .route("/memory/projection", post(memory_files::projection))
         .route("/memory/commit", post(memory_files::commit))
         .route("/memory/receipt", post(memory_files::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
-        .layer(axum::Extension(config.memory_files.clone()))
+        .layer(axum::middleware::from_fn(memory_files::scope_guard))
+        .layer(axum::Extension(memory_files))
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
@@ -443,6 +527,7 @@ async fn main() {
         .route("/share", post(publication::share_payload))
         .merge(publication::acquisition_routes())
         .merge(align::routes())
+        .merge(mapping::routes())
         .merge(snapshot_upload::routes())
         .route("/cord", post(cord))
         .route("/render", post(render_prepare))
@@ -535,72 +620,26 @@ async fn main() {
         .route("/spotlight", post(spotlight_handler))
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
-        .route("/preview/{iri}", get(preview_handler));
-    let app = scoped_reads::guard(
-        process_pool::route(app, &workers),
-        scoped_profile,
-        scoped_source,
-    );
-    let app = auth_guard::layer(
-        app,
-        auth_guard::Config {
-            auth_policy,
-            session_keys,
-            attest_store,
-            replica_config,
-            read_only,
-            is_relay,
-            scoped_enabled,
-        },
+        .route("/preview/{iri}", get(preview_handler))
+}
+
+/// The protection stack around [`api_routes`], innermost first: worker-pool
+/// proxying, then the scoped-read guard, then authentication. A proxied worker
+/// request therefore cannot bypass the scoped guard, and the guard only ever
+/// sees authenticated identity evidence.
+fn protected_app(
+    routes: Router<SharedStore>,
+    workers: &process_pool::ProcessPool,
+    scoped_profile: Option<(quipu::read_authorization::profile::ScopedReadConfig, String)>,
+    scoped_source: SharedStore,
+    auth: auth_guard::Config,
+) -> Router<SharedStore> {
+    auth_guard::layer(
+        scoped_reads::guard(
+            process_pool::route(routes, workers),
+            scoped_profile,
+            scoped_source,
+        ),
+        auth,
     )
-    // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
-    // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
-    // preflight (GH#5). Built above from the configured allowlist.
-    .layer(cors)
-    // Strict profiles cannot admit an unsigned CORS preflight before the
-    // signature verifier. Use a same-origin client or authenticated broker.
-    .layer(axum::middleware::from_fn(move |req, next| {
-        auth::strict_preflight(preflight_keys_required, req, next)
-    }))
-    // Body limit: axum's 2MB default silently caps /knot at small graphs —
-    // a code-graph promotion of one real repository is ~9MB of Turtle and
-    // was refused 413. 64MB bounds a whole-repo promotion with headroom
-    // while still refusing runaway bodies.
-    .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
-    // Request log, outermost so every request (including CORS preflights
-    // and auth rejections) leaves a trace. Until this existed, server.log
-    // was startup banners only, and a wedged instance left NOTHING to RCA
-    // from — the whole incident was reconstructed from gdb.
-    // stderr on purpose: stdout is block-buffered under systemd, stderr is
-    // not, and the journal timestamps every line itself.
-    .layer(axum::middleware::from_fn(request_middleware::log_request))
-    .layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        replica::headers,
-    ))
-    .with_state(state);
-
-    let app = process_pool::protect_worker(app);
-
-    if let Some(replica) = config.server.replica {
-        replica::start_metadata_reader(push_store_outer, replica);
-    } else if let Some(relay) = relay {
-        relay::start(push_store_outer, relay);
-    } else {
-        background::start(
-            push_store_outer,
-            config.events.retention_days,
-            &config.embedding,
-        );
-    }
-
-    // Everything committed before this line is STARTUP in quipu_write_facts_total
-    // (aegis-gwkd76): the work every restart repeats.
-    quipu::write_kind::set_serving();
-    if scoped_enabled {
-        scoped_reads::serve_http(app, &bind_addr).await;
-    } else {
-        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
-    }
-    drop(workers);
 }

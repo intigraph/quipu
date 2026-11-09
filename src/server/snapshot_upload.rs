@@ -95,6 +95,7 @@ pub(crate) fn routes() -> Router<SharedStore> {
         .route("/import", post(super::publication::import_share))
         .route("/import/promote", post(super::publication::promote_import))
         .route("/knot", post(super::publication::knot))
+        .route("/knot/status", post(super::knot_completion::status))
         .route("/knot/stage", post(stage_part))
         .route("/knot/promote", post(promote))
         .route("/knot/cancel", post(cancel))

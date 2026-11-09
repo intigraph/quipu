@@ -1,0 +1,23 @@
+Scoped common-ledger source controls (base 61eba8bf)
+
+Before (unchanged source, new runtime controls):
+  scoped ledger subset snapshot/resume: FAIL, unknown scope field
+  omitted incoming slot control: FAIL at scoped fixture decode
+  result: 0 passed / 2 failed; compiled tests, HOME guard clean
+
+After scoped pending snapshot/identity implementation:
+  original paired controls: 2 passed / 0 failed; HOME guard clean
+  expanded native session controls: 22 passed / 0 failed; HOME guard clean
+  invisible physical history invalidates a held-slot guard
+  invisible physical history overflow refuses before ledger writes
+  public ingress refuses scoped internal requests
+  valid-time changes alter session identity; legacy encoding omits scope
+
+Naive guard control:
+  replace all-physical-claim digest with visible-value/provenance digest
+  invisible received interval test: FAIL (0 passed / 1 failed)
+  exact original source restored after the control
+
+Repeat final controls: just test --features shacl,owl --lib merge_session::tests::
+This is an in-memory library demonstration. No live writer, endpoint admission,
+production database, retained-history proof or performance acceptance is claimed.

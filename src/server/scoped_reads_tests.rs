@@ -21,6 +21,12 @@ struct Fixture {
 
 impl Fixture {
     fn router(&self) -> axum::Router {
+        self.router_with_shared(None)
+    }
+
+    /// The same real guard stack, optionally with the legacy shared writer
+    /// bearer configured, as an operator might leave it on a scoped instance.
+    fn router_with_shared(&self, shared: Option<&str>) -> axum::Router {
         let app = axum::Router::new()
             .route(
                 "/query",
@@ -41,10 +47,14 @@ impl Fixture {
             "quipu",
         )
         .unwrap();
-        let policy =
-            quipu::http_auth::BearerPolicy::new(None, None, None, quipu::time::epoch_secs())
-                .unwrap()
-                .with_named(registry);
+        let policy = quipu::http_auth::BearerPolicy::new(
+            shared.map(str::to_owned),
+            None,
+            None,
+            quipu::time::epoch_secs(),
+        )
+        .unwrap()
+        .with_named(registry);
         crate::auth_guard::layer(
             app,
             crate::auth_guard::Config {
@@ -57,6 +67,36 @@ impl Fixture {
                 scoped_enabled: true,
             },
         )
+    }
+
+    /// The production route table behind the production protection stack.
+    /// `scoped: false` is the control: same routes, guard not configured.
+    fn real_app(&self, scoped: bool) -> axum::Router {
+        let registry = quipu::crew_credentials::CredentialRegistry::parse(
+            &std::fs::read(&self.registry).unwrap(),
+            "quipu",
+        )
+        .unwrap();
+        let policy =
+            quipu::http_auth::BearerPolicy::new(None, None, None, quipu::time::epoch_secs())
+                .unwrap()
+                .with_named(registry);
+        crate::protected_app(
+            crate::api_routes(Default::default()),
+            &crate::process_pool::in_process(),
+            scoped.then(|| (self.profile.clone(), self.registry.clone())),
+            self.source.clone(),
+            crate::auth_guard::Config {
+                auth_policy: policy,
+                session_keys: Default::default(),
+                attest_store: self.source.clone(),
+                replica_config: None,
+                read_only: true,
+                is_relay: false,
+                scoped_enabled: scoped,
+            },
+        )
+        .with_state(self.source.clone())
     }
 
     fn new(hidden: &str) -> Self {
@@ -257,6 +297,9 @@ async fn scoped_reads_identity_scope_method_alias_and_unknown_refusals_are_paire
         "/share/asof",
         "/replicate/stream",
         "/replicate/challenge",
+        "/mapping/propose",
+        "/mapping/decide",
+        "/mapping/apply",
     ] {
         assert_eq!(
             fixture.call("POST", path, Some("p"), json!({})).await.0,
@@ -640,5 +683,156 @@ async fn scoped_reads_unavailable_policy_is_unknown_and_credentials_revoke_witho
     assert_eq!(
         fixture.call("POST", "/query", Some("p"), query).await.0,
         StatusCode::FORBIDDEN
+    );
+}
+
+/// End-to-end regression guard: with the legacy shared writer bearer
+/// configured, a request presenting it while copying a granted principal's
+/// agent/actor headers is refused, and a named reader on the same instance is
+/// still served.
+///
+/// Two independent defenses hold here, so disabling either alone does not
+/// change this outcome (measured with a temporary mutant that accepted the
+/// shared class: still refused). The shared bearer always authenticates as
+/// the fixed non-IRI principal `legacy-shared-bearer`, never a header value,
+/// so no read grant can name it. The class refusal itself is proven at unit
+/// level by `invalid_identity_no_grant_expiry_and_operation_intersection_deny`.
+#[tokio::test]
+async fn scoped_reads_refuse_the_legacy_shared_bearer_over_http() {
+    use tower::ServiceExt;
+    const SHARED: &str = "fixture-shared-writer-bearer";
+    let fixture = Fixture::new("secret");
+    for (token, status) in [(SHARED, StatusCode::FORBIDDEN), ("p", StatusCode::OK)] {
+        for path in ["/query", "/graphs"] {
+            let request = if path == "/query" {
+                Request::post(path)
+                    .header("content-type", "application/json")
+                    // Copied caller claims naming a principal that holds a grant.
+                    .header("x-quipu-agent", "urn:p")
+                    .header("x-actor", "urn:p")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(json!({"query":"ASK { ?s ?p ?o }"}).to_string()))
+            } else {
+                Request::get(path)
+                    .header("x-quipu-agent", "urn:p")
+                    .header("x-actor", "urn:p")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+            }
+            .unwrap();
+            let response = fixture
+                .router_with_shared(Some(SHARED))
+                .oneshot(request)
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status, "{path} with {token}");
+            let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+            let body = String::from_utf8_lossy(&body);
+            assert!(!body.contains("unscoped"), "{path}: raw handler reached");
+            assert!(!body.contains("secret"), "{path}: hidden data disclosed");
+        }
+    }
+}
+
+async fn send(app: &axum::Router, method: &str, path: &str, body: Body) -> (StatusCode, String) {
+    use tower::ServiceExt;
+    let request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("authorization", "Bearer p")
+        .header("content-type", "application/json")
+        .body(body)
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 4 * 1024 * 1024)
+        .await
+        .unwrap();
+    (status, String::from_utf8_lossy(&body).into_owned())
+}
+
+/// G2 part 3: the guard tests above use a two-route fixture. This drives every
+/// census path and method through `api_routes` + `protected_app`, the exact
+/// assembly `main` serves, so a route registered outside the guard or a
+/// reordered stack is caught here rather than in production.
+#[tokio::test]
+async fn scoped_reads_guard_covers_the_real_assembled_route_table() {
+    use quipu::read_authorization::routes::{RouteClass, census, classify};
+    let fixture = Fixture::new("secret");
+
+    // Control: the same real routes without a scoped profile serve the real
+    // handlers, which list the graph the principal holds no grant for.
+    let open = fixture.real_app(false);
+    let (status, body) = send(&open, "GET", "/graphs", Body::empty()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body.contains("urn:b"),
+        "control must reach the real handler: {body}"
+    );
+
+    let app = fixture.real_app(true);
+    let mut probed = 0;
+    for template in census()
+        .iter()
+        .copied()
+        .chain(["/mcp", "/mcp/", "/new-unclassified"])
+    {
+        let path = template.replace("{iri}", "urn%3Aentity%3Asecret");
+        for method in ["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH"] {
+            let class = classify(&path, method);
+            let input = match class {
+                RouteClass::Scoped(ReadOperation::Query) => {
+                    json!({"query":"SELECT ?g ?s ?v WHERE { GRAPH ?g { ?s <urn:p> ?v } }"})
+                        .to_string()
+                }
+                RouteClass::Scoped(ReadOperation::Metadata) => String::new(),
+                _ => "{}".to_owned(),
+            };
+            let (status, body) = send(&app, method, &path, Body::from(input)).await;
+            probed += 1;
+            assert!(
+                !body.contains("secret") && !body.contains("urn:b"),
+                "{method} {path} exposed denied data: {body}"
+            );
+            match class {
+                RouteClass::PublicStatic => {
+                    assert_eq!(status, StatusCode::OK, "{method} {path}");
+                    if method == "GET" {
+                        let value: Value = serde_json::from_str(&body).unwrap();
+                        assert_eq!(
+                            value,
+                            json!({"service":"quipu","profile":"scoped-current/v1"}),
+                            "{path} must be the guard's static answer, not the real handler"
+                        );
+                    }
+                }
+                RouteClass::Scoped(_) => {
+                    assert_eq!(status, StatusCode::OK, "{method} {path}: {body}");
+                }
+                _ => {
+                    assert_eq!(status, StatusCode::FORBIDDEN, "{method} {path}: {body}");
+                    if method == "HEAD" {
+                        // HEAD responses carry no body; the status is the evidence.
+                        continue;
+                    }
+                    let value: Value = serde_json::from_str(&body).unwrap();
+                    // Authentication is outer: on this read-only scoped
+                    // instance it refuses write routes before the scoped
+                    // guard. Either refusal means no handler ran.
+                    let read_only_write =
+                        class == RouteClass::Write && value["reason"] == "server_is_read_only";
+                    assert!(
+                        read_only_write || value == json!({"error":"scoped read denied"}),
+                        "{method} {path}: refused by something other than auth or the scoped guard: {value}"
+                    );
+                }
+            }
+        }
+    }
+    assert!(probed > 6 * 100, "census unexpectedly small: {probed}");
+    let (_, graphs) = send(&app, "GET", "/graphs", Body::empty()).await;
+    assert!(
+        graphs.contains("urn:a") && graphs.contains("urn:c"),
+        "{graphs}"
     );
 }

@@ -4,7 +4,7 @@ use crate::cli::{chrono_now, flag_value};
 
 pub(crate) const MERGE_USAGE: &str = "usage: quipu merge <share-dir> [--actor <id>] [--db <path>]\n\
        quipu merge show <decisions.json> [--format text|md|json]\n\
-       quipu merge resolve <decisions.json> <row> --choose ours|theirs|base|both|value|defer [--value <term>]... --by <who>\n\
+       quipu merge resolve <decisions.json> <row> --choose continue|ours|theirs|base|both|value|defer [--value <term>]... --by <who>\n\
        quipu merge <share-dir> --emit-decisions <file.json> [--slot-scoped] [--propose] [--db <path>]\n\
        quipu merge <share-dir> --decisions <file.json> --reviewer <who> [--dry-run] [--actor <id>] [--db <path>]";
 
@@ -138,6 +138,13 @@ pub fn cmd_merge_reconcile(args: &[String]) -> bool {
                 fail("resolve needs --by <who>: the person who chose, or your agent id")
             };
             let mut file = read_file(path);
+            if let quipu::merge_reconcile::ReconcileFile::DataBook(book) = &file {
+                let Some(choice) = flag_value(args, "--choose") else {
+                    fail("resolve needs --choose <choice>")
+                };
+                crate::cli_git_merge::resolve_in_merge(&book.document, row, choice, by);
+                return true;
+            }
             if let quipu::merge_reconcile::ReconcileFile::Git { dir, .. } = &file {
                 // A Git choice rewrites the pendant: same verb, the Git applier.
                 let Some(choice) = flag_value(args, "--choose") else {

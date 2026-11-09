@@ -2474,7 +2474,7 @@ fn compose_view_still_sees_the_overlay() {
 
 #[test]
 fn loading_a_second_version_closes_the_first_rather_than_overwriting() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2500,7 +2500,7 @@ fn loading_a_second_version_closes_the_first_rather_than_overwriting() {
 #[test]
 fn validate_as_of_v1s_window_uses_v1_semantics() {
     // #71 acceptance 1 — the headline.
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2532,7 +2532,7 @@ fn validate_as_of_v1s_window_uses_v1_semantics() {
 
 #[test]
 fn a_window_before_any_version_has_no_shapes() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2551,7 +2551,7 @@ fn a_window_before_any_version_has_no_shapes() {
 #[test]
 fn a_shape_load_appears_in_events_with_a_tx() {
     // #71 acceptance 2. Before this the audit spine had NO record the rules moved.
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2571,7 +2571,7 @@ fn a_shape_load_appears_in_events_with_a_tx() {
 #[test]
 fn remove_closes_the_row_and_history_remains_queryable() {
     // #71 acceptance 4.
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2598,7 +2598,7 @@ fn remove_closes_the_row_and_history_remains_queryable() {
 
 #[test]
 fn removing_something_absent_is_false_and_emits_nothing() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     assert!(!store.remove_shapes("nope").unwrap());
     let events: i64 = store
         .conn
@@ -2611,7 +2611,7 @@ fn removing_something_absent_is_false_and_emits_nothing() {
 fn a_reload_at_the_same_instant_replaces_that_instants_version() {
     // No meaningful ordering within one timestamp, and the (name, valid_from)
     // primary key would otherwise collide.
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# a", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2630,7 +2630,7 @@ fn a_reload_at_the_same_instant_replaces_that_instants_version() {
 
 #[test]
 fn ontologies_get_the_same_discipline() {
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_ontology("o", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();
@@ -2735,7 +2735,7 @@ fn validate_falls_back_to_stored_shapes_and_honours_as_of() {
     // quipu #71: the `/validate` surface. An explicit `shapes` still wins (the
     // existing contract); absent one, the STORED shapes are used, optionally
     // as they stood in a prior window.
-    let store = Store::open_in_memory().unwrap();
+    let mut store = Store::open_in_memory().unwrap();
     store
         .load_shapes("s", "# v1", "2026-08-01T00:00:00Z")
         .unwrap();

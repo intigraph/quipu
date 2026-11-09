@@ -145,6 +145,7 @@ pub fn tool_entity_ref(store: &mut Store, input: &Value) -> Result<Value> {
         }
         id
     };
+    crate::writer_scope::check_mint(store, graph, prefix, &entry.base_iri, node_type)?;
     if request.keys.is_some() != (entry.minting == "key") {
         return Err(Error::InvalidValue(
             "keys are required for, and only accepted by, key-minting namespaces".into(),

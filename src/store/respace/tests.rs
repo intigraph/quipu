@@ -45,6 +45,32 @@ impl Drop for Scratch {
 
 const T0: &str = "2026-01-01T00:00:00Z";
 
+#[test]
+fn respaced_copy_cannot_inherit_changeset_authority_or_receipts() {
+    let scratch = Scratch::new("client-admission-local");
+    let source = scratch.path("source.db");
+    let destination = scratch.path("destination.db");
+    let store = Store::open(&source.to_string_lossy()).unwrap();
+    store
+        .conn
+        .execute_batch(
+            "INSERT INTO client_changeset_grants VALUES('local-client',1,'{}');
+         INSERT INTO client_changeset_receipts VALUES('local-operation','{}');",
+        )
+        .unwrap();
+    drop(store);
+    respace_file(&source, &destination, 1).unwrap();
+    for (path, expected) in [(&source, 1_i64), (&destination, 0_i64)] {
+        let conn = Connection::open(path).unwrap();
+        for table in ["client_changeset_grants", "client_changeset_receipts"] {
+            let count: i64 = conn
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(count, expected, "{table} at {}", path.display());
+        }
+    }
+}
+
 fn fact(entity: i64, attribute: i64, value: Value) -> Datum {
     Datum {
         entity,

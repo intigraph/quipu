@@ -166,6 +166,16 @@ impl Store {
                 theirs: render(e, a, c.theirs)?,
             });
         }
+        if let Some(resolved) = resolved {
+            for key in resolved.keys() {
+                let bv = b.get(key).unwrap_or(&empty);
+                let ov = o.get(key).unwrap_or(&empty);
+                let tv = t.get(key).unwrap_or(&empty);
+                if ov == tv && ov != bv {
+                    used += 1;
+                }
+            }
+        }
         if resolved.is_some_and(|r| r.len() != used) {
             return Err(Error::InvalidValue(
                 "fork merge: a decision names a slot that is not in conflict; nothing was written"
@@ -357,7 +367,12 @@ impl Store {
     /// The fork's own close time for each value of slot `(e, a)` it closed:
     /// its latest closed row in the fork graph (aegis-jxxd). The merge core
     /// clamps it to the ROOT row it ends.
-    fn fork_closes(&self, fork_g: i64, e: i64, a: i64) -> Result<BTreeMap<Vec<u8>, String>> {
+    pub(super) fn fork_closes(
+        &self,
+        fork_g: i64,
+        e: i64,
+        a: i64,
+    ) -> Result<BTreeMap<Vec<u8>, String>> {
         let mut rows = self.conn.prepare_cached(
             "SELECT v, valid_to FROM facts \
              WHERE g = ?1 AND e = ?2 AND a = ?3 AND op = 1 AND valid_to IS NOT NULL \

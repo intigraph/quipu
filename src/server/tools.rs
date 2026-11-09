@@ -6,7 +6,7 @@
 //! embeds the query text outside the store lock.
 
 use axum::extract::State;
-use serde_json::{Value as JsonValue, json};
+use serde_json::Value as JsonValue;
 
 use super::SharedStore;
 use super::admission::{
@@ -24,8 +24,8 @@ macro_rules! ro_handler {
             //
             // ⚠ `&Store` does NOT prove read-only, and assuming it does is the
             // mistake this comment exists to stop. `Store::intern` takes
-            // `&self` and runs an INSERT; so do `load_shapes`, `remove_shapes`,
-            // `load_ontology` and `remove_ontology`. The borrow checker cannot
+            // `&self` and runs an INSERT. Mutable registry writers are now
+            // explicit, but the borrow checker still cannot
             // tell a pooled-safe tool from a writing one, and this codebase has
             // already caught two handlers mis-registered as `ro_handler!` for
             // exactly that reason (see the notes on `set_predicate` and the
@@ -174,7 +174,12 @@ macro_rules! rw_handler {
                     let (out, profile) = st.observe_poststate(|st| {
                         quipu::transaction_auth::refuse_if_refused()
                             .map_err(AppError::from)
-                            .and_then(|()| $tool(st, &i).map_err(AppError::from))
+                            .and_then(|()| {
+                                super::update::writer_targets::tool(st, &endpoint, &i, |st, i| {
+                                    $tool(st, i)
+                                })
+                                .map_err(AppError::from)
+                            })
                     });
                     // While the guard is alive, so `held` is the lock interval
                     // (aegis-wlf0: writes recorded no store time before).
@@ -188,7 +193,15 @@ macro_rules! rw_handler {
                         profile,
                     );
                     let out = out?;
-                    (out, st.take_deferred_embed())
+                    (
+                        out,
+                        if quipu::writer_scope::is_scoped_request() {
+                            let _ = st.take_deferred_embed();
+                            None
+                        } else {
+                            st.take_deferred_embed()
+                        },
+                    )
                 };
                 if let Some(work) = work {
                     finish_deferred_embed(&s, &work)?;
@@ -486,62 +499,14 @@ ro_handler!(context, quipu::tool_context);
 rw_handler!(propose_schema_change, quipu::tool_propose_schema_change);
 ro_handler!(list_proposals, quipu::tool_list_proposals);
 rw_handler!(accept_proposal, quipu::tool_accept_proposal);
+ro_handler!(mapping_propose, quipu::tool_mapping_propose);
+rw_handler!(mapping_apply, quipu::tool_mapping_apply);
 rw_handler!(reject_proposal, quipu::tool_reject_proposal);
 
-/// `/episode` in two phases (aegis-xi0).
-///
-/// Non-strict entity resolution is advisory, and it is the expensive part of an
-/// episode: one embedding and one label scan per node. Run under the writer, a
-/// 57-node episode on a production-size store spent its whole budget holding
-/// the single writer and was then refused. So resolution runs first on a READ
-/// connection, and the writer is taken only to revalidate it against what
-/// committed in between and to commit, exactly as [`rw_handler`] does.
-///
-/// One deadline, stamped here, covers both admissions. Where two phases do not
-/// apply (strict resolution, no read pool, a reader whose frozen layers cannot
-/// be synced) the request takes the single-phase path unchanged.
-pub(crate) async fn episode(
-    State(s): State<SharedStore>,
-    axum::Json(i): axum::Json<JsonValue>,
-) -> Result<axum::Json<JsonValue>, AppError> {
-    let (started, deadline) = super::admission::episode_budget();
-    let prepared = if s.resolves_off_writer() {
-        let (reader_store, input) = (s.clone(), i.clone());
-        episode_read_blocking_until(started, deadline, move || {
-            let mut reader = reader_store.vector_read();
-            // `read()` reports a failed frozen-pack sync and carries on with
-            // the archives absent. Resolution must not: a duplicate in a
-            // frozen layer would go unreported. Fall back to the writer.
-            if reader.sync_frozen_attachments().is_err() {
-                return Ok(None);
-            }
-            Ok(quipu::tool_episode_prepare(&reader, &input)?)
-        })
-        .await?
-    } else {
-        None
-    };
-    write_blocking_until(std::time::Instant::now(), deadline, move || {
-        let (out, work) = {
-            let mut st = s.write_lock()?;
-            quipu::transaction_auth::refuse_if_refused()?;
-            let out = match prepared {
-                Some(prepared) => quipu::tool_episode_commit(&mut st, prepared)?,
-                None => quipu::tool_episode(&mut st, &i)?,
-            };
-            (out, st.take_deferred_embed())
-        };
-        if let Some(work) = work {
-            finish_deferred_embed(&s, &work)?;
-        }
-        Ok(axum::Json(super::input_fields::annotate(
-            stringify!(quipu::tool_episode),
-            &i,
-            out,
-        )))
-    })
-    .await
-}
+#[path = "episode_handler.rs"]
+mod episode_handler;
+pub(crate) use episode_handler::episode;
+
 rw_handler!(episodes_complete, quipu::tool_episodes_complete);
 rw_handler!(impact_analysis, quipu::tool_impact);
 ro_handler!(path_cone, quipu::tool_path_cone);
@@ -587,126 +552,9 @@ pub(crate) async fn validate(
     .await
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct BackfillResult {
-    pub(crate) embedded: usize,
-    pub(crate) stale_retries: usize,
-}
-
-/// Rebuild the semantic-search corpus without monopolising the writer lock.
-///
-/// Each bounded batch is snapshotted under the lock, embedded outside it, and
-/// conditionally applied under a fresh lock.  An entity changed during the
-/// unlocked ONNX pass is requeued with its new text/version; a vector computed
-/// from an obsolete snapshot is never written and the edit is never silently
-/// omitted from the completed backfill.
-pub(crate) fn backfill_embeddings(
-    store: &SharedStore,
-) -> std::result::Result<BackfillResult, String> {
-    const BATCH_SIZE: usize = 32;
-
-    let (provider, entity_ids) = {
-        let s = store.lock();
-        let provider = s.embedding_provider().ok_or(quipu::NO_PROVIDER_HELP)?;
-        // Do not route a whole-store maintenance scan through the SPARQL evaluator:
-        // the production graph exceeds its query budget before embedding starts.
-        let entity_ids: std::collections::BTreeSet<i64> = s
-            .current_facts()
-            .map_err(|e| e.to_string())?
-            .into_iter()
-            .map(|fact| fact.entity)
-            .collect();
-        (provider, entity_ids)
-    };
-    if entity_ids.is_empty() {
-        return Ok(BackfillResult {
-            embedded: 0,
-            stale_retries: 0,
-        });
-    }
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .to_string();
-    let mut embedded = 0usize;
-    let mut stale_retries = 0usize;
-    let mut pending: std::collections::VecDeque<i64> = entity_ids.into_iter().collect();
-
-    while !pending.is_empty() {
-        let ids: Vec<i64> = (0..BATCH_SIZE)
-            .filter_map(|_| pending.pop_front())
-            .collect();
-        // BOUNDED writer-lock window: capture both the exact text and the
-        // newest contributing fact transaction.  The transaction version
-        // catches change-then-revert races that text equality alone misses.
-        let snapshots: Vec<(i64, String, i64)> = {
-            let s = store.lock();
-            let mut snapshots = Vec::with_capacity(ids.len());
-            for eid in ids {
-                let facts = s.entity_facts(eid).map_err(|e| e.to_string())?;
-                let Some(version) = facts.iter().map(|f| f.tx).max() else {
-                    continue;
-                };
-                let text = quipu::build_entity_text(&s, eid).map_err(|e| e.to_string())?;
-                if !text.is_empty() {
-                    snapshots.push((eid, text, version));
-                }
-            }
-            snapshots
-        };
-        if snapshots.is_empty() {
-            continue;
-        }
-        let texts: Vec<&str> = snapshots.iter().map(|(_, text, _)| text.as_str()).collect();
-        // Expensive ONNX work is deliberately LOCK-FREE.  BATCH_SIZE remains
-        // the existing RSS bound: one call can never scale with corpus size.
-        let embs = provider.embed_batch(&texts).map_err(|e| e.to_string())?;
-
-        // BOUNDED writer-lock window: apply only snapshots that are still
-        // current.  Requeue stale entities so a concurrent edit is eventually
-        // embedded rather than overwritten or silently skipped.
-        {
-            let s = store.lock();
-            let vs = s.vector_store();
-            for ((eid, text, version), emb) in snapshots.iter().zip(embs.iter()) {
-                let current_facts = s.entity_facts(*eid).map_err(|e| e.to_string())?;
-                let current_version = current_facts.iter().map(|f| f.tx).max();
-                let current_text = quipu::build_entity_text(&s, *eid).map_err(|e| e.to_string())?;
-                if current_version != Some(*version) || current_text != *text {
-                    pending.push_back(*eid);
-                    stale_retries += 1;
-                    continue;
-                }
-                // Backfill is also the repair path for stale corpus entries. Close
-                // the prior current row first; otherwise both remain current and
-                // the search text lookup may return the obsolete one (aegis-eldb1).
-                vs.close_embedding(*eid, &ts).map_err(|e| e.to_string())?;
-                vs.embed_entity(*eid, text, emb, &ts)
-                    .map_err(|e| e.to_string())?;
-                embedded += 1;
-            }
-        }
-    }
-    Ok(BackfillResult {
-        embedded,
-        stale_retries,
-    })
-}
-
-pub(crate) async fn embed_backfill(
-    State(store): State<SharedStore>,
-) -> std::result::Result<axum::Json<JsonValue>, AppError> {
-    blocking(move || match backfill_embeddings(&store) {
-        Ok(outcome) => Ok(axum::Json(json!({
-            "status": "ok",
-            "entities_embedded": outcome.embedded,
-            "stale_retries": outcome.stale_retries,
-        }))),
-        Err(e) => Ok(axum::Json(json!({"status": "error", "error": e}))),
-    })
-    .await
-}
+#[path = "tools_backfill.rs"]
+mod backfill;
+pub(crate) use backfill::{backfill_embeddings, embed_backfill};
 
 #[cfg(test)]
 #[path = "write_store_time_tests.rs"]
