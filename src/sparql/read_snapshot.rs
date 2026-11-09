@@ -58,7 +58,7 @@ fn query_temporal_inner(store: &Store, sparql: &str, ctx: &TemporalContext) -> R
     }
 
     let parsed = crate::sparql_structure::parse_query(sparql_parser(), sparql)?
-        .map_err(|e| crate::sparql_structure::query_error(sparql, &e))?;
+        .map_err(|e| Error::InvalidValue(format!("SPARQL parse error: {e}")))?;
 
     let started = crate::time::Stopwatch::start();
     root_scope::check(&parsed)?;

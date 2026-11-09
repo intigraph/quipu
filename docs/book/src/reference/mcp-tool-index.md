@@ -432,7 +432,7 @@ Promote a staged share only when existing promotion gates permit it. Does not by
 
 ## `quipu_knot`
 
-Assert facts into the knowledge graph (with optional SHACL validation). When a loaded class vocabulary exists, unknown rdf:type IRIs refuse before writing. Inspect quipu_shapes with action=vocabulary; similar class names are not semantic equivalence. Propose and load a shape if no sanctioned type fits.
+Assert facts into the knowledge graph (with optional SHACL validation)
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -702,7 +702,7 @@ Manage STORED named queries — competency questions a consumer ships with its d
 
 ## `quipu_query`
 
-Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx). Declare every prefixed name with an explicit PREFIX; namespaces are not assumed. For exploratory text discovery use quipu_search instead of unbound FILTER(CONTAINS(...)) scans. Search does not replace exact-ID, owner-plate, named-graph or absence checks.
+Execute a SPARQL SELECT query against the knowledge graph (supports time-travel via valid_at/tx)
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

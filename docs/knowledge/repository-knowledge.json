@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "5b46e40cc5263dbe4aa4de031d7bacc66643ee83655090e0454869506fde26f1",
+      "source_sha256": "332abb5c1dfee36b5be8ffcc0218eeff79de5b0deaefb8e54ae537c545169394",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
