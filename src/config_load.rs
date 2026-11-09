@@ -60,14 +60,16 @@ impl QuipuConfig {
                     )));
                 }
             };
-            return toml::from_str::<ConfigFile>(&content)
+            let parsed = toml::from_str::<ConfigFile>(&content)
                 .map(|file| file.quipu)
                 .map_err(|_| {
                     crate::Error::InvalidValue(format!(
                         "invalid server configuration: {}",
                         path.display()
                     ))
-                });
+                })?;
+            refuse_misplaced_scoped_keys(&content, &path)?;
+            return Ok(parsed);
         }
         Ok(Self::default())
     }
@@ -78,6 +80,47 @@ impl QuipuConfig {
         let file: ConfigFile = toml::from_str(&content).ok()?;
         Some(file.quipu)
     }
+}
+
+/// A scoped-read profile is opt-in through exactly `[quipu.server.scoped_reads]`.
+/// `ServerConfig` ignores unknown keys, so a misspelled or misplaced profile
+/// would otherwise parse as "no profile" and start the legacy open-read
+/// server, the one outcome the profile exists to prevent (aegis-44r G5).
+/// Apart from the existing server writer-credential key, any other key in
+/// `[quipu]` or `[quipu.server]` whose name contains "scoped" refuses startup.
+/// Unrelated unknown keys stay accepted, so this
+/// does not tighten parsing for existing configurations. The message names
+/// neither the key nor any value.
+fn refuse_misplaced_scoped_keys(content: &str, path: &Path) -> crate::Result<()> {
+    let refuse = || {
+        crate::Error::InvalidValue(format!(
+            "unrecognized scoped read configuration key in {}; refusing startup",
+            path.display()
+        ))
+    };
+    let looks_scoped = |key: &str| {
+        key.to_ascii_lowercase()
+            .replace(['-', '_', ' '], "")
+            .contains("scoped")
+    };
+    let value: toml::Table = toml::from_str(content).map_err(|_| refuse())?;
+    let Some(quipu) = value.get("quipu").and_then(toml::Value::as_table) else {
+        return Ok(());
+    };
+    if quipu.keys().any(|key| looks_scoped(key)) {
+        return Err(refuse());
+    }
+    if let Some(server) = quipu.get("server").and_then(toml::Value::as_table)
+        && server.keys().any(|key| {
+            !matches!(
+                key.as_str(),
+                "scoped_reads" | "scoped_writer_credentials_file"
+            ) && looks_scoped(key)
+        })
+    {
+        return Err(refuse());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -109,5 +152,73 @@ mod strict_tests {
                 .replica
                 .is_some()
         );
+    }
+
+    #[test]
+    fn misspelled_or_misplaced_scoped_profile_refuses_instead_of_open_reads() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".bobbin")).unwrap();
+        let path = dir.path().join(".bobbin/config.toml");
+        for content in [
+            "[quipu.server.scoped_read]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+            "[quipu.server.scopedreads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+            "[quipu.server.scoped-reads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+            "[quipu.server.Scoped_Reads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+            "[quipu.scoped_reads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+            "[quipu.server]\nscoped = true\n",
+            "[quipu.server]\nscoped_writer_credential_file = \"private-sentinel\"\n",
+            "[quipu]\nscoped_writer_credentials_file = \"private-sentinel\"\n",
+        ] {
+            std::fs::write(&path, content).unwrap();
+            let error = QuipuConfig::load_strict(dir.path())
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("refusing startup"), "{content}: {error}");
+            assert!(
+                !error.contains("urn:o") && !error.contains("/p\""),
+                "{content}"
+            );
+        }
+        // The correct section still parses into an explicit profile.
+        std::fs::write(
+            &path,
+            "[quipu.server.scoped_reads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+        )
+        .unwrap();
+        assert!(
+            QuipuConfig::load_strict(dir.path())
+                .unwrap()
+                .server
+                .scoped_reads
+                .is_some()
+        );
+        // Unrelated unknown keys are not newly refused.
+        std::fs::write(&path, "[quipu.server]\nfuture_flag = true\n").unwrap();
+        assert!(QuipuConfig::load_strict(dir.path()).is_ok());
+    }
+
+    #[test]
+    fn existing_scoped_writer_credentials_remain_valid_with_read_profile_guard() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".bobbin")).unwrap();
+        let path = dir.path().join(".bobbin/config.toml");
+        for profile in [
+            "",
+            "\n[quipu.server.scoped_reads]\npolicy_path = \"/p\"\nowner = \"urn:o\"\n",
+        ] {
+            std::fs::write(
+                &path,
+                format!(
+                    "[quipu.server]\nscoped_writer_credentials_file = \"/writer-credentials\"\n{profile}"
+                ),
+            )
+            .unwrap();
+            let config = QuipuConfig::load_strict(dir.path()).unwrap();
+            assert_eq!(
+                config.server.scoped_writer_credentials_file,
+                Some("/writer-credentials".to_owned())
+            );
+            assert_eq!(config.server.scoped_reads.is_some(), !profile.is_empty());
+        }
     }
 }
