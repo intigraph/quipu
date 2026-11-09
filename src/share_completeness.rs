@@ -154,6 +154,10 @@ pub const DECLARED: &[(&str, Disposition)] = &[
     // Local owner authority and registry-instance pins are never imported.
     ("writer_grants", Disposition::Excluded),
     ("writer_graph_instances", Disposition::Excluded),
+    // Owner-issued changeset authority never travels in a share. Receipts bind
+    // acceptance to this master lineage; importing one cannot admit a retry.
+    ("client_changeset_grants", Disposition::Excluded),
+    ("client_changeset_receipts", Disposition::Excluded),
     // Master-local lifecycle admission/receipt state. A foreign pack carries
     // mapping and audit RDF as content, but cannot authorize changes by
     // installing a protected writer's execution cache. Missing cache with an

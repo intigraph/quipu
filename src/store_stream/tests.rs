@@ -387,7 +387,19 @@ fn scoped_writer_authority_is_local_not_snapshot_or_journal_content() {
             [],
         )
         .unwrap();
-    for table in ["writer_grants", "writer_graph_instances"] {
+    store
+        .conn
+        .execute_batch(
+            "INSERT INTO client_changeset_grants VALUES('local-client',1,'{}');
+         INSERT INTO client_changeset_receipts VALUES('local-operation','{}');",
+        )
+        .unwrap();
+    for table in [
+        "writer_grants",
+        "writer_graph_instances",
+        "client_changeset_grants",
+        "client_changeset_receipts",
+    ] {
         let count: i64 = store
             .conn
             .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
@@ -400,9 +412,19 @@ fn scoped_writer_authority_is_local_not_snapshot_or_journal_content() {
     assert!(catalog.iter().any(|table| table.name == "graphs"));
     assert!(!catalog.iter().any(|table| matches!(
         table.name.as_str(),
-        "writer_grants" | "writer_graph_instances"
+        "writer_grants"
+            | "writer_graph_instances"
+            | "client_changeset_grants"
+            | "client_changeset_receipts"
     )));
     initialize(&store).unwrap();
+    store
+        .conn
+        .execute_batch(
+            "UPDATE client_changeset_grants SET revision=2;
+         UPDATE client_changeset_receipts SET receipt='{\"changed\":true}';",
+        )
+        .unwrap();
     store
         .conn
         .execute(

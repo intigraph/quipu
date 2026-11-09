@@ -70,6 +70,17 @@ pub const COLUMN_CLASSIFICATION: &[(&str, &str, TermIdKind)] = &[
     ("writer_grants", "id", TermIdKind::None),
     ("writer_grants", "revision", TermIdKind::None),
     ("writer_grants", "payload", TermIdKind::None),
+    // Master-local changeset authority and receipts contain text/JSON and tx
+    // identifiers, never interned term IDs. Owned copies clear these rows.
+    ("client_changeset_grants", "id", TermIdKind::None),
+    ("client_changeset_grants", "revision", TermIdKind::None),
+    ("client_changeset_grants", "payload", TermIdKind::None),
+    (
+        "client_changeset_receipts",
+        "operation_id",
+        TermIdKind::None,
+    ),
+    ("client_changeset_receipts", "receipt", TermIdKind::None),
     ("writer_graph_instances", "g", TermIdKind::Id),
     ("writer_graph_instances", "generation", TermIdKind::None),
     ("transaction_declarations", "tx", TermIdKind::None),
