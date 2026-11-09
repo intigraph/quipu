@@ -53,7 +53,7 @@ impl Validator {
             // Dynamic expressions need the data/focus and remain conservative here.
             if shape
                 .deactivated()
-                .and_then(|expr| expr.as_constant())
+                .and_then(shacl_engine::ir::IRNodeExpr::as_constant)
                 .map(|value| OxigraphInMemory::object_as_term(&value))
                 .and_then(|term| OxigraphInMemory::term_as_literal(&term).ok())
                 .and_then(|literal| literal.to_bool())
