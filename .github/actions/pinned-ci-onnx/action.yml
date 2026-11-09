@@ -1,0 +1,30 @@
+name: Pinned CI ONNX acquisition
+description: Optional mirror, immutable Actions cache, then original upstream; all bytes verified
+inputs:
+  mirror-base:
+    description: Optional approved HTTPS mirror base
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - id: pin
+      shell: bash
+      run: python scripts/prepare-ci-onnx.py --metadata
+    - id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/pinned-ci-assets
+        key: ${{ steps.pin.outputs.key }}
+    - name: Verify acquisition and select offline native archive
+      shell: bash
+      env:
+        CI_ARTIFACT_MIRROR_URL: ${{ inputs.mirror-base }}
+        CI_ARTIFACT_CACHE_DIR: ${{ runner.temp }}/pinned-ci-assets
+      run: python scripts/prepare-ci-onnx.py
+    - name: Retain verified pinned bytes before the build
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/pinned-ci-assets
+        key: ${{ steps.pin.outputs.key }}
