@@ -61,18 +61,21 @@ mod tests {
         )
         .unwrap();
         assert_eq!(absent["result"], false);
-        crate::tool_knot(
+        let admitted = crate::tool_knot(
             &mut store,
             &json!({"turtle":"<https://example.test/good> a <https://example.test/Role> ."}),
-        )
-        .unwrap();
+        );
+        #[cfg(feature = "shacl")]
+        admitted.unwrap();
+        #[cfg(not(feature = "shacl"))]
+        assert!(matches!(admitted, Err(crate::Error::CannotVerify(_))));
         let positive = crate::tool_query(
             &store,
             &json!({"query":"ASK { <https://example.test/good> a <https://example.test/Role> }"}),
         )
         .unwrap();
-        assert_eq!(positive["result"], true);
-        eprintln!("refused/no-write with legal-type positive: {error}");
+        assert_eq!(positive["result"], cfg!(feature = "shacl"));
+        eprintln!("refused/no-write with capability-bound legal-type control: {error}");
         let text = error.to_string();
         assert!(text.contains("Similar loaded class IRIs: https://example.test/Role"));
         assert!(text.contains("not semantic equivalence"));
