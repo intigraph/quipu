@@ -1,0 +1,14 @@
+running 1 test
+TYPED_LIMIT_ONE_VM_INSTRUCTIONS=120101
+
+thread 'sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation' (2810689) panicked at src/sparql/triple/limited_tests.rs:118:5:
+LIMIT 1 performed 120101 VM instructions
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation ... FAILED
+
+failures:
+
+failures:
+    sparql::triple::limited_tests::chaski_typed_limit_one_avoids_grouping_the_type_relation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3488 filtered out; finished in 1.72s
