@@ -30,9 +30,22 @@ fn single_independent_leaf(pattern: &GraphPattern) -> bool {
         }
         GraphPattern::Bgp { patterns } if patterns.len() == 1 => {
             let tp = &patterns[0];
-            matches!((&tp.subject, &tp.predicate, &tp.object),
-                (TermPattern::Variable(s), NamedNodePattern::Variable(p), TermPattern::Variable(o))
-                if s != p && s != o && p != o)
+            match (&tp.subject, &tp.predicate, &tp.object) {
+                (
+                    TermPattern::Variable(s),
+                    NamedNodePattern::Variable(p),
+                    TermPattern::Variable(o),
+                ) => s != p && s != o && p != o,
+                // A fixed predicate adds no variable equality constraint. Keep both
+                // endpoints independent variables: in particular a variable
+                // rdf:type object does not enter the subclass expansion path.
+                (
+                    TermPattern::Variable(s),
+                    NamedNodePattern::NamedNode(_),
+                    TermPattern::Variable(o),
+                ) => s != o,
+                _ => false,
+            }
         }
         _ => false,
     }
