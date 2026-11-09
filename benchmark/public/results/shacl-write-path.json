@@ -9,8 +9,8 @@
    "agrees": 3
   },
   "class": {
-   "agrees": 18,
-   "diverges": 1
+   "agrees": 13,
+   "diverges": 6
   },
   "closed": {
    "agrees": 3,
@@ -33,8 +33,8 @@
    "agrees": 4
   },
   "in": {
-   "diverges": 1,
-   "agrees": 4
+   "diverges": 2,
+   "agrees": 3
   },
   "languageIn": {
    "diverges": 1,
@@ -103,8 +103,8 @@
    "diverges": 1
   },
   "property": {
-   "agrees": 53,
-   "diverges": 1,
+   "agrees": 51,
+   "diverges": 3,
    "write_error": 1
   },
   "qualifiedValueShape": {
@@ -125,9 +125,33 @@
    "class": "over-refusal-on-split",
    "item": "aegis-9q3v"
   },
+  "core/path/path-complex-002#path-complex-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
   "core/path/path-sequence-duplicate-001#path-sequence-duplicate-001": {
    "class": "cannot-verify-complex-path",
    "item": "aegis-9q3v"
+  },
+  "core/path/path-strange-001#path-strange-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/path/path-strange-002#path-strange-002": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/property/property-001#property-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/targets/targetClassImplicit-001#targetClassImplicit-001": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
+  },
+  "core/validation-reports/shared#shared": {
+   "class": "class-path-unexplained",
+   "item": "aegis-kaj"
   }
  },
  "divergences": [
@@ -153,6 +177,94 @@
   ],
   [
    "core/complex/shacl-shacl#shacl-shacl",
+   "subject_halves_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_subject_reversed"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-complex-002#path-complex-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-001#path-strange-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_subject"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple"
+  ],
+  [
+   "core/path/path-strange-002#path-strange-002",
+   "per_triple_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_subject_reversed"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple"
+  ],
+  [
+   "core/property/property-001#property-001",
+   "per_triple_reversed"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_subject"
+  ],
+  [
+   "core/targets/targetClassImplicit-001#targetClassImplicit-001",
+   "per_triple"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_subject_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "per_triple_reversed"
+  ],
+  [
+   "core/validation-reports/shared#shared",
+   "subject_halves"
+  ],
+  [
+   "core/validation-reports/shared#shared",
    "subject_halves_reversed"
   ]
  ],
