@@ -16,8 +16,6 @@ pub(crate) struct CardinalityPlan {
     pub(crate) has_value_set_constraint: bool,
     pub(crate) has_value_constraint: bool,
     pub(crate) has_class_constraint: bool,
-    /// Predicates whose complex/nested value dependencies need bounded graph context.
-    pub(crate) affected_value_path_predicates: BTreeSet<String>,
     pub(crate) incoming_predicates: BTreeSet<String>,
     pub(crate) object_target_predicates: BTreeSet<String>,
     pub(crate) subject_target_predicates: BTreeSet<String>,
@@ -39,14 +37,11 @@ impl Validator {
             has_value_set_constraint: false,
             has_value_constraint: false,
             has_class_constraint: false,
-            affected_value_path_predicates: BTreeSet::new(),
             incoming_predicates: BTreeSet::new(),
             object_target_predicates: BTreeSet::new(),
             subject_target_predicates: BTreeSet::new(),
             node_reference_predicates: BTreeSet::new(),
         };
-        let mut value_path_predicates = BTreeSet::new();
-        let mut needs_path_context = false;
         while let Some(index) = pending.pop() {
             if !seen.insert(index) {
                 continue;
@@ -65,14 +60,6 @@ impl Validator {
                 .unwrap_or(false)
             {
                 continue;
-            }
-            if let Some(path) = shape.path() {
-                collect_path_predicates(path, &mut value_path_predicates);
-                // The stored-value gate only walks direct sh:node references.
-                // Other composed paths and nested sh:property dependencies need
-                // the affected component as well, not just a payload PASS.
-                needs_path_context |= !matches!(path, SHACLPath::Predicate { .. })
-                    || !shape.property_shapes().is_empty();
             }
             for target in shape.targets() {
                 match target {
@@ -146,31 +133,7 @@ impl Validator {
                 }
             }
         }
-        if needs_path_context && plan.has_value_constraint {
-            plan.affected_value_path_predicates = value_path_predicates;
-        }
         Ok(plan)
-    }
-}
-
-/// Flatten a compiled path without following any data or recursive Rust calls.
-fn collect_path_predicates(path: &SHACLPath, predicates: &mut BTreeSet<String>) {
-    let mut pending = vec![path];
-    while let Some(path) = pending.pop() {
-        match path {
-            SHACLPath::Predicate { pred } => {
-                predicates.insert(pred.as_str().to_owned());
-            }
-            SHACLPath::Alternative { paths } | SHACLPath::Sequence { paths } => {
-                pending.extend(paths.iter());
-            }
-            SHACLPath::Inverse { path }
-            | SHACLPath::ZeroOrMore { path }
-            | SHACLPath::OneOrMore { path }
-            | SHACLPath::ZeroOrOne { path } => {
-                pending.push(path.as_ref());
-            }
-        }
     }
 }
 

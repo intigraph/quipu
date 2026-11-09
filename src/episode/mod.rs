@@ -40,6 +40,8 @@ pub use commit::ingest_episode_resolved;
 
 /// Wire capability required before a client sends explicit node/class addresses.
 pub const EXPLICIT_ADDRESS_CONTRACT: &str = "quipu.episode-addresses/v1";
+/// Request-local strict new-entity validation, without a global policy flip.
+pub const STRICT_NEW_CONTRACT: &str = "quipu.episode-strict-new/v1";
 
 /// Options controlling entity resolution during episode ingest.
 #[derive(Debug, Clone)]

@@ -1,9 +1,0 @@
-Script started on 2026-11-09 04:41:00-05:00 [COMMAND="python3 run.py" <not executed on terminal>]
-Input: three edges completing an inverse path to untyped values.
-BEFORE whole graph conforms: False
-BEFORE every per-subject write accepted: True
-AFTER every per-subject write accepted: False
-CONTROL complete valid graph accepted: True
-PASS: a stored path cannot silently complete an invalid post-state.
-
-Script done on 2026-11-09 04:41:00-05:00 [COMMAND_EXIT_CODE="0"]
