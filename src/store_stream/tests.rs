@@ -8,7 +8,7 @@ fn fluent_guard_cache_and_live_permits_never_enter_snapshot_or_journal() {
     // Interning the actual protected type populates the receiving-store cache.
     // Both excluded tables contain real rows, so exclusion is non-vacuous.
     let kind = store
-        .intern(&format!("{}Fluent", crate::namespace::QUIPU))
+        .intern(&format!("{}Fluent", crate::namespace::QUIPU_FLUENT))
         .unwrap();
     store
         .conn
