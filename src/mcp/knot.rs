@@ -257,7 +257,7 @@ pub fn tool_knot(store: &mut Store, input: &JsonValue) -> Result<JsonValue> {
                 "violations": feedback.violations,
                 "warnings": feedback.warnings,
                 "issues": issues,
-                "hint": "propose a schema change via quipu_propose_schema_change"
+                "hint": "Each independent write must be valid in its own post-state. Stage data that is valid only together as one complete document and submit one /knot. For an intended schema change, use quipu_propose_schema_change."
             }));
         }
     }

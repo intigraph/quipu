@@ -54,9 +54,10 @@ fn knot(store: &mut quipu::Store, shapes: &str, turtle: &str) -> Value {
     });
     match quipu::tool_knot(store, &input) {
         Ok(result) if result["conforms"] == json!(false) => {
-            json!({"accepted": false, "rejection": "shacl"})
+            json!({"accepted": false, "rejection": "shacl", "issues": result["issues"],
+                "hint": result["hint"]})
         }
-        Ok(_) => json!({"accepted": true}),
+        Ok(result) => json!({"accepted": true, "count": result["count"]}),
         Err(error @ quipu::Error::ValidationFailed { .. }) => {
             json!({"accepted": false, "rejection": "shacl", "error": error.to_string()})
         }
@@ -108,7 +109,7 @@ fn splits(all: &[Triple]) -> BTreeMap<&'static str, Vec<Vec<&Triple>>> {
     out
 }
 
-fn write_path(shapes: &str, data: &str, base: &str) -> Value {
+fn write_path(shapes: &str, data: &str, base: &str, atomic_document: bool) -> Value {
     let all = triples(data, base);
     let whole = ntriples(&all.iter().collect::<Vec<_>>());
     let batch = quipu::validate_shapes(shapes, &whole).map_or_else(
@@ -124,10 +125,17 @@ fn write_path(shapes: &str, data: &str, base: &str) -> Value {
             .filter(|chunk| !chunk.is_empty())
             .map(|chunk| knot(&mut store, shapes, &ntriples(chunk)))
             .collect();
-        modes.insert(
-            name.to_string(),
-            json!({"conforms": mode_verdict(&writes), "writes": writes}),
-        );
+        let mut mode = json!({"conforms": mode_verdict(&writes), "writes": writes});
+        if atomic_document {
+            // Chunks are a transport/staging detail, not separately committed
+            // RDF documents. Preserve their shared blank-node labels and judge
+            // the completed document once through the SAME real write gate.
+            let document: String = chunks.iter().map(|chunk| ntriples(chunk)).collect();
+            let mut atomic = quipu::Store::open_in_memory()
+                .unwrap_or_else(|e| fail(format!("atomic store: {e}")));
+            mode["atomic"] = knot(&mut atomic, shapes, &document);
+        }
+        modes.insert(name.to_string(), mode);
     }
     // Deliberately weak positive control: every triple validated ALONE, with no
     // store at all. It must keep diverging on a cross-write cardinality case even
@@ -146,13 +154,14 @@ fn write_path(shapes: &str, data: &str, base: &str) -> Value {
 
 fn main() {
     let mut args = env::args().skip(1);
-    let (mut shapes, mut data, mut base, mut write) = (None, None, None, false);
+    let (mut shapes, mut data, mut base, mut write, mut atomic) = (None, None, None, false, false);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--shapes" => shapes = args.next(),
             "--data" => data = args.next(),
             "--base" => base = args.next(),
             "--write-path" => write = true,
+            "--atomic-document" => atomic = true,
             _ => fail(format!("unknown argument: {arg}")),
         }
     }
@@ -167,7 +176,7 @@ fn main() {
         fs::read_to_string(shapes).unwrap_or_else(|e| fail(format!("shapes read error: {e}")));
     let data = fs::read_to_string(data).unwrap_or_else(|e| fail(format!("data read error: {e}")));
     if write {
-        println!("{}", write_path(&shapes, &data, &base));
+        println!("{}", write_path(&shapes, &data, &base, atomic));
         return;
     }
     match quipu::validate_shapes(&shapes, &data) {
@@ -208,6 +217,55 @@ mod tests {
         let w = write("<http://example.org/a> a <http://example.org/P> .");
         assert_eq!(w["accepted"], json!(false), "{w}");
         assert_eq!(w["rejection"], json!("shacl"), "{w}");
+        let hint = w["hint"].as_str().expect("write-gate diagnostic");
+        assert!(hint.contains("own post-state") && hint.contains("one complete document"));
+        assert!(
+            w["issues"]
+                .as_array()
+                .is_some_and(|issues| !issues.is_empty()),
+            "{w}"
+        );
+    }
+
+    #[test]
+    fn together_only_chunks_commit_once_or_leave_no_data() {
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        let first = "<http://example.org/a> a <http://example.org/P> .\n";
+        let second = "<http://example.org/a> <http://example.org/name> \"a\" .\n";
+        // A missing required property is a real violation, not over-refusal.
+        assert_eq!(knot(&mut store, SHAPES, first)["accepted"], json!(false));
+        if let Some(id) = store.lookup("http://example.org/a").unwrap() {
+            assert!(store.entity_facts(id).unwrap().is_empty());
+        }
+        // Assemble the complete document BEFORE invoking the existing atomic
+        // gate. No invalid intermediate chunk becomes committed data.
+        let result = quipu::tool_knot(
+            &mut store,
+            &json!({
+                "turtle": format!("{first}{second}"), "shapes": SHAPES,
+                "timestamp": "2026-01-01T00:00:00Z",
+            }),
+        )
+        .unwrap();
+        assert_eq!(result["conforms"], json!(true), "{result}");
+        assert_eq!(result["count"], json!(2), "{result}");
+        let id = store.lookup("http://example.org/a").unwrap().unwrap();
+        assert_eq!(store.entity_facts(id).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn an_invalid_completed_document_is_not_an_atomic_escape_hatch() {
+        let shapes = SHAPES.replace("sh:minCount 1", "sh:minCount 1 ; sh:maxCount 1");
+        let mut store = quipu::Store::open_in_memory().unwrap();
+        let document = "<http://example.org/a> a <http://example.org/P> ; \
+            <http://example.org/name> \"a\", \"b\" .";
+        assert_eq!(
+            knot(&mut store, &shapes, document)["accepted"],
+            json!(false)
+        );
+        if let Some(id) = store.lookup("http://example.org/a").unwrap() {
+            assert!(store.entity_facts(id).unwrap().is_empty());
+        }
     }
 
     #[test]
