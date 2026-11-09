@@ -154,7 +154,7 @@ mod contract_tests {
     use super::*;
     #[test]
     fn all_common_prefixes_need_explicit_declarations_and_valid_queries_stay_valid() {
-        for prefix in ["rdf", "rdfs", "xsd", "schema", "prov", "aegis", "quechua"] {
+        for prefix in ["rdf", "rdfs", "xsd", "schema", "prov", "custom", "example"] {
             let q = format!("ASK {{ ?s {prefix}:term ?o }}");
             let error = crate::sparql::sparql_parser().parse_query(&q).unwrap_err();
             assert!(
