@@ -1,0 +1,54 @@
+Script started on 2026-11-09 06:05:25-05:00 [COMMAND="python3 docs/probes/pr-demos/registry-digest-startup/run.py" <not executed on terminal>]
+BEFORE: base360f8f49 with the added regression, before the migration fix
+running 1 test
+test shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows ... FAILED
+
+failures:
+
+---- shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows stdout ----
+
+thread 'shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows' (454540) panicked at src/shape_mapping/backfill_tests.rs:11:5:
+assertion `left == right` failed: opening must not canonicalize historical Turtle
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3488 filtered out; finished in 0.00s
+
+AFTER: development/full native test: shape_mapping::backfill_tests
+
+running 7 tests
+test shape_mapping::backfill_tests::registry_open_does_not_canonicalize_historical_rows ... ok
+test shape_mapping::backfill_tests::stale_same_version_replacements_and_rolled_back_progress_do_not_escape ... ok
+test shape_mapping::backfill_tests::pending_pins_fail_closed_then_exact_identity_and_history_survive ... ok
+test shape_mapping::backfill_tests::both_current_registries_are_processed_before_shape_history ... ok
+test shape_mapping::backfill_tests::new_registry_edit_keeps_its_identity_when_old_work_finishes_late ... ok
+test shape_mapping::backfill_tests::oversized_valid_legacy_document_is_bounded_and_explicitly_unpinnable ... ok
+test shape_mapping::backfill_tests::progress_and_failed_versions_persist_without_recanonicalizing_on_restart ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 4038 filtered out; finished in 0.35s
+
+AFTER: development/full native test: mcp_transport::tests
+
+running 4 tests
+test mcp_transport::tests::invalid_stdio_credential_refuses_before_readiness_work ... ok
+test mcp_transport::tests::every_advertised_tool_has_a_classified_registered_route ... ok
+test mcp_transport::tests::actual_http_listener_observes_socket_not_forwarded_headers ... ok
+test mcp_transport::tests::readiness_callback_runs_after_bind_and_does_not_block_http ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 4041 filtered out; finished in 0.01s
+
+AFTER: development/full native test: background::registry_digests::tests::canonicalization_releases_the_real_writer_mutex
+
+running 1 test
+test background::registry_digests::tests::canonicalization_releases_the_real_writer_mutex ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 373 filtered out; finished in 0.33s
+
+PASS: no eager history parse; durable bounded progress and refusal controls; bound listener; writer mutex released
+
+Script done on 2026-11-09 06:05:26-05:00 [COMMAND_EXIT_CODE="0"]
