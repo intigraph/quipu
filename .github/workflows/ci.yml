@@ -540,6 +540,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -597,6 +599,8 @@ jobs:
           tool: git-cliff
       - name: Prove the changelog guard, pre-cut gate and freshness check
         run: ./scripts/test-verify-changelog.sh
+      - name: Check current release-window coverage
+        run: python3 scripts/check-release-window.py
 
       - name: Agent benchmark harness unit tests
         run: python3 -m unittest discover -s benchmark/census/agent -p 'test_*.py'
