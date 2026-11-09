@@ -1,0 +1,10 @@
+Script started on 2026-11-09 03:21:39-05:00 [COMMAND="stty -onlcr; python3 docs/demos/ci-asset-cache.py" <not executed on terminal>]
+Before: unavailable upstream, no dedicated archive cache
+upstream asset unavailable (HTTP 504)
+After: same unavailable upstream, independently verified cache seed
+{'source': 'cache', 'sha256': '61bc66bb2d7ce50bc93c44589dcbba7a9fc6990ff60d137ec6f3aaa8fa7fe222', 'bytes': 42}
+Upstream calls: 0
+Corrupt cache: asset SHA256 mismatch; fallback refused
+Upstream calls after corrupt cache: 0
+
+Script done on 2026-11-09 03:21:39-05:00 [COMMAND_EXIT_CODE="0"]
