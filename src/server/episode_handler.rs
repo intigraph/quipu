@@ -4,6 +4,10 @@ use super::{
     write_blocking_until,
 };
 
+#[cfg(test)]
+#[path = "episode_strict_tests.rs"]
+mod strict_tests;
+
 /// `/episode` in two phases (aegis-xi0).
 ///
 /// Non-strict entity resolution is advisory, and it is the expensive part of an

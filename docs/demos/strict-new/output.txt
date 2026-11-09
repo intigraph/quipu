@@ -1,0 +1,5 @@
+Script started on 2026-11-09 04:31:47-05:00 [COMMAND="stty -onlcr && just demo strict-new 2>/tmp/episode-strict-new-build.log" <not executed on terminal>]
+{"global_enabled":false,"global_strict":false,"result":"ADMITTED","strict_new_entities":false,"transaction_changed":true}
+{"global_enabled":false,"global_strict":false,"result":"REFUSED","strict_new_entities":true,"transaction_changed":false}
+
+Script done on 2026-11-09 04:31:49-05:00 [COMMAND_EXIT_CODE="0"]
