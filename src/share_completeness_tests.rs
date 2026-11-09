@@ -218,6 +218,14 @@ fn the_attestation_tables_are_never_carried() {
     }
 }
 
+#[test]
+fn changeset_authority_and_master_receipts_are_never_carried() {
+    for table in ["client_changeset_grants", "client_changeset_receipts"] {
+        assert_eq!(disposition(table), Some(Disposition::Excluded));
+        assert!(!carried().contains(&table));
+    }
+}
+
 /// `carried()` is Content plus Log, and excludes the rest.
 #[test]
 fn carried_is_content_and_log_only() {
