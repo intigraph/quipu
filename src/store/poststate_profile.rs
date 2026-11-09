@@ -24,6 +24,14 @@ pub struct PoststateProfile {
     pub check_graph: Duration,
     pub check_ownership: Duration,
     pub check_entities: Duration,
+    /// Bounded reads for touched entities, nested within `check_entities`.
+    pub check_entity_bounded: Duration,
+    /// Incoming targets for entity and literal focuses, nested within `check_entities`.
+    pub check_entity_object_targets: Duration,
+    /// Optional ROOT type references, nested within `check_entities`.
+    pub check_entity_reference_types: Duration,
+    /// Type hierarchy closure, nested within `check_entities` (not the value phase).
+    pub check_entity_subclasses: Duration,
     pub check_values: Duration,
     pub check_encode: Duration,
     pub check_validate: Duration,
