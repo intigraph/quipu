@@ -88,6 +88,18 @@ whole-graph pending-post-state check:
   dependencies are not a whole-graph revalidation guarantee. This does not add a new minimum-count requirement to an
   incomplete incremental write. Existing deactivation and unsupported cardinality
   path behavior remain unchanged.
+- Complex value paths and nested `sh:property` dependencies additionally gather
+  the affected component along the compiled path predicates, in both directions.
+  Reads bind an entity or a predicate plus object; they do not scan the graph.
+  Related context nodes are included as affected focuses so a later edge cannot
+  silently complete an invalid path on an earlier focus. This required context
+  uses the existing 1,024-node and 100,000-fact budgets. Exhaustion returns
+  `CannotVerify` and rolls back the write; it cannot use the optional value
+  context's payload-only fallback. Fresh graphs retain whole-graph validation.
+  Incremental `rdfs:subClassOf` changes with value constraints also gather
+  class, subclass and instance links using the same bounds, so newly applicable
+  stored instances are judged. A budget refusal is an explicit unknown, not a
+  SHACL verdict.
 - With `governance.enforce_on_write` enabled, an applicable action-boundary
   policy evaluates its claim for touched targets against the transaction's
   pending post-state. A parent can require evidence on its linked child in the
