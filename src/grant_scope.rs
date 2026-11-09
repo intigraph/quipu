@@ -19,11 +19,26 @@ impl GrantScope<'_> {
     #[must_use]
     pub fn permits(&self, principal: &str, requested_graphs: &BTreeSet<String>, now: u64) -> bool {
         !self.revoked
-            && self.principal == principal
-            && self.valid_from <= now
-            && now < self.valid_until
-            && !requested_graphs.is_empty()
-            && requested_graphs.is_subset(self.graphs)
+            && self.matches_principal(principal)
+            && self.valid_at(now)
+            && Self::contains_graphs(self.graphs, requested_graphs)
+    }
+
+    // Keep components shared so read-side enforcement mutants can disable
+    // exactly one boundary without replacing the production predicate.
+    pub(crate) fn matches_principal(&self, principal: &str) -> bool {
+        self.principal == principal
+    }
+
+    pub(crate) fn valid_at(&self, now: u64) -> bool {
+        self.valid_from <= now && now < self.valid_until
+    }
+
+    pub(crate) fn contains_graphs(
+        granted: &BTreeSet<String>,
+        requested: &BTreeSet<String>,
+    ) -> bool {
+        !requested.is_empty() && requested.is_subset(granted)
     }
 }
 

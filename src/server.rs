@@ -429,7 +429,79 @@ async fn main() {
     }
 
     let attest_store = state.clone();
-    let app = Router::new()
+    let app = api_routes(config.memory_files.clone());
+    let app = protected_app(
+        app,
+        &workers,
+        scoped_profile,
+        scoped_source,
+        auth_guard::Config {
+            auth_policy,
+            session_keys,
+            attest_store,
+            replica_config,
+            read_only,
+            is_relay,
+            scoped_enabled,
+        },
+    )
+    // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
+    // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
+    // preflight (GH#5). Built above from the configured allowlist.
+    .layer(cors)
+    // Strict profiles cannot admit an unsigned CORS preflight before the
+    // signature verifier. Use a same-origin client or authenticated broker.
+    .layer(axum::middleware::from_fn(move |req, next| {
+        auth::strict_preflight(preflight_keys_required, req, next)
+    }))
+    // Body limit: axum's 2MB default silently caps /knot at small graphs —
+    // a code-graph promotion of one real repository is ~9MB of Turtle and
+    // was refused 413. 64MB bounds a whole-repo promotion with headroom
+    // while still refusing runaway bodies.
+    .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
+    // Request log, outermost so every request (including CORS preflights
+    // and auth rejections) leaves a trace. Until this existed, server.log
+    // was startup banners only, and a wedged instance left NOTHING to RCA
+    // from — the whole incident was reconstructed from gdb.
+    // stderr on purpose: stdout is block-buffered under systemd, stderr is
+    // not, and the journal timestamps every line itself.
+    .layer(axum::middleware::from_fn(request_middleware::log_request))
+    .layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        replica::headers,
+    ))
+    .with_state(state);
+
+    let app = process_pool::protect_worker(app);
+
+    if let Some(replica) = config.server.replica {
+        replica::start_metadata_reader(push_store_outer, replica);
+    } else if let Some(relay) = relay {
+        relay::start(push_store_outer, relay);
+    } else {
+        background::start(
+            push_store_outer,
+            config.events.retention_days,
+            &config.embedding,
+        );
+    }
+
+    // Everything committed before this line is STARTUP in quipu_write_facts_total
+    // (aegis-gwkd76): the work every restart repeats.
+    quipu::write_kind::set_serving();
+    if scoped_enabled {
+        scoped_reads::serve_http(app, &bind_addr).await;
+    } else {
+        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
+    }
+    drop(workers);
+}
+
+/// Every HTTP route the server registers. Serve it only through
+/// [`protected_app`]; a route merged after that call would not meet the
+/// scoped-read guard or authentication (aegis-44r).
+fn api_routes(memory_files: quipu::config::MemoryFilesConfig) -> Router<SharedStore> {
+    Router::new()
         .route("/memory/read", post(memory_files::read))
         .route("/memory/export", post(memory_files::export))
         .route("/memory/projection", post(memory_files::projection))
@@ -437,7 +509,7 @@ async fn main() {
         .route("/memory/receipt", post(memory_files::receipt))
         .layer(axum::extract::DefaultBodyLimit::max(1024 * 1024))
         .layer(axum::middleware::from_fn(memory_files::scope_guard))
-        .layer(axum::Extension(config.memory_files.clone()))
+        .layer(axum::Extension(memory_files))
         .merge(assets::routes())
         // Core API
         .merge(base::status_routes())
@@ -548,72 +620,26 @@ async fn main() {
         .route("/spotlight", post(spotlight_handler))
         .route("/fragments", get(fragments_handler))
         .route("/reconcile", post(reconcile_handler))
-        .route("/preview/{iri}", get(preview_handler));
-    let app = scoped_reads::guard(
-        process_pool::route(app, &workers),
-        scoped_profile,
-        scoped_source,
-    );
-    let app = auth_guard::layer(
-        app,
-        auth_guard::Config {
-            auth_policy,
-            session_keys,
-            attest_store,
-            replica_config,
-            read_only,
-            is_relay,
-            scoped_enabled,
-        },
+        .route("/preview/{iri}", get(preview_handler))
+}
+
+/// The protection stack around [`api_routes`], innermost first: worker-pool
+/// proxying, then the scoped-read guard, then authentication. A proxied worker
+/// request therefore cannot bypass the scoped guard, and the guard only ever
+/// sees authenticated identity evidence.
+fn protected_app(
+    routes: Router<SharedStore>,
+    workers: &process_pool::ProcessPool,
+    scoped_profile: Option<(quipu::read_authorization::profile::ScopedReadConfig, String)>,
+    scoped_source: SharedStore,
+    auth: auth_guard::Config,
+) -> Router<SharedStore> {
+    auth_guard::layer(
+        scoped_reads::guard(
+            process_pool::route(routes, workers),
+            scoped_profile,
+            scoped_source,
+        ),
+        auth,
     )
-    // CORS: allow the Bobbin Knowledge tab (and other browser origins) to
-    // call /query, /search, /episode, etc. cross-origin, incl. OPTIONS
-    // preflight (GH#5). Built above from the configured allowlist.
-    .layer(cors)
-    // Strict profiles cannot admit an unsigned CORS preflight before the
-    // signature verifier. Use a same-origin client or authenticated broker.
-    .layer(axum::middleware::from_fn(move |req, next| {
-        auth::strict_preflight(preflight_keys_required, req, next)
-    }))
-    // Body limit: axum's 2MB default silently caps /knot at small graphs —
-    // a code-graph promotion of one real repository is ~9MB of Turtle and
-    // was refused 413. 64MB bounds a whole-repo promotion with headroom
-    // while still refusing runaway bodies.
-    .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024))
-    // Request log, outermost so every request (including CORS preflights
-    // and auth rejections) leaves a trace. Until this existed, server.log
-    // was startup banners only, and a wedged instance left NOTHING to RCA
-    // from — the whole incident was reconstructed from gdb.
-    // stderr on purpose: stdout is block-buffered under systemd, stderr is
-    // not, and the journal timestamps every line itself.
-    .layer(axum::middleware::from_fn(request_middleware::log_request))
-    .layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        replica::headers,
-    ))
-    .with_state(state);
-
-    let app = process_pool::protect_worker(app);
-
-    if let Some(replica) = config.server.replica {
-        replica::start_metadata_reader(push_store_outer, replica);
-    } else if let Some(relay) = relay {
-        relay::start(push_store_outer, relay);
-    } else {
-        background::start(
-            push_store_outer,
-            config.events.retention_days,
-            &config.embedding,
-        );
-    }
-
-    // Everything committed before this line is STARTUP in quipu_write_facts_total
-    // (aegis-gwkd76): the work every restart repeats.
-    quipu::write_kind::set_serving();
-    if scoped_enabled {
-        scoped_reads::serve_http(app, &bind_addr).await;
-    } else {
-        quipu::mcp_transport::serve(app, &args, cors_origins, &bind_addr, &db_path).await;
-    }
-    drop(workers);
 }
