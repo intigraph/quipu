@@ -156,9 +156,38 @@ An episode node declares it inline:
 {
   "name": "alice_smith",
   "type": "Person",
-  "distinct_from": ["http://aegis.gastown.local/ontology/Alice"]
+  "distinct_from": ["https://example.org/people/Alice"],
+  "properties": {"distinctReason": "Different people, checked against the source records"}
 }
 ```
+
+### Request-local strict new entities
+
+The governed graph-extract producer may explicitly opt in with
+`strict_new_entities: true` on `/episode` (also `quipu_episode`). Omitted or
+`false` preserves the configured resolution behavior. This does not change the
+store-wide configuration, enable strict mode for another request, or grant any
+write permission. Existing global strict mode is never weakened by `false`.
+
+Probe `/version` for `quipu.episode-strict-new/v1` **before** opting in. Older
+servers may ignore unknown JSON fields; a missing capability is a refusal to
+send, not permission to proceed in advisory mode. The request requires the
+normal receiver-authenticated principal and an explicit, already registered,
+local committed named graph. ROOT, unknown, attached and frozen targets refuse.
+Caller-written actor/principal/client headers cannot authenticate a request.
+
+The native writer enables resolution for this request and validates typed
+near-duplicates against its current composed identity evidence before opening
+the episode transaction. Configured threshold and candidate semantics, opaque
+identifier exemptions and same-IRI reuse are unchanged. Strict requests do not
+take the advisory off-writer prepare shortcut. Reasoned `distinct_from` pairs
+are admitted and persisted atomically with the episode; an empty reason refuses.
+
+This is voluntary validation for the opted-in producer, not mandatory graph
+protection: another authorized client can omit the option. `/knot`, `/update`
+and ordinary episodes do not acquire this contract. Rollback is to omit the
+option in the producer; no global flag or existing identity is rewritten.
+Production activation and its scratch smoke remain separately authorized.
 
 ## MCP tool
 
