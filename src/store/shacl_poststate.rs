@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 
 #[cfg(feature = "shacl")]
 mod instrumented_check;
+#[cfg(all(test, feature = "shacl"))]
+mod lookup_tests;
 use crate::time::Stopwatch;
 
 use super::{Datum, Store};
@@ -135,70 +137,6 @@ impl Store {
                     self.append_bounded_entity(facts, parent, 0, Some(rdf_type))?;
                 }
                 pending.push(parent);
-            }
-        }
-        Ok(())
-    }
-
-    /// Complete the affected predicate-connected component before judging it.
-    /// Only bound entity reads and (predicate, object) index probes are used;
-    /// no graph scan, cross-graph values or partial-context success is allowed.
-    #[cfg(feature = "shacl")]
-    fn append_affected_path_context(
-        &self,
-        facts: &mut Vec<crate::Fact>,
-        focuses: &mut BTreeSet<String>,
-        seeds: &BTreeSet<i64>,
-        graph: i64,
-        predicates: &BTreeSet<String>,
-    ) -> Result<()> {
-        let attributes: BTreeSet<_> = predicates
-            .iter()
-            .map(|p| self.lookup(p))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-        let reference_graphs: Vec<_> = self
-            .reference_type_graphs(graph)
-            .into_iter()
-            .filter(|context_graph| *context_graph != graph)
-            .collect();
-        let rdf_type = if reference_graphs.is_empty() {
-            None
-        } else {
-            self.lookup("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?
-        };
-        let mut pending: Vec<_> = seeds.iter().copied().collect();
-        let mut seen = BTreeSet::new();
-        while let Some(entity) = pending.pop() {
-            if !seen.insert(entity) {
-                continue;
-            }
-            if seen.len() > CONTEXT_NODE_BUDGET {
-                return Err(Error::CannotVerify(
-                    "post-state SHACL affected paths exceed 1024 nodes".into(),
-                ));
-            }
-            focuses.insert(self.resolve(entity)?);
-            let start = facts.len();
-            self.append_bounded_entity(facts, entity, graph, None)?;
-            // A discovered parent can be typed outside the destination.
-            // Honor exactly the selected reference-type dataset; never fetch
-            // those graphs' values or infer that ROOT is always selected.
-            if let Some(rdf_type) = rdf_type {
-                for &context_graph in &reference_graphs {
-                    self.append_bounded_entity(facts, entity, context_graph, Some(rdf_type))?;
-                }
-            }
-            self.append_object_targets(facts, &crate::Value::Ref(entity), graph, predicates)?;
-            for fact in &facts[start..] {
-                if attributes.contains(&fact.attribute) {
-                    pending.push(fact.entity);
-                    if let crate::Value::Ref(object) = fact.value {
-                        pending.push(object);
-                    }
-                }
             }
         }
         Ok(())
@@ -347,14 +285,17 @@ impl Store {
         predicates: &BTreeSet<String>,
     ) -> Result<()> {
         // Existing incoming target edges need not have been in this payload.
-        // Read only (predicate, bound object) through the existing value index.
+        // Bind both value and attribute: idx_active_vge omits the attribute
+        // and can fetch a large unrelated value cohort before filtering it.
+        // Keep graph/current filters: idx_vaet also contains other graphs/history.
         for predicate in predicates {
             let Some(attribute) = self.lookup(predicate)? else {
                 continue;
             };
             let bytes = object.to_bytes();
             let mut stmt = self.conn.prepare(
-                "SELECT e,a,v,tx,valid_from,valid_to,op FROM facts WHERE v=?1 AND a=?2 \
+                "SELECT e,a,v,tx,valid_from,valid_to,op FROM facts INDEXED BY idx_vaet \
+                 WHERE v=?1 AND a=?2 \
                  AND g=?3 AND op=1 AND valid_to IS NULL LIMIT 100001",
             )?;
             let mut rows = stmt.query(rusqlite::params![bytes, attribute, graph])?;
