@@ -18,6 +18,9 @@
 
 use crate::error::{Error, Result};
 
+mod diagnostics;
+pub use diagnostics::query_error;
+
 /// The most structural tokens one request may carry. Sized to the DEBUG profile,
 /// whose frames are ~25x release's: on [`DEEP_STACK_BYTES`] every shape in the
 /// regression matrix parses at this cost in a debug build.

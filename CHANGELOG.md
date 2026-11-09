@@ -45,6 +45,10 @@ All notable changes to this project will be documented in this file.
 - *(search)* Return lexical results on fresh stores (#1069)([6280e2b](https://github.com/scbrown/quipu/commit/6280e2bc593b28c0bc34750d0471b05dc2272080))
 - *(sparql)* Retain active graph bindings across subqueries (#1079)([08fe4f2](https://github.com/scbrown/quipu/commit/08fe4f200b50e2cab6a256d4c8165812797524dc))
 
+### Reverted
+
+- *(diagnostics)* Roll back query refusal guidance during an upstream build download outage (#1138)([3368582](https://github.com/intigraph/quipu/commit/33685822feacbd5f9ce012d469dcdd761dc796ec))
+
 ### Miscellaneous
 
 - Add glama.json for the Glama MCP directory listing (#1081)([adfe890](https://github.com/scbrown/quipu/commit/adfe890556ae3d59c0fa5340a754513aac75df08))
