@@ -152,6 +152,7 @@ pub(crate) fn in_process() -> ProcessPool {
     ProcessPool {
         children: Vec::new(),
         routing: None,
+        internal_worker: false,
     }
 }
 
