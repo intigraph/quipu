@@ -39,6 +39,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: pinned-ci-asset-mirror
+        name: pinned CI mirror acquisition controls
+        entry: python3 scripts/test-ci-asset-mirror.py
+        language: system
+        pass_filenames: false
+        files: ^(scripts/(fetch-pinned-ci-asset|prepare-ci-onnx|test-ci-asset-mirror)\.py|build/onnx_catalogue\.rs|\.github/workflows/ci\.yml)$
       - id: shape-propagation
         name: shape propagation warning and counterexamples
         entry: python scripts/shape-propagation-ci.py

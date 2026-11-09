@@ -10,6 +10,7 @@ mod datasets;
 mod deck;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod deck_tests;
+mod episode_admission;
 pub(crate) mod fresh_search;
 mod graphs;
 mod queries;

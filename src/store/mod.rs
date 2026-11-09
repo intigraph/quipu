@@ -88,6 +88,9 @@ mod slot_reads;
 // Source-stage prepared-cut bridge; no production caller or admission authority.
 #[allow(dead_code)]
 pub(crate) mod slot_read_batch;
+// Private prototype only; no server, CLI or production configuration entry.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod reserved_admission_fixture;
 pub use projections::{
     GroupBy, PROJECTION_ROWS_MAX, ProjectionAggregate, ProjectionRows, ProjectionStatus, RowsAfter,
 };

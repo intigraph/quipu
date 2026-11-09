@@ -24,7 +24,7 @@
       "source": "src/main.rs",
       "subject": "http://aegis.gastown.local/ontology/code/quipu/src%2Fmain.rs",
       "summary": "The native command-line entrypoint parses local query, share, import, validation and offline competency authoring commands.",
-      "source_sha256": "7f2ccebbdb1be4d3fd5bd08e917a7febce6294cf4de40aeace98abe3368a167a",
+      "source_sha256": "c8ec69d05a96136ce72d8170272918890d39179239ba669e5c0223912b6e18cb",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "quipu"
@@ -139,7 +139,7 @@
       "source": "docs/book/src/reference/cli-commands.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fcli-commands.md",
       "summary": "Generated catalogue of every admitted command path, with syntax and per-option descriptions shared by CLI help, man pages and completions.",
-      "source_sha256": "af868c730b9575ee9a99241e23fdff8b2c7b1f8759597d350bec5c75143f2406",
+      "source_sha256": "59095169e61b8e7ad3fb8e076a7c665cf79863dbce70cf6f892e197e671ed8e4",
       "properties": {
         "interfaceKind": "CLI",
         "publicName": "CLI Command Index"
@@ -150,7 +150,7 @@
       "source": "docs/book/src/reference/mcp-tool-index.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/docs%2Fbook%2Fsrc%2Freference%2Fmcp-tool-index.md",
       "summary": "Generated index of the served MCP tool definitions, parameter types, required fields and descriptions.",
-      "source_sha256": "08a2947212046a795755572b0b727d5bd069aa4e0b95bf4ede4704ac207ace83",
+      "source_sha256": "47ec88a6232e0e5c574068536d80fcc02efb1b064d5786144783a9679bded7b4",
       "properties": {
         "interfaceKind": "MCP",
         "publicName": "MCP Tool Index"
@@ -171,7 +171,7 @@
       "source": "src/primer.md",
       "subject": "http://aegis.gastown.local/ontology/doc/quipu/src%2Fprimer.md",
       "summary": "Embedded agent primer supplies graph workflows, command examples and safety boundaries used by the prime command.",
-      "source_sha256": "a911faaf3fc4e2984770485033e82fb72a55802dd9e859ab5fa0ff74096ae768",
+      "source_sha256": "ed4e462aee6f56c7cdf2e18395090a96f0493695d0fab18ba8fb52966bcab18d",
       "properties": {
         "startHereOrder": 5
       }

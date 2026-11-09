@@ -69,9 +69,11 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand asof-rdf 'Convert one retained as-of share into bounded coherent RDF chunks offline'
             cand acquire 'Measure the bounded scope of a direct-main graph acquisition'
             cand migrate-vectors 'Move stored vectors between backends (lancedb feature)'
-            cand git-mergetool 'Interactively resolve a pendant using the standard merge layout'
+            cand git-mergetool 'Interactively resolve a pendant or declared DataBook using the standard merge layout'
             cand git-merge 'Merge pendants from Git snapshots and stop before committing'
             cand merge-driver 'Low-level Git merge driver for pendant files'
+            cand databook-merge-driver 'Low-level Git merge driver for declared DataBook files'
+            cand databook-check 'Verify an immutable DataBook merge result and its decisions'
             cand pendant-resolve 'Record a resolution choice for one pendant merge conflict'
             cand pendant-check 'Check a pendant merge result in CI without a merge driver'
             cand diff-textconv 'Render a pack with labels for git diff textconv'
@@ -819,6 +821,16 @@ set edit:completion:arg-completer[qp] = {|@words|
             cand --help 'Print help'
         }
         &'qp;merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;databook-merge-driver'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'qp;databook-check'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand -h 'Print help'
             cand --help 'Print help'

@@ -138,6 +138,13 @@ pub fn cmd_merge_reconcile(args: &[String]) -> bool {
                 fail("resolve needs --by <who>: the person who chose, or your agent id")
             };
             let mut file = read_file(path);
+            if let quipu::merge_reconcile::ReconcileFile::DataBook(book) = &file {
+                let Some(choice) = flag_value(args, "--choose") else {
+                    fail("resolve needs --choose <choice>")
+                };
+                crate::cli_git_merge::resolve_in_merge(&book.document, row, choice, by);
+                return true;
+            }
             if let quipu::merge_reconcile::ReconcileFile::Git { dir, .. } = &file {
                 // A Git choice rewrites the pendant: same verb, the Git applier.
                 let Some(choice) = flag_value(args, "--choose") else {

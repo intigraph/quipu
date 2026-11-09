@@ -1150,10 +1150,10 @@ qp git-merge <ref>
 
 ## `qp git-mergetool`
 
-Interactively resolve a pendant using the standard merge layout.
+Interactively resolve a pendant or declared DataBook using the standard merge layout.
 
 ```text
-qp git-mergetool <pendant-export.nt>
+qp git-mergetool <pendant-export.nt|book.databook.md>
 ```
 
 - `--by <VALUE>`: Identity recording a resolution.
@@ -1186,6 +1186,22 @@ Low-level Git merge driver for pendant files.
 
 ```text
 qp merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-merge-driver`
+
+Low-level Git merge driver for declared DataBook files.
+
+```text
+qp databook-merge-driver <base> <ours> <theirs> <path>
+```
+
+## `qp databook-check`
+
+Verify an immutable DataBook merge result and its decisions.
+
+```text
+qp databook-check <base-ref> <ours-ref> <theirs-ref> <result-ref> <path>
 ```
 
 ## `qp pendant-resolve`
