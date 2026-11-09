@@ -89,6 +89,10 @@ pub struct ShareOptions {
     pub queries: Option<Vec<String>>,
     /// Optional ancillary alignment evidence; never automatically applied.
     pub alignments_turtle: Option<String>,
+    /// Opaque source proofs, sealed by share identity; never authority or graph facts.
+    pub fluent_proofs: Vec<String>,
+    /// Explicit pending observable requests; no approval or registration travels.
+    pub observable_configs: Vec<String>,
     /// Prior share id in this lineage.
     pub parent_share: Option<String>,
     /// Also emit a human-readable `export.ttl` derived view.
@@ -127,6 +131,8 @@ impl Default for ShareOptions {
             no_shapes: false,
             queries: None,
             alignments_turtle: None,
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
             parent_share: None,
             turtle_view: false,
             pack_dir: Some(PENDANT_PACK_DIR.into()),
@@ -177,6 +183,9 @@ impl SharePayloadRequest {
             no_shapes: self.no_shapes,
             queries: self.queries.clone(),
             alignments_turtle: self.alignments_turtle.clone(),
+            // No new HTTP producer/admission surface in this source-only adapter.
+            fluent_proofs: Vec::new(),
+            observable_configs: Vec::new(),
             parent_share: self.parent_share.clone(),
             turtle_view: self.turtle_view,
             // Not settable over HTTP: pack_dir is a property of the producing
@@ -271,6 +280,12 @@ pub use pointers::{PointerTarget, SharePointer};
 /// source compatibility for this exhaustive public struct.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShareManifest {
+    /// Exact pending configuration strings; absent preserves legacy identities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observable_configs: Vec<String>,
+    /// Exact opaque source proofs inside share identity; absent preserves legacy bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fluent_proofs: Vec<String>,
     /// Optional exact model identity; covered by `share_id`. Legacy shares omit it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub embedding: Option<crate::embedding_runtime::EmbeddingRecipe>,
@@ -491,6 +506,8 @@ fn shapes_bytes(store: &Store, names: &[String], no_shapes: bool) -> Result<Vec<
 }
 
 pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<SharePayload> {
+    crate::share_fluent::validate(&opts.fluent_proofs)?;
+    crate::fluent::pending_config::storage::validate_requests(&opts.observable_configs)?;
     let graph = canonicalize_ntriples(&export_scope(
         store,
         &opts.scope,
@@ -526,6 +543,8 @@ pub(crate) fn build_share_payload(store: &Store, opts: &ShareOptions) -> Result<
         recipe.validate()?;
     }
     let mut manifest = ShareManifest {
+        observable_configs: opts.observable_configs.clone(),
+        fluent_proofs: opts.fluent_proofs.clone(),
         embedding,
         schema: "https://github.com/scbrown/quipu/share-manifest/v1".into(),
         share_id: String::new(),

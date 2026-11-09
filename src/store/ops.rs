@@ -25,6 +25,10 @@ pub(super) struct Staged {
     /// What this write did, for `quipu_write_facts_total` (aegis-gwkd76). Taken
     /// from values staging computes anyway: no extra store read.
     counts: StagedCounts,
+    /// Native fluent rows constructed after transaction allocation.
+    materialized: Option<Vec<Datum>>,
+    /// An exact native replay rolls back its tentative allocation.
+    replayed: bool,
     /// The COMPLETE set of changes this write made to the current-fact view, or
     /// `None` when the write path cannot vouch that it is complete.
     ///
@@ -145,6 +149,7 @@ impl Store {
             retract_source,
             None,
             existing_tx,
+            None,
         )
     }
 
@@ -159,12 +164,58 @@ impl Store {
         retract_source: Option<&str>,
         window: Option<super::source_claims::ClaimWindow>,
         existing_tx: Option<i64>,
+        fluent: Option<crate::fluent::writer::NativeWrite<'_>>,
     ) -> Result<Staged> {
+        if fluent.is_some()
+            && (existing_tx.is_some()
+                || window.is_some()
+                || retract_source.is_some()
+                || !datums.is_empty())
+        {
+            return Err(crate::Error::InvalidValue(
+                "fluent append cannot replace or reuse transactions".into(),
+            ));
+        }
         if window.is_some() && existing_tx.is_some() {
             return Err(crate::Error::InvalidValue(
                 "mapping settlement cannot reuse a claim-window transaction".into(),
             ));
         }
+        let tx_id = if let Some(tx) = existing_tx {
+            self.validate_mapping_transaction(tx, timestamp, actor, source)?;
+            tx
+        } else {
+            crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?
+        };
+
+        // begin() has obtained the SQLite writer reservation before any shape,
+        // target or existing-event read. A builder cannot select its own tx.
+        let materialized = match fluent
+            .map(|request| request.materialize(self, graph, tx_id, timestamp))
+            .transpose()?
+        {
+            None => None,
+            Some(crate::fluent::writer::Prepared::Write(datums)) => Some(datums),
+            Some(crate::fluent::writer::Prepared::Replay(tx_id)) => {
+                return Ok(Staged {
+                    tx_id,
+                    materialized: None,
+                    replayed: true,
+                    counts: StagedCounts {
+                        inferred: 0,
+                        asserted: 0,
+                        retracted: 0,
+                        superseded: 0,
+                    },
+                    effective: Some(Vec::new()),
+                    #[cfg(feature = "reactive-reasoner")]
+                    asserts: Vec::new(),
+                    #[cfg(feature = "reactive-reasoner")]
+                    retracts: Vec::new(),
+                });
+            }
+        };
+        let datums = materialized.as_deref().unwrap_or(datums);
         // The human trust-root registry as it stands BEFORE this write
         // (aegis-kzt0ql.9.4). Compared with the post-state below.
         let workflow_before = if self.governance_config().enforce_workflows {
@@ -173,12 +224,6 @@ impl Store {
             None
         };
         let trust_before = crate::governance::trust_root::snapshot(self)?;
-        let tx_id = if let Some(tx) = existing_tx {
-            self.validate_mapping_transaction(tx, timestamp, actor, source)?;
-            tx
-        } else {
-            crate::transaction_auth::begin(&self.conn, timestamp, actor, source)?
-        };
 
         // Domain/range axioms are not merely a one-time migration at ontology
         // load. Apply them to every newly asserted edge so a range such as
@@ -204,6 +249,18 @@ impl Store {
         // Whether anything beyond the caller's datums entered this write.
         let inferred = staged_datums.len() != datums.len();
 
+        let fluent_admission = if fluent.is_some() {
+            super::fluent_guard::check_native_inferences(
+                self,
+                graph,
+                datums,
+                &staged_datums[datums.len()..],
+            )
+        } else {
+            super::fluent_guard::check(self, graph, &staged_datums)
+        };
+        fluent_admission.map_err(|e| self.stash_refusal("fluent", e, staged_datums.len()))?;
+
         // Functional-property supersede (aegis-7vn3b). MUST run before the insert
         // loop below: it closes the PRIOR value so the new one lands as the only
         // current fact. Run after, and both would be live and the OWL gate would
@@ -217,6 +274,9 @@ impl Store {
         #[cfg(not(feature = "owl"))]
         let superseded = 0usize;
 
+        if fluent.is_some() {
+            self.permit_native_fluent_records(tx_id, graph, datums)?;
+        }
         let (asserts, retracts) = if existing_tx.is_some() {
             if source != Some(super::mapping_atomic::SOURCE) || retract_source.is_some() {
                 return Err(crate::Error::InvalidValue(
@@ -234,6 +294,10 @@ impl Store {
                 window,
             )?
         };
+        if let Some(request) = fluent {
+            request.persist_origin(self, graph, tx_id)?;
+            self.finish_native_fluent_records(tx_id)?;
+        }
         let written_asserts: Vec<_> = asserts.iter().collect();
         let written_retracts: Vec<_> = retracts.iter().collect();
 
@@ -332,6 +396,8 @@ impl Store {
                 superseded,
             },
             effective,
+            materialized,
+            replayed: false,
             #[cfg(feature = "reactive-reasoner")]
             asserts,
             #[cfg(feature = "reactive-reasoner")]

@@ -386,6 +386,17 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
         DROP TRIGGER writer_graph_insert; DROP TRIGGER writer_graph_delete;
         DROP TRIGGER writer_graph_update;",
     )?;
+    // This transaction rewrites only the fresh, owned copy created above.
+    // Native content and signed proof bytes stay unchanged; their local term
+    // references move with every other classified column. Reinstall guards
+    // before commit, so no committed copy is writable without its backstop.
+    tx.execute_batch(
+        "DROP TRIGGER fluent_fact_insert; DROP TRIGGER fluent_fact_update;
+         DROP TRIGGER fluent_fact_delete; DROP TRIGGER fluent_origin_insert;
+         DROP TRIGGER fluent_origin_update; DROP TRIGGER fluent_origin_delete;
+         DROP TRIGGER fluent_config_insert; DROP TRIGGER fluent_config_update;
+         DROP TRIGGER fluent_config_delete;",
+    )?;
 
     let mut columns = Vec::new();
     for col in &classified {
@@ -429,6 +440,7 @@ fn respace_in_place(db: &Path, to_space: i64) -> Result<RespaceReport> {
             params![to_space],
         )?;
     }
+    crate::store::Store::migrate_fluent_persistence(&tx)?;
     tx.commit()?;
 
     let report = RespaceReport {

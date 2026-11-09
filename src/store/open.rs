@@ -330,6 +330,7 @@ impl Store {
         Self::migrate_graph_metadata_v1(&conn)?;
         attach::migrate_graph_source(&conn)?;
         Self::migrate_writer_scope(&conn)?;
+        Self::migrate_fluent_persistence(&conn)?;
 
         // Verification runs AFTER the migrations, not at attach time, because
         // the space-collision check needs the local store's own space — which
