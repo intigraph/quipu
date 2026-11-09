@@ -129,8 +129,7 @@ fn equivocation_refuses_atomically_and_numeric_errors_do_not_truncate_history() 
 
 #[test]
 fn policies_are_explicit_shape_annotations_and_ordinary_slots_are_not_promoted() {
-    let prefix =
-        "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> .";
+    let prefix = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> .";
     let shapes = format!(
         "{prefix} <urn:shape> sh:path <urn:count>; qp:currentValuePolicy \"sum\" . <urn:status> sh:path <urn:status>; sh:maxCount 1 ."
     );

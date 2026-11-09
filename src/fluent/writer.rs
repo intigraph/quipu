@@ -236,7 +236,7 @@ impl Append {
         }
         log.append(observation.clone())?;
         log.current(&self.fluent, binding.declaration.policy)?;
-        let qp = crate::namespace::QUIPU;
+        let qp = crate::namespace::QUIPU_FLUENT;
         let mut out = descriptor;
         for (predicate, value) in [
             (
@@ -281,7 +281,7 @@ pub(super) fn descriptor(
     fluent: &str,
     at: &str,
 ) -> Result<Vec<Datum>> {
-    let qp = crate::namespace::QUIPU;
+    let qp = crate::namespace::QUIPU_FLUENT;
     [
         (
             crate::namespace::RDF_TYPE.to_owned(),
@@ -310,7 +310,7 @@ pub(super) fn descriptor(
 /// Read only the selected graph's native RDF event fields. Missing or ambiguous
 /// fields refuse rather than producing an apparently empty/current value.
 pub(crate) fn read_log(store: &Store, graph: i64, fluent: &str, policy: Policy) -> Result<Log> {
-    let qp = crate::namespace::QUIPU;
+    let qp = crate::namespace::QUIPU_FLUENT;
     let Some(fluent_id) = store.lookup(fluent)? else {
         return Ok(Log::default());
     };

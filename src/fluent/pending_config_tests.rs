@@ -44,7 +44,7 @@ fn loaded_graph(graph: &str) -> (Store, i64) {
             AT,
         )
         .unwrap();
-    store.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> . <urn:base-shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" . <urn:output-shape> sh:path <urn:aggregate>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", AT).unwrap();
+    store.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> . <urn:base-shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" . <urn:output-shape> sh:path <urn:aggregate>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", AT).unwrap();
     let g = if graph == crate::schema::ROOT_GRAPH_IRI {
         0
     } else {

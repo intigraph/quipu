@@ -9,11 +9,11 @@ pub(super) fn load(store: &Store, graph: i64) -> Result<(Registry, Log)> {
     let mut log = Log::default();
     let (Some(type_id), Some(fluent_type)) = (
         store.lookup(crate::namespace::RDF_TYPE)?,
-        store.lookup(&format!("{}Fluent", crate::namespace::QUIPU))?,
+        store.lookup(&format!("{}Fluent", crate::namespace::QUIPU_FLUENT))?,
     ) else {
         return Ok((registry, log));
     };
-    let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU))?;
+    let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU_FLUENT))?;
     let facts = store.current_facts_in_graph(graph)?;
     let entities: BTreeSet<_> = facts
         .iter()
@@ -30,7 +30,7 @@ pub(super) fn load(store: &Store, graph: i64) -> Result<(Registry, Log)> {
         let rows: Vec<_> = facts.iter().filter(|f| f.entity == entity).collect();
         let one = |name: &str| -> Result<Value> {
             let attribute = store
-                .lookup(&format!("{}{name}", crate::namespace::QUIPU))?
+                .lookup(&format!("{}{name}", crate::namespace::QUIPU_FLUENT))?
                 .ok_or_else(|| invalid("missing native declaration field"))?;
             let values: Vec<_> = rows.iter().filter(|f| f.attribute == attribute).collect();
             if values.len() != 1 {
@@ -101,7 +101,7 @@ pub(super) fn load(store: &Store, graph: i64) -> Result<(Registry, Log)> {
                 return Err(invalid("computedBy and currentValuePolicy differ"));
             }
             let dependency = store
-                .lookup(&format!("{}observes", crate::namespace::QUIPU))?
+                .lookup(&format!("{}observes", crate::namespace::QUIPU_FLUENT))?
                 .ok_or_else(|| invalid("observable dependencies missing"))?;
             let mut observes = BTreeSet::new();
             for row in rows.iter().filter(|f| f.attribute == dependency) {

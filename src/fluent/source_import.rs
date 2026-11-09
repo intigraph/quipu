@@ -83,7 +83,7 @@ impl Proof {
     fn datums(&self, store: &Store, at: &str) -> Result<Vec<crate::store::Datum>> {
         let slot = &self.body.slot;
         let observation = &self.body.observation;
-        let qp = crate::namespace::QUIPU;
+        let qp = crate::namespace::QUIPU_FLUENT;
         let value = match &observation.value {
             Scalar::Integer(n) => {
                 Literal::new_typed_literal(n.to_string(), oxrdf::vocab::xsd::INTEGER).into()

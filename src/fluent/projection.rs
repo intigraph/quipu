@@ -124,7 +124,7 @@ impl Store {
         let facts = self.entity_facts_in_graph(entity, graph)?;
         let field = |name: &str| -> Result<String> {
             let attribute = self
-                .lookup(&format!("{}{name}", crate::namespace::QUIPU))?
+                .lookup(&format!("{}{name}", crate::namespace::QUIPU_FLUENT))?
                 .ok_or_else(|| invalid("missing projection descriptor field"))?;
             let values: Vec<_> = facts.iter().filter(|f| f.attribute == attribute).collect();
             if values.len() != 1 {

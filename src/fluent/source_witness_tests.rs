@@ -23,7 +23,7 @@ pub(super) fn loaded_shapes(graph_name: &str) -> (Store, i64) {
             "2026-11-08T00:00:00Z",
         )
         .unwrap();
-    store.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> . <urn:shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", "2026-11-08T00:00:00Z").unwrap();
+    store.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> . <urn:shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", "2026-11-08T00:00:00Z").unwrap();
     let graph = if graph_name == crate::schema::ROOT_GRAPH_IRI {
         0
     } else {
@@ -102,7 +102,7 @@ fn bearer_origin_roundtrips_without_a_per_event_writer_signature_or_source_mutat
 #[test]
 fn actor_and_native_source_text_do_not_let_the_witness_capture_unadmitted_records() {
     let (mut store, _) = loaded(crate::schema::ROOT_GRAPH_IRI);
-    let qp = crate::namespace::QUIPU;
+    let qp = crate::namespace::QUIPU_FLUENT;
     let turtle = format!(
         "<urn:forged> <{qp}forFluent> <urn:fluent>; <{qp}writer> <urn:actual-writer>; <{qp}originTx> 1; <{qp}observationValue> 999 ."
     );

@@ -36,7 +36,7 @@ pub fn declarations(turtle: &str) -> Result<Vec<Declaration>> {
                 paths.entry(subject).or_default().insert(value);
             }
             predicate
-                if predicate.strip_prefix(crate::namespace::QUIPU)
+                if predicate.strip_prefix(crate::namespace::QUIPU_FLUENT)
                     == Some("currentValuePolicy") =>
             {
                 let value = match triple.object {

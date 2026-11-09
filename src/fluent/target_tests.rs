@@ -1,5 +1,5 @@
 use super::*;
-const PREFIX: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .";
+const PREFIX: &str = "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> . @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .";
 fn shape(target: &str) -> String {
     format!(
         "{PREFIX} <urn:node> {target}; sh:property <urn:prop> . <urn:prop> sh:path <urn:count>; qp:currentValuePolicy \"sum\" ."

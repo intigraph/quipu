@@ -230,7 +230,7 @@ fn pending_config_actual_receipt_preserves_raw_approval_and_is_sql_immutable() {
 #[test]
 fn pending_config_failed_poststate_rolls_back_descriptor_and_original_receipt() {
     let mut store = loaded();
-    store.load_shapes("deny-derived",r#"@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:deny> a sh:NodeShape; sh:targetNode <urn:derived>; sh:property [ sh:path <https://quipu.dev/ontology/computedBy>; sh:maxCount 0 ] ."#,AT).unwrap();
+    store.load_shapes("deny-derived",r#"@prefix sh: <http://www.w3.org/ns/shacl#> . <urn:deny> a sh:NodeShape; sh:targetNode <urn:derived>; sh:property [ sh:path <https://w3id.org/intigraph/quipu/ns#computedBy>; sh:maxCount 0 ] ."#,AT).unwrap();
     let request = pending("urn:derived", &["urn:base"]);
     let approval = approve(&store, &request);
     govern(&mut store, &approval);

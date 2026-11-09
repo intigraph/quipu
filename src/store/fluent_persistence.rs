@@ -27,7 +27,7 @@ fn protected(record: &str) -> String {
 impl Store {
     pub(super) fn migrate_fluent_persistence(conn: &Connection) -> Result<()> {
         crate::fluent::pending_config::storage::migrate(conn)?;
-        let qp = crate::namespace::QUIPU;
+        let qp = crate::namespace::QUIPU_FLUENT;
         let kinds = format!("'{qp}Fluent','{qp}FluentObservation','{qp}Observable'");
         conn.execute_batch(&format!(
             "CREATE TABLE IF NOT EXISTS fluent_type_codes (id INTEGER PRIMARY KEY, value BLOB NOT NULL UNIQUE);

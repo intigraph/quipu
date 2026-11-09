@@ -15,7 +15,7 @@ fn native_store() -> Store {
             "2026-11-08T00:00:00Z",
         )
         .unwrap();
-    store.load_shapes("counter", &format!("<urn:counter-shape> <http://www.w3.org/ns/shacl#path> <urn:count>; <http://www.w3.org/ns/shacl#targetNode> <urn:subject>; <{}currentValuePolicy> \"sum\" .", crate::namespace::QUIPU), "2026-11-08T00:00:00Z").unwrap();
+    store.load_shapes("counter", &format!("<urn:counter-shape> <http://www.w3.org/ns/shacl#path> <urn:count>; <http://www.w3.org/ns/shacl#targetNode> <urn:subject>; <{}currentValuePolicy> \"sum\" .", crate::namespace::QUIPU_FLUENT), "2026-11-08T00:00:00Z").unwrap();
     let identity = Identity {
         principal: "urn:writer".into(),
         credential_id: Some("fixture".into()),
@@ -73,7 +73,7 @@ fn fluent_type_codes_match_native_ref_codec_at_large_term_ids() {
             .conn
             .execute(
                 "INSERT INTO terms(id,iri) VALUES(?1,?2)",
-                params![id, format!("{}Fluent", crate::namespace::QUIPU)],
+                params![id, format!("{}Fluent", crate::namespace::QUIPU_FLUENT)],
             )
             .unwrap();
         let actual: Vec<u8> = store

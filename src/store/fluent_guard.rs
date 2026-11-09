@@ -12,7 +12,7 @@ pub(super) fn check(store: &Store, graph: i64, datums: &[Datum]) -> Result<()> {
     };
     let types: BTreeSet<_> = ["Fluent", "FluentObservation", "Observable"]
         .into_iter()
-        .map(|name| store.lookup(&format!("{}{name}", crate::namespace::QUIPU)))
+        .map(|name| store.lookup(&format!("{}{name}", crate::namespace::QUIPU_FLUENT)))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
@@ -85,11 +85,11 @@ pub(super) fn check_native_inferences(
 pub(super) fn check_native_capacity(store: &Store, graph: i64) -> Result<()> {
     let (Some(type_id), Some(fluent_type)) = (
         store.lookup(crate::namespace::RDF_TYPE)?,
-        store.lookup(&format!("{}Fluent", crate::namespace::QUIPU))?,
+        store.lookup(&format!("{}Fluent", crate::namespace::QUIPU_FLUENT))?,
     ) else {
         return Ok(());
     };
-    let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU))?;
+    let observable_type = store.lookup(&format!("{}Observable", crate::namespace::QUIPU_FLUENT))?;
     // Only the protected live declaration types are needed. Avoid loading
     // every observation log just to enforce the reader's declaration bounds.
     let mut query = store.conn.prepare_cached(
@@ -150,7 +150,7 @@ impl Store {
     pub(crate) fn check_fluent_graph_binding(&self, fluent: &str, graph: &str) -> Result<()> {
         let (Some(entity), Some(attribute)) = (
             self.lookup(fluent)?,
-            self.lookup(&format!("{}inGraph", crate::namespace::QUIPU))?,
+            self.lookup(&format!("{}inGraph", crate::namespace::QUIPU_FLUENT))?,
         ) else {
             return Ok(());
         };

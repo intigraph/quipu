@@ -34,7 +34,7 @@ fn loaded(policy: &str) -> Store {
         )
         .unwrap();
     store.load_shapes("declarations", &format!(
-        "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> . \
+        "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> . \
          <urn:base-shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"{policy}\" . \
          <urn:output-shape> sh:path <urn:aggregate>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" ."
     ), "2026-11-08T00:00:00Z").unwrap();
@@ -247,7 +247,7 @@ fn authenticated_source_label_and_untyped_fields_do_not_admit_a_fluent_event() {
     let mut store = loaded("sum");
     let before = store.fluent_current_native(0, "urn:base").unwrap();
     let next = store.latest_tx_id().unwrap() + 1;
-    let qp = crate::namespace::QUIPU;
+    let qp = crate::namespace::QUIPU_FLUENT;
     let at = "2026-11-08T01:00:00Z";
     let fields = [
         ("forFluent", writer::iri("urn:base").unwrap()),

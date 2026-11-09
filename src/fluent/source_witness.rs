@@ -113,7 +113,7 @@ pub(super) fn capture(
     let rows = store.entity_facts_in_graph(entity, graph)?;
     let field = |name: &str| -> Result<String> {
         let attribute = store
-            .lookup(&format!("{}{name}", crate::namespace::QUIPU))?
+            .lookup(&format!("{}{name}", crate::namespace::QUIPU_FLUENT))?
             .ok_or_else(|| invalid("source descriptor field missing"))?;
         let values: Vec<_> = rows.iter().filter(|f| f.attribute == attribute).collect();
         let [fact] = values.as_slice() else {

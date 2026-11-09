@@ -107,7 +107,7 @@ fn explicit_pendant_file_bytes_retain_proofs_but_require_fresh_native_authority(
                 AT,
             )
             .unwrap();
-        receiver.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://quipu.dev/ontology/> . <urn:shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", AT).unwrap();
+        receiver.load_shapes("declarations", "@prefix sh: <http://www.w3.org/ns/shacl#> . @prefix qp: <https://w3id.org/intigraph/quipu/ns#> . <urn:shape> sh:path <urn:count>; sh:targetNode <urn:subject>; qp:currentValuePolicy \"sum\" .", AT).unwrap();
         let g = if graph == crate::schema::ROOT_GRAPH_IRI {
             0
         } else {

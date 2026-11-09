@@ -27,7 +27,7 @@ mod tests {
         let shapes = format!(
             "{}\n<urn:count-shape> <http://www.w3.org/ns/shacl#path> <urn:count>; <http://www.w3.org/ns/shacl#targetNode> <urn:subject>; <{}currentValuePolicy> \"sum\" .",
             include_str!("../../shapes/fluents-v1.ttl"),
-            crate::namespace::QUIPU
+            crate::namespace::QUIPU_FLUENT
         );
         store
             .load_shapes(
@@ -144,8 +144,8 @@ mod admission_tests {
         let before = store.latest_tx_id().unwrap();
         let deny = format!(
             "@prefix sh:<http://www.w3.org/ns/shacl#> . <urn:deny> a sh:NodeShape; sh:targetClass <{}FluentObservation>; sh:property [ sh:path <{}observationValue>; sh:maxCount 0 ] .",
-            crate::namespace::QUIPU,
-            crate::namespace::QUIPU
+            crate::namespace::QUIPU_FLUENT,
+            crate::namespace::QUIPU_FLUENT
         );
         with_identity(Some(identity()), || {
             let result =
@@ -223,7 +223,7 @@ mod immutable_tests {
                 .into_iter()
                 .find(|f| {
                     store.resolve(f.attribute).unwrap()
-                        == format!("{}observationValue", crate::namespace::QUIPU)
+                        == format!("{}observationValue", crate::namespace::QUIPU_FLUENT)
                 })
                 .unwrap();
             let mut retract = Datum {
@@ -256,7 +256,11 @@ mod immutable_tests {
                 &store,
                 "urn:forged-event",
                 crate::namespace::RDF_TYPE,
-                &iri(&format!("{}FluentObservation", crate::namespace::QUIPU)).unwrap(),
+                &iri(&format!(
+                    "{}FluentObservation",
+                    crate::namespace::QUIPU_FLUENT
+                ))
+                .unwrap(),
                 &crate::time::now_iso(),
             )
             .unwrap();
@@ -268,7 +272,7 @@ mod immutable_tests {
             let declaration = datum(
                 &store,
                 &request.fluent,
-                &format!("{}currentValuePolicy", crate::namespace::QUIPU),
+                &format!("{}currentValuePolicy", crate::namespace::QUIPU_FLUENT),
                 &literal("max"),
                 &crate::time::now_iso(),
             )
@@ -309,7 +313,7 @@ mod term_tests {
             let mut store = loaded();
             let declaration = format!(
                 "<urn:count-shape> <http://www.w3.org/ns/shacl#path> <urn:count>; <http://www.w3.org/ns/shacl#targetNode> <urn:subject>; <{}currentValuePolicy> \"{name}\" .",
-                crate::namespace::QUIPU
+                crate::namespace::QUIPU_FLUENT
             );
             store
                 .load_shapes("test-declaration", &declaration, "2026-11-08T02:01:00Z")
@@ -352,7 +356,7 @@ mod inference_tests {
     #[test]
     fn native_append_refuses_inference_that_changes_prepared_record_content() {
         let mut store = loaded();
-        store.load_ontology("record-domain", &format!("<{}writer> <http://www.w3.org/2000/01/rdf-schema#domain> <urn:UnexpectedRecordType> .", crate::namespace::QUIPU), "2026-11-08T03:00:00Z").unwrap();
+        store.load_ontology("record-domain", &format!("<{}writer> <http://www.w3.org/2000/01/rdf-schema#domain> <urn:UnexpectedRecordType> .", crate::namespace::QUIPU_FLUENT), "2026-11-08T03:00:00Z").unwrap();
         let before = store.latest_tx_id().unwrap();
         let result = with_identity(Some(identity()), || {
             store.append_fluent_native(&request(), 0)
@@ -368,7 +372,7 @@ mod inference_tests {
     #[test]
     fn native_append_allows_duplicate_record_type_and_unrelated_inferred_type() {
         let mut store = loaded();
-        store.load_ontology("record-domain", &format!("<{}writer> <http://www.w3.org/2000/01/rdf-schema#domain> <{}FluentObservation>; <http://www.w3.org/2000/01/rdf-schema#range> <urn:WriterClass> .", crate::namespace::QUIPU, crate::namespace::QUIPU), "2026-11-08T03:00:00Z").unwrap();
+        store.load_ontology("record-domain", &format!("<{}writer> <http://www.w3.org/2000/01/rdf-schema#domain> <{}FluentObservation>; <http://www.w3.org/2000/01/rdf-schema#range> <urn:WriterClass> .", crate::namespace::QUIPU_FLUENT, crate::namespace::QUIPU_FLUENT), "2026-11-08T03:00:00Z").unwrap();
         with_identity(Some(identity()), || {
             store.append_fluent_native(&request(), 0).unwrap();
             let log = read_log(&store, 0, &request().fluent, Policy::Sum).unwrap();

@@ -45,7 +45,7 @@ impl Register {
         registry.current(&self.observable.name, &log)?;
         let mut datums: Vec<Datum> =
             writer::descriptor(store, &binding, &self.observable.name, timestamp)?;
-        let qp = crate::namespace::QUIPU;
+        let qp = crate::namespace::QUIPU_FLUENT;
         datums.push(writer::datum(
             store,
             &self.observable.name,
