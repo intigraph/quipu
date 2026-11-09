@@ -263,3 +263,12 @@ fn private_no_data_settlement_is_not_a_graph_commit() {
     Stage::capture(Some(observer.clone()), 1).finish(Completion::NativeRelease(0));
     assert_eq!(next(&observer).completion, Completion::Unknown);
 }
+
+#[test]
+fn loss_counter_saturates_without_wrapping() {
+    let count = AtomicU64::new(u64::MAX - 1);
+    increment(&count);
+    assert_eq!(count.load(Ordering::Relaxed), u64::MAX);
+    increment(&count);
+    assert_eq!(count.load(Ordering::Relaxed), u64::MAX);
+}

@@ -75,9 +75,15 @@ pub struct Observer {
 }
 
 fn increment(value: &AtomicU64) {
-    let _ = value.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-        Some(n.saturating_add(1))
-    });
+    let mut before = value.load(Ordering::Relaxed);
+    while let Err(actual) = value.compare_exchange_weak(
+        before,
+        before.saturating_add(1),
+        Ordering::Relaxed,
+        Ordering::Relaxed,
+    ) {
+        before = actual;
+    }
 }
 
 impl Observer {
