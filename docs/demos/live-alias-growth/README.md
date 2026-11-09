@@ -28,8 +28,12 @@ candidate in separate checkouts, retain both binaries, then run:
 BASE_PROBE=/path/to/base HEAD_PROBE=/path/to/head bash run.sh
 ```
 
-Download [the output recording](output.log.gz) and [its actual timing](timing.log)
-then decompress with `gzip -dk output.log.gz` and replay with `scriptreplay --log-out output.log --log-timing timing.log`.
+Download [the plaintext output recording](output.log) and [its actual timing](timing.log),
+then replay with `scriptreplay --log-out output.log --log-timing timing.log`.
+The recording is 658 bytes; SHA-256
+`1df97da5fa64eb9aaa10656ca858f2a7126b9418aa2f6a2a8280dc74baf82e8f`.
+It is the exact decompressed recording, not a new execution; its normalized
+bytes match the existing transcript. The compressed source member was removed.
 Use `--divisor 0.1` to slow the short fixture. The [transcript](transcript.txt)
 normalizes CRLF for reading. No inline player is claimed. These small sanitized
 artifacts follow this repository's existing `docs/demos` retention.
