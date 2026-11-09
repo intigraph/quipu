@@ -242,6 +242,7 @@ pub(crate) async fn version() -> impl IntoResponse {
         "write_contracts": [
             crate::knot_completion::CONTRACT,
             quipu::episode::EXPLICIT_ADDRESS_CONTRACT,
+            quipu::episode::STRICT_NEW_CONTRACT,
         ],
         "features": compiled_features(),
     }))
@@ -260,6 +261,7 @@ mod episode_address_contract_tests {
         let value: JsonValue = serde_json::from_slice(&body).unwrap();
         let contracts = value["write_contracts"].as_array().unwrap();
         assert!(contracts.contains(&json!("quipu.episode-addresses/v1")));
+        assert!(contracts.contains(&json!("quipu.episode-strict-new/v1")));
         assert!(contracts.contains(&json!("quipu.knot-completion/v1")));
     }
 }

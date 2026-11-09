@@ -84,6 +84,7 @@ pub(super) fn defs() -> Vec<JsonValue> {
                 "type": "object",
                 "properties": {
                     "graph": {"type": "string", "description": "Destination graph for the episode."},
+                    "strict_new_entities": {"type": "boolean", "default": false, "description": "Request-local strict new-entity validation. Requires an existing local committed named graph; grants no write authority. Same-IRI reuse and reasoned distinct_from remain supported. Probe quipu.episode-strict-new/v1 first."},
                     "shapes": {"type": "string", "description": "Optional SHACL validation shapes in Turtle."},
                     "replace_snapshot": {"type": "boolean", "description": "Replace facts previously asserted by this episode."},
                     "name": { "type": "string", "description": "Episode name/identifier" },

@@ -210,6 +210,7 @@ Ingest structured knowledge from an agent episode (nodes + edges)
 | `replace_snapshot` | boolean | no | Replace facts previously asserted by this episode. |
 | `shapes` | string | no | Optional SHACL validation shapes in Turtle. |
 | `source` | string | no | Who/what produced this episode |
+| `strict_new_entities` | boolean | no | Request-local strict new-entity validation. Requires an existing local committed named graph; grants no write authority. Same-IRI reuse and reasoned distinct_from remain supported. Probe quipu.episode-strict-new/v1 first. |
 
 ## `quipu_episodes_complete`
 
