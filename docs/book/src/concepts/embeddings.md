@@ -64,6 +64,13 @@ indexing is unavailable. Set `auto_embed = false` to disable automatic vector
 writes. This does not disable model initialization, explicit semantic queries,
 or existing import identity resolution, which may also use the provider.
 
+CLI commands that initialize automatic embedding refuse with a nonzero exit and
+the canonical `no embedding provider configured` reason when `auto_embed = true`
+is explicitly configured but neither a configured nor an installed model is available. This refusal happens
+before writing facts. Use explicit `auto_embed = false` for graph-only writes;
+the omitted default remains quiet, and pure graph reads continue to work
+without initializing a provider.
+
 ## Writes and staged imports
 
 Native CLI writes (`knot`, `ingest`, episodes) and server writes use the configured
