@@ -337,3 +337,8 @@ fn copy_native(
     destination.transact_to_graph(&datums, "1970-01-01T00:00:00Z", None, None, target)?;
     Ok(())
 }
+
+#[cfg(unix)]
+mod composed;
+#[cfg(unix)]
+pub use composed::ComposedReadView;

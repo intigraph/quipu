@@ -1040,3 +1040,236 @@ fn budgeted_owner_refuses_missing_fence_reader() {
         .is_err()
     );
 }
+
+fn composition_authority(
+    graphs: &[&str],
+) -> (
+    crate::read_authorization::OwnerReadPolicy,
+    crate::read_authorization::ReadIdentity,
+) {
+    use crate::read_authorization::*;
+    use sha2::{Digest, Sha256};
+    let registry = crate::crew_credentials::CredentialRegistry::parse(
+        &serde_json::to_vec(&json!({"version":1,"credentials":[{
+            "credential_id":"composition-fixture", "principal":"urn:principal:reader",
+            "audience":"quipu", "token_sha256":format!("{:x}", Sha256::digest(b"composition-fixture-token"))
+        }]})).unwrap(), "quipu",
+    ).unwrap();
+    let identity =
+        ReadIdentity::authenticate_named(&registry, Some("Bearer composition-fixture-token"))
+            .unwrap();
+    let mut policy = OwnerReadPolicy::open(":memory:", "urn:principal:owner").unwrap();
+    policy
+        .apply(
+            &ReadGrant {
+                version: 1,
+                id: "urn:grant:composition".into(),
+                principal: "urn:principal:reader".into(),
+                graphs: graphs.iter().map(|s| (*s).to_owned()).collect(),
+                operations: [ReadOperation::Query, ReadOperation::Export].into(),
+                valid_from: 1,
+                valid_until: 100,
+                max_offline_seconds: 300,
+                issuer: "urn:principal:owner".into(),
+                revision: 1,
+                revoked: false,
+            },
+            "private composed fixture",
+        )
+        .unwrap();
+    (policy, identity)
+}
+
+#[test]
+fn composed_cut_joins_canonical_terms_with_bags_and_exact_graph_grants() {
+    use crate::read_authorization::ReadOperation;
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    for i in 0..32 {
+        b.writer.lock().intern(&format!("urn:padding:{i}")).unwrap();
+    }
+    let turtle_a = "<urn:left:1> <urn:link> <urn:shared> . <urn:left:2> <urn:link> <urn:shared> .";
+    let turtle_b = "<urn:shared> <urn:value> \"answer\"@en . <urn:shared> <urn:typed> \"007\"^^<http://www.w3.org/2001/XMLSchema#integer> .";
+    let mut baseline = Store::open_in_memory().unwrap();
+    for (owner, text) in [(&a, turtle_a), (&b, turtle_b)] {
+        owner
+            .knot(
+                &request(owner),
+                &json!({"graph":owner.route.graph,"turtle":text}),
+            )
+            .unwrap();
+        let graph = baseline.graph_create(&owner.route.graph).unwrap();
+        crate::rdf::ingest_assigned_rdf(
+            &mut baseline,
+            text.as_bytes(),
+            oxrdfio::RdfFormat::Turtle,
+            None,
+            "1970-01-01T00:00:00Z",
+            None,
+            None,
+            graph,
+        )
+        .unwrap();
+    }
+    assert_ne!(
+        a.writer.lock().lookup("urn:shared").unwrap(),
+        b.writer.lock().lookup("urn:shared").unwrap()
+    );
+    let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
+    let policy = policy.snapshot().unwrap();
+    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    let deadline = strict_deadline();
+    Owner::read_strict(&[&b, &a], deadline, |reads| {
+        let view = policy.authorize(&identity, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, allocation, 2, deadline)?;
+        let reference = policy.authorize(&identity, ReadOperation::Query, None, 2)?.open(&baseline, 2)?;
+        for query in [
+            format!("SELECT ?s ?value WHERE {{ GRAPH <{}> {{ ?s <urn:link> ?x }} GRAPH <{}> {{ ?x <urn:value> ?value }} }} ORDER BY ?s", a.route.graph, b.route.graph),
+            format!("SELECT (COUNT(*) AS ?n) WHERE {{ GRAPH <{}> {{ ?s <urn:link> ?x }} GRAPH <{}> {{ ?x <urn:value> ?value }} }}", a.route.graph, b.route.graph),
+            format!("SELECT ?v WHERE {{ GRAPH <{}> {{ <urn:shared> <urn:typed> ?v }} }}", b.route.graph),
+            "SELECT (COUNT(*) AS ?n) WHERE { ?s ?p ?o }".into(),
+        ] {
+            assert_eq!(view.query(&query, false, 2)?, reference.query(&query, false, 2)?, "{query}");
+            assert_eq!(view.query(&query, true, 2)?, reference.query(&query, true, 2)?, "resident: {query}");
+        }
+        for query in [
+            "ASK { GRAPH <urn:hidden> { ?s ?p ?o } }",
+            "ASK FROM <urn:hidden> { ?s ?p ?o }",
+            "ASK { FILTER NOT EXISTS { GRAPH <urn:hidden> { ?s ?p ?o } } }",
+            "ASK { SERVICE <https://example.invalid/> { ?s ?p ?o } }",
+        ] { assert!(view.query(query, false, 2).is_err()); }
+        view.recheck(&policy, &identity, reads, 2)?;
+        assert!(view.recheck(&policy, &identity, &reads[..1], 2).is_err());
+        Ok(())
+    }).unwrap();
+}
+
+#[test]
+fn composed_cut_refuses_scope_operation_expiry_deadline_and_oversized_values() {
+    use crate::read_authorization::ReadOperation;
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
+    let policy = policy.snapshot().unwrap();
+    let (subset, _) = composition_authority(&[&a.route.graph]);
+    let subset = subset.snapshot().unwrap();
+    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        assert!(
+            subset
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .is_err()
+        );
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(&reads[..1], allocation, 2, strict_deadline())
+                .is_err()
+        );
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Export, None, 2)?
+                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .is_err()
+        );
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(reads, allocation, 100, strict_deadline())
+                .is_err()
+        );
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(reads, allocation, 2, std::time::Instant::now())
+                .is_err()
+        );
+        Ok(())
+    })
+    .unwrap();
+    a.knot(&request(&a), &input(&a, &"x".repeat(65_536)))
+        .unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .is_err()
+        );
+        Ok(())
+    })
+    .unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |_| Ok(())).unwrap();
+}
+
+#[test]
+fn composed_cut_recheck_binds_generation_policy_and_expired_buffer() {
+    use crate::read_authorization::{ReadGrant, ReadOperation};
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let graphs = [&a.route.graph, &b.route.graph];
+    let (mut owner_policy, identity) = composition_authority(&[graphs[0], graphs[1]]);
+    let policy = owner_policy.snapshot().unwrap();
+    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        let view = policy
+            .authorize(&identity, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, allocation, 2, deadline)?;
+        for field in ["generation", "policy", "file"] {
+            let mut route = reads[0].route.clone();
+            match field {
+                "generation" => route.generation += 1,
+                "policy" => route.policy.push_str("-changed"),
+                _ => route.file_id.push_str("-changed"),
+            }
+            let changed = [
+                CapturedRead {
+                    route: &route,
+                    catalog_revision: reads[0].catalog_revision,
+                    local_tx: reads[0].local_tx,
+                    store: reads[0].store,
+                },
+                CapturedRead {
+                    route: reads[1].route,
+                    catalog_revision: reads[1].catalog_revision,
+                    local_tx: reads[1].local_tx,
+                    store: reads[1].store,
+                },
+            ];
+            assert!(
+                view.recheck(&policy, &identity, &changed, 2).is_err(),
+                "{field}"
+            );
+        }
+        view.recheck(&policy, &identity, reads, 2)?;
+        owner_policy.apply(
+            &ReadGrant {
+                version: 1,
+                id: "urn:grant:composition".into(),
+                principal: "urn:principal:reader".into(),
+                graphs: graphs.iter().map(|s| (*s).clone()).collect(),
+                operations: [ReadOperation::Query, ReadOperation::Export].into(),
+                valid_from: 1,
+                valid_until: 100,
+                max_offline_seconds: 300,
+                issuer: "urn:principal:owner".into(),
+                revision: 2,
+                revoked: true,
+            },
+            "private revocation control",
+        )?;
+        assert!(
+            view.recheck(&owner_policy.snapshot()?, &identity, reads, 2)
+                .is_err()
+        );
+        while let Some(remaining) = deadline.checked_duration_since(std::time::Instant::now()) {
+            std::thread::sleep(remaining);
+        }
+        assert!(view.query("ASK { ?s ?p ?o }", false, 2).is_err());
+        assert!(view.recheck(&policy, &identity, reads, 2).is_err());
+        Ok(())
+    })
+    .unwrap();
+}
