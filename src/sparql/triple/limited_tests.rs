@@ -172,7 +172,7 @@ fn limited_attached_rows_preserve_subject_predicate_and_object_aliases() {
         let graph = store.overlay_create(graph_iri, 0).unwrap();
         crate::rdf::ingest_rdf_to_graph(
             &mut store,
-            b"<http://example.org/s> <http://example.org/p> <http://example.org/o> .".as_slice(),
+            b"<http://example.org/s> <http://example.org/p> <http://example.org/o> . <http://example.org/s> a <http://example.org/Class> .".as_slice(),
             RdfFormat::Turtle,
             None,
             "2026-01-01T00:00:00Z",
@@ -223,8 +223,18 @@ fn limited_attached_rows_preserve_subject_predicate_and_object_aliases() {
     let text = "SELECT ?s ?p ?o FROM <http://example.org/main-g> FROM <http://example.org/layer-g> WHERE {?s ?p ?o}";
     let full = crate::sparql::query(&store, text).unwrap();
     let limited = crate::sparql::query(&store, &format!("{text} LIMIT 100")).unwrap();
-    assert_eq!(full.rows().len(), 1);
+    assert_eq!(full.rows().len(), 2);
     assert_eq!(keys(&limited), keys(&full));
+    for pattern in ["?s <http://example.org/p> ?o", "?s a ?o"] {
+        let text = format!(
+            "SELECT ?s ?o FROM <http://example.org/main-g> FROM <http://example.org/layer-g> WHERE {{{pattern}}}"
+        );
+        let full = crate::sparql::query(&store, &text).unwrap();
+        let limited = crate::sparql::query(&store, &format!("{text} LIMIT 100")).unwrap();
+        assert_eq!(full.rows().len(), 1, "attached alias positive control");
+        assert_eq!(keys(&limited), keys(&full));
+        assert_eq!(limited.variables(), full.variables());
+    }
 }
 
 #[test]
@@ -235,7 +245,11 @@ fn limited_scope_refuses_unsafe_shapes_and_restores_after_failure() {
     for (inner, accepted) in [
         ("?s ?p ?o", true),
         ("?s ?p ?s", false),
-        ("?s <http://example.org/p> ?o", false),
+        ("?s <http://example.org/p> ?o", true),
+        ("?s a ?type", true),
+        ("?s a ?s", false),
+        ("?s a <http://example.org/Class>", false),
+        ("?s <http://example.org/p> 1", false),
         ("?s ?p ?o . ?s ?q ?v", false),
         ("?s ?p ?o FILTER(?o=1)", false),
         ("GRAPH ?g {?s ?p ?o}", false),
@@ -346,3 +360,6 @@ fn ordinary_filtered_scan_keeps_existing_join_budget_semantics() {
     .unwrap();
     assert_eq!(result.rows().len(), 1);
 }
+
+#[path = "limited_typed_tests.rs"]
+mod typed;

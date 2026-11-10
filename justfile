@@ -200,6 +200,7 @@ demo name="explorer":
     set -euo pipefail
     case {{quote(name)}} in
         scoped-reads) cargo run --quiet --no-default-features --example scoped_reads ;;
+        strict-new) cargo run --quiet --locked --no-default-features --example episode_strict_new ;;
         merge-risk-plan) cargo run --quiet --locked --offline --no-default-features --example merge_risk_plan ;;
         key-identity-guards) cargo run --quiet --locked --no-default-features --example key_identity_guards -- --expect-guards ;;
         ownership-handoff-model) cargo run --quiet --locked --offline --no-default-features --example ownership_handoff_model ;;

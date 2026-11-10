@@ -2,6 +2,9 @@
 
 pub(crate) fn option_help(path: &str, name: &str) -> Option<&'static str> {
     match (path, name) {
+        ("share", "competency") => {
+            Some("Verbatim competency.toml to compile and seal with the share")
+        }
         ("export", "read-only") => {
             Some("Export a cold local snapshot without writes; refuses sidecars and attachments")
         }

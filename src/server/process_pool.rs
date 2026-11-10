@@ -146,6 +146,16 @@ impl Drop for ProcessPool {
     }
 }
 
+/// A pool with no workers: every request is served in-process.
+#[cfg(test)]
+pub(crate) fn in_process() -> ProcessPool {
+    ProcessPool {
+        children: Vec::new(),
+        routing: None,
+        internal_worker: false,
+    }
+}
+
 #[path = "process_pool/startup.rs"]
 mod startup;
 pub(crate) use startup::start;

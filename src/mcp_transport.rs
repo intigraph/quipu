@@ -22,6 +22,9 @@ mod observation;
 #[cfg(test)]
 #[path = "mcp_transport/parity_tests.rs"]
 mod parity_tests;
+#[cfg(test)]
+#[path = "mcp_transport/route_census_tests.rs"]
+mod route_census_tests;
 #[path = "mcp_transport/search_context.rs"]
 mod search_context;
 
