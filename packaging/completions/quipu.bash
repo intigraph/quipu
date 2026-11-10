@@ -4334,7 +4334,7 @@ _quipu() {
             return 0
             ;;
         quipu__subcmd__report)
-            opts="-h --db --type --predicate --hubs --surprises --questions --help"
+            opts="-h --db --type --predicate --hubs --surprises --questions --prometheus --days --end --public --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -4361,6 +4361,18 @@ _quipu() {
                     return 0
                     ;;
                 --questions)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --prometheus)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --days)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --end)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
