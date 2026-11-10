@@ -9,7 +9,7 @@
 //! unreadable body or an exhausted bound. A backend never reports a conflict;
 //! the witness resolves `Exists` by reading the exact key back.
 use super::Reply;
-use super::records::{Key, MAX_GENERATION};
+use super::records::Key;
 
 /// Result of a conditional create.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,9 +64,9 @@ pub(crate) fn parse(name: &str) -> Option<Key> {
         if s.len() != 2 || !s.bytes().all(|b| b.is_ascii_digit()) {
             return None;
         }
-        s.parse()
-            .ok()
-            .filter(|n| *n <= MAX_GENERATION.max(super::records::MAX_ATTEMPT))
+        // Width, not the lineage bounds: the walk deliberately probes one
+        // key past its last admitted generation/attempt.
+        s.parse().ok()
     }
     let parts: Vec<&str> = name.split('/').collect();
     let key = match parts.as_slice() {
