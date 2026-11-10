@@ -165,7 +165,10 @@ impl ComposedReadView {
                 (read.route.clone(), read.catalog_revision),
             );
         }
-        if observed.len() != reads.len() || observed != self.bindings {
+        if observed.len() != reads.len()
+            || observed != self.bindings
+            || Instant::now() >= self.deadline
+        {
             return Err(denied());
         }
         Ok(())

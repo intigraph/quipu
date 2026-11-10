@@ -1423,3 +1423,63 @@ fn composed_cut_sees_post_open_terms_without_cross_file_numeric_aliases() {
     })
     .unwrap();
 }
+
+#[test]
+fn composed_cut_recheck_refuses_deadline_expiring_during_identity_sql() {
+    use crate::read_authorization::{ComposedReadAdmission, ReadOperation};
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
+    let policy = policy.snapshot().unwrap();
+    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        let deadline = std::time::Instant::now() + Duration::from_millis(300);
+        let view = policy
+            .authorize(&identity, ReadOperation::Query, None, 2)?
+            .open_composed_cut(reads, admission.try_reserve()?, 2, deadline)?;
+        // Pause the actual SQL identity lookup AFTER the entry deadline check.
+        // A successful pre-expiry control rules out a refuse-everything patch.
+        view.recheck(&policy, &identity, reads, 2)?;
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed = called.clone();
+        reads[0].store.conn.progress_handler(
+            1,
+            Some(move || {
+                if !observed.swap(true, Ordering::AcqRel) {
+                    while let Some(remaining) =
+                        deadline.checked_duration_since(std::time::Instant::now())
+                    {
+                        std::thread::sleep(remaining);
+                    }
+                }
+                false
+            }),
+        )?;
+        let result = view.recheck(&policy, &identity, reads, 2);
+        reads[0]
+            .store
+            .conn
+            .progress_handler(0, None::<fn() -> bool>)?;
+        assert!(
+            called.load(Ordering::Acquire),
+            "identity SQL delay control did not run"
+        );
+        assert!(std::time::Instant::now() >= deadline);
+        assert!(
+            result.is_err(),
+            "recheck published success after its deadline"
+        );
+        Ok(())
+    })
+    .unwrap();
+    assert!(
+        admission.try_reserve().is_ok(),
+        "late recheck leaked scratch permit"
+    );
+    for owner in [&a, &b] {
+        for reader in &owner.readers {
+            assert!(reader.lock().conn.is_autocommit());
+        }
+        owner.read(Store::store_id).unwrap();
+    }
+}
