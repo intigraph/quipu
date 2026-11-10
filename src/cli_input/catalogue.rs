@@ -146,6 +146,7 @@ pub(super) static SPECS: &[Spec] = &[
     spec!("align decide", "<set.tsv>", 1, 1, "decisions reviewer out", ""),
     spec!("align apply", "<set.tsv>", 1, 1, "graph-a graph-b expected-version actor", ""),
     spec!("align export", "<set.tsv>", 1, 1, "license format prefix author-prefix out", ""),
+    spec!("align import", "<set.sssom.tsv>", 1, 1, "out", ""),
     spec!("propose", "", 0, 0, "status", ""),
     spec!("propose list", "", 0, 0, "status", ""),
     spec!("propose submit", "<kind> <target> <diff-file>", 3, 3, "proposer rationale trigger", ""),

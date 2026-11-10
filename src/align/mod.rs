@@ -9,10 +9,13 @@
 //! Design: `docs/design/cross-graph-alignment.md`.
 
 pub mod apply;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod crosswalk;
 pub mod decide;
 pub mod discover;
 pub mod enumerate;
 pub mod export;
+pub mod interchange;
 pub mod propose;
 pub mod sssom;
 pub mod verify;

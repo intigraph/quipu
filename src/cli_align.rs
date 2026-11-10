@@ -41,6 +41,7 @@ pub fn cmd_align(args: &[String], db_path: &str) {
         Some("decide") => cmd_decide(args),
         Some("apply") => cmd_apply(args, db_path),
         Some("export") => cmd_export(args),
+        Some("import") => cmd_import(args),
         _ => {
             eprintln!(
                 "usage: quipu align propose <graph-a> <graph-b> [--out <set.tsv>] [--db <path>]\n\
@@ -57,6 +58,58 @@ pub fn cmd_align(args: &[String], db_path: &str) {
             std::process::exit(1);
         }
     }
+}
+
+/// Import produces pending evidence only. No store is opened and no imported
+/// author or receipt is converted into local acceptance.
+fn cmd_import(args: &[String]) {
+    use std::io::Read as _;
+    let fail = |error: &dyn std::fmt::Display| -> ! {
+        eprintln!("align import: {error}");
+        std::process::exit(1)
+    };
+    let Some(path) = args.get(3) else {
+        fail(&"requires <set.sssom.tsv> --out <proposals.json>")
+    };
+    let Some(out) = flag_value(args, "--out") else {
+        fail(&"--out <proposals.json> is required; import never writes facts")
+    };
+    let mut bytes = Vec::new();
+    let input = std::fs::File::open(path).unwrap_or_else(|e| fail(&e));
+    if let Ok(output) = std::fs::metadata(out) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            let source = input.metadata().unwrap_or_else(|e| fail(&e));
+            if source.dev() == output.dev() && source.ino() == output.ino() {
+                fail(&"output must not replace the original mapping source");
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = output;
+            if std::fs::canonicalize(path).ok() == std::fs::canonicalize(out).ok() {
+                fail(&"output must not replace the original mapping source");
+            }
+        }
+    }
+    input
+        .take((quipu::align::interchange::MAX_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .unwrap_or_else(|e| fail(&e));
+    let text = std::str::from_utf8(&bytes).unwrap_or_else(|e| fail(&e));
+    let evidence = quipu::align::interchange::ExternalSet::parse(text).unwrap_or_else(|e| fail(&e));
+    let count = evidence.rows.len();
+    let report = serde_json::json!({
+        "schema": "https://quipu.dev/sssom-import-proposals/v1",
+        "local_acceptance": "pending",
+        "evidence": evidence,
+    });
+    let body = serde_json::to_vec_pretty(&report).unwrap_or_else(|e| fail(&e));
+    crate::cli_merge::write_atomic(out, &body).unwrap_or_else(|e| fail(&e));
+    println!(
+        "wrote {count} pending mapping proposal(s) to {out}; no facts or local decisions written"
+    );
 }
 
 /// Read-only: enumerates both graphs and scores candidate pairs.

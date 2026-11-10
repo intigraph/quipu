@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH QUIPU-ALIGN-IMPORT 1 "" quipu "Quipu Manual"
+.SH NAME
+quipu\-align\-import \- Read external SSSOM as pending proposals without accepting mappings or writing facts
+.SH SYNOPSIS
+\fBquipu align import\fR [\fB\-\-db\fR] [\fB\-\-out\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIset.sssom.tsv\fR> 
+.SH DESCRIPTION
+Read external SSSOM as pending proposals without accepting mappings or writing facts
+.SH OPTIONS
+.TP
+\fB\-\-db\fR \fI<PATH>\fR
+Store file (default: .bobbin/quipu/quipu.db; configuration may override it)
+.TP
+\fB\-\-out\fR \fI<VALUE>\fR
+Output file
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIset.sssom.tsv\fR>
+

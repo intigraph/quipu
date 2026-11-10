@@ -60,6 +60,27 @@ produced **1**. If a pair you expect is missing, check the types before the labe
 An absent graph is a question the store cannot answer, so it is refused rather than reported as
 an empty result. An **empty** graph is a legitimate answer of zero and is returned as one.
 
+## Import an external SSSOM set
+
+```text
+qp align import external.sssom.tsv --out proposals.json
+```
+
+Reads standard SSSOM/TSV as pending proposals. The JSON retains the original
+bytes, metadata, source digest, expanded identifiers and row evidence, including
+justifications Quipu does not itself emit. A source author or an `accepted` field
+is evidence from the publisher; it does not establish a local decision.
+
+Import opens no store and writes no facts or acceptance records. Inspect the
+proposal JSON before deciding which correspondences to use. It is a review
+artifact, not an `align apply` input.
+
+The reader refuses ambiguous prefixes, duplicate columns, malformed rows,
+unsupported modifiers, impossible dates and non-finite confidence. Limits are
+16 MiB of input, 64 KiB of metadata, 50,000 rows and 32 MiB of expanded fields.
+YAML aliases and metadata nesting deeper than 16 levels are refused. An invalid
+input leaves any previous output file unchanged.
+
 ## decide
 
 ```text

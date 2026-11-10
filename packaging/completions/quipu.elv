@@ -1002,6 +1002,7 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand decide 'Apply reviewer accept and negate decisions to a mapping set'
             cand apply 'Materialize decided alignments into a derived alignment graph'
             cand export 'Export a mapping set as standard SSSOM TSV or RDF Turtle'
+            cand import 'Read external SSSOM as pending proposals without accepting mappings or writing facts'
         }
         &'quipu;align;propose'= {
             cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
@@ -1033,6 +1034,12 @@ set edit:completion:arg-completer[quipu] = {|@words|
             cand --format 'Output or input format for this operation'
             cand --prefix 'Extra CURIE prefix as name=<namespace>; repeatable'
             cand --author-prefix 'Declared prefix that turns a bare reviewer into an author_id'
+            cand --out 'Output file'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'quipu;align;import'= {
+            cand --db 'Store file (default: .bobbin/quipu/quipu.db; configuration may override it)'
             cand --out 'Output file'
             cand -h 'Print help'
             cand --help 'Print help'

@@ -250,6 +250,9 @@ _quipu() {
             quipu__subcmd__align,export)
                 cmd="quipu__subcmd__align__subcmd__export"
                 ;;
+            quipu__subcmd__align,import)
+                cmd="quipu__subcmd__align__subcmd__import"
+                ;;
             quipu__subcmd__align,propose)
                 cmd="quipu__subcmd__align__subcmd__propose"
                 ;;
@@ -646,7 +649,7 @@ _quipu() {
             return 0
             ;;
         quipu__subcmd__align)
-            opts="-h --db --help propose decide apply export"
+            opts="-h --db --help propose decide apply export import"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -751,6 +754,28 @@ _quipu() {
                     return 0
                     ;;
                 --author-prefix)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --out)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        quipu__subcmd__align__subcmd__import)
+            opts="-h --db --out --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --db)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

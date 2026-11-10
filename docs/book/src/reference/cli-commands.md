@@ -1454,7 +1454,7 @@ qp path draft <trajectory-IRI>
 
 Propose, decide and apply cross-graph alignments.
 
-Subcommands: `align propose`, `align decide`, `align apply`, `align export`.
+Subcommands: `align propose`, `align decide`, `align apply`, `align export`, `align import`.
 
 ### `qp align propose`
 
@@ -1513,6 +1513,16 @@ qp align export <set.tsv>
 - `--prefix <VALUE>`: Extra CURIE prefix as name=<namespace>; repeatable.
 
 - `--author-prefix <VALUE>`: Declared prefix that turns a bare reviewer into an author_id.
+
+- `--out <VALUE>`: Output file.
+
+### `qp align import`
+
+Read external SSSOM as pending proposals without accepting mappings or writing facts.
+
+```text
+qp align import <set.sssom.tsv>
+```
 
 - `--out <VALUE>`: Output file.
 

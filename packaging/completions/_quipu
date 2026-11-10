@@ -1489,6 +1489,15 @@ _arguments "${_arguments_options[@]}" : \
 ':arg-set-tsv:_default' \
 && ret=0
 ;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'--db=[Store file (default\: .bobbin/quipu/quipu.db; configuration may override it)]:PATH:_default' \
+'*--out=[Output file]:VALUE:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+':arg-set-sssom-tsv:_default' \
+&& ret=0
+;;
         esac
     ;;
 esac
@@ -2340,6 +2349,7 @@ _quipu__subcmd__align_commands() {
 'decide:Apply reviewer accept and negate decisions to a mapping set' \
 'apply:Materialize decided alignments into a derived alignment graph' \
 'export:Export a mapping set as standard SSSOM TSV or RDF Turtle' \
+'import:Read external SSSOM as pending proposals without accepting mappings or writing facts' \
     )
     _describe -t commands 'quipu align commands' commands "$@"
 }
@@ -2357,6 +2367,11 @@ _quipu__subcmd__align__subcmd__decide_commands() {
 _quipu__subcmd__align__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'quipu align export commands' commands "$@"
+}
+(( $+functions[_quipu__subcmd__align__subcmd__import_commands] )) ||
+_quipu__subcmd__align__subcmd__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'quipu align import commands' commands "$@"
 }
 (( $+functions[_quipu__subcmd__align__subcmd__propose_commands] )) ||
 _quipu__subcmd__align__subcmd__propose_commands() {
