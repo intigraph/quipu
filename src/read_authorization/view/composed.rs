@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{AuthorizedRead, MAX_VIEW_BYTES, MAX_VIEW_FACTS, ReadOperation, ReadView, denied};
-use crate::{Result, Store, memory_budget::MemoryAllocation, store::graph_owner::CapturedRead};
+use crate::{Result, Store, store::graph_owner::CapturedRead};
 
 /// Request-owned authorized RDF view of one strict owner cut. This API does
 /// not install a route or reserve evaluator/RSS capacity. The trusted caller
@@ -15,16 +15,19 @@ pub struct ComposedReadView {
     view: ReadView,
     bindings: BTreeMap<String, (crate::graph_catalog::Route, u64)>,
     deadline: Instant,
+    // Drop scratch state before releasing its connection reservation.
+    _permit: super::ComposedReadPermit,
 }
 
 impl AuthorizedRead {
     /// Copy exactly the authorized graphs from an already captured strict cut.
     /// No current-read fallback, attachment, history or implicit ROOT expansion.
-    /// The caller supplies a share of the SAME aggregate connection allocation.
+    /// The caller reserves from the SAME service-sized admission handle BEFORE
+    /// strict capture; the view owns that permit for its scratch lifetime.
     pub fn open_composed_cut(
         self,
         reads: &[CapturedRead<'_>],
-        allocation: MemoryAllocation,
+        permit: super::ComposedReadPermit,
         now: u64,
         deadline: Instant,
     ) -> Result<ComposedReadView> {
@@ -36,6 +39,7 @@ impl AuthorizedRead {
             }
         };
         check()?;
+        let allocation = permit.allocation();
         if self.operation != ReadOperation::Query
             || now >= self.expiry
             || now < self.authorized_at
@@ -55,7 +59,8 @@ impl AuthorizedRead {
         for read in reads {
             check()?;
             let source = read.store;
-            if read.catalog_revision != revision
+            if !permit.matches(read)
+                || read.catalog_revision != revision
                 || source.conn.is_autocommit()
                 || source.has_attachments()
                 || source.store_id()? != read.route.store_id
@@ -111,6 +116,7 @@ impl AuthorizedRead {
             view,
             bindings,
             deadline,
+            _permit: permit,
         })
     }
 }

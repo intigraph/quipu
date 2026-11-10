@@ -1117,11 +1117,15 @@ fn composed_cut_joins_canonical_terms_with_bags_and_exact_graph_grants() {
     );
     let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
     let policy = policy.snapshot().unwrap();
-    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    let admission =
+        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
+            .unwrap();
     let deadline = strict_deadline();
+    let permit = admission.try_reserve().unwrap();
     Owner::read_strict(&[&b, &a], deadline, |reads| {
         let view = policy.authorize(&identity, ReadOperation::Query, None, 2)?
-            .open_composed_cut(reads, allocation, 2, deadline)?;
+            .open_composed_cut(reads, permit, 2, deadline)?;
+        assert!(admission.clone().try_reserve().is_err(), "view must retain shared scratch permit");
         let reference = policy.authorize(&identity, ReadOperation::Query, None, 2)?.open(&baseline, 2)?;
         for query in [
             format!("SELECT ?s ?value WHERE {{ GRAPH <{}> {{ ?s <urn:link> ?x }} GRAPH <{}> {{ ?x <urn:value> ?value }} }} ORDER BY ?s", a.route.graph, b.route.graph),
@@ -1142,6 +1146,10 @@ fn composed_cut_joins_canonical_terms_with_bags_and_exact_graph_grants() {
         assert!(view.recheck(&policy, &identity, &reads[..1], 2).is_err());
         Ok(())
     }).unwrap();
+    assert!(
+        admission.try_reserve().is_ok(),
+        "scratch permit leaked after view drop"
+    );
 }
 
 #[test]
@@ -1153,36 +1161,43 @@ fn composed_cut_refuses_scope_operation_expiry_deadline_and_oversized_values() {
     let policy = policy.snapshot().unwrap();
     let (subset, _) = composition_authority(&[&a.route.graph]);
     let subset = subset.snapshot().unwrap();
-    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    let admission =
+        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
+            .unwrap();
     Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
         assert!(
             subset
                 .authorize(&identity, ReadOperation::Query, None, 2)?
-                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .open_composed_cut(reads, admission.try_reserve()?, 2, strict_deadline())
                 .is_err()
         );
         assert!(
             policy
                 .authorize(&identity, ReadOperation::Query, None, 2)?
-                .open_composed_cut(&reads[..1], allocation, 2, strict_deadline())
+                .open_composed_cut(&reads[..1], admission.try_reserve()?, 2, strict_deadline())
                 .is_err()
         );
         assert!(
             policy
                 .authorize(&identity, ReadOperation::Export, None, 2)?
-                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .open_composed_cut(reads, admission.try_reserve()?, 2, strict_deadline())
                 .is_err()
         );
         assert!(
             policy
                 .authorize(&identity, ReadOperation::Query, None, 2)?
-                .open_composed_cut(reads, allocation, 100, strict_deadline())
+                .open_composed_cut(reads, admission.try_reserve()?, 100, strict_deadline())
                 .is_err()
         );
         assert!(
             policy
                 .authorize(&identity, ReadOperation::Query, None, 2)?
-                .open_composed_cut(reads, allocation, 2, std::time::Instant::now())
+                .open_composed_cut(
+                    reads,
+                    admission.try_reserve()?,
+                    2,
+                    std::time::Instant::now()
+                )
                 .is_err()
         );
         Ok(())
@@ -1194,7 +1209,7 @@ fn composed_cut_refuses_scope_operation_expiry_deadline_and_oversized_values() {
         assert!(
             policy
                 .authorize(&identity, ReadOperation::Query, None, 2)?
-                .open_composed_cut(reads, allocation, 2, strict_deadline())
+                .open_composed_cut(reads, admission.try_reserve()?, 2, strict_deadline())
                 .is_err()
         );
         Ok(())
@@ -1211,12 +1226,14 @@ fn composed_cut_recheck_binds_generation_policy_and_expired_buffer() {
     let graphs = [&a.route.graph, &b.route.graph];
     let (mut owner_policy, identity) = composition_authority(&[graphs[0], graphs[1]]);
     let policy = owner_policy.snapshot().unwrap();
-    let allocation = a.catalog.memory_allocation(512, 1, 1).unwrap();
+    let admission =
+        crate::read_authorization::ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1)
+            .unwrap();
     Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
         let deadline = std::time::Instant::now() + Duration::from_secs(1);
         let view = policy
             .authorize(&identity, ReadOperation::Query, None, 2)?
-            .open_composed_cut(reads, allocation, 2, deadline)?;
+            .open_composed_cut(reads, admission.try_reserve()?, 2, deadline)?;
         for field in ["generation", "policy", "file"] {
             let mut route = reads[0].route.clone();
             match field {
@@ -1272,4 +1289,41 @@ fn composed_cut_recheck_binds_generation_policy_and_expired_buffer() {
         Ok(())
     })
     .unwrap();
+}
+
+#[test]
+fn composed_cut_admission_refuses_zero_underfunding_and_foreign_catalog() {
+    use crate::read_authorization::{ComposedReadAdmission, ReadOperation};
+    let temp = tempfile::tempdir().unwrap();
+    let (a, b) = strict_fixture(temp.path());
+    assert!(ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 0).is_err());
+    assert!(ComposedReadAdmission::new(a.catalog.clone(), 511, 1, 1).is_err());
+    assert!(ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 2).is_err());
+    let admission = ComposedReadAdmission::new(a.catalog.clone(), 512, 1, 1).unwrap();
+    assert_eq!(admission.allocation().connections, 8);
+    let permit = admission.try_reserve().unwrap();
+    assert!(admission.clone().try_reserve().is_err());
+    drop(permit);
+    assert!(admission.try_reserve().is_ok());
+    let mut changed = a.route.clone();
+    changed.generation += 1;
+    let other =
+        ComposedReadAdmission::new(catalog(vec![changed, b.route.clone()]), 512, 1, 1).unwrap();
+    let (policy, identity) = composition_authority(&[&a.route.graph, &b.route.graph]);
+    let policy = policy.snapshot().unwrap();
+    let permit = other.try_reserve().unwrap();
+    Owner::read_strict(&[&a, &b], strict_deadline(), |reads| {
+        assert!(
+            policy
+                .authorize(&identity, ReadOperation::Query, None, 2)?
+                .open_composed_cut(reads, permit, 2, strict_deadline())
+                .is_err()
+        );
+        Ok(())
+    })
+    .unwrap();
+    assert!(
+        other.try_reserve().is_ok(),
+        "foreign-catalog refusal leaked reservation"
+    );
 }

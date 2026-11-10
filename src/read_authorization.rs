@@ -16,9 +16,9 @@ pub(crate) mod mutants;
 pub mod profile;
 pub mod routes;
 mod view;
-#[cfg(unix)]
-pub use view::ComposedReadView;
 pub use view::ReadView;
+#[cfg(unix)]
+pub use view::{ComposedReadAdmission, ComposedReadPermit, ComposedReadView};
 #[cfg(test)]
 mod tests;
 

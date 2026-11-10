@@ -342,3 +342,8 @@ fn copy_native(
 mod composed;
 #[cfg(unix)]
 pub use composed::ComposedReadView;
+
+#[cfg(unix)]
+mod composed_admission;
+#[cfg(unix)]
+pub use composed_admission::{ComposedReadAdmission, ComposedReadPermit};
