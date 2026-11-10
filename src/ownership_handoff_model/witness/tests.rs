@@ -435,3 +435,22 @@ fn unparseable_listed_name_is_unknown_not_ignored() {
     let foreign = ObjectWitness::attach(initial().store_id, ForeignName(w.backend.clone()));
     assert_eq!(foreign.head(&initial().store_id, 0), Reply::Unknown);
 }
+
+struct MemoryHarness;
+impl conformance::Harness for MemoryHarness {
+    type Backend = MemoryObjects;
+    fn fresh(&self) -> InMemoryWitness {
+        let Reply::Ok(w) = InMemoryWitness::new(conformance::genesis()) else {
+            panic!("genesis positive control");
+        };
+        w
+    }
+    fn inject(&self, witness: &InMemoryWitness, fault: Fault) {
+        assert_eq!(witness.inject(fault), Reply::Ok(()));
+    }
+}
+
+#[test]
+fn memory_backend_passes_the_shared_conformance_suite() {
+    conformance::run(&MemoryHarness);
+}

@@ -5,8 +5,12 @@
 use super::{Abandonment, Authority, Certificate, Journal, Request, WitnessHead};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
+#[cfg(test)]
+mod conformance;
 pub(crate) mod objects;
 mod records;
+#[cfg(all(feature = "ownership-witness-s3", not(target_arch = "wasm32")))]
+pub(crate) mod s3;
 mod walk;
 use objects::{Created, Object, Objects};
 use records::*;
